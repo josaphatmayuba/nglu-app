@@ -1,0 +1,2059 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KodaPay — Plateforme restaurant · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a'},
+        kp:{50:'#effafa',100:'#d7f1f1',200:'#b0e2e3',300:'#7cc9cc',400:'#45a7ad',500:'#2c8a91',600:'#1f6d75',700:'#1b575f',800:'#123f46',900:'#0b2e34',950:'#062025'},
+        acc:{400:'#fb923c',500:'#f97316',600:'#ea580c'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#eceae4;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-teal{background:linear-gradient(150deg,#123f46 0%,#0b2e34 60%,#062025 100%);}
+    .grad-leaf{background:linear-gradient(135deg,#45a7ad,#1f6d75);}
+    .card{background:#fff;border:1px solid #e4e2da;border-radius:16px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+    [data-lucide]{stroke-width:2;}
+    .surface{display:none;}.surface.active{display:block;animation:fadein .25s ease;}
+    .view{display:none;}.view.active{display:block;animation:fadein .25s ease;}
+    @keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+    .nav-active{background:rgba(255,255,255,.12)!important;color:#fff!important;}
+    .nav-active [data-lucide]{color:#7cc9cc!important;}
+    .tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:600;text-align:left;padding:10px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;}
+    .tbl td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    .tbl tr:hover td{background:#f7fbfb;}
+    .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid transparent;transition:.15s;}
+    .btn-teal{background:#123f46;color:#fff;}.btn-teal:hover{background:#1b575f;}
+    .btn-acc{background:#f97316;color:#fff;}.btn-acc:hover{background:#ea580c;}
+    .btn-ghost{border-color:#dcd9cf;background:#fff;color:#334155;}.btn-ghost:hover{background:#f1f5f9;}
+    .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:8px;}
+    .field{width:100%;border:1px solid #dcd9cf;border-radius:10px;padding:9px 12px;font-size:13px;background:#fff;outline:none;}
+    .field:focus{border-color:#2c8a91;box-shadow:0 0 0 3px rgba(44,138,145,.13);}
+    .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .food{border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;flex:none;}
+    /* switcher */
+    #switcher{position:fixed;top:0;left:0;right:0;z-index:90;background:#062025;color:#cbd5e1;display:flex;align-items:center;gap:4px;padding:8px 12px;overflow-x:auto;}
+    .sw{font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;color:#94a3b8;}
+    .sw.sw-active{background:#f97316;color:#fff;}
+    body{padding-top:46px;}
+    /* toast */
+    #toasts{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99;display:flex;flex-direction:column;gap:8px;align-items:center;width:max-content;max-width:92vw;}
+    .toast{background:#0f172a;color:#fff;font-size:13px;font-weight:500;padding:10px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,.35);display:flex;align-items:center;gap:8px;animation:fadein .2s ease;}
+    /* back-office layout */
+    #bo-sidebar{display:none;}
+    @media(min-width:1024px){
+      #bo-sidebar{display:flex;position:fixed;top:46px;left:0;bottom:0;width:232px;flex-direction:column;z-index:40;}
+      #bo-main{margin-left:232px;}
+    }
+    /* phone frame */
+    .phone{width:min(400px,100%);margin:0 auto;background:#062025;border-radius:42px;padding:10px;box-shadow:0 25px 60px rgba(2,6,23,.35);}
+    .phone-screen{background:#f6f4ef;border-radius:34px;overflow:hidden;height:780px;display:flex;flex-direction:column;position:relative;}
+    /* tv frame */
+    .tv{max-width:1150px;margin:0 auto;background:#0a0a0a;border-radius:18px;padding:14px;box-shadow:0 25px 60px rgba(2,6,23,.4);}
+    .glow{box-shadow:0 0 0 2px #86efac,0 0 34px rgba(74,222,128,.45);}
+    /* tablet frame */
+    .tablet{max-width:1200px;margin:0 auto;background:#0f172a;border-radius:26px;padding:12px;box-shadow:0 25px 60px rgba(2,6,23,.4);}
+    .cat-tile{border-radius:14px;color:#fff;padding:12px;cursor:pointer;min-width:104px;}
+    .step-dot{width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex:none;}
+    /* popmenu générique */
+    .popmenu{position:fixed;z-index:95;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(2,6,23,.18);padding:5px;min-width:190px;animation:fadein .12s ease;}
+    .pm-item{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;padding:8px 10px;border-radius:8px;cursor:pointer;color:#334155;white-space:nowrap;}
+    .pm-item:hover{background:#f1f5f9;}
+    .pm-item.pm-danger{color:#dc2626;}.pm-item.pm-danger:hover{background:#fef2f2;}
+    .pm-head{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;padding:6px 10px 3px;}
+    .pm-sep{height:1px;background:#f1f5f9;margin:4px 2px;}
+    /* modal générique */
+    #overlay{position:fixed;inset:0;background:rgba(4,15,12,.55);backdrop-filter:blur(3px);z-index:96;display:none;align-items:center;justify-content:center;padding:18px;}
+    #overlay.open{display:flex;}
+    #modal{background:#fff;width:100%;max-width:520px;border-radius:20px;max-height:88vh;overflow-y:auto;animation:slideup .22s ease;}
+    @keyframes slideup{from{transform:translateY(24px);opacity:0;}to{transform:none;opacity:1;}}
+    .qty-btn{width:30px;height:30px;border-radius:9px;border:1px solid #e2e8f0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;}
+    .payopt{border:1.5px solid #e2e8f0;border-radius:14px;padding:12px;cursor:pointer;text-align:center;}
+    .payopt.sel{border-color:#2563eb;background:#eff6ff;}
+  </style>
+</head>
+<body>
+
+<!-- ===================== SWITCHER DE SURFACES (chrome mockup) ===================== -->
+<div id="switcher">
+  <div class="flex items-center gap-2 pr-3 mr-1 border-r border-white/15">
+    <div class="grad-leaf w-6 h-6 rounded-md flex items-center justify-center"><i data-lucide="leaf" class="w-3.5 h-3.5 text-white"></i></div>
+    <span class="font-display font-bold text-white text-[13px]">KodaPay</span>
+    <span class="text-[10px] text-ink-400">mockup</span>
+  </div>
+  <div class="sw sw-active" data-surf="bo" onclick="setBiz&&setBiz('resto');showSurf('bo',this)"><i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>Back-office resto</div>
+  <div class="sw" data-surf="bo" onclick="setBiz&&setBiz('market');showSurf('bo',this)"><i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>Supermarché</div>
+  <div class="sw" data-surf="client" onclick="showSurf('client',this)"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>App client (QR)</div>
+  <div class="sw" data-surf="tv" onclick="showSurf('tv',this)"><i data-lucide="tv" class="w-3.5 h-3.5"></i>Écran cuisine</div>
+  <div class="sw" data-surf="pos" onclick="showSurf('pos',this)"><i data-lucide="tablet" class="w-3.5 h-3.5"></i>Caisse POS</div>
+  <div class="sw" data-surf="posm" onclick="showSurf('posm',this)"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>POS mobile</div>
+  <div class="sw" data-surf="admin" onclick="showSurf('admin',this)"><i data-lucide="globe" class="w-3.5 h-3.5"></i>Super Admin</div>
+</div>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 1 : BACK-OFFICE RESTAURATEUR                                         -->
+<!-- ============================================================================ -->
+<section id="surf-bo" class="surface active">
+
+  <aside id="bo-sidebar" class="grad-teal text-ink-300">
+    <div class="flex items-center gap-3 px-5 py-5">
+      <div class="grad-leaf w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-kp-950/50">
+        <i data-lucide="leaf" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <div class="font-display font-bold text-white text-[15px] leading-tight">KodaPay</div>
+        <div class="text-[10.5px] text-kp-300/70" id="bo-sub">Espace restaurateur</div>
+      </div>
+    </div>
+    <div class="mx-4 mb-3 rounded-xl bg-white/5 border border-white/10 p-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-full bg-kp-700 border border-kp-400/40 flex items-center justify-center"><i data-lucide="sprout" class="w-4 h-4 text-kp-300"></i></div>
+        <div class="min-w-0">
+          <div class="text-[12.5px] font-semibold text-white truncate" id="bo-biz-name">Le Jardin Grill</div>
+          <div class="text-[10px] text-kp-300/70" id="bo-biz-desc">Cuisine française · Grillades</div>
+        </div>
+      </div>
+      <button class="mt-3 w-full text-left text-[11.5px] font-medium bg-white/10 hover:bg-white/15 rounded-lg px-3 py-2 flex items-center justify-between" onclick="toast('Sélecteur de succursale (mockup)')">
+        Toutes les succursales <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+    <nav class="flex-1 px-3 space-y-0.5" id="bo-nav"></nav>
+    <div class="mx-4 my-3 rounded-xl bg-white/5 border border-white/10 p-3">
+      <div class="flex items-center justify-between">
+        <span class="text-[12px] font-semibold text-white">Plan Entreprise</span>
+        <span class="chip bg-kp-400/20 text-kp-300">Actif</span>
+      </div>
+      <div class="text-[10.5px] text-kp-300/70 mt-1">Prochain renouvellement<br/><span class="text-ink-200 font-medium">12 juin 2025</span></div>
+      <button class="btn btn-ghost btn-xs w-full justify-center mt-2.5 !bg-white/10 !border-white/15 !text-white" onclick="toast('Gestion abonnement (mockup)')">Gérer mon abonnement</button>
+    </div>
+    <div class="px-4 pb-4">
+      <div class="flex items-center gap-2.5 cursor-pointer hover:bg-white/5 rounded-xl p-2" onclick="toast('Support KodaPay (mockup)')">
+        <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><i data-lucide="headphones" class="w-4 h-4 text-kp-300"></i></div>
+        <div>
+          <div class="text-[12px] font-semibold text-white">Besoin d'aide ?</div>
+          <div class="text-[10px] text-kp-300/70">Contactez notre support</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main id="bo-main" class="p-4 lg:p-7 max-w-[1500px]">
+    <!-- entête -->
+    <div class="flex flex-wrap items-center gap-3 mb-6">
+      <div class="mr-auto">
+        <h1 class="font-display text-[22px] lg:text-[26px] font-bold" id="bo-title">Tableau de bord</h1>
+        <p class="text-[12.5px] text-ink-500">Vue d'ensemble de votre activité aujourd'hui.</p>
+      </div>
+      <button class="btn btn-ghost" onclick="toast('Sélecteur de date (mockup)')"><i data-lucide="calendar" class="w-4 h-4"></i>Aujourd'hui, 13 mai 2025<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
+      <button class="btn btn-ghost hidden sm:inline-flex" onclick="toast('Succursales (mockup)')"><i data-lucide="store" class="w-4 h-4"></i>Succursale principale<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
+      <button class="relative btn btn-ghost !px-2.5" onclick="toast('3 notifications (mockup)')">
+        <i data-lucide="bell" class="w-4 h-4"></i>
+        <span class="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 min-w-[18px] px-1 rounded-full bg-acc-500 text-[9.5px] font-bold text-white flex items-center justify-center">3</span>
+      </button>
+      <div class="flex items-center gap-2 cursor-pointer" onclick="toast('Profil (mockup)')">
+        <div class="w-9 h-9 rounded-full grad-leaf flex items-center justify-center text-white text-xs font-bold">TM</div>
+        <div class="hidden md:block leading-tight">
+          <div class="text-[12.5px] font-semibold">Thomas Martin</div>
+          <div class="text-[10.5px] text-ink-500">Administrateur</div>
+        </div>
+        <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-ink-400"></i>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5 mb-5">
+      <div class="card p-4">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500" id="kpi-orders-lbl">Total commandes du jour</span><span class="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center"><i data-lucide="shopping-bag" class="w-4.5 h-4.5 w-4 h-4 text-blue-500"></i></span></div>
+        <div class="font-display text-[26px] font-bold mt-1" id="kpi-orders">127</div>
+        <div class="chip bg-emerald-50 text-emerald-600 mt-1"><i data-lucide="trending-up" class="w-3 h-3"></i>+18% vs hier</div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500">Ventes du jour</span><span class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center"><i data-lucide="circle-dollar-sign" class="w-4 h-4 text-emerald-500"></i></span></div>
+        <div class="font-display text-[26px] font-bold mt-1" id="kpi-sales">4 890,50 €</div>
+        <div class="chip bg-emerald-50 text-emerald-600 mt-1"><i data-lucide="trending-up" class="w-3 h-3"></i>+22% vs hier</div>
+      </div>
+      <div class="card p-4 cursor-pointer hover:shadow-md transition" onclick="boGo('Dépenses')">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500">Dépenses du jour</span><span class="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center"><i data-lucide="trending-down" class="w-4 h-4 text-red-500"></i></span></div>
+        <div class="font-display text-[26px] font-bold mt-1" id="kpi-exp">1 240,00 €</div>
+        <div class="text-[11.5px] text-ink-500 mt-1">6 dépenses · voir détail</div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500">Marge du jour</span><span class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center"><i data-lucide="wallet" class="w-4 h-4 text-emerald-600"></i></span></div>
+        <div class="font-display text-[26px] font-bold mt-1" id="kpi-margin">3 650,50 €</div>
+        <div class="chip bg-emerald-50 text-emerald-600 mt-1" id="kpi-margin-pct"><i data-lucide="trending-up" class="w-3 h-3"></i>75% de marge</div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500" id="kpi-prep-lbl">Commandes en préparation</span><span class="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center"><i data-lucide="chef-hat" class="w-4 h-4 text-acc-500"></i></span></div>
+        <div class="font-display text-[26px] font-bold mt-1" id="kpi-prep">23</div>
+        <div class="chip bg-orange-50 text-acc-600 mt-1" id="kpi-prep-chip">En cours</div>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500" id="kpi-pop-lbl">Produit populaire</span><span class="w-9 h-9 rounded-xl bg-lime-50 flex items-center justify-center"><i data-lucide="flame" class="w-4 h-4 text-lime-600"></i></span></div>
+        <div class="font-display text-[17px] font-bold mt-2 leading-tight" id="kpi-pop">Entrecôte grillée</div>
+        <div class="text-[11.5px] text-ink-500 mt-1" id="kpi-pop-sub">32 commandes</div>
+      </div>
+    </div>
+
+    <!-- rangée graphiques -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 mb-5">
+      <!-- évolution des ventes -->
+      <div class="card p-4 lg:col-span-1 xl:col-span-1 lg:min-h-[280px]">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-display font-semibold text-[14.5px]">Évolution des ventes</h3>
+          <button class="btn btn-ghost btn-xs" onclick="toast('Période (mockup)')">7 derniers jours<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+        </div>
+        <div class="flex items-center gap-4 text-[11px] text-ink-500 mb-2">
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-kp-800"></span>Ventes (€)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-ink-300"></span>Commandes</span>
+        </div>
+        <svg viewBox="0 0 320 150" class="w-full">
+          <g stroke="#eef1f0"><line x1="0" y1="20" x2="320" y2="20"/><line x1="0" y1="55" x2="320" y2="55"/><line x1="0" y1="90" x2="320" y2="90"/><line x1="0" y1="125" x2="320" y2="125"/></g>
+          <path d="M10,118 L60,96 L110,80 L160,84 L210,58 L260,62 L310,30 L310,140 L10,140 Z" fill="#12404610"/>
+          <path d="M10,118 L60,96 L110,80 L160,84 L210,58 L260,62 L310,30" fill="none" stroke="#123f46" stroke-width="2.5"/>
+          <path d="M10,125 L60,112 L110,102 L160,108 L210,88 L260,95 L310,72" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="1 0"/>
+          <g fill="#123f46"><circle cx="10" cy="118" r="3"/><circle cx="60" cy="96" r="3"/><circle cx="110" cy="80" r="3"/><circle cx="160" cy="84" r="3"/><circle cx="210" cy="58" r="3"/><circle cx="260" cy="62" r="3"/><circle cx="310" cy="30" r="3.5" stroke="#fff" stroke-width="1.5"/></g>
+          <g font-size="9" fill="#94a3b8"><text x="4" y="148">7 mai</text><text x="54" y="148">8 mai</text><text x="104" y="148">9 mai</text><text x="152" y="148">10 mai</text><text x="202" y="148">11 mai</text><text x="252" y="148">12 mai</text><text x="294" y="148">13 mai</text></g>
+        </svg>
+        <div class="mt-2 rounded-xl border border-ink-200 bg-white shadow-sm px-3 py-2 w-max text-[11px]">
+          <div class="font-semibold text-ink-700 mb-0.5">13 mai 2025</div>
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-kp-800"></span>Ventes (€) <b class="ml-auto pl-4">4 890,50 €</b></div>
+          <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-ink-300"></span>Commandes <b class="ml-auto pl-4">127</b></div>
+        </div>
+      </div>
+
+      <!-- répartition des commandes -->
+      <div class="card p-4" id="card-repartition">
+        <h3 class="font-display font-semibold text-[14.5px] mb-3">Répartition des commandes</h3>
+        <div class="flex items-center gap-5">
+          <svg viewBox="0 0 42 42" class="w-36 h-36 -rotate-90">
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f1f5f9" stroke-width="7"/>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="#123f46" stroke-width="7" stroke-dasharray="61 39" stroke-dashoffset="0"/>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="#f97316" stroke-width="7" stroke-dasharray="18 82" stroke-dashoffset="-61"/>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="#34d399" stroke-width="7" stroke-dasharray="13 87" stroke-dashoffset="-79"/>
+            <circle cx="21" cy="21" r="15.9" fill="none" stroke="#cbd5e1" stroke-width="7" stroke-dasharray="8 92" stroke-dashoffset="-92"/>
+          </svg>
+          <div class="absolute"></div>
+          <div class="space-y-2.5 text-[12px]">
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-kp-800"></span><div>Terminées<br/><b>78 (61%)</b></div></div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-acc-500"></span><div>En préparation<br/><b>23 (18%)</b></div></div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span><div>Prêtes<br/><b>16 (13%)</b></div></div>
+            <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-ink-300"></span><div>Annulées<br/><b>10 (8%)</b></div></div>
+          </div>
+        </div>
+        <div class="text-center -mt-24 mb-16 pointer-events-none w-36">
+          <div class="font-display text-[22px] font-bold">127</div><div class="text-[10.5px] text-ink-500 -mt-1">Total</div>
+        </div>
+      </div>
+
+      <!-- Studio IA Produit -->
+      <div class="card p-4">
+        <div class="flex items-center gap-2 mb-1">
+          <h3 class="font-display font-semibold text-[14.5px]">Studio IA Produit</h3>
+          <span class="chip bg-kp-50 text-kp-600">Nouveau</span>
+        </div>
+        <p class="text-[11.5px] text-ink-500 mb-3">Améliorez vos photos produits avec l'IA.</p>
+        <div class="flex items-center gap-2.5">
+          <div class="flex-1 rounded-xl bg-gradient-to-br from-stone-300 to-stone-500 h-28 relative flex items-center justify-center text-4xl">🥩<span class="absolute top-1.5 left-1.5 chip bg-black/50 text-white">Originale</span></div>
+          <i data-lucide="arrow-right" class="w-4 h-4 text-ink-400 flex-none"></i>
+          <div class="flex-1 rounded-xl bg-gradient-to-br from-amber-700 via-orange-800 to-stone-900 h-28 relative flex items-center justify-center text-4xl">🥩<span class="absolute top-1.5 left-1.5 chip bg-black/50 text-white">Améliorée</span><span class="absolute bottom-1.5 right-1.5"><i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i></span></div>
+        </div>
+        <button class="btn btn-teal w-full justify-center mt-3" onclick="toast('Génération IA lancée… (mockup)')"><i data-lucide="wand-2" class="w-4 h-4"></i>Améliorer avec IA</button>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <button class="btn btn-ghost justify-center" onclick="toast('Image choisie (mockup)')">Choisir cette image</button>
+          <button class="btn btn-ghost justify-center" onclick="toast('Variantes générées (mockup)')"><i data-lucide="images" class="w-4 h-4"></i>Générer variantes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- rangée tables -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
+      <!-- gestion des produits -->
+      <div class="card">
+        <div class="p-4 pb-3 flex flex-wrap items-center gap-2.5">
+          <h3 class="font-display font-semibold text-[14.5px] mr-auto">Gestion des produits</h3>
+          <button class="btn btn-ghost btn-xs" onclick="toast('Filtre catégories (mockup)')">Toutes catégories<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+          <div class="relative"><i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2 text-ink-400"></i><input class="field !py-1.5 !pl-8 !w-44 !text-[12px]" placeholder="Rechercher un produit…"/></div>
+          <button class="btn btn-teal btn-xs" onclick="toast('Formulaire nouveau produit (mockup)')"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter un produit</button>
+        </div>
+        <div class="scrollx">
+          <table class="tbl w-full">
+            <thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Statut</th><th>Ventes</th><th>Actions</th></tr></thead>
+            <tbody id="bo-products"></tbody>
+          </table>
+        </div>
+        <div class="p-3 text-center"><a class="text-[12px] font-semibold text-kp-600 cursor-pointer hover:underline" onclick="toast('Liste complète produits (mockup)')">Voir tous les produits</a></div>
+      </div>
+
+      <!-- gestion des QR codes -->
+      <div class="card" id="card-qr">
+        <div class="p-4 pb-3 flex flex-wrap items-center gap-2.5">
+          <h3 class="font-display font-semibold text-[14.5px] mr-auto">Gestion des QR Codes</h3>
+          <button class="btn btn-acc btn-xs" onclick="toast('Assistant création QR Code (mockup)')"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Créer un QR Code</button>
+        </div>
+        <div class="px-4 pb-3 flex flex-wrap gap-2.5">
+          <div><span class="text-[10.5px] font-semibold text-ink-500 block mb-1">Succursale</span>
+            <button class="btn btn-ghost btn-xs" onclick="toast('Filtre succursale (mockup)')">Succursale principale<i data-lucide="chevron-down" class="w-3 h-3"></i></button></div>
+          <div><span class="text-[10.5px] font-semibold text-ink-500 block mb-1">Statut</span>
+            <button class="btn btn-ghost btn-xs" onclick="toast('Filtre statut (mockup)')">Tous<i data-lucide="chevron-down" class="w-3 h-3"></i></button></div>
+        </div>
+        <div class="scrollx">
+          <table class="tbl w-full">
+            <thead><tr><th>Nom / Emplacement</th><th>Type</th><th>Scans aujourd'hui</th><th>Statut</th><th>Actions</th></tr></thead>
+            <tbody id="bo-qrcodes"></tbody>
+          </table>
+        </div>
+        <div class="p-3 text-center"><a class="text-[12px] font-semibold text-kp-600 cursor-pointer hover:underline" onclick="toast('Liste complète QR Codes (mockup)')">Voir tous les QR Codes</a></div>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 2 : APP CLIENT MOBILE (commande à table via QR)                      -->
+<!-- ============================================================================ -->
+<section id="surf-client" class="surface">
+  <div class="py-8 px-4">
+    <div class="phone">
+      <div class="phone-screen">
+        <!-- header -->
+        <div class="grad-teal text-white px-4 pt-4 pb-4">
+          <div class="flex items-center justify-between text-[12px] font-semibold mb-3 px-1"><span>9:41</span><span class="flex items-center gap-1.5"><i data-lucide="signal" class="w-3.5 h-3.5"></i><i data-lucide="wifi" class="w-3.5 h-3.5"></i><i data-lucide="battery-full" class="w-4 h-4"></i></span></div>
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-full border-2 border-amber-400/60 bg-kp-800 flex items-center justify-center"><i data-lucide="sprout" class="w-5 h-5 text-kp-300"></i></div>
+            <div class="flex-1 min-w-0">
+              <div class="font-display font-bold text-[18px] leading-tight">Le Jardin Grill</div>
+              <div class="text-[11px] text-kp-200/80">Cuisine française · Grillades &amp; spécialités</div>
+            </div>
+            <button class="bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-[12.5px] font-semibold flex items-center gap-1.5" onclick="toast('Table détectée via QR (mockup)')"><i data-lucide="armchair" class="w-4 h-4"></i>Table 07</button>
+          </div>
+        </div>
+
+        <!-- recherche + catégories -->
+        <div class="px-4 pt-3 pb-2 bg-[#f6f4ef]">
+          <div class="flex items-center gap-2">
+            <div class="relative flex-1"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-ink-400"></i><input class="field !rounded-full !pl-9" placeholder="Rechercher un plat, une boisson…"/></div>
+            <button class="p-2.5 text-kp-700" onclick="toast('Filtres (mockup)')"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i></button>
+          </div>
+          <div class="flex gap-2 mt-3 overflow-x-auto pb-1" id="cli-cats"></div>
+        </div>
+
+        <!-- liste plats -->
+        <div class="flex-1 overflow-y-auto px-4 pb-28" id="cli-list"></div>
+
+        <!-- barre panier -->
+        <div class="absolute left-3 right-3 bottom-3 grad-teal text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl cursor-pointer" onclick="openCheckout()">
+          <div class="relative"><i data-lucide="shopping-basket" class="w-5 h-5"></i><span id="cli-count" class="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-acc-500 text-[9px] font-bold flex items-center justify-center">2</span></div>
+          <div class="flex-1 leading-tight"><div class="text-[13px] font-bold">Voir le panier</div><div class="text-[10.5px] text-kp-200/80" id="cli-count2">2 articles</div></div>
+          <div class="font-display font-bold text-[16px]" id="cli-total">43,80 €</div>
+          <i data-lucide="chevron-up" class="w-4 h-4"></i>
+        </div>
+
+        <!-- panneau checkout + suivi -->
+        <div id="cli-sheet" class="absolute inset-x-0 bottom-0 top-24 bg-black/40 backdrop-blur-[2px] hidden" onclick="if(event.target===this)closeCheckout()">
+          <div class="absolute inset-x-0 bottom-0 grid grid-cols-1 sm:grid-cols-2 gap-2 p-2">
+            <!-- finaliser -->
+            <div class="bg-white rounded-2xl p-4">
+              <div class="flex items-center justify-between mb-3"><h4 class="font-display font-bold text-[15px]">Finaliser ma commande</h4><button onclick="closeCheckout()"><i data-lucide="x" class="w-4.5 h-4.5 w-4 h-4 text-ink-400"></i></button></div>
+              <label class="text-[11px] font-semibold text-ink-600">Téléphone <span class="font-normal text-ink-400">(pour vous prévenir)</span></label>
+              <div class="relative mt-1 mb-3"><i data-lucide="phone" class="w-4 h-4 absolute left-3 top-2.5 text-ink-400"></i><input class="field !pl-9" value="+243 812 345 678"/></div>
+              <div class="text-[11px] font-semibold text-ink-600 mb-1.5">Mode de paiement</div>
+              <div class="grid grid-cols-2 gap-2 mb-3">
+                <button class="border-2 border-kp-500 bg-kp-50 rounded-xl p-2.5 text-left" onclick="toast('Paiement carte sélectionné (mockup)')">
+                  <i data-lucide="credit-card" class="w-4 h-4 text-kp-600 mb-1"></i>
+                  <div class="text-[11.5px] font-bold">Payer maintenant</div><div class="text-[9.5px] text-ink-500">Carte / Mobile Money</div>
+                </button>
+                <button class="border border-ink-200 rounded-xl p-2.5 text-left" onclick="toast('Paiement à la caisse sélectionné (mockup)')">
+                  <i data-lucide="banknote" class="w-4 h-4 text-ink-500 mb-1"></i>
+                  <div class="text-[11.5px] font-bold">Payer à la caisse</div><div class="text-[9.5px] text-ink-500">Paiement sur place</div>
+                </button>
+              </div>
+              <button class="btn btn-acc w-full justify-between !py-3 !rounded-xl" onclick="toast('Commande n°1042 confirmée ! (mockup)')"><span>Confirmer la commande</span><span class="flex items-center gap-2">43,80 €<i data-lucide="arrow-right" class="w-4 h-4"></i></span></button>
+              <div class="text-center text-[10px] text-ink-400 mt-2 flex items-center justify-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i>Paiement sécurisé</div>
+            </div>
+            <!-- suivi -->
+            <div class="bg-white rounded-2xl p-4">
+              <div class="flex items-center justify-between mb-2"><h4 class="font-display font-bold text-[15px]">Suivi de commande</h4><button onclick="closeCheckout()"><i data-lucide="x" class="w-4 h-4 text-ink-400"></i></button></div>
+              <div class="flex items-center gap-3 mb-3">
+                <div><div class="text-[10.5px] text-ink-500">Commande n°</div><div class="font-display text-[26px] font-bold leading-none">1042</div></div>
+                <div class="ml-auto w-20 h-16 rounded-xl bg-kp-50 flex items-center justify-center text-3xl">👩‍🍳</div>
+              </div>
+              <div class="flex items-center px-1">
+                <div class="step-dot bg-emerald-500 text-white"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>
+                <div class="flex-1 h-0.5 bg-emerald-500"></div>
+                <div class="step-dot border-[3px] border-kp-700 bg-white"><span class="w-2.5 h-2.5 rounded-full bg-kp-700"></span></div>
+                <div class="flex-1 h-0.5 bg-ink-200"></div>
+                <div class="step-dot border-2 border-ink-300 bg-white"></div>
+              </div>
+              <div class="flex justify-between text-[10px] font-semibold text-ink-600 mt-1 px-0"><span>Reçue</span><span class="text-kp-700">En préparation</span><span class="text-ink-400">Prête</span></div>
+              <p class="text-center text-[10.5px] text-ink-500 mt-2">Votre commande est en préparation en cuisine.</p>
+              <div class="mt-3 rounded-xl bg-kp-50 text-kp-700 text-[11.5px] font-semibold px-3 py-2.5 flex items-center gap-2 justify-center"><i data-lucide="clock" class="w-4 h-4"></i>Temps estimé : 12 – 15 min</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center text-[11.5px] text-ink-500 mt-4">Le client scanne le QR code de sa table → menu → commande → paiement → suivi en temps réel.</p>
+  </div>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 3 : ÉCRAN CUISINE / RETRAIT (TV)                                     -->
+<!-- ============================================================================ -->
+<section id="surf-tv" class="surface">
+  <div class="py-8 px-4">
+    <div class="tv">
+      <div class="grad-teal rounded-lg p-6 lg:p-10 relative overflow-hidden">
+        <i data-lucide="leaf" class="absolute -bottom-8 -left-8 w-48 h-48 text-white/5 rotate-12"></i>
+        <i data-lucide="leaf" class="absolute -top-10 -right-10 w-56 h-56 text-white/5 -rotate-45"></i>
+        <!-- entête TV -->
+        <div class="flex items-center gap-4 mb-7 relative">
+          <div class="w-14 h-14 rounded-full border-2 border-amber-400/60 bg-kp-800 flex items-center justify-center"><i data-lucide="sprout" class="w-7 h-7 text-kp-300"></i></div>
+          <div class="mr-auto">
+            <div class="font-display text-white font-bold text-[26px] leading-tight">Le Jardin Grill</div>
+            <div class="text-[13px] text-kp-200/80">Cuisine française · Grillades &amp; spécialités</div>
+          </div>
+          <div class="text-right text-white">
+            <div class="flex items-center gap-2 justify-end font-display font-bold text-[28px]"><i data-lucide="clock" class="w-6 h-6"></i>9:41</div>
+            <div class="text-[13px] text-kp-200/80">Samedi 24 mai</div>
+          </div>
+        </div>
+        <!-- colonnes -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+          <div class="bg-white/95 rounded-2xl p-6">
+            <div class="flex items-center gap-3 pb-3 border-b border-ink-200">
+              <i data-lucide="chef-hat" class="w-7 h-7 text-ink-700"></i>
+              <div><div class="font-display font-bold text-[20px] tracking-wide">EN PRÉPARATION</div><div class="text-[12px] text-ink-500">Encore un peu de patience…</div></div>
+            </div>
+            <div class="mt-4 space-y-3" id="tv-prep"></div>
+          </div>
+          <div class="bg-emerald-50/95 rounded-2xl p-6 glow">
+            <div class="flex items-center gap-3 pb-3 border-b border-emerald-200">
+              <div class="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center"><i data-lucide="check" class="w-5 h-5 text-white"></i></div>
+              <div><div class="font-display font-bold text-[20px] tracking-wide text-emerald-700">PRÊTES</div><div class="text-[12px] text-emerald-700/70">À retirer au comptoir</div></div>
+            </div>
+            <div class="mt-4 space-y-3" id="tv-ready"></div>
+          </div>
+        </div>
+        <div class="mt-7 text-center text-kp-100 text-[15px] flex items-center justify-center gap-2 relative">
+          <i data-lucide="user" class="w-5 h-5"></i>Présentez-vous <b class="text-lime-300">au comptoir</b> quand votre numéro apparaît.
+        </div>
+      </div>
+      <div class="text-center text-[10px] text-ink-400 pt-2">KodaPay</div>
+    </div>
+    <p class="text-center text-[11.5px] text-ink-500 mt-4">Affichage TV en salle : les numéros passent automatiquement de « En préparation » à « Prêtes ».</p>
+  </div>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 4 : CAISSE POS (tablette)                                            -->
+<!-- ============================================================================ -->
+<section id="surf-pos" class="surface">
+  <div class="py-8 px-4">
+    <div class="tablet">
+      <div class="bg-[#f4f6f8] rounded-2xl overflow-hidden">
+        <!-- topbar POS -->
+        <div class="bg-white border-b border-ink-200 px-5 py-3 flex items-center gap-3">
+          <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="leaf" class="w-4 h-4 text-white"></i></div>
+          <span class="font-display font-bold text-[16px]">KodaPay <span class="text-blue-600 text-[12px] font-extrabold align-top">POS</span></span>
+          <button class="btn btn-ghost btn-xs ml-3" onclick="toast('Sélecteur de service (mockup)')">Service midi<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="btn btn-ghost !px-2.5" onclick="toast('Recherche (mockup)')"><i data-lucide="search" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost !px-2.5" onclick="toast('Scanner code-barres (mockup)')"><i data-lucide="scan-line" class="w-4 h-4"></i></button>
+            <i data-lucide="wifi" class="w-4 h-4 text-ink-400 ml-1"></i>
+            <button class="relative p-1.5" onclick="toast('3 notifications (mockup)')"><i data-lucide="bell" class="w-4 h-4 text-ink-500"></i><span class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] font-bold text-white flex items-center justify-center">3</span></button>
+            <div class="w-8 h-8 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">AD</div>
+          </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row">
+          <!-- zone menu -->
+          <div class="flex-1 p-5 min-w-0">
+            <div class="flex gap-2.5 overflow-x-auto pb-2" id="pos-cats"></div>
+            <div class="flex items-center justify-between mt-4 mb-3">
+              <h3 class="font-display font-bold text-[16px]">Nos plats</h3>
+              <button class="btn btn-ghost btn-xs" onclick="toast('Tri (mockup)')">Le plus populaire<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3" id="pos-grid"></div>
+            <!-- bottom nav -->
+            <div class="mt-5 bg-white border border-ink-200 rounded-2xl px-4 py-2.5 flex items-center justify-around">
+              <div class="flex flex-col items-center gap-0.5 text-blue-600 font-semibold text-[11px] border-b-2 border-blue-600 pb-1 cursor-pointer"><i data-lucide="utensils" class="w-4 h-4"></i>Menu</div>
+              <div class="relative flex flex-col items-center gap-0.5 text-ink-500 text-[11px] cursor-pointer" onclick="toast('Commandes (mockup)')"><i data-lucide="receipt-text" class="w-4 h-4"></i>Commandes<span class="absolute -top-1 left-6 w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] font-bold text-white flex items-center justify-center">2</span></div>
+              <div class="flex flex-col items-center gap-0.5 text-ink-500 text-[11px] cursor-pointer" onclick="toast('Transactions (mockup)')"><i data-lucide="arrow-left-right" class="w-4 h-4"></i>Transactions</div>
+              <div class="flex flex-col items-center gap-0.5 text-ink-500 text-[11px] cursor-pointer" onclick="toast('Articles (mockup)')"><i data-lucide="package" class="w-4 h-4"></i>Articles</div>
+              <div class="flex flex-col items-center gap-0.5 text-ink-500 text-[11px] cursor-pointer" onclick="toast('Plus (mockup)')"><i data-lucide="menu" class="w-4 h-4"></i>Plus</div>
+            </div>
+          </div>
+
+          <!-- addition -->
+          <div class="w-full lg:w-[340px] flex-none bg-white border-l border-ink-200 p-5 flex flex-col">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="font-display font-bold text-[16px]">Commande 1042</h3>
+              <button onclick="toast('Options commande (mockup)')"><i data-lucide="more-vertical" class="w-4 h-4 text-ink-400"></i></button>
+            </div>
+            <div class="flex gap-4 text-[12.5px] font-semibold border-b border-ink-200 mb-3">
+              <span class="pb-2 border-b-2 border-blue-600 text-blue-600 cursor-pointer">Addition</span>
+              <span class="pb-2 text-ink-500 cursor-pointer" onclick="toast('Actions (mockup)')">Actions</span>
+              <span class="pb-2 text-ink-500 cursor-pointer" onclick="toast('Fiche client (mockup)')">Client</span>
+            </div>
+            <div class="flex-1 space-y-3" id="pos-ticket"></div>
+            <div class="border-t border-ink-200 mt-3 pt-3 space-y-1.5 text-[13px]">
+              <div class="flex justify-between text-ink-500"><span>Sous-total</span><span class="font-semibold text-ink-800">$49.00</span></div>
+              <div class="flex justify-between text-ink-500"><span>TVA (8,5%)</span><span class="font-semibold text-ink-800">$4.17</span></div>
+              <div class="flex justify-between font-display font-bold text-[17px] pt-1"><span>Total</span><span>$53.17</span></div>
+            </div>
+            <button class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[15px] rounded-xl py-3.5 flex items-center justify-center gap-2" onclick="toast('Encaissement $53.17 (mockup)')"><i data-lucide="credit-card" class="w-4.5 h-4.5 w-4 h-4"></i>Payer&nbsp; $53.17</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center text-[11.5px] text-ink-500 mt-4">Caisse tablette pour le personnel : prise de commande rapide, addition, encaissement.</p>
+  </div>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 4bis : CAISSE POS (mobile)                                           -->
+<!-- ============================================================================ -->
+<section id="surf-posm" class="surface">
+  <div class="py-8 px-4">
+    <div class="phone">
+      <div class="phone-screen !bg-[#f4f6f8]">
+        <!-- topbar -->
+        <div class="bg-white border-b border-ink-200 px-4 pt-3 pb-3">
+          <div class="flex items-center justify-between text-[12px] font-semibold mb-2.5 px-1 text-ink-800"><span>9:41</span><span class="flex items-center gap-1.5"><i data-lucide="signal" class="w-3.5 h-3.5"></i><i data-lucide="wifi" class="w-3.5 h-3.5"></i><i data-lucide="battery-full" class="w-4 h-4"></i></span></div>
+          <div class="flex items-center gap-2.5">
+            <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="leaf" class="w-4 h-4 text-white"></i></div>
+            <span class="font-display font-bold text-[15px]">KodaPay <span class="text-blue-600 text-[11px] font-extrabold align-top">POS</span></span>
+            <button class="btn btn-ghost btn-xs ml-1" onclick="toast('Sélecteur de service (mockup)')">Midi<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+            <div class="ml-auto flex items-center gap-1.5">
+              <button class="p-1.5" onclick="toast('Scanner code-barres (mockup)')"><i data-lucide="scan-line" class="w-4 h-4 text-ink-500"></i></button>
+              <button class="relative p-1.5" onclick="toast('3 notifications (mockup)')"><i data-lucide="bell" class="w-4 h-4 text-ink-500"></i><span class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] font-bold text-white flex items-center justify-center">3</span></button>
+              <div class="w-7 h-7 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">AD</div>
+            </div>
+          </div>
+          <div class="relative mt-2.5"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-ink-400"></i><input class="field !rounded-full !pl-9 !py-2 !text-[12.5px]" placeholder="Rechercher un article…"/></div>
+        </div>
+
+        <!-- catégories -->
+        <div class="px-4 pt-3">
+          <div class="flex gap-2 overflow-x-auto pb-1" id="posm-cats"></div>
+        </div>
+
+        <!-- grille articles -->
+        <div class="flex-1 overflow-y-auto px-4 pt-2 pb-40">
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="font-display font-bold text-[14.5px]">Nos plats</h3>
+            <button class="btn btn-ghost btn-xs" onclick="toast('Tri (mockup)')">Populaire<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+          </div>
+          <div class="grid grid-cols-2 gap-2.5" id="posm-grid"></div>
+        </div>
+
+        <!-- barre addition -->
+        <div class="absolute left-3 right-3 bottom-16 bg-ink-900 text-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-xl cursor-pointer" onclick="openPosmTicket()">
+          <div class="relative"><i data-lucide="receipt-text" class="w-5 h-5"></i><span class="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-blue-500 text-[9px] font-bold flex items-center justify-center">6</span></div>
+          <div class="flex-1 leading-tight"><div class="text-[13px] font-bold">Commande 1042</div><div class="text-[10.5px] text-ink-400">6 articles</div></div>
+          <div class="font-display font-bold text-[16px]">$53.17</div>
+          <i data-lucide="chevron-up" class="w-4 h-4"></i>
+        </div>
+
+        <!-- bottom nav -->
+        <div class="absolute left-0 right-0 bottom-0 bg-white border-t border-ink-200 px-3 py-2 flex items-center justify-around">
+          <div class="flex flex-col items-center gap-0.5 text-blue-600 font-semibold text-[10px] cursor-pointer"><i data-lucide="utensils" class="w-4 h-4"></i>Menu</div>
+          <div class="relative flex flex-col items-center gap-0.5 text-ink-500 text-[10px] cursor-pointer" onclick="toast('Commandes (mockup)')"><i data-lucide="receipt-text" class="w-4 h-4"></i>Commandes<span class="absolute -top-1 left-7 w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] font-bold text-white flex items-center justify-center">2</span></div>
+          <div class="flex flex-col items-center gap-0.5 text-ink-500 text-[10px] cursor-pointer" onclick="toast('Transactions (mockup)')"><i data-lucide="arrow-left-right" class="w-4 h-4"></i>Transactions</div>
+          <div class="flex flex-col items-center gap-0.5 text-ink-500 text-[10px] cursor-pointer" onclick="toast('Plus (mockup)')"><i data-lucide="menu" class="w-4 h-4"></i>Plus</div>
+        </div>
+
+        <!-- feuille addition -->
+        <div id="posm-sheet" class="absolute inset-0 bg-black/40 backdrop-blur-[2px] hidden" onclick="if(event.target===this)closePosmTicket()">
+          <div class="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl p-4 max-h-[80%] flex flex-col">
+            <div class="w-10 h-1 rounded-full bg-ink-200 mx-auto mb-3"></div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="font-display font-bold text-[15.5px]">Commande 1042</h4>
+              <button onclick="closePosmTicket()"><i data-lucide="x" class="w-4 h-4 text-ink-400"></i></button>
+            </div>
+            <div class="flex gap-4 text-[12px] font-semibold border-b border-ink-200 mb-3">
+              <span class="pb-2 border-b-2 border-blue-600 text-blue-600 cursor-pointer">Addition</span>
+              <span class="pb-2 text-ink-500 cursor-pointer" onclick="toast('Actions (mockup)')">Actions</span>
+              <span class="pb-2 text-ink-500 cursor-pointer" onclick="toast('Fiche client (mockup)')">Client</span>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-3" id="posm-ticket"></div>
+            <div class="border-t border-ink-200 mt-3 pt-3 space-y-1.5 text-[13px]">
+              <div class="flex justify-between text-ink-500"><span>Sous-total</span><span class="font-semibold text-ink-800">$49.00</span></div>
+              <div class="flex justify-between text-ink-500"><span>TVA (8,5%)</span><span class="font-semibold text-ink-800">$4.17</span></div>
+              <div class="flex justify-between font-display font-bold text-[16px] pt-1"><span>Total</span><span>$53.17</span></div>
+            </div>
+            <button class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[14.5px] rounded-xl py-3 flex items-center justify-center gap-2" onclick="toast('Encaissement $53.17 (mockup)')"><i data-lucide="credit-card" class="w-4 h-4"></i>Payer&nbsp; $53.17</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center text-[11.5px] text-ink-500 mt-4">Caisse POS sur smartphone : prise de commande en salle, addition en feuille coulissante, encaissement.</p>
+  </div>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 5 : SUPER ADMIN PLATEFORME                                           -->
+<!-- ============================================================================ -->
+<section id="surf-admin" class="surface">
+  <div class="flex">
+    <aside class="hidden lg:flex w-[230px] flex-none grad-teal text-ink-300 flex-col min-h-[calc(100vh-46px)] sticky top-[46px]">
+      <div class="flex items-center gap-3 px-5 py-5">
+        <div class="grad-leaf w-9 h-9 rounded-xl flex items-center justify-center"><i data-lucide="leaf" class="w-4.5 h-4.5 w-4 h-4 text-white"></i></div>
+        <div class="font-display font-bold text-white text-[16px]">KodaPay</div>
+      </div>
+      <nav class="flex-1 px-3 space-y-0.5" id="adm-nav"></nav>
+      <div class="mx-4 my-3 rounded-xl bg-white/5 border border-white/10 p-3">
+        <div class="text-[11px] font-semibold text-white mb-1">Statut plateforme</div>
+        <div class="flex items-center gap-1.5 text-[11px] text-emerald-300"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Opérationnelle</div>
+        <div class="text-[10px] text-kp-300/70 mt-1">Tous les systèmes fonctionnent normalement.</div>
+        <a class="text-[10.5px] font-semibold text-kp-300 mt-1.5 inline-flex items-center gap-1 cursor-pointer" onclick="toast('Page statut (mockup)')">Voir le statut <i data-lucide="arrow-right" class="w-3 h-3"></i></a>
+      </div>
+      <div class="px-4 pb-4">
+        <div class="flex items-center gap-2.5 rounded-xl bg-white/5 p-2.5 cursor-pointer" onclick="toast('Compte super admin (mockup)')">
+          <div class="w-8 h-8 rounded-full bg-white/15 text-white text-[10.5px] font-bold flex items-center justify-center">SA</div>
+          <div class="min-w-0"><div class="text-[12px] font-semibold text-white">Super Admin</div><div class="text-[10px] text-kp-300/70 truncate">admin@kodapay.com</div></div>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 ml-auto"></i>
+        </div>
+      </div>
+    </aside>
+
+    <main class="flex-1 min-w-0 p-4 lg:p-7">
+      <div class="flex flex-wrap items-center gap-3 mb-6">
+        <div class="mr-auto">
+          <h1 class="font-display text-[22px] lg:text-[26px] font-bold">Tableau de bord</h1>
+          <p class="text-[12.5px] text-ink-500">Vue d'ensemble de votre plateforme.</p>
+        </div>
+        <button class="btn btn-ghost" onclick="toast('Période (mockup)')">30 avr. – 30 mai 2025<i data-lucide="calendar" class="w-4 h-4"></i></button>
+        <button class="btn btn-ghost" onclick="toast('Export (mockup)')"><i data-lucide="download" class="w-4 h-4"></i>Exporter</button>
+        <button class="relative btn btn-ghost !px-2.5" onclick="toast('6 notifications (mockup)')"><i data-lucide="bell" class="w-4 h-4"></i><span class="absolute -top-1.5 -right-1.5 min-w-[18px] h-4.5 h-4 px-1 rounded-full bg-acc-500 text-[9.5px] font-bold text-white flex items-center justify-center">6</span></button>
+        <div class="flex items-center gap-2 cursor-pointer" onclick="toast('Profil (mockup)')">
+          <div class="w-9 h-9 rounded-full bg-kp-800 text-white text-[11px] font-bold flex items-center justify-center">SA</div>
+          <div class="hidden md:block leading-tight"><div class="text-[12.5px] font-semibold">Super Admin</div><div class="text-[10.5px] text-ink-500">Propriétaire</div></div>
+        </div>
+      </div>
+
+      <!-- KPIs plateforme -->
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 mb-5" id="adm-kpis"></div>
+
+      <!-- répartition + entreprises -->
+      <div class="grid grid-cols-1 xl:grid-cols-5 gap-3.5 mb-5">
+        <div class="card p-4 xl:col-span-2">
+          <h3 class="font-display font-semibold text-[14.5px] mb-3">Répartition mondiale</h3>
+          <div class="rounded-xl bg-kp-50 h-36 flex items-center justify-center mb-3"><i data-lucide="globe-2" class="w-16 h-16 text-kp-300"></i></div>
+          <div class="space-y-2 text-[12px]" id="adm-regions"></div>
+        </div>
+        <div class="card xl:col-span-3">
+          <div class="p-4 pb-2 flex items-center justify-between">
+            <h3 class="font-display font-semibold text-[14.5px]">Entreprises clientes</h3>
+            <button class="btn btn-ghost btn-xs" onclick="toast('Liste entreprises (mockup)')">Voir toutes les entreprises</button>
+          </div>
+          <div class="scrollx">
+            <table class="tbl w-full">
+              <thead><tr><th>Entreprise</th><th>Pays</th><th>Statut</th><th>Plan</th><th>Ventes mensuelles</th><th>Commission due</th><th></th></tr></thead>
+              <tbody id="adm-companies"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- rangée basse -->
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3.5">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3"><h3 class="font-display font-semibold text-[14px]">Résumé de facturation</h3><span class="chip bg-kp-50 text-kp-600">Mai 2025</span></div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="rounded-xl bg-ink-50 p-3"><div class="text-[10.5px] text-ink-500">Facturé ce mois</div><div class="font-display font-bold text-[16px]">58 900,00 €</div></div>
+            <div class="rounded-xl bg-red-50 p-3"><div class="text-[10.5px] text-ink-500">Impayés</div><div class="font-display font-bold text-[16px] text-red-600">4 250,00 €</div></div>
+            <div class="rounded-xl bg-emerald-50 p-3"><div class="text-[10.5px] text-ink-500">Paiements reçus</div><div class="font-display font-bold text-[16px] text-emerald-700">54 650,00 €</div></div>
+            <div class="rounded-xl bg-ink-50 p-3"><div class="text-[10.5px] text-ink-500">Taux de recouvrement</div><div class="font-display font-bold text-[16px]">92,8 %</div></div>
+          </div>
+          <button class="btn btn-ghost btn-xs w-full justify-center mt-3" onclick="toast('Factures (mockup)')">Voir toutes les factures</button>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-1"><h3 class="font-display font-semibold text-[14px]">Revenus récurrents (MRR)</h3><button class="btn btn-ghost btn-xs" onclick="toast('Période (mockup)')">6 mois<i data-lucide="chevron-down" class="w-3 h-3"></i></button></div>
+          <div class="font-display font-bold text-[22px]">82 340,00 €</div>
+          <div class="chip bg-emerald-50 text-emerald-600 mb-2"><i data-lucide="trending-up" class="w-3 h-3"></i>+16,3% vs période précédente</div>
+          <svg viewBox="0 0 260 90" class="w-full">
+            <path d="M10,78 L58,66 L106,55 L154,42 L202,26 L250,12" fill="none" stroke="#2c8a91" stroke-width="2.5"/>
+            <g fill="#2c8a91"><circle cx="10" cy="78" r="3"/><circle cx="58" cy="66" r="3"/><circle cx="106" cy="55" r="3"/><circle cx="154" cy="42" r="3"/><circle cx="202" cy="26" r="3"/><circle cx="250" cy="12" r="3"/></g>
+            <g font-size="9" fill="#94a3b8"><text x="2" y="89">Déc.</text><text x="50" y="89">Janv.</text><text x="98" y="89">Févr.</text><text x="148" y="89">Mars</text><text x="196" y="89">Avr.</text><text x="246" y="89">Mai</text></g>
+          </svg>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3"><h3 class="font-display font-semibold text-[14px]">Passerelles de paiement</h3><button class="btn btn-ghost btn-xs" onclick="toast('Gestion passerelles (mockup)')">Gérer</button></div>
+          <div class="space-y-2.5" id="adm-gateways"></div>
+          <a class="block text-center text-[11.5px] font-semibold text-kp-600 mt-3 cursor-pointer" onclick="toast('Passerelles (mockup)')">Voir toutes les passerelles →</a>
+        </div>
+        <div class="card p-4">
+          <h3 class="font-display font-semibold text-[14px] mb-3">Alertes et actions requises</h3>
+          <div class="space-y-2.5">
+            <div class="rounded-xl border border-red-100 bg-red-50/60 p-3">
+              <div class="flex items-center gap-2 text-[12px] font-bold text-red-700"><i data-lucide="alert-circle" class="w-4 h-4"></i>3 entreprises suspendues</div>
+              <div class="text-[11px] text-ink-500 mt-0.5">Factures impayées depuis plus de 7 jours.</div>
+              <a class="text-[11px] font-semibold text-red-600 cursor-pointer" onclick="toast('Entreprises suspendues (mockup)')">Voir les entreprises →</a>
+            </div>
+            <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+              <div class="flex items-center gap-2 text-[12px] font-bold text-amber-700"><i data-lucide="clock" class="w-4 h-4"></i>5 entreprises en retard de paiement</div>
+              <div class="text-[11px] text-ink-500 mt-0.5">Échéance dans les 3 prochains jours.</div>
+              <a class="text-[11px] font-semibold text-amber-600 cursor-pointer" onclick="toast('Retards (mockup)')">Voir les entreprises →</a>
+            </div>
+            <div class="rounded-xl border border-kp-100 bg-kp-50/60 p-3">
+              <div class="flex items-center gap-2 text-[12px] font-bold text-kp-700"><i data-lucide="info" class="w-4 h-4"></i>Mise à jour des CGV</div>
+              <div class="text-[11px] text-ink-500 mt-0.5">De nouvelles conditions sont disponibles.</div>
+              <a class="text-[11px] font-semibold text-kp-600 cursor-pointer" onclick="toast('CGV (mockup)')">Consulter les CGV →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</section>
+
+<div id="toasts"></div>
+<div id="overlay" onclick="if(event.target===this)closeModal()"><div id="modal"></div></div>
+
+<script>
+/* ---------- helpers ---------- */
+function toast(msg){
+  const t=document.createElement('div');t.className='toast';t.innerHTML='<span>'+msg+'</span>';
+  document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),2600);
+}
+function showSurf(id,el){
+  document.querySelectorAll('.surface').forEach(s=>s.classList.remove('active'));
+  document.getElementById('surf-'+id).classList.add('active');
+  document.querySelectorAll('.sw').forEach(s=>s.classList.remove('sw-active'));
+  el.classList.add('sw-active');window.scrollTo(0,0);lucide.createIcons();
+}
+
+/* ---------- back-office : types de commerce (verticales) ---------- */
+/* chaque module a une clé ; les modes activent un sous-ensemble. Le socle est commun à tous. */
+const boModules={
+  dashboard:['layout-dashboard','Tableau de bord'],
+  commandes:['receipt-text','Commandes'],
+  produits:['utensils','Produits'],
+  ingredients:['carrot','Ingrédients'],
+  stock:['boxes','Stock'],
+  qr:['qr-code','QR Codes'],
+  paiements:['credit-card','Paiements'],
+  depenses:['trending-down','Dépenses'],
+  employes:['users','Employés'],
+  rapports:['bar-chart-3','Rapports'],
+  parametres:['settings','Paramètres'],
+};
+const boModes={
+  'Restaurant':{ic:'utensils-crossed',sub:'Espace restaurateur',mods:['dashboard','commandes','produits','ingredients','qr','paiements','depenses','employes','rapports','parametres']},
+  'Supermarché':{ic:'shopping-cart',sub:'Espace commerçant',mods:['dashboard','commandes','produits','stock','paiements','depenses','employes','rapports','parametres']},
+  'Quincaillerie':{ic:'wrench',sub:'Espace commerçant',mods:['dashboard','commandes','produits','stock','paiements','depenses','employes','rapports','parametres']},
+  'Boutique / Services':{ic:'store',sub:'Espace commerçant',mods:['dashboard','commandes','produits','qr','paiements','depenses','employes','rapports','parametres']},
+};
+/* boNav est dérivé du mode courant */
+function currentNav(){const m=boModes[bo?bo.mode:'Restaurant']||boModes['Restaurant'];return m.mods.map(k=>boModules[k]);}
+window.boNav=[]; /* rempli par renderBoNav via currentNav */
+
+/* ---------- back-office : produits ---------- */
+const boProducts=[
+  ['🥩','Entrecôte grillée','Grillades','24,90 €',32,9.20],
+  ['🐟','Saumon rôti','Poissons','18,90 €',28,7.50],
+  ['🍄','Risotto aux cèpes','Risottos','16,90 €',21,4.10],
+  ['🦆','Magret de canard','Viandes','22,90 €',18,8.40],
+  ['🍮','Crème brûlée','Desserts','7,90 €',15,1.60],
+];
+document.getElementById('bo-products').innerHTML=boProducts.map(([em,n,c,p,v])=>`
+  <tr><td><div class="flex items-center gap-2.5"><div class="food w-9 h-9 bg-kp-50 !text-[18px]">${em}</div><b>${n}</b></div></td>
+  <td class="text-ink-500">${c}</td><td class="font-semibold">${p}</td>
+  <td><span class="chip bg-emerald-50 text-emerald-600">Actif</span></td><td>${v}</td>
+  <td><button class="btn btn-ghost btn-xs" onclick="toast('Édition ${n} (mockup)')"><i data-lucide="pencil" class="w-3 h-3"></i>Éditer</button></td></tr>`).join('');
+
+/* ---------- back-office : QR codes ---------- */
+const boQr=[['Table 01','Table',18],['Table 02','Table',22],['Terrasse','Zone',35],['Comptoir','Zone',12]];
+document.getElementById('bo-qrcodes').innerHTML=boQr.map(([n,t,s])=>`
+  <tr><td><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-lg border border-ink-200 flex items-center justify-center"><i data-lucide="qr-code" class="w-4 h-4 text-ink-600"></i></div><b>${n}</b></div></td>
+  <td class="text-ink-500">${t}</td><td>${s}</td><td><span class="chip bg-emerald-50 text-emerald-600">Actif</span></td>
+  <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="toast('Aperçu QR ${n} (mockup)')">Voir</button>
+  <button class="btn btn-ghost btn-xs !px-2" onclick="toast('Options ${n} (mockup)')"><i data-lucide="more-vertical" class="w-3 h-3"></i></button></div></td></tr>`).join('');
+
+/* ---------- app client ---------- */
+const cliCats=[['utensils','Plats',true],['cup-soda','Boissons'],['cake-slice','Desserts'],['users','À partager']];
+document.getElementById('cli-cats').innerHTML=cliCats.map(([ic,lb,act])=>`
+  <button class="chip !py-2 !px-4 !text-[12px] flex-none ${act?'bg-kp-800 text-white':'bg-white border border-ink-200 text-ink-600'}" onclick="toast('Catégorie ${lb} (mockup)')">
+  <i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${lb}</button>`).join('');
+
+const cliDishes=[
+  ['🥩','Entrecôte grillée','Entrecôte de bœuf grillée, beurre maître d’hôtel, frites maison et salade verte.','24,90 €'],
+  ['🐟','Saumon rôti','Saumon rôti au four, légumes de saison et sauce citronnée.','18,90 €'],
+  ['🍄','Risotto aux cèpes 🌿','Risotto crémeux aux cèpes, parmesan et huile de truffe.','16,90 €'],
+  ['🦆','Magret de canard','Magret rôti, miel et purée de patates douces.','22,90 €'],
+];
+let cartN=2,cartT=43.8;
+document.getElementById('cli-list').innerHTML=cliDishes.map(([em,n,d,p],i)=>`
+  <div class="flex gap-3.5 py-4 ${i? 'border-t border-ink-200/70':''}">
+    <div class="food w-24 h-24 bg-gradient-to-br from-stone-200 to-stone-400 !text-[40px]">${em}</div>
+    <div class="flex-1 min-w-0">
+      <div class="font-bold text-[15px]">${n}</div>
+      <div class="text-[11.5px] text-ink-500 leading-snug mt-0.5">${d}</div>
+      <div class="font-display font-bold text-kp-700 text-[15px] mt-1.5">${p}</div>
+    </div>
+    <button class="self-center w-11 h-11 rounded-xl border border-ink-200 bg-white flex items-center justify-center text-kp-700 hover:bg-kp-50" onclick="addCart('${p}')"><i data-lucide="plus" class="w-5 h-5"></i></button>
+  </div>`).join('');
+function addCart(p){
+  cartN++;cartT+=parseFloat(p.replace(',','.'));
+  document.getElementById('cli-count').textContent=cartN;
+  document.getElementById('cli-count2').textContent=cartN+' articles';
+  document.getElementById('cli-total').textContent=cartT.toFixed(2).replace('.',',')+' €';
+  toast('Ajouté au panier (mockup)');
+}
+function openCheckout(){document.getElementById('cli-sheet').classList.remove('hidden');lucide.createIcons();}
+function closeCheckout(){document.getElementById('cli-sheet').classList.add('hidden');}
+
+/* ---------- écran cuisine ---------- */
+document.getElementById('tv-prep').innerHTML=[1042,1043,1044,1047].map(n=>`
+  <div class="flex items-center justify-between rounded-xl border border-ink-200 px-5 py-3">
+    <span class="font-display font-bold text-[40px] leading-none tracking-tight">${n}</span>
+    <i data-lucide="more-vertical" class="w-5 h-5 text-ink-300"></i></div>`).join('');
+document.getElementById('tv-ready').innerHTML=[1038,1039,1040].map(n=>`
+  <div class="flex items-center justify-between rounded-xl bg-white border border-emerald-200 px-5 py-4 shadow-[0_0_18px_rgba(52,211,153,.25)]">
+    <span class="font-display font-bold text-[44px] leading-none tracking-tight text-emerald-700">${n}</span>
+    <span class="text-2xl">🎉</span></div>`).join('');
+
+/* ---------- POS ---------- */
+const posCats=[['leaf','Salades',8,'bg-emerald-500'],['sandwich','Sandwichs',7,'bg-amber-500'],['cup-soda','Boissons',12,'bg-blue-500'],['cake-slice','Desserts',6,'bg-pink-500'],['soup','Bols',10,'bg-violet-500'],['beer','Bières & vins',9,'bg-red-500'],['badge-percent','Promotions',4,'bg-teal-600'],['scan-line','Scanner','','bg-ink-100 !text-ink-700']];
+document.getElementById('pos-cats').innerHTML=posCats.map(([ic,lb,n,cl])=>`
+  <div class="cat-tile ${cl}" onclick="toast('Catégorie ${lb} (mockup)')">
+    <i data-lucide="${ic}" class="w-5 h-5 mb-2"></i>
+    <div class="text-[12.5px] font-bold leading-tight">${lb}</div>
+    ${n!==''?`<div class="text-[10px] opacity-80">${n} articles</div>`:''}</div>`).join('');
+
+const posItems=[
+  ['🥖','Banh mi classique','$8.50','Populaire'],['🌯','Wrap poulet grillé','$9.00',''],
+  ['🥗','Salade lotus','$12.00',''],['🍣','Saumon épicé bowl','$14.00',''],
+  ['🍄','Risotto champignons','$13.50','Nouveau'],['🐟','Saumon rôti','$16.00',''],
+  ['🍜','Bowl tempura','$13.00',''],['🍫','Gâteau chocolat','$6.50',''],
+];
+document.getElementById('pos-grid').innerHTML=posItems.map(([em,n,p,badge])=>`
+  <div class="card !rounded-2xl overflow-hidden cursor-pointer hover:shadow-md transition" onclick="toast('${n} ajouté à la commande (mockup)')">
+    <div class="relative h-28 bg-gradient-to-br from-stone-200 to-stone-400 flex items-center justify-center text-4xl">${em}
+      ${badge?`<span class="chip absolute top-2 left-2 ${badge==='Populaire'?'bg-blue-600':'bg-emerald-600'} text-white">${badge}</span>`:''}
+      <span class="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-white shadow flex items-center justify-center"><i data-lucide="plus" class="w-4 h-4 text-ink-700"></i></span></div>
+    <div class="p-3"><div class="text-[13px] font-bold leading-tight">${n}</div><div class="text-[12.5px] text-ink-500 mt-0.5">${p}</div></div></div>`).join('');
+
+const posTicket=[[1,'Salade lotus','$12.00',''],[2,'Banh mi classique','$17.00','Sans coriandre'],[1,'Saumon épicé bowl','$14.00',''],[2,'Thé glacé maison','$6.00','Citron']];
+document.getElementById('pos-ticket').innerHTML=posTicket.map(([q,n,p,note])=>`
+  <div class="flex items-start gap-2.5">
+    <span class="w-6 h-6 rounded-lg bg-ink-100 text-[11px] font-bold flex items-center justify-center flex-none mt-0.5">${q}</span>
+    <div class="flex-1 min-w-0"><div class="text-[13px] font-semibold">${n}</div>${note?`<div class="text-[11px] text-ink-500">${note}</div>`:''}</div>
+    <span class="text-[13px] font-semibold">${p}</span>
+    <button class="text-ink-400 mt-0.5" onclick="toast('Modifier ${n} (mockup)')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></div>`).join('');
+
+/* ---------- POS mobile ---------- */
+document.getElementById('posm-cats').innerHTML=posCats.map(([ic,lb,n,cl])=>`
+  <div class="cat-tile ${cl} !min-w-[86px] !p-2.5 flex-none" onclick="toast('Catégorie ${lb} (mockup)')">
+    <i data-lucide="${ic}" class="w-4 h-4 mb-1.5"></i>
+    <div class="text-[11px] font-bold leading-tight">${lb}</div>
+    ${n!==''?`<div class="text-[9px] opacity-80">${n} articles</div>`:''}</div>`).join('');
+
+document.getElementById('posm-grid').innerHTML=posItems.map(([em,n,p,badge])=>`
+  <div class="card !rounded-2xl overflow-hidden cursor-pointer active:scale-[.98] transition" onclick="toast('${n} ajouté à la commande (mockup)')">
+    <div class="relative h-20 bg-gradient-to-br from-stone-200 to-stone-400 flex items-center justify-center text-3xl">${em}
+      ${badge?`<span class="chip absolute top-1.5 left-1.5 !text-[9px] ${badge==='Populaire'?'bg-blue-600':'bg-emerald-600'} text-white">${badge}</span>`:''}
+      <span class="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full bg-white shadow flex items-center justify-center"><i data-lucide="plus" class="w-3.5 h-3.5 text-ink-700"></i></span></div>
+    <div class="p-2.5"><div class="text-[11.5px] font-bold leading-tight">${n}</div><div class="text-[11.5px] text-ink-500 mt-0.5">${p}</div></div></div>`).join('');
+
+document.getElementById('posm-ticket').innerHTML=posTicket.map(([q,n,p,note])=>`
+  <div class="flex items-start gap-2.5">
+    <span class="w-6 h-6 rounded-lg bg-ink-100 text-[11px] font-bold flex items-center justify-center flex-none mt-0.5">${q}</span>
+    <div class="flex-1 min-w-0"><div class="text-[12.5px] font-semibold">${n}</div>${note?`<div class="text-[10.5px] text-ink-500">${note}</div>`:''}</div>
+    <span class="text-[12.5px] font-semibold">${p}</span>
+    <button class="text-ink-400 mt-0.5" onclick="toast('Modifier ${n} (mockup)')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></div>`).join('');
+
+function openPosmTicket(){document.getElementById('posm-sheet').classList.remove('hidden');lucide.createIcons();}
+function closePosmTicket(){document.getElementById('posm-sheet').classList.add('hidden');}
+
+/* ---------- super admin ---------- */
+const admNav=[['layout-dashboard','Tableau de bord',true],['building-2','Entreprises'],['badge-check','Abonnements'],['arrow-left-right','Transactions'],['percent','Commissions'],['life-buoy','Support'],['globe','Paiements mondiaux'],['bar-chart-3','Analytique'],['settings','Paramètres plateforme']];
+document.getElementById('adm-nav').innerHTML=admNav.map(([ic,lb,act])=>`
+  <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-white/5 ${act?'nav-active':''}" onclick="toast('${lb} (mockup)')">
+    <i data-lucide="${ic}" class="w-4 h-4"></i>${lb}</div>`).join('');
+
+const admKpis=[
+  ['building-2','Entreprises actives','152','+12 ce mois · sur 180 au total','bg-kp-50 text-kp-600'],
+  ['wallet','Revenus plateforme','48 750,00 €','+18,6% vs mois dernier','bg-emerald-50 text-emerald-600'],
+  ['coins','Commissions du jour','2 340,50 €','+9,2% vs hier','bg-amber-50 text-amber-600'],
+  ['shopping-cart','Volume commandes global','1 248 290,00 €','+15,4% vs mois dernier','bg-blue-50 text-blue-600'],
+  ['alert-triangle','Incidents support','8','3 critiques','bg-red-50 text-red-500'],
+];
+document.getElementById('adm-kpis').innerHTML=admKpis.map(([ic,lb,v,sub,cl])=>`
+  <div class="card p-4"><div class="flex items-start justify-between"><span class="text-[11.5px] font-medium text-ink-500 leading-tight">${lb}</span>
+  <span class="w-9 h-9 rounded-xl ${cl.split(' ')[0]} flex items-center justify-center flex-none"><i data-lucide="${ic}" class="w-4 h-4 ${cl.split(' ')[1]}"></i></span></div>
+  <div class="font-display text-[21px] font-bold mt-1">${v}</div><div class="text-[11px] text-ink-500 mt-0.5">${sub}</div></div>`).join('');
+
+const admRegions=[['Europe',62,'bg-kp-800'],['Afrique',45,'bg-kp-500'],['Amérique',28,'bg-kp-300'],['Asie',12,'bg-kp-200'],['Autres',5,'bg-ink-200']];
+document.getElementById('adm-regions').innerHTML=admRegions.map(([r,n,cl])=>`
+  <div class="flex items-center gap-2.5"><span class="w-2.5 h-2.5 rounded-sm ${cl}"></span><span class="flex-1">${r}</span><b>${n} entreprises</b></div>`).join('');
+
+const admCompanies=[
+  ['Le Jardin Grill','🇫🇷 France','Active','Premium','24 590,00 €','737,70 €','emerald'],
+  ['Bistro Milano','🇮🇹 Italie','Active','Standard','18 240,00 €','547,20 €','emerald'],
+  ['Sushi House','🇩🇪 Allemagne','Active','Premium','32 120,00 €','963,60 €','emerald'],
+  ['Café de la Paix','🇧🇪 Belgique','En attente','Standard','9 870,00 €','296,10 €','amber'],
+  ['Tacos Express','🇪🇸 Espagne','Suspendue','Standard','–','–','red'],
+];
+document.getElementById('adm-companies').innerHTML=admCompanies.map(([n,pays,st,plan,cavg,com,cl])=>`
+  <tr><td><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-full grad-leaf flex items-center justify-center"><i data-lucide="leaf" class="w-3.5 h-3.5 text-white"></i></div><b>${n}</b></div></td>
+  <td>${pays}</td><td><span class="chip bg-${cl}-50 text-${cl}-600">${st}</span></td><td class="text-ink-500">${plan}</td>
+  <td class="font-semibold">${cavg}</td><td>${com}</td>
+  <td><button class="btn btn-ghost btn-xs !px-2" onclick="toast('Fiche ${n} (mockup)')"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></button></td></tr>`).join('');
+
+const admGateways=[['Stripe','98,7 %'],['PayPal','97,1 %'],['Paystack','99,2 %'],['Flutterwave','98,9 %'],['Mercado Pago','97,6 %']];
+document.getElementById('adm-gateways').innerHTML=admGateways.map(([g,tx])=>`
+  <div class="flex items-center gap-2.5 text-[12.5px]">
+    <div class="w-7 h-7 rounded-lg bg-ink-100 flex items-center justify-center"><i data-lucide="credit-card" class="w-3.5 h-3.5 text-ink-600"></i></div>
+    <b class="flex-1">${g}</b><span class="chip bg-emerald-50 text-emerald-600">Activée</span><span class="text-ink-500">${tx}</span></div>`).join('');
+
+lucide.createIcons();
+</script>
+
+<script>
+/* ================= INTERACTIVITÉ — PARTIE 1 : infra + back-office ================= */
+
+/* ---- popmenu générique ---- */
+let _menu=null;
+function closeMenu(){if(_menu){_menu.remove();_menu=null;}}
+function popMenu(ev,items){
+  ev.stopPropagation();closeMenu();
+  _menu=document.createElement('div');_menu.className='popmenu';
+  _menu.innerHTML=items.map((it,i)=>it.sep?'<div class="pm-sep"></div>':it.head?`<div class="pm-head">${it.head}</div>`:
+    `<div class="pm-item ${it.danger?'pm-danger':''}" data-i="${i}">${it.ic?`<i data-lucide="${it.ic}" class="w-3.5 h-3.5"></i>`:''}${it.lb}</div>`).join('');
+  document.body.appendChild(_menu);
+  const b=ev.currentTarget.getBoundingClientRect(),mw=_menu.offsetWidth,mh=_menu.offsetHeight;
+  _menu.style.left=Math.max(8,Math.min(b.left,innerWidth-mw-8))+'px';
+  _menu.style.top=(b.bottom+mh+8>innerHeight?b.top-mh-6:b.bottom+6)+'px';
+  _menu.querySelectorAll('.pm-item').forEach(el=>el.onclick=()=>{const f=items[+el.dataset.i].fn;closeMenu();f&&f();});
+  lucide.createIcons();
+  setTimeout(()=>document.addEventListener('click',closeMenu,{once:true}),0);
+}
+
+/* ---- modal générique ---- */
+function openModal(html){const o=document.getElementById('overlay');o.classList.add('open');document.getElementById('modal').innerHTML=html;lucide.createIcons();}
+function closeModal(){document.getElementById('overlay').classList.remove('open');}
+function mHead(t){return `<div class="flex items-center justify-between px-5 pt-5 pb-2"><h3 class="font-display font-bold text-[16px]">${t}</h3><button onclick="closeModal()" class="p-1"><i data-lucide="x" class="w-4 h-4 text-ink-400"></i></button></div>`;}
+function confirmModal(t,msg,okLb,fn){
+  window.__cf=fn;
+  openModal(mHead(t)+`<div class="px-5 pb-5"><p class="text-[13px] text-ink-600">${msg}</p>
+  <div class="flex gap-2 justify-end mt-4"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="closeModal();__cf&&__cf()">${okLb}</button></div></div>`);
+}
+
+/* ---- faux QR canvas (téléchargeable) ---- */
+function drawQr(cv,seed){const c=cv.getContext('2d'),n=21,s=cv.width/n;c.fillStyle='#fff';c.fillRect(0,0,cv.width,cv.height);c.fillStyle='#0f172a';
+  let r=seed;const rnd=()=>(r=(r*1103515245+12345)%2147483648)/2147483648;
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){if(rnd()>.5)c.fillRect(x*s,y*s,s,s);}
+  [[0,0],[n-7,0],[0,n-7]].forEach(([px,py])=>{c.fillStyle='#0f172a';c.fillRect(px*s,py*s,7*s,7*s);c.fillStyle='#fff';c.fillRect((px+1)*s,(py+1)*s,5*s,5*s);c.fillStyle='#0f172a';c.fillRect((px+2)*s,(py+2)*s,3*s,3*s);});}
+function dlQr(nom){const cv=document.getElementById('qr-cv');const a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download='qr-'+nom.toLowerCase().replace(/\s+/g,'-')+'.png';a.click();toast('QR Code téléchargé');}
+
+/* ---- export CSV réel ---- */
+function dlCSV(name,rows){const csv=rows.map(r=>r.join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));a.download=name;a.click();toast('Export téléchargé : '+name);}
+
+/* ================= BACK-OFFICE ================= */
+const bo={mode:'Restaurant',succ:'Toutes les succursales',period:'Aujourd’hui, 13 mai 2025',catFilter:'Toutes catégories',search:'',view:'Tableau de bord',
+  prods:boProducts.map(r=>({em:r[0],n:r[1],c:r[2],p:r[3],v:r[4],cost:r[5],actif:true})),
+  qrs:boQr.map(r=>({n:r[0],t:r[1],s:r[2],actif:true})),
+  notifs:[['shopping-bag','Nouvelle commande n°1047 — Table 03','Il y a 2 min'],['star','Nouvel avis client 5★ sur Entrecôte grillée','Il y a 18 min'],['credit-card','Paiement de 86,40 € reçu (commande 1041)','Il y a 31 min']],
+  cmds:[{no:1047,ou:'Table 03',art:3,tot:'52,70 €',st:'Reçue'},{no:1046,ou:'Table 12',art:2,tot:'31,80 €',st:'En préparation'},{no:1045,ou:'Comptoir',art:5,tot:'86,40 €',st:'En préparation'},{no:1044,ou:'Terrasse',art:1,tot:'18,90 €',st:'Prête'},{no:1043,ou:'Table 07',art:4,tot:'64,20 €',st:'Prête'},{no:1042,ou:'Table 07',art:2,tot:'43,80 €',st:'Terminée'}],
+  emps:[{n:'Thomas Martin',r:'Administrateur'},{n:'Sarah Kanza',r:'Caissière'},{n:'Marc Ilunga',r:'Chef de cuisine'},{n:'Awa Ndaya',r:'Serveuse'}],
+  pays:[{d:'13 mai',m:'Carte bancaire',mt:'2 940,10 €'},{d:'13 mai',m:'Mobile Money',mt:'1 250,40 €'},{d:'13 mai',m:'Espèces',mt:'700,00 €'},{d:'12 mai',m:'Carte bancaire',mt:'2 410,00 €'}]};
+bo.expCats=['Marchandises & fournisseurs','Loyer & charges','Salaires','Énergie','Marketing','Entretien & réparations','Autre'];
+bo.expenses=[
+  {d:'13 mai 2025',cat:'Marchandises & fournisseurs',lb:'Livraison viandes — Boucherie Delval',mt:620.00,notes:''},
+  {d:'13 mai 2025',cat:'Énergie',lb:'Facture gaz cuisine',mt:180.00,notes:''},
+  {d:'12 mai 2025',cat:'Marchandises & fournisseurs',lb:'Primeur — fruits & légumes',mt:245.00,notes:''},
+  {d:'12 mai 2025',cat:'Entretien & réparations',lb:'Réparation four professionnel',mt:95.00,notes:'Intervention urgente'},
+  {d:'11 mai 2025',cat:'Marketing',lb:'Campagne réseaux sociaux',mt:60.00,notes:''},
+  {d:'10 mai 2025',cat:'Marchandises & fournisseurs',lb:'Cave à vins — réassort',mt:340.00,notes:''},
+];
+const boKpiByPeriod={'Aujourd’hui, 13 mai 2025':{orders:'127',sales:4890.50,exp:1240.00,prep:'23'},'Hier, 12 mai 2025':{orders:'108',sales:4010.20,exp:980.00,prep:'0'},'7 derniers jours':{orders:'742',sales:27480.90,exp:6420.00,prep:'23'},'30 derniers jours':{orders:'3 118',sales:118640.00,exp:27100.00,prep:'23'}};
+
+/* ===== Recettes (option B) : registre d'ingrédients partagé + fiches recette =====
+   unit = unité d'achat/prix. base = unité de dosage dans la recette (g pour kg, ml pour L, pièce).
+   price = prix pour 1 unité d'achat. Donc coût = price / factor * qty(base). */
+/* ===== Stock (mode Supermarché) : produits finis suivis en quantité ===== */
+bo.stock=[
+  {id:1,n:'Riz parfumé 5 kg',cb:'6291041500213',qty:42,seuil:10,buy:6.20,sell:8.90,mv:[]},
+  {id:2,n:'Huile végétale 1 L',cb:'5449000000996',qty:8,seuil:10,buy:1.80,sell:2.90,mv:[]},
+  {id:3,n:'Sucre blanc 1 kg',cb:'8712566012345',qty:0,seuil:15,buy:0.90,sell:1.50,mv:[]},
+  {id:4,n:'Lait UHT 1 L',cb:'3017620422003',qty:60,seuil:20,buy:0.70,sell:1.20,mv:[]},
+  {id:5,n:'Savon de ménage',cb:'6001085001234',qty:120,seuil:30,buy:0.40,sell:0.90,mv:[]},
+  {id:6,n:'Farine de froment 1 kg',cb:'6161100230015',qty:14,seuil:15,buy:0.85,sell:1.40,mv:[]},
+];
+const stockState=s=>s.qty<=0?'out':s.qty<=s.seuil?'low':'ok';
+
+bo.ingUnits={'kg':{base:'g',factor:1000},'L':{base:'ml',factor:1000},'pièce':{base:'pièce',factor:1}};
+bo.ingredients=[
+  {id:1,n:'Entrecôte de bœuf',unit:'kg',price:18.00},
+  {id:2,n:'Filet de saumon',unit:'kg',price:16.00},
+  {id:3,n:'Magret de canard',unit:'kg',price:15.00},
+  {id:4,n:'Riz arborio',unit:'kg',price:3.20},
+  {id:5,n:'Cèpes',unit:'kg',price:22.00},
+  {id:6,n:'Pommes de terre',unit:'kg',price:1.20},
+  {id:7,n:'Beurre',unit:'kg',price:8.00},
+  {id:8,n:'Parmesan',unit:'kg',price:14.00},
+  {id:9,n:'Crème / œufs (base dessert)',unit:'L',price:2.50},
+  {id:10,n:'Sucre',unit:'kg',price:1.10},
+  {id:11,n:'Salade & garniture',unit:'kg',price:3.00},
+  {id:12,n:'Miel',unit:'kg',price:9.00},
+];
+/* recette : lignes {ingId, qty(en base)} ; waste = % pertes ; consum = % consommables (huile/sel/gaz) */
+bo.recipes={
+  'Entrecôte grillée':{lines:[{ingId:1,qty:250},{ingId:6,qty:200},{ingId:7,qty:20},{ingId:11,qty:60}],waste:8,consum:5},
+  'Saumon rôti':{lines:[{ingId:2,qty:200},{ingId:6,qty:150},{ingId:11,qty:80}],waste:6,consum:5},
+  'Risotto aux cèpes':{lines:[{ingId:4,qty:90},{ingId:5,qty:50},{ingId:8,qty:25},{ingId:7,qty:15}],waste:5,consum:5},
+  'Magret de canard':{lines:[{ingId:3,qty:220},{ingId:12,qty:15},{ingId:6,qty:150}],waste:7,consum:5},
+  'Crème brûlée':{lines:[{ingId:9,qty:120},{ingId:10,qty:30}],waste:4,consum:3},
+};
+const boMain=document.getElementById('bo-main');
+const boHeaderEl=boMain.children[0];
+const boDashEls=[...boMain.children].slice(1);
+const boGeneric=document.createElement('div');boMain.appendChild(boGeneric);
+
+function boGo(view){
+  bo.view=view;document.getElementById('bo-title').textContent=view;
+  const dash=view==='Tableau de bord';
+  boDashEls.forEach(e=>e.style.display=dash?'':'none');
+  boGeneric.innerHTML=dash?'':boViewHtml(view);
+  renderBoNav();if(dash){renderProducts();renderQr();}
+  lucide.createIcons();window.scrollTo(0,0);
+}
+function renderBoNav(){
+  window.boNav=currentNav();
+  document.getElementById('bo-nav').innerHTML=boNav.map(([ic,lb])=>`
+    <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-white/5 ${bo.view===lb?'nav-active':''}" onclick="boGo('${lb.replace(/'/g,"\\'")}')">
+    <i data-lucide="${ic}" class="w-4 h-4"></i>${lb}</div>`).join('');
+}
+/* bascule de mode : recompose le menu + met à jour l'entête sidebar */
+function setBoMode(mode){bo.mode=mode;const m=boModes[mode];
+  const sub=document.getElementById('bo-sub');if(sub)sub.textContent=m.sub;
+  const ic=document.getElementById('bo-brand-ic');if(ic){ic.setAttribute('data-lucide',m.ic);}
+  /* si la vue courante n'existe plus dans ce mode, revenir au tableau de bord */
+  if(!m.mods.map(k=>boModules[k][1]).includes(bo.view))bo.view='Tableau de bord';
+  boGo(bo.view);toast('Type de commerce : '+mode);}
+const stChip=s=>({'Reçue':'bg-blue-50 text-blue-600','En préparation':'bg-orange-50 text-acc-600','Prête':'bg-emerald-50 text-emerald-600','Terminée':'bg-ink-100 text-ink-500','Annulée':'bg-red-50 text-red-500'}[s]||'bg-ink-100 text-ink-500');
+
+function boViewHtml(v){
+  if(v==='Commandes')return `<div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Commandes du jour</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('commandes.csv',[['N°','Emplacement','Articles','Total','Statut'],...bo.cmds.map(c=>[c.no,c.ou,c.art,c.tot,c.st])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>N°</th><th>Emplacement</th><th>Articles</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
+    ${bo.cmds.map((c,i)=>`<tr><td><b>${c.no}</b></td><td>${c.ou}</td><td>${c.art}</td><td class="font-semibold">${c.tot}</td>
+    <td><span class="chip ${stChip(c.st)}">${c.st}</span></td>
+    <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="modalCmd(${i})">Voir</button>
+    ${c.st!=='Terminée'&&c.st!=='Annulée'?`<button class="btn btn-teal btn-xs" onclick="advCmd(${i})">${c.st==='Reçue'?'Préparer':c.st==='En préparation'?'Prête':'Terminer'}</button>`:''}</div></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  if(v==='Produits'){
+    const withCost=bo.prods.filter(p=>typeof p.cost==='number');
+    const totProfit=withCost.reduce((s,p)=>s+prodMargin(p).profit,0);
+    const best=withCost.slice().sort((a,b)=>prodMargin(b).profit-prodMargin(a).profit)[0];
+    const missing=bo.prods.filter(p=>typeof p.cost!=='number').length;
+    return `<div class="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-4">
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Bénéfice estimé (marge × ventes)</div><div class="font-display text-[20px] font-bold text-emerald-600">${eurFmt(totProfit)}</div><div class="text-[10.5px] text-ink-400 mt-0.5">Sur les produits avec coût renseigné</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Produit le plus rentable</div><div class="font-display text-[16px] font-bold mt-1 leading-tight">${best?best.n:'—'}</div><div class="text-[10.5px] text-ink-400 mt-0.5">${best?eurFmt(prodMargin(best).profit)+' de bénéfice':'Renseignez les coûts'}</div></div>
+    <div class="card p-4 col-span-2 md:col-span-1"><div class="text-[11.5px] text-ink-500">Coûts à renseigner</div><div class="font-display text-[20px] font-bold ${missing?'text-amber-600':'text-emerald-600'}">${missing}</div><div class="text-[10.5px] text-ink-400 mt-0.5">${missing?'Ajoutez le coût pour calculer la marge':'Tous les produits sont renseignés ✔'}</div></div></div>
+    <div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Tous les produits (${bo.prods.length})</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('produits.csv',[['Produit','Catégorie','Prix','Coût','Marge','Marge %','Ventes'],...bo.prods.map(p=>{const m=prodMargin(p);return [p.n,p.c,p.p,m.cost===null?'':m.cost.toFixed(2),m.cost===null?'':m.m.toFixed(2),m.cost===null?'':m.pct+'%',p.v];})])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button>
+    <button class="btn btn-teal btn-xs" onclick="modalProduct(-1)"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter un produit</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Coût</th><th>Marge</th><th>Statut</th><th>Ventes</th><th>Actions</th></tr></thead><tbody id="bo-products-full">${prodRows(true)}</tbody></table></div></div>`;}
+  if(v==='QR Codes')return `<div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Tous les QR Codes (${bo.qrs.length})</h3>
+    <button class="btn btn-acc btn-xs" onclick="modalQrNew()"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Créer un QR Code</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Nom / Emplacement</th><th>Type</th><th>Scans aujourd’hui</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="bo-qrcodes-full">${qrRows()}</tbody></table></div></div>`;
+  if(v==='Paiements')return `<div class="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-4">
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Encaissé aujourd’hui</div><div class="font-display text-[22px] font-bold">4 890,50 €</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Commission KodaPay (1%)</div><div class="font-display text-[22px] font-bold">48,91 €</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Prochain versement</div><div class="font-display text-[22px] font-bold">15 mai</div></div></div>
+    <div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Derniers encaissements</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('paiements.csv',[['Date','Méthode','Montant'],...bo.pays.map(p=>[p.d,p.m,p.mt])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Date</th><th>Méthode</th><th>Montant</th><th>Statut</th></tr></thead><tbody>
+    ${bo.pays.map(p=>`<tr><td>${p.d}</td><td>${p.m}</td><td class="font-semibold">${p.mt}</td><td><span class="chip bg-emerald-50 text-emerald-600">Réglé</span></td></tr>`).join('')}</tbody></table></div></div>`;
+  if(v==='Stock'){
+    const totVal=bo.stock.reduce((s,x)=>s+x.qty*x.buy,0);
+    const low=bo.stock.filter(x=>stockState(x)==='low').length;
+    const out=bo.stock.filter(x=>stockState(x)==='out').length;
+    return `<div class="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-4">
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Références</div><div class="font-display text-[20px] font-bold">${bo.stock.length}</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Valeur du stock</div><div class="font-display text-[20px] font-bold">${eurFmt(totVal)}</div><div class="text-[10.5px] text-ink-400 mt-0.5">au prix d’achat</div></div>
+    <div class="card p-4 ${low?'ring-1 ring-amber-200':''}"><div class="text-[11.5px] text-ink-500">Stock faible</div><div class="font-display text-[20px] font-bold ${low?'text-amber-600':''}">${low}</div></div>
+    <div class="card p-4 ${out?'ring-1 ring-red-200':''}"><div class="text-[11.5px] text-ink-500">Ruptures</div><div class="font-display text-[20px] font-bold ${out?'text-red-600':''}">${out}</div></div></div>
+    <div class="card"><div class="p-4 flex flex-wrap items-center gap-2">
+    <h3 class="font-display font-semibold text-[14.5px] mr-auto">Inventaire produits</h3>
+    <button class="btn btn-ghost btn-xs" onclick="modalScanStock()"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i>Scanner un code-barres</button>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('inventaire.csv',[['Produit','Code-barres','Stock','Seuil','Prix achat','Prix vente'],...bo.stock.map(x=>[x.n,x.cb,x.qty,x.seuil,x.buy.toFixed(2),x.sell.toFixed(2)])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button>
+    <button class="btn btn-teal btn-xs" onclick="modalStock(-1)"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter un article</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Produit</th><th>Code-barres</th><th>Stock</th><th>Seuil</th><th>Prix vente</th><th>État</th><th>Mouvement</th><th>Actions</th></tr></thead>
+    <tbody id="bo-stock">${stockRows()}</tbody></table></div></div>`;}
+  if(v==='Ingrédients')return `<div class="card"><div class="p-4 flex items-center gap-2">
+    <h3 class="font-display font-semibold text-[14.5px] mr-auto">Ingrédients &amp; matières premières (${bo.ingredients.length})</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('ingredients.csv',[['Ingrédient','Unité','Prix'],...bo.ingredients.map(x=>[x.n,x.unit,x.price.toFixed(2)])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button>
+    <button class="btn btn-teal btn-xs" onclick="modalIngredient(-1)"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter un ingrédient</button></div>
+    <div class="px-4 pb-2 text-[11.5px] text-ink-500">Le prix est celui de l’unité d’achat. Modifier un prix ici <b>recalcule automatiquement</b> le coût de tous les plats qui l’utilisent.</div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Ingrédient</th><th>Unité d’achat</th><th>Prix d’achat</th><th>Prix unitaire</th><th>Utilisé dans</th><th>Actions</th></tr></thead>
+    <tbody id="bo-ingredients">${ingRows()}</tbody></table></div></div>`;
+  if(v==='Dépenses'){const tot=bo.expenses.reduce((s,e)=>s+e.mt,0);const sales=4890.50;const margin=sales-tot;
+    return `<div class="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-4">
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Ventes du jour</div><div class="font-display text-[20px] font-bold">${eurFmt(sales)}</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Dépenses du jour</div><div class="font-display text-[20px] font-bold text-red-600">${eurFmt(tot)}</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Marge du jour</div><div class="font-display text-[20px] font-bold text-emerald-600">${eurFmt(margin)}</div></div></div>
+    <div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Dépenses (${bo.expenses.length})</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('depenses.csv',[['Date','Catégorie','Libellé','Montant'],...bo.expenses.map(e=>[e.d,e.cat,e.lb,e.mt.toFixed(2)])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button>
+    <button class="btn btn-teal btn-xs" onclick="modalExpense(-1)"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter une dépense</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Date</th><th>Catégorie</th><th>Libellé</th><th>Montant</th><th>Actions</th></tr></thead><tbody id="bo-expenses-full">${expRows()}</tbody></table></div></div>`;}
+  if(v==='Employés')return `<div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Équipe (${bo.emps.length})</h3>
+    <button class="btn btn-teal btn-xs" onclick="modalEmp()"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Inviter un employé</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Nom</th><th>Rôle</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
+    ${bo.emps.map((e,i)=>`<tr><td><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-full grad-leaf text-white text-[10px] font-bold flex items-center justify-center">${e.n.split(' ').map(x=>x[0]).join('')}</div><b>${e.n}</b></div></td>
+    <td class="text-ink-500">${e.r}</td><td><span class="chip bg-emerald-50 text-emerald-600">Actif</span></td>
+    <td><button class="btn btn-ghost btn-xs" onclick="popMenu(event,[{lb:'Changer le rôle',ic:'user-cog',fn:()=>toast('Rôle mis à jour')},{lb:'Retirer l’accès',ic:'user-x',danger:true,fn:()=>{bo.emps.splice(${i},1);boGo('Employés');toast('Accès retiré');}}])"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></button></td></tr>`).join('')}</tbody></table></div></div>`;
+  if(v==='Rapports')return `<div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+    ${[['bar-chart-3','Rapport des ventes','Ventes par jour, produit et catégorie.'],['credit-card','Rapport des paiements','Encaissements par méthode de paiement.'],['users','Rapport d’activité','Performance de l’équipe et du service.']].map(([ic,t,d])=>`
+    <div class="card p-5"><div class="w-10 h-10 rounded-xl bg-kp-50 flex items-center justify-center mb-3"><i data-lucide="${ic}" class="w-5 h-5 text-kp-600"></i></div>
+    <div class="font-display font-bold text-[15px]">${t}</div><div class="text-[12px] text-ink-500 mt-1 mb-3">${d}</div>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('${t.toLowerCase().replace(/\s|’/g,'-')}.csv',[['Date','Valeur'],['13 mai','4 890,50'],['12 mai','4 010,20'],['11 mai','3 720,00']])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Télécharger CSV</button></div>`).join('')}</div>`;
+  if(v==='Paramètres')return `
+    <div class="card p-5 max-w-2xl mb-4">
+      <h3 class="font-display font-semibold text-[15px] mb-1">Type de commerce</h3>
+      <p class="text-[12px] text-ink-500 mb-3">Choisissez votre activité : KodaPay active les modules adaptés (recettes pour un restaurant, stock pour un supermarché…). Le socle ventes / paiements / dépenses reste identique.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      ${Object.keys(boModes).map(mode=>{const m=boModes[mode];const on=bo.mode===mode;
+        const feats={'Restaurant':'Recettes, ingrédients, commande à table','Supermarché':'Stock, codes-barres, inventaire','Quincaillerie':'Stock, codes-barres, ventes au comptoir','Boutique / Services':'Catalogue simple, prestations'}[mode];
+        return `<button class="text-left rounded-xl border-2 p-3.5 transition ${on?'border-kp-500 bg-kp-50':'border-ink-200 hover:border-ink-300'}" onclick="setBoMode('${mode.replace(/'/g,"\\'")}');boGo('Paramètres')">
+        <div class="flex items-center justify-between"><div class="w-9 h-9 rounded-xl ${on?'bg-kp-500 text-white':'bg-ink-100 text-ink-600'} flex items-center justify-center"><i data-lucide="${m.ic}" class="w-4.5 h-4.5 w-4 h-4"></i></div>
+        ${on?'<i data-lucide="check-circle-2" class="w-5 h-5 text-kp-600"></i>':''}</div>
+        <div class="font-display font-bold text-[14px] mt-2">${mode}</div>
+        <div class="text-[11px] text-ink-500 mt-0.5 leading-snug">${feats}</div></button>`;}).join('')}
+      </div>
+      <div class="mt-3 text-[11.5px] text-ink-500 flex items-center gap-2"><i data-lucide="info" class="w-4 h-4 text-kp-500"></i>Mode actif : <b class="text-ink-800">${bo.mode}</b> — le menu de gauche s'adapte automatiquement.</div>
+    </div>
+    <div class="card p-5 max-w-2xl"><h3 class="font-display font-semibold text-[15px] mb-4">Informations de l'établissement</h3>
+    <label class="text-[11.5px] font-semibold text-ink-600">Nom</label><input id="set-nom" class="field mt-1 mb-3" value="Le Jardin Grill"/>
+    <label class="text-[11.5px] font-semibold text-ink-600">Description</label><input id="set-desc" class="field mt-1 mb-3" value="Cuisine française · Grillades &amp; spécialités"/>
+    <label class="text-[11.5px] font-semibold text-ink-600">Téléphone</label><input id="set-tel" class="field mt-1 mb-3" value="+243 812 345 678"/>
+    <label class="text-[11.5px] font-semibold text-ink-600">Devise</label><input class="field mt-1 mb-4" value="EUR (€)" disabled/>
+    <button class="btn btn-teal" onclick="toast('Paramètres enregistrés')"><i data-lucide="save" class="w-4 h-4"></i>Enregistrer</button></div>`;
+  return '';
+}
+function modalCmd(i){const c=bo.cmds[i];openModal(mHead('Commande n°'+c.no)+`<div class="px-5 pb-5 text-[13px]">
+  <div class="flex justify-between py-1.5"><span class="text-ink-500">Emplacement</span><b>${c.ou}</b></div>
+  <div class="flex justify-between py-1.5"><span class="text-ink-500">Articles</span><b>${c.art}</b></div>
+  <div class="flex justify-between py-1.5"><span class="text-ink-500">Total</span><b>${c.tot}</b></div>
+  <div class="flex justify-between py-1.5 items-center"><span class="text-ink-500">Statut</span><span class="chip ${stChip(c.st)}">${c.st}</span></div>
+  <div class="flex gap-2 justify-end mt-4"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+  ${c.st!=='Terminée'?`<button class="btn btn-teal" onclick="closeModal();advCmd(${i})">Avancer le statut</button>`:''}</div></div>`);}
+function advCmd(i){const seq=['Reçue','En préparation','Prête','Terminée'];const c=bo.cmds[i];c.st=seq[Math.min(seq.indexOf(c.st)+1,3)];boGo('Commandes');toast('Commande '+c.no+' → '+c.st);}
+
+/* ---- produits : rendu + CRUD ---- */
+function prodThumb(p,size){const s=size||'w-9 h-9';return p.photo
+  ? `<img src="${p.photo}" class="${s} rounded-lg object-cover flex-none border border-ink-200"/>`
+  : `<div class="food ${s} bg-kp-50 !text-[18px]">${p.em}</div>`;}
+/* prix de vente numérique depuis la chaîne "24,90 €" */
+const priceNum=s=>parseFloat(String(s).replace(/[^\d,.-]/g,'').replace(',','.'))||0;
+/* marge unitaire, % et bénéfice total (marge × ventes) */
+function prodMargin(p){const sell=priceNum(p.p),cost=(typeof p.cost==='number')?p.cost:null;
+  if(cost===null)return{cost:null};const m=sell-cost,pct=sell?Math.round(m/sell*100):0;return{sell,cost,m,pct,profit:m*(p.v||0)};}
+
+/* ===== moteur de coût recette ===== */
+function ingById(id){return bo.ingredients.find(x=>x.id===id);}
+/* coût d'une unité base (g/ml/pièce) d'un ingrédient */
+function ingBaseCost(ing){const u=bo.ingUnits[ing.unit]||{factor:1};return ing.price/u.factor;}
+function lineCost(l){const ing=ingById(l.ingId);if(!ing)return 0;return ingBaseCost(ing)*(l.qty||0);}
+/* coût total d'une recette : ingrédients + pertes + consommables */
+function recipeCost(r){if(!r||!r.lines)return null;
+  const raw=r.lines.reduce((s,l)=>s+lineCost(l),0);
+  return raw*(1+(r.waste||0)/100)*(1+(r.consum||0)/100);}
+function recipeBreakdown(r){const raw=r.lines.reduce((s,l)=>s+lineCost(l),0);
+  const waste=raw*(r.waste||0)/100,consum=(raw+waste)*(r.consum||0)/100;
+  return{raw,waste,consum,total:raw+waste+consum};}
+/* recalcul en cascade : quand un prix d'ingrédient change, tous les plats liés se recalculent */
+function syncRecipeCosts(){bo.prods.forEach(p=>{const r=bo.recipes[p.n];if(r){const c=recipeCost(r);if(c!==null)p.cost=Math.round(c*100)/100;}});}
+const unitBaseLabel=u=>(bo.ingUnits[u]||{base:''}).base;
+
+/* quels plats utilisent un ingrédient */
+function dishesUsing(ingId){return Object.keys(bo.recipes).filter(n=>bo.recipes[n].lines.some(l=>l.ingId===ingId));}
+function ingRows(){return bo.ingredients.map((x,i)=>{const used=dishesUsing(x.id);
+  const unitTxt=x.unit==='pièce'?eurFmt(x.price)+' / pièce':eurFmt(ingBaseCost(x)*100)+' / 100 '+unitBaseLabel(x.unit);
+  return `<tr><td><b>${x.n}</b></td><td class="text-ink-500">${x.unit}</td>
+  <td class="font-semibold">${eurFmt(x.price)}</td>
+  <td class="text-ink-500">${unitTxt}</td>
+  <td>${used.length?used.map(n=>`<span class="chip bg-ink-100 text-ink-600 mr-1 mb-1">${n}</span>`).join(''):'<span class="text-ink-400 text-[11.5px]">—</span>'}</td>
+  <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="modalIngredient(${i})"><i data-lucide="pencil" class="w-3 h-3"></i>Éditer</button>
+  <button class="btn btn-ghost btn-xs !px-2 !text-red-600" onclick="delIngredient(${i})"><i data-lucide="trash-2" class="w-3 h-3"></i></button></div></td></tr>`;}).join('')
+  ||'<tr><td colspan="6" class="text-center text-ink-400 py-6">Aucun ingrédient. Ajoutez-en pour composer vos recettes.</td></tr>';}
+function renderIngredients(){const el=document.getElementById('bo-ingredients');if(el){el.innerHTML=ingRows();lucide.createIcons();}}
+function modalIngredient(i){const x=i>=0?bo.ingredients[i]:{n:'',unit:'kg',price:''};
+  openModal(mHead(i>=0?'Éditer l’ingrédient':'Nouvel ingrédient')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Nom</label><input id="if-n" class="field mt-1 mb-3" value="${x.n}" placeholder="Ex : Entrecôte de bœuf"/>
+  <div class="grid grid-cols-2 gap-3">
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Unité d’achat</label>
+  <select id="if-u" class="field mt-1">${Object.keys(bo.ingUnits).map(u=>`<option ${u===x.unit?'selected':''}>${u}</option>`).join('')}</select></div>
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Prix d’achat (€)</label><input id="if-p" class="field mt-1" value="${x.price}" placeholder="18,00"/></div></div>
+  <div class="text-[10.5px] text-ink-400 mt-2">Ex : « kg » à 18,00 € → le dosage se fait en grammes dans les recettes.</div>
+  <div class="flex gap-2 justify-end mt-4"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="saveIngredient(${i})">Enregistrer</button></div></div>`);}
+function saveIngredient(i){const n=document.getElementById('if-n').value.trim(),unit=document.getElementById('if-u').value,price=priceNum(document.getElementById('if-p').value);
+  if(!n||!price){toast('Nom et prix obligatoires');return;}
+  if(i>=0){bo.ingredients[i].n=n;bo.ingredients[i].unit=unit;bo.ingredients[i].price=price;}
+  else bo.ingredients.push({id:Math.max(0,...bo.ingredients.map(x=>x.id))+1,n,unit,price});
+  /* CASCADE : le prix a changé → recalcul de tous les plats liés */
+  syncRecipeCosts();closeModal();renderIngredients();renderProducts();
+  const impacted=i>=0?dishesUsing(bo.ingredients[i].id):[];
+  toast(i>=0?(impacted.length?'Prix mis à jour — '+impacted.length+' plat(s) recalculé(s)':'Ingrédient mis à jour'):'Ingrédient « '+n+' » ajouté');}
+function delIngredient(i){const x=bo.ingredients[i];const used=dishesUsing(x.id);
+  if(used.length){toast('Impossible : utilisé dans '+used.length+' recette(s)');return;}
+  confirmModal('Supprimer l’ingrédient','« '+x.n+' » sera retiré du registre.','Supprimer',()=>{bo.ingredients.splice(i,1);renderIngredients();toast('Ingrédient supprimé');});}
+
+/* ---- stock (mode Supermarché) : rendu + CRUD + mouvements ---- */
+function stockStChip(st){return st==='ok'?'bg-emerald-50 text-emerald-600':st==='low'?'bg-amber-50 text-amber-600':'bg-red-50 text-red-500';}
+function stockStLbl(st){return st==='ok'?'En stock':st==='low'?'Stock faible':'Rupture';}
+function stockRows(){return bo.stock.map((x,i)=>{const st=stockState(x);
+  return `<tr class="${st==='out'?'bg-red-50/40':''}"><td><b>${x.n}</b></td><td class="text-ink-500">${x.cb}</td>
+  <td class="font-semibold ${st==='out'?'text-red-600':st==='low'?'text-amber-600':''}">${x.qty}</td>
+  <td class="text-ink-500">${x.seuil}</td><td>${eurFmt(x.sell)}</td>
+  <td><span class="chip ${stockStChip(st)}">${stockStLbl(st)}</span></td>
+  <td><div class="flex gap-1"><button class="qty-btn !w-7 !h-7 !text-[13px]" title="Sortie" onclick="stockMove(${i},-1)">−</button>
+  <button class="qty-btn !w-7 !h-7 !text-[13px]" title="Entrée" onclick="stockMove(${i},1)">+</button>
+  <button class="btn btn-ghost btn-xs !px-2" title="Réapprovisionner" onclick="modalRestock(${i})"><i data-lucide="truck" class="w-3.5 h-3.5"></i></button></div></td>
+  <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="modalStock(${i})"><i data-lucide="pencil" class="w-3 h-3"></i>Éditer</button>
+  <button class="btn btn-ghost btn-xs !px-2" onclick="modalStockHist(${i})" title="Historique"><i data-lucide="history" class="w-3.5 h-3.5"></i></button></div></td></tr>`;}).join('')
+  ||'<tr><td colspan="8" class="text-center text-ink-400 py-6">Aucun article en stock.</td></tr>';}
+function renderStock(){const el=document.getElementById('bo-stock');if(el){el.innerHTML=stockRows();lucide.createIcons();}if(bo.view==='Stock')boGo('Stock');
+  if(typeof adaptDashboard==='function'&&window.biz==='market')adaptDashboard();}
+function stockMove(i,delta){const x=bo.stock[i];if(x.qty+delta<0){toast('Stock déjà à zéro');return;}
+  x.qty+=delta;x.mv.unshift({d:'13 mai 2025',t:delta>0?'Entrée':'Sortie',q:Math.abs(delta),note:'Ajustement manuel'});
+  renderStock();
+  if(stockState(x)==='out')toast('⚠ '+x.n+' en rupture');
+  else if(stockState(x)==='low')toast('Stock faible : '+x.n+' ('+x.qty+')');
+  else toast(x.n+' : '+x.qty+' en stock');}
+function modalStock(i){const x=i>=0?bo.stock[i]:{n:'',cb:'',qty:0,seuil:10,buy:'',sell:'',mv:[]};
+  openModal(mHead(i>=0?'Éditer l’article':'Nouvel article')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Nom du produit</label><input id="sf-n" class="field mt-1 mb-3" value="${x.n}" placeholder="Ex : Riz parfumé 5 kg"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Code-barres (EAN)</label>
+  <div class="flex gap-2 mt-1 mb-3"><input id="sf-cb" class="field" value="${x.cb}" placeholder="Ex : 6291041500213"/>
+  <button class="btn btn-ghost !px-3" title="Scanner" onclick="document.getElementById('sf-cb').value=String(Math.floor(6000000000000+Math.random()*3999999999999));toast('Code-barres scanné')"><i data-lucide="scan-line" class="w-4 h-4"></i></button></div>
+  <div class="grid grid-cols-2 gap-3">
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Quantité en stock</label><input id="sf-qty" class="field mt-1" value="${x.qty}" placeholder="0"/></div>
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Seuil d’alerte</label><input id="sf-seuil" class="field mt-1" value="${x.seuil}" placeholder="10"/></div>
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Prix d’achat (€)</label><input id="sf-buy" class="field mt-1" value="${x.buy}" placeholder="6,20" oninput="sfMargin()"/></div>
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Prix de vente (€)</label><input id="sf-sell" class="field mt-1" value="${x.sell}" placeholder="8,90" oninput="sfMargin()"/></div></div>
+  <div id="sf-margin" class="mt-2.5 rounded-xl bg-ink-50 px-3 py-2.5 text-[12px] text-ink-600"></div>
+  <div class="flex gap-2 justify-between mt-4">
+  ${i>=0?`<button class="btn btn-ghost !text-red-600" onclick="closeModal();confirmModal('Supprimer l’article','« '+bo.stock[${i}].n+' » sera retiré de l’inventaire.','Supprimer',()=>{bo.stock.splice(${i},1);renderStock();toast('Article supprimé');})">Supprimer</button>`:'<span></span>'}
+  <div class="flex gap-2"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="saveStock(${i})">Enregistrer</button></div></div></div>`);
+  sfMargin();}
+function sfMargin(){const box=document.getElementById('sf-margin');if(!box)return;
+  const buy=priceNum(document.getElementById('sf-buy').value),sell=priceNum(document.getElementById('sf-sell').value);
+  if(!buy||!sell){box.innerHTML='<span class="text-ink-400">Saisissez prix d’achat et de vente pour voir la marge.</span>';return;}
+  const m=sell-buy,pct=Math.round(m/sell*100);
+  box.innerHTML=`<div class="flex items-center gap-2 flex-wrap"><i data-lucide="calculator" class="w-4 h-4 text-kp-600"></i><span>Marge :</span>
+  <b class="${m<0?'text-red-600':'text-emerald-600'}">${eurFmt(m)}</b>${marginChip(pct)}
+  ${m<0?'<span class="text-red-600 font-semibold">⚠ Vendu à perte !</span>':`<span class="text-ink-400">soit ${pct}% du prix de vente</span>`}</div>`;
+  lucide.createIcons();}
+function saveStock(i){const n=document.getElementById('sf-n').value.trim();
+  if(!n){toast('Nom obligatoire');return;}
+  const rec={n,cb:document.getElementById('sf-cb').value.trim(),qty:parseInt(priceNum(document.getElementById('sf-qty').value))||0,
+    seuil:parseInt(priceNum(document.getElementById('sf-seuil').value))||0,buy:priceNum(document.getElementById('sf-buy').value),sell:priceNum(document.getElementById('sf-sell').value),
+    mv:i>=0?bo.stock[i].mv:[],id:i>=0?bo.stock[i].id:Math.max(0,...bo.stock.map(x=>x.id))+1};
+  if(i>=0)bo.stock[i]=rec;else bo.stock.push(rec);
+  closeModal();renderStock();toast(i>=0?'Article mis à jour':'Article « '+n+' » ajouté');}
+function modalRestock(i){const x=bo.stock[i];
+  openModal(mHead('Réapprovisionner — '+x.n)+`<div class="px-5 pb-5">
+  <div class="text-[12.5px] text-ink-500 mb-3">Stock actuel : <b class="text-ink-800">${x.qty}</b> · Seuil : ${x.seuil}</div>
+  <label class="text-[11.5px] font-semibold text-ink-600">Quantité reçue</label><input id="rs-q" class="field mt-1 mb-3" value="" placeholder="Ex : 50"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Fournisseur (optionnel)</label><input id="rs-f" class="field mt-1 mb-4" placeholder="Ex : Grossiste Central"/>
+  <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="const q=parseInt(priceNum(document.getElementById('rs-q').value))||0;if(q<=0){toast('Quantité invalide');return;}bo.stock[${i}].qty+=q;bo.stock[${i}].mv.unshift({d:'13 mai 2025',t:'Réappro',q,note:document.getElementById('rs-f').value.trim()||'Réapprovisionnement'});closeModal();renderStock();toast('+' +q+' — nouveau stock : '+bo.stock[${i}].qty)"><i data-lucide="truck" class="w-4 h-4"></i>Valider la réception</button></div></div>`);}
+function modalStockHist(i){const x=bo.stock[i];
+  openModal(mHead('Historique — '+x.n)+`<div class="px-5 pb-5">
+  ${x.mv.length?x.mv.map(m=>`<div class="flex items-center gap-3 py-2 border-b border-ink-100 last:border-0 text-[13px]">
+  <span class="chip ${m.t==='Sortie'?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-600'}">${m.t}</span>
+  <span class="font-semibold">${m.t==='Sortie'?'−':'+'}${m.q}</span><span class="text-ink-500 flex-1">${m.note}</span><span class="text-ink-400 text-[11.5px]">${m.d}</span></div>`).join('')
+  :'<div class="text-center text-ink-400 py-4 text-[12.5px]">Aucun mouvement enregistré.</div>'}</div>`);}
+function modalScanStock(){openModal(mHead('Scanner un code-barres')+`<div class="px-5 pb-5 text-center">
+  <div class="rounded-2xl border-2 border-dashed border-ink-300 py-10 mb-4"><i data-lucide="scan-line" class="w-12 h-12 text-ink-300 mx-auto"></i>
+  <div class="text-[12px] text-ink-400 mt-2">Visez le code-barres du produit</div></div>
+  <button class="btn btn-teal w-full justify-center" onclick="const i=Math.floor(Math.random()*bo.stock.length);closeModal();toast('Trouvé : '+bo.stock[i].n);modalStock(i)">Simuler un scan</button></div>`);}
+function marginChip(pct){const cl=pct>=60?'bg-emerald-50 text-emerald-600':pct>=35?'bg-amber-50 text-amber-600':pct>=0?'bg-orange-50 text-acc-600':'bg-red-50 text-red-500';return `<span class="chip ${cl}">${pct}%</span>`;}
+function prodRows(full){const f=bo.prods.filter(p=>(bo.catFilter==='Toutes catégories'||p.c===bo.catFilter)&&p.n.toLowerCase().includes(bo.search));
+  return f.map(p=>{const i=bo.prods.indexOf(p);const mg=prodMargin(p);
+  const extra=full?`<td class="text-ink-500">${mg.cost===null?'—':eurFmt(mg.cost)}</td>
+  <td>${mg.cost===null?'<span class="text-ink-400 text-[11.5px]">à renseigner</span>':`<span class="font-semibold ${mg.m<0?'text-red-600':''}">${eurFmt(mg.m)}</span> ${marginChip(mg.pct)}`}</td>`:'';
+  return `<tr class="${p.actif?'':'opacity-50'}"><td><div class="flex items-center gap-2.5">${prodThumb(p)}<b>${p.n}</b></div></td>
+  <td class="text-ink-500">${p.c}</td><td class="font-semibold">${p.p}</td>${extra}
+  <td><span class="chip ${p.actif?'bg-emerald-50 text-emerald-600':'bg-ink-100 text-ink-500'}">${p.actif?'Actif':'Inactif'}</span></td><td>${p.v}</td>
+  <td><button class="btn btn-ghost btn-xs" onclick="modalProduct(${i})"><i data-lucide="pencil" class="w-3 h-3"></i>Éditer</button></td></tr>`;}).join('')||`<tr><td colspan="${full?8:6}" class="text-center text-ink-400 py-6">Aucun produit trouvé.</td></tr>`;}
+function renderProducts(){const el=document.getElementById('bo-products');if(el)el.innerHTML=prodRows(false);const f=document.getElementById('bo-products-full');if(f)f.innerHTML=prodRows(true);lucide.createIcons();}
+
+/* ---- dépenses : rendu + CRUD ---- */
+const eurFmt=v=>v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+function expRows(){return bo.expenses.map((e,i)=>`<tr><td class="text-ink-500">${e.d}</td><td><span class="chip bg-ink-100 text-ink-600">${e.cat}</span></td>
+  <td><b>${e.lb}</b>${e.notes?`<div class="text-[10.5px] text-ink-400">${e.notes}</div>`:''}</td>
+  <td class="font-semibold text-red-600">−${eurFmt(e.mt)}</td>
+  <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="modalExpense(${i})"><i data-lucide="pencil" class="w-3 h-3"></i>Éditer</button>
+  <button class="btn btn-ghost btn-xs !px-2 !text-red-600" onclick="confirmModal('Supprimer la dépense','« '+bo.expenses[${i}].lb+' » sera retirée du registre.','Supprimer',()=>{bo.expenses.splice(${i},1);renderExpenses();refreshDashKpis();toast('Dépense supprimée');})"><i data-lucide="trash-2" class="w-3 h-3"></i></button></div></td></tr>`).join('')
+  ||'<tr><td colspan="5" class="text-center text-ink-400 py-6">Aucune dépense enregistrée.</td></tr>';}
+function renderExpenses(){const f=document.getElementById('bo-expenses-full');if(f){f.innerHTML=expRows();lucide.createIcons();}if(bo.view==='Dépenses')boGo('Dépenses');}
+function modalExpense(i){const e=i>=0?bo.expenses[i]:{d:'13 mai 2025',cat:bo.expCats[0],lb:'',mt:0,notes:''};
+  openModal(mHead(i>=0?'Éditer la dépense':'Nouvelle dépense')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Libellé</label><input id="ef-lb" class="field mt-1 mb-3" value="${e.lb}" placeholder="Ex : Livraison viandes"/>
+  <div class="grid grid-cols-2 gap-3"><div><label class="text-[11.5px] font-semibold text-ink-600">Catégorie</label>
+  <select id="ef-cat" class="field mt-1">${bo.expCats.map(c=>`<option ${c===e.cat?'selected':''}>${c}</option>`).join('')}</select></div>
+  <div><label class="text-[11.5px] font-semibold text-ink-600">Montant (€)</label><input id="ef-mt" class="field mt-1" value="${e.mt||''}" placeholder="120.00"/></div></div>
+  <label class="text-[11.5px] font-semibold text-ink-600 mt-3 block">Date</label><input id="ef-d" class="field mt-1 mb-3" value="${e.d}" placeholder="13 mai 2025"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Note (optionnel)</label><input id="ef-notes" class="field mt-1 mb-1" value="${e.notes}" placeholder="Ex : facture n°..."/>
+  <div class="flex gap-2 justify-between mt-4">
+  ${i>=0?`<button class="btn btn-ghost !text-red-600" onclick="closeModal();confirmModal('Supprimer la dépense','« '+bo.expenses[${i}].lb+' » sera retirée du registre.','Supprimer',()=>{bo.expenses.splice(${i},1);renderExpenses();refreshDashKpis();toast('Dépense supprimée');})">Supprimer</button>`:'<span></span>'}
+  <div class="flex gap-2"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="saveExpense(${i})">Enregistrer</button></div></div></div>`);}
+function saveExpense(i){const lb=document.getElementById('ef-lb').value.trim(),mt=parseFloat(document.getElementById('ef-mt').value.replace(',','.'));
+  if(!lb||!mt||mt<=0){toast('Libellé et montant valides obligatoires');return;}
+  const rec={d:document.getElementById('ef-d').value.trim()||'13 mai 2025',cat:document.getElementById('ef-cat').value,lb,mt,notes:document.getElementById('ef-notes').value.trim()};
+  if(i>=0)bo.expenses[i]=rec;else bo.expenses.unshift(rec);
+  closeModal();renderExpenses();refreshDashKpis();toast(i>=0?'Dépense mise à jour':'Dépense « '+lb+' » ajoutée');}
+function refreshDashKpis(){
+  const tot=bo.expenses.reduce((s,e)=>s+e.mt,0);const sales=parseFloat(document.getElementById('kpi-sales').textContent.replace(/[^\d,.-]/g,'').replace(',','.'))||0;
+  const el=document.getElementById('kpi-exp');if(el)el.textContent=eurFmt(tot);
+  const cnt=document.querySelector('#kpi-exp')?.closest('.card')?.querySelector('.text-ink-500');if(cnt)cnt.textContent=bo.expenses.length+' dépense'+(bo.expenses.length>1?'s':'')+' · voir détail';
+  const margin=sales-tot,pct=sales?Math.round(margin/sales*100):0;
+  const me=document.getElementById('kpi-margin');if(me)me.textContent=eurFmt(margin);
+  const mp=document.getElementById('kpi-margin-pct');if(mp)mp.innerHTML=`<i data-lucide="${margin>=0?'trending-up':'trending-down'}" class="w-3 h-3"></i>${pct}% de marge`;
+  lucide.createIcons();
+}
+function modalProduct(i){const p=i>=0?bo.prods[i]:{em:'🍽️',n:'',c:'Grillades',p:'',v:0,actif:true};
+  window.__photo=p.photo||'';window.__em=p.em||'🍽️';
+  openModal(mHead(i>=0?'Éditer le produit':'Nouveau produit')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600 block mb-1.5">Photo du produit</label>
+  <div class="flex items-center gap-3 mb-3">
+    <div id="pf-thumb" class="w-16 h-16 rounded-xl overflow-hidden flex-none border border-ink-200 flex items-center justify-center bg-kp-50 text-3xl">${p.photo?`<img src="${p.photo}" class="w-full h-full object-cover"/>`:p.em}</div>
+    <div class="flex-1">
+      <label class="btn btn-ghost btn-xs cursor-pointer inline-flex"><i data-lucide="upload" class="w-3.5 h-3.5"></i>Choisir une photo<input type="file" accept="image/*" class="hidden" onchange="pfUpload(this)"/></label>
+      ${p.photo?`<button class="btn btn-ghost btn-xs !text-red-600 ml-1" onclick="window.__photo='';document.getElementById('pf-thumb').innerHTML=window.__em;toast('Photo retirée')"><i data-lucide="x" class="w-3.5 h-3.5"></i>Retirer</button>`:''}
+      <div class="text-[10.5px] text-ink-400 mt-1">JPG ou PNG, carré recommandé. Sans photo, un emoji est utilisé.</div>
+    </div>
+  </div>
+  <label class="text-[11.5px] font-semibold text-ink-600">Nom</label><input id="pf-n" class="field mt-1 mb-3" value="${p.n}" placeholder="Ex : Entrecôte grillée"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Catégorie</label>
+  <select id="pf-c" class="field mt-1 mb-3">${(bo.mode==='Restaurant'?['Grillades','Poissons','Viandes','Risottos','Desserts','Boissons']:['Épicerie','Boissons & frais','Hygiène','Autre']).map(c=>`<option ${c===p.c?'selected':''}>${c}</option>`).join('')}</select>
+  <label class="text-[11.5px] font-semibold text-ink-600">Prix de vente (€)</label><input id="pf-p" class="field mt-1 mb-3" value="${p.p.replace(' €','')}" placeholder="19,90" oninput="pfCalc()"/>
+  ${bo.mode==='Restaurant'?`
+  <!-- FICHE RECETTE (mode Restaurant) -->
+  <div class="rounded-xl border border-ink-200 p-3 mb-3">
+    <div class="flex items-center gap-2 mb-2"><i data-lucide="chef-hat" class="w-4 h-4 text-kp-600"></i><b class="text-[12.5px]">Fiche recette</b>
+    <span class="text-[10.5px] text-ink-400 ml-auto">le coût se calcule tout seul</span></div>
+    <div id="pf-recipe-lines" class="space-y-1.5"></div>
+    <button class="btn btn-ghost btn-xs mt-2" onclick="pfAddLine()"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter un ingrédient</button>
+    <div class="grid grid-cols-2 gap-3 mt-3">
+      <div><label class="text-[10.5px] font-semibold text-ink-500">Pertes / gaspillage (%)</label><input id="pf-waste" class="field mt-1 !py-1.5 !text-[12px]" value="${(bo.recipes[p.n]||{waste:8}).waste}" oninput="pfCalc()"/></div>
+      <div><label class="text-[10.5px] font-semibold text-ink-500">Consommables (huile, sel, gaz) (%)</label><input id="pf-consum" class="field mt-1 !py-1.5 !text-[12px]" value="${(bo.recipes[p.n]||{consum:5}).consum}" oninput="pfCalc()"/></div>
+    </div>
+  </div>`:`
+  <!-- ACHAT-REVENTE (mode Supermarché / Boutique) -->
+  <div class="grid grid-cols-2 gap-3 mb-3">
+    <div><label class="text-[11.5px] font-semibold text-ink-600">Prix d’achat (€)</label><input id="pf-cost" class="field mt-1" value="${typeof p.cost==='number'?p.cost:''}" placeholder="6,20" oninput="pfCalc()"/></div>
+  </div>`}
+  <div id="pf-margin" class="mt-1 rounded-xl bg-ink-50 px-3 py-2.5 text-[12px] text-ink-600"></div>
+  <label class="text-[11.5px] font-semibold text-ink-600 mt-3 block">Emoji de secours <span class="font-normal text-ink-400">(si pas de photo)</span></label>
+  <div class="flex gap-2 mt-1 mb-1" id="pf-ems">${['🥩','🐟','🦆','🍄','🍮','🥗','🍷'].map(e=>`<button class="w-9 h-9 rounded-lg border ${e===p.em?'border-kp-500 bg-kp-50':'border-ink-200'} text-[18px]" onclick="document.querySelectorAll('#pf-ems button').forEach(b=>b.classList.remove('border-kp-500','bg-kp-50'));this.classList.add('border-kp-500','bg-kp-50');window.__em='${e}';if(!window.__photo)document.getElementById('pf-thumb').innerHTML='${e}'">${e}</button>`).join('')}</div>
+  <div class="flex gap-2 justify-between mt-4">
+  ${i>=0?`<button class="btn btn-ghost !text-red-600" onclick="bo.prods[${i}].actif=!bo.prods[${i}].actif;closeModal();renderProducts();boGo(bo.view);toast(bo.prods[${i}].actif?'Produit réactivé':'Produit désactivé')">${p.actif?'Désactiver':'Réactiver'}</button>`:'<span></span>'}
+  <div class="flex gap-2"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="saveProduct(${i})">Enregistrer</button></div></div></div>`);
+  /* état recette édité (copie de travail) */
+  const src=bo.recipes[p.n];window.__recipe=src?JSON.parse(JSON.stringify(src.lines)):[];
+  pfRenderLines();pfCalc();}
+/* rendu des lignes d'ingrédients de la recette */
+function pfRenderLines(){const box=document.getElementById('pf-recipe-lines');if(!box)return;
+  box.innerHTML=window.__recipe.length?window.__recipe.map((l,ix)=>{const ing=ingById(l.ingId);const base=ing?unitBaseLabel(ing.unit):'g';
+    return `<div class="flex items-center gap-1.5">
+    <select class="field !py-1.5 !text-[12px] flex-1" onchange="window.__recipe[${ix}].ingId=+this.value;pfRenderLines();pfCalc()">
+      ${bo.ingredients.map(x=>`<option value="${x.id}" ${x.id===l.ingId?'selected':''}>${x.n}</option>`).join('')}</select>
+    <input class="field !py-1.5 !text-[12px] !w-16 text-right" value="${l.qty}" oninput="window.__recipe[${ix}].qty=priceNum(this.value);pfLineCost(${ix});pfCalc()"/>
+    <span class="text-[11px] text-ink-400 w-6">${base}</span>
+    <span class="text-[11.5px] font-semibold w-16 text-right" id="pf-lc-${ix}">${eurFmt(lineCost(l))}</span>
+    <button class="text-ink-400 px-1" onclick="window.__recipe.splice(${ix},1);pfRenderLines();pfCalc()"><i data-lucide="x" class="w-3.5 h-3.5"></i></button></div>`;}).join('')
+    :'<div class="text-[11.5px] text-ink-400 py-1">Aucun ingrédient. Ajoutez les composants du plat pour calculer le coût.</div>';
+  lucide.createIcons();}
+function pfLineCost(ix){const el=document.getElementById('pf-lc-'+ix);if(el)el.textContent=eurFmt(lineCost(window.__recipe[ix]));}
+function pfAddLine(){if(!bo.ingredients.length){toast('Ajoutez d’abord des ingrédients');return;}
+  window.__recipe.push({ingId:bo.ingredients[0].id,qty:0});pfRenderLines();pfCalc();}
+/* calcul du coût → marge en direct (recette en mode Restaurant, prix d'achat sinon) */
+function pfCalc(){const box=document.getElementById('pf-margin');if(!box)return;
+  const sell=priceNum(document.getElementById('pf-p').value);
+  const wasteEl=document.getElementById('pf-waste');
+  if(!wasteEl){ /* mode achat-revente : coût = prix d'achat saisi */
+    const cEl=document.getElementById('pf-cost');const has=cEl&&cEl.value.trim()!=='';const cost=has?priceNum(cEl.value):null;window.__cost=cost;
+    if(!sell){box.innerHTML='<span class="text-ink-400">Saisissez le prix de vente pour voir la marge.</span>';return;}
+    if(!has){box.innerHTML='<span class="text-ink-400">Ajoutez le prix d’achat et je calcule la marge automatiquement.</span>';return;}
+    const m=sell-cost,pct=Math.round(m/sell*100);
+    box.innerHTML=`<div class="flex items-center gap-2 flex-wrap"><i data-lucide="calculator" class="w-4 h-4 text-kp-600"></i>
+    <span>Marge :</span><b class="${m<0?'text-red-600':'text-emerald-600'}">${eurFmt(m)}</b>${marginChip(pct)}
+    ${m<0?'<span class="text-red-600 font-semibold">⚠ Vendu à perte !</span>':`<span class="text-ink-400">soit ${pct}% du prix de vente</span>`}</div>`;
+    lucide.createIcons();return;}
+  const waste=priceNum(wasteEl.value),consum=priceNum(document.getElementById('pf-consum').value);
+  const r={lines:window.__recipe||[],waste,consum};const bd=recipeBreakdown(r);const cost=bd.total;window.__cost=cost;
+  const noRecipe=!window.__recipe||!window.__recipe.length;
+  let head=noRecipe?'<span class="text-ink-400">Ajoutez des ingrédients ci-dessus — le coût de revient se calcule automatiquement.</span>':
+    `<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
+     <span>Ingrédients : <b>${eurFmt(bd.raw)}</b></span>
+     <span>+ pertes ${waste}% : <b>${eurFmt(bd.waste)}</b></span>
+     <span>+ consommables ${consum}% : <b>${eurFmt(bd.consum)}</b></span>
+     <span class="w-full pt-1">= Prix de revient : <b class="text-kp-700 text-[13px]">${eurFmt(cost)}</b></span></div>`;
+  let marginLine='';
+  if(sell&&!noRecipe){const m=sell-cost,pct=Math.round(m/sell*100),fc=Math.round(cost/sell*100);
+    marginLine=`<div class="mt-2 pt-2 border-t border-ink-200 flex flex-wrap items-center gap-2 text-[12px]">
+    <i data-lucide="calculator" class="w-4 h-4 text-kp-600"></i><span>Marge :</span>
+    <b class="${m<0?'text-red-600':'text-emerald-600'}">${eurFmt(m)}</b>${marginChip(pct)}
+    <span class="text-ink-400">coût matière ${fc}%</span>
+    ${m<0?'<span class="text-red-600 font-semibold">⚠ Ce plat perd de l’argent !</span>':fc>35?'<span class="text-amber-600 font-semibold">coût matière élevé (viser 25–35%)</span>':'<span class="text-emerald-600 font-semibold">✔ coût matière sain</span>'}</div>`;}
+  box.innerHTML=head+marginLine;lucide.createIcons();}
+function pfUpload(input){const f=input.files&&input.files[0];if(!f)return;
+  const r=new FileReader();r.onload=e=>{window.__photo=e.target.result;
+    document.getElementById('pf-thumb').innerHTML=`<img src="${window.__photo}" class="w-full h-full object-cover"/>`;toast('Photo importée');};
+  r.readAsDataURL(f);}
+function saveProduct(i){const n=document.getElementById('pf-n').value.trim(),c=document.getElementById('pf-c').value,pr=document.getElementById('pf-p').value.trim();
+  if(!n||!pr){toast('Nom et prix obligatoires');return;}
+  const oldName=i>=0?bo.prods[i].n:null;
+  let cost=undefined;
+  const wasteEl=document.getElementById('pf-waste');
+  if(wasteEl){ /* mode Restaurant : coût issu de la fiche recette */
+    const lines=(window.__recipe||[]).filter(l=>l.qty>0);
+    const waste=priceNum(wasteEl.value),consum=priceNum(document.getElementById('pf-consum').value);
+    if(lines.length){bo.recipes[n]={lines:JSON.parse(JSON.stringify(lines)),waste,consum};cost=Math.round(recipeCost(bo.recipes[n])*100)/100;
+      if(oldName&&oldName!==n)delete bo.recipes[oldName];}
+    else{if(oldName)delete bo.recipes[oldName];delete bo.recipes[n];cost=i>=0?bo.prods[i].cost:undefined;}
+  }else{ /* mode achat-revente : coût = prix d'achat saisi */
+    const cEl=document.getElementById('pf-cost');const raw=cEl?cEl.value.trim():'';
+    cost=raw?priceNum(raw):(i>=0?bo.prods[i].cost:undefined);}
+  const rec={em:window.__em||'🍽️',photo:window.__photo||'',n,c,p:pr+' €',cost,v:i>=0?bo.prods[i].v:0,actif:i>=0?bo.prods[i].actif:true,stockId:i>=0?bo.prods[i].stockId:undefined};
+  if(i>=0)bo.prods[i]=rec;else bo.prods.unshift(rec);
+  closeModal();renderProducts();if(bo.view==='Produits')boGo('Produits');toast(i>=0?'Produit mis à jour':'Produit « '+n+' » ajouté');}
+
+/* ---- QR codes : rendu + création + aperçu ---- */
+function qrRows(){return bo.qrs.map((q,i)=>`<tr class="${q.actif?'':'opacity-50'}"><td><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-lg border border-ink-200 flex items-center justify-center"><i data-lucide="qr-code" class="w-4 h-4 text-ink-600"></i></div><b>${q.n}</b></div></td>
+  <td class="text-ink-500">${q.t}</td><td>${q.s}</td><td><span class="chip ${q.actif?'bg-emerald-50 text-emerald-600':'bg-ink-100 text-ink-500'}">${q.actif?'Actif':'Inactif'}</span></td>
+  <td><div class="flex gap-1.5"><button class="btn btn-ghost btn-xs" onclick="modalQrView(${i})">Voir</button>
+  <button class="btn btn-ghost btn-xs !px-2" onclick="popMenu(event,[{lb:'Télécharger le PNG',ic:'download',fn:()=>{modalQrView(${i});setTimeout(()=>dlQr(bo.qrs[${i}].n),150);}},{lb:bo.qrs[${i}].actif?'Désactiver':'Réactiver',ic:'power',fn:()=>{bo.qrs[${i}].actif=!bo.qrs[${i}].actif;renderQr();if(bo.view==='QR Codes')boGo('QR Codes');toast('Statut mis à jour');}},{lb:'Supprimer',ic:'trash-2',danger:true,fn:()=>confirmModal('Supprimer le QR Code','Le QR « '+bo.qrs[${i}].n+' » ne sera plus scannable.','Supprimer',()=>{bo.qrs.splice(${i},1);renderQr();if(bo.view==='QR Codes')boGo('QR Codes');toast('QR Code supprimé');})}])"><i data-lucide="more-vertical" class="w-3 h-3"></i></button></div></td></tr>`).join('');}
+function renderQr(){const el=document.getElementById('bo-qrcodes');if(el)el.innerHTML=qrRows();const f=document.getElementById('bo-qrcodes-full');if(f)f.innerHTML=qrRows();lucide.createIcons();}
+function modalQrView(i){const q=bo.qrs[i];
+  openModal(mHead('QR Code — '+q.n)+`<div class="px-5 pb-5 text-center">
+  <canvas id="qr-cv" width="210" height="210" class="mx-auto rounded-xl border border-ink-200 p-2"></canvas>
+  <div class="text-[12.5px] text-ink-500 mt-3">Type : <b class="text-ink-800">${q.t}</b> · Scans aujourd’hui : <b class="text-ink-800">${q.s}</b></div>
+  <div class="text-[11.5px] text-ink-400 mt-1">kodapay.app/r/jardin-grill/${q.n.toLowerCase().replace(/\s+/g,'-')}</div>
+  <div class="flex gap-2 justify-center mt-4"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+  <button class="btn btn-teal" onclick="dlQr('${q.n}')"><i data-lucide="download" class="w-4 h-4"></i>Télécharger PNG</button></div></div>`);
+  drawQr(document.getElementById('qr-cv'),(i+3)*97);}
+function modalQrNew(){openModal(mHead('Créer un QR Code')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Nom / Emplacement</label><input id="qf-n" class="field mt-1 mb-3" placeholder="Ex : Table 03"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Type</label>
+  <select id="qf-t" class="field mt-1 mb-4"><option>Table</option><option>Zone</option><option>Comptoir</option></select>
+  <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-acc" onclick="const n=document.getElementById('qf-n').value.trim();if(!n){toast('Nom obligatoire');return;}bo.qrs.push({n,t:document.getElementById('qf-t').value,s:0,actif:true});closeModal();renderQr();if(bo.view==='QR Codes')boGo('QR Codes');toast('QR Code « '+n+' » créé');modalQrView(bo.qrs.length-1);">Créer</button></div></div>`);}
+
+/* ---- employés ---- */
+function modalEmp(){openModal(mHead('Inviter un employé')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Nom complet</label><input id="ef-n" class="field mt-1 mb-3" placeholder="Ex : Jean Kalala"/>
+  <label class="text-[11.5px] font-semibold text-ink-600">Rôle</label>
+  <select id="ef-r" class="field mt-1 mb-4"><option>Caissier</option><option>Serveur</option><option>Chef de cuisine</option><option>Manager</option></select>
+  <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="const n=document.getElementById('ef-n').value.trim();if(!n){toast('Nom obligatoire');return;}bo.emps.push({n,r:document.getElementById('ef-r').value});closeModal();boGo('Employés');toast('Invitation envoyée à '+n);">Inviter</button></div></div>`);}
+
+/* ---- menus header back-office ---- */
+function menuDate(ev,el){popMenu(ev,Object.keys(boKpiByPeriod).map(p=>({lb:p,ic:'calendar',fn:()=>{bo.period=p;
+  el.innerHTML=`<i data-lucide="calendar" class="w-4 h-4"></i>${p}<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>`;
+  const k=boKpiByPeriod[p];
+  document.getElementById('kpi-orders').textContent=k.orders;
+  document.getElementById('kpi-sales').textContent=eurFmt(k.sales);
+  document.getElementById('kpi-exp').textContent=eurFmt(k.exp);
+  const margin=k.sales-k.exp,pct=k.sales?Math.round(margin/k.sales*100):0;
+  document.getElementById('kpi-margin').textContent=eurFmt(margin);
+  document.getElementById('kpi-margin-pct').innerHTML=`<i data-lucide="${margin>=0?'trending-up':'trending-down'}" class="w-3 h-3"></i>${pct}% de marge`;
+  lucide.createIcons();toast('Données mises à jour — '+p);}})));}
+function menuSucc(ev,el){popMenu(ev,['Toutes les succursales','Succursale principale','Succursale Rive Gauche'].map(s=>({lb:s,ic:'store',fn:()=>{bo.succ=s;
+  if(el)el.innerHTML=(el.querySelector('[data-lucide=store],[data-lucide=chevron-down]')?`<i data-lucide="store" class="w-4 h-4"></i>${s}<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>`:s+' <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>');
+  lucide.createIcons();toast('Vue filtrée : '+s);}})));}
+function menuNotifs(ev,el,notifs){const items=notifs.map(([ic,t,d])=>({lb:`<div><div class="font-semibold">${t}</div><div class="text-[10.5px] text-ink-400">${d}</div></div>`,ic}));
+  items.push({sep:true},{lb:'Tout marquer comme lu',ic:'check-check',fn:()=>{const b=el.querySelector('span');if(b)b.remove();toast('Notifications lues');}});
+  popMenu(ev,items);}
+function menuProfil(ev){popMenu(ev,[{head:'Thomas Martin'},{lb:'Mon profil',ic:'user',fn:()=>openModal(mHead('Mon profil')+`<div class="px-5 pb-5 text-[13px]">
+  <div class="flex items-center gap-3 mb-4"><div class="w-12 h-12 rounded-full grad-leaf text-white font-bold flex items-center justify-center">TM</div>
+  <div><b>Thomas Martin</b><div class="text-ink-500 text-[11.5px]">thomas@jardingrill.fr · Administrateur</div></div></div>
+  <button class="btn btn-ghost w-full justify-center" onclick="closeModal();toast('Lien de réinitialisation envoyé')">Changer le mot de passe</button></div>`)},
+  {lb:'Paramètres',ic:'settings',fn:()=>boGo('Paramètres')},{sep:true},
+  {lb:'Déconnexion',ic:'log-out',danger:true,fn:()=>confirmModal('Déconnexion','Voulez-vous vraiment vous déconnecter ?','Se déconnecter',()=>toast('Déconnecté (mockup — rechargez pour revenir)'))}]);}
+function modalAbo(){openModal(mHead('Mon abonnement')+`<div class="px-5 pb-5 text-[13px]">
+  <div class="rounded-xl border border-kp-200 bg-kp-50/50 p-4 mb-3"><div class="flex items-center justify-between"><b class="font-display text-[15px]">Plan Entreprise</b><span class="chip bg-kp-100 text-kp-700">Actif</span></div>
+  <div class="text-ink-500 text-[12px] mt-1">89 €/mois · Renouvellement le 12 juin 2025 · Succursales illimitées, Studio IA, support prioritaire.</div></div>
+  <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+  <button class="btn btn-ghost" onclick="closeModal();toast('Facture mai 2025 téléchargée')"><i data-lucide="download" class="w-4 h-4"></i>Dernière facture</button>
+  <button class="btn btn-teal" onclick="closeModal();toast('Un conseiller vous recontactera')">Changer de plan</button></div></div>`);}
+function modalSupport(){openModal(mHead('Contacter le support')+`<div class="px-5 pb-5">
+  <label class="text-[11.5px] font-semibold text-ink-600">Sujet</label>
+  <select class="field mt-1 mb-3"><option>Question sur la facturation</option><option>Problème technique</option><option>Demande de fonctionnalité</option></select>
+  <label class="text-[11.5px] font-semibold text-ink-600">Message</label>
+  <textarea id="sup-msg" class="field mt-1 mb-4" rows="4" placeholder="Décrivez votre demande…"></textarea>
+  <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+  <button class="btn btn-teal" onclick="closeModal();toast('Message envoyé au support — réponse sous 24 h')"><i data-lucide="send" class="w-4 h-4"></i>Envoyer</button></div></div>`);}
+
+/* ---- Studio IA ---- */
+function iaEnhance(ev){const b=ev.currentTarget;b.innerHTML='<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>Génération en cours…';lucide.createIcons();
+  setTimeout(()=>{b.innerHTML='<i data-lucide="wand-2" class="w-4 h-4"></i>Améliorer avec IA';lucide.createIcons();toast('Photo améliorée générée ✨');},1400);}
+function iaVariants(){openModal(mHead('Variantes générées')+`<div class="px-5 pb-5">
+  <div class="grid grid-cols-3 gap-2.5">${['from-amber-700 to-stone-900','from-orange-800 to-stone-800','from-red-900 to-stone-900'].map((g,i)=>`
+  <div class="rounded-xl bg-gradient-to-br ${g} h-24 flex items-center justify-center text-3xl cursor-pointer hover:ring-2 ring-kp-500" onclick="closeModal();toast('Variante ${i+1} sélectionnée')">🥩</div>`).join('')}</div>
+  <p class="text-[11.5px] text-ink-500 mt-3 text-center">Cliquez sur une variante pour l’utiliser comme photo produit.</p></div>`);}
+
+/* ---- recâblage des boutons statiques du back-office ---- */
+function rewire(map,root){(root||document).querySelectorAll('[onclick]').forEach(el=>{const s=el.getAttribute('onclick')||'';if(!s.includes('toast('))return;
+  for(const[k,f]of map){if(s.includes(k)){el.removeAttribute('onclick');el.onclick=e=>f(e,el);break;}}});}
+rewire([
+  ['Sélecteur de succursale',(e,el)=>menuSucc(e,el)],
+  ['Succursales (mockup)',(e,el)=>menuSucc(e,el)],
+  ['Sélecteur de date',(e,el)=>menuDate(e,el)],
+  ['3 notifications',(e,el)=>menuNotifs(e,el,bo.notifs)],
+  ['Profil (mockup)',e=>menuProfil(e)],
+  ['Gestion abonnement',()=>modalAbo()],
+  ['Support KodaPay',()=>modalSupport()],
+  ['Génération IA lancée',e=>iaEnhance(e)],
+  ['Image choisie',()=>toast('✔ Image définie comme photo du produit')],
+  ['Variantes générées',()=>iaVariants()],
+  ['Formulaire nouveau produit',()=>modalProduct(-1)],
+  ['Filtre catégories',(e,el)=>popMenu(e,['Toutes catégories','Grillades','Poissons','Viandes','Risottos','Desserts'].map(c=>({lb:c,fn:()=>{bo.catFilter=c;el.innerHTML=c+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';renderProducts();lucide.createIcons();}})))],
+  ['Liste complète produits',()=>boGo('Produits')],
+  ['Assistant création QR Code',()=>modalQrNew()],
+  ['Filtre succursale',(e,el)=>menuSucc(e,el)],
+  ['Filtre statut',(e,el)=>popMenu(e,['Tous','Actifs','Inactifs'].map(s=>({lb:s,fn:()=>{el.innerHTML=s+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';lucide.createIcons();toast('Filtre : '+s);}})))],
+  ['Liste complète QR Codes',()=>boGo('QR Codes')],
+  ['Période (mockup)',(e,el)=>popMenu(e,['7 derniers jours','30 derniers jours','3 derniers mois'].map(p=>({lb:p,ic:'calendar',fn:()=>{el.innerHTML=p+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';lucide.createIcons();toast('Graphique mis à jour — '+p);}})))],
+],document.getElementById('surf-bo'));
+const boSearch=document.querySelector('#surf-bo input[placeholder="Rechercher un produit…"]');
+if(boSearch)boSearch.oninput=()=>{bo.search=boSearch.value.toLowerCase();renderProducts();};
+syncRecipeCosts();renderBoNav();renderProducts();renderQr();refreshDashKpis();
+lucide.createIcons();
+/*__PART1_END__*/
+</script>
+
+<script>
+/* ================= INTERACTIVITÉ — PARTIE 2 : app client + écran cuisine ================= */
+
+/* ---- données menu client (avec catégories) ---- */
+const cliMenu=[
+  {em:'🥩',n:'Entrecôte grillée',d:'Entrecôte de bœuf grillée, beurre maître d’hôtel, frites maison et salade verte.',p:24.90,cat:'Plats'},
+  {em:'🐟',n:'Saumon rôti',d:'Saumon rôti au four, légumes de saison et sauce citronnée.',p:18.90,cat:'Plats'},
+  {em:'🍄',n:'Risotto aux cèpes 🌿',d:'Risotto crémeux aux cèpes, parmesan et huile de truffe.',p:16.90,cat:'Plats',veg:true},
+  {em:'🦆',n:'Magret de canard',d:'Magret rôti, miel et purée de patates douces.',p:22.90,cat:'Plats'},
+  {em:'🍹',n:'Jus gingembre maison',d:'Gingembre frais pressé, citron vert et menthe.',p:4.50,cat:'Boissons',veg:true},
+  {em:'🍋',n:'Thé glacé citron',d:'Thé noir infusé à froid, citron et sucre de canne.',p:3.90,cat:'Boissons',veg:true},
+  {em:'🍮',n:'Crème brûlée',d:'Crème vanille de Madagascar, caramel croquant.',p:7.90,cat:'Desserts',veg:true},
+  {em:'🍫',n:'Moelleux au chocolat',d:'Cœur coulant, glace vanille et éclats de noisettes.',p:8.50,cat:'Desserts',veg:true},
+  {em:'🧀',n:'Planche mixte à partager',d:'Charcuteries fines, fromages affinés et condiments.',p:19.90,cat:'À partager'},
+];
+const cli={cat:'Plats',search:'',veg:'Tous',cart:[{i:0,q:1},{i:1,q:1}],table:'Table 07',step:1,confirmed:false,no:1042};
+const eur=v=>v.toFixed(2).replace('.',',')+' €';
+const cartTotal=()=>cli.cart.reduce((s,l)=>s+cliMenu[l.i].p*l.q,0);
+const cartCount=()=>cli.cart.reduce((s,l)=>s+l.q,0);
+
+function renderCliCats(){
+  const defs=[['utensils','Plats'],['cup-soda','Boissons'],['cake-slice','Desserts'],['users','À partager']];
+  document.getElementById('cli-cats').innerHTML=defs.map(([ic,lb])=>`
+    <button class="chip !py-2 !px-4 !text-[12px] flex-none ${cli.cat===lb?'bg-kp-800 text-white':'bg-white border border-ink-200 text-ink-600'}" onclick="cli.cat='${lb}';renderCliCats();renderCliList()">
+    <i data-lucide="${ic}" class="w-3.5 h-3.5"></i>${lb}</button>`).join('');
+  lucide.createIcons();
+}
+function renderCliList(){
+  const items=cliMenu.filter(d=>d.cat===cli.cat&&d.n.toLowerCase().includes(cli.search)&&(cli.veg!=='Végétarien'||d.veg)&&(cli.veg!=='Moins de 10 €'||d.p<10));
+  document.getElementById('cli-list').innerHTML=items.map((d,ix)=>{const i=cliMenu.indexOf(d);return `
+    <div class="flex gap-3.5 py-4 ${ix?'border-t border-ink-200/70':''}">
+      <div class="food w-24 h-24 bg-gradient-to-br from-stone-200 to-stone-400 !text-[40px]">${d.em}</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-bold text-[15px]">${d.n}</div>
+        <div class="text-[11.5px] text-ink-500 leading-snug mt-0.5">${d.d}</div>
+        <div class="font-display font-bold text-kp-700 text-[15px] mt-1.5">${eur(d.p)}</div>
+      </div>
+      <button class="self-center w-11 h-11 rounded-xl border border-ink-200 bg-white flex items-center justify-center text-kp-700 hover:bg-kp-50 active:scale-95" onclick="cliAdd(${i})"><i data-lucide="plus" class="w-5 h-5"></i></button>
+    </div>`;}).join('')||'<div class="text-center text-ink-400 text-[12.5px] py-10">Aucun résultat dans cette catégorie.</div>';
+  lucide.createIcons();
+}
+function cliAdd(i){const l=cli.cart.find(x=>x.i===i);l?l.q++:cli.cart.push({i,q:1});renderCliBar();renderCliCart();toast(cliMenu[i].n+' ajouté au panier');}
+function cliQty(ix,d){const l=cli.cart[ix];l.q+=d;if(l.q<=0)cli.cart.splice(ix,1);renderCliBar();renderCliCart();}
+function renderCliBar(){
+  document.getElementById('cli-count').textContent=cartCount();
+  document.getElementById('cli-count2').textContent=cartCount()+' article'+(cartCount()>1?'s':'');
+  document.getElementById('cli-total').textContent=eur(cartTotal());
+  const b=document.getElementById('cli-confirm');if(b)b.querySelector('.cf-tot').textContent=eur(cartTotal());
+}
+function renderCliCart(){
+  const box=document.getElementById('cli-cartlines');if(!box)return;
+  box.innerHTML=cli.cart.length?cli.cart.map((l,ix)=>`
+    <div class="flex items-center gap-2 py-1.5">
+      <span class="text-[16px]">${cliMenu[l.i].em}</span>
+      <span class="flex-1 text-[12px] font-semibold truncate">${cliMenu[l.i].n}</span>
+      <button class="qty-btn !w-6 !h-6 !text-[12px]" onclick="cliQty(${ix},-1)">−</button>
+      <span class="text-[12px] font-bold w-4 text-center">${l.q}</span>
+      <button class="qty-btn !w-6 !h-6 !text-[12px]" onclick="cliQty(${ix},1)">+</button>
+      <span class="text-[12px] font-semibold w-14 text-right">${eur(cliMenu[l.i].p*l.q)}</span>
+    </div>`).join(''):'<div class="text-center text-[11.5px] text-ink-400 py-2">Panier vide — ajoutez des plats.</div>';
+}
+function renderSuivi(){
+  const p=document.querySelector('#cli-sheet .grid > div:nth-child(2)');if(!p)return;
+  const steps=['Reçue','En préparation','Prête'],s=cli.step;
+  const msg=['Votre commande a bien été reçue.','Votre commande est en préparation en cuisine.','Votre commande est prête ! Présentez-vous au comptoir. 🎉'][s];
+  const eta=['~ 15 min','12 – 15 min','Maintenant'][s];
+  p.innerHTML=`<div class="flex items-center justify-between mb-2"><h4 class="font-display font-bold text-[15px]">Suivi de commande</h4><button onclick="closeCheckout()"><i data-lucide="x" class="w-4 h-4 text-ink-400"></i></button></div>
+  <div class="flex items-center gap-3 mb-3">
+    <div><div class="text-[10.5px] text-ink-500">Commande n°</div><div class="font-display text-[26px] font-bold leading-none">${cli.no}</div></div>
+    <div class="ml-auto w-20 h-16 rounded-xl bg-kp-50 flex items-center justify-center text-3xl">${s===2?'✅':'👩‍🍳'}</div></div>
+  <div class="flex items-center px-1">
+    ${steps.map((_,i)=>`${i?`<div class="flex-1 h-0.5 ${i<=s?'bg-emerald-500':'bg-ink-200'}"></div>`:''}
+    ${i<s?'<div class="step-dot bg-emerald-500 text-white"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>':
+      i===s?'<div class="step-dot border-[3px] border-kp-700 bg-white"><span class="w-2.5 h-2.5 rounded-full bg-kp-700"></span></div>':
+      '<div class="step-dot border-2 border-ink-300 bg-white"></div>'}`).join('')}</div>
+  <div class="flex justify-between text-[10px] font-semibold text-ink-600 mt-1">${steps.map((st,i)=>`<span class="${i===s?'text-kp-700':i<s?'text-emerald-600':'text-ink-400'}">${st}</span>`).join('')}</div>
+  <p class="text-center text-[10.5px] text-ink-500 mt-2">${msg}</p>
+  <div class="mt-3 rounded-xl ${s===2?'bg-emerald-50 text-emerald-700':'bg-kp-50 text-kp-700'} text-[11.5px] font-semibold px-3 py-2.5 flex items-center gap-2 justify-center"><i data-lucide="clock" class="w-4 h-4"></i>Temps estimé : ${eta}</div>`;
+  lucide.createIcons();
+}
+function cliConfirm(){
+  if(!cli.cart.length){toast('Votre panier est vide');return;}
+  cli.confirmed=true;cli.step=0;renderSuivi();toast('Commande n°'+cli.no+' confirmée ✔');
+  setTimeout(()=>{cli.step=1;renderSuivi();},3500);
+  setTimeout(()=>{cli.step=2;renderSuivi();toast('Commande n°'+cli.no+' prête ! 🎉');if(typeof tvSt!=='undefined'){tvSt.prep=tvSt.prep.filter(n=>n!==cli.no);if(!tvSt.ready.includes(cli.no))tvSt.ready.unshift(cli.no);tvRender();}},9000);
+}
+function cliPayMode(sel){
+  const btns=document.querySelectorAll('#cli-paymodes > button');
+  btns.forEach((b,i)=>{b.className=(i===sel)?'border-2 border-kp-500 bg-kp-50 rounded-xl p-2.5 text-left':'border border-ink-200 rounded-xl p-2.5 text-left';});
+  toast(sel===0?'Paiement en ligne sélectionné':'Paiement à la caisse sélectionné');
+}
+
+/* recâblage surface client */
+(function(){
+  const fin=document.querySelector('#cli-sheet .grid > div:first-child');
+  if(fin){
+    const box=document.createElement('div');box.id='cli-cartlines';box.className='mb-2 border-b border-ink-100 pb-2';
+    fin.insertBefore(box,fin.children[1]);
+    const modes=fin.querySelector('.grid.grid-cols-2');if(modes){modes.id='cli-paymodes';[...modes.children].forEach((b,i)=>{b.removeAttribute('onclick');b.onclick=()=>cliPayMode(i);});}
+    const cf=fin.querySelector('button.btn-acc');
+    if(cf){cf.id='cli-confirm';cf.removeAttribute('onclick');cf.onclick=cliConfirm;
+      cf.innerHTML='<span>Confirmer la commande</span><span class="flex items-center gap-2"><span class="cf-tot">43,80 €</span><i data-lucide="arrow-right" class="w-4 h-4"></i></span>';}
+  }
+  rewire([
+    ['Table détectée',(e,el)=>openModal(mHead('Votre table')+`<div class="px-5 pb-5 text-[13px]">
+      <p class="text-ink-600 mb-3">QR code scanné : vous êtes installé à la <b>${cli.table}</b> du Jardin Grill.</p>
+      <label class="text-[11.5px] font-semibold text-ink-600">Changer de table</label>
+      <select id="tb-sel" class="field mt-1 mb-4">${['Table 05','Table 06','Table 07','Table 08','Terrasse 01'].map(t=>`<option ${t===cli.table?'selected':''}>${t}</option>`).join('')}</select>
+      <div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-teal" onclick="cli.table=document.getElementById('tb-sel').value;closeModal();document.querySelector('#surf-client [data-tbl]').lastChild.textContent=cli.table;toast('Table mise à jour : '+cli.table)">Valider</button></div></div>`)],
+    ['Filtres (mockup)',(e)=>popMenu(e,['Tous','Végétarien','Moins de 10 €'].map(f=>({lb:f,ic:f==='Végétarien'?'leaf':f==='Tous'?'list':'coins',fn:()=>{cli.veg=f;renderCliList();toast('Filtre : '+f);}})))],
+  ],document.getElementById('surf-client'));
+  const tblBtn=document.querySelector('#surf-client button.bg-white\\/10');
+  if(tblBtn){tblBtn.setAttribute('data-tbl','1');}
+  const cs=document.querySelector('#surf-client input[placeholder="Rechercher un plat, une boisson…"]');
+  if(cs)cs.oninput=()=>{cli.search=cs.value.toLowerCase();renderCliList();};
+  renderCliCats();renderCliList();renderCliBar();renderCliCart();renderSuivi();
+})();
+
+/* ================= ÉCRAN CUISINE ================= */
+const tvSt={prep:[1042,1043,1044,1047],ready:[1038,1039,1040],next:1048};
+function tvRender(){
+  document.getElementById('tv-prep').innerHTML=tvSt.prep.map(n=>`
+    <div class="flex items-center justify-between rounded-xl border border-ink-200 px-5 py-3">
+      <span class="font-display font-bold text-[40px] leading-none tracking-tight">${n}</span>
+      <button class="p-1" onclick="popMenu(event,[{lb:'Marquer prête',ic:'check',fn:()=>tvReadyUp(${n})},{lb:'Annuler la commande',ic:'x',danger:true,fn:()=>{tvSt.prep=tvSt.prep.filter(x=>x!==${n});tvRender();toast('Commande ${n} annulée');}}])"><i data-lucide="more-vertical" class="w-5 h-5 text-ink-300"></i></button></div>`).join('')
+    ||'<div class="text-center text-ink-400 text-[13px] py-8">Aucune commande en préparation.</div>';
+  document.getElementById('tv-ready').innerHTML=tvSt.ready.map(n=>`
+    <div class="flex items-center justify-between rounded-xl bg-white border border-emerald-200 px-5 py-4 shadow-[0_0_18px_rgba(52,211,153,.25)] cursor-pointer" onclick="popMenu(event,[{lb:'Commande retirée par le client',ic:'check-check',fn:()=>{tvSt.ready=tvSt.ready.filter(x=>x!==${n});tvRender();toast('Commande ${n} retirée');}},{lb:'Rappeler le client',ic:'bell-ring',fn:()=>toast('SMS de rappel envoyé pour la ${n}')}])">
+      <span class="font-display font-bold text-[44px] leading-none tracking-tight text-emerald-700">${n}</span>
+      <span class="text-2xl">🎉</span></div>`).join('')
+    ||'<div class="text-center text-emerald-700/50 text-[13px] py-8">Aucune commande prête.</div>';
+  lucide.createIcons();
+}
+function tvReadyUp(n){tvSt.prep=tvSt.prep.filter(x=>x!==n);tvSt.ready.unshift(n);tvRender();toast('Commande '+n+' prête — affichée côté client');}
+(function(){
+  const hd=document.querySelector('#surf-tv .tv .flex.items-center.gap-4');
+  if(hd){const b=document.createElement('button');b.className='btn btn-ghost btn-xs !bg-white/10 !border-white/20 !text-white mr-3';
+    b.innerHTML='<i data-lucide="plus" class="w-3.5 h-3.5"></i>Nouvelle commande';
+    b.onclick=()=>{tvSt.prep.push(tvSt.next++);tvRender();toast('Commande '+(tvSt.next-1)+' reçue en cuisine');};
+    hd.insertBefore(b,hd.lastElementChild);}
+  tvRender();
+})();
+/*__PART2_END__*/
+</script>
+
+<script>
+/* ================= INTERACTIVITÉ — PARTIE 3 : caisse POS (tablette + mobile) ================= */
+const usd=v=>'$'+v.toFixed(2);
+const pos={cat:'Tous',sort:'Populaire',tab:'Addition',discount:0,no:1042,openOrders:[{no:1041,n:3,tot:28.5},{no:1040,n:1,tot:9.0}],
+  items:[
+    {em:'🥖',n:'Banh mi classique',p:8.5,cat:'Sandwichs',badge:'Populaire',dispo:true,pop:98},
+    {em:'🌯',n:'Wrap poulet grillé',p:9.0,cat:'Sandwichs',dispo:true,pop:85},
+    {em:'🥗',n:'Salade lotus',p:12.0,cat:'Salades',dispo:true,pop:80},
+    {em:'🍣',n:'Saumon épicé bowl',p:14.0,cat:'Bols',dispo:true,pop:76},
+    {em:'🍄',n:'Risotto champignons',p:13.5,cat:'Bols',badge:'Nouveau',dispo:true,pop:60},
+    {em:'🐟',n:'Saumon rôti',p:16.0,cat:'Bols',dispo:true,pop:72},
+    {em:'🍜',n:'Bowl tempura',p:13.0,cat:'Bols',dispo:true,pop:64},
+    {em:'🍫',n:'Gâteau chocolat',p:6.5,cat:'Desserts',dispo:true,pop:70},
+    {em:'🧋',n:'Thé glacé maison',p:3.0,cat:'Boissons',dispo:true,pop:55},
+    {em:'🍺',n:'Bière artisanale',p:5.5,cat:'Bières & vins',dispo:true,pop:50},
+  ],
+  ticket:[{i:2,q:1,note:''},{i:0,q:2,note:'Sans coriandre'},{i:3,q:1,note:''},{i:8,q:2,note:'Citron'}]};
+const posSub=()=>pos.ticket.reduce((s,l)=>s+pos.items[l.i].p*l.q,0);
+let posRefs={};
+
+function renderPosCats(){
+  const html=(window.__posCats||posCats).map(([ic,lb,n,cl])=>{
+    const act=pos.cat===lb?'ring-2 ring-offset-2 ring-ink-900':'';
+    const click=lb==='Scanner'?'modalScan()':lb==='Promotions'?`pos.cat='Promotions';renderPosAll()`:`pos.cat=pos.cat==='${lb}'?'Tous':'${lb}';renderPosAll()`;
+    return {big:`<div class="cat-tile ${cl} ${act}" onclick="${click}"><i data-lucide="${ic}" class="w-5 h-5 mb-2"></i><div class="text-[12.5px] font-bold leading-tight">${lb}</div>${n!==''?`<div class="text-[10px] opacity-80">${n} articles</div>`:''}</div>`,
+      small:`<div class="cat-tile ${cl} ${act} !min-w-[86px] !p-2.5 flex-none" onclick="${click}"><i data-lucide="${ic}" class="w-4 h-4 mb-1.5"></i><div class="text-[11px] font-bold leading-tight">${lb}</div>${n!==''?`<div class="text-[9px] opacity-80">${n} articles</div>`:''}</div>`};});
+  document.getElementById('pos-cats').innerHTML=html.map(h=>h.big).join('');
+  document.getElementById('posm-cats').innerHTML=html.map(h=>h.small).join('');
+  lucide.createIcons();
+}
+function posFiltered(){
+  let f=pos.items.filter(it=>pos.cat==='Tous'||(pos.cat==='Promotions'?it.badge:it.cat===pos.cat));
+  if(pos.search)f=f.filter(it=>it.n.toLowerCase().includes(pos.search));
+  if(pos.sort==='Prix croissant')f=[...f].sort((a,b)=>a.p-b.p);
+  else if(pos.sort==='Prix décroissant')f=[...f].sort((a,b)=>b.p-a.p);
+  else f=[...f].sort((a,b)=>b.pop-a.pop);
+  return f;
+}
+function posCard(it,small){const i=pos.items.indexOf(it);return `
+  <div class="card !rounded-2xl overflow-hidden ${it.dispo?'cursor-pointer hover:shadow-md':'opacity-40'} transition active:scale-[.98]" onclick="${it.dispo?`addPos(${i})`:`toast('Article indisponible')`}">
+    <div class="relative ${small?'h-20 text-3xl':'h-28 text-4xl'} bg-gradient-to-br from-stone-200 to-stone-400 flex items-center justify-center">${it.em}
+      ${it.badge?`<span class="chip absolute ${small?'top-1.5 left-1.5 !text-[9px]':'top-2 left-2'} ${it.badge==='Populaire'?'bg-blue-600':'bg-emerald-600'} text-white">${it.badge}</span>`:''}
+      <span class="absolute ${small?'bottom-1.5 right-1.5 w-6 h-6':'bottom-2 right-2 w-7 h-7'} rounded-full bg-white shadow flex items-center justify-center"><i data-lucide="plus" class="${small?'w-3.5 h-3.5':'w-4 h-4'} text-ink-700"></i></span></div>
+    <div class="${small?'p-2.5':'p-3'}"><div class="${small?'text-[11.5px]':'text-[13px]'} font-bold leading-tight">${it.n}</div><div class="${small?'text-[11.5px]':'text-[12.5px]'} text-ink-500 mt-0.5">${usd(it.p)}</div></div></div>`;}
+function renderPosGrid(){
+  const f=posFiltered();
+  document.getElementById('pos-grid').innerHTML=f.map(it=>posCard(it,false)).join('')||'<div class="col-span-full text-center text-ink-400 py-8 text-[13px]">Aucun article.</div>';
+  document.getElementById('posm-grid').innerHTML=f.map(it=>posCard(it,true)).join('')||'<div class="col-span-2 text-center text-ink-400 py-8 text-[12px]">Aucun article.</div>';
+  lucide.createIcons();
+}
+function addPos(i){const l=pos.ticket.find(x=>x.i===i&&!x.note);l?l.q++:pos.ticket.push({i,q:1,note:''});renderTicket();toast(pos.items[i].n+' ajouté à la commande');}
+function ticketLines(){return pos.ticket.map((l,ix)=>`
+  <div class="flex items-start gap-2.5">
+    <span class="w-6 h-6 rounded-lg bg-ink-100 text-[11px] font-bold flex items-center justify-center flex-none mt-0.5">${l.q}</span>
+    <div class="flex-1 min-w-0"><div class="text-[13px] font-semibold">${pos.items[l.i].n}</div>${l.note?`<div class="text-[11px] text-ink-500">${l.note}</div>`:''}</div>
+    <span class="text-[13px] font-semibold">${usd(pos.items[l.i].p*l.q)}</span>
+    <button class="text-ink-400 mt-0.5" onclick="editLine(${ix})"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></div>`).join('')
+  ||'<div class="text-center text-ink-400 text-[12px] py-6">Addition vide — touchez un article.</div>';}
+function totalsHtml(){const s=posSub(),d=s*pos.discount,t=(s-d)*1.085;
+  return `${pos.discount?`<div class="flex justify-between text-ink-500"><span>Remise (${pos.discount*100}%)</span><span class="font-semibold text-red-600">−${usd(d)}</span></div>`:''}
+  <div class="flex justify-between text-ink-500"><span>Sous-total</span><span class="font-semibold text-ink-800">${usd(s-d)}</span></div>
+  <div class="flex justify-between text-ink-500"><span>TVA (8,5%)</span><span class="font-semibold text-ink-800">${usd((s-d)*0.085)}</span></div>
+  <div class="flex justify-between font-display font-bold text-[17px] pt-1"><span>Total</span><span>${usd(t)}</span></div>`;}
+function tabContent(){
+  if(pos.tab==='Actions')return `<div class="space-y-2">
+    <button class="btn btn-ghost w-full justify-start" onclick="popMenu(event,[0.05,0.1,0.2].map(d=>({lb:'Remise '+(d*100)+' %',ic:'badge-percent',fn:()=>{pos.discount=d;renderTicket();toast('Remise appliquée : '+(d*100)+' %');}})).concat([{lb:'Retirer la remise',ic:'x',fn:()=>{pos.discount=0;renderTicket();toast('Remise retirée');}}]))"><i data-lucide="badge-percent" class="w-4 h-4"></i>Appliquer une remise</button>
+    <button class="btn btn-ghost w-full justify-start" onclick="toast('Ticket envoyé à l’imprimante de cuisine')"><i data-lucide="printer" class="w-4 h-4"></i>Imprimer en cuisine</button>
+    <button class="btn btn-ghost w-full justify-start" onclick="pos.openOrders.push({no:pos.no,n:pos.ticket.length,tot:posSub()});pos.ticket=[];pos.no++;pos.tab='Addition';renderTicket();toast('Commande mise en attente')"><i data-lucide="pause" class="w-4 h-4"></i>Mettre en attente</button>
+    <button class="btn btn-ghost w-full justify-start !text-red-600" onclick="confirmModal('Annuler la commande','Tous les articles de la commande '+pos.no+' seront supprimés.','Annuler la commande',()=>{pos.ticket=[];pos.discount=0;pos.tab='Addition';renderTicket();toast('Commande annulée');})"><i data-lucide="trash-2" class="w-4 h-4"></i>Annuler la commande</button></div>`;
+  if(pos.tab==='Client')return `<div>
+    <label class="text-[11px] font-semibold text-ink-600">Nom du client</label><input id="pc-n" class="field mt-1 mb-2.5" placeholder="Ex : Awa N."/>
+    <label class="text-[11px] font-semibold text-ink-600">Téléphone</label><input class="field mt-1 mb-3" placeholder="+243 …"/>
+    <button class="btn btn-teal w-full justify-center" onclick="toast('Client associé à la commande '+pos.no)"><i data-lucide="user-plus" class="w-4 h-4"></i>Associer le client</button></div>`;
+  return ticketLines();
+}
+function renderTicket(){
+  const cnt=pos.ticket.reduce((s,l)=>s+l.q,0),tot=(posSub()*(1-pos.discount))*1.085;
+  ['pos-ticket','posm-ticket'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=tabContent();});
+  if(posRefs.totT)posRefs.totT.innerHTML=totalsHtml();
+  if(posRefs.totM)posRefs.totM.innerHTML=totalsHtml();
+  if(posRefs.payT)posRefs.payT.innerHTML='<i data-lucide="credit-card" class="w-4 h-4"></i>Payer&nbsp; '+usd(tot);
+  if(posRefs.payM)posRefs.payM.innerHTML='<i data-lucide="credit-card" class="w-4 h-4"></i>Payer&nbsp; '+usd(tot);
+  if(posRefs.barCnt){posRefs.barCnt.textContent=cnt;posRefs.barSub.textContent=cnt+' article'+(cnt>1?'s':'');posRefs.barTot.textContent=usd(tot);}
+  document.querySelectorAll('.pos-no').forEach(e=>e.textContent=(window.biz==='market'?'Ticket ':'Commande ')+pos.no);
+  posRefs.tabs&&posRefs.tabs.forEach(g=>g.forEach(sp=>{const on=sp.textContent.trim()===pos.tab;
+    sp.className='pb-2 cursor-pointer '+(on?'border-b-2 border-blue-600 text-blue-600':'text-ink-500');}));
+  lucide.createIcons();
+}
+function renderPosAll(){renderPosCats();renderPosGrid();renderTicket();}
+function editLine(ix){const l=pos.ticket[ix],it=pos.items[l.i];
+  openModal(mHead('Modifier — '+it.n)+`<div class="px-5 pb-5">
+  <div class="flex items-center justify-center gap-4 my-2">
+    <button class="qty-btn !w-10 !h-10 !text-[18px]" onclick="if(pos.ticket[${ix}].q>1){pos.ticket[${ix}].q--;document.getElementById('el-q').textContent=pos.ticket[${ix}].q;renderTicket();}">−</button>
+    <span id="el-q" class="font-display font-bold text-[24px] w-8 text-center">${l.q}</span>
+    <button class="qty-btn !w-10 !h-10 !text-[18px]" onclick="pos.ticket[${ix}].q++;document.getElementById('el-q').textContent=pos.ticket[${ix}].q;renderTicket();">+</button></div>
+  <label class="text-[11.5px] font-semibold text-ink-600">Note cuisine</label>
+  <input id="el-note" class="field mt-1 mb-4" value="${l.note}" placeholder="Ex : sans coriandre"/>
+  <div class="flex justify-between gap-2">
+    <button class="btn btn-ghost !text-red-600" onclick="pos.ticket.splice(${ix},1);closeModal();renderTicket();toast('Article retiré')"><i data-lucide="trash-2" class="w-4 h-4"></i>Retirer</button>
+    <button class="btn btn-teal" onclick="pos.ticket[${ix}].note=document.getElementById('el-note').value;closeModal();renderTicket();toast('Ligne mise à jour')">Enregistrer</button></div></div>`);}
+let payMode='Carte bancaire';
+function modalPay(){if(!pos.ticket.length){toast('Addition vide');return;}
+  const tot=(posSub()*(1-pos.discount))*1.085;payMode='Carte bancaire';
+  openModal(mHead('Encaisser '+usd(tot))+`<div class="px-5 pb-5">
+  <div class="grid grid-cols-3 gap-2 mb-4" id="pay-opts">
+    ${[['credit-card','Carte bancaire'],['smartphone','Mobile Money'],['banknote','Espèces']].map(([ic,m],i)=>`
+    <div class="payopt ${i===0?'sel':''}" onclick="payMode='${m}';document.querySelectorAll('#pay-opts .payopt').forEach(o=>o.classList.remove('sel'));this.classList.add('sel')">
+    <i data-lucide="${ic}" class="w-5 h-5 mx-auto mb-1.5 text-ink-600"></i><div class="text-[11px] font-bold">${m}</div></div>`).join('')}</div>
+  <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[14.5px] rounded-xl py-3" onclick="paySuccess(${tot})">Valider le paiement</button></div>`);}
+function paySuccess(tot){
+  openModal(`<div class="px-5 py-8 text-center">
+  <div class="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3"><i data-lucide="check" class="w-8 h-8 text-emerald-600"></i></div>
+  <div class="font-display font-bold text-[18px]">Paiement accepté</div>
+  <div class="text-[13px] text-ink-500 mt-1">Commande ${pos.no} · ${usd(tot)} · ${payMode}</div>
+  <div class="flex gap-2 justify-center mt-5">
+  <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+  <button class="btn btn-teal" onclick="closeModal();toast('Ticket imprimé')"><i data-lucide="printer" class="w-4 h-4"></i>Imprimer le reçu</button></div></div>`);
+  /* supermarché/quincaillerie : la vente décrémente le stock ; restaurant : envoi en cuisine */
+  if(window.biz==='market'){
+    pos.ticket.forEach(l=>{const it=pos.items[l.i];const s=it&&it.stockId?bo.stock.find(x=>x.id===it.stockId):null;
+      if(s){s.qty=Math.max(0,s.qty-l.q);s.mv.unshift({d:'13 mai 2025',t:'Vente',q:l.q,note:'Caisse — ticket '+pos.no});
+        if(s.qty===0){toast('⚠ Rupture : '+s.n);it.dispo=false;}
+        else if(s.qty<=s.seuil)toast('Stock faible : '+s.n+' ('+s.qty+' restants)');}});
+    if(typeof renderStock==='function')renderStock();renderPosGrid();
+  }else if(typeof tvSt!=='undefined'){tvSt.prep.push(pos.no);tvRender();}
+  pos.ticket=[];pos.discount=0;pos.no++;pos.tab='Addition';renderTicket();closePosmTicket();
+}
+function modalScan(){openModal(mHead('Scanner un article')+`<div class="px-5 pb-5 text-center">
+  <div class="rounded-2xl border-2 border-dashed border-ink-300 py-10 mb-4"><i data-lucide="scan-line" class="w-12 h-12 text-ink-300 mx-auto"></i>
+  <div class="text-[12px] text-ink-400 mt-2">Visez le code-barres de l’article</div></div>
+  <button class="btn btn-teal w-full justify-center" onclick="closeModal();addPos(Math.floor(Math.random()*pos.items.length))">Simuler un scan</button></div>`);}
+function modalPosSearch(){openModal(mHead('Rechercher un article')+`<div class="px-5 pb-5">
+  <input id="ps-q" class="field mb-3" placeholder="Nom de l’article…" oninput="document.getElementById('ps-res').innerHTML=pos.items.filter(it=>it.n.toLowerCase().includes(this.value.toLowerCase())).map(it=>'<div class=&quot;pm-item&quot; onclick=&quot;closeModal();addPos('+pos.items.indexOf(it)+')&quot;>'+it.em+' '+it.n+' — '+usd(it.p)+'</div>').join('')"/>
+  <div id="ps-res" class="space-y-1">${pos.items.map((it,i)=>`<div class="pm-item" onclick="closeModal();addPos(${i})">${it.em} ${it.n} — ${usd(it.p)}</div>`).join('')}</div></div>`);}
+function modalOrders(){openModal(mHead('Commandes en attente')+`<div class="px-5 pb-5">
+  ${pos.openOrders.map((o,i)=>`<div class="flex items-center gap-3 py-2.5 border-b border-ink-100 last:border-0">
+    <b class="font-display text-[15px]">${o.no}</b><span class="text-[12px] text-ink-500 flex-1">${o.n} article${o.n>1?'s':''} · ${usd(o.tot)}</span>
+    <button class="btn btn-teal btn-xs" onclick="closeModal();toast('Commande ${o.no} rechargée dans la caisse')">Reprendre</button></div>`).join('')||'<div class="text-center text-ink-400 py-4 text-[12.5px]">Aucune commande en attente.</div>'}</div>`);}
+function modalTx(){openModal(mHead('Transactions du service')+`<div class="px-5 pb-5">
+  ${[['1041','$28.50','Carte'],['1040','$9.00','Espèces'],['1039','$46.20','Mobile Money'],['1038','$18.75','Carte']].map(([n,m,t])=>`
+  <div class="flex items-center gap-3 py-2.5 border-b border-ink-100 last:border-0 text-[13px]"><b>${n}</b><span class="text-ink-500 flex-1">${t}</span><b>${m}</b>
+  <span class="chip bg-emerald-50 text-emerald-600">Réglée</span></div>`).join('')}
+  <button class="btn btn-ghost btn-xs w-full justify-center mt-3" onclick="dlCSV('transactions.csv',[['Commande','Méthode','Montant'],['1041','Carte','28.50'],['1040','Espèces','9.00'],['1039','Mobile Money','46.20'],['1038','Carte','18.75']])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter CSV</button></div>`);}
+function modalArticles(){openModal(mHead('Disponibilité des articles')+`<div class="px-5 pb-5 max-h-[55vh] overflow-y-auto">
+  ${pos.items.map((it,i)=>`<div class="flex items-center gap-3 py-2 border-b border-ink-100 last:border-0 text-[13px]">
+  <span class="text-[16px]">${it.em}</span><span class="flex-1 font-semibold ${it.dispo?'':'text-ink-400 line-through'}">${it.n}</span>
+  <button class="chip ${it.dispo?'bg-emerald-50 text-emerald-600':'bg-ink-100 text-ink-500'}" onclick="pos.items[${i}].dispo=!pos.items[${i}].dispo;closeModal();renderPosGrid();modalArticles();toast(pos.items[${i}].n+(pos.items[${i}].dispo?' remis en vente':' marqué épuisé'))">${it.dispo?'Disponible':'Épuisé'}</button></div>`).join('')}</div>`);}
+
+(function(){
+  const surfT=document.getElementById('surf-pos'),surfM=document.getElementById('surf-posm');
+  const tk=document.getElementById('pos-ticket');posRefs.totT=tk.nextElementSibling;posRefs.payT=posRefs.totT.nextElementSibling;
+  const tkm=document.getElementById('posm-ticket');posRefs.totM=tkm.nextElementSibling;posRefs.payM=posRefs.totM.nextElementSibling;
+  posRefs.payT.removeAttribute('onclick');posRefs.payT.onclick=modalPay;
+  posRefs.payM.removeAttribute('onclick');posRefs.payM.onclick=modalPay;
+  const bar=surfM.querySelector('[onclick="openPosmTicket()"]');
+  if(bar){posRefs.barCnt=bar.querySelector('span span')||bar.querySelector('.relative span');posRefs.barCnt=bar.querySelector('.relative span');
+    posRefs.barSub=bar.querySelector('.text-ink-400');posRefs.barTot=bar.querySelector('.font-display');}
+  document.querySelectorAll('#surf-pos h3.font-display, #posm-sheet h4.font-display').forEach(e=>{if(e.textContent.includes('Commande'))e.classList.add('pos-no');});
+  posRefs.tabs=[];
+  [surfT,surfM].forEach(s=>{const g=[...s.querySelectorAll('.flex.gap-4 > span')].filter(sp=>['Addition','Actions','Client'].includes(sp.textContent.trim()));
+    if(g.length){posRefs.tabs.push(g);g.forEach(sp=>{sp.removeAttribute('onclick');sp.onclick=()=>{pos.tab=sp.textContent.trim();renderTicket();};});}});
+  const posMap=[
+    ['Sélecteur de service',(e,el)=>popMenu(e,['Service midi','Service soir','Brunch week-end'].map(s=>({lb:s,ic:'clock',fn:()=>{el.innerHTML=s+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';lucide.createIcons();toast(s+' activé');}})))],
+    ['Recherche (mockup)',()=>modalPosSearch()],
+    ['Scanner code-barres',()=>modalScan()],
+    ['3 notifications',(e,el)=>menuNotifs(e,el,[['receipt-text','Commande 1041 en attente depuis 12 min','Il y a 2 min'],['package','Stock faible : Saumon rôti (3 restants)','Il y a 20 min'],['info','Mise à jour KodaPay POS disponible','Hier']])],
+    ['Tri (mockup)',(e,el)=>popMenu(e,['Populaire','Prix croissant','Prix décroissant'].map(s=>({lb:s,ic:'arrow-up-down',fn:()=>{pos.sort=s;el.innerHTML=s+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';renderPosGrid();lucide.createIcons();}})))],
+    ['Options commande',(e)=>popMenu(e,[{lb:'Imprimer en cuisine',ic:'printer',fn:()=>toast('Ticket envoyé en cuisine')},{lb:'Mettre en attente',ic:'pause',fn:()=>{pos.openOrders.push({no:pos.no,n:pos.ticket.length,tot:posSub()});pos.ticket=[];pos.no++;renderTicket();toast('Commande mise en attente');}},{lb:'Annuler la commande',ic:'trash-2',danger:true,fn:()=>confirmModal('Annuler la commande','Tous les articles seront supprimés.','Annuler la commande',()=>{pos.ticket=[];pos.discount=0;renderTicket();toast('Commande annulée');})}])],
+    ['Commandes (mockup)',()=>modalOrders()],
+    ['Transactions (mockup)',()=>modalTx()],
+    ['Articles (mockup)',()=>modalArticles()],
+    ['Plus (mockup)',(e)=>popMenu(e,[{lb:'Ouvrir le tiroir-caisse',ic:'archive',fn:()=>toast('Tiroir-caisse ouvert')},{lb:'Clôture de service',ic:'lock',fn:()=>confirmModal('Clôture de service','Clôturer le service midi et générer le rapport Z ?','Clôturer',()=>toast('Service clôturé — rapport Z généré'))},{lb:'Paramètres caisse',ic:'settings',fn:()=>toast('Paramètres caisse (mockup)')}])],
+    ['Fiche client',(e)=>{pos.tab='Client';renderTicket();}],
+    ['Actions (mockup)',(e)=>{pos.tab='Actions';renderTicket();}],
+  ];
+  rewire(posMap,surfT);rewire(posMap,surfM);
+  const psM=surfM.querySelector('input[placeholder="Rechercher un article…"]');
+  if(psM)psM.oninput=()=>{pos.search=psM.value.toLowerCase();renderPosGrid();};
+  renderPosAll();
+})();
+/*__PART3_END__*/
+</script>
+
+<script>
+/* ================= INTERACTIVITÉ — PARTIE 4 : Super Admin ================= */
+const adm={view:'Tableau de bord',filter:'Tous',
+  cos:admCompanies.map(r=>({n:r[0],pays:r[1],st:r[2],plan:r[3],cavg:r[4],com:r[5]})),
+  gws:admGateways.map(([g,tx])=>({g,tx,on:true})),
+  notifs:[['building-2','Nouvelle inscription : Warung Bali (Indonésie)','Il y a 5 min'],['alert-triangle','Incident passerelle Paystack résolu','Il y a 1 h'],['credit-card','Paiement de 737,70 € reçu — Le Jardin Grill','Il y a 2 h']]};
+const admMainEl=document.querySelector('#surf-admin main');
+const admDashEls=[...admMainEl.children].slice(1);
+const admGeneric=document.createElement('div');admMainEl.appendChild(admGeneric);
+const admStChip=s=>({'Active':'bg-emerald-50 text-emerald-600','En attente':'bg-amber-50 text-amber-600','Suspendue':'bg-red-50 text-red-500'}[s]);
+
+function admGo(view,filter){
+  adm.view=view;if(filter)adm.filter=filter;
+  const h=admMainEl.querySelector('h1');h.textContent=view;
+  const dash=view==='Tableau de bord';
+  admDashEls.forEach(e=>e.style.display=dash?'':'none');
+  admGeneric.innerHTML=dash?'':admViewHtml(view);
+  renderAdmNav();if(dash)renderAdmCos();
+  lucide.createIcons();window.scrollTo(0,0);
+}
+function renderAdmNav(){
+  document.getElementById('adm-nav').innerHTML=admNav.map(([ic,lb])=>`
+    <div class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium cursor-pointer hover:bg-white/5 ${adm.view===lb?'nav-active':''}" onclick="admGo('${lb.replace(/'/g,"\\'")}')">
+    <i data-lucide="${ic}" class="w-4 h-4"></i>${lb}</div>`).join('');
+}
+function coRow(c,i,full){return `<tr><td><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-full grad-leaf flex items-center justify-center"><i data-lucide="leaf" class="w-3.5 h-3.5 text-white"></i></div><b>${c.n}</b></div></td>
+  <td>${c.pays}</td><td><span class="chip ${admStChip(c.st)}">${c.st}</span></td><td class="text-ink-500">${c.plan}</td>
+  <td class="font-semibold">${c.cavg}</td><td>${c.com}</td>
+  <td><button class="btn btn-ghost btn-xs !px-2" onclick="menuCo(event,${i},${full})"><i data-lucide="more-horizontal" class="w-3.5 h-3.5"></i></button></td></tr>`;}
+function renderAdmCos(){const el=document.getElementById('adm-companies');if(el)el.innerHTML=adm.cos.map((c,i)=>coRow(c,i,false)).join('');lucide.createIcons();}
+function menuCo(ev,i,full){const c=adm.cos[i];
+  popMenu(ev,[{lb:'Voir la fiche',ic:'eye',fn:()=>modalCo(i)},
+    {lb:'Voir les factures',ic:'receipt-text',fn:()=>modalFactures(c.n)},
+    {sep:true},
+    c.st==='Suspendue'?{lb:'Réactiver',ic:'play',fn:()=>{c.st='Active';admRefresh();toast(c.n+' réactivée');}}:
+      {lb:'Suspendre',ic:'pause',danger:true,fn:()=>confirmModal('Suspendre '+c.n,'L’accès de cette entreprise à la plateforme sera coupé.','Suspendre',()=>{c.st='Suspendue';admRefresh();toast(c.n+' suspendue');})}]);}
+function admRefresh(){renderAdmCos();if(adm.view==='Entreprises')admGo('Entreprises');}
+function modalCo(i){const c=adm.cos[i];
+  openModal(mHead(c.n)+`<div class="px-5 pb-5 text-[13px]">
+  <div class="grid grid-cols-2 gap-2 mb-3">
+    ${[['Pays',c.pays],['Plan',c.plan],['Ventes mensuelles',c.cavg],['Commission due',c.com]].map(([k,v])=>`<div class="rounded-xl bg-ink-50 p-3"><div class="text-[10.5px] text-ink-500">${k}</div><b>${v}</b></div>`).join('')}</div>
+  <div class="flex items-center justify-between py-1.5"><span class="text-ink-500">Statut</span><span class="chip ${admStChip(c.st)}">${c.st}</span></div>
+  <div class="flex gap-2 justify-end mt-4"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+  <button class="btn btn-teal" onclick="closeModal();toast('Connexion au back-office de ${c.n.replace(/'/g,'’')} (mockup)')">Ouvrir son back-office</button></div></div>`);}
+function modalFactures(who){openModal(mHead('Factures — '+(who||'plateforme'))+`<div class="px-5 pb-5">
+  ${[['INV-2025-0512','Mai 2025','737,70 €','Payée'],['INV-2025-0412','Avr. 2025','692,10 €','Payée'],['INV-2025-0312','Mars 2025','655,80 €','Payée']].map(([n,p,m,s])=>`
+  <div class="flex items-center gap-3 py-2.5 border-b border-ink-100 last:border-0 text-[13px]"><b>${n}</b><span class="text-ink-500 flex-1">${p}</span><b>${m}</b>
+  <span class="chip bg-emerald-50 text-emerald-600">${s}</span>
+  <button class="btn btn-ghost btn-xs !px-2" onclick="toast('Facture ${n} téléchargée')"><i data-lucide="download" class="w-3 h-3"></i></button></div>`).join('')}</div>`);}
+function admViewHtml(v){
+  if(v==='Entreprises'){const list=adm.cos.filter(c=>adm.filter==='Tous'||c.st===adm.filter);
+    return `<div class="flex gap-2 mb-3">${['Tous','Active','En attente','Suspendue'].map(f=>`
+    <button class="chip !py-1.5 !px-3.5 cursor-pointer ${adm.filter===f?'bg-kp-800 text-white':'bg-white border border-ink-200 text-ink-600'}" onclick="admGo('Entreprises','${f}')">${f}</button>`).join('')}
+    <button class="btn btn-ghost btn-xs ml-auto" onclick="dlCSV('entreprises.csv',[['Entreprise','Pays','Statut','Plan','Ventes','Commission'],...adm.cos.map(c=>[c.n,c.pays.slice(5),c.st,c.plan,c.cavg,c.com])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button></div>
+    <div class="card"><div class="scrollx"><table class="tbl w-full"><thead><tr><th>Entreprise</th><th>Pays</th><th>Statut</th><th>Plan</th><th>Ventes mensuelles</th><th>Commission due</th><th></th></tr></thead>
+    <tbody>${list.map(c=>coRow(c,adm.cos.indexOf(c),true)).join('')||'<tr><td colspan="7" class="text-center text-ink-400 py-6">Aucune entreprise.</td></tr>'}</tbody></table></div></div>`;}
+  if(v==='Abonnements')return `<div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+    ${[['Standard','29 €/mois','98 entreprises',['1 succursale','QR codes illimités','Commission 1%']],['Premium','59 €/mois','47 entreprises',['3 succursales','Studio IA Produit','Écran cuisine']],['Entreprise','89 €/mois','7 entreprises',['Succursales illimitées','Support prioritaire','API & intégrations']]].map(([n,p,c,feats],i)=>`
+    <div class="card p-5 ${i===1?'ring-2 ring-kp-500':''}"><div class="flex items-center justify-between"><b class="font-display text-[16px]">${n}</b>${i===1?'<span class="chip bg-kp-50 text-kp-600">Populaire</span>':''}</div>
+    <div class="font-display font-bold text-[22px] mt-1">${p}</div><div class="text-[11.5px] text-ink-500 mb-3">${c}</div>
+    <ul class="text-[12px] text-ink-600 space-y-1.5 mb-4">${feats.map(f=>`<li class="flex items-center gap-2"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i>${f}</li>`).join('')}</ul>
+    <button class="btn btn-ghost w-full justify-center" onclick="toast('Édition du plan ${n} (mockup)')">Modifier le plan</button></div>`).join('')}</div>`;
+  if(v==='Transactions')return `<div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Dernières transactions plateforme</h3>
+    <button class="btn btn-ghost btn-xs" onclick="dlCSV('transactions-plateforme.csv',[['Entreprise','Montant','Commission','Passerelle'],['Le Jardin Grill','486,20 €','4,86 €','Stripe'],['Sushi House','1 240,00 €','12,40 €','Stripe'],['Bistro Milano','264,80 €','2,65 €','PayPal']])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Entreprise</th><th>Montant</th><th>Commission</th><th>Passerelle</th><th>Statut</th></tr></thead><tbody>
+    ${[['Le Jardin Grill','486,20 €','4,86 €','Stripe'],['Sushi House','1 240,00 €','12,40 €','Stripe'],['Bistro Milano','264,80 €','2,65 €','PayPal'],['Café de la Paix','128,40 €','1,28 €','Paystack']].map(r=>`
+    <tr><td><b>${r[0]}</b></td><td class="font-semibold">${r[1]}</td><td>${r[2]}</td><td class="text-ink-500">${r[3]}</td><td><span class="chip bg-emerald-50 text-emerald-600">Réglée</span></td></tr>`).join('')}</tbody></table></div></div>`;
+  if(v==='Commissions')return `<div class="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-4">
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Commissions du jour</div><div class="font-display text-[22px] font-bold">2 340,50 €</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Commissions du mois</div><div class="font-display text-[22px] font-bold">48 750,00 €</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Taux moyen</div><div class="font-display text-[22px] font-bold">1,0 %</div></div></div>
+    <div class="card p-4"><h3 class="font-display font-semibold text-[14.5px] mb-2">Top contributeurs</h3>
+    ${adm.cos.filter(c=>c.com!=='–').map(c=>`<div class="flex items-center gap-3 py-2 border-b border-ink-100 last:border-0 text-[13px]"><b class="flex-1">${c.n}</b><span class="text-ink-500">${c.cavg}</span><b>${c.com}</b></div>`).join('')}</div>`;
+  if(v==='Support')return `<div class="card"><div class="p-4"><h3 class="font-display font-semibold text-[14.5px]">Tickets support (8)</h3></div>
+    <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Ticket</th><th>Entreprise</th><th>Priorité</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
+    ${[['#4812','Tacos Express','Critique','Ouvert'],['#4811','Café de la Paix','Critique','Ouvert'],['#4810','Sushi House','Critique','En cours'],['#4809','Bistro Milano','Normale','En cours'],['#4808','Le Jardin Grill','Normale','Résolu']].map(([t,e,p,s],i)=>`
+    <tr><td><b>${t}</b></td><td>${e}</td><td><span class="chip ${p==='Critique'?'bg-red-50 text-red-500':'bg-ink-100 text-ink-500'}">${p}</span></td>
+    <td><span class="chip ${s==='Résolu'?'bg-emerald-50 text-emerald-600':s==='En cours'?'bg-amber-50 text-amber-600':'bg-blue-50 text-blue-600'}">${s}</span></td>
+    <td>${s!=='Résolu'?`<button class="btn btn-teal btn-xs" onclick="toast('Ticket ${t} marqué résolu');admGo('Support')">Résoudre</button>`:''}</td></tr>`).join('')}</tbody></table></div></div>`;
+  if(v==='Paiements mondiaux')return `<div class="card p-5 max-w-2xl"><h3 class="font-display font-semibold text-[15px] mb-1">Passerelles de paiement</h3>
+    <p class="text-[12px] text-ink-500 mb-4">Activez ou désactivez les passerelles disponibles pour les entreprises clientes.</p>
+    ${adm.gws.map((g,i)=>`<div class="flex items-center gap-3 py-3 border-b border-ink-100 last:border-0">
+    <div class="w-9 h-9 rounded-xl bg-ink-100 flex items-center justify-center"><i data-lucide="credit-card" class="w-4 h-4 text-ink-600"></i></div>
+    <div class="flex-1"><b class="text-[13.5px]">${g.g}</b><div class="text-[11px] text-ink-500">Taux de succès : ${g.tx}</div></div>
+    <button class="chip cursor-pointer ${g.on?'bg-emerald-50 text-emerald-600':'bg-ink-100 text-ink-500'}" onclick="adm.gws[${i}].on=!adm.gws[${i}].on;admGo('Paiements mondiaux');renderAdmGws();toast('${g.g} '+(adm.gws[${i}].on?'activée':'désactivée'))">${g.on?'Activée':'Désactivée'}</button></div>`).join('')}</div>`;
+  if(v==='Analytique')return `<div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+    <div class="card p-4"><h3 class="font-display font-semibold text-[14px] mb-2">Croissance des entreprises</h3>
+    <svg viewBox="0 0 260 100" class="w-full"><path d="M10,88 L60,80 L110,66 L160,52 L210,34 L250,14" fill="none" stroke="#2c8a91" stroke-width="2.5"/><g font-size="9" fill="#94a3b8"><text x="2" y="99">Déc.</text><text x="240" y="99">Mai</text></g></svg></div>
+    <div class="card p-4"><h3 class="font-display font-semibold text-[14px] mb-2">Volume de commandes (M€)</h3>
+    <svg viewBox="0 0 260 100" class="w-full">${[38,46,54,61,72,86].map((h,i)=>`<rect x="${14+i*42}" y="${92-h*0.8}" width="26" height="${h*0.8}" rx="4" fill="${i===5?'#123f46':'#b0e2e3'}"/>`).join('')}</svg></div></div>`;
+  if(v==='Paramètres plateforme')return `<div class="card p-5 max-w-xl"><h3 class="font-display font-semibold text-[15px] mb-4">Paramètres généraux</h3>
+    <label class="text-[11.5px] font-semibold text-ink-600">Taux de commission par défaut (%)</label><input class="field mt-1 mb-3" value="1.0"/>
+    <label class="text-[11.5px] font-semibold text-ink-600">Devise de facturation</label><select class="field mt-1 mb-3"><option>EUR (€)</option><option>USD ($)</option></select>
+    <label class="text-[11.5px] font-semibold text-ink-600">Suspension auto après impayé (jours)</label><input class="field mt-1 mb-4" value="7"/>
+    <button class="btn btn-teal" onclick="toast('Paramètres plateforme enregistrés')"><i data-lucide="save" class="w-4 h-4"></i>Enregistrer</button></div>`;
+  return '';
+}
+function renderAdmGws(){document.getElementById('adm-gateways').innerHTML=adm.gws.map((g,i)=>`
+  <div class="flex items-center gap-2.5 text-[12.5px]">
+    <div class="w-7 h-7 rounded-lg bg-ink-100 flex items-center justify-center"><i data-lucide="credit-card" class="w-3.5 h-3.5 text-ink-600"></i></div>
+    <b class="flex-1">${g.g}</b>
+    <span class="chip cursor-pointer ${g.on?'bg-emerald-50 text-emerald-600':'bg-ink-100 text-ink-500'}" onclick="adm.gws[${i}].on=!adm.gws[${i}].on;renderAdmGws();toast('${g.g} '+(adm.gws[${i}].on?'activée':'désactivée'))">${g.on?'Activée':'Désactivée'}</span>
+    <span class="text-ink-500">${g.tx}</span></div>`).join('');lucide.createIcons();}
+
+rewire([
+  ['Période (mockup)',(e,el)=>popMenu(e,['30 avr. – 30 mai 2025','1 avr. – 30 avr. 2025','Année 2025'].map(p=>({lb:p,ic:'calendar',fn:()=>{el.innerHTML=p+' <i data-lucide="calendar" class="w-4 h-4"></i>';lucide.createIcons();toast('Période : '+p);}})))],
+  ['Export (mockup)',()=>dlCSV('kodapay-plateforme.csv',[['Entreprise','Pays','Statut','Plan','Ventes','Commission'],...adm.cos.map(c=>[c.n,c.pays.slice(5),c.st,c.plan,c.cavg,c.com])])],
+  ['6 notifications',(e,el)=>menuNotifs(e,el,adm.notifs)],
+  ['Profil (mockup)',e=>popMenu(e,[{head:'Super Admin'},{lb:'Mon compte',ic:'user',fn:()=>toast('Compte super admin (mockup)')},{lb:'Paramètres plateforme',ic:'settings',fn:()=>admGo('Paramètres plateforme')},{sep:true},{lb:'Déconnexion',ic:'log-out',danger:true,fn:()=>confirmModal('Déconnexion','Se déconnecter de la console plateforme ?','Se déconnecter',()=>toast('Déconnecté (mockup)'))}])],
+  ['Compte super admin',e=>popMenu(e,[{lb:'Mon compte',ic:'user',fn:()=>toast('Compte super admin (mockup)')},{lb:'Déconnexion',ic:'log-out',danger:true,fn:()=>toast('Déconnecté (mockup)')}])],
+  ['Page statut',()=>openModal(mHead('Statut de la plateforme')+`<div class="px-5 pb-5">${[['API KodaPay','Opérationnelle'],['Paiements','Opérationnels'],['Écrans cuisine','Opérationnels'],['Studio IA','Dégradé — files d’attente ralenties']].map(([s,st])=>`<div class="flex items-center gap-2.5 py-2 border-b border-ink-100 last:border-0 text-[13px]"><span class="w-2 h-2 rounded-full ${st.startsWith('Op')?'bg-emerald-500':'bg-amber-500'}"></span><b class="flex-1">${s}</b><span class="text-ink-500">${st}</span></div>`).join('')}</div>`)],
+  ['Liste entreprises',()=>admGo('Entreprises','Tous')],
+  ['Factures (mockup)',()=>modalFactures()],
+  ['Gestion passerelles',()=>admGo('Paiements mondiaux')],
+  ['Passerelles (mockup)',()=>admGo('Paiements mondiaux')],
+  ['Entreprises suspendues',()=>admGo('Entreprises','Suspendue')],
+  ['Retards (mockup)',()=>admGo('Entreprises','En attente')],
+  ['CGV (mockup)',()=>openModal(mHead('Conditions générales — v4.2')+`<div class="px-5 pb-5 text-[12.5px] text-ink-600"><p class="mb-3">Principales évolutions : clarification de la commission de 1% par transaction, ajout des passerelles Flutterwave et Mercado Pago, délai de suspension pour impayé porté à 7 jours.</p><div class="flex gap-2 justify-end"><button class="btn btn-ghost" onclick="closeModal()">Plus tard</button><button class="btn btn-teal" onclick="closeModal();toast('CGV v4.2 acceptées')">Accepter</button></div></div>`)],
+],document.getElementById('surf-admin'));
+renderAdmNav();renderAdmCos();renderAdmGws();
+lucide.createIcons();
+</script>
+
+<script>
+/* ================= PARTIE 5 : multi-commerce via le switcher (resto ↔ supermarché) ================= */
+const mkEmoji={1:'🍚',2:'🫒',3:'🧂',4:'🥛',5:'🧼',6:'🌾'};
+const mkCat={4:'Boissons & frais',5:'Hygiène'};
+const mkVentes=[34,27,51,45,88,19];
+const bizData={
+  resto:{name:'Le Jardin Grill',desc:'Cuisine française · Grillades',mode:'Restaurant',
+    prods:bo.prods,posCats:null,posItems:pos.items.slice()},
+  market:{name:'Marché Central',desc:'Supermarché · Alimentation générale',mode:'Supermarché',
+    prods:bo.stock.map((s,ix)=>({em:mkEmoji[s.id]||'🛒',photo:'',n:s.n,c:mkCat[s.id]||'Épicerie',p:s.sell.toFixed(2).replace('.',',')+' €',cost:s.buy,v:mkVentes[ix%mkVentes.length],actif:true,stockId:s.id})),
+    posCats:[['shopping-basket','Épicerie',4,'bg-emerald-500'],['cup-soda','Boissons & frais',1,'bg-blue-500'],['sparkles','Hygiène',1,'bg-violet-500'],['badge-percent','Promotions',0,'bg-teal-600'],['scan-line','Scanner','','bg-ink-100 !text-ink-700']],
+    posItems:bo.stock.map((s,ix)=>({em:mkEmoji[s.id]||'🛒',n:s.n,p:s.sell,cat:mkCat[s.id]||'Épicerie',dispo:s.qty>0,pop:100-ix,stockId:s.id}))},
+};
+window.biz='resto';
+function setBiz(b){if(window.biz===b)return;window.biz=b;const d=bizData[b];
+  /* identité du commerce dans la sidebar */
+  const n=document.getElementById('bo-biz-name'),ds=document.getElementById('bo-biz-desc');
+  if(n)n.textContent=d.name;if(ds)ds.textContent=d.desc;
+  /* catalogue back-office */
+  bo.prods=d.prods;bo.catFilter='Toutes catégories';bo.search='';
+  /* caisse POS : catalogue + remise à zéro de la commande en cours */
+  window.__posCats=d.posCats;pos.items=d.posItems;pos.ticket=[];pos.discount=0;pos.cat='Tous';pos.tab='Addition';pos.search='';
+  renderPosAll();
+  /* mode = menu adapté (Stock pour le marché, Ingrédients pour le resto) */
+  setBoMode(d.mode);
+  adaptDashboard();
+}
+/* le tableau de bord change de peau selon le commerce */
+function adaptDashboard(){
+  const mk=window.biz==='market';
+  const set=(id,txt)=>{const e=document.getElementById(id);if(e)e.textContent=txt;};
+  set('kpi-orders-lbl',mk?'Tickets de caisse du jour':'Total commandes du jour');
+  set('kpi-pop-lbl',mk?'Article le plus vendu':'Produit populaire');
+  set('kpi-pop',mk?'Savon de ménage':'Entrecôte grillée');
+  set('kpi-pop-sub',mk?'88 ventes':'32 commandes');
+  /* la carte « en préparation » devient « ruptures de stock » */
+  const out=bo.stock.filter(s=>s.qty<=0).length,low=bo.stock.filter(s=>s.qty>0&&s.qty<=s.seuil).length;
+  set('kpi-prep-lbl',mk?'Articles en rupture':'Commandes en préparation');
+  set('kpi-prep',mk?String(out):'23');
+  const chip=document.getElementById('kpi-prep-chip');
+  if(chip){chip.textContent=mk?(low+' en stock faible'):'En cours';
+    chip.className='chip mt-1 '+(mk?(out?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-600'):'bg-orange-50 text-acc-600');}
+  /* donut de commandes → état du stock ; QR codes → masqué */
+  const rep=document.getElementById('card-repartition');
+  if(rep){if(!rep.dataset.orig)rep.dataset.orig=rep.innerHTML;
+    if(mk){rep.innerHTML=`<h3 class="font-display font-semibold text-[14.5px] mb-3">État du stock</h3>
+      <div class="space-y-2.5">${bo.stock.slice().sort((a,b)=>(a.qty/Math.max(1,a.seuil))-(b.qty/Math.max(1,b.seuil))).map(s=>{const st=stockState(s);
+        return `<div class="flex items-center gap-2.5 text-[12.5px]"><span class="w-2 h-2 rounded-full flex-none ${st==='out'?'bg-red-500':st==='low'?'bg-amber-500':'bg-emerald-500'}"></span>
+        <span class="flex-1 truncate">${s.n}</span><b>${s.qty}</b><span class="chip ${stockStChip(st)}">${stockStLbl(st)}</span></div>`;}).join('')}</div>
+      <button class="btn btn-ghost btn-xs w-full justify-center mt-3" onclick="boGo('Stock')"><i data-lucide="boxes" class="w-3.5 h-3.5"></i>Gérer le stock</button>`;}
+    else rep.innerHTML=rep.dataset.orig;}
+  const qr=document.getElementById('card-qr');if(qr)qr.style.display=mk?'none':'';
+  /* Studio IA : exemple adapté */
+  lucide.createIcons();
+}
+</script>
+</body>
+</html>
