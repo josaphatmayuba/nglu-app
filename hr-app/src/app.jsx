@@ -2276,6 +2276,8 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const [periodFilter, setPeriodFilter] = React.useState("");
   const [generating, setGenerating] = React.useState(false);
   const [generateError, setGenerateError] = React.useState("");
+  const [generateInfo, setGenerateInfo] = React.useState("");
+  const [bulkSubmitting, setBulkSubmitting] = React.useState(false);
   const rows = data.salaries || [];
   const payrollRows = data.payrolls || [];
   const summary = data.payrollSummary || EMPTY_DATA.payrollSummary;
@@ -2316,17 +2318,50 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const payrollGrossLines = moneyLinesFrom(filteredPayrolls, (p) => p.grossSalary ?? payrollGross(p), moneySymbolFor);
   const availablePeriods = [...new Set(payrollRows.map((p) => p.period).filter(Boolean))].sort().reverse();
 
+  const now = new Date();
+  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthRows = payrollRows.filter((p) => p.period === currentPeriod);
+  const monthDrafts = monthRows.filter((p) => ["draft", "rejected"].includes(String(p.status || "draft")));
+  const monthPending = monthRows.filter((p) => String(p.status) === "pending_approval").length;
+  const monthValidated = monthRows.filter((p) => String(p.status) === "validated").length;
+  const monthPaid = monthRows.filter((p) => String(p.status) === "paid").length;
+
   const handleGenerate = async () => {
     if (!employeeFilter) { setGenerateError("Selectionne un employe pour generer la paie."); return; }
-    const now = new Date();
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    setGenerating(true); setGenerateError("");
+    setGenerating(true); setGenerateError(""); setGenerateInfo("");
     try {
-      const draft = await api.generatePayroll(employeeFilter, period);
+      const draft = await api.generatePayroll(employeeFilter, currentPeriod);
       setModal({ kind: "payroll", prefill: draft });
     } catch (e) {
       setGenerateError(e.message || "Erreur lors de la generation.");
     } finally { setGenerating(false); }
+  };
+
+  const handleGenerateMonth = async () => {
+    setGenerating(true); setGenerateError(""); setGenerateInfo("");
+    try {
+      const res = await api.generateMonthPayrolls(currentPeriod);
+      const parts = [`${res.created} bulletin(s) cree(s)`];
+      if (res.alreadyExisting) parts.push(`${res.alreadyExisting} deja existant(s)`);
+      if (res.errors?.length) parts.push(`${res.errors.length} erreur(s) : ${res.errors.map((e) => `${personName(staff, e.userId)} (${e.error})`).join(" ; ")}`);
+      setGenerateInfo(`Periode ${res.period} — ${parts.join(", ")}.`);
+      reload();
+    } catch (e) {
+      setGenerateError(e.message || "Erreur lors de la generation du mois.");
+    } finally { setGenerating(false); }
+  };
+
+  const handleSubmitAllDrafts = async () => {
+    if (!monthDrafts.length) return;
+    setBulkSubmitting(true); setGenerateError(""); setGenerateInfo("");
+    let ok = 0; const fails = [];
+    for (const p of monthDrafts) {
+      try { await api.submitPayroll(p.id); ok += 1; }
+      catch (e) { fails.push(`${personName(staff, p.userId)} (${e.message})`); }
+    }
+    setGenerateInfo(`${ok} bulletin(s) soumis pour approbation${fails.length ? ` — echecs : ${fails.join(" ; ")}` : ""}.`);
+    setBulkSubmitting(false);
+    reload();
   };
 
   const handleSubmit = async (p) => {
@@ -2361,7 +2396,26 @@ function Paie({ data, staff, masse, setModal, reload }) {
   );
   return (
     <>
-      <PageHead eyebrow="Payroll" title="Paie professionnelle" action="Nouveau bulletin" actionIcon="plus" onAction={() => setModal({ kind: "payroll" })} />
+      <PageHead eyebrow="Payroll" title="Paie professionnelle" action={generating ? "Calcul..." : `Generer la paie de ${currentPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} />
+      <div className="card pad" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 1 — Generer</div>
+            <div className="tiny muted">{monthRows.length} bulletin(s) ce mois. Le bouton en haut cree un brouillon pour chaque employe sous contrat qui n'en a pas encore.</div>
+          </div>
+          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 2 — Faire approuver</div>
+            <div className="tiny muted">{monthDrafts.length} brouillon(s) a soumettre, {monthPending} en attente du superieur.</div>
+            {monthDrafts.length > 0 && <button type="button" className="link" style={{ fontSize: 12 }} onClick={handleSubmitAllDrafts} disabled={bulkSubmitting}>{bulkSubmitting ? "Envoi..." : "Tout soumettre"}</button>}
+          </div>
+          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 3 — Payer</div>
+            <div className="tiny muted">{monthValidated} valide(s) a payer, {monthPaid} paye(s). Marque chaque bulletin paye dans la liste ci-dessous.</div>
+          </div>
+        </div>
+        {generateInfo && <div className="chip emerald" style={{ marginTop: 10 }}>{generateInfo}</div>}
+        {generateError && <div className="chip amber" style={{ marginTop: 10 }}>{generateError}</div>}
+      </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Brouillons" value={summary.workflow.draft} />
         <KPI label="En approbation" value={payrollRows.filter((p) => String(p.status) === "pending_approval").length} tone={payrollRows.filter((p) => String(p.status) === "pending_approval").length ? "warn" : undefined} />
@@ -2378,13 +2432,13 @@ function Paie({ data, staff, masse, setModal, reload }) {
         <div className="section-head">
           <h3 className="font-display">Bulletins de paie</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" className="pillbtn" onClick={handleGenerate} disabled={generating} title="Generer depuis contrat et presences du mois en cours">
-              <Icon name="play" style={{ width: 13, height: 13 }} /> {generating ? "Calcul..." : "Generer depuis contrat"}
+            <button type="button" className="pillbtn" onClick={handleGenerate} disabled={generating} title="Generer le bulletin de l'employe selectionne dans le filtre ci-dessous">
+              <Icon name="play" style={{ width: 13, height: 13 }} /> {generating ? "Calcul..." : "Generer pour un employe"}
             </button>
+            <button type="button" className="link" onClick={() => setModal({ kind: "payroll" })} title="Cas exceptionnel : saisir un bulletin entierement a la main"><Icon name="plus" style={{ width: 13, height: 13 }} /> Saisie manuelle</button>
             <button type="button" className="link" onClick={exportPayrolls}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button>
           </div>
         </div>
-        {generateError && <div className="chip amber" style={{ marginBottom: 8 }}>{generateError}</div>}
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
           <Autocomplete value={employeeFilter} onChange={(v) => { setEmployeeFilter(v); setGenerateError(""); }}
@@ -2429,7 +2483,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
             </tr>;
           })}</tbody>
         </table></div>
-        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin ou Generer depuis contrat pour creer la premiere paie." : "Modifie la recherche ou les filtres."} />}
+        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? `Clique sur "Generer la paie de ${currentPeriod}" en haut pour creer les bulletins de tous les employes sous contrat.` : "Modifie la recherche ou les filtres."} />}
       </div>
 
       {payrollPreview && (

@@ -216,6 +216,7 @@ export class HrPayrollController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listPayrolls(q, orgId); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.payrollSummary(q); }
   @Get("generate") generate(@Query() q: Record<string, string>) { return this.service.generatePayroll(q); }
+  @Post("generate-month") generateMonth(@Body() body: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.generateMonthPayrolls(body ?? {}, orgId); }
   @Get(":id/html") async html(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
     const html = await this.service.payrollPdfHtml(id);
     res.setHeader("Content-Type", "text/html; charset=utf-8");

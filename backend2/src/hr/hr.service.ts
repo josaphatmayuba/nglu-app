@@ -1001,6 +1001,37 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
+  // Génération groupée : un bulletin brouillon par employé sous contrat actif
+  // de l'org qui n'a pas encore de bulletin sur la période. Idempotent : les
+  // employés déjà servis sont comptés dans alreadyExisting, jamais dupliqués.
+  async generateMonthPayrolls(q: Record<string, string>, orgId: number) {
+    const period = q["period"] || this.currentPayrollPeriod();
+    const contractRows = await this.db
+      .select({ userId: hrContracts.userId })
+      .from(hrContracts)
+      .where(and(eq(hrContracts.organizationId, orgId), ne(hrContracts.status, "terminated")));
+    const userIds = [...new Set(contractRows.map((c) => Number(c.userId)))];
+    const existing = await this.db
+      .select({ userId: hrPayrolls.userId })
+      .from(hrPayrolls)
+      .where(and(eq(hrPayrolls.organizationId, orgId), eq(hrPayrolls.period, period), ne(hrPayrolls.status, "false")));
+    const done = new Set(existing.map((p) => Number(p.userId)));
+    let created = 0;
+    let alreadyExisting = 0;
+    const errors: Array<{ userId: number; error: string }> = [];
+    for (const userId of userIds) {
+      if (done.has(userId)) { alreadyExisting += 1; continue; }
+      try {
+        const draft = await this.generatePayroll({ userId: String(userId), period });
+        await this.createPayroll(draft as CreateHrPayrollDto, orgId);
+        created += 1;
+      } catch (err) {
+        errors.push({ userId, error: (err as Error).message });
+      }
+    }
+    return { period, eligible: userIds.length, created, alreadyExisting, errors };
+  }
+
   private computeIpr(taxableBase: number, taxRule: typeof hrTaxRules.$inferSelect): number {
     const brackets = taxRule.iprBrackets as Array<{ upTo: number | null; rate: number }> | null;
     if (brackets && brackets.length > 0) {

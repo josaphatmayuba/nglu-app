@@ -84,6 +84,7 @@ export const api = {
   },
   payrollSummary: (period) => jsonFetch(`/hr/payrolls/summary${period ? `?period=${period}` : ""}`),
   generatePayroll: (userId, period) => jsonFetch(`/hr/payrolls/generate?userId=${userId}${period ? `&period=${period}` : ""}`),
+  generateMonthPayrolls: (period) => jsonFetch("/hr/payrolls/generate-month", { method: "POST", body: JSON.stringify(period ? { period } : {}) }),
   hrProjects: () => jsonFetch("/hr/projects?query=all"),
   hrProjectReport: () => jsonFetch("/hr/projects/report"),
   hrProjectAssignments: () => jsonFetch("/hr/project-assignments?query=all"),
