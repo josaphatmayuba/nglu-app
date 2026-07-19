@@ -2282,11 +2282,15 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const payrollRows = data.payrolls || [];
   const summary = data.payrollSummary || EMPTY_DATA.payrollSummary;
   const [payrollPreview, setPayrollPreview] = React.useState(null); // { html } ou { loading:true }
+  const previewFrameRef = React.useRef(null);
   const openPayrollPreview = async (p) => {
     setPayrollPreview({ loading: true });
-    try { setPayrollPreview({ html: await api.payrollHtml(p.id) }); }
+    // L'HTML backend embarque un window.print() au chargement (voulu pour l'onglet
+    // dédié) : on le retire pour l'aperçu, l'impression se fait via le bouton.
+    try { setPayrollPreview({ html: (await api.payrollHtml(p.id)).replace(/<script>[\s\S]*?<\/script>/g, "") }); }
     catch (e) { setPayrollPreview(null); alert(e.message); }
   };
+  const printPreview = () => { try { previewFrameRef.current?.contentWindow?.print(); } catch (e) { alert(e.message); } };
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
@@ -2320,7 +2324,9 @@ function Paie({ data, staff, masse, setModal, reload }) {
 
   const now = new Date();
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const monthRows = payrollRows.filter((p) => p.period === currentPeriod);
+  // Période de paie choisie par la personne RH (défaut : mois courant).
+  const [payPeriod, setPayPeriod] = React.useState(currentPeriod);
+  const monthRows = payrollRows.filter((p) => p.period === payPeriod);
   const monthDrafts = monthRows.filter((p) => ["draft", "rejected"].includes(String(p.status || "draft")));
   const monthPending = monthRows.filter((p) => String(p.status) === "pending_approval").length;
   const monthValidated = monthRows.filter((p) => String(p.status) === "validated").length;
@@ -2330,7 +2336,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
     if (!employeeFilter) { setGenerateError("Selectionne un employe pour generer la paie."); return; }
     setGenerating(true); setGenerateError(""); setGenerateInfo("");
     try {
-      const draft = await api.generatePayroll(employeeFilter, currentPeriod);
+      const draft = await api.generatePayroll(employeeFilter, payPeriod);
       setModal({ kind: "payroll", prefill: draft });
     } catch (e) {
       setGenerateError(e.message || "Erreur lors de la generation.");
@@ -2340,7 +2346,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const handleGenerateMonth = async () => {
     setGenerating(true); setGenerateError(""); setGenerateInfo("");
     try {
-      const res = await api.generateMonthPayrolls(currentPeriod);
+      const res = await api.generateMonthPayrolls(payPeriod);
       const parts = [`${res.created} bulletin(s) cree(s)`];
       if (res.alreadyExisting) parts.push(`${res.alreadyExisting} deja existant(s)`);
       if (res.errors?.length) parts.push(`${res.errors.length} erreur(s) : ${res.errors.map((e) => `${personName(staff, e.userId)} (${e.error})`).join(" ; ")}`);
@@ -2396,12 +2402,15 @@ function Paie({ data, staff, masse, setModal, reload }) {
   );
   return (
     <>
-      <PageHead eyebrow="Payroll" title="Paie professionnelle" action={generating ? "Calcul..." : `Generer la paie de ${currentPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} />
+      <PageHead eyebrow="Payroll" title="Paie professionnelle" action={generating ? "Calcul..." : `Generer la paie de ${payPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} />
       <div className="card pad" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+          <div style={{ flex: "1 1 200px", minWidth: 200 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 1 — Generer</div>
-            <div className="tiny muted">{monthRows.length} bulletin(s) ce mois. Le bouton en haut cree un brouillon pour chaque employe sous contrat qui n'en a pas encore.</div>
+            <label className="tiny muted" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>Periode de paie :
+              <input type="month" className="pillbtn" value={payPeriod} onChange={(e) => { if (e.target.value) setPayPeriod(e.target.value); }} aria-label="Periode de paie" />
+            </label>
+            <div className="tiny muted">{monthRows.length} bulletin(s) sur cette periode. Le bouton en haut cree un brouillon pour chaque employe sous contrat qui n'en a pas encore.</div>
           </div>
           <div style={{ flex: "1 1 180px", minWidth: 180 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 2 — Faire approuver</div>
@@ -2491,11 +2500,14 @@ function Paie({ data, staff, masse, setModal, reload }) {
           <div style={{ background: "#fff", borderRadius: 10, width: "min(820px,96vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.22)" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>Aperçu du bulletin</span>
-              <button type="button" className="link" onClick={() => setPayrollPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {!payrollPreview.loading && <button type="button" className="pillbtn" onClick={printPreview}><Icon name="download" style={{ width: 13, height: 13 }} /> Imprimer / PDF</button>}
+                <button type="button" className="link" onClick={() => setPayrollPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+              </div>
             </div>
             {payrollPreview.loading
               ? <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Chargement…</div>
-              : <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(payrollPreview.html) }} />}
+              : <iframe ref={previewFrameRef} title="Bulletin de paie" srcDoc={payrollPreview.html} style={{ width: "100%", height: "72vh", border: 0, display: "block", background: "#fff" }} />}
           </div>
         </div>
       )}

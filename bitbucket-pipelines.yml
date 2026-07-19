@@ -150,6 +150,9 @@ pipelines:
                 # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+                # pdf-service dev : comme MinIO, le --no-deps ne le cree jamais -> les PDF RH
+                # echouent en dev (fetch failed http://pdf-service:8002). On l'up explicitement.
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
