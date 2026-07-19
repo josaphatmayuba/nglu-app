@@ -163,7 +163,7 @@ export function LoginScreen({ lang = "fr" }) {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <Brand size={64}/>
           {/* Wordmark officiel (image) au lieu du texte CSS, pour rester fidèle à la charte. */}
-          <img src="/farmos/farmos-wordmark.png" alt="FarmOS" style={{ height: 26, width: "auto", display: "block" }}/>
+          <img src={`${import.meta.env.BASE_URL}farmos-wordmark.png`} alt="FarmOS" style={{ height: 26, width: "auto", display: "block" }}/>
           <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", textAlign: "center" }}>
             {lang === "fr" ? "Connecte-toi pour accéder à l'élevage" : "Sign in to access your herd"}
           </div>

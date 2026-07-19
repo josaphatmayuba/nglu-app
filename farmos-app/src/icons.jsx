@@ -235,7 +235,7 @@ const Brand = ({ size = 28, onDark = false }) => {
       }}
     >
       <img
-        src="/farmos/farmos-logo.png"
+        src={`${import.meta.env.BASE_URL}farmos-logo.png`}
         alt="FarmOS"
         style={{ width: size - pad * 2, height: size - pad * 2, objectFit: "contain", display: "block" }}
       />

@@ -72,7 +72,9 @@ const ROUTE_SLUGS = {
   settings: "parametres",
 };
 const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
-const BASE = "/farmos/";
+// Base injectee par vite : "/farmos/" (defaut) ou "/" (build --mode avelomi,
+// servi a la racine de farmos.avelomi.com). Ne pas re-hardcoder "/farmos/".
+const BASE = import.meta.env.BASE_URL;
 function routeFromLocation() {
   if (typeof window === "undefined") return "dashboard";
   const p = window.location.pathname || "";
