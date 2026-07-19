@@ -282,6 +282,9 @@ export default function HrPanel() {
   const [statusFilter, setStatusFilter] = useState("all");
   const dispatch = useDispatch();
   const currenciesList = useSelector((state) => state.currency?.list) || [];
+  const permissionsList = useSelector((s) => s?.auth?.list) || [];
+  const canCreateStaff = permissionsList.includes("create-user");
+  const canExportStaff = permissionsList.includes("readAll-user");
   useEffect(() => { if (!currenciesList.length) dispatch(loadAllCurrency()); }, [dispatch, currenciesList.length]);
 
   function loadStaff() {
@@ -300,6 +303,18 @@ export default function HrPanel() {
   useEffect(() => { loadStaff(); }, []);
 
   const activeCount = staffList.filter((u) => u.status === "true").length;
+
+  // Masse salariale = somme des salaires courants des actifs, groupée par devise
+  const payrollByCurrency = staffList
+    .filter((u) => u.status === "true" && u.currentSalary != null)
+    .reduce((acc, u) => {
+      const key = u.currentSalaryCurrencyId ?? "none";
+      acc[key] = (acc[key] || 0) + Number(u.currentSalary);
+      return acc;
+    }, {});
+  const payrollLabel = Object.entries(payrollByCurrency)
+    .map(([cid, amt]) => fmtSalary(amt, cid === "none" ? null : Number(cid), currenciesList))
+    .join(" + ");
 
   const filteredStaff = staffList.filter((u) => {
     // Text search
@@ -378,20 +393,24 @@ export default function HrPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={exportCsv}
-            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
-            title="Exporter en CSV"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setNewStaff(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Nouvel employé</span>
-          </button>
+          {canExportStaff && (
+            <button
+              onClick={exportCsv}
+              className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+              title="Exporter en CSV"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
+          {canCreateStaff && (
+            <button
+              onClick={() => setNewStaff(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Nouvel employé</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -428,7 +447,9 @@ export default function HrPanel() {
             </svg>
           </div>
           <div className="text-xs text-ink-500 font-medium mb-1">Masse salariale</div>
-          <div className="text-lg md:text-xl font-semibold text-ink-900 tracking-tight">Voir Paie</div>
+          <div className="text-lg md:text-xl font-semibold text-ink-900 tracking-tight">
+            {staffLoading ? "…" : payrollLabel || "—"}
+          </div>
           <div className="mt-2 text-xs text-ink-400">Détail dans l&apos;onglet Paie</div>
         </div>
 
