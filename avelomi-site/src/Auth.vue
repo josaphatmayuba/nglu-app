@@ -273,17 +273,18 @@ async function submitSignup() {
 }
 
 // ───────────────────────── Espace ─────────────────────────
-// Les SPA (FarmOS, Compta, Domus, BatiPro, HR) ne sont routees que sur la prod
-// avelomi.com ; le stack dev.avelomi.com n'a que la vitrine + /api. On pointe
-// donc les cartes vers les chemins ABSOLUS de prod, qui existent reellement.
-const APP_BASE = 'https://avelomi.com';
+// Chaque app Avelomi vit sur son propre sous-domaine : <app>.avelomi.com en
+// prod, <app>.dev.avelomi.com en dev. Depuis la vitrine dev on pointe vers les
+// sous-domaines dev ; sinon vers la prod. Stats (CRM) reste sur avelomi.com/crm.
+const IS_DEV = typeof window !== 'undefined' && window.location.hostname.startsWith('dev.');
+const appUrl = (sub) => `https://${sub}.${IS_DEV ? 'dev.' : ''}avelomi.com`;
 const apps = computed(() => ([
-  { img: '/img/farmos-icon.png', nm: 'FarmOS', url: `${APP_BASE}/farmos` },
-  { img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: `${APP_BASE}/comptabilite` },
-  { img: '/img/domus-icon.svg', nm: 'Domus', url: `${APP_BASE}/domus` },
-  { img: '/img/batipro-icon.svg', nm: 'BatiPro', url: `${APP_BASE}/batipro` },
-  { img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: `${APP_BASE}/hr` },
-  { ico: '📊', nm: t('Stats', 'Stats'), url: `${APP_BASE}/crm` },
+  { img: '/img/farmos-icon.png', nm: 'FarmOS', url: appUrl('farmos') },
+  { img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: appUrl('compta') },
+  { img: '/img/domus-icon.svg', nm: 'Domus', url: appUrl('domus') },
+  { img: '/img/batipro-icon.svg', nm: 'BatiPro', url: appUrl('batipro') },
+  { img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: appUrl('rh') },
+  { ico: '📊', nm: t('Stats', 'Stats'), url: 'https://avelomi.com/crm' },
 ]));
 function enterWorkspace() { success.value = false; inWorkspace.value = true; go('#/accueil'); }
 function go(hash) { location.hash = hash; }

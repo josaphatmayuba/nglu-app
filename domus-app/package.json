@@ -12,7 +12,8 @@
     "cap:copy": "npm run build && npx cap copy",
     "cap:sync": "npm run build && npx cap sync",
     "android:open": "npm run cap:copy && npx cap open android",
-    "ios:open": "npm run cap:copy && npx cap open ios"
+    "ios:open": "npm run cap:copy && npx cap open ios",
+    "build:avelomi": "vite build --mode avelomi --outDir dist-avelomi"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",

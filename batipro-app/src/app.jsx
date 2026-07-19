@@ -147,7 +147,7 @@ function App() {
   return (
     <div className="app">
       <aside className="sidebar grad-dark">
-        <a className="brand" href="/batipro/">
+        <a className="brand" href={import.meta.env.BASE_URL}>
           <span className="brand-icon grad-amber"><Icon name="hardHat" /></span>
           <span className="brand-title font-display">BâtiPro</span>
         </a>

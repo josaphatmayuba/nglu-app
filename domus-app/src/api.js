@@ -266,7 +266,8 @@ export const api = {
 // Domus possède sa PROPRE page publique : on réécrit le lien vers une URL propre
 // sous /domus/. nginx assure le fallback SPA (`@dev_domus_spa`/`@prod_domus_spa`
 // → /domus/index.html) pour ce deep-link, donc pas besoin de routage par hash.
-export const ONBOARDING_PATH = "/domus/onboarding/tenant";
+// Base injectee par vite : "/domus/" (defaut) ou "/" (build --mode avelomi).
+export const ONBOARDING_PATH = `${import.meta.env.BASE_URL}onboarding/tenant`;
 export function domusOnboardingUrl(backendUrl) {
   try {
     const u = new URL(backendUrl);

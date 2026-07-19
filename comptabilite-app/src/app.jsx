@@ -475,7 +475,7 @@ function App() {
   return (
     <div className="app">
       <aside className="sidebar grad-dark">
-        <a className="brand" href="/comptabilite/">
+        <a className="brand" href={import.meta.env.BASE_URL}>
           <span className="brand-icon grad-accent"><Icon name="bookOpenCheck" /></span>
           <span className="brand-title font-display">Compta</span>
         </a>

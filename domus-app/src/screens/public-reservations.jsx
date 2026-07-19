@@ -25,7 +25,7 @@ import { cleanCurrencySymbol, money, normalizeCurrencyModule } from "../data.js"
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { t, tf } from "../i18n.js";
 
-const PUBLIC_BASE = "/domus/public";
+const PUBLIC_BASE = `${import.meta.env.BASE_URL}public`;
 
 function toMoney(value) {
   const n = Number(value || 0);

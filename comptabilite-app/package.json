@@ -8,7 +8,8 @@
     "build": "node -e \"console.error('\\n[ERREUR] Utilisez npm run build:dev (dev) ou npm run build:prod (prod).\\nPlain build interdit: cible API non garantie.\\n'); process.exit(1)\"",
     "build:dev": "vite build --mode development",
     "build:prod": "vite build --mode production",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "build:avelomi": "vite build --mode avelomi --outDir dist-avelomi"
   },
   "dependencies": {
     "react": "^18.3.1",

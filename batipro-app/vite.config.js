@@ -3,22 +3,27 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { versionDefine } from "../scripts/app-version.mjs";
 
-export default defineConfig({
+// Deux cibles de build pour la MEME app :
+//  - defaut        : base "/batipro/" (ongdngolu.org/batipro + avelomi.com/batipro, INCHANGE)
+//  - --mode avelomi: base "/" pour le sous-domaine avelomi (root nginx dedie html-batipro-avelomi-*)
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/batipro/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      base: "/batipro/",
-      scope: "/batipro/",
+      base: BASE,
+      scope: BASE,
       includeAssets: ["batipro-icon.svg"],
       manifest: {
-        id: "/batipro/",
+        id: BASE,
         name: "BatiPro Construction",
         short_name: "BatiPro",
         description: "Gestion de chantiers, main-d'oeuvre, materiaux et budgets.",
-        start_url: "/batipro/",
-        scope: "/batipro/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#f8fafc",
@@ -35,14 +40,14 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/batipro/index.html",
+        navigateFallback: BASE + "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: []
       },
       devOptions: { enabled: false }
     })
   ],
-  base: "/batipro/",
+  base: BASE,
   define: {
     __BUILD_TS__: JSON.stringify(Date.now()),
     ...versionDefine()
@@ -57,4 +62,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "batipro-assets"
   }
+};
 });
