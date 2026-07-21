@@ -1,5 +1,4 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { renderPdfViaService } from "../common/pdf-client";
 import { computeLotBenchmarks } from "./farmos-benchmarks";
 import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -2490,10 +2489,8 @@ export class FarmosService {
     return { message: "Élément supprimé." };
   }
 
-  // ─── Rapports PDF — délégués au microservice pdf-service (voir pdf-client) ───
-  private async htmlToPdf(html: string): Promise<Buffer> {
-    return renderPdfViaService(html, "FarmOS");
-  }
+  // ─── Rapports imprimables — HTML rendu par le navigateur (window.print),
+  // plus de microservice pdf-service. ───
 
   private esc(v: any): string {
     return String(v ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
@@ -2507,8 +2504,8 @@ export class FarmosService {
     return /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(s) ? s : null;
   }
 
-  // Rapport PDF d'un dossier vétérinaire (examen + ordonnance + signature).
-  async vetExamPdf(id: number, orgId: number): Promise<{ buffer: Buffer; reference: string }> {
+  // Rapport imprimable d'un dossier vétérinaire (examen + ordonnance + signature).
+  async vetExamHtml(id: number, orgId: number): Promise<{ html: string; reference: string }> {
     const exam: any = await this.getVetExam(id, orgId);
     const animal = exam.animalId ? await this.getAnimal(exam.animalId, orgId).catch(() => null) : null;
     const rows = (exam.prescriptions || []).map((p: any) => `
@@ -2552,12 +2549,11 @@ export class FarmosService {
         ${this.safeImageSrc(exam.signature) ? `<img class="sig" src="${this.safeImageSrc(exam.signature)}" alt="signature"/>` : ""}
       </div>
     </body></html>`;
-    const buffer = await this.htmlToPdf(html);
-    return { buffer, reference: `dossier-vet-${id}` };
+    return { html, reference: `dossier-vet-${id}` };
   }
 
-  // Rapport PDF de rentabilité (résumé financier + ventes/dépenses récentes).
-  async financePdf(orgId: number): Promise<{ buffer: Buffer; reference: string }> {
+  // Rapport imprimable de rentabilité (résumé financier + ventes/dépenses récentes).
+  async financeHtml(orgId: number): Promise<{ html: string; reference: string }> {
     const [finance, sales, expenses] = await Promise.all([
       this.getFinanceSummary(orgId),
       this.listSales(orgId),
@@ -2590,8 +2586,7 @@ export class FarmosService {
       <h2>Dépenses récentes</h2>
       <table><tr><th>Date</th><th>Catégorie</th><th>Note</th><th style="text-align:right">Montant</th></tr>${eRows || "<tr><td colspan=4>—</td></tr>"}</table>
     </body></html>`;
-    const buffer = await this.htmlToPdf(html);
-    return { buffer, reference: `rentabilite-${new Date().toISOString().slice(0, 10)}` };
+    return { html, reference: `rentabilite-${new Date().toISOString().slice(0, 10)}` };
   }
 
   async listWorkLogs(orgId: number, userId?: number | null, from?: string | null, to?: string | null) {

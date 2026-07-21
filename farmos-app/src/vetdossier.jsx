@@ -303,8 +303,8 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
               {lang === "fr" ? "Signé par " : "Signed by "}<strong>{exam.signedBy || exam.vet || "—"}</strong>
               {exam.signedAt ? ` · ${String(exam.signedAt).slice(0, 10)}` : ""}
             </div>
-            <button className="btn btn-sm" onClick={() => api.downloadVetExamPdf(exam._pk || exam.id).catch((e) => setErr(e.message))}>
-              <Icon name="download" size={12} color="var(--ink-700)"/>PDF
+            <button className="btn btn-sm" onClick={() => api.printVetExam(exam._pk || exam.id).catch((e) => setErr(e.message))}>
+              <Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Imprimer / PDF" : "Print / PDF"}
             </button>
           </div>
         ) : (

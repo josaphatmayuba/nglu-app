@@ -99,7 +99,6 @@ services:
       RENT_REMINDERS_ENABLED: ${RENT_REMINDERS_ENABLED:-false}
       RENT_REMINDER_OVERDUE_DAYS: ${RENT_REMINDER_OVERDUE_DAYS:-15}
       RENT_REMINDER_CRON: ${RENT_REMINDER_CRON:-0 9 * * *}
-      PDF_SERVICE_URL: ${PDF_SERVICE_URL:-http://pdf-service:8002}
       OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
       OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-nglu_minio}
       OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-nglu_minio_password_change_me}
@@ -116,18 +115,6 @@ services:
     networks:
       - nglu_dev_network
     mem_limit: 160m
-
-  pdf-service:
-    build:
-      context: ./pdf-service
-      dockerfile: Dockerfile
-    container_name: nglu_dev_pdf_service
-    restart: unless-stopped
-    environment:
-      PORT: 8002
-    networks:
-      - nglu_dev_network
-    mem_limit: 320m
 
   middleware:
     build:

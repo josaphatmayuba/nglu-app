@@ -223,13 +223,6 @@ export class HrPayrollController {
     res.setHeader("Content-Disposition", `inline; filename="fiche-paie-${id}.html"`);
     res.send(html);
   }
-  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
-    const pdfBuffer = await this.service.generatePayrollPdf(id);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="fiche-paie-${id}.pdf"`);
-    res.setHeader("Content-Length", pdfBuffer.length);
-    res.end(pdfBuffer);
-  }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findPayroll(id, orgId); }
   @Post() create(@Body() body: CreateHrPayrollDto, @CurrentOrg() orgId: number) { return this.service.createPayroll(body, orgId); }
   @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.submitPayroll(id, body.approvedBy); }
@@ -340,13 +333,6 @@ export class HrDocumentController {
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findDocument(id, orgId); }
   @Post() create(@Body() body: CreateHrDocumentDto, @CurrentOrg() orgId: number) { return this.service.createDocument(body, orgId); }
   @Post("generate") generate(@Body() body: GenerateHrDocumentDto, @CurrentOrg() orgId: number) { return this.service.generateDocument(body, orgId); }
-  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
-    const { buffer, reference } = await this.service.documentPdf(id);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
-    res.setHeader("Content-Length", buffer.length);
-    res.end(buffer);
-  }
   @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.submitDocument(id, this.actorId(req) ?? body.approvedBy); }
   @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.approveDocument(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.rejectDocument(id, this.actorId(req) ?? body.approvedBy, body.comment); }

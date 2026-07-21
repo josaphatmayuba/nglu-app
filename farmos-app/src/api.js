@@ -107,6 +107,28 @@ async function downloadBlob(path, fallbackName = "download") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Ouvre un rapport HTML serveur dans une fenêtre d'impression (remplace les PDF
+// serveur). La fenêtre est ouverte AVANT le fetch pour ne pas être bloquée
+// comme pop-up, avec un placeholder pendant le chargement.
+async function printServerHtml(path) {
+  const w = window.open("", "_blank");
+  if (!w) { throw new Error("Autorisez les pop-ups pour imprimer le rapport."); }
+  w.document.write('<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#666;margin:40px">Chargement du rapport…</body></html>');
+  w.document.close();
+  try {
+    const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
+    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    let html = await res.text();
+    if (!/window\.print/.test(html)) {
+      html = html.replace(/<\/body>/i, '<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script></body>');
+    }
+    w.document.open(); w.document.write(html); w.document.close();
+  } catch (e) {
+    w.close();
+    throw e;
+  }
+}
+
 
 // SCRUM-239 : stale-while-revalidate via Dexie. Sert immédiatement la version
 // cachée de la collection (si présente), puis rafraîchit en arrière-plan et
@@ -323,8 +345,10 @@ export const api = {
   createDocument: (body) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(body) }),
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
   downloadDocument: (id, name) => downloadBlob(`/documents/${id}/download`, name || `document-${id}`),
-  downloadVetExamPdf: (id) => downloadBlob(`/vet-exams/${id}/pdf`, `dossier-vet-${id}.pdf`),
-  downloadFinancePdf: () => downloadBlob(`/reports/finance/pdf`, `rentabilite.pdf`),
+  // Impression navigateur (le pdf-service serveur est supprimé) : on récupère le
+  // HTML du rapport et on l'ouvre dans une fenêtre qui déclenche window.print().
+  printVetExam: (id) => printServerHtml(`/vet-exams/${id}/html`),
+  printFinanceReport: () => printServerHtml(`/reports/finance/html`),
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
   getMortalityStats: () => jsonFetch("/mortality-events/stats"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),

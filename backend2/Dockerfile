@@ -1,7 +1,6 @@
 FROM node:20-alpine
 
-# Génération PDF déléguée au microservice `pdf-service` (chromium isolé là-bas).
-# backend2 n'embarque plus chromium/puppeteer.
+# Plus de génération PDF serveur : les rapports HTML sont imprimés côté navigateur.
 
 WORKDIR /app
 

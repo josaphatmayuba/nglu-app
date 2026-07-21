@@ -3436,7 +3436,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Transactions récentes" : "Recent transactions"}</h3>
-          <button className="btn btn-sm" onClick={() => api.downloadFinancePdf().catch((e) => console.warn(e.message))}><Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Exporter PDF" : "Export PDF"}</button>
+          <button className="btn btn-sm" onClick={() => api.printFinanceReport().catch((e) => console.warn(e.message))}><Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Imprimer / PDF" : "Print / PDF"}</button>
         </div>
         {transactions.map((tr, i) => (
           <div key={tr.id || i} style={{
@@ -3930,7 +3930,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
   // explication en langage naturel à l'impression. cta "pdf" = bouton PDF, sinon Imprimer.
   const liveReports = [
     // Rentabilité = PDF financier global (ne sait pas filtrer par espèce) → désactivé si une espèce est sélectionnée.
-    { fr: "Rentabilité", en: "Profitability", descFr: "Revenus, dépenses, profit + ventes/dépenses récentes", descEn: "Revenue, expenses, profit + recent sales/expenses", icon: "coins", color: "var(--money-500)", cta: "pdf", disabled: !!speciesFilter, disabledHint: lang === "fr" ? "Rapport global ferme — retirer le filtre espèce" : "Farm-wide report — clear the species filter", action: () => api.downloadFinancePdf().catch((e) => console.warn(e.message)) },
+    { fr: "Rentabilité", en: "Profitability", descFr: "Revenus, dépenses, profit + ventes/dépenses récentes", descEn: "Revenue, expenses, profit + recent sales/expenses", icon: "coins", color: "var(--money-500)", cta: "pdf", disabled: !!speciesFilter, disabledHint: lang === "fr" ? "Rapport global ferme — retirer le filtre espèce" : "Farm-wide report — clear the species filter", action: () => api.printFinanceReport().catch((e) => console.warn(e.message)) },
     { fr: "Effectif par bâtiment", en: "Headcount by building", descFr: "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment", descEn: "Total and categories per building", icon: "layers", color: "var(--forest-700)", needsData: true, action: () => printHeadcountReport(hcData.buildings, fAnimals, lang, speciesLabel) },
     { fr: "Structure du cheptel ♂/♀", en: "Herd structure ♂/♀", descFr: "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀", descEn: "Males / females per category and building, + ♂:♀ ratio", icon: "fingerprint", color: "var(--pertinence-500)", needsData: true, action: () => printSexStructureReport(hcData.buildings, fAnimals, lang, speciesLabel) },
     { fr: "Ratio reproducteur M:F", en: "Breeding ratio M:F", descFr: "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture", descEn: "Males / females and M:F ratio per building, with reading guide", icon: "activity", color: "var(--oxblood-500)", needsData: true, action: () => printBreedingRatioReport(hcData.buildings, fAnimals, lang, speciesLabel) },

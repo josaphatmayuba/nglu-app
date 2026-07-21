@@ -1,6 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { renderPdfViaService } from "../common/pdf-client";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -803,26 +802,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 </body></html>`;
   }
 
-  // Rendu HTML -> PDF via Puppeteer (mutualisé entre fiches de paie et documents RH).
-  private async htmlToPdf(html: string): Promise<Buffer> {
-    // Retire le script d'auto-impression éventuel avant la génération PDF.
-    const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
-    return renderPdfViaService(cleanHtml, "HR");
-  }
-
-  async generatePayrollPdf(id: number): Promise<Buffer> {
-    const html = await this.payrollPdfHtml(id);
-    return this.htmlToPdf(html);
-  }
-
-  // PDF d'un document RH déjà généré (réutilise le HTML stocké dans `content`).
-  async documentPdf(id: number): Promise<{ buffer: Buffer; reference: string }> {
-    const doc = await this.findDocument(id) as Record<string, any>;
-    const html = String(doc.content || "");
-    if (!html.trim()) throw new BadRequestException("This document has no content to render.");
-    const buffer = await this.htmlToPdf(html);
-    return { buffer, reference: String(doc.reference || `document-${id}`) };
-  }
+  // La génération PDF serveur (pdf-service/Puppeteer) est supprimée : les PDF
+  // se font côté navigateur via l'aperçu HTML + Imprimer / Enregistrer en PDF.
 
   async createPayroll(input: CreateHrPayrollDto, orgId: number) {
     await this.validatePayrollRefs(input);

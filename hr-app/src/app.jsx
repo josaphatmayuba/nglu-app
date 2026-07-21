@@ -2486,8 +2486,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
                 {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--red-500, #ef4444)" }} onClick={() => handleReject(p)}>Rejeter</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openPayrollPreview(p)}>Aperçu</button>
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/payrolls/${p.id}/pdf`, `fiche-paie-${p.id}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
+                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openPayrollPreview(p)}>Aperçu / PDF</button>
               </td>
             </tr>;
           })}</tbody>
@@ -2698,8 +2697,7 @@ function Dossiers({ data, staff, setModal, reload }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>{preview.documentType} — {preview.reference}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/documents/${preview.id}/pdf`, `${preview.reference || "document"}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
-                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(preview.content, true)}>Imprimer</button>
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(preview.content, true)}>Imprimer / PDF</button>
                 <button type="button" className="link" onClick={() => setPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
               </div>
             </div>

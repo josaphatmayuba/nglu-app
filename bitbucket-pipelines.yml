@@ -150,19 +150,6 @@ pipelines:
                 # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
-                # pdf-service dev : comme MinIO, le --no-deps ne le cree jamais -> les PDF RH
-                # echouent en dev (fetch failed http://pdf-service:8002). On l'up explicitement.
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build pdf-service"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
-
-          - step:
-              name: PDF Service → dev
-              condition: { changesets: { includePaths: ["pdf-service/**", "docker-compose.dev.yml"] } }
-              script:
-                - apk add --no-cache openssh-client
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - scp -o StrictHostKeyChecking=no -r pdf-service $SERVER:$APP/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
@@ -409,21 +396,6 @@ pipelines:
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
-              name: PDF Service → Avelomi-dev
-              condition: { changesets: { includePaths: ["pdf-service/**", "docker-compose.dev.yml"] } }
-              script:
-                - *avelomi-ssh-setup
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - $SSH $SERVER "set -e; mkdir -p $APP/pdf-service 2>/dev/null || sudo -n mkdir -p $APP/pdf-service; if [ ! -w $APP ] || [ ! -w $APP/pdf-service ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/pdf-service; fi"
-                - *avelomi-dev-env
-                - $SCP -r pdf-service $SERVER:$APP/
-                - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
-
-          - step:
               name: Middleware → Avelomi-dev
               condition: { changesets: { includePaths: ["middleware/**", "docker-compose.dev.yml"] } }
               script:
@@ -465,16 +437,6 @@ pipelines:
                 # minio du compose jamais cree -> photos 500 (EAI_AGAIN minio). Script idempotent.
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
-
-          - step:
-              name: PDF Service → prod
-              condition: { changesets: { includePaths: ["pdf-service/**", "docker-compose.prod.yml"] } }
-              script:
-                - apk add --no-cache openssh-client
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - scp -o StrictHostKeyChecking=no -r pdf-service $SERVER:$APP/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
@@ -695,21 +657,6 @@ pipelines:
                 # MinIO partage (idempotent): backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
                 - $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
-
-          - step:
-              name: PDF Service → Avelomi
-              condition: { changesets: { includePaths: ["pdf-service/**", "docker-compose.prod.yml"] } }
-              script:
-                - *avelomi-ssh-setup
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - *avelomi-prod-guard
-                - $SSH $SERVER "set -e; mkdir -p $APP/pdf-service 2>/dev/null || sudo -n mkdir -p $APP/pdf-service; if [ ! -w $APP ] || [ ! -w $APP/pdf-service ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/pdf-service; fi"
-                - $SCP -r pdf-service $SERVER:$APP/
-                - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:

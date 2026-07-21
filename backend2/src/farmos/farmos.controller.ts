@@ -747,25 +747,23 @@ export class FarmosController {
     return this.farmos.deleteLandFeature(id, orgId);
   }
 
-  // ─── Rapports PDF (#3) ────────────────────────────────────────────────────
+  // ─── Rapports imprimables (#3) — HTML, impression côté navigateur ──────────
   @Permissions("readAll-farmos")
-  @Get("vet-exams/:id/pdf")
-  async vetExamPdf(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
-    const { buffer, reference } = await this.farmos.vetExamPdf(id, orgId);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
-    res.setHeader("Content-Length", buffer.length);
-    res.end(buffer);
+  @Get("vet-exams/:id/html")
+  async vetExamHtml(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
+    const { html, reference } = await this.farmos.vetExamHtml(id, orgId);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="${reference}.html"`);
+    res.send(html);
   }
 
   @Permissions("readAll-farmos")
-  @Get("reports/finance/pdf")
-  async financePdf(@CurrentOrg() orgId: number, @Res() res: Response) {
-    const { buffer, reference } = await this.farmos.financePdf(orgId);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
-    res.setHeader("Content-Length", buffer.length);
-    res.end(buffer);
+  @Get("reports/finance/html")
+  async financeHtml(@CurrentOrg() orgId: number, @Res() res: Response) {
+    const { html, reference } = await this.farmos.financeHtml(orgId);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="${reference}.html"`);
+    res.send(html);
   }
 
   @Permissions("readAll-farmos")
