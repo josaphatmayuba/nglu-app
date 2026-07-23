@@ -101,6 +101,81 @@ export class ChatService {
     return { id: insertId };
   }
 
+  // ── Discussions directes (tête-à-tête) ──────────────────────────────────────
+  // Un tête-à-tête est une discussion sans channel, de type 'direct', dont
+  // entity_id porte la paire d'utilisateurs triée (min-max) : c'est ce qui rend
+  // la recherche « la conversation entre A et B » déterministe, quel que soit
+  // celui des deux qui l'ouvre en premier.
+
+  private directKey(a: number, b: number) {
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    return `${lo}-${hi}`;
+  }
+
+  /** Ouvre (ou crée) la discussion 1-à-1 entre l'appelant et `otherUserId`. */
+  async getOrCreateDirectDiscussion(userId: number, otherUserId: number) {
+    if (otherUserId === userId) {
+      throw new ForbiddenException("Impossible d'ouvrir une discussion avec soi-même.");
+    }
+    const other = await this.getUserById(otherUserId);
+    if (!other) throw new ForbiddenException("Utilisateur introuvable.");
+
+    const key = this.directKey(userId, otherUserId);
+    const existing = await this.row<{ id: number }>(sql`
+      SELECT id FROM journal_discussions
+      WHERE discussion_type = 'direct' AND entity_type = 'direct' AND entity_key = ${key} AND status = 1
+      LIMIT 1
+    `);
+
+    const title = `${other.firstName ?? ""} ${other.lastName ?? ""}`.trim() || `Utilisateur ${otherUserId}`;
+    if (existing) {
+      // Les participants sont réinsérés en IGNORE : une discussion créée avant
+      // l'ajout d'un des deux comptes resterait sinon inaccessible.
+      await this.addDirectParticipants(existing.id, userId, otherUserId);
+      return { id: existing.id, title, otherUserId };
+    }
+
+    const insertId = await this.insert(sql`
+      INSERT INTO journal_discussions (entity_type, entity_id, entity_key, discussion_type, title, created_by)
+      VALUES ('direct', ${Math.min(userId, otherUserId)}, ${key}, 'direct', ${title}, ${userId})
+    `);
+    await this.addDirectParticipants(insertId, userId, otherUserId);
+    return { id: insertId, title, otherUserId };
+  }
+
+  private async addDirectParticipants(discussionId: number, a: number, b: number) {
+    await this.db.execute(sql`
+      INSERT IGNORE INTO journal_discussion_participants (discussion_id, user_id)
+      VALUES (${discussionId}, ${a}), (${discussionId}, ${b})
+    `);
+  }
+
+  /**
+   * Liste des personnes joignables, avec la conversation directe existante si
+   * elle existe : l'onglet « Personnes » affiche ainsi dernier message et
+   * non-lus sans un aller-retour par utilisateur.
+   */
+  async getDirectConversations(userId: number) {
+    return this.rows(sql`
+      SELECT u.id AS user_id, u.firstName, u.lastName, u.email,
+             d.id AS discussion_id,
+             (SELECT COUNT(*) FROM journal_messages m
+              WHERE m.discussion_id = d.id AND m.status = 1 AND m.sender_id <> ${userId}
+                AND NOT EXISTS (SELECT 1 FROM journal_message_reads r WHERE r.message_id = m.id AND r.user_id = ${userId})) AS unread,
+             (SELECT m2.content FROM journal_messages m2 WHERE m2.discussion_id = d.id AND m2.status = 1
+              ORDER BY m2.created_at DESC LIMIT 1) AS last_message,
+             (SELECT m2.created_at FROM journal_messages m2 WHERE m2.discussion_id = d.id AND m2.status = 1
+              ORDER BY m2.created_at DESC LIMIT 1) AS last_message_at
+      FROM user u
+      LEFT JOIN journal_discussions d
+        ON d.discussion_type = 'direct' AND d.status = 1
+       AND d.entity_key = CONCAT(LEAST(u.id, ${userId}), '-', GREATEST(u.id, ${userId}))
+      WHERE u.status = 1 AND u.id <> ${userId}
+      ORDER BY last_message_at IS NULL, last_message_at DESC, u.firstName
+      LIMIT 200
+    `);
+  }
+
   // ── Sujets liés (events + tickets) ─────────────────────────────────────────
   async getTopics(userId: number, filters: { q?: string; type?: string } = {}) {
     let typeCond: SQL = sql``;

@@ -70,6 +70,22 @@ export class ChatController {
     return this.svc.getOrCreateChannelDiscussion(id, userId);
   }
 
+  // ── Discussions directes (tête-à-tête) ──────────────────────────────────────
+  @Get("direct")
+  @ApiOperation({ summary: "Personnes joignables + conversation directe existante" })
+  getDirectConversations(@CurrentUserId() userId: number) {
+    return this.svc.getDirectConversations(userId);
+  }
+
+  @Post("direct/:userId")
+  @ApiOperation({ summary: "Ouvrir (ou créer) la discussion 1-à-1 avec un utilisateur" })
+  openDirect(
+    @Param("userId", ParseIntPipe) otherUserId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.svc.getOrCreateDirectDiscussion(userId, otherUserId);
+  }
+
   // ── Sujets (événements + tickets avec discussion) ───────────────────────────
   @Get("topics")
   @ApiOperation({ summary: "Sujets de discussion (events + tickets)" })

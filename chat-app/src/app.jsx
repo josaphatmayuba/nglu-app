@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   MessageSquare, Hash, BookOpen, Ticket, Search, Plus, Settings,
   LogOut, Users, Send, ArrowLeft, ChevronRight, Circle, ExternalLink,
-  TrendingUp, Shield, X, CheckCheck, Mic, Phone,
+  TrendingUp, Shield, X, CheckCheck, Mic, Phone, User,
 } from "lucide-react";
 import { useAuthToken, clearToken, LoginScreen, readToken } from "./auth.jsx";
 import { api, API_ROOT } from "./api.js";
@@ -241,8 +241,9 @@ export default function App() {
   const token = useAuthToken();
   const [channels, setChannels] = useState([]);
   const [topics, setTopics] = useState([]);
-  const [activeDisc, setActiveDisc] = useState(null); // { id, title, entityType, entityId }
-  const [activeTab, setActiveTab] = useState("channels"); // channels | topics
+  const [people, setPeople] = useState([]);
+  const [activeDisc, setActiveDisc] = useState(null); // { id, title, entityType, entityId, peerId }
+  const [activeTab, setActiveTab] = useState("channels"); // channels | topics | people
   const [topicFilter, setTopicFilter] = useState("all"); // all | event | ticket
   const [search, setSearch] = useState("");
   const [showNewChannel, setShowNewChannel] = useState(false);
@@ -283,6 +284,7 @@ export default function App() {
       // Rafraîchir les badges
       loadChannels();
       loadTopics();
+      loadPeople();
     });
     return () => {
       socket.disconnect();
@@ -299,7 +301,13 @@ export default function App() {
       .then(setTopics).catch(console.error);
   }, [topicFilter]);
 
-  useEffect(() => { if (token) { loadChannels(); loadTopics(); } }, [token, loadChannels, loadTopics]);
+  const loadPeople = useCallback(() => {
+    api.directConversations().then(setPeople).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (token) { loadChannels(); loadTopics(); loadPeople(); }
+  }, [token, loadChannels, loadTopics, loadPeople]);
 
   const openChannel = async (ch) => {
     try {
@@ -307,6 +315,29 @@ export default function App() {
       setActiveDisc({ id: disc.id, title: `# ${ch.name}`, icon: ch.icon, color: ch.color });
       setMobileMsgOpen(true);
     } catch(e) { console.error(e); }
+  };
+
+  // Tête-à-tête : la discussion est créée à la volée au premier clic, on n'a
+  // donc pas besoin d'attendre qu'un channel commun existe.
+  const openPerson = async (p) => {
+    try {
+      const disc = await api.openDirect(p.user_id);
+      const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || `Utilisateur ${p.user_id}`;
+      setActiveDisc({ id: disc.id, title: name, peerId: p.user_id });
+      setMobileMsgOpen(true);
+      loadPeople();
+      return disc;
+    } catch (e) { console.error(e); }
+  };
+
+  // Appel direct depuis la liste : ouvre d'abord la discussion, car un appel
+  // est toujours rattaché à une discussion côté backend.
+  const callPerson = async (e, p) => {
+    e.stopPropagation();
+    const disc = await openPerson(p);
+    if (!disc) return;
+    const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || `Utilisateur ${p.user_id}`;
+    call.startCall(disc.id, p.user_id, name);
   };
 
   const openTopic = (topic) => {
@@ -324,6 +355,11 @@ export default function App() {
     const q = search.toLowerCase();
     return (t.event_title||t.title||"").toLowerCase().includes(q) ||
            (t.last_message||"").toLowerCase().includes(q);
+  });
+
+  const filteredPeople = people.filter(p => {
+    if (!search) return true;
+    return `${p.firstName ?? ""} ${p.lastName ?? ""}`.toLowerCase().includes(search.toLowerCase());
   });
 
   if (!token) return <LoginScreen />;
@@ -358,6 +394,9 @@ export default function App() {
           </button>
           <button className={`tab-btn ${activeTab==="topics"?"active":""}`} onClick={() => setActiveTab("topics")}>
             <BookOpen size={14} /> Sujets
+          </button>
+          <button className={`tab-btn ${activeTab==="people"?"active":""}`} onClick={() => setActiveTab("people")}>
+            <User size={14} /> Personnes
           </button>
         </div>
 
@@ -420,6 +459,46 @@ export default function App() {
             </div>
           </>
         )}
+
+        {activeTab === "people" && (
+          <>
+            <div className="sidebar-search">
+              <Search size={13} />
+              <input placeholder="Rechercher une personne…" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="topic-list">
+              {filteredPeople.map(p => {
+                const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || `Utilisateur ${p.user_id}`;
+                return (
+                  <div key={p.user_id}
+                    className={`person-item ${activeDisc?.peerId===p.user_id?"active":""}`}
+                    onClick={() => openPerson(p)}>
+                    <div className="msg-avatar" style={{ background: avatarColor(p.user_id) }}>
+                      {initials(p.firstName, p.lastName)}
+                    </div>
+                    <div className="topic-body">
+                      <div className="topic-title">{name}</div>
+                      {p.last_message && (
+                        <div className="topic-preview">{p.last_message.slice(0,40)}{p.last_message.length>40?"…":""}</div>
+                      )}
+                    </div>
+                    <div className="topic-meta">
+                      {p.last_message_at && <span>{relTime(p.last_message_at)}</span>}
+                      {p.unread > 0 && <span className="ch-badge">{p.unread}</span>}
+                    </div>
+                    <button className="person-call-btn"
+                      onClick={(e) => callPerson(e, p)}
+                      disabled={!socket || call.isActive}
+                      title={call.isActive ? "Appel en cours" : `Appeler ${name}`}>
+                      <Phone size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+              {filteredPeople.length === 0 && <div className="sidebar-empty">Aucune personne</div>}
+            </div>
+          </>
+        )}
       </aside>
 
       {/* ── Zone principale ── */}
@@ -434,14 +513,20 @@ export default function App() {
               <div className="thread-title">
                 {activeDisc.icon
                   ? <span style={{ color: activeDisc.color||"#6366f1" }}><ChanIcon name={activeDisc.icon} size={18}/></span>
-                  : (activeDisc.entityType === "journal_event" ? <BookOpen size={18}/> : <Ticket size={18}/>)
+                  : activeDisc.peerId
+                    ? <User size={18}/>
+                    : (activeDisc.entityType === "journal_event" ? <BookOpen size={18}/> : <Ticket size={18}/>)
                 }
                 <span>{activeDisc.title}</span>
               </div>
-              {/* Appel audio : désactivé tant que le socket n'est pas connecté. */}
+              {/* Appel audio : désactivé tant que le socket n'est pas connecté.
+                  En tête-à-tête le correspondant est connu — pas de sélecteur. */}
               <button
                 className="call-start-btn"
-                onClick={() => setCallPickerOpen(true)}
+                onClick={() => {
+                  if (activeDisc.peerId) call.startCall(activeDisc.id, activeDisc.peerId, activeDisc.title);
+                  else setCallPickerOpen(true);
+                }}
                 disabled={!socket || call.isActive}
                 title={call.isActive ? "Appel en cours" : "Appeler"}
               >

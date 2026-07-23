@@ -65,6 +65,10 @@ export const api = {
     req(`/messages/${discussionId}`, { method: "POST", body: JSON.stringify({ content, mentions }) }),
   users: () => req("/users"),
 
+  // ── Discussions directes (tête-à-tête) ─────────────────────────────────────
+  directConversations: () => req("/direct"),
+  openDirect: (userId) => req(`/direct/${userId}`, { method: "POST" }),
+
   // ── Appels audio ───────────────────────────────────────────────────────────
   iceServers: () => req("/ice-servers"),
   callHistory: (discussionId) => req(`/calls/${discussionId}`),

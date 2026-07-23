@@ -1303,6 +1303,13 @@
                         "when":  1780930800000,
                         "tag":  "0210_journal_messages_voice",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  186,
+                        "version":  "5",
+                        "when":  1780934400000,
+                        "tag":  "0211_chat_direct_discussions",
+                        "breakpoints":  true
                     }
                 ]
 }
