@@ -131,7 +131,7 @@ pipelines:
           - step:
               name: Backend2 → dev
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "scripts/ci/ensure-shared-minio.sh"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "scripts/ci/ensure-shared-minio.sh", "scripts/ci/ensure-coturn.sh", "docker/coturn/**"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -153,6 +153,15 @@ pipelines:
                 # Serveur TURN (appels audio du chat) : meme raison que MinIO ci-dessus,
                 # le `up --no-deps` ne cree jamais le service coturn du compose.
                 # Non bloquant : si TURN_SECRET manque, le script sort en 0 avec un avertissement.
+                #
+                # Le `git pull` serveur echoue en silence (drift local), donc le
+                # docker-compose.dev.yml et les fichiers docker/coturn/ n'y arrivent
+                # jamais -> `no such service: coturn`, et les volumes montes pointent
+                # sur des dossiers vides crees par Docker. On les scp comme dist/ et
+                # drizzle/ plutot que de dependre du pull.
+                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
+                - $SSH $SERVER "mkdir -p $APP/docker/coturn"
+                - scp -o StrictHostKeyChecking=no docker/coturn/turnserver.conf docker/coturn/entrypoint.sh $SERVER:$APP/docker/coturn/
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-coturn.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-coturn.sh nglu_dev docker-compose.dev.yml .env.dev"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"

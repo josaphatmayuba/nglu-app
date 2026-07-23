@@ -39,9 +39,32 @@ if ! grep -qE '^TURN_EXTERNAL_IP=.+' "$ENV_FILE" 2>/dev/null; then
   echo "[coturn] les candidats relay seront inutilisables depuis l'exterieur." >&2
 fi
 
+# Le service peut etre absent du compose serveur (fichier obsolete non sync).
+# On le detecte avant le `up` pour sortir avec un message clair plutot qu'un
+# `no such service` qui casse tout le step de deploiement backend.
+if ! $DOCKER compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+     config --services 2>/dev/null | grep -qx coturn; then
+  echo "[coturn] service absent de $COMPOSE_FILE sur ce serveur — coturn NON demarre." >&2
+  echo "[coturn] Le fichier compose du serveur est probablement obsolete." >&2
+  exit 0   # non bloquant
+fi
+
+# Les volumes montes doivent exister en tant que FICHIERS : si docker/coturn/
+# manque, Docker cree des repertoires vides a leur place et l'entrypoint
+# echoue avec l'usage du loader musl.
+for f in docker/coturn/turnserver.conf docker/coturn/entrypoint.sh; do
+  if [ ! -f "$f" ]; then
+    echo "[coturn] $f manquant (ou cree comme repertoire par Docker) — coturn NON demarre." >&2
+    exit 0   # non bloquant
+  fi
+done
+
 echo "[coturn] demarrage/mise a jour du service"
-$DOCKER compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-  up -d --no-deps coturn
+if ! $DOCKER compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+     up -d --no-deps coturn; then
+  echo "[coturn] ATTENTION: le demarrage a echoue — les appels resteront en P2P direct." >&2
+  exit 0   # non bloquant : le backend est deja deploye, ne pas rougir le step
+fi
 
 # Verification : coturn doit ecouter sur 3478. En network_mode host, on teste
 # directement sur l'hote.
