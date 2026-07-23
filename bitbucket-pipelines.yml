@@ -142,9 +142,14 @@ pipelines:
                 # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
                 # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
                 - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod).
+                # Le git pull serveur peut echouer a cause de drift local; on le synchronise explicitement.
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
+                # Meme logique pour le compose: il choisit le Dockerfile utilise par le rebuild.
+                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
                 # MinIO partage (dev+prod, meme instance): le pipeline lance backend2 en --no-deps,
                 # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
@@ -159,7 +164,6 @@ pipelines:
                 # jamais -> `no such service: coturn`, et les volumes montes pointent
                 # sur des dossiers vides crees par Docker. On les scp comme dist/ et
                 # drizzle/ plutot que de dependre du pull.
-                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
                 - $SSH $SERVER "mkdir -p $APP/docker/coturn"
                 - scp -o StrictHostKeyChecking=no docker/coturn/turnserver.conf docker/coturn/entrypoint.sh $SERVER:$APP/docker/coturn/
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-coturn.sh $SERVER:$APP/
@@ -443,9 +447,14 @@ pipelines:
                 # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
                 # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
                 - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod).
+                # Le git pull serveur peut echouer a cause de drift local; on le synchronise explicitement.
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
+                # Meme logique pour le compose: il choisit le Dockerfile utilise par le rebuild.
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
                 # MinIO partage (dev+prod, meme instance): backend2 lance en --no-deps -> service
                 # minio du compose jamais cree -> photos 500 (EAI_AGAIN minio). Script idempotent.
@@ -733,7 +742,11 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → dev (full)
@@ -780,7 +793,11 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → prod (full)
