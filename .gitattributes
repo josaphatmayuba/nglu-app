@@ -1,0 +1,6 @@
+# Les scripts shell et les fichiers de conf executes sous Linux doivent rester
+# en LF : un CRLF fait echouer l'interpretation (`bad interpreter: /bin/sh^M`)
+# ou la lecture ligne a ligne des configs, y compris quand le fichier est monte
+# dans un conteneur depuis un poste Windows.
+*.sh text eol=lf
+docker/coturn/turnserver.conf text eol=lf

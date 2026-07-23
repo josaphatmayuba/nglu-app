@@ -150,6 +150,11 @@ pipelines:
                 # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
                 - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+                # Serveur TURN (appels audio du chat) : meme raison que MinIO ci-dessus,
+                # le `up --no-deps` ne cree jamais le service coturn du compose.
+                # Non bloquant : si TURN_SECRET manque, le script sort en 0 avec un avertissement.
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-coturn.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-coturn.sh nglu_dev docker-compose.dev.yml .env.dev"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:

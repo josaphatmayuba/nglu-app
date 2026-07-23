@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `chat_calls` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`discussion_id` int NOT NULL,
+	`caller_id` int NOT NULL,
+	`callee_id` int NOT NULL,
+	`call_type` varchar(16) NOT NULL DEFAULT 'audio',
+	`state` varchar(16) NOT NULL DEFAULT 'ringing',
+	`connection_type` varchar(16),
+	`started_at` timestamp NULL,
+	`ended_at` timestamp NULL,
+	`duration_seconds` int,
+	`end_reason` varchar(32),
+	`created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	`status` tinyint NOT NULL DEFAULT 1,
+	CONSTRAINT `chat_calls_id` PRIMARY KEY(`id`),
+	INDEX `chat_calls_discussion_idx` (`discussion_id`),
+	INDEX `chat_calls_callee_state_idx` (`callee_id`,`state`),
+	INDEX `chat_calls_caller_state_idx` (`caller_id`,`state`)
+);

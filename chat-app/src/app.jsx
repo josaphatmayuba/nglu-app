@@ -2,12 +2,17 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   MessageSquare, Hash, BookOpen, Ticket, Search, Plus, Settings,
   LogOut, Users, Send, ArrowLeft, ChevronRight, Circle, ExternalLink,
-  TrendingUp, Shield, X, CheckCheck,
+  TrendingUp, Shield, X, CheckCheck, Mic, Phone,
 } from "lucide-react";
 import { useAuthToken, clearToken, LoginScreen, readToken } from "./auth.jsx";
 import { api, API_ROOT } from "./api.js";
 import { sanitizeHtml } from "./sanitizeHtml.js";
 import { io } from "socket.io-client";
+import { useCall } from "./call/useCall.js";
+import { CallUI } from "./call/CallUI.jsx";
+import { CallPicker } from "./call/CallPicker.jsx";
+import { useVoiceRecorder } from "./voice/useVoiceRecorder.js";
+import { VoiceMessage } from "./voice/VoiceMessage.jsx";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -58,6 +63,14 @@ function MessageThread({ discussionId, currentUserId, socket }) {
   const inputRef = useRef(null);
   const typingTimer = useRef(null);
   const currentDiscId = useRef(discussionId);
+
+  // Messages vocaux : envoi différé avec reprise. Le fil est rafraîchi quand un
+  // vocal en attente finit par partir (parfois plusieurs minutes après, en 2G).
+  const reloadMessages = useCallback((did) => {
+    if (did !== currentDiscId.current) return;
+    api.messages(did).then(setMessages).catch(() => { /* rechargement best-effort */ });
+  }, []);
+  const voice = useVoiceRecorder(discussionId, { onSent: reloadMessages });
 
   useEffect(() => {
     currentDiscId.current = discussionId;
@@ -148,8 +161,18 @@ function MessageThread({ discussionId, currentUserId, socket }) {
                 {!isMe && showAvatar && (
                   <div className="msg-name">{msg.firstName} {msg.lastName}</div>
                 )}
-                <div className={`bubble ${isMe?"bubble-me":"bubble-other"}`}
-                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(parseContent(msg.content)) }} />
+                {msg.attachment_type === "voice" ? (
+                  <div className={`bubble ${isMe?"bubble-me":"bubble-other"} bubble-voice`}>
+                    <VoiceMessage
+                      messageId={msg.id}
+                      durationSec={msg.attachment_duration_sec}
+                      isMe={isMe}
+                    />
+                  </div>
+                ) : (
+                  <div className={`bubble ${isMe?"bubble-me":"bubble-other"}`}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(parseContent(msg.content)) }} />
+                )}
                 <div className="msg-time">
                   {relTime(msg.created_at)}
                   {isMe && <CheckCheck size={12} style={{ color: msg.is_read?"#818cf8":"#64748b" }} />}
@@ -166,17 +189,49 @@ function MessageThread({ discussionId, currentUserId, socket }) {
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="thread-input-bar">
-        <textarea ref={inputRef} className="msg-input"
-          placeholder="Écrivez… Maj+Entrée pour saut de ligne"
-          value={content}
-          onChange={(e) => { setContent(e.target.value); handleTyping(); }}
-          onKeyDown={handleKeyDown}
-          rows={1} />
-        <button className="send-btn" onClick={handleSend} disabled={!content.trim()||sending}>
-          <Send size={17} />
-        </button>
-      </div>
+      {voice.recording ? (
+        <div className="thread-input-bar recording-bar">
+          <button className="voice-cancel" onClick={voice.cancelRecording} title="Annuler">
+            <X size={18} />
+          </button>
+          <div className="recording-info">
+            <span className="recording-dot" />
+            <span className="recording-time">
+              {Math.floor(voice.elapsedSec / 60)}:{(voice.elapsedSec % 60).toString().padStart(2, "0")}
+            </span>
+            <span className="recording-hint">Enregistrement…</span>
+          </div>
+          <button className="send-btn" onClick={voice.stopRecording} title="Envoyer le vocal">
+            <Send size={17} />
+          </button>
+        </div>
+      ) : (
+        <div className="thread-input-bar">
+          <textarea ref={inputRef} className="msg-input"
+            placeholder="Écrivez… Maj+Entrée pour saut de ligne"
+            value={content}
+            onChange={(e) => { setContent(e.target.value); handleTyping(); }}
+            onKeyDown={handleKeyDown}
+            rows={1} />
+          {/* Le micro remplace l'envoi tant qu'aucun texte n'est saisi :
+              sur réseau très faible, le vocal est le mode qui passe toujours. */}
+          {content.trim() ? (
+            <button className="send-btn" onClick={handleSend} disabled={sending}>
+              <Send size={17} />
+            </button>
+          ) : (
+            <button className="send-btn mic-btn" onClick={voice.startRecording} title="Message vocal">
+              <Mic size={17} />
+            </button>
+          )}
+        </div>
+      )}
+      {voice.pendingCount > 0 && (
+        <div className="voice-pending">
+          {voice.pendingCount} vocal{voice.pendingCount > 1 ? "s" : ""} en attente d’envoi — reprise automatique
+        </div>
+      )}
+      {voice.error && <div className="voice-pending voice-pending-err">{voice.error}</div>}
     </div>
   );
 }
@@ -193,16 +248,34 @@ export default function App() {
   const [showNewChannel, setShowNewChannel] = useState(false);
   const [mobileMsgOpen, setMobileMsgOpen] = useState(false);
   const socketRef = useRef(null);
+  // Le socket est aussi en state : une ref ne déclenche pas de re-rendu, or les
+  // hooks d'appel doivent recevoir l'instance dès qu'elle existe.
+  const [socket, setSocket] = useState(null);
   const currentUserId = parseInt(localStorage.getItem("id") || "0", 10);
+
+  // Appels audio : monté au niveau de l'app pour recevoir les appels entrants
+  // même quand aucune discussion n'est ouverte.
+  const call = useCall(socket, currentUserId);
+  const [callPickerOpen, setCallPickerOpen] = useState(false);
 
   // WebSocket
   useEffect(() => {
     if (!token) return;
     const socket = io(`${WS_HOST}/chat`, {
       auth: { token },
-      transports: ["websocket"],
+      // Repli polling autorisé : sur certains réseaux mobiles africains et
+      // derrière des proxys d'entreprise, l'upgrade WebSocket échoue. Sans
+      // polling, le chat ET les appels seraient totalement inutilisables.
+      transports: ["websocket", "polling"],
+      // Reconnexion patiente : en 2G, une coupure de 30 s est banale.
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      timeout: 25000,
     });
     socketRef.current = socket;
+    setSocket(socket);
     socket.on("connect", () => {
       socket.emit("register", { userId: currentUserId });
     });
@@ -211,7 +284,10 @@ export default function App() {
       loadChannels();
       loadTopics();
     });
-    return () => socket.disconnect();
+    return () => {
+      socket.disconnect();
+      setSocket(null);
+    };
   }, [token]);
 
   const loadChannels = useCallback(() => {
@@ -254,6 +330,18 @@ export default function App() {
 
   return (
     <div className="shell">
+      {/* Appels : montés à la racine pour que la sonnerie entrante s'affiche
+          même sans discussion ouverte. */}
+      <CallUI call={call} />
+      <CallPicker
+        open={callPickerOpen}
+        onClose={() => setCallPickerOpen(false)}
+        currentUserId={currentUserId}
+        onPick={(calleeId, name) => {
+          if (activeDisc) call.startCall(activeDisc.id, calleeId, name);
+        }}
+      />
+
       {/* ── Sidebar ── */}
       <aside className={`sidebar ${mobileMsgOpen ? "mob-hidden" : ""}`}>
         {/* Brand */}
@@ -350,6 +438,15 @@ export default function App() {
                 }
                 <span>{activeDisc.title}</span>
               </div>
+              {/* Appel audio : désactivé tant que le socket n'est pas connecté. */}
+              <button
+                className="call-start-btn"
+                onClick={() => setCallPickerOpen(true)}
+                disabled={!socket || call.isActive}
+                title={call.isActive ? "Appel en cours" : "Appeler"}
+              >
+                <Phone size={15} />
+              </button>
               {activeDisc.entityType && (
                 <a
                   href={activeDisc.entityType === "journal_event" ? "/journal/" : "/tickets/"}

@@ -138,6 +138,19 @@ export const env = {
     userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "permissions-updates",
     dataUpdatesChannel: process.env.REDIS_CHANNEL_DATA_UPDATES || "data-updates",
   },
+  // Appels audio du chat : credentials TURN ephemeres (HMAC du secret partage
+  // avec coturn). Le secret ne quitte jamais le backend ; seuls des couples
+  // username/credential a duree de vie limitee sont envoyes aux clients.
+  turn: {
+    secret: process.env.TURN_SECRET || "",
+    // Hote public du serveur TURN, vu depuis les clients (ex: turn.ngolu.app).
+    host: process.env.TURN_HOST || "",
+    port: Number(process.env.TURN_PORT || 3478),
+    tlsPort: Number(process.env.TURN_TLS_PORT || 5349),
+    realm: process.env.TURN_REALM || "nglu.chat",
+    // Duree de validite des credentials remis au client (secondes).
+    credentialTtlSeconds: Number(process.env.TURN_CREDENTIAL_TTL || 3600),
+  },
   objectStorage: {
     endpoint: process.env.OBJECT_STORAGE_ENDPOINT || "http://minio:9000",
     accessKeyId: process.env.OBJECT_STORAGE_ACCESS_KEY_ID || process.env.MINIO_ROOT_USER || "nglu_minio",

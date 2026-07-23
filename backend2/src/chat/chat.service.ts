@@ -132,7 +132,7 @@ export class ChatService {
     const cursor = beforeId ? sql`AND m.id < ${beforeId}` : sql``;
     const rows = await this.rows(sql`
       SELECT m.id, m.sender_id, m.content, m.mentions, m.attachment_url,
-             m.attachment_name, m.created_at,
+             m.attachment_name, m.attachment_type, m.attachment_duration_sec, m.created_at,
              u.firstName, u.lastName,
              EXISTS(SELECT 1 FROM journal_message_reads r WHERE r.message_id = m.id AND r.user_id = ${userId}) AS is_read
       FROM journal_messages m
@@ -182,6 +182,59 @@ export class ChatService {
   async getUsers() {
     return this.rows(sql`
       SELECT id, firstName, lastName, email FROM user WHERE status = 1 ORDER BY firstName LIMIT 200
+    `);
+  }
+
+  /**
+   * Enregistre un message vocal deja televerse dans le stockage objet.
+   * Le contenu textuel reste vide : l'UI affiche un lecteur audio.
+   */
+  async createVoiceMessage(
+    discussionId: number,
+    userId: number,
+    attachment: { objectKey: string; name: string; durationSec: number },
+  ) {
+    await this.assertDiscussionAccess(discussionId, userId);
+
+    const messageId = await this.insert(sql`
+      INSERT INTO journal_messages
+        (discussion_id, sender_id, content, mentions, attachment_url, attachment_name,
+         attachment_type, attachment_duration_sec)
+      VALUES (${discussionId}, ${userId}, '', '[]', ${attachment.objectKey}, ${attachment.name},
+         'voice', ${attachment.durationSec})
+    `);
+
+    await this.db.execute(sql`
+      INSERT IGNORE INTO journal_message_reads (message_id, user_id) VALUES (${messageId}, ${userId})
+    `);
+
+    return this.row(sql`
+      SELECT m.id, m.sender_id, m.content, m.mentions, m.attachment_url,
+             m.attachment_name, m.attachment_type, m.attachment_duration_sec, m.created_at,
+             u.firstName, u.lastName
+      FROM journal_messages m
+      LEFT JOIN user u ON u.id = m.sender_id
+      WHERE m.id = ${messageId}
+    `);
+  }
+
+  /** Cle de stockage d'un vocal, apres controle d'acces a la discussion. */
+  async getVoiceObjectKey(messageId: number, userId: number) {
+    const row = await this.row<{ attachment_url: string; discussion_id: number; attachment_type: string }>(sql`
+      SELECT attachment_url, discussion_id, attachment_type
+      FROM journal_messages WHERE id = ${messageId} AND status = 1 LIMIT 1
+    `);
+    if (!row || row.attachment_type !== "voice" || !row.attachment_url) {
+      throw new ForbiddenException("Message vocal introuvable.");
+    }
+    await this.assertDiscussionAccess(row.discussion_id, userId);
+    return row.attachment_url;
+  }
+
+  /** Identite d'un utilisateur — utilise pour afficher le nom de l'appelant. */
+  async getUserById(userId: number) {
+    return this.row<{ id: number; firstName: string | null; lastName: string | null }>(sql`
+      SELECT id, firstName, lastName FROM user WHERE id = ${userId} AND status = 1 LIMIT 1
     `);
   }
 

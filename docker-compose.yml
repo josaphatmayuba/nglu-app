@@ -50,6 +50,25 @@ services:
     networks:
       - nglu_network
 
+  # coturn - serveur TURN/STUN pour les appels audio du chat.
+  # Indispensable sur les reseaux mobiles RDC (NAT symetrique) : sans relais TURN,
+  # une part importante des appels WebRTC n'arrive jamais a s'etablir.
+  # network_mode: host est requis - coturn alloue dynamiquement des ports media
+  # et ne fonctionne pas correctement derriere le NAT de Docker.
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    container_name: nglu_coturn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_REALM: ${TURN_REALM:-nglu.chat}
+    entrypoint: ["/bin/sh", "/opt/entrypoint.sh"]
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./docker/coturn/entrypoint.sh:/opt/entrypoint.sh:ro
+
   # Backend - Laravel API (deprecated, historical only).
   # Not started by default. Use:
   # docker compose --profile legacy-laravel up -d backend

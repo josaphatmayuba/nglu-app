@@ -58,6 +58,27 @@ services:
       - nglu_dev_network
     mem_limit: 128m
 
+  # coturn - serveur TURN/STUN pour les appels audio du chat.
+  # Indispensable sur les reseaux mobiles RDC : le NAT symetrique des operateurs
+  # fait echouer une part importante des connexions WebRTC en P2P direct.
+  # network_mode: host est requis (coturn alloue dynamiquement ses ports media
+  # et ne fonctionne pas derriere le NAT Docker) -> pas de `networks:` ici.
+  # Empreinte memoire faible (~20 Mo) : le serveur dev+prod est contraint.
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    container_name: nglu_dev_coturn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_REALM: ${TURN_REALM:-nglu.chat}
+    entrypoint: ["/bin/sh", "/opt/entrypoint.sh"]
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./docker/coturn/entrypoint.sh:/opt/entrypoint.sh:ro
+    mem_limit: 64m
+
   backend2:
     build:
       context: ./backend2
