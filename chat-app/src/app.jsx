@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   MessageSquare, Hash, BookOpen, Ticket, Search, Plus, Settings,
   LogOut, Users, Send, ArrowLeft, ChevronRight, Circle, ExternalLink,
-  TrendingUp, Shield, X, CheckCheck, Mic, Phone, User,
+  TrendingUp, Shield, X, CheckCheck, Mic, Phone, User, Download,
 } from "lucide-react";
 import { useAuthToken, clearToken, LoginScreen, readToken } from "./auth.jsx";
 import { api, API_ROOT } from "./api.js";
@@ -13,6 +13,7 @@ import { CallUI } from "./call/CallUI.jsx";
 import { CallPicker } from "./call/CallPicker.jsx";
 import { useVoiceRecorder } from "./voice/useVoiceRecorder.js";
 import { VoiceMessage } from "./voice/VoiceMessage.jsx";
+import { usePwaInstallPrompt } from "./pwaInstallPrompt.js";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -240,6 +241,7 @@ function MessageThread({ discussionId, currentUserId, socket }) {
 // ── App principale ──────────────────────────────────────────────────────────
 export default function App() {
   const token = useAuthToken();
+  const pwaInstall = usePwaInstallPrompt();
   const [channels, setChannels] = useState([]);
   const [topics, setTopics] = useState([]);
   const [people, setPeople] = useState([]);
@@ -389,6 +391,11 @@ export default function App() {
         <div className="brand">
           <div className="brand-icon"><MessageSquare size={18} color="#fff" /></div>
           <span className="brand-name">Chat SIFA</span>
+          {pwaInstall.canInstall && (
+            <button className="icon-btn install-btn" onClick={pwaInstall.install} title="Installer l'app">
+              <Download size={16} />
+            </button>
+          )}
           <button className="icon-btn" onClick={clearToken} title="Déconnexion"><LogOut size={16} /></button>
         </div>
 

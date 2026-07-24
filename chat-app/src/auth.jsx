@@ -1,7 +1,8 @@
 // Chat SIFA — auth partagée (même cookie refresh httpOnly que le CRM).
 // SCRUM-119 : access-token en mémoire applicative, jamais en localStorage.
 import React, { useEffect, useState } from "react";
-import { MessageSquare, Eye, EyeOff } from "lucide-react";
+import { MessageSquare, Eye, EyeOff, Download } from "lucide-react";
+import { usePwaInstallPrompt } from "./pwaInstallPrompt.js";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -70,6 +71,7 @@ export function useAuthToken() {
 }
 
 export function LoginScreen() {
+  const pwaInstall = usePwaInstallPrompt();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -122,6 +124,13 @@ export function LoginScreen() {
           </div>
           <div style={{ fontFamily:"Space Grotesk,sans-serif", fontWeight:700, fontSize:22, color:"#f1f5f9" }}>Chat SIFA</div>
           <div style={{ fontSize:12, color:"#64748b", textAlign:"center" }}>Messagerie d'entreprise · même session que le CRM</div>
+          {pwaInstall.canInstall && (
+            <button type="button" onClick={pwaInstall.install}
+              style={{ height:34, borderRadius:9, border:"1px solid rgba(255,255,255,0.10)", background:"#0f172a", color:"#f1f5f9", padding:"0 12px", display:"inline-flex", alignItems:"center", gap:7, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              <Download size={14} />
+              Installer l'app
+            </button>
+          )}
         </div>
 
         <label style={{ display:"flex", flexDirection:"column", gap:6 }}>
