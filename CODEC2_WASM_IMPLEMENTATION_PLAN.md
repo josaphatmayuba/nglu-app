@@ -22,7 +22,7 @@ Contraintes acceptees :
 - [x] Wrapper C et adaptateur JavaScript lazy-loades.
 - [x] Smoke test encode/decode valide.
 - [x] Capture AudioWorklet et lecture tamponnee.
-- [ ] Transport binaire full-duplex.
+- [x] Transport binaire full-duplex Socket.IO avec paquets regroupes et relais authentifie.
 - [ ] Bascule automatique depuis WebRTC.
 
 Codec2 est un codec vocal open source en C99, sous licence LGPL 2.1. Le projet
@@ -90,20 +90,27 @@ de couper l'appel.
 
 ## Phase 4 - Transport full-duplex
 
-Chaque direction possede son flux independant. Une trame contient :
+Chaque direction possede son flux independant. Les trames sont regroupees par
+cinq (environ 200 ms) dans un paquet binaire :
 
 ```text
-version | callId | direction | sequence | timestamp | codecMode | payload
+version | codecMode | frameCount | bytesPerFrame | sequence | payload...
 ```
 
 Le transport doit fournir :
 
 - donnees binaires, jamais du JSON audio ;
 - numero de sequence par direction ;
-- accuse de reception leger ;
-- reprise apres reconnexion ;
-- abandon des trames trop anciennes ;
-- protection contre les doublons et les trames hors ordre.
+- validation serveur de la taille, du mode et du debit ;
+- abandon des trames trop anciennes cote reception ;
+- protection contre les paquets invalides et le flood.
+
+Le relais est maintenant implemente sur les evenements Socket.IO
+`call:ultra:ready` et `call:ultra:frame`. Les trames ne sont jamais decodees par
+le serveur et restent limitees aux participants de l'appel.
+
+La reprise apres reconnexion, les accus de reception et l'abandon explicite
+des paquets trop anciens restent a traiter pendant l'integration dans `useCall`.
 
 Premiere option : utiliser les evenements binaires Socket.IO deja presents.
 Si leur overhead est trop eleve, ajouter un endpoint WebSocket binaire dedie.

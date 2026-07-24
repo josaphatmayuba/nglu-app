@@ -20,6 +20,14 @@ const socketCorsOrigins = [
   "http://localhost",
 ];
 
+const ULTRA_PROTOCOL_VERSION = 1;
+const ULTRA_MODE_700C = 8;
+const ULTRA_FRAME_BYTES = 4;
+const ULTRA_PACKET_HEADER_BYTES = 8;
+const ULTRA_MAX_FRAMES_PER_PACKET = 5;
+const ULTRA_MAX_PACKET_BYTES = ULTRA_PACKET_HEADER_BYTES + ULTRA_FRAME_BYTES * ULTRA_MAX_FRAMES_PER_PACKET;
+const ULTRA_MAX_FRAMES_PER_SECOND = 75;
+
 @WebSocketGateway({ namespace: "/chat", cors: { origin: socketCorsOrigins, credentials: true } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
@@ -27,6 +35,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // desktop). Indispensable pour les appels : une Map mono-socket enverrait la
   // sonnerie sur le mauvais appareil apres l'ouverture d'un second onglet.
   private userSockets = new Map<number, Set<string>>();
+  private ultraRate = new Map<string, { startedAt: number; frames: number }>();
 
   constructor(
     private readonly svc: ChatService,
@@ -47,6 +56,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async handleDisconnect(client: Socket) {
+    this.ultraRate.delete(client.id);
     for (const [userId, socketIds] of this.userSockets) {
       if (!socketIds.delete(client.id)) continue;
       if (socketIds.size === 0) this.userSockets.delete(userId);
@@ -265,6 +275,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  /** Annonce la disponibilite du transport Codec2 a l'autre participant. */
+  @SubscribeMessage("call:ultra:ready")
+  async handleUltraReady(
+    @MessageBody() data: { callId: number; mode: number; bytesPerFrame: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = this.authenticatedUserId(client);
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call || call.state !== "active") return;
+    if (Number(data?.mode) !== ULTRA_MODE_700C || Number(data?.bytesPerFrame) !== ULTRA_FRAME_BYTES) return;
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:ultra:ready", {
+      callId: call.id,
+      mode: ULTRA_MODE_700C,
+      bytesPerFrame: ULTRA_FRAME_BYTES,
+    });
+  }
+
+  /** Relaye les paquets Codec2 sans les decoder cote serveur. */
+  @SubscribeMessage("call:ultra:frame")
+  async handleUltraFrame(
+    @MessageBody() data: { callId: number; packet: unknown },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = this.authenticatedUserId(client);
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call || call.state !== "active") return;
+
+    const packet = this.asBinary(data?.packet);
+    if (!packet || !this.isValidUltraPacket(packet) || !this.acceptUltraRate(client.id, packet[2])) return;
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:ultra:frame", { callId: call.id, packet });
+  }
+
   /**
    * Le client rapporte le mode de connexion reellement negocie.
    * Mesure le taux de recours au relais TURN sur le terrain.
@@ -374,6 +420,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         socket.data.activeCallId = undefined;
       }
     }
+  }
+
+  private asBinary(value: unknown): Buffer | undefined {
+    if (Buffer.isBuffer(value)) return value;
+    if (value instanceof Uint8Array) return Buffer.from(value);
+    if (value instanceof ArrayBuffer) return Buffer.from(value);
+    return undefined;
+  }
+
+  private isValidUltraPacket(packet: Buffer) {
+    if (packet.length < ULTRA_PACKET_HEADER_BYTES || packet.length > ULTRA_MAX_PACKET_BYTES) return false;
+    const count = packet[2];
+    const bytesPerFrame = packet[3];
+    return packet[0] === ULTRA_PROTOCOL_VERSION
+      && packet[1] === ULTRA_MODE_700C
+      && count >= 1
+      && count <= ULTRA_MAX_FRAMES_PER_PACKET
+      && bytesPerFrame === ULTRA_FRAME_BYTES
+      && packet.length === ULTRA_PACKET_HEADER_BYTES + count * bytesPerFrame;
+  }
+
+  private acceptUltraRate(socketId: string, frameCount: number) {
+    const now = Date.now();
+    const current = this.ultraRate.get(socketId);
+    const state = !current || now - current.startedAt >= 1000
+      ? { startedAt: now, frames: 0 }
+      : current;
+    if (state.frames + frameCount > ULTRA_MAX_FRAMES_PER_SECOND) return false;
+    state.frames += frameCount;
+    this.ultraRate.set(socketId, state);
+    return true;
   }
 
   private authenticatedUserId(client: Socket) {
