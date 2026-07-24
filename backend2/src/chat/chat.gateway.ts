@@ -139,7 +139,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     const userId = this.authenticatedUserId(client);
-    await this.svc.assertDiscussionAccess(data.discussionId, userId);
+    try {
+      await this.svc.assertDiscussionAccess(data.discussionId, userId);
+    } catch {
+      client.emit("call:failed", { reason: "forbidden", message: "Discussion inaccessible." });
+      return;
+    }
 
     const calleeId = Number(data.calleeId);
     if (!Number.isInteger(calleeId) || calleeId <= 0 || calleeId === userId) {
@@ -147,7 +152,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    if (!(await this.svc.getUserByIdInSameOrg(userId, calleeId))) {
+    try {
+      if (!(await this.svc.getUserByIdInSameOrg(userId, calleeId))) {
+        client.emit("call:failed", { reason: "invalid", message: "Destinataire invalide." });
+        return;
+      }
+    } catch {
       client.emit("call:failed", { reason: "invalid", message: "Destinataire invalide." });
       return;
     }

@@ -36,14 +36,24 @@ const BAD_SAMPLES_TO_DOWNGRADE = 2;
 const PROFILE_CHANGE_COOLDOWN_MS = 20000;
 
 const END_MESSAGES = {
-  hangup: "Appel terminé",
-  rejected: "Appel refusé",
-  missed: "Pas de réponse",
+  hangup: "Appel termine",
+  rejected: "Appel refuse",
+  missed: "Pas de reponse",
   unavailable: "Correspondant hors ligne",
-  busy: "Correspondant déjà en appel",
+  busy: "Correspondant deja en appel",
   failed: "Connexion impossible",
   timeout: "Connexion perdue",
+  forbidden: "Appel non autorise",
+  invalid: "Destinataire invalide",
 };
+
+function callSetupErrorMessage(err) {
+  const name = err?.name || "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") return "Micro bloque par le navigateur";
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "Aucun micro disponible";
+  if (name === "NotReadableError" || name === "TrackStartError") return "Micro deja utilise ou inaccessible";
+  return "Connexion audio impossible";
+}
 
 export function useCall(socket, currentUserId) {
   const [state, setState] = useState(CALL_STATE.IDLE);
@@ -138,13 +148,13 @@ export function useCall(socket, currentUserId) {
   }, [cleanup]);
 
   /** Termine l'appel localement et previent le serveur. */
-  const endCall = useCallback((reason = "hangup") => {
+  const endCall = useCallback((reason = "hangup", message = null) => {
     const id = callIdRef.current;
     if (id && socket?.connected) {
       socket.emit("call:end", { callId: id, reason });
     }
     cleanup();
-    setEndMessage(END_MESSAGES[reason] ?? END_MESSAGES.hangup);
+    setEndMessage(message || END_MESSAGES[reason] || END_MESSAGES.hangup);
     setState(CALL_STATE.ENDED);
     // Laisse le temps de lire le message avant de rendre la main.
     timersRef.current.reset = setTimeout(() => resetToIdle(), 2500);
@@ -424,8 +434,8 @@ export function useCall(socket, currentUserId) {
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
-    } catch {
-      endCall("failed");
+    } catch (err) {
+      endCall("failed", callSetupErrorMessage(err));
     }
   }, [createPeerConnection, socket, endCall]);
 
@@ -556,8 +566,8 @@ export function useCall(socket, currentUserId) {
         offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
         await pc.setLocalDescription(offer);
         socket.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
-      } catch {
-        endCall("failed"); // micro refuse ou indisponible
+      } catch (err) {
+        endCall("failed", callSetupErrorMessage(err));
       }
     };
 
@@ -599,8 +609,8 @@ export function useCall(socket, currentUserId) {
           }
           try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch { /* obsolete */ }
         }
-      } catch {
-        endCall("failed");
+      } catch (err) {
+        endCall("failed", callSetupErrorMessage(err));
       }
     };
 
@@ -683,3 +693,4 @@ export function useCall(socket, currentUserId) {
     isActive: state !== CALL_STATE.IDLE,
   };
 }
+
