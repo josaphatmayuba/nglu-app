@@ -126,10 +126,10 @@ app.use((req, res, next) => {
 // which is the secure default — the backend always sees a canonical
 // hostname and isn't influenced by Host-header attacks.
 // The backend reads X-Forwarded-Host (set by nginx) for public URLs.
-app.use(
-  createProxyMiddleware({
+const backendProxy = createProxyMiddleware({
     target: BACKEND_URL,
     changeOrigin: true,
+    ws: true,
     on: {
       error: (err, req, res) => {
         console.error('[PROXY ERROR]', err.message);
@@ -139,11 +139,15 @@ app.use(
         });
       },
     },
-  })
-);
+});
 
-app.listen(PORT, () => {
+app.use(backendProxy);
+
+const server = app.listen(PORT, () => {
   console.log(`Middleware actif sur le port ${PORT}`);
   console.log(`Proxy vers : ${BACKEND_URL}`);
   console.log(`Routes autorisées : ${whitelist.length}`);
 });
+if (typeof backendProxy.upgrade === 'function') {
+  server.on('upgrade', backendProxy.upgrade);
+}

@@ -25,6 +25,11 @@ module.exports = [
   // ── Server-Sent Events (JWT requis) ───────────
   { method: 'GET',  prefix: '/events/me',                      auth: true  },
 
+  // Socket.IO transport path. Auth is enforced by backend2 ChatGateway from
+  // the Socket.IO handshake payload; the HTTP polling endpoint itself must be
+  // public so the namespace connection can be established.
+  { method: '*',    prefix: '/socket.io',                       auth: false },
+
   // ── Health & config (public) ───────────────────
   { method: 'GET',  prefix: '/health',                        auth: false },
   { method: 'GET',  prefix: '/setting/public',                auth: false },
