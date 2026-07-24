@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
-import { AUDIO_CONSTRAINTS } from "../call/opusTuning.js";
+import { getMicrophoneStream, microphoneErrorMessage } from "../call/microphone.js";
 import { enqueueVoice, listReady, markAttemptFailed, removeVoice } from "./voiceQueue.js";
 
 // Enregistrement et envoi differe des messages vocaux.
@@ -88,10 +88,10 @@ export function useVoiceRecorder(discussionId, { onSent } = {}) {
   const startRecording = useCallback(async () => {
     setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: AUDIO_CONSTRAINTS,
-        video: false,
-      });
+      if (typeof MediaRecorder === "undefined") {
+        throw new Error("MediaRecorder unavailable");
+      }
+      const stream = await getMicrophoneStream();
       streamRef.current = stream;
       chunksRef.current = [];
 
@@ -134,8 +134,10 @@ export function useVoiceRecorder(discussionId, { onSent } = {}) {
         setElapsedSec(sec);
         if (sec >= MAX_DURATION_SEC) stopRecording();
       }, 1000);
-    } catch {
-      setError("Micro indisponible");
+    } catch (err) {
+      setError(err?.message === "MediaRecorder unavailable"
+        ? "Messages vocaux non supportes par ce navigateur"
+        : microphoneErrorMessage(err));
       stopTracks();
       setRecording(false);
     }

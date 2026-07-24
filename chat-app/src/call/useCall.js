@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
-import { AUDIO_CONSTRAINTS, applyOpusProfile, detectInitialProfile, readOpusProfileFromSdp } from "./opusTuning.js";
+import { applyOpusProfile, detectInitialProfile, readOpusProfileFromSdp } from "./opusTuning.js";
+import { getMicrophoneStream, microphoneErrorMessage } from "./microphone.js";
 
 // Machine a etats d'un appel audio 1-a-1.
 //
@@ -48,11 +49,8 @@ const END_MESSAGES = {
 };
 
 function callSetupErrorMessage(err) {
-  const name = err?.name || "";
-  if (name === "NotAllowedError" || name === "PermissionDeniedError") return "Micro bloque par le navigateur";
-  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "Aucun micro disponible";
-  if (name === "NotReadableError" || name === "TrackStartError") return "Micro deja utilise ou inaccessible";
-  return "Connexion audio impossible";
+  const message = microphoneErrorMessage(err);
+  return message === "Micro indisponible" ? "Connexion audio impossible" : message;
 }
 
 export function useCall(socket, currentUserId) {
@@ -358,13 +356,7 @@ export function useCall(socket, currentUserId) {
     if (existing?.active && existing.getAudioTracks().some((track) => track.readyState === "live")) {
       return existing;
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("mediaDevices unavailable");
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: AUDIO_CONSTRAINTS,
-      video: false,
-    });
+    const stream = await getMicrophoneStream();
     localStreamRef.current = stream;
     return stream;
   }, []);
