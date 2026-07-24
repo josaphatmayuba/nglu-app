@@ -25,7 +25,7 @@ Contraintes acceptees :
 - [x] Transport binaire full-duplex Socket.IO avec paquets regroupes et relais authentifie.
 - [x] Branchement manuel dans `useCall` avec activation coordonnee des deux cotes.
 - [x] Declenchement automatique experimental apres deux mesures faibles consecutives.
-- [ ] Retour automatique vers WebRTC apres stabilisation.
+- [x] Retour automatique vers WebRTC apres quatre mesures stables.
 
 Codec2 est un codec vocal open source en C99, sous licence LGPL 2.1. Le projet
 officiel documente notamment le mode 700C a environ 700 bit/s :
@@ -123,11 +123,12 @@ pas la livraison parfaite de chaque echantillon.
 
 ## Phase 5 - Bascule automatique
 
-La bascule automatique est disponible derriere le feature flag
+La bascule automatique et le retour vers WebRTC sont disponibles derriere le feature flag
 `VITE_CODEC2_AUTO_FALLBACK=true` ou le parametre d'URL `?codec2=auto`. Elle
 attend deux mesures faibles consecutives (environ six secondes) avant de
-demarrer Ultra. Le flag doit rester active sur dev jusqu'a validation sous
-throttling reel.
+demarrer Ultra, puis quatre mesures stables avec au moins 16 kbit/s disponibles
+avant de revenir vers WebRTC. Le flag doit rester active sur dev jusqu'a
+validation sous throttling reel.
 
 Ajouter un negociateur de mode dans `useCall` :
 

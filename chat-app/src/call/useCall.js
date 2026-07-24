@@ -29,6 +29,8 @@ const HEARTBEAT_MS = 15000;
 const STATS_INTERVAL_MS = 3000;
 const ICE_RESTART_COOLDOWN_MS = 8000;
 const ULTRA_AUTO_BAD_SAMPLES = 2;
+const ULTRA_AUTO_GOOD_SAMPLES = 4;
+const ULTRA_RETURN_BITRATE = 16000;
 const AUTO_ULTRA_FALLBACK = import.meta.env.VITE_CODEC2_AUTO_FALLBACK === "true"
   || (typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("codec2") === "auto");
@@ -79,7 +81,9 @@ export function useCall(socket, currentUserId) {
   const ultraRef = useRef(null);
   const ultraAttemptRef = useRef(0);
   const ultraStartRef = useRef(null);
+  const ultraStopRef = useRef(null);
   const ultraAutoBadSamplesRef = useRef(0);
+  const ultraAutoGoodSamplesRef = useRef(0);
   const ultraAutoAttemptedRef = useRef(false);
   const callIdRef = useRef(null);
   const isCallerRef = useRef(false);
@@ -125,6 +129,7 @@ export function useCall(socket, currentUserId) {
         sender.replaceTrack(track).catch(() => { /* peerconnection deja fermee */ });
       }
     }
+    ultraAutoGoodSamplesRef.current = 0;
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = remoteStreamRef.current;
       remoteAudioRef.current.play?.().catch(() => { /* autoplay bloque */ });
@@ -145,6 +150,7 @@ export function useCall(socket, currentUserId) {
     clearTimers();
     teardownUltra();
     ultraAutoBadSamplesRef.current = 0;
+    ultraAutoGoodSamplesRef.current = 0;
     ultraAutoAttemptedRef.current = false;
     if (pcRef.current) {
       try {
@@ -353,11 +359,23 @@ export function useCall(socket, currentUserId) {
     qualityRef.current = nextQuality;
     setQuality(nextQuality);
 
-    if (AUTO_ULTRA_FALLBACK && ultraModeRef.current === "off" && !ultraAutoAttemptedRef.current) {
-      ultraAutoBadSamplesRef.current = score === 1 ? ultraAutoBadSamplesRef.current + 1 : 0;
-      if (ultraAutoBadSamplesRef.current >= ULTRA_AUTO_BAD_SAMPLES && ultraStartRef.current) {
-        ultraAutoAttemptedRef.current = true;
-        ultraStartRef.current();
+    if (AUTO_ULTRA_FALLBACK) {
+      if (ultraModeRef.current === "off" && !ultraAutoAttemptedRef.current) {
+        ultraAutoBadSamplesRef.current = score === 1 ? ultraAutoBadSamplesRef.current + 1 : 0;
+        if (ultraAutoBadSamplesRef.current >= ULTRA_AUTO_BAD_SAMPLES && ultraStartRef.current) {
+          ultraAutoAttemptedRef.current = true;
+          ultraStartRef.current();
+        }
+      } else if (ultraModeRef.current === "active") {
+        const recovered = availableBitrate != null
+          && availableBitrate >= ULTRA_RETURN_BITRATE
+          && (rtt == null || rtt < 400);
+        ultraAutoGoodSamplesRef.current = recovered
+          ? ultraAutoGoodSamplesRef.current + 1
+          : 0;
+        if (ultraAutoGoodSamplesRef.current >= ULTRA_AUTO_GOOD_SAMPLES && ultraStopRef.current) {
+          ultraStopRef.current();
+        }
       }
     }
 
@@ -493,6 +511,13 @@ export function useCall(socket, currentUserId) {
       if (ultraStartRef.current === startUltra) ultraStartRef.current = null;
     };
   }, [startUltra]);
+
+  useEffect(() => {
+    ultraStopRef.current = stopUltra;
+    return () => {
+      if (ultraStopRef.current === stopUltra) ultraStopRef.current = null;
+    };
+  }, [stopUltra]);
 
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {
