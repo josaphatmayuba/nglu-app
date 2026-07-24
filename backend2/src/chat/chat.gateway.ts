@@ -36,6 +36,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // sonnerie sur le mauvais appareil apres l'ouverture d'un second onglet.
   private userSockets = new Map<number, Set<string>>();
   private ultraRate = new Map<string, { startedAt: number; frames: number }>();
+  // Les paquets audio Ultra arrivent plusieurs fois par seconde. Une fois
+  // l'appel valide, garder ses participants en memoire evite une requete SQL
+  // pour chaque paquet.
+  private ultraCalls = new Map<number, {
+    callerId: number;
+    calleeId: number;
+    expiresAt: number;
+  }>();
 
   constructor(
     private readonly svc: ChatService,
@@ -241,6 +249,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     await this.calls.markActive(call.id);
     client.data.activeCallId = call.id;
+    this.ultraCalls.set(call.id, {
+      callerId: call.caller_id,
+      calleeId: call.callee_id,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
 
     // L'appelant cree l'offre SDP une fois l'acceptation connue : cela evite
     // de negocier une connexion pour un appel qui sera refuse.
@@ -312,14 +325,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const userId = await this.authenticatedUserId(client);
     if (!userId) return;
-    const call = await this.safeParticipant(client, data?.callId, userId);
-    if (!call || call.state !== "active") return;
+    const callId = Number(data?.callId);
+    const call = this.ultraCalls.get(callId);
+    if (!call || call.expiresAt <= Date.now()) {
+      this.ultraCalls.delete(callId);
+      return;
+    }
+    if (Number(client.data.activeCallId) !== callId
+      || (call.callerId !== userId && call.calleeId !== userId)) return;
 
     const packet = this.asBinary(data?.packet);
     if (!packet || !this.isValidUltraPacket(packet) || !this.acceptUltraRate(client.id, packet[2])) return;
 
-    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
-    this.emitToUser(peerId, "call:ultra:frame", { callId: call.id, packet });
+    const peerId = call.callerId === userId ? call.calleeId : call.callerId;
+    this.emitToUser(peerId, "call:ultra:frame", { callId, packet });
   }
 
   /** Demande aux deux clients de quitter le mode Ultra ensemble. */
@@ -405,6 +424,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!call || call.state === "ended") return;
 
     await this.calls.endCall(callId, reason);
+    this.ultraCalls.delete(callId);
 
     for (const participantId of [call.caller_id, call.callee_id]) {
       this.emitToUser(participantId, "call:ended", {
