@@ -26,6 +26,9 @@ Contraintes acceptees :
 - [x] Branchement manuel dans `useCall` avec activation coordonnee des deux cotes.
 - [x] Declenchement automatique experimental apres deux mesures faibles consecutives.
 - [x] Retour automatique vers WebRTC apres quatre mesures stables.
+- [x] Abandon des trames Ultra trop vieilles/reordonnees cote reception (numero de sequence exploite dans le transport).
+- [x] Reprise apres reconnexion Socket.IO pendant un appel actif (delai de grace serveur + `call:rejoin`).
+- [x] Test de charge automatise du transport (perte de paquets, gigue/reordonnancement, coupure prolongee) : `scripts/codec2-wasm/load-test.mjs`.
 
 Codec2 est un codec vocal open source en C99, sous licence LGPL 2.1. Le projet
 officiel documente notamment le mode 700C a environ 700 bit/s :
@@ -111,8 +114,13 @@ Le relais est maintenant implemente sur les evenements Socket.IO
 `call:ultra:ready` et `call:ultra:frame`. Les trames ne sont jamais decodees par
 le serveur et restent limitees aux participants de l'appel.
 
-La reprise apres reconnexion, les accus de reception et l'abandon explicite
-des paquets trop anciens restent a traiter pendant l'integration dans `useCall`.
+L'abandon des paquets trop anciens est fait cote transport (numero de sequence,
+`chat-app/src/ultra/transport.js`). La reprise apres reconnexion est geree via
+un delai de grace serveur (`DISCONNECT_GRACE_MS`, `chat.gateway.ts`) et
+l'evenement `call:rejoin` emis par le client des que le socket se reconnecte
+(`useCall.js`). Les accuses de reception explicites restent hors scope : le
+choix assume est de privilegier la continuite (drop silencieux) plutot qu'un
+protocole de retransmission, coherent avec l'objectif temps reel du mode.
 
 Premiere option : utiliser les evenements binaires Socket.IO deja presents.
 Si leur overhead est trop eleve, ajouter un endpoint WebSocket binaire dedie.
@@ -157,6 +165,14 @@ Ajouter un bouton manuel `Mode economie extreme` pour faciliter les tests et
 permettre de forcer le mode Ultra sans attendre la detection reseau.
 
 ## Phase 7 - Tests et criteres d'acceptation
+
+Automatise dans `scripts/codec2-wasm/load-test.mjs` (couche transport, sans
+navigateur) : perte de paquets 5/10/20 %, gigue/reordonnancement avec rejet
+des trames en retard, coupure prolongee suivie d'une reprise sans blocage.
+Lancer avec `node scripts/codec2-wasm/load-test.mjs`.
+
+Reste a faire manuellement en conditions reelles (necessite deux onglets/
+appareils et throttling reseau, hors portee d'un script Node) :
 
 Tester les deux directions simultanement avec :
 

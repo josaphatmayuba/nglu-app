@@ -28,6 +28,10 @@ const RINGING_TIMEOUT_MS = 45000;
 const HEARTBEAT_MS = 15000;
 const STATS_INTERVAL_MS = 3000;
 const ICE_RESTART_COOLDOWN_MS = 8000;
+// Doit rester sous DISCONNECT_GRACE_MS cote gateway (12s) : le client doit
+// avoir le temps d'emettre call:rejoin apres une reconnexion avant que le
+// serveur ne raccroche de son cote.
+const DISCONNECT_GRACE_MS = 10000;
 const ULTRA_AUTO_BAD_SAMPLES = 2;
 const ULTRA_AUTO_GOOD_SAMPLES = 4;
 const ULTRA_RETURN_BITRATE = 16000;
@@ -73,6 +77,9 @@ export function useCall(socket, currentUserId) {
   const [endMessage, setEndMessage] = useState(null);
   const [durationSec, setDurationSec] = useState(0);
   const [ultraMode, setUltraMode] = useState("off"); // off | starting | active | error
+  // Vrai pendant le delai de grace apres une deconnexion socket (cf onDisconnect) :
+  // l'appel n'est pas encore raccroche, mais le signaling est momentanement coupe.
+  const [reconnecting, setReconnecting] = useState(false);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -207,6 +214,7 @@ export function useCall(socket, currentUserId) {
     setQuality(null);
     setMuted(false);
     setDurationSec(0);
+    setReconnecting(false);
     setState(CALL_STATE.IDLE);
   }, [cleanup]);
 
@@ -861,13 +869,28 @@ export function useCall(socket, currentUserId) {
     };
 
     // Le client Socket.IO retente indefiniment en arriere-plan
-    // (reconnectionAttempts: Infinity, cf app.jsx) : sans ce handler, perdre
-    // la connexion pendant un appel ne le termine jamais localement, et
-    // l'autre participant attend jusqu'a 45s (timeout ICE/heartbeat) avant
-    // d'etre prevenu — ou pas du tout si le socket finit par se reconnecter
-    // sans que WebRTC n'ait jamais bascule en "failed".
+    // (reconnectionAttempts: Infinity, cf app.jsx). Le serveur laisse aussi un
+    // delai de grace avant de raccrocher (cf DISCONNECT_GRACE_MS cote
+    // gateway) : on s'aligne dessus plutot que de raccrocher immediatement,
+    // pour survivre a une micro-coupure reseau pendant laquelle WebRTC/Ultra
+    // continuent souvent de fonctionner en P2P sans le signaling.
     const onDisconnect = () => {
-      if (callIdRef.current) endCall("timeout");
+      if (!callIdRef.current) return;
+      setReconnecting(true);
+      clearTimeout(timersRef.current.disconnectGrace);
+      timersRef.current.disconnectGrace = setTimeout(() => {
+        if (callIdRef.current) endCall("timeout");
+      }, DISCONNECT_GRACE_MS);
+    };
+
+    // Reconnexion Socket.IO : si un appel etait en cours, on le rattache au
+    // nouveau socket cote serveur (call:rejoin) avant que le delai de grace
+    // n'expire, plutot que de laisser le serveur raccrocher.
+    const onConnect = () => {
+      setReconnecting(false);
+      clearTimeout(timersRef.current.disconnectGrace);
+      delete timersRef.current.disconnectGrace;
+      if (callIdRef.current) socket.emit("call:rejoin", { callId: callIdRef.current });
     };
 
     socket.on("call:incoming", onIncoming);
@@ -880,6 +903,7 @@ export function useCall(socket, currentUserId) {
     socket.on("call:ended", onEnded);
     socket.on("call:failed", onFailed);
     socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
 
     return () => {
       socket.off("call:incoming", onIncoming);
@@ -892,6 +916,9 @@ export function useCall(socket, currentUserId) {
       socket.off("call:ended", onEnded);
       socket.off("call:failed", onFailed);
       socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
+      clearTimeout(timersRef.current.disconnectGrace);
+      delete timersRef.current.disconnectGrace;
     };
   }, [socket, state, startUltra, engageUltra, teardownUltra, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle]);
 
@@ -956,6 +983,7 @@ export function useCall(socket, currentUserId) {
     endMessage,
     durationSec,
     ultraMode,
+    reconnecting,
     remoteAudioRef,
     startCall,
     prepareMicrophone,

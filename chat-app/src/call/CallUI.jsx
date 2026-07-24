@@ -35,7 +35,7 @@ function QualityBadge({ quality }) {
 
 export function CallUI({ call }) {
   const {
-    state, peer, muted, quality, profile, ultraMode, endMessage, durationSec,
+    state, peer, muted, quality, profile, ultraMode, reconnecting, endMessage, durationSec,
     remoteAudioRef, acceptCall, rejectCall, endCall, toggleMute, startUltra, stopUltra,
   } = call;
 
@@ -75,7 +75,9 @@ export function CallUI({ call }) {
               {PROFILE_LABELS[profile] ?? profile}
             </span>
           )}
-          {quality?.score === 1 && (
+          {reconnecting ? (
+            <span className="call-bar-warn">Reconnexion en cours…</span>
+          ) : quality?.score === 1 && (
             <span className="call-bar-warn">Connexion faible — la voix peut se couper</span>
           )}
           <div className="call-bar-actions">

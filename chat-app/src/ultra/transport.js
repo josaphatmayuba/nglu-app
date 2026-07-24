@@ -83,6 +83,10 @@ export function createCodec2Transport(
   let sequence = 0;
   let pending = [];
   let flushTimer = null;
+  // Derniere sequence jouee : sert a rejeter les trames trop vieilles et a
+  // ne jamais faire reculer le decodeur Codec2.
+  let lastPlayedSequence = -1;
+  let sequenceInitialized = false;
 
   const flush = () => {
     flushTimer = null;
@@ -100,9 +104,28 @@ export function createCodec2Transport(
     flushTimer = setTimeout(flush, FLUSH_DELAY_MS);
   };
 
+  // Distance signee entre deux sequences 16 bits, en tenant compte du
+  // wraparound (ex: 65534 -> 2 doit compter comme +4, pas -65532).
+  const sequenceDelta = (a, b) => (((a - b) & 0xffff) << 16 >> 16);
+
+  const acceptFrame = (frame, meta) => {
+    if (!sequenceInitialized) {
+      sequenceInitialized = true;
+      lastPlayedSequence = meta.sequence;
+      onFrame?.(frame, meta);
+      return;
+    }
+    // delta <= 0 : trame deja jouee ou reordonnee en retard -> abandonnee,
+    // qu'elle soit legerement en retard ou tres vieille (wraparound compris).
+    const delta = sequenceDelta(meta.sequence, lastPlayedSequence);
+    if (delta <= 0) return;
+    lastPlayedSequence = meta.sequence;
+    onFrame?.(frame, meta);
+  };
+
   const receive = (data) => {
     if (closed || Number(data?.callId) !== Number(callId)) return;
-    readPacket(data.packet, mode, bytesPerFrame, onFrame || (() => {}));
+    readPacket(data.packet, mode, bytesPerFrame, acceptFrame);
   };
 
   socket?.on("call:ultra:frame", receive);

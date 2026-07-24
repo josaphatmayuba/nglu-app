@@ -44,6 +44,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     calleeId: number;
     expiresAt: number;
   }>();
+  // Deconnexion pendant un appel actif : delai de grace avant de raccrocher,
+  // pour laisser le temps a une reconnexion Socket.IO (reconnectionAttempts:
+  // Infinity cote client) de rejoindre l'appel via call:rejoin. Sans ce delai,
+  // toute micro-coupure reseau raccrochait l'appel alors que le socket se
+  // reconnectait tout seul quelques secondes plus tard.
+  private disconnectGrace = new Map<number, NodeJS.Timeout>();
+  private static readonly DISCONNECT_GRACE_MS = 12000;
 
   constructor(
     private readonly svc: ChatService,
@@ -72,11 +79,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     // Deconnexion pendant un appel (fermeture d'onglet, coupure reseau) :
-    // on previent l'autre participant au lieu de le laisser sonner dans le vide.
+    // delai de grace avant de raccrocher, pour laisser une reconnexion
+    // Socket.IO rejoindre l'appel (cf call:rejoin). Si personne ne rejoint a
+    // temps, on previent l'autre participant au lieu de le laisser bloque.
     const callId = Number(client.data.activeCallId);
-    if (Number.isInteger(callId) && callId > 0) {
-      await this.terminateCall(callId, Number(client.data.userId), "timeout");
+    const userId = Number(client.data.userId);
+    if (Number.isInteger(callId) && callId > 0 && Number.isInteger(userId) && userId > 0) {
+      this.scheduleDisconnectGrace(callId, userId);
     }
+  }
+
+  /** Programme la cloture differee d'un appel apres deconnexion. */
+  private scheduleDisconnectGrace(callId: number, userId: number) {
+    const existing = this.disconnectGrace.get(callId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.disconnectGrace.delete(callId);
+      this.terminateCall(callId, userId, "timeout").catch(() => { /* appel deja termine */ });
+    }, ChatGateway.DISCONNECT_GRACE_MS);
+    this.disconnectGrace.set(callId, timer);
   }
 
   @SubscribeMessage("register")
@@ -412,6 +433,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await this.calls.touch(call.id);
   }
 
+  /**
+   * Rattache un appel actif au nouveau socket apres une reconnexion.
+   * Annule le delai de grace declenche par handleDisconnect : sans cet appel,
+   * l'appel serait raccroche ~12 s apres la coupure meme si le client revient
+   * a temps (cf scheduleDisconnectGrace).
+   */
+  @SubscribeMessage("call:rejoin")
+  async handleCallRejoin(
+    @MessageBody() data: { callId: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call || call.state !== "active") return;
+
+    const pending = this.disconnectGrace.get(call.id);
+    if (pending) {
+      clearTimeout(pending);
+      this.disconnectGrace.delete(call.id);
+    }
+    client.data.activeCallId = call.id;
+    await this.calls.touch(call.id);
+    client.emit("call:rejoined", { callId: call.id });
+  }
+
   /** Raccrochage explicite, ou echec de connexion signale par le client. */
   @SubscribeMessage("call:end")
   async handleCallEnd(
@@ -442,6 +489,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private async terminateCall(callId: number, actorUserId: number, reason: CallEndReason) {
     const call = await this.calls.getCall(callId);
     if (!call || call.state === "ended") return;
+
+    const pendingGrace = this.disconnectGrace.get(callId);
+    if (pendingGrace) {
+      clearTimeout(pendingGrace);
+      this.disconnectGrace.delete(callId);
+    }
 
     await this.calls.endCall(callId, reason);
     this.ultraCalls.delete(callId);
