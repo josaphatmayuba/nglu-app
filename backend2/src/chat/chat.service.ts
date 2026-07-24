@@ -8,6 +8,24 @@ import type { Database } from "../database/types";
 // Anti-XSS stocke : les messages sont du texte simple. On retire toute balise HTML
 // avant persistance (defense en profondeur, en plus de l'echappement cote front).
 const MAX_MESSAGE_LENGTH = 5000;
+const MYSQL_LOCK_RETRY_DELAYS_MS = [25, 75, 150];
+
+function isTransientMysqlLockError(error: unknown): boolean {
+  const cause = (error as { cause?: unknown })?.cause ?? error;
+  const mysqlError = cause as { code?: string; errno?: number; sqlState?: string };
+  return (
+    mysqlError.code === "ER_LOCK_DEADLOCK" ||
+    mysqlError.code === "ER_LOCK_WAIT_TIMEOUT" ||
+    mysqlError.errno === 1213 ||
+    mysqlError.errno === 1205 ||
+    mysqlError.sqlState === "40001"
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function sanitizeMessageContent(content: string): string {
   return String(content ?? "")
     .replace(/<[^>]*>/g, "") // supprime toute balise <...>
@@ -31,6 +49,21 @@ export class ChatService {
     const res: any = await this.db.execute(query);
     const meta = Array.isArray(res) ? res[0] : res;
     return Number(meta?.insertId ?? 0);
+  }
+
+  private async executeWithLockRetry(queryFactory: () => SQL): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.db.execute(queryFactory());
+        return;
+      } catch (error) {
+        const delay = MYSQL_LOCK_RETRY_DELAYS_MS[attempt];
+        if (!isTransientMysqlLockError(error) || delay === undefined) {
+          throw error;
+        }
+        await sleep(delay);
+      }
+    }
   }
 
   // ── Channels ────────────────────────────────────────────────────────────────
@@ -144,7 +177,7 @@ export class ChatService {
   }
 
   private async addDirectParticipants(discussionId: number, a: number, b: number) {
-    await this.db.execute(sql`
+    await this.executeWithLockRetry(() => sql`
       INSERT IGNORE INTO journal_discussion_participants (discussion_id, user_id)
       VALUES (${discussionId}, ${a}), (${discussionId}, ${b})
     `);
