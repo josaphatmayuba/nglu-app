@@ -361,6 +361,10 @@ export function useCall(socket, currentUserId) {
     return stream;
   }, []);
 
+  // Expose la demande micro pour les boutons qui doivent faire un appel
+  // reseau avant de connaitre l'identifiant de discussion.
+  const prepareMicrophone = useCallback(() => ensureLocalStream(), [ensureLocalStream]);
+
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {
     const iceServers = await getIceServers();
@@ -708,6 +712,7 @@ export function useCall(socket, currentUserId) {
     durationSec,
     remoteAudioRef,
     startCall,
+    prepareMicrophone,
     acceptCall,
     rejectCall,
     endCall,

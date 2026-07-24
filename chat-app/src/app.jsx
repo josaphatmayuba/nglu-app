@@ -334,8 +334,12 @@ export default function App() {
   // est toujours rattaché à une discussion côté backend.
   const callPerson = async (e, p) => {
     e.stopPropagation();
+    // La demande de permission doit partir directement du clic. L'ouverture
+    // de la discussion fait un appel reseau et ferait perdre le geste utilisateur.
+    const microphoneReady = call.prepareMicrophone();
     const disc = await openPerson(p);
     if (!disc) return;
+    try { await microphoneReady; } catch { /* startCall affiche l'erreur */ }
     const name = `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim() || `Utilisateur ${p.user_id}`;
     call.startCall(disc.id, p.user_id, name);
   };
