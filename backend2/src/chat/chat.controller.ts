@@ -114,7 +114,7 @@ export class ChatController {
 
   // ── Utilisateurs (@mention) ─────────────────────────────────────────────────
   @Get("users")
-  getUsers() { return this.svc.getUsers(); }
+  getUsers(@CurrentUserId() userId: number) { return this.svc.getUsers(userId); }
 
   // ── Appels audio ────────────────────────────────────────────────────────────
   @Get("ice-servers")

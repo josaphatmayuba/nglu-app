@@ -147,6 +147,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    if (!(await this.svc.getUserByIdInSameOrg(userId, calleeId))) {
+      client.emit("call:failed", { reason: "invalid", message: "Destinataire invalide." });
+      return;
+    }
+
     // L'appele doit avoir acces a la discussion : empeche de faire sonner
     // n'importe quel utilisateur en forgeant un calleeId.
     try {
@@ -182,7 +187,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const callId = await this.calls.createCall(data.discussionId, userId, calleeId);
     client.data.activeCallId = callId;
 
-    const caller = await this.svc.getUserById(userId);
+    const caller = await this.svc.getUserByIdInSameOrg(userId, userId);
     const callerName = caller ? `${caller.firstName ?? ""} ${caller.lastName ?? ""}`.trim() : "Appel";
 
     this.emitToUser(calleeId, "call:incoming", {

@@ -117,7 +117,7 @@ export class ChatService {
     if (otherUserId === userId) {
       throw new ForbiddenException("Impossible d'ouvrir une discussion avec soi-même.");
     }
-    const other = await this.getUserById(otherUserId);
+    const other = await this.getUserByIdInSameOrg(userId, otherUserId);
     if (!other) throw new ForbiddenException("Utilisateur introuvable.");
 
     const key = this.directKey(userId, otherUserId);
@@ -167,10 +167,11 @@ export class ChatService {
              (SELECT m2.created_at FROM journal_messages m2 WHERE m2.discussion_id = d.id AND m2.status = 1
               ORDER BY m2.created_at DESC LIMIT 1) AS last_message_at
       FROM users u
+      JOIN users me ON me.id = ${userId} AND me.status = 'true'
       LEFT JOIN journal_discussions d
         ON d.discussion_type = 'direct' AND d.status = 1
        AND d.entity_key = CONCAT(LEAST(u.id, ${userId}), '-', GREATEST(u.id, ${userId}))
-      WHERE u.status = 'true' AND u.id <> ${userId}
+      WHERE u.status = 'true' AND u.organization_id = me.organization_id AND u.id <> ${userId}
       ORDER BY last_message_at IS NULL, last_message_at DESC, u.firstName
       LIMIT 200
     `);
@@ -242,7 +243,11 @@ export class ChatService {
     // Ajouter mentions comme participants
     for (const uid of mentions) {
       await this.db.execute(sql`
-        INSERT IGNORE INTO journal_discussion_participants (discussion_id, user_id) VALUES (${discussionId}, ${uid})
+        INSERT IGNORE INTO journal_discussion_participants (discussion_id, user_id)
+        SELECT ${discussionId}, u.id
+        FROM users u
+        JOIN users me ON me.id = ${userId} AND me.status = 'true'
+        WHERE u.id = ${uid} AND u.status = 'true' AND u.organization_id = me.organization_id
       `);
     }
 
@@ -254,9 +259,14 @@ export class ChatService {
   }
 
   // ── Utilisateurs disponibles (pour @mention) ────────────────────────────────
-  async getUsers() {
+  async getUsers(userId: number) {
     return this.rows(sql`
-      SELECT id, firstName, lastName, email FROM users WHERE status = 'true' ORDER BY firstName LIMIT 200
+      SELECT u.id, u.firstName, u.lastName, u.email
+      FROM users u
+      JOIN users me ON me.id = ${userId} AND me.status = 'true'
+      WHERE u.status = 'true' AND u.organization_id = me.organization_id
+      ORDER BY u.firstName
+      LIMIT 200
     `);
   }
 
@@ -307,9 +317,13 @@ export class ChatService {
   }
 
   /** Identite d'un utilisateur — utilise pour afficher le nom de l'appelant. */
-  async getUserById(userId: number) {
+  async getUserByIdInSameOrg(userId: number, otherUserId: number) {
     return this.row<{ id: number; firstName: string | null; lastName: string | null }>(sql`
-      SELECT id, firstName, lastName FROM users WHERE id = ${userId} AND status = 'true' LIMIT 1
+      SELECT u.id, u.firstName, u.lastName
+      FROM users u
+      JOIN users me ON me.id = ${userId} AND me.status = 'true'
+      WHERE u.id = ${otherUserId} AND u.status = 'true' AND u.organization_id = me.organization_id
+      LIMIT 1
     `);
   }
 
@@ -330,6 +344,7 @@ export class ChatService {
     const row = await this.row(sql`
       SELECT d.id
       FROM journal_discussions d
+      JOIN users me ON me.id = ${userId} AND me.status = 'true'
       LEFT JOIN chat_channels c ON c.id = d.channel_id
       LEFT JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = ${userId}
       LEFT JOIN journal_discussion_participants p ON p.discussion_id = d.id AND p.user_id = ${userId}
@@ -340,6 +355,15 @@ export class ChatService {
           OR p.user_id IS NOT NULL
           OR c.is_default = 1
           OR cm.user_id IS NOT NULL
+        )
+        AND (
+          d.discussion_type <> 'direct'
+          OR NOT EXISTS (
+            SELECT 1
+            FROM journal_discussion_participants dp
+            JOIN users du ON du.id = dp.user_id
+            WHERE dp.discussion_id = d.id AND du.organization_id <> me.organization_id
+          )
         )
       LIMIT 1
     `);
