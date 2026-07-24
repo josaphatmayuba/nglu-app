@@ -429,11 +429,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const socketIds = this.userSockets.get(userId);
     if (!socketIds) return;
     for (const socketId of socketIds) {
-      const socket = this.server.sockets.sockets.get(socketId);
+      const socket = this.getSocket(socketId);
       if (socket && Number(socket.data.activeCallId) === callId) {
         socket.data.activeCallId = undefined;
       }
     }
+  }
+
+  private getSocket(socketId: string): Socket | undefined {
+    const namespaceSockets = this.server.sockets;
+    if (namespaceSockets instanceof Map) return namespaceSockets.get(socketId);
+    return namespaceSockets?.sockets?.get(socketId);
   }
 
   private asBinary(value: unknown): Buffer | undefined {
