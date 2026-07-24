@@ -21,7 +21,7 @@ Contraintes acceptees :
 - [x] Codec2 700C compile en WebAssembly.
 - [x] Wrapper C et adaptateur JavaScript lazy-loades.
 - [x] Smoke test encode/decode valide.
-- [ ] Capture AudioWorklet et lecture tamponnee.
+- [x] Capture AudioWorklet et lecture tamponnee.
 - [ ] Transport binaire full-duplex.
 - [ ] Bascule automatique depuis WebRTC.
 
