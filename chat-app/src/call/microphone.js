@@ -21,16 +21,16 @@ export async function getMicrophoneStream() {
     throw new Error("mediaDevices unavailable");
   }
 
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: AUDIO_CONSTRAINTS,
-      video: false,
-    });
-  } catch (err) {
-    const name = err?.name || "";
-    if (name === "OverconstrainedError" || name === "ConstraintNotSatisfiedError") {
-      return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    }
-    throw err;
+  // Demande d'abord le micro avec les contraintes minimales. Certains
+  // navigateurs accordent la permission mais refusent une contrainte audio
+  // avancee au moment de getUserMedia(), ce qui masque la vraie demande.
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  const track = stream.getAudioTracks()[0];
+
+  // Les optimisations sont facultatives : le micro reste utilisable si le
+  // navigateur ne sait pas les appliquer.
+  if (track?.applyConstraints) {
+    try { await track.applyConstraints(AUDIO_CONSTRAINTS); } catch { /* garder le flux standard */ }
   }
+  return stream;
 }
