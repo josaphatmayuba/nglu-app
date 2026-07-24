@@ -868,6 +868,29 @@ export function useCall(socket, currentUserId) {
     };
   }, [state, socket, collectStats]);
 
+  // Les navigateurs mobiles suspendent souvent AudioWorklet et Socket.IO quand
+  // l'ecran est verrouille. Revenir a WebRTC avant la suspension permet au
+  // moteur audio natif de continuer quand le navigateur le supporte.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (ultraModeRef.current === "active" || ultraModeRef.current === "starting") {
+          ultraAutoAttemptedRef.current = true;
+          teardownUltra({ notify: true });
+        }
+        return;
+      }
+
+      if (remoteAudioRef.current && remoteStreamRef.current) {
+        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+        remoteAudioRef.current.play?.().catch(() => { /* autoplay deja bloque */ });
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [teardownUltra]);
+
   // Filet de securite : libere le micro si le composant disparait.
   useEffect(() => cleanup, [cleanup]);
 
