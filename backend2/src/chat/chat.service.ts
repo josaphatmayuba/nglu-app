@@ -79,7 +79,7 @@ export class ChatService {
     return this.rows(sql`
       SELECT m.user_id, m.role, m.joined_at, u.firstName, u.lastName, u.email
       FROM chat_channel_members m
-      LEFT JOIN user u ON u.id = m.user_id
+      LEFT JOIN users u ON u.id = m.user_id
       WHERE m.channel_id = ${channelId}
     `);
   }
@@ -166,11 +166,11 @@ export class ChatService {
               ORDER BY m2.created_at DESC LIMIT 1) AS last_message,
              (SELECT m2.created_at FROM journal_messages m2 WHERE m2.discussion_id = d.id AND m2.status = 1
               ORDER BY m2.created_at DESC LIMIT 1) AS last_message_at
-      FROM user u
+      FROM users u
       LEFT JOIN journal_discussions d
         ON d.discussion_type = 'direct' AND d.status = 1
        AND d.entity_key = CONCAT(LEAST(u.id, ${userId}), '-', GREATEST(u.id, ${userId}))
-      WHERE u.status = 1 AND u.id <> ${userId}
+      WHERE u.status = 'true' AND u.id <> ${userId}
       ORDER BY last_message_at IS NULL, last_message_at DESC, u.firstName
       LIMIT 200
     `);
@@ -211,7 +211,7 @@ export class ChatService {
              u.firstName, u.lastName,
              EXISTS(SELECT 1 FROM journal_message_reads r WHERE r.message_id = m.id AND r.user_id = ${userId}) AS is_read
       FROM journal_messages m
-      LEFT JOIN user u ON u.id = m.sender_id
+      LEFT JOIN users u ON u.id = m.sender_id
       WHERE m.discussion_id = ${discussionId} AND m.status = 1 ${cursor}
       ORDER BY m.created_at DESC LIMIT ${limit}
     `);
@@ -249,14 +249,14 @@ export class ChatService {
     return this.row(sql`
       SELECT m.id, m.discussion_id, m.sender_id, m.content, m.mentions,
              m.created_at, u.firstName, u.lastName
-      FROM journal_messages m LEFT JOIN user u ON u.id = m.sender_id WHERE m.id = ${messageId}
+      FROM journal_messages m LEFT JOIN users u ON u.id = m.sender_id WHERE m.id = ${messageId}
     `);
   }
 
   // ── Utilisateurs disponibles (pour @mention) ────────────────────────────────
   async getUsers() {
     return this.rows(sql`
-      SELECT id, firstName, lastName, email FROM user WHERE status = 1 ORDER BY firstName LIMIT 200
+      SELECT id, firstName, lastName, email FROM users WHERE status = 'true' ORDER BY firstName LIMIT 200
     `);
   }
 
@@ -288,7 +288,7 @@ export class ChatService {
              m.attachment_name, m.attachment_type, m.attachment_duration_sec, m.created_at,
              u.firstName, u.lastName
       FROM journal_messages m
-      LEFT JOIN user u ON u.id = m.sender_id
+      LEFT JOIN users u ON u.id = m.sender_id
       WHERE m.id = ${messageId}
     `);
   }
@@ -309,7 +309,7 @@ export class ChatService {
   /** Identite d'un utilisateur — utilise pour afficher le nom de l'appelant. */
   async getUserById(userId: number) {
     return this.row<{ id: number; firstName: string | null; lastName: string | null }>(sql`
-      SELECT id, firstName, lastName FROM user WHERE id = ${userId} AND status = 1 LIMIT 1
+      SELECT id, firstName, lastName FROM users WHERE id = ${userId} AND status = 'true' LIMIT 1
     `);
   }
 

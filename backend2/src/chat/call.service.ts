@@ -162,8 +162,8 @@ export class CallService {
              caller.firstName AS caller_first_name, caller.lastName AS caller_last_name,
              callee.firstName AS callee_first_name, callee.lastName AS callee_last_name
       FROM chat_calls c
-      LEFT JOIN user caller ON caller.id = c.caller_id
-      LEFT JOIN user callee ON callee.id = c.callee_id
+      LEFT JOIN users caller ON caller.id = c.caller_id
+      LEFT JOIN users callee ON callee.id = c.callee_id
       WHERE c.discussion_id = ${discussionId} AND c.status = 1
       ORDER BY c.id DESC
       LIMIT ${limit}
