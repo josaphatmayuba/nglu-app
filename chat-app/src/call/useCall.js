@@ -32,6 +32,7 @@ const ULTRA_AUTO_BAD_SAMPLES = 2;
 const ULTRA_AUTO_GOOD_SAMPLES = 4;
 const ULTRA_RETURN_BITRATE = 16000;
 const AUTO_ULTRA_FALLBACK = import.meta.env.VITE_CODEC2_AUTO_FALLBACK === "true"
+  || import.meta.env.MODE === "development"
   || (typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("codec2") === "auto");
 
