@@ -49,18 +49,20 @@ export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconne
     @MessageBody() data: { discussionId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     await this.svc.markAllRead(data.discussionId, userId);
     client.join(`discussion:${data.discussionId}`);
     client.emit("joined", { discussionId: data.discussionId });
   }
 
   @SubscribeMessage("leaveDiscussion")
-  handleLeave(
+  async handleLeave(
     @MessageBody() data: { discussionId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     client.leave(`discussion:${data.discussionId}`);
   }
 
@@ -75,7 +77,8 @@ export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconne
     },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const msg = await this.svc.sendMessage(
       data.discussionId,
       userId,
@@ -104,23 +107,32 @@ export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconne
   }
 
   @SubscribeMessage("typing")
-  handleTyping(
+  async handleTyping(
     @MessageBody() data: { discussionId: number; firstName: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     client.to(`discussion:${data.discussionId}`).emit("userTyping", {
       userId,
       firstName: data.firstName,
     });
   }
 
-  private authenticatedUserId(client: Socket) {
+  private async authenticatedUserId(client: Socket) {
     const userId = Number(client.data.userId);
     if (!Number.isInteger(userId) || userId <= 0) {
-      client.emit("unauthorized", { message: "Authentification requise." });
-      client.disconnect(true);
-      throw new Error("Unauthenticated socket");
+      try {
+        const auth = await this.wsAuth.authenticate(client);
+        client.data.userId = auth.userId;
+        client.data.organizationId = auth.organizationId;
+        client.data.roleId = auth.roleId;
+        return auth.userId;
+      } catch {
+        client.emit("unauthorized", { message: "Authentification requise." });
+        client.disconnect(true);
+        return undefined;
+      }
     }
     return userId;
   }

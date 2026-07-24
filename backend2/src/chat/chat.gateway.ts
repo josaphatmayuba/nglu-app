@@ -73,7 +73,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage("register")
   async handleRegister(@ConnectedSocket() client: Socket) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const sockets = this.userSockets.get(userId) ?? new Set<string>();
     sockets.add(client.id);
     this.userSockets.set(userId, sockets);
@@ -88,15 +89,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage("joinRoom")
   async handleJoin(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     await this.svc.assertDiscussionAccess(data.discussionId, userId);
     client.join(`disc:${data.discussionId}`);
     client.emit("joined", { discussionId: data.discussionId });
   }
 
   @SubscribeMessage("leaveRoom")
-  handleLeave(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
-    this.authenticatedUserId(client);
+  async handleLeave(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     client.leave(`disc:${data.discussionId}`);
   }
 
@@ -105,7 +108,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { discussionId: number; content: string; mentions?: number[] },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const msg = await this.svc.sendMessage(data.discussionId, userId, data.content, data.mentions ?? []);
 
     this.server.to(`disc:${data.discussionId}`).emit("newMessage", { ...msg, discussionId: data.discussionId });
@@ -123,11 +127,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage("typing")
-  handleTyping(
+  async handleTyping(
     @MessageBody() data: { discussionId: number; firstName: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     client.to(`disc:${data.discussionId}`).emit("userTyping", {
       userId,
       firstName: data.firstName,
@@ -148,7 +153,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { discussionId: number; calleeId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     try {
       await this.svc.assertDiscussionAccess(data.discussionId, userId);
     } catch {
@@ -225,7 +231,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data.callId, userId);
     if (!call) return;
 
@@ -247,7 +254,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data.callId, userId);
     if (!call || call.callee_id !== userId) return;
     await this.terminateCall(call.id, userId, "rejected");
@@ -263,7 +271,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number; signal: unknown },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data.callId, userId);
     if (!call) return;
 
@@ -281,7 +290,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number; mode: number; bytesPerFrame: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data?.callId, userId);
     if (!call || call.state !== "active") return;
     if (Number(data?.mode) !== ULTRA_MODE_700C || Number(data?.bytesPerFrame) !== ULTRA_FRAME_BYTES) return;
@@ -300,7 +310,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number; packet: unknown },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data?.callId, userId);
     if (!call || call.state !== "active") return;
 
@@ -317,7 +328,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data?.callId, userId);
     if (!call) return;
 
@@ -334,7 +346,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number; connectionType: "p2p" | "relay" },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data.callId, userId);
     if (!call) return;
 
@@ -353,7 +366,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.calls.getCall(Number(data.callId));
     if (!call || (call.caller_id !== userId && call.callee_id !== userId)) return;
     await this.calls.touch(call.id);
@@ -365,7 +379,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { callId: number; reason?: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = this.authenticatedUserId(client);
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
     const call = await this.safeParticipant(client, data.callId, userId);
     if (!call) return;
 
@@ -473,12 +488,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return true;
   }
 
-  private authenticatedUserId(client: Socket) {
+  private async authenticatedUserId(client: Socket) {
     const userId = Number(client.data.userId);
     if (!Number.isInteger(userId) || userId <= 0) {
-      client.emit("unauthorized", { message: "Authentification requise." });
-      client.disconnect(true);
-      throw new Error("Unauthenticated socket");
+      try {
+        const auth = await this.wsAuth.authenticate(client);
+        client.data.userId = auth.userId;
+        client.data.organizationId = auth.organizationId;
+        client.data.roleId = auth.roleId;
+        return auth.userId;
+      } catch {
+        client.emit("unauthorized", { message: "Authentification requise." });
+        client.disconnect(true);
+        return undefined;
+      }
     }
     return userId;
   }
