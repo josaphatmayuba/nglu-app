@@ -352,6 +352,23 @@ export function useCall(socket, currentUserId) {
     renegotiateRef.current = renegotiateProfile;
   }, [renegotiateProfile]);
 
+  /** Demande le micro des que l'utilisateur lance/accepte l'appel. */
+  const ensureLocalStream = useCallback(async () => {
+    const existing = localStreamRef.current;
+    if (existing?.active && existing.getAudioTracks().some((track) => track.readyState === "live")) {
+      return existing;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("mediaDevices unavailable");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: AUDIO_CONSTRAINTS,
+      video: false,
+    });
+    localStreamRef.current = stream;
+    return stream;
+  }, []);
+
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {
     const iceServers = await getIceServers();
@@ -366,11 +383,7 @@ export function useCall(socket, currentUserId) {
       iceCandidatePoolSize: 0, // pre-collecte inutile ici, coute de la batterie
     });
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: AUDIO_CONSTRAINTS,
-      video: false,
-    });
-    localStreamRef.current = stream;
+    const stream = await ensureLocalStream();
     for (const track of stream.getTracks()) pc.addTrack(track, stream);
 
     pc.onicecandidate = (evt) => {
@@ -412,7 +425,7 @@ export function useCall(socket, currentUserId) {
 
     pcRef.current = pc;
     return pc;
-  }, [getIceServers, socket, attemptIceRestart, endCall]);
+  }, [getIceServers, ensureLocalStream, socket, attemptIceRestart, endCall]);
 
   /** Rebatit la connexion en forcant le relais TURN. */
   const restartWithRelay = useCallback(async () => {
@@ -464,6 +477,18 @@ export function useCall(socket, currentUserId) {
     profileRef.current = initial;
     setProfile(initial);
 
+    try {
+      await ensureLocalStream();
+    } catch (err) {
+      cleanup();
+      setPeer({ userId: calleeId, name: calleeName });
+      setDiscussionId(targetDiscussionId);
+      setEndMessage(callSetupErrorMessage(err));
+      setState(CALL_STATE.ENDED);
+      timersRef.current.reset = setTimeout(() => resetToIdle(), 2500);
+      return;
+    }
+
     isCallerRef.current = true;
     setPeer({ userId: calleeId, name: calleeName });
     setDiscussionId(targetDiscussionId);
@@ -475,15 +500,21 @@ export function useCall(socket, currentUserId) {
     timersRef.current.ringing = setTimeout(() => {
       if (callIdRef.current) endCall("missed");
     }, RINGING_TIMEOUT_MS);
-  }, [socket, endCall, resetToIdle]);
+  }, [socket, ensureLocalStream, cleanup, endCall, resetToIdle]);
 
   /** Accepte l'appel entrant. */
-  const acceptCall = useCallback(() => {
+  const acceptCall = useCallback(async () => {
     if (!callIdRef.current || !socket?.connected) return;
     clearTimeout(timersRef.current.ringing);
     setState(CALL_STATE.CONNECTING);
+    try {
+      await ensureLocalStream();
+    } catch (err) {
+      endCall("failed", callSetupErrorMessage(err));
+      return;
+    }
     socket.emit("call:accept", { callId: callIdRef.current });
-  }, [socket]);
+  }, [socket, ensureLocalStream, endCall]);
 
   /** Refuse l'appel entrant. */
   const rejectCall = useCallback(() => {
