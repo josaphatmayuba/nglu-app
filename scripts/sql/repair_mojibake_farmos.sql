@@ -1,4 +1,5 @@
--- Réparation mojibake (double-encodage UTF-8) sur les tables FarmOS.
+-- Réparation mojibake (double-encodage UTF-8) sur les tables FarmOS + champs
+-- transverses visibles dans le chat.
 -- Contexte : certaines valeurs ont été stockées doublement encodées UTF-8
 -- (ex. « Étable » -> « Ã‰table », hex C383E280B0 au lieu de C389). La colonne
 -- est utf8mb4 ; seules les VALEURS sont corrompues.
@@ -42,3 +43,11 @@ UPDATE farmos_treatments         SET notes             = CONVERT(BINARY CONVERT(
 UPDATE farmos_treatments         SET route             = CONVERT(BINARY CONVERT(route             USING latin1) USING utf8mb4) WHERE HEX(route)             LIKE @bad;
 UPDATE farmos_vaccinations       SET target            = CONVERT(BINARY CONVERT(target            USING latin1) USING utf8mb4) WHERE HEX(target)            LIKE @bad;
 UPDATE farmos_vaccinations       SET vaccine           = CONVERT(BINARY CONVERT(vaccine           USING latin1) USING utf8mb4) WHERE HEX(vaccine)           LIKE @bad;
+
+-- Champs transverses affichés dans Chat SIFA (onglet Personnes, titres, messages).
+UPDATE users               SET firstName   = CONVERT(BINARY CONVERT(firstName   USING latin1) USING utf8mb4) WHERE firstName   IS NOT NULL AND HEX(firstName)   LIKE @bad;
+UPDATE users               SET lastName    = CONVERT(BINARY CONVERT(lastName    USING latin1) USING utf8mb4) WHERE lastName    IS NOT NULL AND HEX(lastName)    LIKE @bad;
+UPDATE chat_channels       SET name        = CONVERT(BINARY CONVERT(name        USING latin1) USING utf8mb4) WHERE name        IS NOT NULL AND HEX(name)        LIKE @bad;
+UPDATE chat_channels       SET description = CONVERT(BINARY CONVERT(description USING latin1) USING utf8mb4) WHERE description IS NOT NULL AND HEX(description) LIKE @bad;
+UPDATE journal_discussions SET title       = CONVERT(BINARY CONVERT(title       USING latin1) USING utf8mb4) WHERE title       IS NOT NULL AND HEX(title)       LIKE @bad;
+UPDATE journal_messages    SET content     = CONVERT(BINARY CONVERT(content     USING latin1) USING utf8mb4) WHERE content     IS NOT NULL AND HEX(content)     LIKE @bad;

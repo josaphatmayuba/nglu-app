@@ -1310,6 +1310,13 @@
                         "when":  1780934400000,
                         "tag":  "0211_chat_direct_discussions",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  187,
+                        "version":  "5",
+                        "when":  1780938000000,
+                        "tag":  "0212_repair_chat_user_mojibake",
+                        "breakpoints":  true
                     }
                 ]
 }
