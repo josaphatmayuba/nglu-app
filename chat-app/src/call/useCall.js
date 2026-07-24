@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { applyOpusProfile, detectInitialProfile, readOpusProfileFromSdp } from "./opusTuning.js";
 import { getMicrophoneStream, microphoneErrorMessage } from "./microphone.js";
+import { createCodec2AudioEngine } from "../ultra/audioWorklet.js";
+import { createCodec2Transport } from "../ultra/transport.js";
 
 // Machine a etats d'un appel audio 1-a-1.
 //
@@ -63,10 +65,15 @@ export function useCall(socket, currentUserId) {
   const [profile, setProfile] = useState("low");
   const [endMessage, setEndMessage] = useState(null);
   const [durationSec, setDurationSec] = useState(0);
+  const [ultraMode, setUltraMode] = useState("off"); // off | starting | active | error
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const remoteStreamRef = useRef(null);
+  const ultraModeRef = useRef("off");
+  const ultraRef = useRef(null);
+  const ultraAttemptRef = useRef(0);
   const callIdRef = useRef(null);
   const isCallerRef = useRef(false);
   const iceServersRef = useRef(null);
@@ -89,6 +96,35 @@ export function useCall(socket, currentUserId) {
   // circulaire entre adaptProfile et la renegociation.
   const renegotiateRef = useRef(null);
 
+  const updateUltraMode = useCallback((mode) => {
+    ultraModeRef.current = mode;
+    setUltraMode(mode);
+  }, []);
+
+  /** Stoppe le transport Ultra et restaure l'envoi RTP sans couper le micro. */
+  const teardownUltra = useCallback(({ notify = false } = {}) => {
+    ultraAttemptRef.current += 1;
+    const id = callIdRef.current;
+    const current = ultraRef.current;
+    ultraRef.current = null;
+
+    if (notify && id && socket?.connected) {
+      socket.emit("call:ultra:stop", { callId: id });
+    }
+    if (current) {
+      current.transport?.close();
+      current.engine?.close()?.catch(() => { /* contexte deja ferme */ });
+      for (const { sender, track } of current.senders) {
+        sender.replaceTrack(track).catch(() => { /* peerconnection deja fermee */ });
+      }
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      remoteAudioRef.current.play?.().catch(() => { /* autoplay bloque */ });
+    }
+    updateUltraMode("off");
+  }, [socket, updateUltraMode]);
+
   const clearTimers = useCallback(() => {
     for (const key of Object.keys(timersRef.current)) {
       clearTimeout(timersRef.current[key]);
@@ -100,6 +136,7 @@ export function useCall(socket, currentUserId) {
   /** Libere micro, PeerConnection et minuteries. Toujours appelable. */
   const cleanup = useCallback(() => {
     clearTimers();
+    teardownUltra();
     if (pcRef.current) {
       try {
         pcRef.current.onicecandidate = null;
@@ -131,7 +168,7 @@ export function useCall(socket, currentUserId) {
     lastProfileChangeRef.current = 0;
     lastSampleRef.current = { lost: 0, received: 0 };
     qualityRef.current = null;
-  }, [clearTimers]);
+  }, [clearTimers, teardownUltra]);
 
   const resetToIdle = useCallback(() => {
     cleanup();
@@ -365,6 +402,64 @@ export function useCall(socket, currentUserId) {
   // reseau avant de connaitre l'identifiant de discussion.
   const prepareMicrophone = useCallback(() => ensureLocalStream(), [ensureLocalStream]);
 
+  /** Active le prototype Codec2 full-duplex sans detruire l'appel WebRTC. */
+  const startUltra = useCallback(async () => {
+    if (state !== CALL_STATE.ACTIVE || !socket?.connected || !callIdRef.current) return;
+    if (ultraRef.current || ultraModeRef.current === "starting") return;
+
+    const attempt = ++ultraAttemptRef.current;
+    updateUltraMode("starting");
+    let engine = null;
+    let transport = null;
+    let senderStates = [];
+    try {
+      const stream = await ensureLocalStream();
+      const track = stream.getAudioTracks()[0];
+      const pc = pcRef.current;
+      senderStates = pc
+        ? pc.getSenders()
+          .filter((sender) => sender.track?.kind === "audio" && sender.track === track)
+          .map((sender) => ({ sender, track }))
+        : [];
+      if (!track || senderStates.length === 0) throw new Error("Piste WebRTC audio absente");
+
+      // Le micro reste vivant pour l'AudioWorklet; seule la copie RTP est retiree.
+      for (const { sender } of senderStates) await sender.replaceTrack(null);
+      ultraRef.current = { engine: null, transport: null, senders: senderStates };
+      if (attempt !== ultraAttemptRef.current) throw new Error("Initialisation Ultra annulee");
+
+      engine = await createCodec2AudioEngine(stream, {
+        onFrame: (frame) => transport?.sendFrame(frame),
+        onState: (event) => {
+          if (event.type === "error") {
+            teardownUltra({ notify: true });
+            updateUltraMode("error");
+          }
+        },
+      });
+      if (attempt !== ultraAttemptRef.current) throw new Error("Initialisation Ultra annulee");
+      ultraRef.current.engine = engine;
+      transport = createCodec2Transport(socket, callIdRef.current, {
+        onFrame: (frame) => engine.sendFrame(frame),
+      });
+      ultraRef.current.transport = transport;
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+      updateUltraMode("active");
+    } catch (error) {
+      if (ultraRef.current?.senders === senderStates) ultraRef.current = null;
+      transport?.close();
+      if (engine) await engine.close().catch(() => { /* nettoyage best-effort */ });
+      for (const { sender, track } of senderStates) await sender.replaceTrack(track).catch(() => {});
+      if (attempt !== ultraAttemptRef.current) return;
+      updateUltraMode("error");
+      console.warn("Codec2 Ultra indisponible", error);
+    }
+  }, [state, socket, ensureLocalStream, teardownUltra, updateUltraMode]);
+
+  const stopUltra = useCallback(() => {
+    teardownUltra({ notify: true });
+  }, [teardownUltra]);
+
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {
     const iceServers = await getIceServers();
@@ -392,7 +487,9 @@ export function useCall(socket, currentUserId) {
     };
 
     pc.ontrack = (evt) => {
-      if (remoteAudioRef.current && evt.streams[0]) {
+      if (!evt.streams[0]) return;
+      remoteStreamRef.current = evt.streams[0];
+      if (ultraModeRef.current !== "active" && remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = evt.streams[0];
         remoteAudioRef.current.play?.().catch(() => { /* autoplay bloque */ });
       }
@@ -641,6 +738,16 @@ export function useCall(socket, currentUserId) {
       }
     };
 
+    const onUltraReady = ({ callId: id }) => {
+      if (callIdRef.current !== id || state !== CALL_STATE.ACTIVE) return;
+      startUltra();
+    };
+
+    const onUltraStop = ({ callId: id }) => {
+      if (callIdRef.current !== id) return;
+      teardownUltra();
+    };
+
     const onEnded = ({ callId: id, reason }) => {
       if (callIdRef.current !== id) return;
       cleanup();
@@ -660,6 +767,8 @@ export function useCall(socket, currentUserId) {
     socket.on("call:ringing", onRinging);
     socket.on("call:accepted", onAccepted);
     socket.on("call:signal", onSignal);
+    socket.on("call:ultra:ready", onUltraReady);
+    socket.on("call:ultra:stop", onUltraStop);
     socket.on("call:ended", onEnded);
     socket.on("call:failed", onFailed);
 
@@ -668,10 +777,12 @@ export function useCall(socket, currentUserId) {
       socket.off("call:ringing", onRinging);
       socket.off("call:accepted", onAccepted);
       socket.off("call:signal", onSignal);
+      socket.off("call:ultra:ready", onUltraReady);
+      socket.off("call:ultra:stop", onUltraStop);
       socket.off("call:ended", onEnded);
       socket.off("call:failed", onFailed);
     };
-  }, [socket, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle]);
+  }, [socket, state, startUltra, teardownUltra, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle]);
 
   // Heartbeat + statistiques + chrono pendant l'appel.
   useEffect(() => {
@@ -710,6 +821,7 @@ export function useCall(socket, currentUserId) {
     profile,
     endMessage,
     durationSec,
+    ultraMode,
     remoteAudioRef,
     startCall,
     prepareMicrophone,
@@ -718,6 +830,8 @@ export function useCall(socket, currentUserId) {
     endCall,
     toggleMute,
     changeProfile,
+    startUltra,
+    stopUltra,
     isActive: state !== CALL_STATE.IDLE,
   };
 }

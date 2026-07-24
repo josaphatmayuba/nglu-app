@@ -1,4 +1,4 @@
-import { Mic, MicOff, Phone, PhoneOff, Signal, SignalHigh, SignalLow, Wifi } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, Radio, Signal, SignalHigh, SignalLow, Wifi } from "lucide-react";
 import { CALL_STATE } from "./useCall.js";
 
 // Interface d'appel audio. Deux formes :
@@ -34,8 +34,8 @@ function QualityBadge({ quality }) {
 
 export function CallUI({ call }) {
   const {
-    state, peer, muted, quality, profile, endMessage, durationSec,
-    remoteAudioRef, acceptCall, rejectCall, endCall, toggleMute,
+    state, peer, muted, quality, profile, ultraMode, endMessage, durationSec,
+    remoteAudioRef, acceptCall, rejectCall, endCall, toggleMute, startUltra, stopUltra,
   } = call;
 
   // Libellés de consommation : rassure l'utilisateur sur l'usage de données,
@@ -78,6 +78,19 @@ export function CallUI({ call }) {
             <span className="call-bar-warn">Connexion faible — la voix peut se couper</span>
           )}
           <div className="call-bar-actions">
+            {ultraMode === "active" && (
+              <span className="call-bar-profile" title="Codec2 actif, environ 700 bit/s par direction">
+                Ultra ~700 bit/s
+              </span>
+            )}
+            <button
+              className={`call-btn call-btn-ultra ${ultraMode === "active" ? "is-active" : ""}`}
+              onClick={ultraMode === "active" ? stopUltra : startUltra}
+              disabled={ultraMode === "starting"}
+              title={ultraMode === "active" ? "Desactiver le mode Ultra" : "Activer le mode Ultra"}
+            >
+              <Radio size={17} />
+            </button>
             <button
               className={`call-btn call-btn-mute ${muted ? "is-muted" : ""}`}
               onClick={toggleMute}

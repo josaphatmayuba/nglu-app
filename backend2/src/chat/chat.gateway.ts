@@ -311,6 +311,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.emitToUser(peerId, "call:ultra:frame", { callId: call.id, packet });
   }
 
+  /** Demande aux deux clients de quitter le mode Ultra ensemble. */
+  @SubscribeMessage("call:ultra:stop")
+  async handleUltraStop(
+    @MessageBody() data: { callId: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = this.authenticatedUserId(client);
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call) return;
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:ultra:stop", { callId: call.id });
+  }
+
   /**
    * Le client rapporte le mode de connexion reellement negocie.
    * Mesure le taux de recours au relais TURN sur le terrain.

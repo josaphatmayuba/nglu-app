@@ -23,6 +23,7 @@ Contraintes acceptees :
 - [x] Smoke test encode/decode valide.
 - [x] Capture AudioWorklet et lecture tamponnee.
 - [x] Transport binaire full-duplex Socket.IO avec paquets regroupes et relais authentifie.
+- [x] Branchement manuel dans `useCall` avec activation coordonnee des deux cotes.
 - [ ] Bascule automatique depuis WebRTC.
 
 Codec2 est un codec vocal open source en C99, sous licence LGPL 2.1. Le projet
@@ -173,7 +174,7 @@ Le mode sera valide si :
 2. Capture et lecture AudioWorklet.
 3. Transport binaire entre deux onglets.
 4. Test full-duplex a 1 kbit/s.
-5. Integration dans `useCall`.
+5. Integration manuelle dans `useCall`.
 6. Bascule automatique et interface.
 7. Tests de regression WebRTC.
 8. Activation d'abord sur dev avec un feature flag.

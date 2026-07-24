@@ -292,6 +292,8 @@ button { font-family: inherit; }
 .call-btn-accept { background: #22c55e; }
 .call-btn-mute { background: var(--sidebar-active); }
 .call-btn-mute.is-muted { background: #f59e0b; }
+.call-btn-ultra { background: #334155; }
+.call-btn-ultra.is-active { background: #7c3aed; }
 
 /* Barre compacte pendant l'appel actif */
 .call-bar {
