@@ -317,6 +317,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  /**
+   * Confirme que les DEUX participants ont un encodeur Codec2 pret : signal
+   * pour que chacun coupe son flux RTP WebRTC sortant. Sans cet accuse
+   * bilateral, le premier cote a couper son RTP laisse l'autre sans audio
+   * pendant que son propre transport Ultra demarre encore.
+   */
+  @SubscribeMessage("call:ultra:go")
+  async handleUltraGo(
+    @MessageBody() data: { callId: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call || call.state !== "active") return;
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:ultra:go", { callId: call.id });
+  }
+
   /** Relaye les paquets Codec2 sans les decoder cote serveur. */
   @SubscribeMessage("call:ultra:frame")
   async handleUltraFrame(
