@@ -28,6 +28,10 @@ const RINGING_TIMEOUT_MS = 45000;
 const HEARTBEAT_MS = 15000;
 const STATS_INTERVAL_MS = 3000;
 const ICE_RESTART_COOLDOWN_MS = 8000;
+const ULTRA_AUTO_BAD_SAMPLES = 2;
+const AUTO_ULTRA_FALLBACK = import.meta.env.VITE_CODEC2_AUTO_FALLBACK === "true"
+  || (typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("codec2") === "auto");
 
 // Adaptation du profil audio a la qualite reelle.
 // Montee exigeante (5 mesures = ~15 s de bonne qualite soutenue) : une
@@ -74,6 +78,9 @@ export function useCall(socket, currentUserId) {
   const ultraModeRef = useRef("off");
   const ultraRef = useRef(null);
   const ultraAttemptRef = useRef(0);
+  const ultraStartRef = useRef(null);
+  const ultraAutoBadSamplesRef = useRef(0);
+  const ultraAutoAttemptedRef = useRef(false);
   const callIdRef = useRef(null);
   const isCallerRef = useRef(false);
   const iceServersRef = useRef(null);
@@ -137,6 +144,8 @@ export function useCall(socket, currentUserId) {
   const cleanup = useCallback(() => {
     clearTimers();
     teardownUltra();
+    ultraAutoBadSamplesRef.current = 0;
+    ultraAutoAttemptedRef.current = false;
     if (pcRef.current) {
       try {
         pcRef.current.onicecandidate = null;
@@ -273,7 +282,8 @@ export function useCall(socket, currentUserId) {
     let stats;
     try { stats = await pc.getStats(); } catch { return; }
 
-    let rtt = null, jitter = null, lost = 0, received = 0, localType = null, remoteType = null;
+    let rtt = null, jitter = null, lost = 0, received = 0;
+    let localType = null, remoteType = null, availableBitrate = null;
 
     stats.forEach((report) => {
       if (report.type === "inbound-rtp" && report.kind === "audio") {
@@ -287,6 +297,9 @@ export function useCall(socket, currentUserId) {
         const remote = stats.get(report.remoteCandidateId);
         localType = local?.candidateType ?? localType;
         remoteType = remote?.candidateType ?? remoteType;
+        if (report.availableOutgoingBitrate != null) {
+          availableBitrate = report.availableOutgoingBitrate;
+        }
       }
     });
 
@@ -320,7 +333,12 @@ export function useCall(socket, currentUserId) {
 
     // Score reseau : pensé pour la 2G, ou 400 ms de latence reste exploitable.
     let score = 3; // 3 = bon, 2 = moyen, 1 = faible
-    if (lossPct > 12 || (rtt != null && rtt > 800) || (jitter != null && jitter > 120)) score = 1;
+    if (
+      lossPct > 12
+      || (rtt != null && rtt > 800)
+      || (jitter != null && jitter > 120)
+      || (availableBitrate != null && availableBitrate < 8000)
+    ) score = 1;
     else if (lossPct > 5 || (rtt != null && rtt > 400) || (jitter != null && jitter > 60)) score = 2;
 
     const nextQuality = {
@@ -329,10 +347,19 @@ export function useCall(socket, currentUserId) {
       rtt: rtt != null ? Math.round(rtt) : null,
       loss: Math.round(lossPct * 10) / 10,
       jitter: jitter != null ? Math.round(jitter) : null,
+      bitrate: availableBitrate != null ? Math.round(availableBitrate) : null,
       relay: localType === "relay" || remoteType === "relay",
     };
     qualityRef.current = nextQuality;
     setQuality(nextQuality);
+
+    if (AUTO_ULTRA_FALLBACK && ultraModeRef.current === "off" && !ultraAutoAttemptedRef.current) {
+      ultraAutoBadSamplesRef.current = score === 1 ? ultraAutoBadSamplesRef.current + 1 : 0;
+      if (ultraAutoBadSamplesRef.current >= ULTRA_AUTO_BAD_SAMPLES && ultraStartRef.current) {
+        ultraAutoAttemptedRef.current = true;
+        ultraStartRef.current();
+      }
+    }
 
     adaptProfile(score);
   }, [socket, adaptProfile]);
@@ -459,6 +486,13 @@ export function useCall(socket, currentUserId) {
   const stopUltra = useCallback(() => {
     teardownUltra({ notify: true });
   }, [teardownUltra]);
+
+  useEffect(() => {
+    ultraStartRef.current = startUltra;
+    return () => {
+      if (ultraStartRef.current === startUltra) ultraStartRef.current = null;
+    };
+  }, [startUltra]);
 
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {

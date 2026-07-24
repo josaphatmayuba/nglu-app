@@ -21,6 +21,7 @@ function QualityBadge({ quality }) {
     <div className={`call-quality ${cls}`} title={
       [
         quality.rtt != null ? `Latence ${quality.rtt} ms` : null,
+        quality.bitrate != null ? `Debit ${Math.round(quality.bitrate / 1000)} kbit/s` : null,
         `Perte ${quality.loss}%`,
         quality.jitter != null ? `Gigue ${quality.jitter} ms` : null,
         quality.relay ? "Via relais TURN" : "Connexion directe",
