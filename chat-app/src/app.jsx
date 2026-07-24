@@ -21,6 +21,7 @@ const NATIVE =
 const WS_HOST = NATIVE
   ? ((typeof window !== "undefined" && window.CHAT_API_HOST) || "https://dev.ongdngolu.org")
   : (typeof window !== "undefined" ? window.location.origin : "");
+const APP_VERSION = import.meta.env.VITE_APP_BASE_VERSION || "dev";
 
 const ICON_MAP = { TrendingUp, BookOpen, Users, Shield, Hash, MessageSquare, Ticket };
 function ChanIcon({ name, size = 16 }) {
@@ -503,6 +504,7 @@ export default function App() {
             </div>
           </>
         )}
+        {import.meta.env.DEV && <div className="app-version">v{APP_VERSION}</div>}
       </aside>
 
       {/* ── Zone principale ── */}
