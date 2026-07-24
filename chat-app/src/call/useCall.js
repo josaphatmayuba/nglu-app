@@ -177,6 +177,11 @@ export function useCall(socket, currentUserId) {
     reportedConnectionRef.current = false;
     relayOnlyRef.current = false;
     iceRestartAtRef.current = 0;
+    // Liberer callIdRef ici (pas seulement dans resetToIdle, retarde de
+    // 1.5-2.5s pour l'affichage du message de fin) : sinon un rappel immediat
+    // pendant l'ecran "Appel termine" trouve encore l'ancien callId et se fait
+    // rejeter (onIncoming le prend pour un second appel en cours).
+    callIdRef.current = null;
     // Compteurs d'adaptation : remis a zero pour que le prochain appel reparte
     // d'une mesure propre et non des statistiques du precedent.
     goodSamplesRef.current = 0;
@@ -823,6 +828,16 @@ export function useCall(socket, currentUserId) {
       timersRef.current.reset = setTimeout(() => resetToIdle(), 2500);
     };
 
+    // Le client Socket.IO retente indefiniment en arriere-plan
+    // (reconnectionAttempts: Infinity, cf app.jsx) : sans ce handler, perdre
+    // la connexion pendant un appel ne le termine jamais localement, et
+    // l'autre participant attend jusqu'a 45s (timeout ICE/heartbeat) avant
+    // d'etre prevenu — ou pas du tout si le socket finit par se reconnecter
+    // sans que WebRTC n'ait jamais bascule en "failed".
+    const onDisconnect = () => {
+      if (callIdRef.current) endCall("timeout");
+    };
+
     socket.on("call:incoming", onIncoming);
     socket.on("call:ringing", onRinging);
     socket.on("call:accepted", onAccepted);
@@ -831,6 +846,7 @@ export function useCall(socket, currentUserId) {
     socket.on("call:ultra:stop", onUltraStop);
     socket.on("call:ended", onEnded);
     socket.on("call:failed", onFailed);
+    socket.on("disconnect", onDisconnect);
 
     return () => {
       socket.off("call:incoming", onIncoming);
@@ -841,6 +857,7 @@ export function useCall(socket, currentUserId) {
       socket.off("call:ultra:stop", onUltraStop);
       socket.off("call:ended", onEnded);
       socket.off("call:failed", onFailed);
+      socket.off("disconnect", onDisconnect);
     };
   }, [socket, state, startUltra, teardownUltra, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle]);
 
