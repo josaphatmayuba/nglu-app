@@ -344,7 +344,7 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
                 - $SSH $SERVER "{ find $APP/chat-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/chat-app/dist -mindepth 1 -delete; } && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - timeout 30s $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true" || echo "[deploy] nginx reload timed out after 30s for chat dev"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Marketing → dev
