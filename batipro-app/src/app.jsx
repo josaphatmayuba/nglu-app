@@ -698,21 +698,27 @@ function Planning({ projects, canMutate }) {
       ) : !phases.length ? (
         <div className="card pad"><span className="muted">Aucune phase définie pour ce chantier.</span></div>
       ) : (
-        <div className="card pad gantt-scroll">
-          <div className="gantt-rows">
-            {phases.map((r) => (
-              <div className="gantt-row" key={r.id} onClick={() => canMutate && setModal(r)} style={{ cursor: canMutate ? "pointer" : "default" }}>
-                <div style={{ fontSize: 12, fontWeight: 500 }}>{r.label}</div>
-                <div className="gantt-track">
-                  {range && r.startDate && r.endDate ? (
-                    <div className={`gantt-bar ${statusTone(r.status) === "amber" ? "grad-amber" : ""}`}
-                      style={{ left: `${pctFor(r.startDate)}%`, width: `${Math.max(2, pctFor(r.endDate) - pctFor(r.startDate))}%`, background: statusTone(r.status) === "emerald" ? "var(--emerald-500)" : statusTone(r.status) === "ink" ? "var(--ink-300)" : undefined }} />
-                  ) : null}
+        <div className="phase-list">
+          {phases.map((r) => {
+            const tone = statusTone(r.status);
+            const barColor = tone === "emerald" ? "var(--emerald-500)" : tone === "amber" ? "var(--amber-500)" : "var(--ink-300)";
+            const hasRange = range && r.startDate && r.endDate;
+            return (
+              <div className="phase-card" key={r.id} onClick={() => canMutate && setModal(r)} style={{ cursor: canMutate ? "pointer" : "default" }}>
+                <div className="phase-card-top">
+                  <span className="phase-name">{r.label}</span>
+                  <span className={`chip ${tone}`}>{r.status?.replace(/_/g, " ")}</span>
                 </div>
-                <span className={`chip ${statusTone(r.status)}`} style={{ marginLeft: 8 }}>{r.progress} %</span>
+                <div className="progress" style={{ marginTop: 8 }}>
+                  <span style={{ width: `${Math.max(0, Math.min(100, n(r.progress)))}%`, background: barColor }} />
+                </div>
+                <div className="phase-card-bottom">
+                  <span>{hasRange ? `${r.startDate} → ${r.endDate}` : "Dates non définies"}</span>
+                  <strong>{r.progress} %</strong>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
 

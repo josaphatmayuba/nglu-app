@@ -144,15 +144,14 @@ table.bp th { text-align: left; font-weight: 600; padding: 10px 16px; }
 table.bp td { padding: 12px 16px; border-top: 1px solid var(--ink-100); }
 table.bp td .danger-txt { color: var(--rose-600); }
 
-/* gantt */
-.gantt-row { display: grid; grid-template-columns: 160px 1fr; align-items: center; }
-.gantt-months { display: grid; grid-template-columns: 160px repeat(8,1fr); margin-bottom: 12px; min-width: 640px; }
-.gantt-months span { font-size: 11px; color: var(--ink-400); text-align: center; }
-.gantt-months span.now { color: var(--amber-600); font-weight: 700; }
-.gantt-track { position: relative; height: 24px; background: var(--ink-50); border-radius: 6px; }
-.gantt-bar { position: absolute; top: 0; height: 24px; border-radius: 6px; }
-.gantt-scroll { overflow-x: auto; }
-.gantt-rows { display: flex; flex-direction: column; gap: 10px; min-width: 640px; }
+/* phases (planning) */
+.phase-list { display: flex; flex-direction: column; gap: 10px; }
+.phase-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; transition: box-shadow .15s, border-color .15s; }
+.phase-card:hover { border-color: var(--ink-200); box-shadow: 0 2px 10px rgba(15,23,42,.06); }
+.phase-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.phase-name { font-size: 13px; font-weight: 600; }
+.phase-card-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--ink-400); }
+.phase-card-bottom strong { color: var(--ink-700); font-weight: 700; }
 
 /* plan 3d */
 .viewer3d { position: relative; height: 360px; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg,#eef2ff,#e6e1d6); display: flex; align-items: center; justify-content: center; }
