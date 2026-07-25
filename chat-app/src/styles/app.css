@@ -298,6 +298,46 @@ button { font-family: inherit; }
 .call-btn-mute.is-muted { background: #f59e0b; }
 .call-btn-ultra { background: #334155; }
 .call-btn-ultra.is-active { background: #7c3aed; }
+.call-btn-video { background: #334155; }
+.call-btn-video.is-active { background: #22c55e; }
+/* Coupure auto reseau (pas un choix utilisateur) : etat distinct du simple
+   "barre" — grise + icone horloge, pour signaler que ca peut revenir seul. */
+.call-btn-video.is-waiting { background: #475569; color: #cbd5e1; opacity: .85; }
+
+/* Preview locale camera : vignette flottante, ne bouscule pas la barre/overlay. */
+.call-video-local {
+  position: fixed; z-index: 160; right: 12px; bottom: 12px;
+  width: 120px; height: 90px; object-fit: cover; border-radius: 10px;
+  background: #0f172a; border: 1px solid var(--border); transform: scaleX(-1);
+}
+@media (max-width: 768px) {
+  .call-video-local { width: 92px; height: 70px; bottom: 76px; }
+}
+
+/* Badge horloge sur la vignette locale pendant une coupure reseau (video
+   toujours "voulue" par l'utilisateur, juste en attente que le lien remonte). */
+.call-video-local-suspended {
+  position: fixed; z-index: 161; right: 12px; bottom: 12px;
+  width: 120px; height: 90px; border-radius: 10px;
+  background: rgba(15,23,42,.82); border: 1px dashed rgba(245,158,11,.6);
+  color: #f59e0b; display: grid; place-items: center;
+}
+@media (max-width: 768px) {
+  .call-video-local-suspended { width: 92px; height: 70px; bottom: 76px; }
+}
+
+/* Placeholder video distante : le pair n'envoie pas de video (jamais activee,
+   coupee manuellement, ou coupee par son reseau). Etat neutre, pas une erreur. */
+.call-video-remote-placeholder {
+  position: fixed; z-index: 140; left: 50%; top: 96px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 18px; border-radius: 12px;
+  background: rgba(15,23,42,.55); color: var(--muted);
+  font-size: 11px; text-align: center; max-width: 220px;
+}
+@media (max-width: 768px) {
+  .call-video-remote-placeholder { top: 84px; padding: 10px 14px; max-width: 180px; }
+}
 
 /* Barre compacte pendant l'appel actif.
    Position fixe : montée à la racine de .shell (flex row), un enfant normal

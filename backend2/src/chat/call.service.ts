@@ -27,6 +27,7 @@ export interface CallRow {
   state: CallState;
   connection_type: string | null;
   started_at: Date | null;
+  has_video: number;
 }
 
 @Injectable()
@@ -55,7 +56,7 @@ export class CallService {
 
   async getCall(callId: number): Promise<CallRow | undefined> {
     return this.row<CallRow>(sql`
-      SELECT id, discussion_id, caller_id, callee_id, state, connection_type, started_at
+      SELECT id, discussion_id, caller_id, callee_id, state, connection_type, started_at, has_video
       FROM chat_calls WHERE id = ${callId} AND status = 1 LIMIT 1
     `);
   }
@@ -76,7 +77,7 @@ export class CallService {
   /** Retourne l'appel en cours d'un utilisateur, s'il y en a un (test "occupe"). */
   async findActiveCallFor(userId: number): Promise<CallRow | undefined> {
     return this.row<CallRow>(sql`
-      SELECT id, discussion_id, caller_id, callee_id, state, connection_type, started_at
+      SELECT id, discussion_id, caller_id, callee_id, state, connection_type, started_at, has_video
       FROM chat_calls
       WHERE status = 1 AND state IN ('ringing','active')
         AND (caller_id = ${userId} OR callee_id = ${userId})
@@ -101,6 +102,17 @@ export class CallService {
   async setConnectionType(callId: number, connectionType: "p2p" | "relay"): Promise<void> {
     await this.db.execute(sql`
       UPDATE chat_calls SET connection_type = ${connectionType}
+      WHERE id = ${callId} AND status = 1
+    `);
+  }
+
+  /**
+   * Marque l'appel comme ayant eu de la video au moins une fois.
+   * Champ purement informatif : n'affecte pas l'etat/la logique de l'appel.
+   */
+  async markHasVideo(callId: number): Promise<void> {
+    await this.db.execute(sql`
+      UPDATE chat_calls SET has_video = 1
       WHERE id = ${callId} AND status = 1
     `);
   }
@@ -157,7 +169,7 @@ export class CallService {
   /** Historique des appels d'une discussion, pour affichage dans le fil. */
   async getCallHistory(discussionId: number, limit = 50) {
     return this.rows(sql`
-      SELECT c.id, c.caller_id, c.callee_id, c.state, c.connection_type,
+      SELECT c.id, c.caller_id, c.callee_id, c.state, c.connection_type, c.has_video,
              c.started_at, c.ended_at, c.duration_seconds, c.end_reason, c.created_at,
              caller.firstName AS caller_first_name, caller.lastName AS caller_last_name,
              callee.firstName AS callee_first_name, callee.lastName AS callee_last_name

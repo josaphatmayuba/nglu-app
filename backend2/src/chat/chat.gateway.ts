@@ -421,6 +421,52 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * L'appele demande a l'appelant de renegocier pour transmettre sa video :
+   * seul l'appelant peut emettre une offre SDP (meme contrainte que l'audio),
+   * donc quand c'est l'appele qui active sa camera il doit passer par ce
+   * relais pour declencher une nouvelle offre cote appelant.
+   */
+  @SubscribeMessage("call:video:request")
+  async handleVideoRequest(
+    @MessageBody() data: { callId: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call || call.state !== "active") return;
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:video:request", { callId: call.id });
+  }
+
+  /**
+   * Relaye l'etat video (active/inactive, raison manuelle ou reseau) a
+   * l'autre participant, pour que l'UI distante distingue une coupure
+   * volontaire d'un repli reseau. Sur le premier "active" recu pour un
+   * appel, marque aussi l'appel comme ayant eu de la video (has_video).
+   */
+  @SubscribeMessage("call:video:state")
+  async handleVideoState(
+    @MessageBody() data: { callId: number; active: boolean; reason?: "manual" | "network" },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = await this.authenticatedUserId(client);
+    if (!userId) return;
+    const call = await this.safeParticipant(client, data?.callId, userId);
+    if (!call) return;
+
+    const active = Boolean(data?.active);
+    const reason = data?.reason === "network" ? "network" : "manual";
+    if (active) {
+      await this.calls.markHasVideo(call.id);
+    }
+
+    const peerId = call.caller_id === userId ? call.callee_id : call.caller_id;
+    this.emitToUser(peerId, "call:video:state", { callId: call.id, active, reason });
+  }
+
+  /**
    * Le client rapporte le mode de connexion reellement negocie.
    * Mesure le taux de recours au relais TURN sur le terrain.
    */

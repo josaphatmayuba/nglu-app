@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { applyOpusProfile, detectInitialProfile, readOpusProfileFromSdp } from "./opusTuning.js";
 import { getMicrophoneStream, microphoneErrorMessage } from "./microphone.js";
+import { getCameraStream, cameraErrorMessage } from "./camera.js";
+import { detectInitialVideoProfile, applyVideoProfile, VIDEO_PROFILES } from "./videoTuning.js";
 import { createCodec2AudioEngine } from "../ultra/audioWorklet.js";
 import { createCodec2Transport } from "../ultra/transport.js";
 
@@ -83,9 +85,42 @@ export function useCall(socket, currentUserId) {
   // Message d'erreur exact d'un echec Ultra, affiche dans l'UI : sur mobile
   // sans DevTools branche, console.warn seul rendait l'echec invisible.
   const [ultraError, setUltraError] = useState(null);
+  // Video (Ticket 2) : capture + toggle locaux uniquement, pas encore
+  // branches au RTCPeerConnection (Ticket 3) ni au signaling (Ticket 4) ni a
+  // l'adaptation reseau (Ticket 5).
+  const [videoEnabled, setVideoEnabled] = useState(false); // intention utilisateur
+  const [videoActive, setVideoActive] = useState(false); // etat reel de la piste
+  const [videoAutoSuspended, setVideoAutoSuspended] = useState(false); // reserve Ticket 5
+  const [cameraError, setCameraError] = useState(null);
+  const [cameraLoading, setCameraLoading] = useState(false);
+  // Vrai des qu'un flux video DISTANT est recu et actif (pilote l'affichage du
+  // <video> distant). Distinct de videoActive (qui concerne l'envoi local).
+  const [remoteVideoActive, setRemoteVideoActive] = useState(false);
+  // Raison de la derniere coupure video distante rapportee par le peer
+  // ("manual"/"network"), pour que l'UI distingue les deux (rendu Ticket 6).
+  const [remoteVideoReason, setRemoteVideoReason] = useState(null);
+  // Miroir reactif (lecture UI uniquement, Ticket 6) de videoProfileRef : la
+  // logique d'adaptation (adaptVideo) continue de piloter le palier via la ref
+  // non-reactive, ce state ne fait que refleter sa valeur pour l'affichage du
+  // libelle VIDEO_PROFILE_LABELS.
+  const [videoProfile, setVideoProfileState] = useState("low");
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
+  const localVideoStreamRef = useRef(null);
+  const videoTransceiverRef = useRef(null);
+  // Direction courante negociee sur la m=video ("inactive" tant que la camera
+  // n'a pas ete activee). Lue par renegotiate() pour munger le SDP video.
+  const videoDirectionRef = useRef("inactive");
+  // Miroir non-reactif de videoActive : permet aux callbacks (restartWithRelay,
+  // renegotiate) de connaitre l'etat reel sans dependre d'une closure stale.
+  const videoActiveRef = useRef(false);
+  const remoteVideoStreamRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const videoProfileRef = useRef("low");
+  const videoGoodSamplesRef = useRef(0); // reserve Ticket 5
+  const videoBadSamplesRef = useRef(0); // reserve Ticket 5
+  const lastVideoProfileChangeRef = useRef(0); // reserve Ticket 5
   const remoteAudioRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const ultraModeRef = useRef("off");
@@ -121,6 +156,35 @@ export function useCall(socket, currentUserId) {
   // Indirection vers attemptIceRestart, defini plus bas : evite une dependance
   // circulaire entre adaptProfile et la renegociation.
   const renegotiateRef = useRef(null);
+  // Indirection vers applyVideoConstraints (defini plus bas) : adaptVideo, defini
+  // a cote d'adaptProfile, doit pouvoir changer de palier video sans dependance
+  // circulaire.
+  const applyVideoConstraintsRef = useRef(null);
+  // Miroir non-reactif de videoEnabled (intention utilisateur) : adaptVideo,
+  // memoize sans deps, doit connaitre l'intention courante sans closure stale.
+  const videoEnabledRef = useRef(false);
+  // Miroir non-reactif de videoAutoSuspended (coupure reseau, videoEnabled reste
+  // true) : distingue une coupure auto d'une coupure manuelle cote adaptVideo.
+  const videoAutoSuspendedRef = useRef(false);
+  // Indirections vers suspend/resumeVideoForNetwork (definis plus bas) : appeles
+  // par adaptVideo sans dependance circulaire.
+  const suspendVideoRef = useRef(null);
+  const resumeVideoRef = useRef(null);
+  // Indirections vers suspend/resumeVideoForVisibility (definis plus bas) :
+  // appelees par le handler visibilitychange, distinctes des indirections
+  // reseau ci-dessus pour ne pas confondre les deux causes de suspension.
+  const suspendVideoForVisibilityRef = useRef(null);
+  const resumeVideoForVisibilityRef = useRef(null);
+  // Ticket 7 (section 8.4) : distingue une suspension video causee par la mise
+  // en arriere-plan (visibilitychange) d'une suspension causee par le reseau
+  // (videoAutoSuspendedRef). Seule la premiere doit etre annulee automatiquement
+  // au retour "visible" ; la seconde reste du ressort d'adaptVideo (mesures
+  // reseau soutenues), pas du simple retour de visibilite.
+  const videoSuspendedByVisibilityRef = useRef(false);
+  // Ticket 7 (section 8.5) : protege toggleCamera() contre un double-clic rapide
+  // (deux getUserMedia/renegociations concurrents) - un second appel pendant
+  // qu'un premier est en cours est ignore silencieusement.
+  const videoToggleInFlightRef = useRef(false);
 
   const updateUltraMode = useCallback((mode) => {
     ultraModeRef.current = mode;
@@ -186,8 +250,38 @@ export function useCall(socket, currentUserId) {
       }
       localStreamRef.current = null;
     }
+    if (localVideoStreamRef.current) {
+      for (const track of localVideoStreamRef.current.getTracks()) {
+        try { track.stop(); } catch { /* ignore */ }
+      }
+      localVideoStreamRef.current = null;
+    }
+    videoActiveRef.current = false;
+    videoEnabledRef.current = false;
+    videoAutoSuspendedRef.current = false;
+    videoDirectionRef.current = "inactive";
+    videoTransceiverRef.current = null;
+    remoteVideoStreamRef.current = null;
+    // Ticket 7 : remise a zero des flags de suspension/race pour le prochain appel.
+    videoSuspendedByVisibilityRef.current = false;
+    videoToggleInFlightRef.current = false;
+    // Compteurs d'adaptation video : remis a zero pour le prochain appel.
+    videoGoodSamplesRef.current = 0;
+    videoBadSamplesRef.current = 0;
+    lastVideoProfileChangeRef.current = 0;
+    videoProfileRef.current = "low";
+    setVideoProfileState("low");
+    setVideoEnabled(false);
+    setVideoActive(false);
+    setVideoAutoSuspended(false);
+    setRemoteVideoActive(false);
+    setRemoteVideoReason(null);
+    setCameraError(null);
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
     }
     pendingCandidatesRef.current = [];
     remoteDescSetRef.current = false;
@@ -306,6 +400,97 @@ export function useCall(socket, currentUserId) {
     renegotiateRef.current?.();
   }, []);
 
+  /**
+   * Adapte la video au meme thermometre reseau que l'audio (le score audio est
+   * le signal MAITRE, la video suit — cf plan section 4). L'audio n'est JAMAIS
+   * touche ici : adaptVideo ne modifie que le palier/l'etat video et ne
+   * declenche jamais d'ICE restart. La video se degrade/coupe AVANT que l'audio
+   * ne souffre — c'est le seul degre de liberte restant quand l'audio est deja
+   * au plancher.
+   *
+   * Refs dediees (videoGoodSamplesRef/videoBadSamplesRef/lastVideoProfileChangeRef)
+   * pour ne pas se melanger aux compteurs audio ni partager leur cooldown.
+   *
+   * @param {number} score  1=mauvais / 2=moyen / 3=bon (issu des stats AUDIO).
+   */
+  const adaptVideo = useCallback((score) => {
+    // Ne JAMAIS agir si l'utilisateur ne veut pas de video : on ne l'active
+    // jamais automatiquement contre son intention.
+    if (!videoEnabledRef.current) return;
+
+    const order = ["off", "minimal", "low", "standard", "high"];
+    const now = Date.now();
+    const audioAtFloor = profileRef.current === "minimal";
+
+    // ── Coupure ACCELEREE (priorite audio > video) ──────────────────────────
+    // L'audio est deja au plancher et le reseau reste mauvais : la video est le
+    // seul levier restant. On coupe IMMEDIATEMENT (sans attendre les paliers
+    // intermediaires ni le cooldown) pour liberer la bande passante au profit
+    // de l'audio.
+    if (score === 1 && audioAtFloor && videoActiveRef.current) {
+      suspendVideoRef.current?.();
+      return;
+    }
+
+    // Respecte le cooldown entre changements video (independant de l'audio).
+    if (now - lastVideoProfileChangeRef.current < PROFILE_CHANGE_COOLDOWN_MS) return;
+
+    // Compteurs de mesures consecutives (memes seuils que l'audio).
+    if (score === 3) {
+      videoGoodSamplesRef.current += 1;
+      videoBadSamplesRef.current = 0;
+    } else if (score === 1) {
+      videoBadSamplesRef.current += 1;
+      videoGoodSamplesRef.current = 0;
+    } else {
+      videoGoodSamplesRef.current = 0;
+      videoBadSamplesRef.current = 0;
+      return;
+    }
+
+    // ── Descente / coupure (mauvaise qualite soutenue) ──────────────────────
+    if (videoBadSamplesRef.current >= BAD_SAMPLES_TO_DOWNGRADE) {
+      if (videoActiveRef.current) {
+        const idx = order.indexOf(videoProfileRef.current);
+        if (idx > order.indexOf("minimal")) {
+          // Descente d'un palier via setParameters (aucune renegociation SDP).
+          const target = order[idx - 1];
+          videoProfileRef.current = target;
+          setVideoProfileState(target);
+          videoGoodSamplesRef.current = 0;
+          videoBadSamplesRef.current = 0;
+          lastVideoProfileChangeRef.current = now;
+          applyVideoConstraintsRef.current?.(target);
+        } else {
+          // Deja au palier minimal et toujours mauvais : coupure totale.
+          suspendVideoRef.current?.();
+        }
+      }
+      return;
+    }
+
+    // ── Remontee / reactivation (bonne qualite soutenue) ────────────────────
+    if (videoGoodSamplesRef.current >= GOOD_SAMPLES_TO_UPGRADE) {
+      videoGoodSamplesRef.current = 0;
+      videoBadSamplesRef.current = 0;
+      lastVideoProfileChangeRef.current = now;
+      if (videoAutoSuspendedRef.current) {
+        // Reprise apres coupure reseau : reactive la video (intention utilisateur
+        // toujours vraie, videoEnabled est reste true).
+        resumeVideoRef.current?.();
+      } else if (videoActiveRef.current) {
+        // Video active mais degradee : remonte d'un palier.
+        const idx = order.indexOf(videoProfileRef.current);
+        if (idx < order.length - 1) {
+          const target = order[idx + 1];
+          videoProfileRef.current = target;
+          setVideoProfileState(target);
+          applyVideoConstraintsRef.current?.(target);
+        }
+      }
+    }
+  }, []);
+
   /** Mesure la qualite et rapporte le mode de connexion (p2p vs relay). */
   const collectStats = useCallback(async () => {
     const pc = pcRef.current;
@@ -315,12 +500,18 @@ export function useCall(socket, currentUserId) {
 
     let rtt = null, jitter = null, lost = 0, received = 0;
     let localType = null, remoteType = null, availableBitrate = null;
+    // Lecture seule, pour affichage debug (Ticket 6) : n'influence jamais le
+    // score ni adaptVideo (qui reste pilote par les stats AUDIO uniquement).
+    let videoBitrateSent = null;
 
     stats.forEach((report) => {
       if (report.type === "inbound-rtp" && report.kind === "audio") {
         jitter = report.jitter != null ? report.jitter * 1000 : jitter;
         lost = report.packetsLost ?? 0;
         received = report.packetsReceived ?? 0;
+      }
+      if (report.type === "outbound-rtp" && report.kind === "video") {
+        if (report.targetBitrate != null) videoBitrateSent = report.targetBitrate;
       }
       if (report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
         rtt = report.currentRoundTripTime != null ? report.currentRoundTripTime * 1000 : rtt;
@@ -380,6 +571,7 @@ export function useCall(socket, currentUserId) {
       jitter: jitter != null ? Math.round(jitter) : null,
       bitrate: availableBitrate != null ? Math.round(availableBitrate) : null,
       relay: localType === "relay" || remoteType === "relay",
+      videoBitrateSent: videoBitrateSent != null ? Math.round(videoBitrateSent) : null,
     };
     qualityRef.current = nextQuality;
     setQuality(nextQuality);
@@ -412,7 +604,12 @@ export function useCall(socket, currentUserId) {
     }
 
     adaptProfile(score);
-  }, [socket, adaptProfile]);
+    // Video decidee APRES l'audio (ordre important) : adaptVideo lit
+    // profileRef.current pour appliquer la priorite audio>video (coupure video
+    // acceleree quand l'audio est deja au plancher). Meme score que l'audio, pas
+    // de score video separe (decision explicite du plan section 4).
+    adaptVideo(score);
+  }, [socket, adaptProfile, adaptVideo]);
 
   /**
    * Relance la negociation ICE sans raccrocher.
@@ -428,6 +625,7 @@ export function useCall(socket, currentUserId) {
     try {
       const offer = await pc.createOffer({ iceRestart: true });
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
+      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", {
         callId: callIdRef.current,
@@ -437,13 +635,19 @@ export function useCall(socket, currentUserId) {
   }, [socket]);
 
   /**
-   * Renegocie uniquement le codec, sans relancer la decouverte ICE.
+   * Primitive UNIQUE de renegociation SDP legere (sans relance ICE).
    *
-   * Distinct de attemptIceRestart : ici le chemin reseau est bon, seul le
-   * debit change. Un iceRestart complet couterait plusieurs secondes de
-   * collecte de candidats pour rien — inacceptable en 2G.
+   * Sert a la fois aux changements de profil audio Opus ET aux changements de
+   * direction/plafond video : une seule offre, un seul chemin, pas de flot
+   * parallele. Le chemin reseau reste inchange (contrairement a
+   * attemptIceRestart) — un iceRestart couterait plusieurs secondes de collecte
+   * de candidats, inacceptable en 2G, et couperait l'audio pour rien.
+   *
+   * Contrainte structurelle (comme l'audio) : seul l'appelant reoffre, et il
+   * faut signalingState === "stable". La renegociation video ne declenche donc
+   * jamais d'ICE restart, l'audio n'est pas interrompu.
    */
-  const renegotiateProfile = useCallback(async () => {
+  const renegotiate = useCallback(async () => {
     const pc = pcRef.current;
     if (!pc || !isCallerRef.current) return; // seul l'appelant reoffre
     if (pc.signalingState !== "stable") return; // negociation deja en cours
@@ -451,18 +655,23 @@ export function useCall(socket, currentUserId) {
     try {
       const offer = await pc.createOffer();
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
+      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", {
         callId: callIdRef.current,
         signal: { type: "offer", sdp: offer.sdp },
       });
-    } catch { /* on garde le profil courant, l'appel continue */ }
+    } catch { /* on garde l'etat courant, l'appel continue */ }
   }, [socket]);
+
+  // Conserve renegotiateProfile comme alias historique (call sites audio) :
+  // meme primitive, evite un renommage massif des appelants.
+  const renegotiateProfile = renegotiate;
 
   // Branche l'indirection utilisee par adaptProfile (defini plus haut).
   useEffect(() => {
-    renegotiateRef.current = renegotiateProfile;
-  }, [renegotiateProfile]);
+    renegotiateRef.current = renegotiate;
+  }, [renegotiate]);
 
   /** Demande le micro des que l'utilisateur lance/accepte l'appel. */
   const ensureLocalStream = useCallback(async () => {
@@ -587,6 +796,31 @@ export function useCall(socket, currentUserId) {
     const stream = await ensureLocalStream();
     for (const track of stream.getTracks()) pc.addTrack(track, stream);
 
+    // Transceiver video pose SYSTEMATIQUEMENT des la creation, meme camera
+    // inactive. Choix retenu (vs ajout tardif au moment du toggle) : negocier le
+    // m=video une seule fois a l'offre initiale donne une structure SDP stable
+    // et evite une renegociation "ajout de m-line" en cours d'appel, fragile sur
+    // Safari / anciens Chromium mobiles africains cibles. Activer/desactiver =
+    // changer direction + replaceTrack, sans jamais modifier le nombre de m-lines.
+    const videoTransceiver = pc.addTransceiver("video", { direction: "inactive" });
+    videoTransceiverRef.current = videoTransceiver;
+
+    // Ré-attache l'etat video courant dans ce (nouveau) PC : indispensable pour
+    // que restartWithRelay/attemptIceRestart preservent la video active a
+    // travers une recreation du PC, exactement comme l'audio ci-dessus.
+    if (videoActiveRef.current && localVideoStreamRef.current) {
+      const vtrack = localVideoStreamRef.current.getVideoTracks()[0];
+      if (vtrack) {
+        try {
+          await videoTransceiver.sender.replaceTrack(vtrack);
+          videoTransceiver.direction = "sendrecv";
+          videoDirectionRef.current = "sendrecv";
+        } catch { /* le PC se refermera de lui-meme si l'echec persiste */ }
+      }
+    } else {
+      videoDirectionRef.current = "inactive";
+    }
+
     pc.onicecandidate = (evt) => {
       if (!evt.candidate || !callIdRef.current) return;
       // Trickle ICE : envoi au fil de l'eau, l'appel s'etablit plus vite.
@@ -597,6 +831,29 @@ export function useCall(socket, currentUserId) {
     };
 
     pc.ontrack = (evt) => {
+      // On distingue video et audio pour garder deux MediaStream distincts cote
+      // reception : vider le flux video (repli reseau, ontrack jamais recu) ne
+      // doit jamais toucher a l'audio.
+      if (evt.track.kind === "video") {
+        // Flux video distant separe. Un <video> dedie (remoteVideoRef) l'affiche
+        // dans CallUI. On garde une reference propre au track video pour pouvoir
+        // vider srcObject sans casser l'audio.
+        const vstream = evt.streams[0] || new MediaStream([evt.track]);
+        remoteVideoStreamRef.current = vstream;
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = vstream;
+          remoteVideoRef.current.play?.().catch(() => { /* autoplay bloque */ });
+        }
+        // Le track distant est "mute" tant qu'aucune image n'arrive (direction
+        // inactive/recvonly cote pair) et "unmute" quand la video coule : on
+        // pilote l'affichage du <video> distant la-dessus plutot que sur l'etat
+        // d'envoi LOCAL (videoActive). Le badge "pair sans camera" = Ticket 6.
+        setRemoteVideoActive(!evt.track.muted);
+        evt.track.onunmute = () => setRemoteVideoActive(true);
+        evt.track.onmute = () => setRemoteVideoActive(false);
+        evt.track.onended = () => setRemoteVideoActive(false);
+        return;
+      }
       if (!evt.streams[0]) return;
       remoteStreamRef.current = evt.streams[0];
       if (ultraModeRef.current !== "active" && remoteAudioRef.current) {
@@ -645,9 +902,44 @@ export function useCall(socket, currentUserId) {
       pendingCandidatesRef.current = [];
       reportedConnectionRef.current = false;
 
+      // Degradation video forcee a l'entree en mode relay (Ticket 5) : le relais
+      // TURN coute cher en bande passante serveur, on ne le charge pas de video
+      // HD des la reconnexion. On repart au palier minimal ; si la video etait
+      // deja au plancher minimal, on la coupe (auto-suspend reseau) — l'audio
+      // reste prioritaire sur le lien relaye. On reinitialise les compteurs de
+      // remontee pour que la video ne remonte pas trop vite apres le relay.
+      if (videoEnabledRef.current && videoActiveRef.current) {
+        if (videoProfileRef.current === "minimal") {
+          // Deja au plancher : coupure. Le PC recree ne reattachera pas la video
+          // (videoActiveRef=false), l'offre partira donc en m=video inactive.
+          const vtrack = localVideoStreamRef.current?.getVideoTracks()[0];
+          if (vtrack) vtrack.enabled = false; // pas stop() -> reprise instantanee
+          videoActiveRef.current = false;
+          videoAutoSuspendedRef.current = true;
+          videoDirectionRef.current = "inactive";
+          setVideoActive(false);
+          setVideoAutoSuspended(true);
+          socket?.emit("call:video:state", { callId: id, active: false, reason: "network" });
+        } else {
+          videoProfileRef.current = "minimal";
+          setVideoProfileState("minimal");
+        }
+      }
+      videoGoodSamplesRef.current = 0;
+      videoBadSamplesRef.current = 0;
+      lastVideoProfileChangeRef.current = Date.now();
+
+      // createPeerConnection re-pose le transceiver video et, si videoActiveRef
+      // est vrai, ré-attache le track + direction sendrecv (etat video preserve
+      // a travers le restart, au palier minimal force ci-dessus).
       const pc = await createPeerConnection(true);
+      // Applique le plafond minimal cote encodeur sur le nouveau sender (si la
+      // video est restee active mais degradee a minimal). Via la ref indirection
+      // (applyVideoConstraints est defini plus bas, evite un TDZ dans les deps).
+      if (videoActiveRef.current) await applyVideoConstraintsRef.current?.(videoProfileRef.current);
       const offer = await pc.createOffer();
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
+      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
     } catch (err) {
@@ -738,6 +1030,307 @@ export function useCall(socket, currentUserId) {
   }, [muted]);
 
   /**
+   * Applique un palier video AU FIL DE L'EAU, sans renegociation SDP.
+   *
+   * Deux leviers complementaires (les deux necessaires) :
+   *  - applyConstraints sur le track : reduit ce que la CAMERA capture (economie
+   *    CPU sur les telephones bas de gamme cibles),
+   *  - setParameters sur le sender : plafonne ce qui est ENCODE/envoye
+   *    (economie de bande passante meme si la capture reste plus grande).
+   *
+   * setParameters s'applique sans interruption : contrairement au changement de
+   * DIRECTION (sendrecv <-> inactive), un changement de palier resolution/bitrate
+   * ne necessite JAMAIS de renegociation SDP.
+   */
+  const applyVideoConstraints = useCallback(async (profileName) => {
+    const p = VIDEO_PROFILES[profileName] ?? VIDEO_PROFILES.low;
+    const track = localVideoStreamRef.current?.getVideoTracks()[0];
+    if (track && p.width > 0) {
+      try {
+        await track.applyConstraints({
+          width: { ideal: p.width },
+          height: { ideal: p.height },
+          frameRate: { ideal: p.fps, max: p.fps },
+        });
+      } catch { /* la camera peut refuser certaines contraintes : best-effort */ }
+    }
+    const sender = videoTransceiverRef.current?.sender;
+    if (sender && sender.setParameters && sender.getParameters) {
+      try {
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+        params.encodings[0].maxBitrate = p.maxBitrate || undefined;
+        params.encodings[0].maxFramerate = p.fps || undefined;
+        // Downscale cote encodeur en complement d'applyConstraints (certains
+        // navigateurs ne re-negocient pas la resolution de capture a la volee).
+        delete params.encodings[0].scaleResolutionDownBy;
+        await sender.setParameters(params);
+      } catch { /* setParameters best-effort */ }
+    }
+  }, []);
+
+  /**
+   * Coupe la video pour cause RESEAU (pas manuel) : la piste cesse d'etre
+   * encodee/envoyee mais N'EST PAS stoppee (track.stop) — elle est seulement
+   * desactivee (track.enabled=false) + direction inactive. Cela permet une
+   * reprise INSTANTANEE (resumeVideoFromNetwork) sans re-demander la permission
+   * camera ni rouvrir le device (couteux, source de flicker).
+   *
+   * videoEnabled RESTE true (intention utilisateur inchangee) ; on distingue cet
+   * etat via videoAutoSuspended=true. Un event call:video:state reason="network"
+   * previent le pair pour l'affichage distant (Ticket 6).
+   */
+  const suspendVideoForNetwork = useCallback(() => {
+    if (!videoActiveRef.current) return;
+    const track = localVideoStreamRef.current?.getVideoTracks()[0];
+    if (track) track.enabled = false; // desactive, PAS stop() -> reprise instantanee
+    const sender = videoTransceiverRef.current?.sender;
+    if (sender) {
+      // La piste reste attachee au sender (pour reprise rapide) mais la direction
+      // inactive coupe l'encodage/envoi RTP.
+      sender.replaceTrack(null).catch(() => { /* PC deja fermee */ });
+    }
+    if (videoTransceiverRef.current) {
+      try { videoTransceiverRef.current.direction = "inactive"; } catch { /* ignore */ }
+    }
+    videoDirectionRef.current = "inactive";
+    videoActiveRef.current = false;
+    videoAutoSuspendedRef.current = true;
+    setVideoActive(false);
+    setVideoAutoSuspended(true);
+    // Changement de direction = renegociation SDP legere (jamais d'ICE restart).
+    renegotiate();
+    socket?.emit("call:video:state", { callId: callIdRef.current, active: false, reason: "network" });
+  }, [renegotiate, socket]);
+
+  /**
+   * Reactive la video apres une coupure RESEAU (symetrique de suspend). La piste
+   * ayant seulement ete desactivee (pas stoppee), la reprise est instantanee :
+   * track.enabled=true + direction sendrecv + renegociation. Si la piste a ete
+   * perdue entre-temps, on la recapture via le mecanisme de toggleCamera.
+   */
+  const resumeVideoFromNetwork = useCallback(async () => {
+    if (!videoEnabledRef.current) return; // securite : jamais contre l'intention
+    let track = localVideoStreamRef.current?.getVideoTracks()[0];
+    if (!track || track.readyState === "ended") {
+      // Piste perdue : recapture via le meme chemin que toggleCamera.
+      try {
+        const stream = await getCameraStream();
+        localVideoStreamRef.current = stream;
+        track = stream.getVideoTracks()[0];
+      } catch (err) {
+        // Recapture impossible : on abandonne la reprise sans casser l'appel.
+        setCameraError(cameraErrorMessage(err));
+        return;
+      }
+    }
+    if (!track) return;
+    track.enabled = true;
+    const sender = videoTransceiverRef.current?.sender;
+    if (sender) {
+      try { await sender.replaceTrack(track); } catch { /* PC deja fermee */ }
+    }
+    if (videoTransceiverRef.current) {
+      try { videoTransceiverRef.current.direction = "sendrecv"; } catch { /* ignore */ }
+    }
+    videoDirectionRef.current = "sendrecv";
+    await applyVideoConstraints(videoProfileRef.current);
+    videoActiveRef.current = true;
+    videoAutoSuspendedRef.current = false;
+    setVideoActive(true);
+    setVideoAutoSuspended(false);
+    renegotiate();
+    socket?.emit("call:video:state", { callId: callIdRef.current, active: true, reason: "network" });
+  }, [applyVideoConstraints, renegotiate, socket]);
+
+  /**
+   * Ticket 7 (section 8.4) : suspend/reprend la video pour cause de mise en
+   * ARRIERE-PLAN (visibilitychange), pas reseau. Meme mecanique que
+   * suspend/resumeVideoForNetwork (track.enabled=false + direction inactive,
+   * jamais track.stop(), reprise instantanee) mais SANS toucher a
+   * videoAutoSuspended[Ref] : cet etat reste reserve a adaptVideo (Ticket 5)
+   * pour ne pas confondre les deux causes de suspension dans l'UI/signaling
+   * (badge "reseau insuffisant" serait trompeur pour une simple mise en
+   * arriere-plan).
+   */
+  const suspendVideoForVisibility = useCallback(() => {
+    if (!videoActiveRef.current) return;
+    const track = localVideoStreamRef.current?.getVideoTracks()[0];
+    if (track) track.enabled = false; // desactive, PAS stop() -> reprise instantanee
+    const sender = videoTransceiverRef.current?.sender;
+    if (sender) {
+      sender.replaceTrack(null).catch(() => { /* PC deja fermee */ });
+    }
+    if (videoTransceiverRef.current) {
+      try { videoTransceiverRef.current.direction = "inactive"; } catch { /* ignore */ }
+    }
+    videoDirectionRef.current = "inactive";
+    videoActiveRef.current = false;
+    setVideoActive(false);
+    // Renegociation legere (jamais d'ICE restart), comme pour le repli reseau.
+    renegotiate();
+    socket?.emit("call:video:state", { callId: callIdRef.current, active: false, reason: "background" });
+  }, [renegotiate, socket]);
+
+  const resumeVideoFromVisibility = useCallback(async () => {
+    if (!videoEnabledRef.current) return; // securite : jamais contre l'intention
+    let track = localVideoStreamRef.current?.getVideoTracks()[0];
+    if (!track || track.readyState === "ended") {
+      try {
+        const stream = await getCameraStream();
+        localVideoStreamRef.current = stream;
+        track = stream.getVideoTracks()[0];
+      } catch (err) {
+        setCameraError(cameraErrorMessage(err));
+        return;
+      }
+    }
+    if (!track) return;
+    track.enabled = true;
+    const sender = videoTransceiverRef.current?.sender;
+    if (sender) {
+      try { await sender.replaceTrack(track); } catch { /* PC deja fermee */ }
+    }
+    if (videoTransceiverRef.current) {
+      try { videoTransceiverRef.current.direction = "sendrecv"; } catch { /* ignore */ }
+    }
+    videoDirectionRef.current = "sendrecv";
+    await applyVideoConstraints(videoProfileRef.current);
+    videoActiveRef.current = true;
+    setVideoActive(true);
+    renegotiate();
+    socket?.emit("call:video:state", { callId: callIdRef.current, active: true, reason: "background" });
+  }, [applyVideoConstraints, renegotiate, socket]);
+
+  // Branche les indirections utilisees par adaptVideo (defini plus haut, memoize
+  // sans deps pour ne pas se re-creer a chaque render).
+  useEffect(() => {
+    applyVideoConstraintsRef.current = applyVideoConstraints;
+    suspendVideoRef.current = suspendVideoForNetwork;
+    resumeVideoRef.current = resumeVideoFromNetwork;
+    suspendVideoForVisibilityRef.current = suspendVideoForVisibility;
+    resumeVideoForVisibilityRef.current = resumeVideoFromVisibility;
+  }, [
+    applyVideoConstraints,
+    suspendVideoForNetwork,
+    resumeVideoFromNetwork,
+    suspendVideoForVisibility,
+    resumeVideoFromVisibility,
+  ]);
+
+  /**
+   * Active/desactive la camera locale ET la branche au RTCPeerConnection.
+   *
+   * Un echec de capture ne doit JAMAIS faire echouer l'appel audio en cours :
+   * seul cameraError est mis a jour, videoEnabled/videoActive retombent a false.
+   * La renegociation video (changement de direction) n'entraine aucun ICE
+   * restart et n'interrompt donc jamais l'audio.
+   *
+   * Ticket 7 (section 8.5) : un double-clic rapide (toggle ON puis OFF avant que
+   * la premiere capture/renegociation soit terminee) est ignore silencieusement
+   * via videoToggleInFlightRef, plutot que de laisser deux getUserMedia/
+   * renegociations se chevaucher et corrompre l'etat.
+   */
+  const toggleCamera = useCallback(async () => {
+    if (videoToggleInFlightRef.current) return;
+    videoToggleInFlightRef.current = true;
+
+    // Toute action manuelle "gagne" sur une decision auto (Ticket 5) : on
+    // reinitialise les compteurs/cooldown video pour ne pas etre contredit juste
+    // apres par une renegociation reseau-driven.
+    videoGoodSamplesRef.current = 0;
+    videoBadSamplesRef.current = 0;
+    lastVideoProfileChangeRef.current = Date.now();
+    // Une action manuelle explicite prime aussi sur une suspension de visibilite
+    // en cours (cas limite : l'utilisateur toggle pendant que l'app est encore
+    // en train de gerer un retour de visibilite) - evite une reprise auto
+    // fantome au prochain visibilitychange.
+    videoSuspendedByVisibilityRef.current = false;
+
+    try {
+      if (videoEnabled) {
+        // Coupure manuelle : on arrete reellement la piste (voyant camera eteint),
+        // contrairement a une future coupure auto reseau (Ticket 5) qui ne fera que
+        // desactiver la piste pour une reprise instantanee.
+        const sender = videoTransceiverRef.current?.sender;
+        if (sender) {
+          try { await sender.replaceTrack(null); } catch { /* PC deja fermee */ }
+        }
+        if (videoTransceiverRef.current) {
+          try { videoTransceiverRef.current.direction = "inactive"; } catch { /* ignore */ }
+        }
+        videoDirectionRef.current = "inactive";
+        if (localVideoStreamRef.current) {
+          for (const track of localVideoStreamRef.current.getTracks()) {
+            try { track.stop(); } catch { /* ignore */ }
+          }
+          localVideoStreamRef.current = null;
+        }
+        videoActiveRef.current = false;
+        videoEnabledRef.current = false;
+        videoAutoSuspendedRef.current = false;
+        setVideoEnabled(false);
+        setVideoActive(false);
+        setVideoAutoSuspended(false);
+        setCameraError(null);
+        // Renegocie pour passer la m=video a inactive (seul l'appelant reoffre).
+        renegotiate();
+        socket?.emit("call:video:state", { callId: callIdRef.current, active: false, reason: "manual" });
+        return;
+      }
+
+      setCameraLoading(true);
+      setCameraError(null);
+      try {
+        const stream = await getCameraStream();
+        localVideoStreamRef.current = stream;
+        videoProfileRef.current = detectInitialVideoProfile();
+        setVideoProfileState(videoProfileRef.current);
+        videoActiveRef.current = true;
+        videoEnabledRef.current = true;
+        videoAutoSuspendedRef.current = false;
+        setVideoEnabled(true);
+        setVideoActive(true);
+
+        // Branche au PC si un appel est actif ; sinon on reste en preview locale
+        // (comportement Ticket 2), le transceiver sera pose a la creation du PC.
+        const sender = videoTransceiverRef.current?.sender;
+        if (pcRef.current && sender) {
+          const vtrack = stream.getVideoTracks()[0];
+          if (vtrack) {
+            await sender.replaceTrack(vtrack);
+            try { videoTransceiverRef.current.direction = "sendrecv"; } catch { /* ignore */ }
+            videoDirectionRef.current = "sendrecv";
+            await applyVideoConstraints(videoProfileRef.current);
+            if (isCallerRef.current) {
+              renegotiate();
+            } else {
+              // L'appele ne peut pas emettre d'offre lui-meme : il demande a
+              // l'appelant de renegocier (celui-ci verra son transceiver video
+              // deja en sendrecv/recvonly cote SDP recu et reoffrira en consequence).
+              socket?.emit("call:video:request", { callId: callIdRef.current });
+            }
+            socket?.emit("call:video:state", { callId: callIdRef.current, active: true, reason: "manual" });
+          }
+        }
+      } catch (err) {
+        // Repli silencieux : la camera echoue sans jamais toucher a l'appel audio.
+        setCameraError(cameraErrorMessage(err));
+        videoActiveRef.current = false;
+        videoEnabledRef.current = false;
+        videoAutoSuspendedRef.current = false;
+        videoDirectionRef.current = "inactive";
+        setVideoEnabled(false);
+        setVideoActive(false);
+      } finally {
+        setCameraLoading(false);
+      }
+    } finally {
+      videoToggleInFlightRef.current = false;
+    }
+  }, [videoEnabled, applyVideoConstraints, renegotiate, socket]);
+
+  /**
    * Change le profil audio en cours d'appel (economie de donnees manuelle).
    * Le choix manuel neutralise l'adaptation automatique pendant le cooldown,
    * pour ne pas etre immediatement contredit par la mesure suivante.
@@ -798,6 +1391,7 @@ export function useCall(socket, currentUserId) {
         const pc = await createPeerConnection(false);
         const offer = await pc.createOffer();
         offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
+        offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
         await pc.setLocalDescription(offer);
         socket.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
       } catch (err) {
@@ -826,6 +1420,11 @@ export function useCall(socket, currentUserId) {
 
           const answer = await pc.createAnswer();
           answer.sdp = applyOpusProfile(answer.sdp, profileRef.current);
+          // direction = null : on NE force PAS la direction sur la reponse (elle
+          // est deja correctement derivee de l'offre par le navigateur ; la
+          // reecrire casserait la reception cote appele). On pose seulement le
+          // plafond b=* selon le palier.
+          answer.sdp = applyVideoProfile(answer.sdp, videoProfileRef.current, null);
           await pc.setLocalDescription(answer);
           socket.emit("call:signal", { callId: id, signal: { type: "answer", sdp: answer.sdp } });
         } else if (signal.type === "answer") {
@@ -866,6 +1465,23 @@ export function useCall(socket, currentUserId) {
       if (callIdRef.current !== id) return;
       ultraPeerReadyRef.current = true;
       if (ultraPendingRef.current) engageUltra();
+    };
+
+    // L'appele a active sa camera et demande une renegociation : seul
+    // l'appelant peut reoffrir. On ignore si on n'est pas l'appelant ou si
+    // une negociation est deja en cours (renegotiate() verifie deja stable).
+    const onVideoRequest = ({ callId: id }) => {
+      if (callIdRef.current !== id || !isCallerRef.current) return;
+      renegotiate();
+    };
+
+    // Etat video du peer distant (coupure/activation, manuelle ou reseau) :
+    // pilote uniquement l'affichage (Ticket 6), aucune action WebRTC ici (la
+    // direction SDP est deja vehiculee par call:signal).
+    const onVideoState = ({ callId: id, active, reason }) => {
+      if (callIdRef.current !== id) return;
+      setRemoteVideoActive(Boolean(active));
+      setRemoteVideoReason(reason === "network" ? "network" : "manual");
     };
 
     const onEnded = ({ callId: id, reason }) => {
@@ -915,6 +1531,8 @@ export function useCall(socket, currentUserId) {
     socket.on("call:ultra:ready", onUltraReady);
     socket.on("call:ultra:go", onUltraGo);
     socket.on("call:ultra:stop", onUltraStop);
+    socket.on("call:video:request", onVideoRequest);
+    socket.on("call:video:state", onVideoState);
     socket.on("call:ended", onEnded);
     socket.on("call:failed", onFailed);
     socket.on("disconnect", onDisconnect);
@@ -928,6 +1546,8 @@ export function useCall(socket, currentUserId) {
       socket.off("call:ultra:ready", onUltraReady);
       socket.off("call:ultra:go", onUltraGo);
       socket.off("call:ultra:stop", onUltraStop);
+      socket.off("call:video:request", onVideoRequest);
+      socket.off("call:video:state", onVideoState);
       socket.off("call:ended", onEnded);
       socket.off("call:failed", onFailed);
       socket.off("disconnect", onDisconnect);
@@ -935,7 +1555,7 @@ export function useCall(socket, currentUserId) {
       clearTimeout(timersRef.current.disconnectGrace);
       delete timersRef.current.disconnectGrace;
     };
-  }, [socket, state, startUltra, engageUltra, teardownUltra, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle]);
+  }, [socket, state, startUltra, engageUltra, teardownUltra, createPeerConnection, flushPendingCandidates, cleanup, endCall, resetToIdle, renegotiate]);
 
   // Heartbeat + statistiques + chrono pendant l'appel.
   useEffect(() => {
@@ -964,6 +1584,21 @@ export function useCall(socket, currentUserId) {
   // Les navigateurs mobiles suspendent souvent AudioWorklet et Socket.IO quand
   // l'ecran est verrouille. Revenir a WebRTC avant la suspension permet au
   // moteur audio natif de continuer quand le navigateur le supporte.
+  //
+  // Ticket 7 (section 8.4) : etend le meme principe a la video. Sur "hidden",
+  // si la video est active, on la desactive explicitement (track.enabled=false,
+  // direction inactive, PAS de track.stop()) plutot que de laisser un
+  // comportement incoherent selon les navigateurs mobiles (qui suspendent de
+  // toute facon l'encodage camera en arriere-plan). On reutilise le meme
+  // mecanisme que suspendVideoForNetwork/resumeVideoFromNetwork (Ticket 5) via
+  // les refs indirectes, pour ne pas dupliquer la logique de renegociation.
+  //
+  // Distinction cause de suspension : videoSuspendedByVisibilityRef marque une
+  // suspension causee par la mise en arriere-plan (annulee automatiquement au
+  // retour "visible"). Si la video etait DEJA videoAutoSuspendedRef (coupure
+  // reseau) AVANT la mise en arriere-plan, on ne la relance pas au retour de
+  // visibilite - c'est adaptVideo (mesures reseau soutenues) qui doit la
+  // relancer normalement, pas le simple retour de visibilite.
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
@@ -971,12 +1606,27 @@ export function useCall(socket, currentUserId) {
           ultraAutoAttemptedRef.current = true;
           teardownUltra({ notify: true });
         }
+        if (videoActiveRef.current && !videoAutoSuspendedRef.current) {
+          videoSuspendedByVisibilityRef.current = true;
+          suspendVideoForVisibilityRef.current?.();
+        }
         return;
       }
 
       if (remoteAudioRef.current && remoteStreamRef.current) {
         remoteAudioRef.current.srcObject = remoteStreamRef.current;
         remoteAudioRef.current.play?.().catch(() => { /* autoplay deja bloque */ });
+      }
+
+      if (videoSuspendedByVisibilityRef.current) {
+        videoSuspendedByVisibilityRef.current = false;
+        // Ne relance que si l'intention utilisateur est toujours active et que
+        // la coupure n'a pas ete "reclassee" reseau entre-temps (adaptVideo a
+        // pu tourner pendant l'arriere-plan et positionner videoAutoSuspendedRef
+        // lui-meme, auquel cas c'est a lui de gerer la remontee).
+        if (videoEnabledRef.current && !videoAutoSuspendedRef.current) {
+          resumeVideoForVisibilityRef.current?.();
+        }
       }
     };
 
@@ -1000,13 +1650,24 @@ export function useCall(socket, currentUserId) {
     ultraMode,
     ultraError,
     reconnecting,
+    videoEnabled,
+    videoActive,
+    videoAutoSuspended,
+    videoProfile,
+    remoteVideoActive,
+    remoteVideoReason,
+    cameraError,
+    cameraLoading,
     remoteAudioRef,
+    localVideoStreamRef,
+    remoteVideoRef,
     startCall,
     prepareMicrophone,
     acceptCall,
     rejectCall,
     endCall,
     toggleMute,
+    toggleCamera,
     changeProfile,
     startUltra,
     stopUltra,
