@@ -11,9 +11,10 @@ function resolveSiblingUrl(file) {
 }
 
 class Codec2DuplexProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.module = null;
+    this.wasmBinary = options.processorOptions?.wasmBinary || null;
     this.handle = 0;
     this.inputPtr = 0;
     this.outputPtr = 0;
@@ -38,6 +39,17 @@ class Codec2DuplexProcessor extends AudioWorkletProcessor {
     try {
       this.module = await createCodec2Module({
         locateFile: resolveSiblingUrl,
+        instantiateWasm: (imports, successCallback) => {
+          if (!this.wasmBinary) throw new Error("Codec2 WASM binary missing");
+          WebAssembly.instantiate(this.wasmBinary, imports).then(
+            ({ instance }) => successCallback(instance),
+            (error) => this.port.postMessage({
+              type: "error",
+              message: error?.message || "Codec2 WASM instantiation failed",
+            }),
+          );
+          return {};
+        },
       });
       if (this.closed) return;
       this.handle = this.module._codec2_wasm_create(CODEC2_MODE_700C);
