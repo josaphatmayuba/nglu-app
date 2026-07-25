@@ -1,6 +1,6 @@
 import React from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Bounds, Environment } from "@react-three/drei";
+import { OrbitControls, Bounds } from "@react-three/drei";
 import * as THREE from "three";
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -141,8 +141,12 @@ function Scene({ model, isolatedIndex, exploded }) {
   const levels = model.levels || [];
   return (
     <>
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[10, 20, 10]} intensity={1.1} castShadow />
+      {/* Éclairage 100% local — aucune ressource externe (pas de HDR/Environment
+          qui tenterait un fetch CDN bloqué par la CSP). */}
+      <ambientLight intensity={0.65} />
+      <hemisphereLight args={["#ffffff", "#b0b8c8", 0.5]} />
+      <directionalLight position={[12, 22, 10]} intensity={1.0} castShadow />
+      <directionalLight position={[-10, 12, -8]} intensity={0.35} />
       <Bounds fit clip observe margin={1.2}>
         <group>
           {levels.map((lv, i) => (
@@ -151,7 +155,6 @@ function Scene({ model, isolatedIndex, exploded }) {
         </group>
       </Bounds>
       <gridHelper args={[40, 40, "#cbd5e1", "#e5e7eb"]} position={[0, -0.01, 0]} />
-      <Environment preset="city" />
       <OrbitControls makeDefault enableDamping dampingFactor={0.1} minDistance={2} maxDistance={120} />
     </>
   );

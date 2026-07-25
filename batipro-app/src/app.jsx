@@ -1,6 +1,7 @@
 import React from "react";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
+import ViewerBoundary from "./ViewerBoundary.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — pas de dépendance externe.
@@ -898,9 +899,11 @@ function Plan3D({ projects, materials, canMutate }) {
 
             {tab === "view3d" ? (
               <div className="viewer3d" style={{ height: 420 }}>
-                <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement du moteur 3D…</div>}>
-                  <Plan3DViewer model={model} isolatedIndex={isolated ? levelIdx : null} exploded={exploded} />
-                </React.Suspense>
+                <ViewerBoundary>
+                  <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement du moteur 3D…</div>}>
+                    <Plan3DViewer model={model} isolatedIndex={isolated ? levelIdx : null} exploded={exploded} />
+                  </React.Suspense>
+                </ViewerBoundary>
               </div>
             ) : tab === "view2d" ? (
               <div className="viewer3d" style={{ height: 420, background: "#f8fafc" }}>
