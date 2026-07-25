@@ -40,6 +40,29 @@ async function jsonFetch(path, init = {}, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
+// Upload multipart authentifié (le token JWT n'est jamais dans l'URL).
+async function uploadForm(path, formData, retried = false) {
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { ...authHeaders() }, body: formData });
+  if (!res.ok) {
+    if (res.status === 401 && !retried && (await restoreSession())) return uploadForm(path, formData, true);
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 160)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// Récupère un fichier protégé en blob authentifié → object URL (jamais via <img src> direct).
+async function blobUrl(path, retried = false) {
+  const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
+  if (!res.ok) {
+    if (res.status === 401 && !retried && (await restoreSession())) return blobUrl(path, true);
+    throw new Error(`API ${res.status} ${res.statusText}`);
+  }
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), type: blob.type };
+}
+
 export const api = {
   dashboard: () => jsonFetch("/dashboard"),
   projects: () => jsonFetch("/projects"),
@@ -79,5 +102,17 @@ export const api = {
   subcontractors: () => jsonFetch("/subcontractors"),
   createSubcontractor: (b) => jsonFetch("/subcontractors", { method: "POST", body: JSON.stringify(b || {}) }),
   updateSubcontractor: (id, b) => jsonFetch(`/subcontractors/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
-  deleteSubcontractor: (id) => jsonFetch(`/subcontractors/${id}`, { method: "DELETE" })
+  deleteSubcontractor: (id) => jsonFetch(`/subcontractors/${id}`, { method: "DELETE" }),
+  // Plan 3D par chantier (modele architectural + niveaux)
+  buildingModel: (projectId) => jsonFetch(`/building-model?project_id=${projectId}`),
+  createBuildingModel: (b) => jsonFetch("/building-model", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateBuildingModel: (id, b) => jsonFetch(`/building-model/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteBuildingModel: (id) => jsonFetch(`/building-model/${id}`, { method: "DELETE" }),
+  createBuildingLevel: (b) => jsonFetch("/building-levels", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateBuildingLevel: (id, b) => jsonFetch(`/building-levels/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteBuildingLevel: (id) => jsonFetch(`/building-levels/${id}`, { method: "DELETE" }),
+  // Import du plan de l'architecte (image/PDF) — Phase 2
+  uploadModelPlan: (modelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-model/${modelId}/plan`, fd); },
+  modelPlanUrl: (modelId) => blobUrl(`/building-model/${modelId}/plan`),
+  deleteModelPlan: (modelId) => jsonFetch(`/building-model/${modelId}/plan`, { method: "DELETE" })
 };

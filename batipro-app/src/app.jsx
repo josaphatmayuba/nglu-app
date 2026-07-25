@@ -161,7 +161,7 @@ function App() {
     dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} />,
     chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} />,
     planning: <Planning projects={projectRows} canMutate={canMutate} />,
-    plan3d: <Plan3D materials={materialRows} />,
+    plan3d: <Plan3D projects={projectRows} materials={materialRows} canMutate={canMutate} />,
     situations: <Situations projects={projectRows} canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
@@ -766,96 +766,202 @@ function PhaseModal({ modal, busy, error, onClose, onSave }) {
   );
 }
 
-/* ── Plan 3D & matériaux ───────────────────────────────────────────────── */
-function Plan3D({ materials }) {
+/* ── Plan 3D architectural par chantier ────────────────────────────────── */
+const Plan3DViewer = React.lazy(() => import("./Plan3DViewer.jsx"));
+const Plan3DEditor = React.lazy(() => import("./Plan3DEditor.jsx"));
+const Plan2DView = React.lazy(() => import("./Plan2DView.jsx"));
+const PlanOriginalView = React.lazy(() => import("./PlanOriginalView.jsx"));
+const ROOF_LABELS = { flat: "Plat / terrasse", gable: "2 pentes (pignon)", hip: "4 pentes", none: "Sans toit" };
+
+function Plan3D({ projects, materials, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [model, setModel] = React.useState(undefined); // undefined=chargement, null=aucun
+  const [tab, setTab] = React.useState("view3d"); // view2d | view3d | editor
+  const [levelIdx, setLevelIdx] = React.useState(0);
+  const [isolated, setIsolated] = React.useState(false);
+  const [exploded, setExploded] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [overlayUrl, setOverlayUrl] = React.useState(null); // plan importé (image) en fond de calque
+  const fileRef = React.useRef(null);
+
+  const selected = projects.find((p) => p.id === projectId);
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setModel(null); return; }
+    setModel(undefined); setError("");
+    api.buildingModel(projectId).then((m) => setModel(m)).catch((e) => { setModel(null); setError(String(e.message || e)); });
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const levels = model?.levels || [];
+  React.useEffect(() => { if (levelIdx >= levels.length) setLevelIdx(Math.max(0, levels.length - 1)); }, [levels.length, levelIdx]);
+
+  // Calque : charge l'image importée (hors PDF) en object URL pour la mettre en fond de l'éditeur 2D.
+  const modelId = model?.id, fileKey = model?.importedFileKey, fileFmt = model?.importedFileFormat;
+  React.useEffect(() => {
+    let url = null, alive = true;
+    setOverlayUrl(null);
+    if (modelId && fileKey && fileFmt !== "pdf") {
+      api.modelPlanUrl(modelId).then((r) => { if (alive) { url = r.url; setOverlayUrl(r.url); } }).catch(() => {});
+    }
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [modelId, fileKey, fileFmt]);
+
+  const createModel = async () => {
+    setBusy(true); setError("");
+    try { await api.createBuildingModel({ project_id: projectId, name: selected?.name }); load(); }
+    catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+  const addLevel = async () => {
+    setBusy(true); setError("");
+    try {
+      const idx = levels.length;
+      await api.createBuildingLevel({ model_id: model.id, project_id: projectId, level_index: idx, label: idx === 0 ? "RDC" : `R+${idx}`, elevation: idx * Number(model.storeyHeight || 2.8), geometry: { rooms: [], walls: [], openings: [] } });
+      load(); setTab("editor"); setLevelIdx(idx);
+    } catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+  const removeLevel = async (id) => {
+    setBusy(true); setError("");
+    try { await api.deleteBuildingLevel(id); load(); }
+    catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+  const saveLevel = async (id, geometry) => {
+    setBusy(true); setError("");
+    try { await api.updateBuildingLevel(id, { geometry }); load(); }
+    catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+  const setRoof = async (roof_type) => {
+    setBusy(true); setError("");
+    try { await api.updateBuildingModel(model.id, { roof_type }); load(); }
+    catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+  const uploadPlan = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true); setError("");
+    try { await api.uploadModelPlan(model.id, file); load(); setTab("original"); }
+    catch (err) { setError(String(err.message || err)); } finally { setBusy(false); }
+  };
+  const removePlan = async () => {
+    setBusy(true); setError("");
+    try { await api.deleteModelPlan(model.id); load(); }
+    catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
+  };
+
   const colors = ["#475569", "#64748b", "#f59e0b", "#6366f1", "#10b981", "#f43f5e"];
   const metre = materials.slice(0, 6).map((m, i) => ({ i: i + 1, c: colors[i % colors.length], name: m.name, q: `${n(m.stock)} ${m.unit}` }));
-  const [floor, setFloor] = React.useState(null); // null = tous les étages
-  const [exploded, setExploded] = React.useState(false);
-  const [rotated, setRotated] = React.useState(false);
-  const chipBtn = { cursor: "pointer", border: 0, font: "inherit" };
-  const Tab = ({ on, onClick, children }) => (
-    <button type="button" className={`chip ${on ? "iris-solid grad-iris" : "ink"}`} style={chipBtn} onClick={onClick}>{children}</button>
-  );
+  const currentLevel = levels[levelIdx];
+
   return (
     <>
       <div className="topbar">
-        <div><p className="eyebrow iris">IA</p><h2 className="title font-display">Du plan papier à la <span className="text-grad">maquette 3D</span></h2></div>
-        <span className="chip iris-solid grad-iris"><Icon name="sparkles" /> Vision IA</span>
+        <div><p className="eyebrow iris">Plan architectural</p><h2 className="title font-display">Maquette 3D{selected ? ` — ${selected.name}` : ""}</h2></div>
+        <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
       </div>
-      <div className="g3">
-        <div className="card span2" style={{ overflow: "hidden" }}>
-          <div style={{ display: "flex", gap: 6, padding: "12px 14px", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap" }}>
-            <Tab on={floor === null} onClick={() => setFloor(null)}>Tous les étages</Tab>
-            <Tab on={floor === 0} onClick={() => setFloor(0)}>RDC</Tab>
-            <Tab on={floor === 1} onClick={() => setFloor(1)}>R+1</Tab>
-            <Tab on={floor === 2} onClick={() => setFloor(2)}>R+2</Tab>
-            <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <Tab on={exploded} onClick={() => setExploded((e) => !e)}><Icon name="box" /> Éclatée</Tab>
-              <Tab on={rotated} onClick={() => setRotated((r) => !r)}><Icon name="rotate3d" /> Rotation</Tab>
-            </span>
-          </div>
-          <div className="viewer3d">
-            <IsoBuilding floor={floor} exploded={exploded} rotated={rotated} />
-            <div style={{ position: "absolute", bottom: 8, left: 12, fontSize: 10, color: "var(--ink-500)", display: "flex", alignItems: "center", gap: 4 }}>
-              <Icon name="rotate3d" className="ic" style={{ width: 12, height: 12 }} /> aperçu maquette · <span style={{ color: "var(--emerald-600)", fontWeight: 600 }}>{floor === null ? "3 niveaux" : ["RDC", "R+1", "R+2"][floor]}</span>
-            </div>
-          </div>
+
+      {error && <div className="inline-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+      {model === undefined ? (
+        <div className="card pad"><span className="muted">Chargement du plan…</span></div>
+      ) : model === null ? (
+        <div className="card pad" style={{ textAlign: "center", padding: 32 }}>
+          <p className="muted" style={{ marginBottom: 14 }}>Aucun plan 3D pour ce chantier.</p>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={createModel}><Icon name="plus" /> Créer le plan</button>
         </div>
-        <div className="card pad">
-          <p className="kv-title"><Icon name="package" /> Matériaux suivis</p>
-          {metre.length ? metre.map((m) => (
-            <div className="metre-row" key={m.i}>
-              <span className="metre-idx" style={{ background: m.c }}>{m.i}</span>
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>{m.name}</div><div style={{ color: "var(--ink-400)" }}>{m.q}</div></div>
+      ) : (
+        <>
+          <div className="card" style={{ overflow: "hidden", marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 6, padding: "12px 14px", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" className={`chip ${tab === "view2d" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("view2d")}>Vue 2D</button>
+              <button type="button" className={`chip ${tab === "view3d" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("view3d")}>Vue 3D</button>
+              {model.importedFileKey && <button type="button" className={`chip ${tab === "original" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("original")}>Plan original</button>}
+              <button type="button" className={`chip ${tab === "editor" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("editor")} disabled={!canMutate}>Éditeur</button>
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" style={{ display: "none" }} onChange={uploadPlan} />
+              <button type="button" className="chip ink" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={() => fileRef.current?.click()}><Icon name="filePlus" /> {model.importedFileKey ? "Remplacer le plan" : "Importer un plan"}</button>
+              {model.importedFileKey && <button type="button" className="chip rose" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={removePlan}>Retirer</button>}
+              {(tab === "view2d" || tab === "view3d") && levels.length > 0 && (
+                <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  {levels.map((lv, i) => (
+                    <button key={lv.id} type="button" className={`chip ${i === levelIdx ? "amber" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setLevelIdx(i)}>{lv.label || `Niv. ${lv.levelIndex}`}</button>
+                  ))}
+                  {tab === "view3d" && <>
+                    <button type="button" className={`chip ${isolated ? "amber" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setIsolated((v) => !v)}>Isoler</button>
+                    <button type="button" className={`chip ${exploded ? "amber" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setExploded((v) => !v)}><Icon name="box" /> Éclatée</button>
+                  </>}
+                </span>
+              )}
             </div>
-          )) : <p className="muted" style={{ fontSize: 12 }}>Aucun matériau enregistré.</p>}
-        </div>
-      </div>
-      <div className="g4" style={{ marginTop: 20 }}>
-        <Feature icon="calculator" tone="iris" title="Métré & devis instantanés" text="Quantités extraites du plan → bon de commande en 1 clic." />
-        <Feature icon="eye" tone="amber" title="Vendre sur plan" text="Le client visualise en 3D avant les travaux." />
-        <Feature icon="checkCheck" tone="emerald" title="Avancement en 3D" text="On coche les matériaux posés → la maquette se remplit." />
-        <Feature icon="shield" tone="rose" title="Moins de gaspillage" text="Détection d'incohérences, juste quantité commandée." />
-      </div>
+
+            {tab === "view3d" ? (
+              <div className="viewer3d" style={{ height: 420 }}>
+                <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement du moteur 3D…</div>}>
+                  <Plan3DViewer model={model} isolatedIndex={isolated ? levelIdx : null} exploded={exploded} />
+                </React.Suspense>
+              </div>
+            ) : tab === "view2d" ? (
+              <div className="viewer3d" style={{ height: 420, background: "#f8fafc" }}>
+                <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement…</div>}>
+                  <Plan2DView level={currentLevel} />
+                </React.Suspense>
+              </div>
+            ) : tab === "original" ? (
+              <div className="viewer3d" style={{ height: 420, background: "#334155" }}>
+                <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement…</div>}>
+                  <PlanOriginalView model={model} />
+                </React.Suspense>
+              </div>
+            ) : (
+              <div className="pad">
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+                  <label className="field" style={{ minWidth: 180 }}>
+                    <span>Toit</span>
+                    <select value={model.roofType} onChange={(e) => setRoof(e.target.value)}>
+                      {Object.entries(ROOF_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </label>
+                  <button className="btn btn-ghost" type="button" onClick={addLevel} disabled={busy}>+ Étage</button>
+                </div>
+                {!levels.length ? (
+                  <p className="muted" style={{ fontSize: 13 }}>Aucun étage. Ajoutez un étage pour commencer à dessiner le plan.</p>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+                      {levels.map((lv, i) => (
+                        <span key={lv.id} style={{ display: "inline-flex", alignItems: "center" }}>
+                          <button type="button" className={`chip ${i === levelIdx ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setLevelIdx(i)}>{lv.label || `Niv. ${lv.levelIndex}`}</button>
+                          {i === levelIdx && levels.length > 1 && <button type="button" className="icon-btn" title="Supprimer l'étage" style={{ marginLeft: 2 }} onClick={() => removeLevel(lv.id)}>✕</button>}
+                        </span>
+                      ))}
+                    </div>
+                    {currentLevel && (
+                      <React.Suspense fallback={<span className="muted">Chargement de l'éditeur…</span>}>
+                        <Plan3DEditor level={currentLevel} model={model} busy={busy} onSaveLevel={saveLevel} overlayUrl={overlayUrl} />
+                      </React.Suspense>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card pad">
+            <p className="kv-title"><Icon name="package" /> Matériaux suivis</p>
+            {metre.length ? metre.map((m) => (
+              <div className="metre-row" key={m.i}>
+                <span className="metre-idx" style={{ background: m.c }}>{m.i}</span>
+                <div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>{m.name}</div><div style={{ color: "var(--ink-400)" }}>{m.q}</div></div>
+              </div>
+            )) : <p className="muted" style={{ fontSize: 12 }}>Aucun matériau enregistré.</p>}
+          </div>
+        </>
+      )}
     </>
   );
 }
-function IsoBuilding({ floor = null, exploded = false, rotated = false }) {
-  const gap = exploded ? 52 : 34;       // écartement vertical des niveaux
-  const base = 150;                      // y du RDC (i=0)
-  const op = (i) => (floor === null || floor === i ? 1 : 0.14);
-  const yt = base - 2 * gap;             // niveau supérieur (R+2)
-  const roofY = yt - 6;
-  return (
-    <svg viewBox="0 0 200 210" style={{ width: 232, height: 248, transform: rotated ? "rotateY(180deg)" : "none", transition: "transform .55s cubic-bezier(.4,0,.2,1)" }} aria-hidden="true">
-      <polygon points={`60,${roofY} 100,${roofY - 22} 140,${roofY} 100,${roofY + 22}`} fill="#f59e0b" stroke="#d97706" strokeWidth="1.5" opacity={floor === null || floor === 2 ? 1 : 0.14} style={{ transition: "opacity .35s" }} />
-      {[2, 1, 0].map((i) => {
-        const y = base - i * gap;
-        return (
-          <g key={i} opacity={op(i)} style={{ transition: "opacity .35s" }}>
-            <polygon points={`60,${y} 100,${y - 22} 140,${y} 100,${y + 22}`} fill="#cfd6e2" stroke="#94a3b8" strokeWidth="1.5" />
-            <polygon points={`60,${y} 100,${y + 22} 100,${y + 44} 60,${y + 22}`} fill="#9aa6b8" stroke="#64748b" strokeWidth="1.5" />
-            <polygon points={`140,${y} 100,${y + 22} 100,${y + 44} 140,${y + 22}`} fill="#b6c0d0" stroke="#64748b" strokeWidth="1.5" />
-            <rect x="72" y={y + 8} width="9" height="9" fill="#6366f1" transform="skewY(28)" opacity="0.85" />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-function Feature({ icon, tone, title, text }) {
-  const bg = { iris: "var(--iris-50)", amber: "var(--amber-50)", emerald: "var(--emerald-100)", rose: "var(--rose-100)" }[tone];
-  const fg = { iris: "var(--iris-600)", amber: "var(--amber-600)", emerald: "var(--emerald-600)", rose: "var(--rose-600)" }[tone];
-  return (
-    <div className="card pad">
-      <div className="feature-ic" style={{ background: bg, color: fg }}><Icon name={icon} /></div>
-      <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
-      <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "4px 0 0" }}>{text}</p>
-    </div>
-  );
-}
-
 /* ── Situations & avenants ─────────────────────────────────────────────── */
 const SITUATION_STATUS_TONE = { Payee: "emerald", "Payée": "emerald", En_validation: "amber", Rejetee: "rose" };
 const CHANGE_ORDER_STATUS_TONE = { Valide: "emerald", "Validé": "emerald", En_attente: "amber", Refuse: "rose" };

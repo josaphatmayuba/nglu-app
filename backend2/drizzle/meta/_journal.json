@@ -1331,6 +1331,13 @@
                         "when":  1780945200000,
                         "tag":  "0214_batipro_phases_situations_subs",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  190,
+                        "version":  "5",
+                        "when":  1780948800000,
+                        "tag":  "0215_batipro_building_models",
+                        "breakpoints":  true
                     }
                 ]
 }

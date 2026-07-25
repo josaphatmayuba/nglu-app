@@ -1,4 +1,5 @@
-import { IsDateString, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, Min } from "class-validator";
+import type { BatiproLevelGeometry } from "../../database/schema";
 
 export class CreateBatiproProjectDto {
   @IsString() code!: string;
@@ -123,4 +124,33 @@ export class CreateBatiproSubcontractorDto {
 
 export class UpdateBatiproSubcontractorDto extends CreateBatiproSubcontractorDto {
   @IsOptional() @IsString() declare name: string;
+}
+
+export class CreateBatiproBuildingModelDto {
+  @IsInt() project_id!: number;
+  @IsOptional() @IsString() source_type?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() unit?: string;
+  @IsOptional() @IsNumber() @Min(0) storey_height?: number;
+  @IsOptional() @IsString() roof_type?: string;
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class UpdateBatiproBuildingModelDto extends CreateBatiproBuildingModelDto {
+  @IsOptional() @IsInt() declare project_id: number;
+}
+
+export class CreateBatiproBuildingLevelDto {
+  @IsInt() model_id!: number;
+  @IsInt() project_id!: number;
+  @IsOptional() @IsInt() level_index?: number;
+  @IsOptional() @IsString() label?: string;
+  @IsOptional() @IsNumber() elevation?: number;
+  @IsOptional() @IsNumber() @Min(0) height?: number;
+  @IsOptional() @IsObject() geometry?: BatiproLevelGeometry;
+}
+
+export class UpdateBatiproBuildingLevelDto extends CreateBatiproBuildingLevelDto {
+  @IsOptional() @IsInt() declare model_id: number;
+  @IsOptional() @IsInt() declare project_id: number;
 }

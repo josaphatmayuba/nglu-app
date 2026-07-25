@@ -3,6 +3,8 @@ import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
+  batiproBuildingLevels,
+  batiproBuildingModels,
   batiproChangeOrders,
   batiproCrews,
   batiproMaterials,
@@ -15,8 +17,11 @@ import {
   currencies,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "../property-management/object-storage.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
+  CreateBatiproBuildingLevelDto,
+  CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
   CreateBatiproMaterialDto,
@@ -25,6 +30,8 @@ import type {
   CreateBatiproSituationDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  UpdateBatiproBuildingLevelDto,
+  UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
   UpdateBatiproCrewDto,
   UpdateBatiproMaterialDto,
@@ -40,6 +47,7 @@ export class BatiproService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtime: RealtimeDataPublisher,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   // ── Helpers RBAC par chantier (BatiPro, Phase 2) ─────────────────────────
@@ -646,6 +654,164 @@ export class BatiproService {
     await this.db.update(batiproSubcontractors).set({ isActive: 0 }).where(and(eq(batiproSubcontractors.id, id), eq(batiproSubcontractors.organizationId, orgId)));
     await this.publish("deleteSubcontractor", ["subcontractors"], "deleted", id, orgId);
     return { message: "Sous-traitant supprime." };
+  }
+
+  // ── Modele architectural 3D (Plan 3D par chantier) ──────────────────────
+  // Renvoie le modele du chantier + ses niveaux actifs (ou null si aucun).
+  async buildingModel(orgId: number, projectId: number) {
+    const [model] = await this.db
+      .select()
+      .from(batiproBuildingModels)
+      .where(and(eq(batiproBuildingModels.projectId, projectId), eq(batiproBuildingModels.organizationId, orgId), eq(batiproBuildingModels.isActive, 1)))
+      .limit(1);
+    if (!model) return null;
+    const levels = await this.db
+      .select()
+      .from(batiproBuildingLevels)
+      .where(and(eq(batiproBuildingLevels.modelId, model.id), eq(batiproBuildingLevels.organizationId, orgId), eq(batiproBuildingLevels.isActive, 1)))
+      .orderBy(batiproBuildingLevels.levelIndex);
+    return { ...model, levels };
+  }
+
+  private async getBuildingModel(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproBuildingModels)
+      .where(and(eq(batiproBuildingModels.id, id), eq(batiproBuildingModels.organizationId, orgId), eq(batiproBuildingModels.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Modele 3D introuvable.");
+    return row;
+  }
+
+  async createBuildingModel(input: CreateBatiproBuildingModelDto, orgId: number) {
+    // Garde-fou : un seul modele actif par chantier.
+    const existing = await this.buildingModel(orgId, input.project_id);
+    if (existing) return existing;
+    const [result] = await this.db.insert(batiproBuildingModels).values({
+      organizationId: orgId,
+      projectId: input.project_id,
+      sourceType: input.source_type ?? "parametric",
+      name: input.name ?? null,
+      unit: input.unit ?? "m",
+      storeyHeight: String(input.storey_height ?? 2.8),
+      roofType: input.roof_type ?? "flat",
+      notes: input.notes ?? null,
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createBuildingModel", ["building_model"], "created", id, orgId);
+    return this.buildingModel(orgId, input.project_id);
+  }
+
+  async updateBuildingModel(id: number, input: UpdateBatiproBuildingModelDto, orgId: number) {
+    const model = await this.getBuildingModel(id, orgId);
+    const patch: Partial<typeof batiproBuildingModels.$inferInsert> = {};
+    if (input.source_type !== undefined) patch.sourceType = input.source_type;
+    if (input.name !== undefined) patch.name = input.name || null;
+    if (input.unit !== undefined) patch.unit = input.unit;
+    if (input.storey_height !== undefined) patch.storeyHeight = String(input.storey_height);
+    if (input.roof_type !== undefined) patch.roofType = input.roof_type;
+    if (input.notes !== undefined) patch.notes = input.notes || null;
+    if (Object.keys(patch).length) await this.db.update(batiproBuildingModels).set(patch).where(eq(batiproBuildingModels.id, id));
+    await this.publish("updateBuildingModel", ["building_model"], "updated", id, orgId);
+    return this.buildingModel(orgId, model.projectId);
+  }
+
+  async deleteBuildingModel(id: number, orgId: number) {
+    await this.getBuildingModel(id, orgId);
+    await this.db.update(batiproBuildingModels).set({ isActive: 0 }).where(and(eq(batiproBuildingModels.id, id), eq(batiproBuildingModels.organizationId, orgId)));
+    // Soft-delete en cascade des niveaux.
+    await this.db.update(batiproBuildingLevels).set({ isActive: 0 }).where(and(eq(batiproBuildingLevels.modelId, id), eq(batiproBuildingLevels.organizationId, orgId)));
+    await this.publish("deleteBuildingModel", ["building_model", "building_levels"], "deleted", id, orgId);
+    return { message: "Modele 3D supprime." };
+  }
+
+  // Import du plan de l'architecte (image/PDF) sur le modele du chantier.
+  // Stocke le fichier tel quel dans MinIO ; le modele bascule source_type='imported'.
+  async uploadModelPlan(id: number, file: any, orgId: number) {
+    const model = await this.getBuildingModel(id, orgId);
+    const stored = await this.objectStorage.putDocument(file, `batipro/plans/${orgId}/${model.projectId}`);
+    // Remplace un ancien fichier eventuel.
+    if (model.importedFileKey) {
+      try { await this.objectStorage.deleteObject(model.importedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproBuildingModels).set({
+      sourceType: "imported",
+      importedFileKey: stored.objectKey,
+      importedFileFormat: stored.mimeType === "application/pdf" ? "pdf" : (stored.mimeType.split("/")[1] || null),
+      importedFileSize: stored.sizeBytes,
+    }).where(eq(batiproBuildingModels.id, id));
+    await this.publish("uploadModelPlan", ["building_model"], "updated", id, orgId);
+    return this.buildingModel(orgId, model.projectId);
+  }
+
+  async modelPlanFile(id: number, orgId: number) {
+    const model = await this.getBuildingModel(id, orgId);
+    if (!model.importedFileKey) throw new NotFoundException("Aucun plan importe.");
+    const object = await this.objectStorage.getObject(model.importedFileKey);
+    return { ...object, mimeType: object.contentType };
+  }
+
+  async deleteModelPlan(id: number, orgId: number) {
+    const model = await this.getBuildingModel(id, orgId);
+    if (model.importedFileKey) {
+      try { await this.objectStorage.deleteObject(model.importedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproBuildingModels).set({
+      sourceType: "parametric",
+      importedFileKey: null,
+      importedFileFormat: null,
+      importedFileSize: null,
+    }).where(eq(batiproBuildingModels.id, id));
+    await this.publish("deleteModelPlan", ["building_model"], "updated", id, orgId);
+    return this.buildingModel(orgId, model.projectId);
+  }
+
+  private async getBuildingLevel(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproBuildingLevels)
+      .where(and(eq(batiproBuildingLevels.id, id), eq(batiproBuildingLevels.organizationId, orgId), eq(batiproBuildingLevels.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Niveau introuvable.");
+    return row;
+  }
+
+  async createBuildingLevel(input: CreateBatiproBuildingLevelDto, orgId: number) {
+    // Verifie que le modele parent appartient bien a l'org.
+    await this.getBuildingModel(input.model_id, orgId);
+    const [result] = await this.db.insert(batiproBuildingLevels).values({
+      organizationId: orgId,
+      modelId: input.model_id,
+      projectId: input.project_id,
+      levelIndex: input.level_index ?? 0,
+      label: input.label ?? null,
+      elevation: String(input.elevation ?? 0),
+      height: input.height != null ? String(input.height) : null,
+      geometry: input.geometry ?? null,
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createBuildingLevel", ["building_levels"], "created", id, orgId);
+    return this.getBuildingLevel(id, orgId);
+  }
+
+  async updateBuildingLevel(id: number, input: UpdateBatiproBuildingLevelDto, orgId: number) {
+    await this.getBuildingLevel(id, orgId);
+    const patch: Partial<typeof batiproBuildingLevels.$inferInsert> = {};
+    if (input.level_index !== undefined) patch.levelIndex = input.level_index;
+    if (input.label !== undefined) patch.label = input.label || null;
+    if (input.elevation !== undefined) patch.elevation = String(input.elevation);
+    if (input.height !== undefined) patch.height = input.height != null ? String(input.height) : null;
+    if (input.geometry !== undefined) patch.geometry = input.geometry ?? null;
+    if (Object.keys(patch).length) await this.db.update(batiproBuildingLevels).set(patch).where(eq(batiproBuildingLevels.id, id));
+    await this.publish("updateBuildingLevel", ["building_levels"], "updated", id, orgId);
+    return this.getBuildingLevel(id, orgId);
+  }
+
+  async deleteBuildingLevel(id: number, orgId: number) {
+    await this.getBuildingLevel(id, orgId);
+    await this.db.update(batiproBuildingLevels).set({ isActive: 0 }).where(and(eq(batiproBuildingLevels.id, id), eq(batiproBuildingLevels.organizationId, orgId)));
+    await this.publish("deleteBuildingLevel", ["building_levels"], "deleted", id, orgId);
+    return { message: "Niveau supprime." };
   }
 
   private async publish(kind: string, tables: string[], action: "created" | "updated" | "deleted", entityId: number | string, orgId: number) {

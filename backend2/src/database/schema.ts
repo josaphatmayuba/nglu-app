@@ -2401,6 +2401,51 @@ export const batiproSubcontractors = mysqlTable("batipro_subcontractors", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Modele architectural 3D d'un chantier (0..1 par projet). Phase 1 = saisie
+// parametrique (source_type='parametric', geometrie dans les niveaux). Phase 2
+// (a venir) = import d'un fichier BIM/CAO (source_type='imported', imported_file_*).
+export const batiproBuildingModels = mysqlTable("batipro_building_models", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  sourceType: varchar("source_type", { length: 20 }).default("parametric").notNull(),
+  name: varchar("name", { length: 255 }),
+  unit: varchar("unit", { length: 10 }).default("m").notNull(),
+  storeyHeight: decimal("storey_height", { precision: 6, scale: 2 }).default("2.80").notNull(),
+  roofType: varchar("roof_type", { length: 20 }).default("flat").notNull(),
+  importedFileKey: varchar("imported_file_key", { length: 512 }),
+  importedFileFormat: varchar("imported_file_format", { length: 10 }),
+  importedFileSize: bigint("imported_file_size", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Geometrie d'un niveau (unite = model.unit, plan en X/Y origine coin bas-gauche).
+export type BatiproLevelGeometry = {
+  rooms?: Array<{ id: string; name?: string; x: number; y: number; w: number; l: number; h?: number; floorColor?: string }>;
+  walls?: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; thickness: number; height: number; roomId?: string }>;
+  openings?: Array<{ id: string; wallId: string; type: "door" | "window"; offset: number; width: number; height: number; sill?: number }>;
+} | null;
+
+// Un niveau (etage) du modele. La geometrie pieces/murs/ouvertures de l'etage
+// est stockee en JSON (auto-suffisant pour le rendu 3D). level_index 0 = RDC.
+export const batiproBuildingLevels = mysqlTable("batipro_building_levels", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  modelId: bigint("model_id", { mode: "number" }).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  levelIndex: int("level_index").default(0).notNull(),
+  label: varchar("label", { length: 100 }),
+  elevation: decimal("elevation", { precision: 8, scale: 2 }).default("0").notNull(),
+  height: decimal("height", { precision: 6, scale: 2 }),
+  geometry: json("geometry").$type<BatiproLevelGeometry>(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosDiseases = mysqlTable("farmos_diseases", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }),

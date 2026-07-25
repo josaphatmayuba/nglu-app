@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentBatiproProject, type BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
@@ -7,6 +9,8 @@ import { BatiproProjectGuard } from "../auth/guards/batipro-project.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
+  CreateBatiproBuildingLevelDto,
+  CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
   CreateBatiproMaterialDto,
@@ -15,6 +19,8 @@ import {
   CreateBatiproSituationDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  UpdateBatiproBuildingLevelDto,
+  UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
   UpdateBatiproCrewDto,
   UpdateBatiproMaterialDto,
@@ -287,5 +293,90 @@ export class BatiproController {
   @Delete("subcontractors/:id")
   deleteSubcontractor(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.deleteSubcontractor(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Get BatiPro building model (plan 3D) of a project" })
+  @Permissions("readAll-batipro")
+  @Get("building-model")
+  buildingModel(@CurrentOrg() orgId: number, @Query("project_id", ParseIntPipe) projectId: number) {
+    return this.batipro.buildingModel(orgId, projectId);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro building model" })
+  @Permissions("create-batipro")
+  @Post("building-model")
+  createBuildingModel(@Body() body: CreateBatiproBuildingModelDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createBuildingModel(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro building model" })
+  @Permissions("update-batipro")
+  @Put("building-model/:id")
+  updateBuildingModel(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproBuildingModelDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateBuildingModel(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro building model" })
+  @Permissions("delete-batipro")
+  @Delete("building-model/:id")
+  deleteBuildingModel(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteBuildingModel(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro building level (etage)" })
+  @Permissions("create-batipro")
+  @Post("building-levels")
+  createBuildingLevel(@Body() body: CreateBatiproBuildingLevelDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createBuildingLevel(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro building level (etage / geometrie)" })
+  @Permissions("update-batipro")
+  @Put("building-levels/:id")
+  updateBuildingLevel(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproBuildingLevelDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateBuildingLevel(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro building level" })
+  @Permissions("delete-batipro")
+  @Delete("building-levels/:id")
+  deleteBuildingLevel(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteBuildingLevel(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload the architect plan (image/PDF) of a building model" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("plan", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("building-model/:id/plan")
+  uploadModelPlan(@Param("id", ParseIntPipe) id: number, @UploadedFile() plan: any, @CurrentOrg() orgId: number) {
+    if (!plan) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.uploadModelPlan(id, plan, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream the imported architect plan (image/PDF)" })
+  @Permissions("readAll-batipro")
+  @Get("building-model/:id/plan")
+  async modelPlanFile(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const file = await this.batipro.modelPlanFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Remove the imported architect plan (back to parametric)" })
+  @Permissions("update-batipro")
+  @Delete("building-model/:id/plan")
+  deleteModelPlan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteModelPlan(id, orgId);
   }
 }
