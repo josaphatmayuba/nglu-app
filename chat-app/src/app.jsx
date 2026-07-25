@@ -22,7 +22,10 @@ const NATIVE =
 const WS_HOST = NATIVE
   ? ((typeof window !== "undefined" && window.CHAT_API_HOST) || "https://dev.ongdngolu.org")
   : (typeof window !== "undefined" ? window.location.origin : "");
-const APP_VERSION = import.meta.env.VITE_APP_BASE_VERSION || "dev";
+// VITE_APP_BASE_VERSION n'est jamais defini au build : __APP_VERSION__ est
+// injecte via vite.config.js define{} depuis le fichier VERSION du repo, donc
+// reflete le build reellement deploye plutot qu'un placeholder statique.
+const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 
 const ICON_MAP = { TrendingUp, BookOpen, Users, Shield, Hash, MessageSquare, Ticket };
 function ChanIcon({ name, size = 16 }) {
@@ -511,7 +514,7 @@ export default function App() {
             </div>
           </>
         )}
-        {import.meta.env.DEV && <div className="app-version">v{APP_VERSION}</div>}
+        {import.meta.env.MODE === "development" && <div className="app-version">v{APP_VERSION}</div>}
       </aside>
 
       {/* ── Zone principale ── */}
