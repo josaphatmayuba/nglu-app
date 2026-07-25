@@ -35,6 +35,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // desktop). Indispensable pour les appels : une Map mono-socket enverrait la
   // sonnerie sur le mauvais appareil apres l'ouverture d'un second onglet.
   private userSockets = new Map<number, Set<string>>();
+  // Organisation de chaque utilisateur connecte : necessaire pour ne renvoyer
+  // la liste de presence qu'aux collegues de la meme organisation.
+  private userOrg = new Map<number, number>();
   private ultraRate = new Map<string, { startedAt: number; frames: number }>();
   // Les paquets audio Ultra arrivent plusieurs fois par seconde. Une fois
   // l'appel valide, garder ses participants en memoire evite une requete SQL
@@ -64,6 +67,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.userId = auth.userId;
       client.data.organizationId = auth.organizationId;
       client.data.roleId = auth.roleId;
+      client.join(`org:${auth.organizationId}`);
     } catch {
       client.emit("unauthorized", { message: "Authentification requise." });
       client.disconnect(true);
@@ -74,7 +78,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.ultraRate.delete(client.id);
     for (const [userId, socketIds] of this.userSockets) {
       if (!socketIds.delete(client.id)) continue;
-      if (socketIds.size === 0) this.userSockets.delete(userId);
+      if (socketIds.size === 0) {
+        this.userSockets.delete(userId);
+        // Dernier socket de cet utilisateur : il passe hors ligne pour de bon
+        // (pas juste la fermeture d'un onglet parmi plusieurs).
+        const orgId = this.userOrg.get(userId);
+        this.userOrg.delete(userId);
+        if (orgId) this.server.to(`org:${orgId}`).emit("presence:update", { userId, online: false });
+      }
       break;
     }
 
@@ -107,6 +118,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sockets = this.userSockets.get(userId) ?? new Set<string>();
     sockets.add(client.id);
     this.userSockets.set(userId, sockets);
+    this.userOrg.set(userId, Number(client.data.organizationId));
 
     const channels = await this.svc.getChannels(userId);
     for (const channel of channels) {
@@ -114,6 +126,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.join(`disc:${discussion.id}`);
     }
     client.emit("registered", { userId });
+
+    // Premiere connexion de cet utilisateur (pas juste un 2e onglet) : prevenir
+    // ses collegues de la meme organisation qu'il vient de passer en ligne.
+    if (this.userSockets.get(userId)?.size === 1) {
+      client.to(`org:${client.data.organizationId}`).emit("presence:update", { userId, online: true });
+    }
+    const orgId = Number(client.data.organizationId);
+    const onlineUserIds = [...this.userOrg.entries()]
+      .filter(([, org]) => org === orgId)
+      .map(([id]) => id);
+    client.emit("presence:list", { userIds: onlineUserIds });
   }
 
   @SubscribeMessage("joinRoom")

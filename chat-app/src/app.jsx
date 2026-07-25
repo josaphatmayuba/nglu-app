@@ -258,6 +258,7 @@ export default function App() {
   // Le socket est aussi en state : une ref ne déclenche pas de re-rendu, or les
   // hooks d'appel doivent recevoir l'instance dès qu'elle existe.
   const [socket, setSocket] = useState(null);
+  const [onlineIds, setOnlineIds] = useState(() => new Set());
   const currentUserId = parseInt(localStorage.getItem("id") || "0", 10);
 
   // Appels audio : monté au niveau de l'app pour recevoir les appels entrants
@@ -291,6 +292,14 @@ export default function App() {
       loadChannels();
       loadTopics();
       loadPeople();
+    });
+    socket.on("presence:list", ({ userIds }) => setOnlineIds(new Set(userIds)));
+    socket.on("presence:update", ({ userId, online }) => {
+      setOnlineIds(prev => {
+        const next = new Set(prev);
+        if (online) next.add(userId); else next.delete(userId);
+        return next;
+      });
     });
     return () => {
       socket.disconnect();
@@ -488,8 +497,11 @@ export default function App() {
                   <div key={p.user_id}
                     className={`person-item ${activeDisc?.peerId===p.user_id?"active":""}`}
                     onClick={() => openPerson(p)}>
-                    <div className="msg-avatar" style={{ background: avatarColor(p.user_id) }}>
-                      {initials(p.firstName, p.lastName)}
+                    <div className="msg-avatar-wrap">
+                      <div className="msg-avatar" style={{ background: avatarColor(p.user_id) }}>
+                        {initials(p.firstName, p.lastName)}
+                      </div>
+                      {onlineIds.has(p.user_id) && <span className="presence-dot" title="En ligne" />}
                     </div>
                     <div className="topic-body">
                       <div className="topic-title">{name}</div>
@@ -534,6 +546,9 @@ export default function App() {
                     : (activeDisc.entityType === "journal_event" ? <BookOpen size={18}/> : <Ticket size={18}/>)
                 }
                 <span>{activeDisc.title}</span>
+                {activeDisc.peerId && onlineIds.has(activeDisc.peerId) && (
+                  <span className="presence-dot presence-dot-inline" title="En ligne" />
+                )}
               </div>
               {/* Appel audio : désactivé tant que le socket n'est pas connecté.
                   En tête-à-tête le correspondant est connu — pas de sélecteur. */}
