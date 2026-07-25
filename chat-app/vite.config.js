@@ -34,7 +34,7 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        globPatterns: ["**/*.{js,mjs,wasm,css,html,svg,png,ico,woff2}"],
         navigateFallback: "/chat/index.html",
         navigateFallbackDenylist: [/^\/api\//],
       },
