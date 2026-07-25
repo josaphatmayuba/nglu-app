@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentBatiproProject, type BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
@@ -7,13 +7,21 @@ import { BatiproProjectGuard } from "../auth/guards/batipro-project.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
+  CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
   CreateBatiproMaterialDto,
+  CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
+  CreateBatiproSituationDto,
+  CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  UpdateBatiproChangeOrderDto,
   UpdateBatiproCrewDto,
   UpdateBatiproMaterialDto,
+  UpdateBatiproPhaseDto,
   UpdateBatiproProjectDto,
+  UpdateBatiproSituationDto,
+  UpdateBatiproSubcontractorDto,
   UpdateBatiproTaskDto,
 } from "./dto/batipro.dto";
 import { BatiproService } from "./batipro.service";
@@ -167,5 +175,117 @@ export class BatiproController {
   @Delete("crews/:id")
   deleteCrew(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.deleteCrew(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List BatiPro phases (optionnel: par chantier)" })
+  @Permissions("readAll-batipro")
+  @Get("phases")
+  phases(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
+    return this.batipro.phases(orgId, projectId ? Number(projectId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro phase" })
+  @Permissions("create-batipro")
+  @Post("phases")
+  createPhase(@Body() body: CreateBatiproPhaseDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createPhase(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro phase" })
+  @Permissions("update-batipro")
+  @Put("phases/:id")
+  updatePhase(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproPhaseDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updatePhase(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro phase" })
+  @Permissions("delete-batipro")
+  @Delete("phases/:id")
+  deletePhase(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deletePhase(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List BatiPro situations (optionnel: par chantier)" })
+  @Permissions("readAll-batipro")
+  @Get("situations")
+  situations(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
+    return this.batipro.situations(orgId, projectId ? Number(projectId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro situation" })
+  @Permissions("create-batipro")
+  @Post("situations")
+  createSituation(@Body() body: CreateBatiproSituationDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createSituation(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro situation" })
+  @Permissions("update-batipro")
+  @Put("situations/:id")
+  updateSituation(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproSituationDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateSituation(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro situation" })
+  @Permissions("delete-batipro")
+  @Delete("situations/:id")
+  deleteSituation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteSituation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List BatiPro change orders (avenants, optionnel: par chantier)" })
+  @Permissions("readAll-batipro")
+  @Get("change-orders")
+  changeOrders(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
+    return this.batipro.changeOrders(orgId, projectId ? Number(projectId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro change order" })
+  @Permissions("create-batipro")
+  @Post("change-orders")
+  createChangeOrder(@Body() body: CreateBatiproChangeOrderDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createChangeOrder(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro change order" })
+  @Permissions("update-batipro")
+  @Put("change-orders/:id")
+  updateChangeOrder(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproChangeOrderDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateChangeOrder(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro change order" })
+  @Permissions("delete-batipro")
+  @Delete("change-orders/:id")
+  deleteChangeOrder(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteChangeOrder(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List BatiPro subcontractors" })
+  @Permissions("readAll-batipro")
+  @Get("subcontractors")
+  subcontractors(@CurrentOrg() orgId: number) {
+    return this.batipro.subcontractors(orgId);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro subcontractor" })
+  @Permissions("create-batipro")
+  @Post("subcontractors")
+  createSubcontractor(@Body() body: CreateBatiproSubcontractorDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createSubcontractor(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro subcontractor" })
+  @Permissions("update-batipro")
+  @Put("subcontractors/:id")
+  updateSubcontractor(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproSubcontractorDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateSubcontractor(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro subcontractor" })
+  @Permissions("delete-batipro")
+  @Delete("subcontractors/:id")
+  deleteSubcontractor(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteSubcontractor(id, orgId);
   }
 }

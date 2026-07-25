@@ -63,3 +63,64 @@ export class CreateBatiproCrewDto {
 export class UpdateBatiproCrewDto extends CreateBatiproCrewDto {
   @IsOptional() @IsString() declare name: string;
 }
+
+export class CreateBatiproPhaseDto {
+  @IsInt() project_id!: number;
+  @IsString() label!: string;
+  @IsOptional() @IsInt() @Min(0) position?: number;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
+  @IsOptional() @IsDateString() start_date?: string;
+  @IsOptional() @IsDateString() end_date?: string;
+}
+
+export class UpdateBatiproPhaseDto extends CreateBatiproPhaseDto {
+  @IsOptional() @IsInt() declare project_id: number;
+  @IsOptional() @IsString() declare label: string;
+}
+
+export class CreateBatiproSituationDto {
+  @IsInt() project_id!: number;
+  @IsInt() number!: number;
+  @IsOptional() @IsString() period?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
+  @IsOptional() @IsNumber() @Min(0) amount?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsString() status?: string;
+}
+
+export class UpdateBatiproSituationDto extends CreateBatiproSituationDto {
+  @IsOptional() @IsInt() declare project_id: number;
+  @IsOptional() @IsInt() declare number: number;
+}
+
+export class CreateBatiproChangeOrderDto {
+  @IsInt() project_id!: number;
+  @IsString() title!: string;
+  @IsOptional() @IsString() reference?: string;
+  @IsOptional() @IsNumber() amount?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsInt() @Min(0) delay_days?: number;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() notes?: string;
+}
+
+export class UpdateBatiproChangeOrderDto extends CreateBatiproChangeOrderDto {
+  @IsOptional() @IsInt() declare project_id: number;
+  @IsOptional() @IsString() declare title: string;
+}
+
+export class CreateBatiproSubcontractorDto {
+  @IsString() name!: string;
+  @IsOptional() @IsInt() project_id?: number;
+  @IsOptional() @IsInt() supplier_id?: number;
+  @IsOptional() @IsString() trade?: string;
+  @IsOptional() @IsNumber() @Min(0) contract_amount?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsNumber() @Min(0) @Max(5) rating?: number;
+}
+
+export class UpdateBatiproSubcontractorDto extends CreateBatiproSubcontractorDto {
+  @IsOptional() @IsString() declare name: string;
+}

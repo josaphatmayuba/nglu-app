@@ -63,5 +63,21 @@ export const api = {
   crews: () => jsonFetch("/crews"),
   createCrew: (b) => jsonFetch("/crews", { method: "POST", body: JSON.stringify(b || {}) }),
   updateCrew: (id, b) => jsonFetch(`/crews/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
-  deleteCrew: (id) => jsonFetch(`/crews/${id}`, { method: "DELETE" })
+  deleteCrew: (id) => jsonFetch(`/crews/${id}`, { method: "DELETE" }),
+  phases: (projectId) => jsonFetch(`/phases${projectId ? `?project_id=${projectId}` : ""}`),
+  createPhase: (b) => jsonFetch("/phases", { method: "POST", body: JSON.stringify(b || {}) }),
+  updatePhase: (id, b) => jsonFetch(`/phases/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deletePhase: (id) => jsonFetch(`/phases/${id}`, { method: "DELETE" }),
+  situations: (projectId) => jsonFetch(`/situations${projectId ? `?project_id=${projectId}` : ""}`),
+  createSituation: (b) => jsonFetch("/situations", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateSituation: (id, b) => jsonFetch(`/situations/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteSituation: (id) => jsonFetch(`/situations/${id}`, { method: "DELETE" }),
+  changeOrders: (projectId) => jsonFetch(`/change-orders${projectId ? `?project_id=${projectId}` : ""}`),
+  createChangeOrder: (b) => jsonFetch("/change-orders", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateChangeOrder: (id, b) => jsonFetch(`/change-orders/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteChangeOrder: (id) => jsonFetch(`/change-orders/${id}`, { method: "DELETE" }),
+  subcontractors: () => jsonFetch("/subcontractors"),
+  createSubcontractor: (b) => jsonFetch("/subcontractors", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateSubcontractor: (id, b) => jsonFetch(`/subcontractors/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteSubcontractor: (id) => jsonFetch(`/subcontractors/${id}`, { method: "DELETE" })
 };

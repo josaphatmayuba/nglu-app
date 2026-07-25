@@ -1,7 +1,6 @@
 import React from "react";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
-import { crews as fallbackCrews, materials as fallbackMaterials, projects as fallbackProjects, tasks as fallbackTasks } from "./data.js";
 
 /* ────────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — pas de dépendance externe.
@@ -73,8 +72,24 @@ const MOB_PRIMARY = ["dashboard", "chantiers", "plan3d", "materiaux"];
 const MOB_MORE = ["planning", "situations", "soustraitants"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
-function money(value) {
-  return new Intl.NumberFormat("fr-CA", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value || 0);
+function money(value, currency) {
+  const code = currency || "USD";
+  try {
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(value || 0);
+  } catch {
+    return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 0 })}`;
+  }
+}
+// Regroupe un total par devise projet (chaque projet peut avoir sa propre devise).
+function moneyByCurrency(projects, field) {
+  const byCurrency = new Map();
+  for (const p of projects) {
+    const code = p.currencyCode || "USD";
+    byCurrency.set(code, (byCurrency.get(code) || 0) + n(p[field]));
+  }
+  const entries = [...byCurrency.entries()];
+  if (!entries.length) return money(0);
+  return entries.map(([code, total]) => money(total, code)).join(" + ");
 }
 const n = (v) => Number(v || 0);
 const projectDue = (p) => p.dueDate || p.due || "-";
@@ -96,10 +111,20 @@ function AppShell() {
   return <App />;
 }
 
+function useCurrentUser() {
+  return React.useMemo(() => {
+    const name = (typeof window !== "undefined" && localStorage.getItem("user")) || "Utilisateur";
+    const role = (typeof window !== "undefined" && localStorage.getItem("role")) || "—";
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "?";
+    return { name, role, initials };
+  }, []);
+}
+
 function App() {
+  const { name: userName, role: userRole, initials: userInitials } = useCurrentUser();
   const [route, setRoute] = React.useState("dashboard");
   const [snapshot, setSnapshot] = React.useState(null);
-  const [apiStatus, setApiStatus] = React.useState("local");
+  const [apiStatus, setApiStatus] = React.useState("loading");
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -107,16 +132,16 @@ function App() {
   const isMobile = useIsMobile();
 
   const loadDashboard = React.useCallback(() => {
+    setApiStatus((s) => (s === "api" ? s : "loading"));
     api.dashboard()
       .then((data) => { setSnapshot(data); setApiStatus("api"); })
-      .catch(() => setApiStatus("local"));
+      .catch(() => setApiStatus("error"));
   }, []);
   React.useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
-  const projectRows = snapshot?.projects || fallbackProjects;
-  const taskRows = snapshot?.tasks || fallbackTasks;
-  const materialRows = snapshot?.materials || fallbackMaterials;
-  const crewRows = snapshot?.crews || fallbackCrews;
+  const projectRows = snapshot?.projects || [];
+  const taskRows = snapshot?.tasks || [];
+  const materialRows = snapshot?.materials || [];
   const canMutate = apiStatus === "api";
 
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
@@ -135,12 +160,12 @@ function App() {
   const views = {
     dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} />,
     chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} />,
-    planning: <Planning />,
-    plan3d: <Plan3D />,
-    situations: <Situations />,
+    planning: <Planning projects={projectRows} canMutate={canMutate} />,
+    plan3d: <Plan3D materials={materialRows} />,
+    situations: <Situations projects={projectRows} canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
-    soustraitants: <SousTraitants />,
+    soustraitants: <SousTraitants projects={projectRows} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -161,10 +186,10 @@ function App() {
           ))}
         </nav>
         <div className="user-chip">
-          <span className="user-avatar grad-amber">JM</span>
+          <span className="user-avatar grad-amber">{userInitials}</span>
           <div>
-            <div className="user-name">J. Mwepu</div>
-            <div className="user-role">Conducteur travaux</div>
+            <div className="user-name">{userName}</div>
+            <div className="user-role">{userRole}</div>
           </div>
           <button className="user-logout" title="Se déconnecter" onClick={clearAuth}><Icon name="logout" /></button>
         </div>
@@ -176,13 +201,15 @@ function App() {
           <span className="brand-icon grad-amber"><Icon name="hardHat" /></span>
           <span className="mob-title font-display">{TITLES[route]}</span>
         </div>
-        <span className="user-avatar grad-amber">JM</span>
+        <span className="user-avatar grad-amber">{userInitials}</span>
       </div>
 
       <main className="main">
         <div className="content">
           {error && <div className="inline-error">{error}</div>}
-          {views[route]}
+          {apiStatus === "loading" && <div className="card pad" style={{ marginBottom: 16 }}><span className="muted">Connexion au serveur…</span></div>}
+          {apiStatus === "error" && <div className="inline-error">Impossible de contacter le serveur BâtiPro. Vérifiez votre connexion, puis réessayez.</div>}
+          {apiStatus === "api" && views[route]}
         </div>
       </main>
 
@@ -229,17 +256,14 @@ function App() {
 function Dashboard({ projects, tasks, go, onNew, canMutate }) {
   const active = projects.filter((p) => p.status !== "Livre" && p.status !== "Livré");
   const avg = Math.round(projects.reduce((s, p) => s + n(p.progress), 0) / Math.max(1, projects.length));
-  const budget = projects.reduce((s, p) => s + n(p.budget), 0);
-  const spent = projects.reduce((s, p) => s + n(p.spent), 0);
   const late = tasks.filter((t) => t.status === "Bloque" || t.status === "Bloqué").length;
-  const palette = ["grad-amber", "grad-iris", "bg-emerald"];
   const projColor = (i) => ["grad-amber", "", "grad-iris"][i % 3] || "grad-amber";
 
   return (
     <>
       <div className="topbar">
         <div>
-          <p className="eyebrow">Vue d'ensemble · juin 2026</p>
+          <p className="eyebrow">Vue d'ensemble · {new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p>
           <h2 className="title font-display">Vos chantiers</h2>
         </div>
         <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
@@ -248,7 +272,7 @@ function Dashboard({ projects, tasks, go, onNew, canMutate }) {
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Chantiers actifs" value={active.length} sub={`${projects.length} au total`} icon="hardHat" />
         <KPI label="Avancement moyen" value={`${avg} %`} sub="tous projets" subClass="up" icon="trendingUp" />
-        <KPI label="Budget engagé" value={money(spent)} sub={`/ ${money(budget)} contractés`} icon="wallet" />
+        <KPI label="Budget engagé" value={moneyByCurrency(projects, "spent")} sub={`/ ${moneyByCurrency(projects, "budget")} contractés`} icon="wallet" />
         <KPI label="Retards / blocages" value={late} sub={late ? "à traiter" : "aucun"} subClass={late ? "down" : ""} icon="alert" danger={late > 0} />
       </div>
 
@@ -281,9 +305,14 @@ function Dashboard({ projects, tasks, go, onNew, canMutate }) {
           <h3 className="font-display" style={{ fontSize: 15, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="bell" className="ic" /> À traiter
           </h3>
-          <Todo icon="calendarCheck" tone="amber" title="Inspection béton" sub="Les Cèdres · demain 09 h" />
-          <Todo icon="package" tone="rose" title="Rupture ciment proche" sub="120 sacs restants" />
-          <Todo icon="receipt" tone="iris" title="Situation 3 à valider" sub="590 k$ · main d'œuvre" />
+          {(() => {
+            const blocked = tasks.filter((t) => t.status === "Bloque" || t.status === "Bloqué");
+            if (!blocked.length) return <p className="muted" style={{ fontSize: 12 }}>Aucun blocage en cours.</p>;
+            return blocked.slice(0, 5).map((t) => {
+              const proj = projects.find((p) => p.id === t.projectId);
+              return <Todo key={t.id} icon="alert" tone="rose" title={t.label} sub={proj?.name || "Chantier"} />;
+            });
+          })()}
         </section>
       </div>
     </>
@@ -315,7 +344,11 @@ function Todo({ icon, tone, title, sub }) {
 
 /* ── Chantiers ─────────────────────────────────────────────────────────── */
 function Chantiers({ projects, onNew, canMutate }) {
-  const selected = projects[0];
+  const [selectedId, setSelectedId] = React.useState(projects[0]?.id ?? null);
+  React.useEffect(() => {
+    if (!projects.some((p) => p.id === selectedId)) setSelectedId(projects[0]?.id ?? null);
+  }, [projects, selectedId]);
+  const selected = projects.find((p) => p.id === selectedId);
   return (
     <>
       <div className="topbar">
@@ -325,7 +358,7 @@ function Chantiers({ projects, onNew, canMutate }) {
 
       <div className="g3" style={{ marginBottom: 18 }}>
         {projects.map((p) => (
-          <div className="card pad" key={p.id}>
+          <div className={`card pad ${p.id === selectedId ? "selected" : ""}`} key={p.id} onClick={() => setSelectedId(p.id)} style={{ cursor: "pointer" }}>
             <div className="proj-card-head">
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
               <span className="chip amber" style={{ marginLeft: "auto" }}>{n(p.progress)} %</span>
@@ -333,7 +366,7 @@ function Chantiers({ projects, onNew, canMutate }) {
             <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>{p.client} · {p.location}</div>
             <div className="progress"><span className="grad-amber" style={{ width: `${n(p.progress)}%` }} /></div>
             <div className="proj-meta">
-              <span>{money(p.spent)} / {money(p.budget)}</span>
+              <span>{money(p.spent, p.currencyCode)} / {money(p.budget, p.currencyCode)}</span>
               <span className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}>{p.risk}</span>
             </div>
           </div>
@@ -356,24 +389,9 @@ function Chantiers({ projects, onNew, canMutate }) {
 
           <div className="g3">
             <div className="card pad">
-              <p className="kv-title"><Icon name="listChecks" /> Phases</p>
-              <Phase done label="Études & permis" pct="100 %" />
-              <Phase done label="Fondations" pct="100 %" />
-              <Phase running label="Gros œuvre" pct="70 %" />
-              <Phase label="Toiture" pct="20 %" />
-              <Phase label="Finitions" pct="0 %" />
-            </div>
-            <div className="card pad">
-              <p className="kv-title"><Icon name="pieChart" /> Budget prévu vs réel</p>
-              <BudgetBar label="Matériaux" txt="980 k / 1,6 M$" pct={61} />
-              <BudgetBar label="Main d'œuvre" txt="720 k / 1,1 M$" pct={65} />
-              <BudgetBar label="Sous-traitance" txt="610 k / 900 k$" pct={68} />
-            </div>
-            <div className="card pad">
-              <p className="kv-title"><Icon name="clipboard" /> Journal de chantier</p>
-              <Journal accent label="12 juin — Coulage dalle niv. 2" sub="14 ouvriers · 2 photos" />
-              <Journal label="11 juin — Livraison acier" sub="8 t · bon n° 2231" />
-              <Journal label="10 juin — Retard ciment" sub="Fournisseur relancé" />
+              <p className="kv-title"><Icon name="pieChart" /> Budget</p>
+              <BudgetBar label="Coût" txt={`${money(selected.spent, selected.currencyCode)} / ${money(selected.budget, selected.currencyCode)}`} pct={n(selected.budget) ? Math.min(100, Math.round((n(selected.spent) / n(selected.budget)) * 100)) : 0} />
+              <BudgetBar label="Facturation" txt={`${money(selected.billedAmount, selected.currencyCode)} / ${money(selected.contractAmount, selected.currencyCode)}`} pct={n(selected.contractAmount) ? Math.min(100, Math.round((n(selected.billedAmount) / n(selected.contractAmount)) * 100)) : 0} />
             </div>
           </div>
         </>
@@ -381,32 +399,11 @@ function Chantiers({ projects, onNew, canMutate }) {
     </>
   );
 }
-function Phase({ done, running, label, pct }) {
-  const icon = done ? "checkCircle" : running ? "loader" : "circle";
-  const color = done ? "var(--emerald-500)" : running ? "var(--amber-500)" : "var(--ink-300)";
-  const txtColor = done ? "var(--emerald-600)" : running ? "var(--amber-600)" : "var(--ink-400)";
-  return (
-    <div className="phase">
-      <Icon name={icon} className="ic" />
-      <span className="grow" style={{ fontWeight: running ? 600 : 400, color }} />
-      <span className="grow" style={{ fontWeight: running ? 600 : 400 }}>{label}</span>
-      <span style={{ color: txtColor, fontWeight: 600 }}>{pct}</span>
-    </div>
-  );
-}
 function BudgetBar({ label, txt, pct }) {
   return (
     <div style={{ marginBottom: 12, fontSize: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>{label}</span><span style={{ color: "var(--ink-500)" }}>{txt}</span></div>
       <div className="progress"><span className="grad-amber" style={{ width: `${pct}%` }} /></div>
-    </div>
-  );
-}
-function Journal({ accent, label, sub }) {
-  return (
-    <div style={{ display: "flex", gap: 10, marginBottom: 12, fontSize: 12 }}>
-      <div className={accent ? "grad-amber" : ""} style={{ width: 4, borderRadius: 4, flex: "none", background: accent ? undefined : "var(--ink-200)" }} />
-      <div><div style={{ fontWeight: 500 }}>{label}</div><div style={{ color: "var(--ink-400)" }}>{sub}</div></div>
     </div>
   );
 }
@@ -641,60 +638,132 @@ function Parametres() {
   );
 }
 
-function Planning() {
-  const rows = [
-    { label: "Études & permis", left: 0, width: 25, color: "bg-emerald", solid: "var(--emerald-500)" },
-    { label: "Fondations", left: 25, width: 25, color: "bg-emerald", solid: "var(--emerald-500)" },
-    { label: "Gros œuvre", left: 50, width: 25, grad: "grad-amber", now: 62.5 },
-    { label: "Toiture", left: 62.5, width: 12.5, solid: "var(--ink-300)" },
-    { label: "Second œuvre", left: 75, width: 15, solid: "var(--ink-300)" },
-    { label: "Finitions / livraison", left: 88, width: 12, solid: "var(--ink-300)", milestone: true },
-  ];
-  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août"];
+function Planning({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [phases, setPhases] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setPhases([]); setLoading(false); return; }
+    setLoading(true);
+    api.phases(projectId).then((rows) => setPhases(rows || [])).catch(() => setPhases([])).finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const selected = projects.find((p) => p.id === projectId);
+  const range = React.useMemo(() => {
+    const dates = phases.flatMap((p) => [p.startDate, p.endDate]).filter(Boolean).map((d) => new Date(d));
+    if (!dates.length) return null;
+    const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
+    return { min, max, span: Math.max(1, max - min) };
+  }, [phases]);
+
+  const statusTone = (s) => (s === "Termine" || s === "Terminé" ? "emerald" : s === "En_cours" || s === "En cours" ? "amber" : "ink");
+  const pctFor = (d) => range ? ((new Date(d) - range.min) / range.span) * 100 : 0;
+
+  const save = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const payload = {
+        project_id: projectId, label: form.label, position: Number(form.position || 0),
+        status: form.status || "A_venir", progress: Number(form.progress || 0),
+        start_date: form.start_date || null, end_date: form.end_date || null,
+      };
+      form.id ? await api.updatePhase(form.id, payload) : await api.createPhase(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
       <div className="topbar">
-        <div><p className="eyebrow">Planning</p><h2 className="title font-display">Planning — Les Cèdres</h2></div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <span className="chip emerald">Terminé</span><span className="chip amber">En cours</span><span className="chip ink">À venir</span>
+        <div>
+          <p className="eyebrow">Planning</p>
+          <h2 className="title font-display">Planning{selected ? ` — ${selected.name}` : ""}</h2>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({})}><Icon name="plus" /> Phase</button>
         </div>
       </div>
-      <div className="card pad gantt-scroll">
-        <div className="gantt-months"><span /> {months.map((m, i) => <span key={m} className={i === 5 ? "now" : ""}>{m}</span>)}</div>
-        <div className="gantt-rows">
-          {rows.map((r) => (
-            <div className="gantt-row" key={r.label}>
-              <div style={{ fontSize: 12, fontWeight: r.grad ? 600 : 500, color: r.solid === "var(--ink-300)" ? "var(--ink-500)" : "inherit" }}>{r.label}</div>
-              <div className="gantt-track">
-                <div className={`gantt-bar ${r.grad || ""}`} style={{ left: `${r.left}%`, width: `${r.width}%`, background: r.grad ? undefined : r.solid }} />
-                {r.now != null && <div style={{ position: "absolute", top: -2, height: 28, width: 2, background: "var(--amber-600)", left: `${r.now}%` }} />}
-                {r.milestone && <div style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, transform: "rotate(45deg)", background: "var(--amber-600)" }} />}
+
+      {loading ? (
+        <div className="card pad"><span className="muted">Chargement…</span></div>
+      ) : !phases.length ? (
+        <div className="card pad"><span className="muted">Aucune phase définie pour ce chantier.</span></div>
+      ) : (
+        <div className="card pad gantt-scroll">
+          <div className="gantt-rows">
+            {phases.map((r) => (
+              <div className="gantt-row" key={r.id} onClick={() => canMutate && setModal(r)} style={{ cursor: canMutate ? "pointer" : "default" }}>
+                <div style={{ fontSize: 12, fontWeight: 500 }}>{r.label}</div>
+                <div className="gantt-track">
+                  {range && r.startDate && r.endDate ? (
+                    <div className={`gantt-bar ${statusTone(r.status) === "amber" ? "grad-amber" : ""}`}
+                      style={{ left: `${pctFor(r.startDate)}%`, width: `${Math.max(2, pctFor(r.endDate) - pctFor(r.startDate))}%`, background: statusTone(r.status) === "emerald" ? "var(--emerald-500)" : statusTone(r.status) === "ink" ? "var(--ink-300)" : undefined }} />
+                  ) : null}
+                </div>
+                <span className={`chip ${statusTone(r.status)}`} style={{ marginLeft: 8 }}>{r.progress} %</span>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 16, marginTop: 16, fontSize: 11, color: "var(--ink-400)" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 12, height: 2, background: "var(--amber-600)" }} /> Aujourd'hui</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, transform: "rotate(45deg)", background: "var(--amber-600)", display: "inline-block" }} /> Jalon livraison</span>
-        </div>
-      </div>
-      <div className="g3" style={{ marginTop: 14 }}>
-        <div className="card pad"><div className="kpi-label">Durée totale</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>8 mois</div></div>
-        <div className="card pad danger"><div className="kpi-label" style={{ color: "var(--rose-600)" }}>Retard chemin critique</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--rose-600)" }}>+45 jours</div></div>
-        <div className="card pad"><div className="kpi-label">Prochain jalon</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>Hors-d'eau</div><div className="kpi-sub">prévu 15 juil.</div></div>
-      </div>
+      )}
+
+      {modal && (
+        <PhaseModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={save} />
+      )}
     </>
+  );
+}
+function PhaseModal({ modal, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({
+    id: modal.id, label: modal.label || "", position: modal.position ?? 0, status: modal.status || "A_venir",
+    progress: modal.progress ?? 0, start_date: modal.startDate || "", end_date: modal.endDate || "",
+  }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier la phase" : "Nouvelle phase"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Nom" value={form.label} onChange={(v) => set("label", v)} required />
+          <label className="field">
+            <span>Statut</span>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)}>
+              <option value="A_venir">À venir</option>
+              <option value="En_cours">En cours</option>
+              <option value="Termine">Terminé</option>
+            </select>
+          </label>
+          <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
+          <Field label="Ordre" type="number" value={form.position} onChange={(v) => set("position", v)} />
+          <Field label="Début" type="date" value={form.start_date} onChange={(v) => set("start_date", v)} />
+          <Field label="Fin" type="date" value={form.end_date} onChange={(v) => set("end_date", v)} />
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.label}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
 /* ── Plan 3D & matériaux ───────────────────────────────────────────────── */
-function Plan3D() {
-  const metre = [
-    { i: 1, c: "#475569", name: "Fondations · béton", q: "320 m³", price: "96 k$" },
-    { i: 2, c: "#64748b", name: "Murs · blocs", q: "12 400 u", price: "148 k$" },
-    { i: 3, c: "#f59e0b", name: "Toiture · charpente", q: "480 m²", price: "64 k$" },
-    { i: 4, c: "#6366f1", name: "Menuiseries · alu", q: "86 ouvertures", price: "92 k$" },
-  ];
+function Plan3D({ materials }) {
+  const colors = ["#475569", "#64748b", "#f59e0b", "#6366f1", "#10b981", "#f43f5e"];
+  const metre = materials.slice(0, 6).map((m, i) => ({ i: i + 1, c: colors[i % colors.length], name: m.name, q: `${n(m.stock)} ${m.unit}` }));
   const [floor, setFloor] = React.useState(null); // null = tous les étages
   const [exploded, setExploded] = React.useState(false);
   const [rotated, setRotated] = React.useState(false);
@@ -728,19 +797,13 @@ function Plan3D() {
           </div>
         </div>
         <div className="card pad">
-          <p className="kv-title"><Icon name="package" /> Matériaux · métré auto</p>
-          {metre.map((m) => (
+          <p className="kv-title"><Icon name="package" /> Matériaux suivis</p>
+          {metre.length ? metre.map((m) => (
             <div className="metre-row" key={m.i}>
               <span className="metre-idx" style={{ background: m.c }}>{m.i}</span>
               <div style={{ flex: 1 }}><div style={{ fontWeight: 500 }}>{m.name}</div><div style={{ color: "var(--ink-400)" }}>{m.q}</div></div>
-              <span style={{ fontWeight: 600 }}>{m.price}</span>
             </div>
-          ))}
-          <div style={{ borderTop: "1px solid var(--ink-100)", marginTop: 12, paddingTop: 12, display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 12, color: "var(--ink-500)" }}>Devis estimé</span>
-            <span className="font-display" style={{ fontSize: 18, fontWeight: 700 }}>610 k$</span>
-          </div>
-          <button className="btn grad-iris" style={{ width: "100%", justifyContent: "center", color: "#fff", marginTop: 12 }}><Icon name="fileDown" /> Exporter le métré</button>
+          )) : <p className="muted" style={{ fontSize: 12 }}>Aucun matériau enregistré.</p>}
         </div>
       </div>
       <div className="g4" style={{ marginTop: 20 }}>
@@ -788,51 +851,180 @@ function Feature({ icon, tone, title, text }) {
 }
 
 /* ── Situations & avenants ─────────────────────────────────────────────── */
-function Situations() {
-  const rows = [
-    { n: "Situation n° 1", per: "Mars 2026", av: "25 %", amt: "1 050 k$", chip: "emerald", st: "Payée" },
-    { n: "Situation n° 2", per: "Avril 2026", av: "45 %", amt: "840 k$", chip: "emerald", st: "Payée" },
-    { n: "Situation n° 3", per: "Mai 2026", av: "62 %", amt: "590 k$", chip: "amber", st: "En validation MO" },
-  ];
+const SITUATION_STATUS_TONE = { Payee: "emerald", "Payée": "emerald", En_validation: "amber", Rejetee: "rose" };
+const CHANGE_ORDER_STATUS_TONE = { Valide: "emerald", "Validé": "emerald", En_attente: "amber", Refuse: "rose" };
+
+function Situations({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [situations, setSituations] = React.useState([]);
+  const [changeOrders, setChangeOrders] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setSituations([]); setChangeOrders([]); setLoading(false); return; }
+    setLoading(true);
+    Promise.all([api.situations(projectId), api.changeOrders(projectId)])
+      .then(([s, c]) => { setSituations(s || []); setChangeOrders(c || []); })
+      .catch(() => { setSituations([]); setChangeOrders([]); })
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const billedToDate = situations.reduce((sum, s) => sum + n(s.amount), 0);
+  const changeOrdersTotal = changeOrders.reduce((sum, c) => sum + n(c.amount), 0);
+  const cur = selected?.currencyCode;
+
+  const saveSituation = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: selected?.currencyId || null, status: form.status || "En_validation" };
+      form.id ? await api.updateSituation(form.id, payload) : await api.createSituation(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const saveChangeOrder = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: selected?.currencyId || null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
+      form.id ? await api.updateChangeOrder(form.id, payload) : await api.createChangeOrder(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
       <div className="topbar">
         <div><p className="eyebrow">Facturation</p><h2 className="title font-display">Situations & avenants</h2></div>
-        <button className="btn btn-amber grad-amber"><Icon name="filePlus" /> Nouvelle situation</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "situation" })}><Icon name="filePlus" /> Nouvelle situation</button>
+        </div>
       </div>
-      <div className="g3" style={{ marginBottom: 16 }}>
-        <div className="card pad"><div className="kpi-label">Marché initial</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>4,00 M$</div></div>
-        <div className="card pad" style={{ boxShadow: "inset 0 0 0 1px var(--amber-100)", background: "rgba(254,243,199,.3)" }}><div className="kpi-label" style={{ color: "var(--amber-700)" }}>+ Avenants</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--amber-700)" }}>+0,20 M$</div></div>
-        <div className="card pad"><div className="kpi-label">Facturé à ce jour</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>2,48 M$ <span style={{ fontSize: 12, color: "var(--ink-400)", fontWeight: 400 }}>/ 4,20</span></div></div>
-      </div>
+
+      {selected && (
+        <div className="g3" style={{ marginBottom: 16 }}>
+          <div className="card pad"><div className="kpi-label">Marché initial</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>{money(selected.contractAmount, cur)}</div></div>
+          <div className="card pad" style={{ boxShadow: "inset 0 0 0 1px var(--amber-100)", background: "rgba(254,243,199,.3)" }}><div className="kpi-label" style={{ color: "var(--amber-700)" }}>+ Avenants</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--amber-700)" }}>+{money(changeOrdersTotal, cur)}</div></div>
+          <div className="card pad"><div className="kpi-label">Facturé (situations)</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>{money(billedToDate, cur)} <span style={{ fontSize: 12, color: "var(--ink-400)", fontWeight: 400 }}>/ {money(n(selected.contractAmount) + changeOrdersTotal, cur)}</span></div></div>
+        </div>
+      )}
+
       <h3 className="font-display" style={{ fontSize: 15, margin: "0 0 8px" }}>Situations de travaux</h3>
       <div className="card table-card" style={{ marginBottom: 18 }}>
         <table className="bp">
           <thead><tr><th>Situation</th><th>Période</th><th>Avancement</th><th>Montant</th><th>Statut</th></tr></thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.n}><td style={{ fontWeight: 500 }}>{r.n}</td><td style={{ color: "var(--ink-500)" }}>{r.per}</td><td>{r.av}</td><td>{r.amt}</td><td><span className={`chip ${r.chip}`}>{r.st}</span></td></tr>
-            ))}
+            {loading ? <tr><td colSpan={5} className="muted">Chargement…</td></tr> :
+              !situations.length ? <tr><td colSpan={5} className="muted">Aucune situation enregistrée.</td></tr> :
+              situations.map((r) => (
+                <tr key={r.id} onClick={() => canMutate && setModal({ kind: "situation", ...r })} style={{ cursor: canMutate ? "pointer" : "default" }}>
+                  <td style={{ fontWeight: 500 }}>Situation n° {r.number}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{r.period || "—"}</td>
+                  <td>{r.progress} %</td>
+                  <td>{money(r.amount, r.currencyCode || cur)}</td>
+                  <td><span className={`chip ${SITUATION_STATUS_TONE[r.status] || "ink"}`}>{r.status?.replace(/_/g, " ")}</span></td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
-      <h3 className="font-display" style={{ fontSize: 15, margin: "0 0 8px" }}>Avenants / ordres de changement</h3>
-      <div className="g2">
-        <Avenant tag="Avenant 01" amt="+120 k$" title="Renforcement fondations (sol argileux)" sub="Validé · délai +20 j" />
-        <Avenant tag="Avenant 02" amt="+80 k$" title="Upgrade menuiseries alu (demande MO)" sub="En attente de signature" />
+
+      <div className="section-head" style={{ marginBottom: 8 }}>
+        <h3 className="font-display" style={{ fontSize: 15, margin: 0 }}>Avenants / ordres de changement</h3>
+        <button className="link" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "changeOrder" })}>+ Ajouter</button>
       </div>
+      <div className="g2">
+        {loading ? <p className="muted">Chargement…</p> :
+          !changeOrders.length ? <p className="muted">Aucun avenant.</p> :
+          changeOrders.map((c) => (
+            <div className="card pad" key={c.id} onClick={() => canMutate && setModal({ kind: "changeOrder", ...c })} style={{ cursor: canMutate ? "pointer" : "default" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span className="chip amber">{c.reference || `Avenant ${c.id}`}</span>
+                <span style={{ marginLeft: "auto", color: "var(--emerald-600)", fontWeight: 700 }}>+{money(c.amount, c.currencyCode || cur)}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>{c.title}</div>
+              <div style={{ fontSize: 12, color: "var(--ink-400)", marginTop: 4 }}>{c.status?.replace(/_/g, " ")}{c.delayDays ? ` · délai +${c.delayDays} j` : ""}</div>
+            </div>
+          ))}
+      </div>
+
+      {modal?.kind === "situation" && <SituationModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveSituation} />}
+      {modal?.kind === "changeOrder" && <ChangeOrderModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveChangeOrder} />}
     </>
   );
 }
-function Avenant({ tag, amt, title, sub }) {
+function SituationModal({ modal, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({ id: modal.id, number: modal.number ?? "", period: modal.period || "", progress: modal.progress ?? 0, amount: modal.amount ?? 0, status: modal.status || "En_validation" }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
-    <div className="card pad">
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span className="chip amber">{tag}</span>
-        <span style={{ marginLeft: "auto", color: "var(--emerald-600)", fontWeight: 700 }}>{amt}</span>
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500 }}>{title}</div>
-      <div style={{ fontSize: 12, color: "var(--ink-400)", marginTop: 4 }}>{sub}</div>
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier la situation" : "Nouvelle situation"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Numéro" type="number" value={form.number} onChange={(v) => set("number", v)} required />
+          <Field label="Période" value={form.period} onChange={(v) => set("period", v)} />
+          <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
+          <Field label="Montant" type="number" value={form.amount} onChange={(v) => set("amount", v)} />
+          <label className="field">
+            <span>Statut</span>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)}>
+              <option value="En_validation">En validation</option>
+              <option value="Payee">Payée</option>
+              <option value="Rejetee">Rejetée</option>
+            </select>
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.number}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+function ChangeOrderModal({ modal, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({ id: modal.id, title: modal.title || "", reference: modal.reference || "", amount: modal.amount ?? 0, delay_days: modal.delayDays ?? 0, status: modal.status || "En_attente", notes: modal.notes || "" }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier l'avenant" : "Nouvel avenant"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Titre" value={form.title} onChange={(v) => set("title", v)} required />
+          <Field label="Référence" value={form.reference} onChange={(v) => set("reference", v)} />
+          <Field label="Montant" type="number" value={form.amount} onChange={(v) => set("amount", v)} />
+          <Field label="Délai ajouté (jours)" type="number" value={form.delay_days} onChange={(v) => set("delay_days", v)} />
+          <label className="field">
+            <span>Statut</span>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)}>
+              <option value="En_attente">En attente</option>
+              <option value="Valide">Validé</option>
+              <option value="Refuse">Refusé</option>
+            </select>
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.title}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -877,35 +1069,109 @@ function Materiaux({ materials, onNew, canMutate }) {
 }
 
 /* ── Sous-traitants ────────────────────────────────────────────────────── */
-function SousTraitants() {
-  const subs = [
-    { name: "ÉlectroPlus SARL", trade: "Électricité", icon: "zap", grad: "", bg: "#0f172a", site: "Tour Horizon", amt: "420 k$", rating: 4.2 },
-    { name: "AquaTech", trade: "Plomberie", icon: "droplet", grad: "", bg: "var(--iris-600)", site: "Les Cèdres", amt: "280 k$", chip: "emerald", st: "Contrat actif" },
-    { name: "Déco+ Finitions", trade: "Peinture", icon: "paint", grad: "grad-amber", site: "Villas du Lac", amt: "150 k$", chip: "amber", st: "En cours" },
-  ];
+const SUBCONTRACTOR_STATUS_TONE = { Actif: "emerald", En_cours: "amber", Termine: "ink", "Terminé": "ink" };
+
+function SousTraitants({ projects, canMutate }) {
+  const [subs, setSubs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.subcontractors().then((rows) => setSubs(rows || [])).catch(() => setSubs([])).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const save = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const project = projects.find((p) => p.id === Number(form.project_id));
+      const payload = {
+        name: form.name, trade: form.trade || null, project_id: form.project_id ? Number(form.project_id) : null,
+        contract_amount: n(form.contract_amount), currency_id: project?.currencyId || null,
+        status: form.status || "En_cours",
+      };
+      form.id ? await api.updateSubcontractor(form.id, payload) : await api.createSubcontractor(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  const siteName = (s) => projects.find((p) => p.id === s.projectId)?.name || "—";
+
   return (
     <>
       <div className="topbar">
         <div><p className="eyebrow">Partenaires</p><h2 className="title font-display">Sous-traitants</h2></div>
-        <button className="btn btn-amber grad-amber"><Icon name="userPlus" /> Ajouter</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Ajouter</button>
       </div>
-      <div className="g3">
-        {subs.map((s) => (
-          <div className="card pad" key={s.name}>
-            <div className="sub-head">
-              <span className={`sub-ic ${s.grad}`} style={s.grad ? undefined : { background: s.bg }}><Icon name={s.icon} /></span>
-              <div><div style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</div><div style={{ fontSize: 12, color: "var(--ink-500)" }}>{s.trade}</div></div>
+      {loading ? (
+        <div className="card pad"><span className="muted">Chargement…</span></div>
+      ) : !subs.length ? (
+        <div className="card pad"><span className="muted">Aucun sous-traitant enregistré.</span></div>
+      ) : (
+        <div className="g3">
+          {subs.map((s) => (
+            <div className="card pad" key={s.id} onClick={() => canMutate && setModal(s)} style={{ cursor: canMutate ? "pointer" : "default" }}>
+              <div className="sub-head">
+                <span className="sub-ic" style={{ background: "#0f172a" }}><Icon name="wrench" /></span>
+                <div><div style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</div><div style={{ fontSize: 12, color: "var(--ink-500)" }}>{s.trade || "—"}</div></div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "var(--ink-500)" }}>{siteName(s)}</span>
+                <span style={{ fontWeight: 600 }}>{money(s.contractAmount, s.currencyCode)}</span>
+              </div>
+              <div style={{ marginTop: 8 }}><span className={`chip ${SUBCONTRACTOR_STATUS_TONE[s.status] || "ink"}`}>{s.status?.replace(/_/g, " ")}</span></div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}><span style={{ color: "var(--ink-500)" }}>{s.site}</span><span style={{ fontWeight: 600 }}>{s.amt}</span></div>
-            {s.rating ? (
-              <div className="stars">{[0, 1, 2, 3].map((i) => <Icon key={i} name="star" />)}<span style={{ color: "var(--ink-400)", marginLeft: 4 }}>{s.rating}</span></div>
-            ) : (
-              <div style={{ marginTop: 8 }}><span className={`chip ${s.chip}`}>{s.st}</span></div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+      {modal && <SubcontractorModal modal={modal} projects={projects} busy={busy} error={error} onClose={() => setModal(null)} onSave={save} />}
     </>
+  );
+}
+function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({
+    id: modal.id, name: modal.name || "", trade: modal.trade || "", project_id: modal.projectId || "",
+    contract_amount: modal.contractAmount ?? 0, status: modal.status || "En_cours",
+  }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier le sous-traitant" : "Nouveau sous-traitant"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Nom" value={form.name} onChange={(v) => set("name", v)} required />
+          <Field label="Corps de métier" value={form.trade} onChange={(v) => set("trade", v)} />
+          <label className="field">
+            <span>Chantier</span>
+            <select value={form.project_id} onChange={(e) => set("project_id", e.target.value)}>
+              <option value="">— Aucun —</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <Field label="Montant contrat" type="number" value={form.contract_amount} onChange={(v) => set("contract_amount", v)} />
+          <label className="field">
+            <span>Statut</span>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)}>
+              <option value="En_cours">En cours</option>
+              <option value="Actif">Actif</option>
+              <option value="Termine">Terminé</option>
+            </select>
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.name}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
