@@ -82,18 +82,31 @@ export function applyVideoProfile(sdp, profileName, direction) {
   // codec, seulement aux b=* et a la direction.
   // (Volontairement pas d'usage plus loin : VP8 est deja le defaut negocie.)
 
-  // Retire les anciennes lignes b=AS/b=TIAS et les directions existantes de la
-  // section video, puis reinsere les notres juste apres les lignes c= (ou, a
-  // defaut, juste apres la ligne m=video).
+  // Retire les anciennes lignes b=AS/b=TIAS ET les directions existantes de la
+  // section video. On memorise la direction retiree pour la cas ou l'appelant
+  // ne force PAS de direction (on la remet alors a l'identique, a sa place).
+  const removedDir = lines.slice(startIdx, endIdx)
+    .filter((l) => /^a=(sendrecv|recvonly|sendonly|inactive)\s*$/.test(l));
   const section = lines.slice(startIdx, endIdx)
     .filter((l) => !/^b=(AS|TIAS):/.test(l)
       && !/^a=(sendrecv|recvonly|sendonly|inactive)\s*$/.test(l));
 
-  // Point d'insertion des b=* : apres la derniere ligne c= de la section, sinon
-  // juste apres m=video (l'ordre SDP veut c= puis b= puis a=).
+  // Point d'insertion : l'ordre SDP d'une section media est
+  //   m= / i= / c= / b= / a=direction / a=rtpmap / a=fmtp / a=ssrc / ...
+  // On insere donc juste APRES les lignes c=/b= (que l'on vient d'ajouter), et
+  // AVANT la premiere ligne d'attribut media (a=rtpmap / a=fmtp / a=rtcp-fb /
+  // a=ssrc / a=mid / a=extmap ...). C'est la seule position valide pour la
+  // direction : la mettre en fin de tableau la ferait atterrir apres la ligne
+  // vide terminale du SDP quand m=video est la derniere section => SDP invalide,
+  // ce qui bloquait TOUS les appels (regression). On calcule l'index sur la
+  // section deja nettoyee, puis on injecte b=* et direction dans le bon ordre.
   let insertAt = 1; // juste apres m=video par defaut
   for (let i = 1; i < section.length; i += 1) {
-    if (section[i].startsWith("c=")) insertAt = i + 1;
+    // On s'arrete a la premiere ligne d'attribut media : tout ce qui precede
+    // (i=, c=, et lignes b= residuelles improbables) reste avant la direction.
+    if (section[i].startsWith("a=")) { insertAt = i; break; }
+    // Sans aucune ligne a= (SDP degenere) : tout le reste vient avant.
+    if (i === section.length - 1) insertAt = section.length;
   }
 
   const bLines = [];
@@ -105,17 +118,16 @@ export function applyVideoProfile(sdp, profileName, direction) {
 
   // direction === null/undefined => on NE force PAS la direction (utile cote
   // appele : la direction de la reponse est deja correctement derivee de l'offre
-  // par le navigateur, la reecrire casserait la reception). Dans ce cas on a
-  // deja retire les anciennes lignes de direction ; on les remet a l'identique.
+  // par le navigateur, la reecrire casserait la reception). Dans ce cas on
+  // remet la direction retiree a l'identique, a la meme place valide.
   const forceDir = ["sendrecv", "recvonly", "sendonly", "inactive"].includes(direction);
-  const removedDir = lines.slice(startIdx, endIdx)
-    .filter((l) => /^a=(sendrecv|recvonly|sendonly|inactive)\s*$/.test(l));
+  const dirLines = forceDir ? [`a=${direction}`] : removedDir;
 
   const rebuilt = [
     ...section.slice(0, insertAt),
     ...bLines,
+    ...dirLines,
     ...section.slice(insertAt),
-    ...(forceDir ? [`a=${direction}`] : removedDir),
   ];
 
   const merged = [
