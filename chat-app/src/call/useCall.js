@@ -3,7 +3,7 @@ import { api } from "../api.js";
 import { applyOpusProfile, detectInitialProfile, readOpusProfileFromSdp } from "./opusTuning.js";
 import { getMicrophoneStream, microphoneErrorMessage } from "./microphone.js";
 import { getCameraStream, cameraErrorMessage } from "./camera.js";
-import { detectInitialVideoProfile, applyVideoProfile, VIDEO_PROFILES } from "./videoTuning.js";
+import { detectInitialVideoProfile, VIDEO_PROFILES } from "./videoTuning.js";
 import { createCodec2AudioEngine } from "../ultra/audioWorklet.js";
 import { createCodec2Transport } from "../ultra/transport.js";
 
@@ -123,8 +123,9 @@ export function useCall(socket, currentUserId) {
   const localStreamRef = useRef(null);
   const localVideoStreamRef = useRef(null);
   const videoTransceiverRef = useRef(null);
-  // Direction courante negociee sur la m=video ("inactive" tant que la camera
-  // n'a pas ete activee). Lue par renegotiate() pour munger le SDP video.
+  // Direction courante de la m=video ("inactive" tant que la camera n'a pas ete
+  // activee). Miroir applicatif de transceiver.direction : sert au suivi d'etat
+  // et a la reprise apres recreation du PC, plus a du munging SDP (supprime).
   const videoDirectionRef = useRef("inactive");
   // Miroir non-reactif de videoActive : permet aux callbacks (restartWithRelay,
   // renegotiate) de connaitre l'etat reel sans dependre d'une closure stale.
@@ -639,7 +640,9 @@ export function useCall(socket, currentUserId) {
     try {
       const offer = await pc.createOffer({ iceRestart: true });
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
-      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
+      // Aucun munging video : le SDP video (si une m=video existe) est laisse
+      // NATIF. La qualite video est pilotee uniquement par setParameters()/
+      // applyConstraints() (cf applyVideoConstraints), jamais par reecriture SDP.
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", {
         callId: callIdRef.current,
@@ -669,7 +672,9 @@ export function useCall(socket, currentUserId) {
     try {
       const offer = await pc.createOffer();
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
-      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
+      // SDP video NATIF (pas de applyVideoProfile) : la renegociation sert
+      // uniquement a ajouter/retirer/rediriger la m=video (direction portee par
+      // le transceiver lui-meme), le navigateur genere le SDP video seul.
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", {
         callId: callIdRef.current,
@@ -810,28 +815,25 @@ export function useCall(socket, currentUserId) {
     const stream = await ensureLocalStream();
     for (const track of stream.getTracks()) pc.addTrack(track, stream);
 
-    // Transceiver video pose SYSTEMATIQUEMENT des la creation, meme camera
-    // inactive. Choix retenu (vs ajout tardif au moment du toggle) : negocier le
-    // m=video une seule fois a l'offre initiale donne une structure SDP stable
-    // et evite une renegociation "ajout de m-line" en cours d'appel, fragile sur
-    // Safari / anciens Chromium mobiles africains cibles. Activer/desactiver =
-    // changer direction + replaceTrack, sans jamais modifier le nombre de m-lines.
-    const videoTransceiver = pc.addTransceiver("video", { direction: "inactive" });
-    videoTransceiverRef.current = videoTransceiver;
-
-    // Ré-attache l'etat video courant dans ce (nouveau) PC : indispensable pour
-    // que restartWithRelay/attemptIceRestart preservent la video active a
-    // travers une recreation du PC, exactement comme l'audio ci-dessus.
+    // Approche "comme WhatsApp" (choix architecture, cf CHANGELOG) : PAS de
+    // transceiver video pose systematiquement. Un appel demarre 100% AUDIO :
+    // aucune m=video dans le SDP initial => chemin identique a celui d'avant le
+    // chantier video (audio garanti fiable, zero munging video). La section
+    // video est ajoutee UNIQUEMENT quand l'utilisateur active sa camera
+    // (toggleCamera -> addTransceiver), ou ici quand on recree le PC alors que
+    // la video etait DEJA active (restartWithRelay/iceRestart preservent l'etat).
     if (videoActiveRef.current && localVideoStreamRef.current) {
       const vtrack = localVideoStreamRef.current.getVideoTracks()[0];
       if (vtrack) {
         try {
-          await videoTransceiver.sender.replaceTrack(vtrack);
-          videoTransceiver.direction = "sendrecv";
+          const videoTransceiver = pc.addTransceiver(vtrack, { direction: "sendrecv" });
+          videoTransceiverRef.current = videoTransceiver;
           videoDirectionRef.current = "sendrecv";
         } catch { /* le PC se refermera de lui-meme si l'echec persiste */ }
       }
     } else {
+      // Appel audio pur : aucun transceiver video, aucune reference pendante.
+      videoTransceiverRef.current = null;
       videoDirectionRef.current = "inactive";
     }
 
@@ -953,7 +955,7 @@ export function useCall(socket, currentUserId) {
       if (videoActiveRef.current) await applyVideoConstraintsRef.current?.(videoProfileRef.current);
       const offer = await pc.createOffer();
       offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
-      offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
+      // SDP video NATIF : plafond video applique via setParameters ci-dessus.
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
     } catch (err) {
@@ -1308,12 +1310,36 @@ export function useCall(socket, currentUserId) {
 
         // Branche au PC si un appel est actif ; sinon on reste en preview locale
         // (comportement Ticket 2), le transceiver sera pose a la creation du PC.
-        const sender = videoTransceiverRef.current?.sender;
-        if (pcRef.current && sender) {
+        const pc = pcRef.current;
+        if (pc) {
           const vtrack = stream.getVideoTracks()[0];
           if (vtrack) {
-            await sender.replaceTrack(vtrack);
-            try { videoTransceiverRef.current.direction = "sendrecv"; } catch { /* ignore */ }
+            // Ajout TARDIF de la section video (approche WhatsApp) : le
+            // transceiver video n'existe pas tant que la camera n'a jamais ete
+            // activee. Premier toggle => addTransceiver (cree la m=video) ; les
+            // toggles suivants dans le meme appel reutilisent le transceiver
+            // existant via replaceTrack (pas de nouvelle m-line).
+            //
+            // Cote APPELE : si l'appelant a deja ajoute sa video, le navigateur
+            // a cree un transceiver video (recvonly) au setRemoteDescription. On
+            // le REUTILISE plutot que d'en creer un second (sinon 2e m=video
+            // fantome). On le retrouve par son kind.
+            if (!videoTransceiverRef.current) {
+              const existing = pc.getTransceivers?.().find(
+                (t) => (t.receiver?.track?.kind === "video" || t.sender?.track?.kind === "video")
+                  && t.currentDirection !== "stopped",
+              );
+              if (existing) {
+                videoTransceiverRef.current = existing;
+                await existing.sender.replaceTrack(vtrack);
+                try { existing.direction = "sendrecv"; } catch { /* ignore */ }
+              } else {
+                videoTransceiverRef.current = pc.addTransceiver(vtrack, { direction: "sendrecv" });
+              }
+            } else {
+              await videoTransceiverRef.current.sender.replaceTrack(vtrack);
+              try { videoTransceiverRef.current.direction = "sendrecv"; } catch { /* ignore */ }
+            }
             videoDirectionRef.current = "sendrecv";
             await applyVideoConstraints(videoProfileRef.current);
             if (isCallerRef.current) {
@@ -1405,7 +1431,9 @@ export function useCall(socket, currentUserId) {
         const pc = await createPeerConnection(false);
         const offer = await pc.createOffer();
         offer.sdp = applyOpusProfile(offer.sdp, profileRef.current);
-        offer.sdp = applyVideoProfile(offer.sdp, videoProfileRef.current, videoDirectionRef.current);
+        // SDP video NATIF : appel purement audio => aucune m=video ici (voir
+        // createPeerConnection, transceiver video pose seulement au 1er toggle
+        // camera). Aucune reecriture video.
         await pc.setLocalDescription(offer);
         socket.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
       } catch (err) {
@@ -1434,11 +1462,9 @@ export function useCall(socket, currentUserId) {
 
           const answer = await pc.createAnswer();
           answer.sdp = applyOpusProfile(answer.sdp, profileRef.current);
-          // direction = null : on NE force PAS la direction sur la reponse (elle
-          // est deja correctement derivee de l'offre par le navigateur ; la
-          // reecrire casserait la reception cote appele). On pose seulement le
-          // plafond b=* selon le palier.
-          answer.sdp = applyVideoProfile(answer.sdp, videoProfileRef.current, null);
+          // Reponse video 100% NATIVE : la direction et le codec sont derives de
+          // l'offre par le navigateur, aucun munging video. Le plafond video est
+          // pose cote encodeur via setParameters (applyVideoConstraints), pas en SDP.
           await pc.setLocalDescription(answer);
           socket.emit("call:signal", { callId: id, signal: { type: "answer", sdp: answer.sdp } });
         } else if (signal.type === "answer") {
