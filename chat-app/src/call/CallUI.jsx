@@ -35,7 +35,7 @@ function QualityBadge({ quality }) {
 
 export function CallUI({ call }) {
   const {
-    state, peer, muted, quality, profile, ultraMode, reconnecting, endMessage, durationSec,
+    state, peer, muted, quality, profile, ultraMode, ultraError, reconnecting, endMessage, durationSec,
     remoteAudioRef, acceptCall, rejectCall, endCall, toggleMute, startUltra, stopUltra,
   } = call;
 
@@ -77,6 +77,10 @@ export function CallUI({ call }) {
           )}
           {reconnecting ? (
             <span className="call-bar-warn">Reconnexion en cours…</span>
+          ) : ultraMode === "error" ? (
+            <span className="call-bar-warn" title={ultraError || undefined}>
+              Mode économie extrême indisponible{ultraError ? ` — ${ultraError}` : ""}
+            </span>
           ) : quality?.score === 1 && (
             <span className="call-bar-warn">Connexion faible — la voix peut se couper</span>
           )}

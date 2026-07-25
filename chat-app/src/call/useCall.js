@@ -80,6 +80,9 @@ export function useCall(socket, currentUserId) {
   // Vrai pendant le delai de grace apres une deconnexion socket (cf onDisconnect) :
   // l'appel n'est pas encore raccroche, mais le signaling est momentanement coupe.
   const [reconnecting, setReconnecting] = useState(false);
+  // Message d'erreur exact d'un echec Ultra, affiche dans l'UI : sur mobile
+  // sans DevTools branche, console.warn seul rendait l'echec invisible.
+  const [ultraError, setUltraError] = useState(null);
 
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -215,6 +218,7 @@ export function useCall(socket, currentUserId) {
     setMuted(false);
     setDurationSec(0);
     setReconnecting(false);
+    setUltraError(null);
     setState(CALL_STATE.IDLE);
   }, [cleanup]);
 
@@ -382,7 +386,14 @@ export function useCall(socket, currentUserId) {
 
     if (AUTO_ULTRA_FALLBACK) {
       if (ultraModeRef.current === "off" && !ultraAutoAttemptedRef.current) {
-        ultraAutoBadSamplesRef.current = score === 1 ? ultraAutoBadSamplesRef.current + 1 : 0;
+        // Ne reinitialise le compteur que sur une bonne mesure (score 3) : un
+        // reseau instable qui oscille Faible/Moyenne reste globalement mauvais
+        // et ne doit pas empecher indefiniment le declenchement d'Ultra.
+        ultraAutoBadSamplesRef.current = score === 1
+          ? ultraAutoBadSamplesRef.current + 1
+          : score === 3
+            ? 0
+            : ultraAutoBadSamplesRef.current;
         if (ultraAutoBadSamplesRef.current >= ULTRA_AUTO_BAD_SAMPLES && ultraStartRef.current) {
           ultraAutoAttemptedRef.current = true;
           ultraStartRef.current();
@@ -492,6 +503,7 @@ export function useCall(socket, currentUserId) {
 
     const attempt = ++ultraAttemptRef.current;
     updateUltraMode("starting");
+    setUltraError(null);
     ultraPeerReadyRef.current = false;
     let engine = null;
     let transport = null;
@@ -515,6 +527,8 @@ export function useCall(socket, currentUserId) {
           if (event.type === "error") {
             teardownUltra({ notify: true });
             updateUltraMode("error");
+            setUltraError(event.message || "Erreur moteur audio Codec2");
+            console.error("[Ultra] audio engine error (post-init)", event);
           }
         },
       });
@@ -533,6 +547,7 @@ export function useCall(socket, currentUserId) {
       if (engine) await engine.close().catch(() => { /* nettoyage best-effort */ });
       if (attempt !== ultraAttemptRef.current) return;
       updateUltraMode("error");
+      setUltraError(error?.message || String(error));
       console.warn("Codec2 Ultra indisponible", error);
     }
   }, [state, socket, ensureLocalStream, teardownUltra, updateUltraMode, engageUltra]);
@@ -983,6 +998,7 @@ export function useCall(socket, currentUserId) {
     endMessage,
     durationSec,
     ultraMode,
+    ultraError,
     reconnecting,
     remoteAudioRef,
     startCall,
