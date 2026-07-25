@@ -3,6 +3,13 @@ import createCodec2Module from "./codec2.mjs";
 const CODEC2_MODE_700C = 8;
 const CODEC2_SAMPLE_RATE = 8000;
 
+// The global `URL` constructor isn't guaranteed inside AudioWorkletGlobalScope
+// on every browser (observed missing on Edge/Chrome Android) — resolve the
+// sibling file path manually instead of `new URL(file, import.meta.url)`.
+function resolveSiblingUrl(file) {
+  return import.meta.url.slice(0, import.meta.url.lastIndexOf("/") + 1) + file;
+}
+
 class Codec2DuplexProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
@@ -30,7 +37,7 @@ class Codec2DuplexProcessor extends AudioWorkletProcessor {
   async initialize() {
     try {
       this.module = await createCodec2Module({
-        locateFile: (file) => new URL(file, import.meta.url).href,
+        locateFile: resolveSiblingUrl,
       });
       if (this.closed) return;
       this.handle = this.module._codec2_wasm_create(CODEC2_MODE_700C);
