@@ -63,9 +63,23 @@ const END_MESSAGES = {
   invalid: "Destinataire invalide",
 };
 
+// Noms d'erreur getUserMedia connus : seuls ceux-ci justifient un message micro.
+const KNOWN_MIC_ERROR_NAMES = new Set([
+  "NotAllowedError", "PermissionDeniedError",
+  "NotFoundError", "DevicesNotFoundError",
+  "NotReadableError", "TrackStartError",
+  "OverconstrainedError", "ConstraintNotSatisfiedError",
+]);
+
 function callSetupErrorMessage(err) {
-  const message = microphoneErrorMessage(err);
-  return message === "Micro indisponible" ? "Connexion audio impossible" : message;
+  // Une erreur de negociation SDP/WebRTC (DOMException generique levee par
+  // set{Local,Remote}Description/createAnswer) n'a rien a voir avec le micro :
+  // la router vers microphoneErrorMessage affichait "Connexion audio impossible",
+  // message trompeur. On ne renvoie un message micro que pour une vraie erreur
+  // getUserMedia connue ; sinon message de connexion generique.
+  const name = err?.name || "";
+  if (KNOWN_MIC_ERROR_NAMES.has(name)) return microphoneErrorMessage(err);
+  return "Connexion impossible";
 }
 
 export function useCall(socket, currentUserId) {

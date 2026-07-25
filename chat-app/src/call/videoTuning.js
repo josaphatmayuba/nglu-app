@@ -91,22 +91,30 @@ export function applyVideoProfile(sdp, profileName, direction) {
     .filter((l) => !/^b=(AS|TIAS):/.test(l)
       && !/^a=(sendrecv|recvonly|sendonly|inactive)\s*$/.test(l));
 
-  // Point d'insertion : l'ordre SDP d'une section media est
-  //   m= / i= / c= / b= / a=direction / a=rtpmap / a=fmtp / a=ssrc / ...
-  // On insere donc juste APRES les lignes c=/b= (que l'on vient d'ajouter), et
-  // AVANT la premiere ligne d'attribut media (a=rtpmap / a=fmtp / a=rtcp-fb /
-  // a=ssrc / a=mid / a=extmap ...). C'est la seule position valide pour la
-  // direction : la mettre en fin de tableau la ferait atterrir apres la ligne
-  // vide terminale du SDP quand m=video est la derniere section => SDP invalide,
-  // ce qui bloquait TOUS les appels (regression). On calcule l'index sur la
-  // section deja nettoyee, puis on injecte b=* et direction dans le bon ordre.
-  let insertAt = 1; // juste apres m=video par defaut
+  // Ordre SDP d'une section media (RFC 4566) :
+  //   m= / i= / c= / b= / a=... (dont a=rtpmap, a=fmtp, a=direction, a=mid...)
+  // Positions d'insertion voulues :
+  //  - les b=AS/b=TIAS juste APRES la ligne c= (place canonique du champ b=),
+  //  - la direction (a=sendrecv/...) juste AVANT la premiere ligne a=rtpmap.
+  // Un SDP Chrome reel commence sa liste d'attributs par a=rtcp/a=ice-ufrag/
+  // a=fingerprint/a=setup/a=mid AVANT a=rtpmap : inserer avant le 1er a=
+  // quelconque ferait atterrir direction/b= au milieu des lignes DTLS/ICE/mid
+  // (tolere mais fragile). On vise donc a=rtpmap, plus stable.
+  // Fallback degenere (aucune a=rtpmap) : on insere en fin de section, ce qui
+  // reste valide (jamais apres la ligne vide terminale : voir merge plus bas).
+
+  // b= : juste apres la derniere ligne c= (0 ou 1 en pratique). A defaut de c=,
+  // juste apres m= (index 0).
+  let bInsertAt = 1;
   for (let i = 1; i < section.length; i += 1) {
-    // On s'arrete a la premiere ligne d'attribut media : tout ce qui precede
-    // (i=, c=, et lignes b= residuelles improbables) reste avant la direction.
-    if (section[i].startsWith("a=")) { insertAt = i; break; }
-    // Sans aucune ligne a= (SDP degenere) : tout le reste vient avant.
-    if (i === section.length - 1) insertAt = section.length;
+    if (section[i].startsWith("c=")) { bInsertAt = i + 1; break; }
+    if (section[i].startsWith("a=")) break; // les c= precedent tous les a=
+  }
+
+  // direction : juste avant la 1re a=rtpmap. Fallback : fin de section.
+  let dirInsertAt = section.length;
+  for (let i = 1; i < section.length; i += 1) {
+    if (section[i].startsWith("a=rtpmap")) { dirInsertAt = i; break; }
   }
 
   const bLines = [];
@@ -123,12 +131,17 @@ export function applyVideoProfile(sdp, profileName, direction) {
   const forceDir = ["sendrecv", "recvonly", "sendonly", "inactive"].includes(direction);
   const dirLines = forceDir ? [`a=${direction}`] : removedDir;
 
-  const rebuilt = [
-    ...section.slice(0, insertAt),
-    ...bLines,
-    ...dirLines,
-    ...section.slice(insertAt),
-  ];
+  // On construit la section en injectant b= puis direction sans invalider les
+  // index : on part de la section nettoyee et on applique les deux insertions du
+  // plus grand index vers le plus petit.
+  const rebuilt = section.slice();
+  if (dirInsertAt >= bInsertAt) {
+    rebuilt.splice(dirInsertAt, 0, ...dirLines);
+    rebuilt.splice(bInsertAt, 0, ...bLines);
+  } else {
+    rebuilt.splice(bInsertAt, 0, ...bLines);
+    rebuilt.splice(dirInsertAt, 0, ...dirLines);
+  }
 
   const merged = [
     ...lines.slice(0, startIdx),
@@ -139,7 +152,17 @@ export function applyVideoProfile(sdp, profileName, direction) {
   // Preserve le style de fin de ligne d'origine (CRLF si le SDP en avait).
   const eol = sdp.includes("\r\n") ? "\r\n" : "\n";
   let out = merged.join(eol);
-  if (sdp.endsWith("\r\n") || sdp.endsWith("\n")) out += eol;
+  // Le SDP source finit toujours par un eol, donc split() a produit un dernier
+  // element "" : merged.join() reproduit DEJA la newline finale. Rajouter un eol
+  // (ancien code) donnait "...\r\n\r\n" => ligne vide terminale malformee, que
+  // Safari/anciens Chromium mobiles rejettent dans set{Local,Remote}Description
+  // (throw) et qui bloquait TOUS les appels. On normalise donc a EXACTEMENT une
+  // newline terminale si le SDP source en avait une, zero sinon.
+  if (sdp.endsWith("\r\n") || sdp.endsWith("\n")) {
+    out = out.replace(/(\r\n|\n)+$/, "") + eol;
+  } else {
+    out = out.replace(/(\r\n|\n)+$/, "");
+  }
   return out;
 }
 
