@@ -37,10 +37,18 @@ const DISCONNECT_GRACE_MS = 10000;
 const ULTRA_AUTO_BAD_SAMPLES = 2;
 const ULTRA_AUTO_GOOD_SAMPLES = 4;
 const ULTRA_RETURN_BITRATE = 16000;
-const AUTO_ULTRA_FALLBACK = import.meta.env.VITE_CODEC2_AUTO_FALLBACK === "true"
-  || import.meta.env.MODE === "development"
-  || (typeof window !== "undefined"
-    && new URLSearchParams(window.location.search).get("codec2") === "auto");
+// Bascule Ultra (Codec2) automatique en cascade de survie.
+//
+// CHANGEMENT DE COMPORTEMENT PROD (correction survie mauvaise connexion) :
+// desormais ACTIF PAR DEFAUT PARTOUT (dev ET prod), le WASM Codec2 etant deja
+// preloade (cf commits recents). Ultra est le dernier rempart audio avant de
+// raccrocher sur un lien ou meme le relais TURN peine. Pour le DESACTIVER, poser
+// explicitement VITE_CODEC2_AUTO_FALLBACK="false" (kill-switch). Le parametre
+// d'URL ?codec2=auto reste supporte comme forcage ponctuel.
+// Actif par defaut PARTOUT (dev + prod). Seul kill-switch : poser explicitement
+// VITE_CODEC2_AUTO_FALLBACK="false". (?codec2=auto reste sans effet negatif : la
+// cascade est deja active.)
+const AUTO_ULTRA_FALLBACK = import.meta.env.VITE_CODEC2_AUTO_FALLBACK !== "false";
 
 // Adaptation du profil audio a la qualite reelle.
 // Montee exigeante (5 mesures = ~15 s de bonne qualite soutenue) : une
@@ -119,6 +127,25 @@ export function useCall(socket, currentUserId) {
   // libelle VIDEO_PROFILE_LABELS.
   const [videoProfile, setVideoProfileState] = useState("low");
 
+  // Miroir non-reactif de `state` : permet aux callbacks WebRTC (createPeerConnection,
+  // oniceconnectionstatechange, restartWithRelay, onSignal) de connaitre l'etat
+  // reel sans dependre d'une closure potentiellement stale. Critique pour la
+  // cascade de survie : distinguer un ECHEC DE SETUP (state !== ACTIVE, raccrocher
+  // reste legitime) d'un ECHEC DE RENEGOCIATION/ICE en cours d'appel (state ===
+  // ACTIVE, il faut degrader/survivre, jamais raccrocher tant que l'audio tient).
+  const stateRef = useRef(CALL_STATE.IDLE);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // FIX 3 : garde-fou de setup (timer connect, 45s arme dans onAccepted) desarme
+  // des que l'appel devient ACTIVE, quel que soit le chemin qui a produit cette
+  // transition. Evite qu'un timer de setup residuel raccroche un appel deja etabli.
+  useEffect(() => {
+    if (state === CALL_STATE.ACTIVE && timersRef.current.connect) {
+      clearTimeout(timersRef.current.connect);
+      delete timersRef.current.connect;
+    }
+  }, [state]);
+
   const pcRef = useRef(null);
   const localStreamRef = useRef(null);
   const localVideoStreamRef = useRef(null);
@@ -160,6 +187,14 @@ export function useCall(socket, currentUserId) {
   const iceRestartAtRef = useRef(0);
   const relayOnlyRef = useRef(false);
   const reportedConnectionRef = useRef(false);
+  // Cascade de survie sur ICE "failed" (correction mauvaise connexion). Chaque
+  // marche de la cascade est BORNEE par une ref "deja tentee" pour ne pas boucler
+  // ni spammer : ICE restart natif -> relais TURN -> Ultra Codec2 -> (dernier
+  // recours) raccrochage apres un delai de grace. Tant qu'une marche non tentee
+  // reste disponible ET qu'un flux audio ACTIVE tient, on NE raccroche PAS.
+  const iceFailedRestartTriedRef = useRef(false); // marche 1 (ICE restart) tentee
+  const iceFailedRelayTriedRef = useRef(false); // marche 2 (relais TURN) tentee
+  const iceFailedUltraTriedRef = useRef(false); // marche 3 (Ultra) tentee
   // Adaptation du profil audio : compteurs de mesures consecutives, derniere
   // valeur de qualite, et echantillon precedent pour calculer la perte sur
   // l'intervalle plutot que depuis le debut de l'appel.
@@ -171,6 +206,10 @@ export function useCall(socket, currentUserId) {
   // Indirection vers attemptIceRestart, defini plus bas : evite une dependance
   // circulaire entre adaptProfile et la renegociation.
   const renegotiateRef = useRef(null);
+  // Indirection vers restartWithRelay (defini apres createPeerConnection) :
+  // permet a la cascade de survie ICE failed (definie avant createPeerConnection)
+  // de l'appeler sans dependance circulaire.
+  const restartWithRelayRef = useRef(null);
   // Indirection vers applyVideoConstraints (defini plus bas) : adaptVideo, defini
   // a cote d'adaptProfile, doit pouvoir changer de palier video sans dependance
   // circulaire.
@@ -303,6 +342,11 @@ export function useCall(socket, currentUserId) {
     reportedConnectionRef.current = false;
     relayOnlyRef.current = false;
     iceRestartAtRef.current = 0;
+    iceFailedRestartTriedRef.current = false;
+    iceFailedRelayTriedRef.current = false;
+    iceFailedUltraTriedRef.current = false;
+    clearTimeout(timersRef.current.iceFailedGrace);
+    delete timersRef.current.iceFailedGrace;
     // Liberer callIdRef ici (pas seulement dans resetToIdle, retarde de
     // 1.5-2.5s pour l'affichage du message de fin) : sinon un rappel immediat
     // pendant l'ecran "Appel termine" trouve encore l'ancien callId et se fait
@@ -798,6 +842,79 @@ export function useCall(socket, currentUserId) {
     };
   }, [stopUltra]);
 
+  /**
+   * Cascade de survie declenchee sur ICE "failed".
+   *
+   * Philosophie (correction mauvaise connexion) : le chemin d'echec reseau
+   * DECLENCHE LA SURVIE, il ne raccroche pas. On epuise, dans l'ordre et une seule
+   * fois chacune (refs anti-boucle), les options avant d'abandonner :
+   *   1. attemptIceRestart()  — ICE restart natif leger (renegocie le chemin).
+   *   2. restartWithRelay()   — rebatit le PC en forcant le relais TURN.
+   *   3. Ultra Codec2         — dernier rempart audio, survit ou meme TURN peine.
+   *   4. endCall("failed")    — DERNIER recours, apres un delai de grace, et
+   *                             seulement si toutes les marches sont epuisees.
+   *
+   * Chaque appel a "failed" avance d'AU PLUS une marche : les refs iceFailed*Tried
+   * garantissent qu'on ne re-tente pas la meme chose en boucle. Le cooldown natif
+   * d'attemptIceRestart (ICE_RESTART_COOLDOWN_MS) borne aussi la premiere marche.
+   * Tant qu'une marche non tentee reste OU qu'un flux audio ACTIVE tient, on
+   * n'arme pas le raccrochage.
+   */
+  const runIceFailedSurvivalCascade = useCallback(() => {
+    // 1) ICE restart natif (le moins couteux). L'appele ne reoffre pas : pour lui
+    // cette marche est un no-op, on passe directement a l'attente de la nouvelle
+    // offre / aux marches suivantes.
+    if (!iceFailedRestartTriedRef.current) {
+      iceFailedRestartTriedRef.current = true;
+      attemptIceRestart();
+      return; // on laisse le temps a l'ICE restart d'aboutir avant l'escalade
+    }
+
+    // 2) Relais TURN force (rebatit le PC). Aligne relayOnlyRef pour eviter un
+    // double restart concurrent avec un autre chemin (onSignal).
+    if (!iceFailedRelayTriedRef.current && !relayOnlyRef.current) {
+      iceFailedRelayTriedRef.current = true;
+      relayOnlyRef.current = true;
+      restartWithRelayRef.current?.();
+      return;
+    }
+
+    // 3) Ultra Codec2 : dernier rempart audio. Exige un appel ACTIVE (startUltra
+    // le verifie aussi). On ne le tente qu'une fois et seulement si pas deja en
+    // cours/actif.
+    if (
+      !iceFailedUltraTriedRef.current
+      && AUTO_ULTRA_FALLBACK
+      && stateRef.current === CALL_STATE.ACTIVE
+      && ultraModeRef.current === "off"
+      && ultraStartRef.current
+    ) {
+      iceFailedUltraTriedRef.current = true;
+      ultraAutoAttemptedRef.current = true; // coherence avec la cascade auto de collectStats
+      ultraStartRef.current();
+      return;
+    }
+
+    // 4) Dernier recours : toutes les options sont epuisees. On n'arme le
+    // raccrochage qu'apres un delai de grace (aligne sur DISCONNECT_GRACE_MS) et
+    // UNIQUEMENT si, a l'echeance, le chemin ne s'est pas retabli entre-temps
+    // (oniceconnectionstatechange "connected" annule ce timer) et qu'aucun audio
+    // Ultra ne tient. Un seul timer arme a la fois.
+    if (!timersRef.current.iceFailedGrace) {
+      timersRef.current.iceFailedGrace = setTimeout(() => {
+        delete timersRef.current.iceFailedGrace;
+        const pc = pcRef.current;
+        const iceOk = pc && (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed");
+        const ultraHoldingAudio = ultraModeRef.current === "active";
+        // Ne pas raccrocher tant qu'un flux audio tient (WebRTC retabli ou Ultra
+        // actif). Sinon, epuisement reel des options -> raccrochage legitime.
+        if (!iceOk && !ultraHoldingAudio && callIdRef.current) {
+          endCall("failed");
+        }
+      }, DISCONNECT_GRACE_MS);
+    }
+  }, [attemptIceRestart, endCall]);
+
   /** Construit la PeerConnection et branche micro + evenements. */
   const createPeerConnection = useCallback(async (forceRelay = false) => {
     const iceServers = await getIceServers();
@@ -881,27 +998,35 @@ export function useCall(socket, currentUserId) {
     pc.oniceconnectionstatechange = () => {
       const st = pc.iceConnectionState;
       if (st === "connected" || st === "completed") {
+        // FIX 3 : le chemin est (re)etabli -> on desarme le garde-fou de setup
+        // (timer connect 45s) et le garde-fou de la cascade failed, sinon un
+        // timer arme lors d'un failed transitoire raccrocherait un appel qui a
+        // pourtant repris. On reinitialise aussi les marches de la cascade : un
+        // futur failed doit pouvoir re-parcourir ICE restart -> relay.
         clearTimeout(timersRef.current.connect);
+        delete timersRef.current.connect;
+        clearTimeout(timersRef.current.iceFailedGrace);
+        delete timersRef.current.iceFailedGrace;
+        iceFailedRestartTriedRef.current = false;
+        iceFailedRelayTriedRef.current = false;
         setState((prev) => (prev === CALL_STATE.ENDED ? prev : CALL_STATE.ACTIVE));
       } else if (st === "disconnected") {
         // Ne pas raccrocher : sur reseau mobile, "disconnected" est souvent
         // transitoire (handover, micro-coupure). On tente une reprise ICE.
         attemptIceRestart();
       } else if (st === "failed") {
-        // Echec definitif du chemin courant : on retente en TURN force,
-        // puis on abandonne.
-        if (!relayOnlyRef.current) {
-          relayOnlyRef.current = true;
-          restartWithRelay();
-        } else {
-          endCall("failed");
-        }
+        // ── CASCADE DE SURVIE (correction mauvaise connexion) ────────────────
+        // "failed" ne raccroche PLUS immediatement. On epuise, dans l'ordre et
+        // UNE SEULE FOIS chacune (refs anti-boucle), les options de survie ; le
+        // raccrochage n'intervient qu'en DERNIER recours, apres un delai de grace.
+        // Tant que l'audio ACTIVE tient, une erreur ICE ne tue jamais l'appel.
+        runIceFailedSurvivalCascade();
       }
     };
 
     pcRef.current = pc;
     return pc;
-  }, [getIceServers, ensureLocalStream, socket, attemptIceRestart, endCall]);
+  }, [getIceServers, ensureLocalStream, socket, attemptIceRestart, runIceFailedSurvivalCascade]);
 
   /** Rebatit la connexion en forcant le relais TURN. */
   const restartWithRelay = useCallback(async () => {
@@ -959,9 +1084,20 @@ export function useCall(socket, currentUserId) {
       await pc.setLocalDescription(offer);
       socket?.emit("call:signal", { callId: id, signal: { type: "offer", sdp: offer.sdp } });
     } catch (err) {
-      endCall("failed", callSetupErrorMessage(err));
+      // NE PAS raccrocher ici (correction survie) : un echec de rebasculement en
+      // relais TURN ne doit pas tuer l'appel. On garde le PC/audio existant et on
+      // laisse la cascade de survie (runIceFailedSurvivalCascade) poursuivre vers
+      // Ultra puis, en dernier recours seulement, le delai de grace avant
+      // raccrochage. Le "failed" ICE suivant fera avancer la cascade.
+      console.warn("[call] restartWithRelay a echoue, poursuite de la cascade de survie", err);
     }
-  }, [createPeerConnection, socket, endCall]);
+  }, [createPeerConnection, socket]);
+
+  // Branche l'indirection utilisee par la cascade de survie ICE failed
+  // (runIceFailedSurvivalCascade, defini avant createPeerConnection).
+  useEffect(() => {
+    restartWithRelayRef.current = restartWithRelay;
+  }, [restartWithRelay]);
 
   /** Applique les candidats ICE recus avant la description distante. */
   const flushPendingCandidates = useCallback(async () => {
@@ -1483,7 +1619,20 @@ export function useCall(socket, currentUserId) {
           try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch { /* obsolete */ }
         }
       } catch (err) {
-        endCall("failed", callSetupErrorMessage(err));
+        // FIX 1 (correction survie) : distinguer SETUP INITIAL de RENEGOCIATION.
+        // - state !== ACTIVE : l'appel n'est pas encore etabli, une erreur de
+        //   traitement d'offre/answer est un vrai echec de setup -> raccrocher
+        //   reste legitime.
+        // - state === ACTIVE : l'appel tient deja (un flux audio existe). L'erreur
+        //   provient d'une RENEGOCIATION en cours (souvent la coupure/adaptation
+        //   video de suspendVideoForNetwork/adaptVideo en mauvais reseau). On AVALE
+        //   l'erreur : on log en warn, on NE raccroche PAS, on garde l'etat/flux
+        //   courant (meme comportement que le catch silencieux de renegotiate).
+        if (stateRef.current === CALL_STATE.ACTIVE) {
+          console.warn("[call] erreur de renegociation ignoree (appel actif preserve)", err);
+        } else {
+          endCall("failed", callSetupErrorMessage(err));
+        }
       }
     };
 
