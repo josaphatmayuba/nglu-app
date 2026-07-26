@@ -1373,6 +1373,41 @@
                         "when":  1780966800000,
                         "tag":  "0220_batipro_invoice_ledger",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  196,
+                        "version":  "5",
+                        "when":  1780970400000,
+                        "tag":  "0221_batipro_site_photos",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  197,
+                        "version":  "5",
+                        "when":  1780974000000,
+                        "tag":  "0222_batipro_workers",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  198,
+                        "version":  "5",
+                        "when":  1780977600000,
+                        "tag":  "0223_batipro_attendance",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  199,
+                        "version":  "5",
+                        "when":  1780981200000,
+                        "tag":  "0224_batipro_notifications",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  200,
+                        "version":  "5",
+                        "when":  1780984800000,
+                        "tag":  "0225_batipro_level_plans",
+                        "breakpoints":  true
                     }
                 ]
 }
