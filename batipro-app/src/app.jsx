@@ -491,17 +491,17 @@ function BudgetBar({ label, txt, pct }) {
 
 /* ── ProjectDetail : page dédiée d'un chantier avec tous ses onglets ────── */
 const PROJECT_TABS = [
-  { id: "apercu", label: "Aperçu" },
-  { id: "devis", label: "Devis" },
-  { id: "bonscommande", label: "Bons de commande" },
-  { id: "situations", label: "Situations & avenants" },
-  { id: "situationstravaux", label: "Situations de travaux" },
-  { id: "factures", label: "Factures" },
-  { id: "photos", label: "Photos & rapport" },
-  { id: "planning", label: "Planning" },
-  { id: "plan3d", label: "Plan 3D" },
-  { id: "materiaux", label: "Matériaux" },
-  { id: "soustraitants", label: "Sous-traitants" },
+  { id: "apercu", label: "Aperçu", icon: "pieChart" },
+  { id: "devis", label: "Devis", icon: "receipt" },
+  { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
+  { id: "situations", label: "Situations & avenants", icon: "receipt" },
+  { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
+  { id: "factures", label: "Factures", icon: "receipt" },
+  { id: "photos", label: "Photos & rapport", icon: "camera" },
+  { id: "planning", label: "Planning", icon: "gantt" },
+  { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
+  { id: "materiaux", label: "Matériaux", icon: "package" },
+  { id: "soustraitants", label: "Sous-traitants", icon: "users" },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials }) {
   const [tab, setTab] = React.useState("apercu");
@@ -538,7 +538,9 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
       <div className="proj-tabs">
         {PROJECT_TABS.map((t) => (
           <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
-            {t.label}
+            <Icon name={t.icon} />
+            <span>{t.label}</span>
+            {t.id === "materiaux" && projectMaterials.length > 0 && <span className="proj-tab-count">{projectMaterials.length}</span>}
           </button>
         ))}
       </div>
