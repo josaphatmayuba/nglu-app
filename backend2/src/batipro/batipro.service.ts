@@ -1,25 +1,29 @@
 import { BadRequestException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
   batiproBuildingLevels,
   batiproBuildingModels,
   appSettings,
+  batiproAttendance,
   batiproChangeOrders,
   batiproCrews,
   batiproDocumentCounters,
   batiproDocumentLines,
   batiproDocuments,
   batiproMaterials,
+  batiproNotifications,
   batiproPhases,
   batiproProjectAssignments,
   batiproProjects,
+  batiproSitePhotos,
   batiproSituations,
   batiproSubcontractorLinks,
   batiproSubcontractors,
   batiproTasks,
+  batiproWorkers,
   currencies,
   suppliers,
 } from "../database/schema";
@@ -27,8 +31,11 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService } from "../ledger/ledger.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
+import { OcrService } from "./ocr.service";
+import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
+  BulkUpsertAttendanceDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -41,9 +48,11 @@ import type {
   CreateBatiproSituationDocumentDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  CreateBatiproWorkerDto,
   CreateSubcontractorLinkDto,
   ReviewSubmissionDto,
   SubmitSubcontractorDocumentDto,
+  UpdateBatiproAttendanceDto,
   UpdateBatiproBuildingLevelDto,
   UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
@@ -53,8 +62,10 @@ import type {
   UpdateBatiproPhaseDto,
   UpdateBatiproProjectDto,
   UpdateBatiproSituationDto,
+  UpdateBatiproSitePhotoDto,
   UpdateBatiproSubcontractorDto,
   UpdateBatiproTaskDto,
+  UpdateBatiproWorkerDto,
 } from "./dto/batipro.dto";
 
 @Injectable()
@@ -64,6 +75,7 @@ export class BatiproService {
     private readonly realtime: RealtimeDataPublisher,
     private readonly objectStorage: ObjectStorageService,
     private readonly ledger: LedgerService,
+    private readonly ocr: OcrService,
   ) {}
 
   // ── Helpers RBAC par chantier (BatiPro, Phase 2) ─────────────────────────
@@ -782,6 +794,45 @@ export class BatiproService {
     return this.buildingModel(orgId, model.projectId);
   }
 
+  // Import du plan de l'architecte (image/PDF) PROPRE A UN ETAGE. Le PDF du RDC
+  // n'est pas celui du R+1 : chaque niveau a son propre fichier (contrairement a
+  // uploadModelPlan ci-dessus, garde en fallback legacy pour les modeles migres).
+  async uploadLevelPlan(levelId: number, file: any, orgId: number) {
+    const level = await this.getBuildingLevel(levelId, orgId);
+    const stored = await this.objectStorage.putDocument(file, `batipro/plans/${orgId}/${level.projectId}/levels/${levelId}`);
+    if (level.importedFileKey) {
+      try { await this.objectStorage.deleteObject(level.importedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproBuildingLevels).set({
+      importedFileKey: stored.objectKey,
+      importedFileFormat: stored.mimeType === "application/pdf" ? "pdf" : (stored.mimeType.split("/")[1] || null),
+      importedFileSize: stored.sizeBytes,
+    }).where(eq(batiproBuildingLevels.id, levelId));
+    await this.publish("uploadLevelPlan", ["building_levels"], "updated", levelId, orgId);
+    return this.getBuildingLevel(levelId, orgId);
+  }
+
+  async levelPlanFile(levelId: number, orgId: number) {
+    const level = await this.getBuildingLevel(levelId, orgId);
+    if (!level.importedFileKey) throw new NotFoundException("Aucun plan importe pour cet etage.");
+    const object = await this.objectStorage.getObject(level.importedFileKey);
+    return { ...object, mimeType: object.contentType };
+  }
+
+  async deleteLevelPlan(levelId: number, orgId: number) {
+    const level = await this.getBuildingLevel(levelId, orgId);
+    if (level.importedFileKey) {
+      try { await this.objectStorage.deleteObject(level.importedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproBuildingLevels).set({
+      importedFileKey: null,
+      importedFileFormat: null,
+      importedFileSize: null,
+    }).where(eq(batiproBuildingLevels.id, levelId));
+    await this.publish("deleteLevelPlan", ["building_levels"], "updated", levelId, orgId);
+    return this.getBuildingLevel(levelId, orgId);
+  }
+
   private async getBuildingLevel(id: number, orgId: number) {
     const [row] = await this.db
       .select()
@@ -1223,6 +1274,17 @@ export class BatiproService {
       if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
       return id;
     });
+
+    // Lie le document cree a sa photo/scan source (OCR), si fournie et appartenant a la meme org.
+    if (input.sourcePhotoId != null) {
+      await this.db
+        .update(batiproSitePhotos)
+        .set({ linkedDocumentId: documentId })
+        .where(and(
+          eq(batiproSitePhotos.id, input.sourcePhotoId),
+          eq(batiproSitePhotos.organizationId, orgId),
+        ));
+    }
 
     await this.publish("createDocument", ["documents", "document_lines"], "created", documentId, orgId);
     return this.getDocument(documentId, orgId);
@@ -1837,6 +1899,506 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     }).where(eq(batiproDocuments.id, doc.id));
     await this.publish("acceptDocument", ["documents"], "updated", doc.id, doc.organizationId);
     return { id: doc.id, status: "accepted", message: "Devis accepte. Merci." };
+  }
+
+  // ── Galerie photo de chantier (site + documents sources) ────────────────
+  // Verifie que le chantier appartient a l'org et reste dans le scope RBAC
+  // courant (memes regles que projectDirectFilter : "all" = pas de filtre).
+  private async assertProjectInScope(projectId: number, orgId: number, scope: BatiproProjectScope) {
+    await this.getProject(projectId, orgId);
+    if (scope !== "all" && !scope.includes(projectId)) {
+      throw new NotFoundException("Chantier introuvable.");
+    }
+  }
+
+  async uploadSitePhoto(projectId: number, file: any, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const stored = await this.objectStorage.putDocument(file, `batipro/site-photos/${orgId}/${projectId}`);
+    const [result] = await this.db.insert(batiproSitePhotos).values({
+      organizationId: orgId,
+      projectId,
+      fileKey: stored.objectKey,
+      fileFormat: stored.mimeType.split("/")[1] || null,
+      fileSize: stored.sizeBytes,
+      uploadedBy: userId ?? null,
+      kind: "site",
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createSitePhoto", ["photos"], "created", id, orgId);
+    return this.getSitePhoto(id, orgId);
+  }
+
+  async sitePhotos(projectId: number, orgId: number, scope: BatiproProjectScope, filters: { from?: string; to?: string; taskId?: number }) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const conditions = [
+      eq(batiproSitePhotos.projectId, projectId),
+      eq(batiproSitePhotos.organizationId, orgId),
+      eq(batiproSitePhotos.isActive, 1),
+    ];
+    if (filters.from) conditions.push(gte(batiproSitePhotos.takenAt, new Date(filters.from)));
+    if (filters.to) conditions.push(lte(batiproSitePhotos.takenAt, new Date(filters.to)));
+    if (filters.taskId) conditions.push(eq(batiproSitePhotos.taskId, filters.taskId));
+    return this.db
+      .select()
+      .from(batiproSitePhotos)
+      .where(and(...conditions))
+      .orderBy(desc(batiproSitePhotos.takenAt));
+  }
+
+  private async getSitePhoto(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproSitePhotos)
+      .where(and(eq(batiproSitePhotos.id, id), eq(batiproSitePhotos.organizationId, orgId), eq(batiproSitePhotos.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Photo introuvable.");
+    return row;
+  }
+
+  async sitePhotoFile(id: number, orgId: number) {
+    const photo = await this.getSitePhoto(id, orgId);
+    const object = await this.objectStorage.getObject(photo.fileKey);
+    return { ...object, mimeType: object.contentType };
+  }
+
+  async updateSitePhoto(id: number, input: UpdateBatiproSitePhotoDto, orgId: number) {
+    await this.getSitePhoto(id, orgId);
+    const patch: Partial<typeof batiproSitePhotos.$inferInsert> = {};
+    if (input.caption !== undefined) patch.caption = input.caption || null;
+    if (input.taken_at !== undefined) patch.takenAt = new Date(input.taken_at);
+    if (input.task_id !== undefined) patch.taskId = input.task_id ?? null;
+    if (Object.keys(patch).length) await this.db.update(batiproSitePhotos).set(patch).where(eq(batiproSitePhotos.id, id));
+    await this.publish("updateSitePhoto", ["photos"], "updated", id, orgId);
+    return this.getSitePhoto(id, orgId);
+  }
+
+  async deleteSitePhoto(id: number, orgId: number) {
+    await this.getSitePhoto(id, orgId);
+    // Soft delete uniquement : l'objet MinIO n'est jamais supprime ici.
+    await this.db.update(batiproSitePhotos).set({ isActive: 0 }).where(and(eq(batiproSitePhotos.id, id), eq(batiproSitePhotos.organizationId, orgId)));
+    await this.publish("deleteSitePhoto", ["photos"], "deleted", id, orgId);
+    return { message: "Photo supprimee." };
+  }
+
+  // Rapport chronologique : liste des photos actives du chantier sur la
+  // periode, avec l'URL de streaming du fichier. Pas de PDF cote backend,
+  // le frontend genere la vue imprimable.
+  async siteReport(projectId: number, orgId: number, scope: BatiproProjectScope, filters: { from?: string; to?: string }) {
+    const project = await this.getProject(projectId, orgId);
+    if (scope !== "all" && !scope.includes(projectId)) throw new NotFoundException("Chantier introuvable.");
+    const photos = await this.sitePhotos(projectId, orgId, scope, filters);
+    return {
+      project: { id: project.id, code: project.code, name: project.name, client: project.client, location: project.location },
+      from: filters.from ?? null,
+      to: filters.to ?? null,
+      photos: photos.map((p) => ({
+        id: p.id,
+        caption: p.caption,
+        takenAt: p.takenAt,
+        taskId: p.taskId,
+        kind: p.kind,
+        fileUrl: `/batipro/photos/${p.id}/file`,
+      })),
+    };
+  }
+
+  // ── Ouvriers nominatifs (pointage/presence) ──────────────────────────────
+  async listWorkers(orgId: number, crewId?: number) {
+    const conditions = [eq(batiproWorkers.organizationId, orgId), eq(batiproWorkers.isActive, 1)];
+    if (crewId) conditions.push(eq(batiproWorkers.crewId, crewId));
+    return this.db
+      .select()
+      .from(batiproWorkers)
+      .where(and(...conditions))
+      .orderBy(batiproWorkers.fullName);
+  }
+
+  async getWorker(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproWorkers)
+      .where(and(eq(batiproWorkers.id, id), eq(batiproWorkers.organizationId, orgId), eq(batiproWorkers.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Ouvrier introuvable.");
+    return row;
+  }
+
+  async createWorker(input: CreateBatiproWorkerDto, orgId: number) {
+    const [result] = await this.db.insert(batiproWorkers).values({
+      organizationId: orgId,
+      crewId: input.crew_id ?? null,
+      fullName: input.full_name,
+      role: input.role ?? null,
+      phone: input.phone ?? null,
+      dailyRate: input.daily_rate !== undefined ? String(input.daily_rate) : null,
+      currencyId: input.currency_id ?? null,
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createWorker", ["workers"], "created", id, orgId);
+    return this.getWorker(id, orgId);
+  }
+
+  async updateWorker(id: number, input: UpdateBatiproWorkerDto, orgId: number) {
+    await this.getWorker(id, orgId);
+    const patch: Partial<typeof batiproWorkers.$inferInsert> = {};
+    if (input.full_name !== undefined) patch.fullName = input.full_name;
+    if (input.crew_id !== undefined) patch.crewId = input.crew_id ?? null;
+    if (input.role !== undefined) patch.role = input.role || null;
+    if (input.phone !== undefined) patch.phone = input.phone || null;
+    if (input.daily_rate !== undefined) patch.dailyRate = input.daily_rate !== null ? String(input.daily_rate) : null;
+    if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
+    if (Object.keys(patch).length) await this.db.update(batiproWorkers).set(patch).where(eq(batiproWorkers.id, id));
+    await this.publish("updateWorker", ["workers"], "updated", id, orgId);
+    return this.getWorker(id, orgId);
+  }
+
+  async deleteWorker(id: number, orgId: number) {
+    await this.getWorker(id, orgId);
+    await this.db.update(batiproWorkers).set({ isActive: 0 }).where(and(eq(batiproWorkers.id, id), eq(batiproWorkers.organizationId, orgId)));
+    await this.publish("deleteWorker", ["workers"], "deleted", id, orgId);
+    return { message: "Ouvrier supprime." };
+  }
+
+  // ── Pointage/presence journaliere sur chantier ───────────────────────────
+  async listAttendance(projectId: number, orgId: number, scope: BatiproProjectScope, filters: { date?: string; from?: string; to?: string }) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const conditions = [
+      eq(batiproAttendance.projectId, projectId),
+      eq(batiproAttendance.organizationId, orgId),
+      eq(batiproAttendance.isActive, 1),
+    ];
+    if (filters.date) conditions.push(eq(batiproAttendance.attendanceDate, filters.date));
+    if (filters.from) conditions.push(gte(batiproAttendance.attendanceDate, filters.from));
+    if (filters.to) conditions.push(lte(batiproAttendance.attendanceDate, filters.to));
+    return this.db
+      .select()
+      .from(batiproAttendance)
+      .where(and(...conditions))
+      .orderBy(desc(batiproAttendance.attendanceDate));
+  }
+
+  async getAttendance(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproAttendance)
+      .where(and(eq(batiproAttendance.id, id), eq(batiproAttendance.organizationId, orgId), eq(batiproAttendance.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Pointage introuvable.");
+    return row;
+  }
+
+  // Upsert applicatif en lot : une ligne par ouvrier+date+chantier. Si une
+  // ligne active existe deja pour ce triplet, on la met a jour plutot que
+  // d'en creer une nouvelle (pas de contrainte unique DB stricte).
+  async bulkUpsertAttendance(projectId: number, input: BulkUpsertAttendanceDto, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const results: number[] = [];
+    for (const entry of input.entries ?? []) {
+      const [existing] = await this.db
+        .select({ id: batiproAttendance.id })
+        .from(batiproAttendance)
+        .where(and(
+          eq(batiproAttendance.projectId, projectId),
+          eq(batiproAttendance.workerId, entry.worker_id),
+          eq(batiproAttendance.attendanceDate, input.attendance_date),
+          eq(batiproAttendance.organizationId, orgId),
+          eq(batiproAttendance.isActive, 1),
+        ))
+        .limit(1);
+      if (existing) {
+        const patch: Partial<typeof batiproAttendance.$inferInsert> = {};
+        if (entry.status !== undefined) patch.status = entry.status;
+        if (entry.hours !== undefined) patch.hours = entry.hours !== null ? String(entry.hours) : null;
+        if (entry.notes !== undefined) patch.notes = entry.notes || null;
+        patch.recordedBy = userId ?? null;
+        if (Object.keys(patch).length) await this.db.update(batiproAttendance).set(patch).where(eq(batiproAttendance.id, existing.id));
+        results.push(existing.id);
+        await this.publish("updateAttendance", ["attendance"], "updated", existing.id, orgId);
+      } else {
+        const [result] = await this.db.insert(batiproAttendance).values({
+          organizationId: orgId,
+          projectId,
+          workerId: entry.worker_id,
+          crewId: input.crew_id ?? null,
+          attendanceDate: input.attendance_date,
+          status: entry.status ?? "present",
+          hours: entry.hours !== undefined && entry.hours !== null ? String(entry.hours) : null,
+          notes: entry.notes ?? null,
+          recordedBy: userId ?? null,
+        }).$returningId();
+        const id = Number(result.id);
+        results.push(id);
+        await this.publish("createAttendance", ["attendance"], "created", id, orgId);
+      }
+    }
+    return this.listAttendance(projectId, orgId, scope, { date: input.attendance_date });
+  }
+
+  async updateAttendance(id: number, input: UpdateBatiproAttendanceDto, orgId: number) {
+    await this.getAttendance(id, orgId);
+    const patch: Partial<typeof batiproAttendance.$inferInsert> = {};
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.hours !== undefined) patch.hours = input.hours !== null ? String(input.hours) : null;
+    if (input.notes !== undefined) patch.notes = input.notes || null;
+    if (Object.keys(patch).length) await this.db.update(batiproAttendance).set(patch).where(eq(batiproAttendance.id, id));
+    await this.publish("updateAttendance", ["attendance"], "updated", id, orgId);
+    return this.getAttendance(id, orgId);
+  }
+
+  async deleteAttendance(id: number, orgId: number) {
+    await this.getAttendance(id, orgId);
+    await this.db.update(batiproAttendance).set({ isActive: 0 }).where(and(eq(batiproAttendance.id, id), eq(batiproAttendance.organizationId, orgId)));
+    await this.publish("deleteAttendance", ["attendance"], "deleted", id, orgId);
+    return { message: "Pointage supprime." };
+  }
+
+  // ── Scan OCR devis/BC fournisseur (pre-remplissage du formulaire de creation) ──
+  // Upload le fichier (image ou PDF) comme photo source_document, tente l'OCR
+  // si c'est une image, puis parse le texte en best-effort. N'ecrit JAMAIS dans
+  // batipro_documents : c'est une simple extraction, la creation reste un appel
+  // separe (POST documents) avec sourcePhotoId optionnel pour relier les deux.
+  async scanSupplierDocument(projectId: number, file: any, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const stored = await this.objectStorage.putDocument(file, `batipro/ocr-scans/${orgId}/${projectId}`);
+    const [result] = await this.db.insert(batiproSitePhotos).values({
+      organizationId: orgId,
+      projectId,
+      fileKey: stored.objectKey,
+      fileFormat: stored.mimeType.split("/")[1] || null,
+      fileSize: stored.sizeBytes,
+      uploadedBy: userId ?? null,
+      kind: "source_document",
+      isActive: 1,
+    }).$returningId();
+    const photoId = Number(result.id);
+    await this.publish("createSitePhoto", ["photos"], "created", photoId, orgId);
+
+    const isImage = ["image/jpeg", "image/png", "image/webp"].includes(stored.mimeType);
+    if (!isImage) {
+      return {
+        photoId,
+        rawText: "",
+        message: "PDF non supporté en v1, utilisez une image",
+        parsed: { supplierName: undefined, documentNumber: undefined, date: undefined, totalHt: undefined, totalTtc: undefined, lines: [] },
+      };
+    }
+
+    const rawText = await this.ocr.extractText(file.buffer, stored.mimeType);
+    const parsed = parseSupplierDocument(rawText);
+    return { photoId, rawText, parsed };
+  }
+
+  // ── Notifications in-app (recalculees a la lecture, pas de cron) ─────────
+  // evaluateNotifications recalcule 3 conditions a partir des donnees existantes
+  // (lecture seule metier) et synchronise la table batipro_notifications :
+  //   - condition vraie sans notif active du meme (type, entityType, entityId) => cree
+  //   - condition vraie avec notif active existante => laisse telle quelle (pas de doublon)
+  //   - condition plus vraie mais notif active existante => soft dismiss (isActive=0)
+  async evaluateNotifications(orgId: number) {
+    const today = sql`CURDATE()`;
+
+    // 1) Taches en retard : date prevue < aujourd hui ET statut != termine.
+    const overdueTasks = await this.db
+      .select()
+      .from(batiproTasks)
+      .where(
+        and(
+          eq(batiproTasks.organizationId, orgId),
+          eq(batiproTasks.isActive, 1),
+          sql`${batiproTasks.taskDate} IS NOT NULL`,
+          sql`${batiproTasks.taskDate} < ${today}`,
+          ne(batiproTasks.status, "Termine"),
+          ne(batiproTasks.status, "Terminé"),
+        ),
+      );
+
+    // 2) Factures en attente : type=invoice, statut=sent (emise, non reglee/validee).
+    const pendingInvoices = await this.db
+      .select()
+      .from(batiproDocuments)
+      .where(
+        and(
+          eq(batiproDocuments.organizationId, orgId),
+          eq(batiproDocuments.isActive, 1),
+          eq(batiproDocuments.type, "invoice"),
+          eq(batiproDocuments.status, "sent"),
+        ),
+      );
+
+    // 3) Depassement budget chantier : spent > budget (montants > 0).
+    const overspentProjects = await this.db
+      .select()
+      .from(batiproProjects)
+      .where(
+        and(
+          eq(batiproProjects.organizationId, orgId),
+          eq(batiproProjects.isActive, 1),
+          sql`${batiproProjects.budget} > 0`,
+          sql`${batiproProjects.spent} > ${batiproProjects.budget}`,
+        ),
+      );
+
+    type Desired = {
+      type: string;
+      severity: string;
+      title: string;
+      message: string;
+      entityType: string;
+      entityId: number;
+      projectId: number | null;
+    };
+    const desired: Desired[] = [];
+
+    for (const task of overdueTasks) {
+      desired.push({
+        type: "task_overdue",
+        severity: "warning",
+        title: "Tache en retard",
+        message: `La tache "${task.label}" a depasse sa date prevue.`.slice(0, 500),
+        entityType: "task",
+        entityId: Number(task.id),
+        projectId: task.projectId != null ? Number(task.projectId) : null,
+      });
+    }
+    for (const doc of pendingInvoices) {
+      desired.push({
+        type: "invoice_pending",
+        severity: "info",
+        title: "Facture en attente",
+        message: `La facture ${doc.number ?? doc.id} est en attente de validation.`.slice(0, 500),
+        entityType: "document",
+        entityId: Number(doc.id),
+        projectId: doc.projectId != null ? Number(doc.projectId) : null,
+      });
+    }
+    for (const project of overspentProjects) {
+      desired.push({
+        type: "budget_exceeded",
+        severity: "critical",
+        title: "Budget depasse",
+        message: `Le chantier "${project.name}" a depasse son budget.`.slice(0, 500),
+        entityType: "project",
+        entityId: Number(project.id),
+        projectId: Number(project.id),
+      });
+    }
+
+    // Notifications actuellement actives pour l org (toutes des 3 types geres).
+    const existing = await this.db
+      .select()
+      .from(batiproNotifications)
+      .where(
+        and(
+          eq(batiproNotifications.organizationId, orgId),
+          eq(batiproNotifications.isActive, 1),
+          inArray(batiproNotifications.type, ["task_overdue", "invoice_pending", "budget_exceeded"]),
+        ),
+      );
+
+    const keyOf = (type: string, entityType: string | null, entityId: number | null) =>
+      `${type}::${entityType ?? ""}::${entityId ?? ""}`;
+    const desiredKeys = new Set(desired.map((d) => keyOf(d.type, d.entityType, d.entityId)));
+    const existingKeys = new Set(
+      existing.map((e) => keyOf(e.type, e.entityType, e.entityId != null ? Number(e.entityId) : null)),
+    );
+
+    // Creations : condition vraie sans notif active existante.
+    const toCreate = desired.filter((d) => !existingKeys.has(keyOf(d.type, d.entityType, d.entityId)));
+    if (toCreate.length) {
+      await this.db.insert(batiproNotifications).values(
+        toCreate.map((d) => ({
+          organizationId: orgId,
+          projectId: d.projectId,
+          type: d.type,
+          severity: d.severity,
+          title: d.title,
+          message: d.message,
+          entityType: d.entityType,
+          entityId: d.entityId,
+        })),
+      );
+    }
+
+    // Soft dismiss auto : notif active dont la condition n est plus vraie.
+    const toDismiss = existing.filter(
+      (e) => !desiredKeys.has(keyOf(e.type, e.entityType, e.entityId != null ? Number(e.entityId) : null)),
+    );
+    if (toDismiss.length) {
+      await this.db
+        .update(batiproNotifications)
+        .set({ isActive: 0 })
+        .where(
+          and(
+            eq(batiproNotifications.organizationId, orgId),
+            inArray(
+              batiproNotifications.id,
+              toDismiss.map((e) => Number(e.id)),
+            ),
+          ),
+        );
+    }
+  }
+
+  async listNotifications(orgId: number, unreadOnly = false) {
+    await this.evaluateNotifications(orgId);
+    const filters = [eq(batiproNotifications.organizationId, orgId), eq(batiproNotifications.isActive, 1)];
+    if (unreadOnly) filters.push(eq(batiproNotifications.isRead, 0));
+    return this.db
+      .select()
+      .from(batiproNotifications)
+      .where(and(...filters))
+      .orderBy(desc(batiproNotifications.createdAt), desc(batiproNotifications.id));
+  }
+
+  private async getNotification(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproNotifications)
+      .where(
+        and(
+          eq(batiproNotifications.id, id),
+          eq(batiproNotifications.organizationId, orgId),
+          eq(batiproNotifications.isActive, 1),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException("Notification introuvable.");
+    return row;
+  }
+
+  async markNotificationRead(id: number, orgId: number) {
+    await this.getNotification(id, orgId);
+    await this.db
+      .update(batiproNotifications)
+      .set({ isRead: 1, readAt: new Date() })
+      .where(and(eq(batiproNotifications.id, id), eq(batiproNotifications.organizationId, orgId)));
+    await this.publish("notification", ["notifications"], "updated", id, orgId);
+    return this.getNotification(id, orgId);
+  }
+
+  async markAllNotificationsRead(orgId: number) {
+    await this.db
+      .update(batiproNotifications)
+      .set({ isRead: 1, readAt: new Date() })
+      .where(
+        and(
+          eq(batiproNotifications.organizationId, orgId),
+          eq(batiproNotifications.isActive, 1),
+          eq(batiproNotifications.isRead, 0),
+        ),
+      );
+    await this.publish("notification", ["notifications"], "updated", "all", orgId);
+    return { message: "Notifications marquees comme lues." };
+  }
+
+  async dismissNotification(id: number, orgId: number) {
+    await this.getNotification(id, orgId);
+    await this.db
+      .update(batiproNotifications)
+      .set({ isActive: 0 })
+      .where(and(eq(batiproNotifications.id, id), eq(batiproNotifications.organizationId, orgId)));
+    await this.publish("notification", ["notifications"], "deleted", id, orgId);
+    return { message: "Notification supprimee." };
   }
 
   private async publish(kind: string, tables: string[], action: "created" | "updated" | "deleted", entityId: number | string, orgId: number) {

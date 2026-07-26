@@ -67,14 +67,17 @@ const NAV = [
   { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
   { id: "situations", label: "Situations & avenants", icon: "receipt" },
   { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
+  { id: "photos", label: "Photos de chantier", icon: "camera" },
+  { id: "pointage", label: "Pointage", icon: "calendarCheck" },
   { id: "factures", label: "Factures", icon: "receipt" },
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
+  { id: "equipes", label: "Équipes", icon: "userPlus" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
-const MOB_PRIMARY = ["dashboard", "chantiers", "plan3d", "materiaux"];
-const MOB_MORE = ["planning", "devis", "bonscommande", "situations", "situationstravaux", "factures", "soustraitants"];
+const MOB_PRIMARY = ["dashboard", "chantiers", "pointage", "materiaux"];
+const MOB_MORE = ["planning", "devis", "bonscommande", "situations", "situationstravaux", "photos", "plan3d", "factures", "soustraitants", "equipes"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -134,6 +137,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [focusProjectId, setFocusProjectId] = React.useState(null);
   const isMobile = useIsMobile();
 
   const loadDashboard = React.useCallback(() => {
@@ -151,6 +155,12 @@ function App() {
 
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
 
+  // Ouvre le chantier concerné par une notification (task/document/project → onglet Projets, préselectionné).
+  const goToProject = (projectId) => {
+    setFocusProjectId(projectId ?? null);
+    go("chantiers");
+  };
+
   const saveRecord = async (kind, form) => {
     setBusy(true); setError("");
     try {
@@ -164,17 +174,20 @@ function App() {
 
   const views = {
     dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} />,
-    chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} />,
+    chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} focusProjectId={focusProjectId} onFocusHandled={() => setFocusProjectId(null)} />,
     planning: <Planning projects={projectRows} canMutate={canMutate} />,
     plan3d: <Plan3D projects={projectRows} materials={materialRows} canMutate={canMutate} />,
     devis: <Devis projects={projectRows} canMutate={canMutate} />,
     bonscommande: <BonsCommande projects={projectRows} canMutate={canMutate} />,
     situations: <Situations projects={projectRows} canMutate={canMutate} />,
     situationstravaux: <SituationsTravaux projects={projectRows} canMutate={canMutate} />,
+    photos: <SitePhotos projects={projectRows} tasks={taskRows} canMutate={canMutate} />,
+    pointage: <Pointage projects={projectRows} canMutate={canMutate} />,
     factures: <Factures projects={projectRows} canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
     soustraitants: <SousTraitants projects={projectRows} canMutate={canMutate} />,
+    equipes: <Equipes canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -195,6 +208,7 @@ function App() {
           ))}
         </nav>
         <div className="user-chip">
+          <NotificationBell goToProject={goToProject} />
           <span className="user-avatar grad-amber">{userInitials}</span>
           <div>
             <div className="user-name">{userName}</div>
@@ -210,7 +224,10 @@ function App() {
           <span className="brand-icon grad-amber"><Icon name="hardHat" /></span>
           <span className="mob-title font-display">{TITLES[route]}</span>
         </div>
-        <span className="user-avatar grad-amber">{userInitials}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <NotificationBell goToProject={goToProject} />
+          <span className="user-avatar grad-amber">{userInitials}</span>
+        </div>
       </div>
 
       <main className="main">
@@ -226,7 +243,7 @@ function App() {
       <nav className="mob-nav">
         {MOB_PRIMARY.map((id) => {
           const item = NAV.find((x) => x.id === id);
-          const lbl = { dashboard: "Accueil", chantiers: "Chantiers", plan3d: "3D", materiaux: "Achats" }[id];
+          const lbl = { dashboard: "Accueil", chantiers: "Chantiers", pointage: "Pointage", materiaux: "Achats" }[id];
           return (
             <button key={id} className={route === id ? "active" : ""} onClick={() => go(id)}>
               <Icon name={id === "dashboard" ? "home" : item.icon} /><span>{lbl}</span>
@@ -352,11 +369,119 @@ function Todo({ icon, tone, title, sub }) {
 }
 
 /* ── Chantiers ─────────────────────────────────────────────────────────── */
-function Chantiers({ projects, onNew, canMutate }) {
+/* ── Notifications (cloche header) ───────────────────────────────────────
+   Panneau déroulant listant les notifications actives ; réutilise le
+   pattern chip/tone existant (amber=warning, rose=critical, ink=info). */
+const NOTIF_TONE = { critical: "rose", warning: "amber", info: "ink" };
+const NOTIF_ICON = { task_overdue: "alert", invoice_pending: "receipt", budget_exceeded: "wallet" };
+function notifRelativeTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const diffMin = Math.round((Date.now() - d.getTime()) / 60000);
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `il y a ${diffH} h`;
+  const diffD = Math.round(diffH / 24);
+  if (diffD < 7) return `il y a ${diffD} j`;
+  return d.toLocaleDateString("fr-FR");
+}
+function NotificationBell({ goToProject }) {
+  const [open, setOpen] = React.useState(false);
+  const [items, setItems] = React.useState([]);
+  const [loaded, setLoaded] = React.useState(false);
+  const rootRef = React.useRef(null);
+
+  const load = React.useCallback(() => {
+    api.listNotifications().then((data) => { setItems(Array.isArray(data) ? data : []); setLoaded(true); }).catch(() => {});
+  }, []);
+
+  // Rafraîchissement léger : au montage puis toutes les 60s (pas de canal SSE/publish dans cette app).
+  React.useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [load]);
+  React.useEffect(() => { if (open) load(); }, [open, load]);
+
+  // Ferme le panneau au clic en dehors.
+  React.useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const unreadCount = items.filter((it) => !it.isRead).length;
+
+  const handleClick = async (it) => {
+    if (!it.isRead) {
+      setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, isRead: true } : x)));
+      api.markNotificationRead(it.id).catch(() => {});
+    }
+    setOpen(false);
+    if (it.projectId != null) goToProject(it.projectId);
+  };
+
+  const markAllRead = () => {
+    setItems((prev) => prev.map((x) => ({ ...x, isRead: true })));
+    api.markAllNotificationsRead().catch(() => {});
+  };
+
+  const dismiss = (e, id) => {
+    e.stopPropagation();
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    api.dismissNotification(id).catch(() => {});
+  };
+
+  return (
+    <div className="notif-bell" ref={rootRef}>
+      <button type="button" className="notif-bell-btn" title="Notifications" onClick={() => setOpen((v) => !v)}>
+        <Icon name="bell" />
+        {unreadCount > 0 && <span className="notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+      </button>
+      {open && (
+        <div className="notif-panel card">
+          <div className="notif-panel-head">
+            <span className="kv-title">Notifications</span>
+            <button type="button" className="link" onClick={markAllRead} disabled={!unreadCount}>Tout marquer comme lu</button>
+          </div>
+          <div className="notif-list">
+            {!loaded && <p className="muted" style={{ fontSize: 12, padding: "8px 4px" }}>Chargement…</p>}
+            {loaded && !items.length && <p className="muted" style={{ fontSize: 12, padding: "8px 4px" }}>Aucune notification.</p>}
+            {items.map((it) => (
+              <div key={it.id} className={`notif-row ${it.isRead ? "" : "unread"}`} onClick={() => handleClick(it)}>
+                <span className={`todo-ic notif-ic-${NOTIF_TONE[it.severity] || "ink"}`}><Icon name={NOTIF_ICON[it.type] || "bell"} /></span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className={`chip ${NOTIF_TONE[it.severity] || "ink"}`}>{it.severity}</span>
+                    <span style={{ fontWeight: 600, fontSize: 12.5 }}>{it.title}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 2 }}>{it.message}</div>
+                  <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 2 }}>{notifRelativeTime(it.createdAt)}</div>
+                </div>
+                <button type="button" className="notif-dismiss" title="Ignorer" onClick={(e) => dismiss(e, it.id)}><Icon name="x" /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Chantiers({ projects, onNew, canMutate, focusProjectId, onFocusHandled }) {
   const [selectedId, setSelectedId] = React.useState(projects[0]?.id ?? null);
   React.useEffect(() => {
     if (!projects.some((p) => p.id === selectedId)) setSelectedId(projects[0]?.id ?? null);
   }, [projects, selectedId]);
+  // Arrivée depuis une notification : préselectionne le chantier concerné.
+  React.useEffect(() => {
+    if (focusProjectId != null && projects.some((p) => p.id === focusProjectId)) {
+      setSelectedId(focusProjectId);
+      onFocusHandled?.();
+    }
+  }, [focusProjectId, projects, onFocusHandled]);
   const selected = projects.find((p) => p.id === selectedId);
   return (
     <>
@@ -805,17 +930,28 @@ function Plan3D({ projects, materials, canMutate }) {
 
   const levels = model?.levels || [];
   React.useEffect(() => { if (levelIdx >= levels.length) setLevelIdx(Math.max(0, levels.length - 1)); }, [levels.length, levelIdx]);
+  const currentLevel = levels[levelIdx];
 
   // Calque : charge l'image importée (hors PDF) en object URL pour la mettre en fond de l'éditeur 2D.
-  const modelId = model?.id, fileKey = model?.importedFileKey, fileFmt = model?.importedFileFormat;
+  // Chaque étage a désormais son propre plan ; fallback sur le plan du modèle
+  // (legacy) uniquement si l'étage courant n'a pas encore le sien.
+  const modelId = model?.id;
+  const levelId = currentLevel?.id;
+  const levelFileKey = currentLevel?.importedFileKey;
+  const levelFileFmt = currentLevel?.importedFileFormat;
+  const modelFileKey = model?.importedFileKey;
+  const modelFileFmt = model?.importedFileFormat;
   React.useEffect(() => {
     let url = null, alive = true;
     setOverlayUrl(null);
-    if (modelId && fileKey && fileFmt !== "pdf") {
+    if (levelId && levelFileKey && levelFileFmt !== "pdf") {
+      api.levelPlanUrl(levelId).then((r) => { if (alive) { url = r.url; setOverlayUrl(r.url); } }).catch(() => {});
+    } else if (modelId && modelFileKey && modelFileFmt !== "pdf" && !levelFileKey) {
+      // Fallback legacy : modèle importé avant l'existence du plan par étage.
       api.modelPlanUrl(modelId).then((r) => { if (alive) { url = r.url; setOverlayUrl(r.url); } }).catch(() => {});
     }
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [modelId, fileKey, fileFmt]);
+  }, [modelId, modelFileKey, modelFileFmt, levelId, levelFileKey, levelFileFmt]);
 
   const createModel = async () => {
     setBusy(true); setError("");
@@ -848,20 +984,20 @@ function Plan3D({ projects, materials, canMutate }) {
   const uploadPlan = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!file || !currentLevel) return;
     setBusy(true); setError("");
-    try { await api.uploadModelPlan(model.id, file); load(); setTab("original"); }
+    try { await api.uploadLevelPlan(currentLevel.id, file); load(); setTab("original"); }
     catch (err) { setError(String(err.message || err)); } finally { setBusy(false); }
   };
   const removePlan = async () => {
+    if (!currentLevel) return;
     setBusy(true); setError("");
-    try { await api.deleteModelPlan(model.id); load(); }
+    try { await api.deleteLevelPlan(currentLevel.id); load(); }
     catch (e) { setError(String(e.message || e)); } finally { setBusy(false); }
   };
 
   const colors = ["#475569", "#64748b", "#f59e0b", "#6366f1", "#10b981", "#f43f5e"];
   const metre = materials.slice(0, 6).map((m, i) => ({ i: i + 1, c: colors[i % colors.length], name: m.name, q: `${n(m.stock)} ${m.unit}` }));
-  const currentLevel = levels[levelIdx];
 
   return (
     <>
@@ -887,11 +1023,15 @@ function Plan3D({ projects, materials, canMutate }) {
             <div style={{ display: "flex", gap: 6, padding: "12px 14px", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap", alignItems: "center" }}>
               <button type="button" className={`chip ${tab === "view2d" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("view2d")}>Vue 2D</button>
               <button type="button" className={`chip ${tab === "view3d" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("view3d")}>Vue 3D</button>
-              {model.importedFileKey && <button type="button" className={`chip ${tab === "original" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("original")}>Plan original</button>}
+              {(currentLevel?.importedFileKey || model.importedFileKey) && <button type="button" className={`chip ${tab === "original" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("original")}>Plan original</button>}
               <button type="button" className={`chip ${tab === "editor" ? "iris-solid grad-iris" : "ink"}`} style={{ cursor: "pointer", border: 0 }} onClick={() => setTab("editor")} disabled={!canMutate}>Éditeur</button>
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" style={{ display: "none" }} onChange={uploadPlan} />
-              <button type="button" className="chip ink" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={() => fileRef.current?.click()}><Icon name="filePlus" /> {model.importedFileKey ? "Remplacer le plan" : "Importer un plan"}</button>
-              {model.importedFileKey && <button type="button" className="chip rose" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={removePlan}>Retirer</button>}
+              {currentLevel && (tab === "editor" || tab === "view2d" || tab === "view3d") && (
+                <>
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" style={{ display: "none" }} onChange={uploadPlan} />
+                  <button type="button" className="chip ink" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={() => fileRef.current?.click()}><Icon name="filePlus" /> {currentLevel.importedFileKey ? "Remplacer le plan" : "Importer un plan"}</button>
+                  {currentLevel.importedFileKey && <button type="button" className="chip rose" style={{ cursor: "pointer", border: 0 }} disabled={!canMutate || busy} onClick={removePlan}>Retirer</button>}
+                </>
+              )}
               {(tab === "view2d" || tab === "view3d") && levels.length > 0 && (
                 <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   {levels.map((lv, i) => (
@@ -922,7 +1062,7 @@ function Plan3D({ projects, materials, canMutate }) {
             ) : tab === "original" ? (
               <div className="viewer3d" style={{ height: 420, background: "#334155" }}>
                 <React.Suspense fallback={<div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--ink-400)", fontSize: 13 }}>Chargement…</div>}>
-                  <PlanOriginalView model={model} />
+                  <PlanOriginalView level={currentLevel} model={model} />
                 </React.Suspense>
               </div>
             ) : (
@@ -1345,6 +1485,11 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(!!docId);
+  // Scan OCR (pre-remplissage) : le formulaire reste entierement editable ensuite.
+  const [scanBusy, setScanBusy] = React.useState(false);
+  const [scanPhotoId, setScanPhotoId] = React.useState(null);
+  const [scanJustApplied, setScanJustApplied] = React.useState(false);
+  const scanInputRef = React.useRef(null);
 
   React.useEffect(() => {
     api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
@@ -1361,6 +1506,15 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
         })
         .catch((e) => setError(e.message || String(e)))
         .finally(() => setLoading(false));
+      // Document deja cree : retrouve la photo source du scan (traçabilité) en
+      // filtrant la galerie du chantier par linkedDocumentId — pas de nouvel
+      // endpoint backend necessaire, listPhotos renvoie deja toutes les colonnes.
+      api.listPhotos(projectId)
+        .then((photos) => {
+          const src = (photos || []).find((p) => p.linkedDocumentId === docId);
+          if (src) setScanPhotoId(src.id);
+        })
+        .catch(() => {});
     }
   }, [docId, projectId]);
 
@@ -1371,6 +1525,48 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
   const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
   const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
   const totalTtc = totalHt + totalVat;
+
+  // Upload immediat + OCR best-effort. Pre-remplit les champs EXISTANTS du
+  // formulaire (fournisseur/lignes/echeance/notes) qui restent 100% editables
+  // ensuite — aucun champ ne devient lecture seule.
+  const handleScanFile = async (file) => {
+    if (!file) return;
+    setError(""); setScanBusy(true); setScanJustApplied(false);
+    try {
+      const res = await api.ocrScanDocument(projectId, file);
+      setScanPhotoId(res?.photoId ?? null);
+      const parsed = res?.parsed || {};
+      if (parsed.supplierName) {
+        const match = suppliers.find((s) => s.name && s.name.trim().toLowerCase() === parsed.supplierName.trim().toLowerCase());
+        if (match) setSupplierId(String(match.id));
+      }
+      if (parsed.date) {
+        // JJ/MM/AAAA ou JJ-MM-AAAA -> input date (AAAA-MM-JJ)
+        const m = parsed.date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (m) {
+          const [, d, mo, y] = m;
+          const yyyy = y.length === 2 ? `20${y}` : y;
+          setDueDate(`${yyyy}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`);
+        }
+      }
+      const noteBits = [];
+      if (parsed.documentNumber) noteBits.push(`N° document fournisseur : ${parsed.documentNumber}`);
+      if (parsed.totalHt != null) noteBits.push(`Total HT scanné : ${parsed.totalHt}`);
+      if (parsed.totalTtc != null) noteBits.push(`Total TTC scanné : ${parsed.totalTtc}`);
+      if (noteBits.length) setNotes((c) => (c ? `${c}\n${noteBits.join(" — ")}` : noteBits.join(" — ")));
+      if (Array.isArray(parsed.lines) && parsed.lines.length) {
+        setLines(parsed.lines.map((l) => ({
+          designation: l.designation || "",
+          quantity: l.quantity ?? 1,
+          unit_price: l.unitPrice ?? 0,
+          vat_rate: 0,
+          phase_id: "",
+        })));
+      }
+      setScanJustApplied(true);
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setScanBusy(false); }
+  };
 
   const save = async () => {
     setError("");
@@ -1386,6 +1582,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
+        ...(docId ? {} : { sourcePhotoId: scanPhotoId || undefined }),
         lines: clean.map((l) => ({
           designation: l.designation.trim(),
           quantity: n(l.quantity),
@@ -1402,13 +1599,32 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
 
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
-      <div className="modal-card" style={{ maxWidth: 720 }}>
+      <div className="modal-card" style={{ maxWidth: scanPhotoId ? 1040 : 720 }}>
         <div className="modal-head">
           <div><h2 className="font-display">{docId ? "Modifier le bon de commande" : "Nouveau bon de commande"}</h2></div>
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         {loading ? <p className="muted">Chargement…</p> : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 280 }}>
+            {!docId && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <input
+                  ref={scanInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handleScanFile(f); }}
+                />
+                <button type="button" className="btn btn-ghost" disabled={scanBusy} onClick={() => scanInputRef.current?.click()}>
+                  <Icon name={scanBusy ? "loader" : "camera"} /> {scanBusy ? "Analyse du document…" : "Scanner un document"}
+                </button>
+                {scanJustApplied && (
+                  <span className="chip amber" style={{ fontSize: 12 }}>Champs extraits automatiquement — vérifiez avant d'enregistrer</span>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <label className="field" style={{ flex: 1, minWidth: 200 }}>
                 <span>Fournisseur</span>
@@ -1468,10 +1684,40 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
             <button className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer le bon de commande"}</button>
           </div>
+          {scanPhotoId != null && (
+            <div style={{ flex: "1 1 260px", minWidth: 220, maxWidth: 320 }}>
+              <p className="eyebrow" style={{ marginBottom: 6 }}>Document scanné</p>
+              <ScanSourcePreview photoId={scanPhotoId} />
+            </div>
+          )}
+          </div>
         )}
       </div>
     </div>
   );
+}
+
+// Apercu du document source (photo/PDF scanné) — meme helper que la galerie
+// Photos (api.photoBlobUrl : fetch blob authentifié, jamais <img src> direct
+// vers l'API). Consultable pendant la saisie ET, via ce meme composant, dans
+// la fiche du document une fois créé.
+function ScanSourcePreview({ photoId }) {
+  const [src, setSrc] = React.useState(null);
+  const [type, setType] = React.useState(null);
+  React.useEffect(() => {
+    let revoke; let active = true;
+    api.photoBlobUrl(photoId).then(({ url, type: t }) => {
+      if (!active) { URL.revokeObjectURL(url); return; }
+      revoke = url; setSrc(url); setType(t);
+    }).catch(() => {});
+    return () => { active = false; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [photoId]);
+
+  if (!src) return <p className="muted" style={{ fontSize: 12 }}>Chargement de l'aperçu…</p>;
+  if (type === "application/pdf") {
+    return <embed src={src} type="application/pdf" style={{ width: "100%", height: 360, border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8 }} />;
+  }
+  return <img src={src} alt="Document scanné" style={{ width: "100%", borderRadius: 8, border: "1px solid var(--ink-200, #cbd5e1)" }} />;
 }
 
 /* ── Situations de travaux (Phase 3 — documentaire, type=situation) ───────
@@ -1809,6 +2055,296 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
 
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
             <button className="btn btn-amber grad-amber" disabled={busy || !rows.length} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer la situation"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Photos de chantier (galerie + rapport imprimable) ─────────────────── */
+function dateInputValue(v) {
+  if (!v) return "";
+  const s = String(v);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+function formatDate(v) {
+  if (!v) return "—";
+  try { return new Date(v).toLocaleDateString("fr-CA"); } catch { return String(v).slice(0, 10); }
+}
+
+function SitePhotos({ projects, tasks, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [photos, setPhotos] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [modal, setModal] = React.useState(null); // { kind: "upload" | "edit" | "lightbox" | "report", ... }
+
+  const projectTasks = tasks.filter((t) => t.projectId === projectId);
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setPhotos([]); setLoading(false); return; }
+    setLoading(true);
+    api.listPhotos(projectId)
+      .then((p) => setPhotos(p || []))
+      .catch((e) => { setPhotos([]); setError(e.message || String(e)); })
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const removePhoto = async (id) => {
+    if (!window.confirm("Retirer cette photo de la galerie ?")) return;
+    try { await api.deletePhoto(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Suivi</p><h2 className="title font-display">Photos de chantier</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-ghost" disabled={!projectId} onClick={() => setModal({ kind: "report" })}><Icon name="fileDown" /> Générer un rapport</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "upload" })}><Icon name="camera" /> Ajouter une photo</button>
+        </div>
+      </div>
+
+      {error && <div className="inline-error">{error}</div>}
+
+      <div className="card pad">
+        {loading ? <p className="muted">Chargement…</p> :
+          !photos.length ? <p className="muted">Aucune photo pour ce chantier.</p> : (
+          <div className="photo-grid">
+            {photos.map((p) => <PhotoThumb key={p.id} photo={p} onOpen={() => setModal({ kind: "lightbox", photo: p })} />)}
+          </div>
+        )}
+      </div>
+
+      {modal?.kind === "upload" && (
+        <PhotoUploadModal projectId={projectId} tasks={projectTasks} onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />
+      )}
+      {modal?.kind === "lightbox" && (
+        <PhotoLightbox
+          photo={modal.photo}
+          tasks={projectTasks}
+          canMutate={canMutate}
+          onClose={() => setModal(null)}
+          onDeleted={() => { setModal(null); load(); }}
+          onSaved={(updated) => { setModal(null); load(); }}
+          removePhoto={removePhoto}
+        />
+      )}
+      {modal?.kind === "report" && (
+        <ReportModal projectId={projectId} onClose={() => setModal(null)} />
+      )}
+    </>
+  );
+}
+
+// Vignette : le fichier est protégé par JWT donc jamais de <img src> direct
+// vers l'API — on récupère un blob authentifié (api.photoBlobUrl) puis on
+// affiche une object URL locale, révoquée au démontage.
+function PhotoThumb({ photo, onOpen }) {
+  const [src, setSrc] = React.useState(null);
+  React.useEffect(() => {
+    let revoke;
+    let active = true;
+    api.photoBlobUrl(photo.id).then(({ url }) => {
+      if (!active) { URL.revokeObjectURL(url); return; }
+      revoke = url; setSrc(url);
+    }).catch(() => {});
+    return () => { active = false; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [photo.id]);
+
+  return (
+    <button type="button" className="photo-thumb" onClick={onOpen}>
+      {src ? <img src={src} alt={photo.caption || "Photo de chantier"} /> : <span className="muted" style={{ fontSize: 11 }}>…</span>}
+      <span className="photo-thumb-date">{formatDate(photo.takenAt)}</span>
+    </button>
+  );
+}
+
+function PhotoUploadModal({ projectId, tasks, onClose, onSaved }) {
+  const [file, setFile] = React.useState(null);
+  const [caption, setCaption] = React.useState("");
+  const [takenAt, setTakenAt] = React.useState(dateInputValue(new Date().toISOString()));
+  const [taskId, setTaskId] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const save = async () => {
+    if (!file) { setError("Choisissez ou prenez une photo."); return; }
+    setError(""); setBusy(true);
+    try {
+      await api.uploadPhoto(projectId, file, { caption: caption.trim() || undefined, takenAt: takenAt || undefined, taskId: taskId ? Number(taskId) : undefined });
+      onSaved();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 480 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Ajouter une photo</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <label className="field">
+            <span>Photo</span>
+            <input type="file" accept="image/*" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          </label>
+          <label className="field"><span>Légende (optionnel)</span><input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Ex. Coulage dalle RDC" /></label>
+          <label className="field"><span>Date</span><input type="date" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} /></label>
+          <label className="field">
+            <span>Tâche liée (optionnel)</span>
+            <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+              <option value="">—</option>
+              {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+            </select>
+          </label>
+          {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+            <button type="button" className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Envoi…" : "Ajouter"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PhotoLightbox({ photo, tasks, canMutate, onClose, removePhoto }) {
+  const [src, setSrc] = React.useState(null);
+  const [editing, setEditing] = React.useState(false);
+  const [caption, setCaption] = React.useState(photo.caption || "");
+  const [takenAt, setTakenAt] = React.useState(dateInputValue(photo.takenAt));
+  const [taskId, setTaskId] = React.useState(photo.taskId || "");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [current, setCurrent] = React.useState(photo);
+
+  React.useEffect(() => {
+    let revoke;
+    let active = true;
+    api.photoBlobUrl(photo.id).then(({ url }) => { if (!active) { URL.revokeObjectURL(url); return; } revoke = url; setSrc(url); }).catch(() => {});
+    return () => { active = false; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [photo.id]);
+
+  const save = async () => {
+    setError(""); setBusy(true);
+    try {
+      const updated = await api.updatePhoto(photo.id, { caption: caption.trim() || null, taken_at: takenAt || undefined, task_id: taskId ? Number(taskId) : null });
+      setCurrent(updated);
+      setEditing(false);
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 640 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{formatDate(current.takenAt)}</h2>{current.caption && <p>{current.caption}</p>}</div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", background: "var(--ink-50)", borderRadius: 12, minHeight: 220 }}>
+          {src ? <img src={src} alt={current.caption || "Photo de chantier"} style={{ maxWidth: "100%", maxHeight: "60vh", borderRadius: 12 }} /> : <p className="muted" style={{ alignSelf: "center" }}>Chargement…</p>}
+        </div>
+
+        {editing ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label className="field"><span>Légende</span><input value={caption} onChange={(e) => setCaption(e.target.value)} /></label>
+            <label className="field"><span>Date</span><input type="date" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} /></label>
+            <label className="field">
+              <span>Tâche liée</span>
+              <select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+                <option value="">—</option>
+                {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>Annuler</button>
+              <button type="button" className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+            </div>
+          </div>
+        ) : canMutate && (
+          <div className="modal-actions">
+            <button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removePhoto(current.id)}>Retirer de la galerie</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)}>Modifier</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Rapport imprimable : sélection de période puis mise en page propre via
+// window.print() (pas de génération PDF côté client, cf. backend siteReport).
+function ReportModal({ projectId, onClose }) {
+  const [from, setFrom] = React.useState("");
+  const [to, setTo] = React.useState("");
+  const [report, setReport] = React.useState(null);
+  const [thumbs, setThumbs] = React.useState({});
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const generate = async () => {
+    setError(""); setBusy(true);
+    try {
+      const r = await api.getReport(projectId, { from: from || undefined, to: to || undefined });
+      setReport(r);
+      const entries = await Promise.all((r.photos || []).map(async (p) => {
+        try { const { url } = await api.photoBlobUrl(p.id); return [p.id, url]; }
+        catch { return [p.id, null]; }
+      }));
+      setThumbs(Object.fromEntries(entries));
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  React.useEffect(() => () => { Object.values(thumbs).forEach((u) => u && URL.revokeObjectURL(u)); }, [thumbs]);
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 840 }}>
+        <div className="modal-head no-print">
+          <div><h2 className="font-display">Rapport photo de chantier</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div className="no-print" style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label className="field"><span>Du</span><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label className="field"><span>Au</span><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+          <button type="button" className="btn btn-amber grad-amber" disabled={busy} onClick={generate}>{busy ? "Génération…" : "Générer"}</button>
+          {report && <button type="button" className="btn btn-ghost" onClick={() => window.print()}><Icon name="fileDown" /> Imprimer / PDF</button>}
+        </div>
+        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }} className="no-print">{error}</div>}
+
+        {report && (
+          <div className="report-print">
+            <h3 className="font-display" style={{ margin: "4px 0 0" }}>{report.project?.name}</h3>
+            <p className="muted" style={{ margin: "2px 0 12px" }}>
+              {report.project?.client ? `Client : ${report.project.client} — ` : ""}
+              {report.project?.location ? `${report.project.location} — ` : ""}
+              Période : {report.from ? formatDate(report.from) : "début"} au {report.to ? formatDate(report.to) : "aujourd'hui"}
+            </p>
+            {!report.photos?.length ? <p className="muted">Aucune photo sur cette période.</p> : (
+              <div className="photo-grid report-grid">
+                {report.photos.map((p) => (
+                  <div key={p.id} className="report-photo">
+                    {thumbs[p.id] ? <img src={thumbs[p.id]} alt={p.caption || "Photo de chantier"} /> : <div className="muted" style={{ fontSize: 11 }}>…</div>}
+                    <div className="report-photo-caption">
+                      <strong>{formatDate(p.takenAt)}</strong>
+                      {p.caption && <span>{p.caption}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2256,6 +2792,404 @@ function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
         </div>
       </form>
     </div>
+  );
+}
+
+/* ── Équipes ───────────────────────────────────────────────────────────── */
+const CREW_STATUS_TONE = { Actif: "emerald", "En_pause": "amber", Termine: "ink", "Terminé": "ink" };
+function Equipes({ canMutate }) {
+  const [sub, setSub] = React.useState("equipes"); // "equipes" | "ouvriers"
+  const [crews, setCrews] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.crews().then((rows) => setCrews(rows || [])).catch(() => setCrews([])).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const save = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const payload = { name: form.name, people: n(form.people), site: form.site || null, status: form.status || "Actif", lead: form.lead || null };
+      form.id ? await api.updateCrew(form.id, payload) : await api.createCrew(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Supprimer cette équipe ?")) return;
+    try { await api.deleteCrew(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Ressources humaines</p><h2 className="title font-display">Équipes</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div className="seg" role="tablist" style={{ display: "flex", gap: 4, background: "var(--ink-100)", borderRadius: 10, padding: 3 }}>
+            <button type="button" className={`btn ${sub === "equipes" ? "btn-dark" : "btn-ghost"}`} style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setSub("equipes")}>Équipes</button>
+            <button type="button" className={`btn ${sub === "ouvriers" ? "btn-dark" : "btn-ghost"}`} style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setSub("ouvriers")}>Ouvriers</button>
+          </div>
+          {sub === "equipes" && <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvelle équipe</button>}
+        </div>
+      </div>
+
+      {sub === "equipes" ? (
+        <>
+          {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+
+          <div className="card table-card">
+            <table className="bp">
+              <thead><tr><th>Équipe</th><th>Chef d'équipe</th><th>Effectif</th><th>Chantier</th><th>Statut</th><th></th></tr></thead>
+              <tbody>
+                {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+                  !crews.length ? <tr><td colSpan={6} className="muted">Aucune équipe enregistrée.</td></tr> :
+                  crews.map((c) => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 500 }}>{c.name}</td>
+                      <td style={{ color: "var(--ink-500)" }}>{c.lead || "—"}</td>
+                      <td>{n(c.people)}</td>
+                      <td style={{ color: "var(--ink-500)" }}>{c.site || "—"}</td>
+                      <td><span className={`chip ${CREW_STATUS_TONE[c.status] || "ink"}`}>{c.status ? c.status.replace(/_/g, " ") : "—"}</span></td>
+                      <td>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {canMutate && <button className="link" onClick={() => setModal(c)}>Modifier</button>}
+                          {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => remove(c.id)}>Suppr.</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {modal && <CrewModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={save} />}
+        </>
+      ) : (
+        <Ouvriers crews={crews} canMutate={canMutate} />
+      )}
+    </>
+  );
+}
+
+/* ── Ouvriers nominatifs (rattachés à une équipe) ─────────────────────── */
+const WORKER_ROLES = ["Maçon", "Chef d'équipe", "Électricien", "Plombier", "Menuisier", "Peintre", "Manœuvre", "Ferrailleur", "Autre"];
+function Ouvriers({ crews, canMutate }) {
+  const [workers, setWorkers] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [currencies, setCurrencies] = React.useState([]);
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.listWorkers().then((rows) => setWorkers(rows || [])).catch(() => setWorkers([])).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    api.currencies().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.data || r?.getAllCurrency || []);
+      setCurrencies((arr || []).filter((c) => String(c.status) === "true" || c.status === true));
+    }).catch(() => setCurrencies([]));
+  }, []);
+
+  const currencyLabel = (id) => {
+    const c = currencies.find((x) => String(x.id) === String(id));
+    return c ? (c.currencyCode || c.currencyName || c.name) : null;
+  };
+
+  const save = async (form) => {
+    setBusy(true); setError("");
+    try {
+      const payload = {
+        fullName: form.fullName, role: form.role || null, phone: form.phone || null,
+        dailyRate: n(form.dailyRate), currencyId: form.currencyId ? Number(form.currencyId) : null,
+        crewId: form.crewId ? Number(form.crewId) : null,
+      };
+      form.id ? await api.updateWorker(form.id, payload) : await api.createWorker(payload);
+      setModal(null); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Retirer cet ouvrier ? (désactivation, l'historique est conservé)")) return;
+    try { await api.deleteWorker(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  return (
+    <>
+      <div className="topbar" style={{ marginTop: 12 }}>
+        <div><p className="eyebrow">Ressources humaines</p><h2 className="title font-display">Ouvriers</h2></div>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvel ouvrier</button>
+      </div>
+
+      {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+
+      <div className="card table-card">
+        <table className="bp">
+          <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Taux journalier</th><th>Équipe</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+              !workers.length ? <tr><td colSpan={6} className="muted">Aucun ouvrier enregistré.</td></tr> :
+              workers.map((w) => {
+                const crew = crews.find((c) => String(c.id) === String(w.crewId));
+                return (
+                  <tr key={w.id}>
+                    <td style={{ fontWeight: 500 }}>{w.fullName}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{w.role || "—"}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{w.phone || "—"}</td>
+                    <td>{w.dailyRate != null ? money(w.dailyRate, w.currencyCode || currencyLabel(w.currencyId)) : "—"}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{crew?.name || "—"}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {canMutate && <button className="link" onClick={() => setModal(w)}>Modifier</button>}
+                        {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => remove(w.id)}>Suppr.</button>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <WorkerModal modal={modal} crews={crews} currencies={currencies} busy={busy} error={error} onClose={() => setModal(null)} onSave={save} />
+      )}
+    </>
+  );
+}
+function WorkerModal({ modal, crews, currencies, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({
+    id: modal.id, fullName: modal.fullName || "", role: modal.role || WORKER_ROLES[0],
+    phone: modal.phone || "+243", dailyRate: modal.dailyRate ?? 0,
+    currencyId: modal.currencyId || "", crewId: modal.crewId || "",
+  }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier l'ouvrier" : "Nouvel ouvrier"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Nom complet" value={form.fullName} onChange={(v) => set("fullName", v)} required />
+          <label className="field">
+            <span>Rôle</span>
+            <select value={form.role} onChange={(e) => set("role", e.target.value)}>
+              {WORKER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </label>
+          {/* Téléphone international — défaut RDC +243 (pas de composant PhoneInput partagé dans batipro-app). */}
+          <Field label="Téléphone" type="tel" value={form.phone} onChange={(v) => set("phone", v)} />
+          <Field label="Taux journalier" type="number" value={form.dailyRate} onChange={(v) => set("dailyRate", v)} />
+          <label className="field">
+            <span>Devise</span>
+            <select value={form.currencyId} onChange={(e) => set("currencyId", e.target.value)}>
+              <option value="">— Devise —</option>
+              {currencies.map((c) => <option key={c.id} value={c.id}>{c.currencyCode || c.currencyName || c.name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Équipe</span>
+            <select value={form.crewId} onChange={(e) => set("crewId", e.target.value)}>
+              <option value="">— Sans équipe —</option>
+              {crews.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.fullName}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+function CrewModal({ modal, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({
+    id: modal.id, name: modal.name || "", lead: modal.lead || "", people: modal.people ?? 0,
+    site: modal.site || "", status: modal.status || "Actif",
+  }));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{form.id ? "Modifier l'équipe" : "Nouvelle équipe"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <Field label="Nom de l'équipe" value={form.name} onChange={(v) => set("name", v)} required />
+          <Field label="Chef d'équipe" value={form.lead} onChange={(v) => set("lead", v)} />
+          <Field label="Effectif" type="number" value={form.people} onChange={(v) => set("people", v)} />
+          <Field label="Chantier" value={form.site} onChange={(v) => set("site", v)} />
+          <label className="field">
+            <span>Statut</span>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)}>
+              <option value="Actif">Actif</option>
+              <option value="En_pause">En pause</option>
+              <option value="Termine">Terminé</option>
+            </select>
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.name}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ── Pointage (présence journalière par chantier) ─────────────────────── */
+const ATTENDANCE_STATUSES = [
+  { id: "present", label: "Présent", tone: "emerald" },
+  { id: "absent", label: "Absent", tone: "rose" },
+  { id: "partiel", label: "Partiel", tone: "amber" },
+  { id: "conge", label: "Congé", tone: "ink" },
+];
+function todayInputValue() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function Pointage({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [date, setDate] = React.useState(todayInputValue());
+  const [workers, setWorkers] = React.useState([]);
+  const [entries, setEntries] = React.useState({}); // workerId -> { status, hours, notes }
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+  // Filtre par équipe assignée au chantier si l'info existe sur le projet, sinon tous les ouvriers actifs.
+  const projectCrewId = selected?.crewId ?? selected?.crew_id ?? null;
+  const visibleWorkers = projectCrewId
+    ? workers.filter((w) => String(w.crewId) === String(projectCrewId))
+    : workers;
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setWorkers([]); setEntries({}); setLoading(false); return; }
+    setLoading(true); setNotice("");
+    Promise.all([api.listWorkers(), api.getAttendance(projectId, { date })])
+      .then(([w, att]) => {
+        setWorkers(w || []);
+        const map = {};
+        for (const a of att || []) {
+          map[a.workerId] = { id: a.id, status: a.status || "present", hours: a.hours ?? "", notes: a.notes || "" };
+        }
+        setEntries(map);
+      })
+      .catch((e) => { setWorkers([]); setEntries({}); setError(e.message || String(e)); })
+      .finally(() => setLoading(false));
+  }, [projectId, date]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const setEntry = (workerId, patch) => {
+    setEntries((c) => ({ ...c, [workerId]: { status: "present", hours: "", notes: "", ...c[workerId], ...patch } }));
+  };
+
+  const save = async () => {
+    if (!projectId) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const payload = visibleWorkers.map((w) => {
+        const e = entries[w.id] || { status: "present" };
+        return {
+          workerId: w.id,
+          status: e.status || "present",
+          hours: e.status === "partiel" && e.hours !== "" ? Number(e.hours) : undefined,
+          notes: e.notes || undefined,
+        };
+      });
+      await api.saveAttendance(projectId, payload);
+      setNotice("Pointage enregistré.");
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Suivi</p><h2 className="title font-display">Pointage</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ minHeight: 40, borderRadius: 8, border: "1px solid var(--ink-200)", padding: "0 10px" }} />
+        </div>
+      </div>
+
+      {error && <div className="inline-error">{error}</div>}
+      {notice && <div style={{ color: "var(--emerald-600)", fontSize: 13, marginBottom: 8, fontWeight: 600 }}>{notice}</div>}
+
+      <div className="card pad">
+        {loading ? <p className="muted">Chargement…</p> :
+          !visibleWorkers.length ? <p className="muted">Aucun ouvrier {projectCrewId ? "dans l'équipe de ce chantier" : "enregistré"}.</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {visibleWorkers.map((w) => {
+              const e = entries[w.id] || { status: "present", hours: "", notes: "" };
+              return (
+                <div key={w.id} className="card" style={{ padding: 12, border: "1px solid var(--line)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{w.fullName}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{w.role || "—"}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {ATTENDANCE_STATUSES.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={!canMutate}
+                        className={`chip ${e.status === s.id ? s.tone : "ink"}`}
+                        style={{ minHeight: 40, minWidth: 84, fontSize: 13, cursor: canMutate ? "pointer" : "default", border: e.status === s.id ? "2px solid currentColor" : "1px solid transparent" }}
+                        onClick={() => setEntry(w.id, { status: s.id })}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  {e.status === "partiel" && (
+                    <div style={{ marginTop: 8 }}>
+                      <label className="field" style={{ maxWidth: 160 }}>
+                        <span>Heures effectuées</span>
+                        <input type="number" min="0" step="0.5" value={e.hours} disabled={!canMutate}
+                          onChange={(ev) => setEntry(w.id, { hours: ev.target.value })} />
+                      </label>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {Boolean(visibleWorkers.length) && (
+        <div style={{ position: "sticky", bottom: 0, paddingTop: 12, background: "linear-gradient(to top, var(--bg, #f6f7f9) 60%, transparent)" }}>
+          <button className="btn btn-amber grad-amber" style={{ width: "100%", minHeight: 48, fontSize: 16 }} disabled={!canMutate || busy || !projectId} onClick={save}>
+            {busy ? "Enregistrement…" : "Enregistrer le pointage"}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

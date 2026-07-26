@@ -10,6 +10,7 @@ import { BatiproProjectGuard } from "../auth/guards/batipro-project.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
+  BulkUpsertAttendanceDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -22,9 +23,11 @@ import {
   CreateBatiproSituationDocumentDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  CreateBatiproWorkerDto,
   CreateSubcontractorLinkDto,
   RecordPaymentDto,
   ReviewSubmissionDto,
+  UpdateBatiproAttendanceDto,
   UpdateBatiproBuildingLevelDto,
   UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
@@ -33,9 +36,11 @@ import {
   UpdateBatiproMaterialDto,
   UpdateBatiproPhaseDto,
   UpdateBatiproProjectDto,
+  UpdateBatiproSitePhotoDto,
   UpdateBatiproSituationDto,
   UpdateBatiproSubcontractorDto,
   UpdateBatiproTaskDto,
+  UpdateBatiproWorkerDto,
 } from "./dto/batipro.dto";
 import { BatiproService } from "./batipro.service";
 
@@ -387,6 +392,42 @@ export class BatiproController {
     return this.batipro.deleteModelPlan(id, orgId);
   }
 
+  @ApiOperation({ summary: "Upload the architect plan (image/PDF) of a building level (etage)" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("plan", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("building-levels/:id/plan")
+  uploadLevelPlan(@Param("id", ParseIntPipe) id: number, @UploadedFile() plan: any, @CurrentOrg() orgId: number) {
+    if (!plan) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.uploadLevelPlan(id, plan, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream the imported architect plan (image/PDF) of a building level" })
+  @Permissions("readAll-batipro")
+  @Get("building-levels/:id/plan")
+  async levelPlanFile(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const file = await this.batipro.levelPlanFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Remove the imported architect plan of a building level" })
+  @Permissions("update-batipro")
+  @Delete("building-levels/:id/plan")
+  deleteLevelPlan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteLevelPlan(id, orgId);
+  }
+
   // ── Portail sous-traitant : lien + revue des soumissions (Phase 0) ───────
   @ApiOperation({ summary: "Generate a subcontractor submission link (token opaque)" })
   @Permissions("create-batipro")
@@ -533,5 +574,204 @@ export class BatiproController {
   @Post("documents/:id/payment")
   recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number) {
     return this.batipro.recordPayment(id, body.amount, orgId);
+  }
+
+  // ── Galerie photo de chantier ─────────────────────────────────────────────
+  @ApiOperation({ summary: "Upload a site photo for a project" })
+  @Permissions("create-batipro")
+  @UseInterceptors(FileInterceptor("photo", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP."), false);
+    },
+  }))
+  @Post("projects/:projectId/photos")
+  uploadSitePhoto(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @UploadedFile() photo: any,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    if (!photo) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.uploadSitePhoto(projectId, photo, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "List site photos of a project (chronological, filters optionnels)" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:projectId/photos")
+  sitePhotos(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("taskId") taskId?: string,
+  ) {
+    return this.batipro.sitePhotos(projectId, orgId, scope, { from, to, taskId: taskId ? Number(taskId) : undefined });
+  }
+
+  @ApiOperation({ summary: "Stream a site photo file" })
+  @Permissions("readAll-batipro")
+  @Get("photos/:id/file")
+  async sitePhotoFile(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const file = await this.batipro.sitePhotoFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Update caption/taken_at/task_id of a site photo" })
+  @Permissions("update-batipro")
+  @Put("photos/:id")
+  updateSitePhoto(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproSitePhotoDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateSitePhoto(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a site photo (objet MinIO conserve)" })
+  @Permissions("delete-batipro")
+  @Delete("photos/:id")
+  deleteSitePhoto(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteSitePhoto(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Site report : photos actives du chantier sur la periode (vue imprimable cote frontend)" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:projectId/report")
+  siteReport(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.batipro.siteReport(projectId, orgId, scope, { from, to });
+  }
+
+  @ApiOperation({ summary: "List BatiPro workers (ouvriers), filtre optionnel par equipe" })
+  @Permissions("readAll-batipro")
+  @Get("workers")
+  workers(@CurrentOrg() orgId: number, @Query("crewId") crewId?: string) {
+    return this.batipro.listWorkers(orgId, crewId ? Number(crewId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Create BatiPro worker" })
+  @Permissions("create-batipro")
+  @Post("workers")
+  createWorker(@Body() body: CreateBatiproWorkerDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createWorker(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update BatiPro worker" })
+  @Permissions("update-batipro")
+  @Put("workers/:id")
+  updateWorker(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproWorkerDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateWorker(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete BatiPro worker" })
+  @Permissions("delete-batipro")
+  @Delete("workers/:id")
+  deleteWorker(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteWorker(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List attendance (pointage) of a project, filtres date/from/to" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:projectId/attendance")
+  attendance(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Query("date") date?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.batipro.listAttendance(projectId, orgId, scope, { date, from, to });
+  }
+
+  @ApiOperation({ summary: "Bulk upsert attendance (pointage) for a project/date : une ligne par ouvrier" })
+  @Permissions("create-batipro")
+  @Post("projects/:projectId/attendance")
+  bulkUpsertAttendance(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Body() body: BulkUpsertAttendanceDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.bulkUpsertAttendance(projectId, body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Update a single attendance entry" })
+  @Permissions("update-batipro")
+  @Put("attendance/:id")
+  updateAttendance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproAttendanceDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateAttendance(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a single attendance entry" })
+  @Permissions("delete-batipro")
+  @Delete("attendance/:id")
+  deleteAttendance(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteAttendance(id, orgId);
+  }
+
+  // ── Scan OCR devis/BC fournisseur (pre-remplissage du formulaire) ──────────
+  @ApiOperation({ summary: "Scan (photo ou PDF) d'un devis/BC fournisseur : upload + OCR best-effort, ne cree aucun document" })
+  @Permissions("create-batipro")
+  @UseInterceptors(FileInterceptor("scan", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("projects/:projectId/documents/ocr-scan")
+  scanSupplierDocument(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @UploadedFile() scan: any,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    if (!scan) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.scanSupplierDocument(projectId, scan, orgId, userId || undefined, scope);
+  }
+
+  // ── Notifications in-app (recalculees a la lecture, pas de cron) ──────────
+  @ApiOperation({ summary: "List BatiPro notifications (recalcul a la volee). unreadOnly=1 pour ne garder que les non lues" })
+  @Permissions("readAll-batipro")
+  @Get("notifications")
+  listNotifications(@CurrentOrg() orgId: number, @Query("unreadOnly") unreadOnly?: string) {
+    const onlyUnread = unreadOnly === "1" || unreadOnly === "true";
+    return this.batipro.listNotifications(orgId, onlyUnread);
+  }
+
+  @ApiOperation({ summary: "Mark all BatiPro notifications as read for the org" })
+  @Permissions("update-batipro")
+  @Put("notifications/read-all")
+  markAllNotificationsRead(@CurrentOrg() orgId: number) {
+    return this.batipro.markAllNotificationsRead(orgId);
+  }
+
+  @ApiOperation({ summary: "Mark a single BatiPro notification as read" })
+  @Permissions("update-batipro")
+  @Put("notifications/:id/read")
+  markNotificationRead(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.markNotificationRead(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-dismiss a single BatiPro notification" })
+  @Permissions("delete-batipro")
+  @Delete("notifications/:id")
+  dismissNotification(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.dismissNotification(id, orgId);
   }
 }

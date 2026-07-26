@@ -218,6 +218,9 @@ export class CreateBatiproDocumentDto {
   @IsOptional() @IsDateString() issue_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  // Photo/scan source (batipro_site_photos.id, kind='source_document') dont ce document est issu (scan OCR).
+  // Optionnel : si fourni, le document cree est relie a la photo (linkedDocumentId).
+  @IsOptional() @IsInt() sourcePhotoId?: number;
   @IsArray()
   @ArrayMaxSize(200)
   @ValidateNested({ each: true })
@@ -261,6 +264,56 @@ export class CreateBatiproSituationDocumentDto {
 // Enregistrement d'un reglement (partiel/total) sur une facture (Phase 4).
 export class RecordPaymentDto {
   @IsNumber() @Min(0) amount!: number;
+}
+
+// Galerie photo de chantier (site + documents sources scannes).
+export class UpdateBatiproSitePhotoDto {
+  @IsOptional() @IsString() @MaxLength(255) caption?: string;
+  @IsOptional() @IsDateString() taken_at?: string;
+  @IsOptional() @IsInt() task_id?: number;
+}
+
+// Ouvriers nominatifs (pointage/presence), rattaches optionnellement a une equipe.
+export class CreateBatiproWorkerDto {
+  @IsString() @MaxLength(255) full_name!: string;
+  @IsOptional() @IsInt() crew_id?: number;
+  @IsOptional() @IsString() @MaxLength(120) role?: string;
+  @IsOptional() @IsString() @MaxLength(40) phone?: string;
+  @IsOptional() @IsNumber() @Min(0) daily_rate?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+}
+
+export class UpdateBatiproWorkerDto {
+  @IsOptional() @IsString() @MaxLength(255) full_name?: string;
+  @IsOptional() @IsInt() crew_id?: number;
+  @IsOptional() @IsString() @MaxLength(120) role?: string;
+  @IsOptional() @IsString() @MaxLength(40) phone?: string;
+  @IsOptional() @IsNumber() @Min(0) daily_rate?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+}
+
+// Pointage journalier : une ligne par ouvrier soumise en lot pour une date donnee.
+export class AttendanceEntryDto {
+  @IsInt() worker_id!: number;
+  @IsOptional() @IsIn(["present", "absent", "partiel", "conge"]) status?: string;
+  @IsOptional() @IsNumber() @Min(0) hours?: number;
+  @IsOptional() @IsString() @MaxLength(255) notes?: string;
+}
+
+export class BulkUpsertAttendanceDto {
+  @IsDateString() attendance_date!: string;
+  @IsOptional() @IsInt() crew_id?: number;
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => AttendanceEntryDto)
+  entries!: AttendanceEntryDto[];
+}
+
+export class UpdateBatiproAttendanceDto {
+  @IsOptional() @IsIn(["present", "absent", "partiel", "conge"]) status?: string;
+  @IsOptional() @IsNumber() @Min(0) hours?: number;
+  @IsOptional() @IsString() @MaxLength(255) notes?: string;
 }
 
 // Mise a jour partielle d'un devis/BC. Si `lines` est fourni, remplace

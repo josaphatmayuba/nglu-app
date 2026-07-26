@@ -118,6 +118,23 @@ export const api = {
   createCrew: (b) => jsonFetch("/crews", { method: "POST", body: JSON.stringify(b || {}) }),
   updateCrew: (id, b) => jsonFetch(`/crews/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteCrew: (id) => jsonFetch(`/crews/${id}`, { method: "DELETE" }),
+  // Ouvriers nominatifs (rattachés à une équipe)
+  listWorkers: () => jsonFetch("/workers"),
+  createWorker: (b) => jsonFetch("/workers", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateWorker: (id, b) => jsonFetch(`/workers/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteWorker: (id) => jsonFetch(`/workers/${id}`, { method: "DELETE" }),
+  // Pointage journalier par chantier
+  getAttendance: (projectId, { date, from, to } = {}) => {
+    const qs = new URLSearchParams();
+    if (date) qs.set("date", date);
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    const q = qs.toString();
+    return jsonFetch(`/projects/${projectId}/attendance${q ? `?${q}` : ""}`);
+  },
+  saveAttendance: (projectId, entries) => jsonFetch(`/projects/${projectId}/attendance`, { method: "POST", body: JSON.stringify(entries || []) }),
+  updateAttendance: (id, b) => jsonFetch(`/attendance/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteAttendance: (id) => jsonFetch(`/attendance/${id}`, { method: "DELETE" }),
   phases: (projectId) => jsonFetch(`/phases${projectId ? `?project_id=${projectId}` : ""}`),
   createPhase: (b) => jsonFetch("/phases", { method: "POST", body: JSON.stringify(b || {}) }),
   updatePhase: (id, b) => jsonFetch(`/phases/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
@@ -146,6 +163,10 @@ export const api = {
   uploadModelPlan: (modelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-model/${modelId}/plan`, fd); },
   modelPlanUrl: (modelId) => blobUrl(`/building-model/${modelId}/plan`),
   deleteModelPlan: (modelId) => jsonFetch(`/building-model/${modelId}/plan`, { method: "DELETE" }),
+  // Import du plan de l'architecte PAR ETAGE — le PDF du RDC n'est pas celui du R+1.
+  uploadLevelPlan: (levelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-levels/${levelId}/plan`, fd); },
+  levelPlanUrl: (levelId) => blobUrl(`/building-levels/${levelId}/plan`),
+  deleteLevelPlan: (levelId) => jsonFetch(`/building-levels/${levelId}/plan`, { method: "DELETE" }),
   // Portail sous-traitant (Phase 0) — cote gestionnaire
   createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),
   submissions: (projectId) => jsonFetch(`/documents/submissions${projectId ? `?project_id=${projectId}` : ""}`),
@@ -160,6 +181,9 @@ export const api = {
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
   documentHtmlUrl: (id) => blobUrl(`/documents/${id}/html`),
   shareDocument: (id) => jsonFetch(`/documents/${id}/share`, { method: "POST", body: "{}" }),
+  // Scan OCR d'un devis/BC fournisseur (photo ou PDF) : upload + best-effort OCR,
+  // ne cree aucun document — retourne { photoId, rawText, parsed } pour pre-remplir le formulaire.
+  ocrScanDocument: (projectId, file) => { const fd = new FormData(); fd.append("scan", file); return uploadForm(`/projects/${projectId}/documents/ocr-scan`, fd); },
   // Bons de commande (Phase 2) : reutilise les endpoints /documents generiques (type=purchase_order)
   budgetSummary: (projectId) => jsonFetch(`/documents/budget-summary?project_id=${projectId}`),
   // Situations de travaux (Phase 3, type=situation) : coexiste avec les situations legacy (/situations)
@@ -169,7 +193,44 @@ export const api = {
   invoices: (projectId) => jsonFetch(`/documents?direction=outbound&type=invoice${projectId ? `&project_id=${projectId}` : ""}`),
   createInvoiceFromSituation: (situationId) => jsonFetch(`/documents/situations/${situationId}/invoice`, { method: "POST", body: "{}" }),
   issueInvoice: (id) => jsonFetch(`/documents/${id}/issue`, { method: "POST", body: "{}" }),
-  recordPayment: (id, amount) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount }) })
+  recordPayment: (id, amount) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount }) }),
+  // Galerie photo de chantier — l'upload backend n'accepte que le fichier
+  // (champ "photo"). caption/taken_at/task_id sont appliqués via un PUT
+  // immédiat après upload (2 appels, cf. batipro.controller.ts).
+  uploadPhoto: async (projectId, file, { caption, takenAt, taskId } = {}) => {
+    const fd = new FormData();
+    fd.append("photo", file);
+    const created = await uploadForm(`/projects/${projectId}/photos`, fd);
+    const patch = {};
+    if (caption) patch.caption = caption;
+    if (takenAt) patch.taken_at = takenAt;
+    if (taskId) patch.task_id = taskId;
+    if (created?.id && Object.keys(patch).length) return jsonFetch(`/photos/${created.id}`, { method: "PUT", body: JSON.stringify(patch) });
+    return created;
+  },
+  listPhotos: (projectId, { from, to, taskId } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    if (taskId) qs.set("taskId", taskId);
+    const q = qs.toString();
+    return jsonFetch(`/projects/${projectId}/photos${q ? `?${q}` : ""}`);
+  },
+  photoBlobUrl: (id) => blobUrl(`/photos/${id}/file`),
+  updatePhoto: (id, data) => jsonFetch(`/photos/${id}`, { method: "PUT", body: JSON.stringify(data || {}) }),
+  deletePhoto: (id) => jsonFetch(`/photos/${id}`, { method: "DELETE" }),
+  getReport: (projectId, { from, to } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    const q = qs.toString();
+    return jsonFetch(`/projects/${projectId}/report${q ? `?${q}` : ""}`);
+  },
+  // Notifications (cloche header)
+  listNotifications: ({ unreadOnly } = {}) => jsonFetch(`/notifications${unreadOnly ? "?unreadOnly=true" : ""}`),
+  markNotificationRead: (id) => jsonFetch(`/notifications/${id}/read`, { method: "PUT" }),
+  markAllNotificationsRead: () => jsonFetch(`/notifications/read-all`, { method: "PUT" }),
+  dismissNotification: (id) => jsonFetch(`/notifications/${id}`, { method: "DELETE" }),
 };
 
 // Lien public partageable a copier/envoyer au sous-traitant.

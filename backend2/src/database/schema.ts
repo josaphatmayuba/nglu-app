@@ -2427,6 +2427,7 @@ export type BatiproLevelGeometry = {
   rooms?: Array<{ id: string; name?: string; x: number; y: number; w: number; l: number; h?: number; floorColor?: string }>;
   walls?: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; thickness: number; height: number; roomId?: string }>;
   openings?: Array<{ id: string; wallId: string; type: "door" | "window"; offset: number; width: number; height: number; sill?: number }>;
+  overlayScale?: { pxPerM: number };
 } | null;
 
 // Un niveau (etage) du modele. La geometrie pieces/murs/ouvertures de l'etage
@@ -2441,6 +2442,12 @@ export const batiproBuildingLevels = mysqlTable("batipro_building_levels", {
   elevation: decimal("elevation", { precision: 8, scale: 2 }).default("0").notNull(),
   height: decimal("height", { precision: 6, scale: 2 }),
   geometry: json("geometry").$type<BatiproLevelGeometry>(),
+  // Plan architecte importe PROPRE A CET ETAGE (le PDF/image du RDC n'est pas
+  // celui du R+1). batiproBuildingModels.importedFileKey reste en fallback legacy
+  // (modeles crees avant cette evolution, migres vers level_index=0).
+  importedFileKey: varchar("imported_file_key", { length: 512 }),
+  importedFileFormat: varchar("imported_file_format", { length: 10 }),
+  importedFileSize: bigint("imported_file_size", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -2530,6 +2537,86 @@ export const batiproDocumentCounters = mysqlTable("batipro_document_counters", {
   type: varchar("type", { length: 20 }).notNull(),
   year: int("year").notNull(),
   lastNumber: int("last_number").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Photos et rapports de chantier. kind=site pour les photos terrain, kind=
+// source_document pour un scan OCR rattache plus tard a un document (devis/BC)
+// via linkedDocumentId. Fichiers stockes sur MinIO (fileKey / thumbnailKey).
+export const batiproSitePhotos = mysqlTable("batipro_site_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  taskId: bigint("task_id", { mode: "number" }),
+  // Rattachement optionnel a un etage (batipro_building_levels) pour distinguer
+  // les photos de construction reelle par niveau, en plus du project_id/task_id
+  // generaux deja existants.
+  levelId: bigint("level_id", { mode: "number" }),
+  fileKey: varchar("file_key", { length: 512 }).notNull(),
+  fileFormat: varchar("file_format", { length: 10 }),
+  fileSize: bigint("file_size", { mode: "number" }),
+  thumbnailKey: varchar("thumbnail_key", { length: 512 }),
+  caption: varchar("caption", { length: 255 }),
+  takenAt: timestamp("taken_at").defaultNow().notNull(),
+  uploadedBy: bigint("uploaded_by", { mode: "number" }),
+  kind: varchar("kind", { length: 20 }).default("site").notNull(),
+  linkedDocumentId: bigint("linked_document_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// BatiPro : ouvriers nominatifs (pointage/presence). Devise via currency_id (table currency).
+// Pas de contrainte FK stricte (meme pattern que les autres tables batipro), seulement des index.
+export const batiproWorkers = mysqlTable("batipro_workers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  crewId: bigint("crew_id", { mode: "number" }),
+  fullName: varchar("full_name", { length: 255 }).notNull(),
+  role: varchar("role", { length: 120 }),
+  phone: varchar("phone", { length: 40 }),
+  dailyRate: decimal("daily_rate", { precision: 14, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// BatiPro : pointage/presence journalier des ouvriers sur un chantier.
+export const batiproAttendance = mysqlTable("batipro_attendance", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  workerId: bigint("worker_id", { mode: "number" }).notNull(),
+  crewId: bigint("crew_id", { mode: "number" }),
+  attendanceDate: date("attendance_date", { mode: "string" }).notNull(),
+  status: varchar("status", { length: 20 }).default("present").notNull(),
+  hours: decimal("hours", { precision: 5, scale: 2 }),
+  notes: varchar("notes", { length: 255 }),
+  recordedBy: bigint("recorded_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// BatiPro : notifications in-app recalculees a la lecture (pas de cron).
+// type : task_overdue / invoice_pending / budget_exceeded.
+// severity : info / warning / critical. entityType : task / document / project.
+// isRead pour le badge, isActive pour le soft dismiss.
+export const batiproNotifications = mysqlTable("batipro_notifications", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }),
+  type: varchar("type", { length: 40 }).notNull(),
+  severity: varchar("severity", { length: 20 }).default("info").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: varchar("message", { length: 500 }).notNull(),
+  entityType: varchar("entity_type", { length: 40 }),
+  entityId: bigint("entity_id", { mode: "number" }),
+  isRead: tinyint("is_read").default(0).notNull(),
+  readAt: timestamp("read_at"),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
