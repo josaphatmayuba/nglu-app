@@ -64,10 +64,11 @@ const NAV = [
   { id: "equipes", label: "Équipes", icon: "userPlus" },
   { id: "pointage", label: "Pointage", icon: "calendarCheck" },
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
+  { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "pointage"];
-const MOB_MORE = ["equipes", "previsionnel", "parametres"];
+const MOB_MORE = ["equipes", "previsionnel", "materiaux", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -167,6 +168,7 @@ function App() {
     pointage: <Pointage projects={projectRows} canMutate={canMutate} />,
     equipes: <Equipes canMutate={canMutate} />,
     previsionnel: <Forecast />,
+    materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -500,16 +502,11 @@ const PROJECT_TABS = [
   { id: "photos", label: "Photos & rapport", icon: "camera" },
   { id: "planning", label: "Planning", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
-  { id: "materiaux", label: "Matériaux", icon: "package" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials }) {
   const [tab, setTab] = React.useState("apercu");
   const p = project;
-  const projectMaterials = React.useMemo(
-    () => materials.filter((m) => (m.projectId ?? m.project_id) === p.id),
-    [materials, p.id]
-  );
 
   return (
     <>
@@ -540,7 +537,6 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
           <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
             <Icon name={t.icon} />
             <span>{t.label}</span>
-            {t.id === "materiaux" && projectMaterials.length > 0 && <span className="proj-tab-count">{projectMaterials.length}</span>}
           </button>
         ))}
       </div>
@@ -563,7 +559,6 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
         {tab === "photos" && <SitePhotos projects={projects} tasks={tasks} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "planning" && <Planning projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
-        {tab === "materiaux" && <Materiaux materials={projectMaterials} canMutate={canMutate} />}
         {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
       </div>
     </>
