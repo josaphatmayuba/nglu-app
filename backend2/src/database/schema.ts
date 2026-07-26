@@ -2446,6 +2446,94 @@ export const batiproBuildingLevels = mysqlTable("batipro_building_levels", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Socle documentaire BatiPro partage (devis, bons de commande, situations,
+// factures) + portail sous-traitant. Un seul en-tete pour les 4 types afin de
+// ne pas dupliquer numerotation/statuts/totaux. direction=inbound = soumission
+// entrante d'un sous-traitant (Phase 0), outbound = document emis vers le client.
+export const batiproDocuments = mysqlTable("batipro_documents", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  type: varchar("type", { length: 20 }).default("quote").notNull(),
+  direction: varchar("direction", { length: 20 }).default("outbound").notNull(),
+  number: varchar("number", { length: 60 }),
+  status: varchar("status", { length: 40 }).default("draft").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  totalHt: decimal("total_ht", { precision: 14, scale: 2 }).default("0").notNull(),
+  totalVat: decimal("total_vat", { precision: 14, scale: 2 }).default("0").notNull(),
+  totalTtc: decimal("total_ttc", { precision: 14, scale: 2 }).default("0").notNull(),
+  parentDocumentId: bigint("parent_document_id", { mode: "number" }),
+  // Rattachement fournisseur (BC) ou sous-traitant (BC ou soumission inbound Phase 0).
+  // Reutilise le referentiel central fournisseurs (meme colonne que batipro_materials.supplierId).
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  subcontractorId: bigint("subcontractor_id", { mode: "number" }),
+  submittedByName: varchar("submitted_by_name", { length: 255 }),
+  submittedByCompany: varchar("submitted_by_company", { length: 255 }),
+  attachedFileKey: varchar("attached_file_key", { length: 512 }),
+  attachedFileFormat: varchar("attached_file_format", { length: 10 }),
+  attachedFileSize: bigint("attached_file_size", { mode: "number" }),
+  clientToken: varchar("client_token", { length: 80 }),
+  clientTokenExpiry: timestamp("client_token_expiry"),
+  notes: text("notes"),
+  ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  // Montant deja regle sur une facture (type=invoice). Suivi du solde/paiement (Phase 4).
+  paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
+  issueDate: date("issue_date", { mode: "string" }),
+  dueDate: date("due_date", { mode: "string" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  documentId: bigint("document_id", { mode: "number" }).notNull(),
+  position: int("position").default(0).notNull(),
+  designation: varchar("designation", { length: 500 }).notNull(),
+  quantity: decimal("quantity", { precision: 14, scale: 3 }).default("0").notNull(),
+  unitPrice: decimal("unit_price", { precision: 14, scale: 2 }).default("0").notNull(),
+  vatRate: decimal("vat_rate", { precision: 6, scale: 2 }).default("0").notNull(),
+  lineHt: decimal("line_ht", { precision: 14, scale: 2 }).default("0").notNull(),
+  lineTtc: decimal("line_ttc", { precision: 14, scale: 2 }).default("0").notNull(),
+  phaseId: bigint("phase_id", { mode: "number" }),
+  // % d'avancement CUMULE de la ligne (situations de travaux, Phase 3). NULL sur
+  // les lignes de devis/BC/factures. Le montant de la periode se deduit du delta
+  // par rapport a la situation precedente cote service.
+  progressPct: decimal("progress_pct", { precision: 6, scale: 2 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Lien a token opaque partage a un sous-traitant (sans compte) pour soumettre
+// ses documents sur un chantier. Multi-usage jusqu'a expiration (le sous-traitant
+// peut deposer plusieurs documents). subcontractorId present = lien nominatif.
+export const batiproSubcontractorLinks = mysqlTable("batipro_subcontractor_links", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  subcontractorId: bigint("subcontractor_id", { mode: "number" }),
+  token: varchar("token", { length: 80 }).notNull(),
+  expiry: timestamp("expiry"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Compteur de numerotation sequentielle par (org, type, annee). Incremente sous
+// verrou (SELECT ... FOR UPDATE) en transaction pour garantir des numeros sans
+// trou ni doublon (DEV-2026-0001, FAC-2026-0001, ...).
+export const batiproDocumentCounters = mysqlTable("batipro_document_counters", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  type: varchar("type", { length: 20 }).notNull(),
+  year: int("year").notNull(),
+  lastNumber: int("last_number").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosDiseases = mysqlTable("farmos_diseases", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }),

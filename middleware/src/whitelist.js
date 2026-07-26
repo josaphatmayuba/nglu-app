@@ -77,6 +77,7 @@ module.exports = [
   { method: '*',    prefix: '/tenant-onboarding',             auth: false },
   { method: '*',    prefix: '/property-management/contracts/sign', auth: false },
   { method: '*',    prefix: '/property-management/public',     auth: false },
+  { method: '*',    prefix: '/batipro/public',                 auth: false }, // portail sous-traitant (token opaque)
 
   // ── Routes protégées (JWT requis) ──────────────
   { method: '*',    prefix: '/dashboard',                     auth: true  },

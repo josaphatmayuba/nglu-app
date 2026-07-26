@@ -1,4 +1,5 @@
-import { IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Max, Min, ValidateNested, IsDateString } from "class-validator";
+import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
 export class CreateBatiproProjectDto {
@@ -153,4 +154,129 @@ export class CreateBatiproBuildingLevelDto {
 export class UpdateBatiproBuildingLevelDto extends CreateBatiproBuildingLevelDto {
   @IsOptional() @IsInt() declare model_id: number;
   @IsOptional() @IsInt() declare project_id: number;
+}
+
+/* ── Socle documentaire + portail sous-traitant (Phase 0) ──────────────── */
+
+// Generation d'un lien sous-traitant (cote gestionnaire, authentifie).
+export class CreateSubcontractorLinkDto {
+  @IsInt() project_id!: number;
+  @IsOptional() @IsInt() subcontractor_id?: number; // present = lien nominatif
+  @IsOptional() @IsInt() @Min(1) @Max(90) expiry_days?: number; // defaut J+7
+}
+
+// Une ligne d'une soumission sous-traitant (formulaire public).
+export class SubcontractorLineDto {
+  @IsString() @MaxLength(500) designation!: string;
+  @IsOptional() @IsNumber() @Min(0) quantity?: number;
+  @IsOptional() @IsNumber() @Min(0) unit_price?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
+  @IsOptional() @IsInt() phase_id?: number;
+}
+
+// Soumission d'un document par un sous-traitant via le token public.
+export class SubmitSubcontractorDocumentDto {
+  @IsOptional() @IsIn(["quote", "invoice"]) type?: "quote" | "invoice";
+  @IsOptional() @IsInt() currency_id?: number;
+  // Mode generique : le sous-traitant s'identifie lui-meme.
+  @IsOptional() @IsString() @MaxLength(255) submitted_by_name?: string;
+  @IsOptional() @IsString() @MaxLength(255) submitted_by_company?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => SubcontractorLineDto)
+  lines!: SubcontractorLineDto[];
+}
+
+// Revue d'une soumission (cote gestionnaire) : validation ou renvoi.
+export class ReviewSubmissionDto {
+  @IsIn(["validate", "return"]) action!: "validate" | "return";
+  @IsOptional() @IsString() @MaxLength(1000) motif?: string;
+}
+
+/* ── Documents sortants : devis (Phase 1) ──────────────────────────────── */
+
+// Une ligne d'un devis (cote gestionnaire). Les totaux sont recalcules serveur.
+export class DocumentLineDto {
+  @IsString() @MaxLength(500) designation!: string;
+  @IsOptional() @IsNumber() @Min(0) quantity?: number;
+  @IsOptional() @IsNumber() @Min(0) unit_price?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
+  @IsOptional() @IsInt() phase_id?: number;
+}
+
+// Creation d'un devis ou d'un bon de commande (direction=outbound impose cote
+// service). BC (type=purchase_order) peut cibler un fournisseur et/ou un
+// sous-traitant existants.
+export class CreateBatiproDocumentDto {
+  @IsInt() project_id!: number;
+  @IsOptional() @IsIn(["quote", "purchase_order", "invoice"]) type?: "quote" | "purchase_order" | "invoice";
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsInt() supplier_id?: number;
+  @IsOptional() @IsInt() subcontractor_id?: number;
+  @IsOptional() @IsDateString() issue_date?: string;
+  @IsOptional() @IsDateString() due_date?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentLineDto)
+  lines!: DocumentLineDto[];
+}
+
+/* ── Situations de travaux (Phase 3, type=situation, direction=outbound) ──
+ * Une situation = decompte periodique d'avancement. Chaque ligne reference une
+ * PHASE du chantier + un % d'avancement CUMULE. Le montant de la periode est
+ * calcule cote serveur : montant_marche_phase * (%_courant - %_precedent).
+ */
+
+// Une ligne de situation : une phase + son % d'avancement cumule courant.
+// `contract_amount` optionnel = montant de marche de la phase saisi manuellement
+// (sinon deduit du devis parent / des devis acceptes du chantier).
+export class SituationLineDto {
+  @IsInt() phase_id!: number;
+  @IsNumber() @Min(0) @Max(100) progress_pct!: number;
+  @IsOptional() @IsNumber() @Min(0) contract_amount?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
+  @IsOptional() @IsString() @MaxLength(500) designation?: string;
+}
+
+// Creation d'une situation de travaux (documentaire, type=situation).
+export class CreateBatiproSituationDocumentDto {
+  @IsInt() project_id!: number;
+  @IsOptional() @IsString() @MaxLength(100) period?: string;
+  @IsOptional() @IsInt() parent_document_id?: number; // devis de reference
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsDateString() issue_date?: string;
+  @IsOptional() @IsDateString() due_date?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => SituationLineDto)
+  lines!: SituationLineDto[];
+}
+
+// Enregistrement d'un reglement (partiel/total) sur une facture (Phase 4).
+export class RecordPaymentDto {
+  @IsNumber() @Min(0) amount!: number;
+}
+
+// Mise a jour partielle d'un devis/BC. Si `lines` est fourni, remplace
+// l'ensemble des lignes et recalcule les totaux.
+export class UpdateBatiproDocumentDto {
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsInt() supplier_id?: number;
+  @IsOptional() @IsInt() subcontractor_id?: number;
+  @IsOptional() @IsDateString() issue_date?: string;
+  @IsOptional() @IsDateString() due_date?: string;
+  @IsOptional() @IsString() @MaxLength(40) status?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentLineDto)
+  lines?: DocumentLineDto[];
 }

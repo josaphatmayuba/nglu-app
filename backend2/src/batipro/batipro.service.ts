@@ -1,22 +1,31 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
   batiproBuildingLevels,
   batiproBuildingModels,
+  appSettings,
   batiproChangeOrders,
   batiproCrews,
+  batiproDocumentCounters,
+  batiproDocumentLines,
+  batiproDocuments,
   batiproMaterials,
   batiproPhases,
   batiproProjectAssignments,
   batiproProjects,
   batiproSituations,
+  batiproSubcontractorLinks,
   batiproSubcontractors,
   batiproTasks,
   currencies,
+  suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
+import { LedgerService } from "../ledger/ledger.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -24,16 +33,22 @@ import type {
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
+  CreateBatiproDocumentDto,
   CreateBatiproMaterialDto,
   CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
+  CreateBatiproSituationDocumentDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  CreateSubcontractorLinkDto,
+  ReviewSubmissionDto,
+  SubmitSubcontractorDocumentDto,
   UpdateBatiproBuildingLevelDto,
   UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
   UpdateBatiproCrewDto,
+  UpdateBatiproDocumentDto,
   UpdateBatiproMaterialDto,
   UpdateBatiproPhaseDto,
   UpdateBatiproProjectDto,
@@ -48,6 +63,7 @@ export class BatiproService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtime: RealtimeDataPublisher,
     private readonly objectStorage: ObjectStorageService,
+    private readonly ledger: LedgerService,
   ) {}
 
   // ── Helpers RBAC par chantier (BatiPro, Phase 2) ─────────────────────────
@@ -812,6 +828,1015 @@ export class BatiproService {
     await this.db.update(batiproBuildingLevels).set({ isActive: 0 }).where(and(eq(batiproBuildingLevels.id, id), eq(batiproBuildingLevels.organizationId, orgId)));
     await this.publish("deleteBuildingLevel", ["building_levels"], "deleted", id, orgId);
     return { message: "Niveau supprime." };
+  }
+
+  // ── Portail sous-traitant : liens a token opaque (Phase 0) ───────────────
+  // Cree un lien partageable (token opaque multi-usage jusqu'a expiration).
+  // subcontractor_id present = lien nominatif, sinon lien generique par chantier.
+  async createSubcontractorLink(input: CreateSubcontractorLinkDto, orgId: number) {
+    // Verifie que le chantier appartient bien a l'org (anti-fuite inter-org).
+    await this.getProject(input.project_id, orgId);
+    if (input.subcontractor_id != null) await this.getSubcontractor(input.subcontractor_id, orgId);
+    const token = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 8);
+    const days = input.expiry_days ?? 7;
+    const [result] = await this.db.insert(batiproSubcontractorLinks).values({
+      organizationId: orgId,
+      projectId: input.project_id,
+      subcontractorId: input.subcontractor_id ?? null,
+      token,
+      expiry: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ${days} DAY)` as any,
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createSubcontractorLink", ["subcontractor_links"], "created", id, orgId);
+    return { id, token, projectId: input.project_id, subcontractorId: input.subcontractor_id ?? null };
+  }
+
+  // Resout un token public : lien actif + non expire. Ne renvoie QUE le contexte
+  // strict necessaire au formulaire (aucune fuite de donnees chantier/org).
+  private async resolveLink(token: string) {
+    const [link] = await this.db
+      .select()
+      .from(batiproSubcontractorLinks)
+      .where(and(eq(batiproSubcontractorLinks.token, token), eq(batiproSubcontractorLinks.isActive, 1)))
+      .limit(1);
+    if (!link) throw new NotFoundException("Lien introuvable ou revoque.");
+    if (link.expiry && new Date(link.expiry).getTime() < Date.now()) {
+      throw new GoneException("Ce lien a expire.");
+    }
+    return link;
+  }
+
+  async getSubcontractorLinkContext(token: string) {
+    const link = await this.resolveLink(token);
+    const [project] = await this.db
+      .select({ id: batiproProjects.id, name: batiproProjects.name, currencyId: batiproProjects.currencyId, currencyCode: currencies.currencyCode, currencySymbol: currencies.currencySymbol })
+      .from(batiproProjects)
+      .leftJoin(currencies, eq(currencies.id, batiproProjects.currencyId))
+      .where(and(eq(batiproProjects.id, link.projectId), eq(batiproProjects.organizationId, link.organizationId), eq(batiproProjects.isActive, 1)))
+      .limit(1);
+    if (!project) throw new NotFoundException("Chantier indisponible.");
+
+    let subcontractor: { id: number; name: string } | null = null;
+    if (link.subcontractorId != null) {
+      const [sub] = await this.db
+        .select({ id: batiproSubcontractors.id, name: batiproSubcontractors.name })
+        .from(batiproSubcontractors)
+        .where(and(eq(batiproSubcontractors.id, link.subcontractorId), eq(batiproSubcontractors.organizationId, link.organizationId), eq(batiproSubcontractors.isActive, 1)))
+        .limit(1);
+      subcontractor = sub ?? null;
+    }
+
+    const phases = await this.db
+      .select({ id: batiproPhases.id, label: batiproPhases.label })
+      .from(batiproPhases)
+      .where(and(eq(batiproPhases.projectId, link.projectId), eq(batiproPhases.organizationId, link.organizationId), eq(batiproPhases.isActive, 1)))
+      .orderBy(batiproPhases.position);
+
+    return {
+      project: { name: project.name, currencyId: project.currencyId, currencyCode: project.currencyCode, currencySymbol: project.currencySymbol },
+      nominative: link.subcontractorId != null,
+      subcontractor,
+      phases,
+    };
+  }
+
+  // Soumission d'un document par un sous-traitant (inbound). Cree le document +
+  // ses lignes ; totaux calcules cote serveur (jamais de confiance au client).
+  async submitSubcontractorDocument(token: string, payload: SubmitSubcontractorDocumentDto) {
+    const link = await this.resolveLink(token);
+    const orgId = link.organizationId;
+    if (!Array.isArray(payload.lines) || !payload.lines.length) {
+      throw new BadRequestException("Au moins une ligne est requise.");
+    }
+    if (link.subcontractorId == null && !payload.submitted_by_name && !payload.submitted_by_company) {
+      throw new BadRequestException("Identifiez-vous (nom ou entreprise).");
+    }
+
+    const phaseIds = new Set(
+      (await this.db
+        .select({ id: batiproPhases.id })
+        .from(batiproPhases)
+        .where(and(eq(batiproPhases.projectId, link.projectId), eq(batiproPhases.organizationId, orgId), eq(batiproPhases.isActive, 1))))
+        .map((p) => p.id),
+    );
+
+    let totalHt = 0, totalVat = 0;
+    const lines = payload.lines.map((line, index) => {
+      const qty = Number(line.quantity ?? 0);
+      const pu = Number(line.unit_price ?? 0);
+      const vatRate = Number(line.vat_rate ?? 0);
+      const lineHt = Math.round(qty * pu * 100) / 100;
+      const lineVat = Math.round(lineHt * (vatRate / 100) * 100) / 100;
+      totalHt += lineHt;
+      totalVat += lineVat;
+      const phaseId = line.phase_id != null && phaseIds.has(line.phase_id) ? line.phase_id : null;
+      return {
+        organizationId: orgId,
+        documentId: 0,
+        position: index,
+        designation: line.designation,
+        quantity: String(qty),
+        unitPrice: String(pu),
+        vatRate: String(vatRate),
+        lineHt: String(lineHt),
+        lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
+        phaseId,
+      };
+    });
+    const totalTtc = Math.round((totalHt + totalVat) * 100) / 100;
+
+    const [result] = await this.db.insert(batiproDocuments).values({
+      organizationId: orgId,
+      projectId: link.projectId,
+      type: payload.type ?? "quote",
+      direction: "inbound",
+      status: "submitted",
+      currencyId: payload.currency_id ?? null,
+      totalHt: String(Math.round(totalHt * 100) / 100),
+      totalVat: String(Math.round(totalVat * 100) / 100),
+      totalTtc: String(totalTtc),
+      subcontractorId: link.subcontractorId ?? null,
+      submittedByName: link.subcontractorId == null ? (payload.submitted_by_name ?? null) : null,
+      submittedByCompany: link.subcontractorId == null ? (payload.submitted_by_company ?? null) : null,
+      notes: payload.notes ?? null,
+    }).$returningId();
+    const documentId = Number(result.id);
+    for (const line of lines) line.documentId = documentId;
+    if (lines.length) await this.db.insert(batiproDocumentLines).values(lines);
+
+    await this.publish("submitSubcontractorDocument", ["documents", "document_lines"], "created", documentId, orgId);
+    return { id: documentId, message: "Soumission enregistree." };
+  }
+
+  // Attache le fichier (PDF/image) d'une soumission via le token public.
+  async attachSubcontractorFile(token: string, documentId: number, file: any) {
+    const link = await this.resolveLink(token);
+    const orgId = link.organizationId;
+    const [doc] = await this.db
+      .select()
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.id, documentId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, link.projectId),
+        eq(batiproDocuments.direction, "inbound"),
+        eq(batiproDocuments.isActive, 1),
+      ))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Soumission introuvable.");
+    const stored = await this.objectStorage.putDocument(file, `batipro/submissions/${orgId}/${link.projectId}`);
+    if (doc.attachedFileKey) {
+      try { await this.objectStorage.deleteObject(doc.attachedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproDocuments).set({
+      attachedFileKey: stored.objectKey,
+      attachedFileFormat: stored.mimeType === "application/pdf" ? "pdf" : (stored.mimeType.split("/")[1] || null),
+      attachedFileSize: stored.sizeBytes,
+    }).where(eq(batiproDocuments.id, documentId));
+    await this.publish("attachSubcontractorFile", ["documents"], "updated", documentId, orgId);
+    return { id: documentId, message: "Fichier attache." };
+  }
+
+  // ── Revue des soumissions (cote gestionnaire, authentifie) ───────────────
+  listInboundSubmissions(orgId: number, projectId?: number) {
+    return this.db
+      .select({
+        ...getTableColumns(batiproDocuments),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+        subcontractorName: batiproSubcontractors.name,
+      })
+      .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.direction, "inbound"),
+        eq(batiproDocuments.isActive, 1),
+        projectId ? eq(batiproDocuments.projectId, projectId) : undefined,
+      ))
+      .orderBy(desc(batiproDocuments.id));
+  }
+
+  private async getInboundDocument(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.id, id),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.direction, "inbound"),
+        eq(batiproDocuments.isActive, 1),
+      ))
+      .limit(1);
+    if (!row) throw new NotFoundException("Soumission introuvable.");
+    return row;
+  }
+
+  async submissionLines(documentId: number, orgId: number) {
+    await this.getInboundDocument(documentId, orgId);
+    return this.db
+      .select()
+      .from(batiproDocumentLines)
+      .where(and(eq(batiproDocumentLines.documentId, documentId), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
+      .orderBy(batiproDocumentLines.position);
+  }
+
+  async reviewSubmission(documentId: number, input: ReviewSubmissionDto, orgId: number) {
+    const doc = await this.getInboundDocument(documentId, orgId);
+    if (doc.status === "validated") throw new GoneException("Cette soumission est deja validee.");
+    const nextStatus = input.action === "validate" ? "validated" : "returned";
+    const patch: Partial<typeof batiproDocuments.$inferInsert> = { status: nextStatus };
+    if (input.action === "return" && input.motif) {
+      patch.notes = doc.notes ? `${doc.notes}\n[Renvoi] ${input.motif}` : `[Renvoi] ${input.motif}`;
+    }
+    await this.db.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, documentId));
+    await this.publish("reviewSubmission", ["documents"], "updated", documentId, orgId);
+    return { id: documentId, status: nextStatus, message: input.action === "validate" ? "Soumission validee." : "Soumission renvoyee." };
+  }
+
+  async submissionFile(documentId: number, orgId: number) {
+    const doc = await this.getInboundDocument(documentId, orgId);
+    if (!doc.attachedFileKey) throw new NotFoundException("Aucun fichier attache.");
+    const object = await this.objectStorage.getObject(doc.attachedFileKey);
+    return { ...object, mimeType: object.contentType };
+  }
+
+  // ── Documents sortants : devis (Phase 1) ─────────────────────────────────
+
+  // Prefixe legal par type de document.
+  private static readonly DOC_PREFIX: Record<string, string> = {
+    quote: "DEV",
+    purchase_order: "BC",
+    situation: "SIT",
+    invoice: "FAC",
+  };
+
+  // Numerotation sequentielle par (org, type, annee), sans trou ni doublon.
+  // Choix : table compteur dediee incrementee sous verrou (SELECT ... FOR UPDATE)
+  // dans une transaction — plus robuste qu'un MAX+1 (pas de scan, pas de course).
+  // Format : DEV-2026-0001. Renvoie { number, sequence }.
+  private async nextDocumentNumber(tx: any, orgId: number, type: string, year: number) {
+    const prefix = BatiproService.DOC_PREFIX[type] ?? "DOC";
+    // Cree la ligne compteur si absente (idempotent), puis verrouille-la.
+    await tx
+      .insert(batiproDocumentCounters)
+      .values({ organizationId: orgId, type, year, lastNumber: 0 })
+      .onDuplicateKeyUpdate({ set: { organizationId: sql`organization_id` } });
+    const [counter] = await tx
+      .select({ id: batiproDocumentCounters.id, lastNumber: batiproDocumentCounters.lastNumber })
+      .from(batiproDocumentCounters)
+      .where(and(
+        eq(batiproDocumentCounters.organizationId, orgId),
+        eq(batiproDocumentCounters.type, type),
+        eq(batiproDocumentCounters.year, year),
+      ))
+      .for("update")
+      .limit(1);
+    const sequence = Number(counter.lastNumber) + 1;
+    await tx
+      .update(batiproDocumentCounters)
+      .set({ lastNumber: sequence })
+      .where(eq(batiproDocumentCounters.id, counter.id));
+    return { number: `${prefix}-${year}-${String(sequence).padStart(4, "0")}`, sequence };
+  }
+
+  // Recalcule les totaux HT/TVA/TTC depuis les lignes (jamais de confiance au
+  // front). Renvoie les lignes normalisees + les totaux arrondis au centime.
+  private computeDocumentTotals(rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number }>, orgId: number, validPhaseIds: Set<number>) {
+    let totalHt = 0, totalVat = 0;
+    const lines = rawLines.map((line, index) => {
+      const qty = Number(line.quantity ?? 0);
+      const pu = Number(line.unit_price ?? 0);
+      const vatRate = Number(line.vat_rate ?? 0);
+      const lineHt = Math.round(qty * pu * 100) / 100;
+      const lineVat = Math.round(lineHt * (vatRate / 100) * 100) / 100;
+      totalHt += lineHt;
+      totalVat += lineVat;
+      const phaseId = line.phase_id != null && validPhaseIds.has(line.phase_id) ? line.phase_id : null;
+      return {
+        organizationId: orgId,
+        documentId: 0,
+        position: index,
+        designation: line.designation,
+        quantity: String(qty),
+        unitPrice: String(pu),
+        vatRate: String(vatRate),
+        lineHt: String(lineHt),
+        lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
+        phaseId,
+      };
+    });
+    return {
+      lines,
+      totalHt: Math.round(totalHt * 100) / 100,
+      totalVat: Math.round(totalVat * 100) / 100,
+      totalTtc: Math.round((totalHt + totalVat) * 100) / 100,
+    };
+  }
+
+  private async validPhaseIds(orgId: number, projectId: number) {
+    const rows = await this.db
+      .select({ id: batiproPhases.id })
+      .from(batiproPhases)
+      .where(and(eq(batiproPhases.projectId, projectId), eq(batiproPhases.organizationId, orgId), eq(batiproPhases.isActive, 1)));
+    return new Set(rows.map((p) => p.id));
+  }
+
+  // Liste les documents sortants (devis par defaut) d'un chantier.
+  listDocuments(orgId: number, opts: { projectId?: number; type?: string; direction?: string } = {}) {
+    return this.db
+      .select({
+        ...getTableColumns(batiproDocuments),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+        supplierName: suppliers.name,
+        subcontractorName: batiproSubcontractors.name,
+      })
+      .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
+      .leftJoin(suppliers, eq(suppliers.id, batiproDocuments.supplierId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, opts.direction ?? "outbound"),
+        opts.type ? eq(batiproDocuments.type, opts.type) : undefined,
+        opts.projectId ? eq(batiproDocuments.projectId, opts.projectId) : undefined,
+      ))
+      .orderBy(desc(batiproDocuments.id));
+  }
+
+  async getDocument(id: number, orgId: number) {
+    const [row] = await this.db
+      .select({
+        ...getTableColumns(batiproDocuments),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+        supplierName: suppliers.name,
+        subcontractorName: batiproSubcontractors.name,
+      })
+      .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
+      .leftJoin(suppliers, eq(suppliers.id, batiproDocuments.supplierId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Document introuvable.");
+    const lines = await this.db
+      .select()
+      .from(batiproDocumentLines)
+      .where(and(eq(batiproDocumentLines.documentId, id), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
+      .orderBy(batiproDocumentLines.position);
+    return { ...row, lines };
+  }
+
+  async createDocument(input: CreateBatiproDocumentDto, orgId: number) {
+    await this.getProject(input.project_id, orgId);
+    if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une ligne est requise.");
+    const type = input.type ?? "quote";
+    const phaseIds = await this.validPhaseIds(orgId, input.project_id);
+    const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
+    const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
+
+    const documentId = await this.db.transaction(async (tx) => {
+      const { number } = await this.nextDocumentNumber(tx, orgId, type, year);
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: input.project_id,
+        type,
+        direction: "outbound",
+        number,
+        status: "draft",
+        currencyId: input.currency_id ?? null,
+        supplierId: input.supplier_id ?? null,
+        subcontractorId: input.subcontractor_id ?? null,
+        totalHt: String(totalHt),
+        totalVat: String(totalVat),
+        totalTtc: String(totalTtc),
+        notes: input.notes ?? null,
+        issueDate: input.issue_date ?? null,
+        dueDate: input.due_date ?? null,
+      }).$returningId();
+      const id = Number(result.id);
+      for (const line of lines) line.documentId = id;
+      if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+      return id;
+    });
+
+    await this.publish("createDocument", ["documents", "document_lines"], "created", documentId, orgId);
+    return this.getDocument(documentId, orgId);
+  }
+
+  async updateDocument(id: number, input: UpdateBatiproDocumentDto, orgId: number) {
+    const doc = await this.getDocument(id, orgId);
+    const patch: Partial<typeof batiproDocuments.$inferInsert> = {};
+    if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
+    if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id ?? null;
+    if (input.subcontractor_id !== undefined) patch.subcontractorId = input.subcontractor_id ?? null;
+    if (input.issue_date !== undefined) patch.issueDate = input.issue_date || null;
+    if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.notes !== undefined) patch.notes = input.notes || null;
+
+    if (input.lines !== undefined) {
+      const phaseIds = await this.validPhaseIds(orgId, doc.projectId);
+      const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
+      patch.totalHt = String(totalHt);
+      patch.totalVat = String(totalVat);
+      patch.totalTtc = String(totalTtc);
+      await this.db.transaction(async (tx) => {
+        // Remplace l'ensemble des lignes (soft-delete des anciennes, insert des nouvelles).
+        await tx.update(batiproDocumentLines).set({ isActive: 0 })
+          .where(and(eq(batiproDocumentLines.documentId, id), eq(batiproDocumentLines.organizationId, orgId)));
+        for (const line of lines) line.documentId = id;
+        if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+        if (Object.keys(patch).length) await tx.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
+      });
+    } else if (Object.keys(patch).length) {
+      await this.db.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
+    }
+
+    await this.publish("updateDocument", ["documents", "document_lines"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
+  }
+
+  async deleteDocument(id: number, orgId: number) {
+    await this.getDocument(id, orgId);
+    await this.db.update(batiproDocuments).set({ isActive: 0 }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    await this.publish("deleteDocument", ["documents"], "deleted", id, orgId);
+    return { message: "Document supprime." };
+  }
+
+  // ── Phase 3 : situations de travaux (type=situation, direction=outbound) ──
+  //
+  // HYPOTHESES DE CALCUL (logique BTP standard, documentees) :
+  //  - Une situation = decompte periodique. Chaque ligne reference une PHASE +
+  //    un % d'avancement CUMULE (progress_pct) atteint a cette situation.
+  //  - Montant de marche d'une phase : (1) si `contract_amount` est saisi sur la
+  //    ligne, on l'utilise ; sinon (2) somme des line_ht des DEVIS sortants du
+  //    chantier (parent si fourni, sinon tous devis actifs) dont les lignes sont
+  //    rattachees a cette phase. Si aucune reference : montant de marche = 0.
+  //  - Montant de la periode pour la ligne =
+  //      montant_marche_phase * (progress_pct_courant - progress_pct_precedent) / 100
+  //    ou progress_pct_precedent = max des progress_pct des situations ANTERIEURES
+  //    actives du chantier sur la meme phase (0 si premiere situation).
+  //  - Les totaux HT/TVA/TTC sont recalcules serveur. Chaque ligne stocke le
+  //    montant de periode dans line_ht (quantity=1, unit_price=montant periode)
+  //    pour rester compatible avec le rendu HTML/totaux generiques.
+
+  // Montant de marche par phase, deduit des devis sortants du chantier.
+  // parentDocumentId : si fourni, ne considere que ce devis ; sinon tous les
+  // devis actifs du chantier. Renvoie Map<phaseId, montant_ht>.
+  private async phaseContractAmounts(orgId: number, projectId: number, parentDocumentId?: number | null) {
+    const rows = await this.db
+      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "quote"),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocumentLines.isActive, 1),
+        parentDocumentId ? eq(batiproDocuments.id, parentDocumentId) : undefined,
+      ));
+    const byPhase = new Map<number, number>();
+    for (const r of rows) {
+      if (r.phaseId == null) continue;
+      byPhase.set(r.phaseId, (byPhase.get(r.phaseId) ?? 0) + Number(r.lineHt ?? 0));
+    }
+    return byPhase;
+  }
+
+  // Avancement CUMULE deja acte par phase (situations ANTERIEURES actives du
+  // chantier). Renvoie Map<phaseId, max_progress_pct>. Permet de pre-remplir une
+  // nouvelle situation et de calculer le delta de la periode.
+  private async priorProgressByPhase(orgId: number, projectId: number, excludeDocumentId?: number) {
+    const rows = await this.db
+      .select({ phaseId: batiproDocumentLines.phaseId, progressPct: batiproDocumentLines.progressPct })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "situation"),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocumentLines.isActive, 1),
+        excludeDocumentId ? sql`${batiproDocuments.id} <> ${excludeDocumentId}` : undefined,
+      ));
+    const byPhase = new Map<number, number>();
+    for (const r of rows) {
+      if (r.phaseId == null || r.progressPct == null) continue;
+      const v = Number(r.progressPct);
+      if (v > (byPhase.get(r.phaseId) ?? 0)) byPhase.set(r.phaseId, v);
+    }
+    return byPhase;
+  }
+
+  // Etat d'avancement cumule par phase (pour pre-remplir une nouvelle situation).
+  // Renvoie, pour chaque phase active du chantier : montant de marche, %
+  // deja acte (cumul precedent), et progression physique de la phase.
+  async situationsAdvancement(projectId: number, orgId: number) {
+    const project = await this.getProject(projectId, orgId);
+    const phases = await this.phases(orgId, projectId);
+    const contract = await this.phaseContractAmounts(orgId, projectId);
+    const prior = await this.priorProgressByPhase(orgId, projectId);
+    return {
+      project_id: projectId,
+      currency_id: project.currencyId ?? null,
+      currency_code: project.currencyCode ?? null,
+      currency_symbol: project.currencySymbol ?? null,
+      phases: phases.map((p) => ({
+        phase_id: p.id,
+        label: p.label,
+        physical_progress: Number(p.progress ?? 0),
+        contract_amount: Math.round((contract.get(p.id) ?? 0) * 100) / 100,
+        previous_progress_pct: prior.get(p.id) ?? 0,
+      })),
+    };
+  }
+
+  // Cree une situation de travaux (type=situation). Calcule le montant de la
+  // periode par phase a partir du delta d'avancement. Numerotation SIT-YYYY-XXXX.
+  async createSituationDocument(input: CreateBatiproSituationDocumentDto, orgId: number) {
+    await this.getProject(input.project_id, orgId);
+    if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une phase est requise.");
+    if (input.parent_document_id != null) {
+      // Anti-fuite : le devis parent doit appartenir a l'org et au chantier.
+      const parent = await this.getDocument(input.parent_document_id, orgId);
+      if (parent.projectId !== input.project_id) throw new BadRequestException("Le devis de reference n'appartient pas a ce chantier.");
+    }
+
+    const validPhases = await this.validPhaseIds(orgId, input.project_id);
+    const contract = await this.phaseContractAmounts(orgId, input.project_id, input.parent_document_id ?? null);
+    const prior = await this.priorProgressByPhase(orgId, input.project_id);
+    const phaseLabels = new Map((await this.phases(orgId, input.project_id)).map((p) => [p.id, p.label] as const));
+
+    let totalHt = 0, totalVat = 0;
+    const lines = input.lines
+      .filter((l) => validPhases.has(l.phase_id))
+      .map((l, index) => {
+        const contractAmount = l.contract_amount != null ? Number(l.contract_amount) : (contract.get(l.phase_id) ?? 0);
+        const current = Number(l.progress_pct);
+        const previous = prior.get(l.phase_id) ?? 0;
+        // Delta borne >= 0 (on ne facture jamais un avancement negatif).
+        const deltaPct = Math.max(0, current - previous);
+        const periodHt = Math.round(contractAmount * (deltaPct / 100) * 100) / 100;
+        const vatRate = Number(l.vat_rate ?? 0);
+        const lineVat = Math.round(periodHt * (vatRate / 100) * 100) / 100;
+        totalHt += periodHt;
+        totalVat += lineVat;
+        const label = l.designation || phaseLabels.get(l.phase_id) || `Phase ${l.phase_id}`;
+        return {
+          organizationId: orgId,
+          documentId: 0,
+          position: index,
+          designation: `${label} — avancement ${current.toFixed(2)}% (période ${previous.toFixed(2)}% → ${current.toFixed(2)}%)`,
+          quantity: "1",
+          unitPrice: String(periodHt),
+          vatRate: String(vatRate),
+          lineHt: String(periodHt),
+          lineTtc: String(Math.round((periodHt + lineVat) * 100) / 100),
+          phaseId: l.phase_id,
+          progressPct: String(current),
+        };
+      });
+    if (!lines.length) throw new BadRequestException("Aucune phase valide pour ce chantier.");
+    const totalTtc = Math.round((totalHt + totalVat) * 100) / 100;
+    const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
+
+    const documentId = await this.db.transaction(async (tx) => {
+      const { number } = await this.nextDocumentNumber(tx, orgId, "situation", year);
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: input.project_id,
+        type: "situation",
+        direction: "outbound",
+        number,
+        status: "draft",
+        currencyId: input.currency_id ?? null,
+        parentDocumentId: input.parent_document_id ?? null,
+        totalHt: String(Math.round(totalHt * 100) / 100),
+        totalVat: String(Math.round(totalVat * 100) / 100),
+        totalTtc: String(totalTtc),
+        notes: input.period ? `Période : ${input.period}${input.notes ? `\n${input.notes}` : ""}` : (input.notes ?? null),
+        issueDate: input.issue_date ?? null,
+        dueDate: input.due_date ?? null,
+      }).$returningId();
+      const id = Number(result.id);
+      for (const line of lines) line.documentId = id;
+      await tx.insert(batiproDocumentLines).values(lines);
+      return id;
+    });
+
+    await this.publish("createSituationDocument", ["documents", "document_lines"], "created", documentId, orgId);
+    return this.getDocument(documentId, orgId);
+  }
+
+  // ── Phase 2 : suivi budgetaire chantier (devis vs BC engages vs budget) ──
+  // Montant devis = somme des devis outbound acceptes. BC engages = somme des
+  // bons de commande outbound actifs (hors annules). Compare au budget/contrat
+  // du chantier. Aucun montant en dur : totaux recalcules cote serveur/DB.
+  async projectBudgetSummary(projectId: number, orgId: number) {
+    const project = await this.getProject(projectId, orgId);
+
+    const [quoteAgg] = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "quote"),
+        eq(batiproDocuments.status, "accepted"),
+      ));
+
+    const [poAgg] = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "purchase_order"),
+        sql`${batiproDocuments.status} <> 'cancelled'`,
+      ));
+
+    const quoteAccepted = Number(quoteAgg?.total ?? 0);
+    const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
+    const budget = Number(project.budget ?? 0);
+    const contractAmount = Number(project.contractAmount ?? 0);
+    const spent = Number(project.spent ?? 0);
+    const referenceBudget = contractAmount || budget;
+
+    return {
+      project_id: projectId,
+      currency_id: project.currencyId ?? null,
+      currency_code: project.currencyCode ?? null,
+      currency_symbol: project.currencySymbol ?? null,
+      budget,
+      contract_amount: contractAmount,
+      spent,
+      quote_accepted: quoteAccepted,
+      purchase_orders_engaged: purchaseOrdersEngaged,
+      remaining_vs_budget: Math.round((referenceBudget - purchaseOrdersEngaged) * 100) / 100,
+      engagement_rate: referenceBudget > 0 ? Math.round((purchaseOrdersEngaged / referenceBudget) * 10000) / 100 : null,
+    };
+  }
+
+  // Genere/renouvelle le token client d'un document et renvoie le token (le lien
+  // partageable est construit cote front). Reutilise le pattern token opaque.
+  async shareDocument(id: number, orgId: number, expiryDays = 30) {
+    const doc = await this.getDocument(id, orgId);
+    const token = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 8);
+    await this.db.update(batiproDocuments).set({
+      clientToken: token,
+      clientTokenExpiry: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ${expiryDays} DAY)` as any,
+      status: doc.status === "draft" ? "sent" : doc.status,
+    }).where(eq(batiproDocuments.id, id));
+    await this.publish("shareDocument", ["documents"], "updated", id, orgId);
+    return { id, token };
+  }
+
+  // ── Phase 4 : factures (type=invoice) + comptabilisation ledger ──────────
+
+  // Genere une facture depuis une situation VALIDEE : reprend les lignes/montants
+  // de la situation, chaine parent_document_id, numerotation FAC-YYYY-XXXX, draft.
+  async createInvoiceFromSituation(situationDocumentId: number, orgId: number) {
+    const situation = await this.getDocument(situationDocumentId, orgId);
+    if (situation.type !== "situation") throw new BadRequestException("Le document source n'est pas une situation.");
+    if (situation.direction !== "outbound") throw new BadRequestException("Seule une situation sortante peut etre facturee.");
+    if (situation.status !== "validated") {
+      throw new BadRequestException("La situation doit etre validee avant d'etre facturee.");
+    }
+    if (!situation.lines.length) throw new BadRequestException("La situation ne contient aucune ligne a facturer.");
+
+    const year = new Date().getFullYear();
+    const documentId = await this.db.transaction(async (tx) => {
+      const { number } = await this.nextDocumentNumber(tx, orgId, "invoice", year);
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: situation.projectId,
+        type: "invoice",
+        direction: "outbound",
+        number,
+        status: "draft",
+        currencyId: situation.currencyId ?? null,
+        parentDocumentId: situation.id,
+        totalHt: String(situation.totalHt),
+        totalVat: String(situation.totalVat),
+        totalTtc: String(situation.totalTtc),
+        notes: situation.notes ?? null,
+        issueDate: sql`CURRENT_DATE` as any,
+      }).$returningId();
+      const id = Number(result.id);
+      // Recopie les lignes de la situation (sans progressPct : c'est une facture).
+      const lines = situation.lines.map((l, index) => ({
+        organizationId: orgId,
+        documentId: id,
+        position: index,
+        designation: l.designation,
+        quantity: String(l.quantity),
+        unitPrice: String(l.unitPrice),
+        vatRate: String(l.vatRate),
+        lineHt: String(l.lineHt),
+        lineTtc: String(l.lineTtc),
+        phaseId: l.phaseId ?? null,
+      }));
+      if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+      // La situation passe a "invoiced" (fin de son cycle).
+      await tx.update(batiproDocuments).set({ status: "invoiced" }).where(eq(batiproDocuments.id, situation.id));
+      return id;
+    });
+
+    await this.publish("createInvoiceFromSituation", ["documents", "document_lines"], "created", documentId, orgId);
+    return this.getDocument(documentId, orgId);
+  }
+
+  // Comptabilise une facture via le ledger (postByRules, ROLES metier — JAMAIS de
+  // compte en dur). Idempotent par idempotencyKey (re-appel ne double pas
+  // l'ecriture). Respecte gate d'approbation + periodes cloturees (gere par le
+  // ledger). Stocke ledger_entry_id + incremente batipro_projects.billed_amount.
+  async postInvoiceToLedger(invoiceDocumentId: number, orgId: number, userId?: number) {
+    const invoice = await this.getDocument(invoiceDocumentId, orgId);
+    if (invoice.type !== "invoice") throw new BadRequestException("Seule une facture peut etre comptabilisee.");
+    if (invoice.direction !== "outbound") throw new BadRequestException("Seule une facture sortante peut etre comptabilisee.");
+    if (invoice.status === "cancelled") throw new BadRequestException("Facture annulee : comptabilisation impossible.");
+
+    const totalHt = Number(invoice.totalHt ?? 0);
+    const totalVat = Number(invoice.totalVat ?? 0);
+    const totalTtc = Number(invoice.totalTtc ?? 0);
+    if (!(totalTtc > 0)) throw new BadRequestException("Montant de facture nul : rien a comptabiliser.");
+
+    // Roles metier (resolus en comptes via transaction_type_rules, type=batipro_invoice) :
+    //  - receivable  = creance client        (DEBIT, TTC)
+    //  - revenue     = produit / vente        (CREDIT, HT)
+    //  - vat_output  = TVA collectee          (CREDIT, TVA)
+    const result = await this.ledger.postByRules(
+      {
+        type: "batipro_invoice",
+        reference: invoice.number ?? `FAC-${invoiceDocumentId}`,
+        particulars: `Facture BatiPro ${invoice.number ?? invoiceDocumentId}`,
+        sourceModule: "batipro",
+        relatedId: String(invoiceDocumentId),
+        idempotencyKey: `batipro:invoice:${invoiceDocumentId}`,
+        currencyId: invoice.currencyId ?? undefined,
+        amountsByRole: {
+          receivable: totalTtc,
+          revenue: totalHt,
+          vat_output: totalVat,
+        },
+      },
+      orgId,
+      userId,
+    );
+
+    // Ecriture differee (gate d'approbation) : on ne fige rien tant qu'elle n'est
+    // pas comptabilisee. La facture reste emise, l'ecriture sera rejouee a l'approbation.
+    const deferred = (result as { deferred?: boolean }).deferred === true;
+    const ledgerEntryId = result.id > 0 ? result.id : null;
+
+    await this.db.transaction(async (tx) => {
+      const patch: Partial<typeof batiproDocuments.$inferInsert> = {
+        status: invoice.status === "draft" ? "issued" : invoice.status,
+      };
+      if (ledgerEntryId) patch.ledgerEntryId = ledgerEntryId;
+      await tx.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, invoiceDocumentId));
+
+      // Suivi budgetaire : incremente billed_amount du chantier UNE SEULE FOIS
+      // (seulement lors de la 1re comptabilisation, ledgerEntryId absent avant).
+      if (ledgerEntryId && invoice.ledgerEntryId == null) {
+        await tx.update(batiproProjects)
+          .set({ billedAmount: sql`${batiproProjects.billedAmount} + ${totalTtc}` })
+          .where(and(eq(batiproProjects.id, invoice.projectId), eq(batiproProjects.organizationId, orgId)));
+      }
+    });
+
+    await this.publish("postInvoiceToLedger", ["documents", "projects"], "updated", invoiceDocumentId, orgId);
+    return { id: invoiceDocumentId, ledger_entry_id: ledgerEntryId, deferred };
+  }
+
+  // Enregistre un reglement (partiel/total) d'une facture. Met a jour paid_amount
+  // et le statut (issued -> paid). La comptabilisation de l'ENCAISSEMENT (ecriture
+  // banque/creance) est REPORTEE : elle depend du moyen de paiement (compte non
+  // fixe, ligne a ligne) — a brancher ulterieurement, cf. sale-invoices paidAmount.
+  async recordPayment(invoiceDocumentId: number, amount: number, orgId: number) {
+    const invoice = await this.getDocument(invoiceDocumentId, orgId);
+    if (invoice.type !== "invoice") throw new BadRequestException("Seule une facture peut recevoir un paiement.");
+    if (invoice.status === "cancelled") throw new BadRequestException("Facture annulee : aucun paiement possible.");
+    if (invoice.status === "draft") throw new BadRequestException("Emettez la facture avant d'enregistrer un paiement.");
+    if (!(amount > 0)) throw new BadRequestException("Le montant du paiement doit etre strictement positif.");
+
+    const totalTtc = Number(invoice.totalTtc ?? 0);
+    const alreadyPaid = Number(invoice.paidAmount ?? 0);
+    const newPaid = Math.round((alreadyPaid + amount) * 100) / 100;
+    if (newPaid > totalTtc + 0.001) {
+      throw new BadRequestException(`Le total regle (${newPaid}) depasse le montant de la facture (${totalTtc}).`);
+    }
+    const fullyPaid = newPaid >= totalTtc - 0.001;
+
+    await this.db.update(batiproDocuments)
+      .set({ paidAmount: String(newPaid), status: fullyPaid ? "paid" : invoice.status })
+      .where(and(eq(batiproDocuments.id, invoiceDocumentId), eq(batiproDocuments.organizationId, orgId)));
+
+    await this.publish("recordPayment", ["documents"], "updated", invoiceDocumentId, orgId);
+    return {
+      id: invoiceDocumentId,
+      paid_amount: newPaid,
+      balance: Math.round((totalTtc - newPaid) * 100) / 100,
+      status: fullyPaid ? "paid" : invoice.status,
+    };
+  }
+
+  // ── Rendu HTML imprimable (calque hr.service.ts payrollPdfHtml) ──────────
+  // Sert l'apercu gestionnaire ET la page client publique. Devise via join DB.
+  async documentHtml(id: number, orgId: number): Promise<string> {
+    const doc = await this.getDocument(id, orgId);
+    const [project] = await this.db
+      .select({ name: batiproProjects.name, code: batiproProjects.code, client: batiproProjects.client, location: batiproProjects.location })
+      .from(batiproProjects)
+      .where(and(eq(batiproProjects.id, doc.projectId), eq(batiproProjects.organizationId, orgId)))
+      .limit(1);
+    const setting = await readOrgAppSetting(this.db, orgId, { companyName: appSettings.companyName });
+    return this.renderDocumentHtml(doc, project ?? null, (setting?.companyName as string | null) || "Mon Organisation");
+  }
+
+  private renderDocumentHtml(doc: any, project: { name?: string | null; code?: string | null; client?: string | null; location?: string | null } | null, orgName: string): string {
+    const cur = doc.currencyCode || "USD";
+    const fmt = (v: any) => Number(v || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = (s: any) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+    const typeLabels: Record<string, string> = { quote: "Devis", purchase_order: "Bon de commande", situation: "Situation de travaux", invoice: "Facture" };
+    const statusLabels: Record<string, string> = {
+      draft: "Brouillon", sent: "Envoyé", viewed: "Consulté", accepted: "Accepté", refused: "Refusé", expired: "Expiré",
+      confirmed: "Confirmé", received: "Réceptionné", cancelled: "Annulé",
+      submitted: "Soumise", validated: "Validée", invoiced: "Facturée",
+    };
+    const statusColors: Record<string, string> = {
+      draft: "#f59e0b", sent: "#3b82f6", viewed: "#3b82f6", accepted: "#10b981", refused: "#ef4444", expired: "#6b7280",
+      confirmed: "#10b981", received: "#0d9488", cancelled: "#ef4444",
+      submitted: "#3b82f6", validated: "#10b981", invoiced: "#0d9488",
+    };
+    const isSituation = doc.type === "situation";
+    const status = String(doc.status || "draft");
+    const dateFr = (d: any) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }) : "—";
+    const issued = dateFr(doc.issueDate || doc.createdAt);
+    const docLines = doc.lines || [];
+    // Situation : colonnes metier (phase, % avancement cumule, montant periode).
+    const situationRows = docLines.map((l: any) => `<tr>
+        <td>${esc(l.designation)}</td>
+        <td class="amount">${l.progressPct != null ? `${fmt(l.progressPct)} %` : "—"}</td>
+        <td class="amount">${fmt(l.lineHt)}</td>
+      </tr>`).join("");
+    const rows = docLines.map((l: any) => {
+      const vat = Number(l.vatRate || 0);
+      return `<tr>
+        <td>${esc(l.designation)}</td>
+        <td class="amount">${fmt(l.quantity)}</td>
+        <td class="amount">${fmt(l.unitPrice)}</td>
+        <td class="amount">${vat ? `${fmt(vat)} %` : "—"}</td>
+        <td class="amount">${fmt(l.lineHt)}</td>
+      </tr>`;
+    }).join("");
+
+    return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(typeLabels[doc.type] || "Document")} ${esc(doc.number || "")} — ${esc(project?.name || "")}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background:#fff;padding:40px 48px;max-width:820px;margin:0 auto}
+@media print{body{padding:20px 24px}@page{margin:1cm}}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #d97706;padding-bottom:16px;margin-bottom:24px}
+.org-name{font-size:18px;font-weight:700;color:#d97706;letter-spacing:1px}
+.org-sub{font-size:11px;color:#666;margin-top:2px}
+.doc-title{text-align:right}
+.doc-title h1{font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.doc-title .num{font-size:13px;color:#444;margin-top:2px}
+.status-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;color:#fff;background:${statusColors[status] || "#999"};margin-top:4px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px}
+.info-box label{font-size:10px;text-transform:uppercase;color:#666;letter-spacing:.5px;display:block;margin-bottom:2px}
+.info-box .v{font-size:13px;font-weight:600}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+th{background:#f1f5f9;font-size:11px;text-transform:uppercase;color:#64748b;letter-spacing:.4px;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0}
+td{padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
+.amount{text-align:right;font-variant-numeric:tabular-nums}
+.totals{width:280px;margin-left:auto}
+.totals td{padding:6px 12px}
+.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #e2e8f0}
+.ttc-row td{font-weight:700;font-size:15px;background:#d97706;color:#fff}
+.notes{font-size:11px;color:#666;font-style:italic;margin-top:8px}
+.mentions{font-size:11px;color:#666;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px}
+.footer{display:flex;justify-content:space-between;margin-top:40px;padding-top:20px;border-top:1px solid #e2e8f0;font-size:11px;color:#999}
+.sig-line{margin-top:40px;border-top:1px solid #999;min-width:180px;padding-top:4px;font-size:11px;color:#666}
+</style></head><body>
+<div class="header">
+  <div><div class="org-name">${esc(orgName)}</div><div class="org-sub">BâtiPro — Gestion de chantier</div></div>
+  <div class="doc-title">
+    <h1>${esc(typeLabels[doc.type] || "Document")}</h1>
+    <div class="num">${esc(doc.number || "")}</div>
+    <span class="status-badge">${esc(statusLabels[status] || status)}</span>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div class="info-box"><label>Chantier</label><div class="v">${esc(project?.name || "—")}${project?.code ? ` (${esc(project.code)})` : ""}</div></div>
+  <div class="info-box"><label>${doc.type === "purchase_order" ? "Fournisseur / sous-traitant" : "Client"}</label><div class="v">${esc(doc.type === "purchase_order" ? (doc.supplierName || doc.subcontractorName || "—") : (project?.client || "—"))}</div></div>
+  <div class="info-box"><label>Date d'émission</label><div class="v">${issued}</div></div>
+  <div class="info-box"><label>Échéance / validité</label><div class="v">${dateFr(doc.dueDate)}</div></div>
+</div>
+
+${isSituation
+  ? `<table>
+  <thead><tr><th>Phase / avancement</th><th class="amount">Avancement cumulé</th><th class="amount">Montant période (${esc(cur)})</th></tr></thead>
+  <tbody>${situationRows || `<tr><td colspan="3" style="color:#999;text-align:center;font-style:italic">Aucune phase</td></tr>`}</tbody>
+</table>`
+  : `<table>
+  <thead><tr><th>Désignation</th><th class="amount">Qté</th><th class="amount">P.U. (${esc(cur)})</th><th class="amount">TVA</th><th class="amount">Total HT (${esc(cur)})</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="5" style="color:#999;text-align:center;font-style:italic">Aucune ligne</td></tr>`}</tbody>
+</table>`}
+
+<table class="totals">
+  <tbody>
+    <tr><td>Total HT</td><td class="amount">${fmt(doc.totalHt)} ${esc(cur)}</td></tr>
+    <tr class="total-row"><td>TVA</td><td class="amount">${fmt(doc.totalVat)} ${esc(cur)}</td></tr>
+    <tr class="ttc-row"><td>Total TTC</td><td class="amount">${fmt(doc.totalTtc)} ${esc(cur)}</td></tr>
+  </tbody>
+</table>
+
+${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
+
+<div class="mentions">
+  ${doc.type === "purchase_order"
+    ? `Bon de commande adressé au fournisseur/sous-traitant. Les prix sont exprimés en ${esc(cur)}. Merci de confirmer réception et délai de livraison.`
+    : isSituation
+    ? `Situation de travaux : décompte de l'avancement du chantier sur la période. Le montant à facturer correspond au delta d'avancement des phases par rapport à la situation précédente. Montants exprimés en ${esc(cur)}.`
+    : `Devis valable jusqu'à la date d'échéance indiquée. Les prix sont exprimés en ${esc(cur)}. Bon pour accord : signature du client valant acceptation.`}
+</div>
+
+<div class="footer">
+  <div>Réf. ${esc(doc.number || `#${doc.id}`)} · Émis le ${issued}</div>
+  <div style="text-align:right"><div>Bon pour accord</div><div class="sig-line">Date et signature</div></div>
+</div>
+</body></html>`;
+  }
+
+  // ── Acces client public par token (devis) ────────────────────────────────
+  private async resolveDocumentToken(token: string) {
+    const [doc] = await this.db
+      .select({
+        ...getTableColumns(batiproDocuments),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
+      .where(and(eq(batiproDocuments.clientToken, token), eq(batiproDocuments.direction, "outbound"), eq(batiproDocuments.isActive, 1)))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Document introuvable ou lien revoque.");
+    if (doc.clientTokenExpiry && new Date(doc.clientTokenExpiry).getTime() < Date.now()) {
+      throw new GoneException("Ce lien a expire.");
+    }
+    return doc;
+  }
+
+  // Rend le HTML du devis pour le client (public). Log "viewed" best-effort.
+  async publicDocumentHtml(token: string): Promise<string> {
+    const doc = await this.resolveDocumentToken(token);
+    const orgId = doc.organizationId;
+    const lines = await this.db
+      .select()
+      .from(batiproDocumentLines)
+      .where(and(eq(batiproDocumentLines.documentId, doc.id), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
+      .orderBy(batiproDocumentLines.position);
+    const [project] = await this.db
+      .select({ name: batiproProjects.name, code: batiproProjects.code, client: batiproProjects.client, location: batiproProjects.location })
+      .from(batiproProjects)
+      .where(and(eq(batiproProjects.id, doc.projectId), eq(batiproProjects.organizationId, orgId)))
+      .limit(1);
+    const setting = await readOrgAppSetting(this.db, orgId, { companyName: appSettings.companyName });
+    if (doc.status === "sent") {
+      try { await this.db.update(batiproDocuments).set({ status: "viewed" as any }).where(eq(batiproDocuments.id, doc.id)); } catch { /* best-effort */ }
+    }
+    return this.renderDocumentHtml({ ...doc, lines }, project ?? null, (setting?.companyName as string | null) || "Mon Organisation");
+  }
+
+  // Le client accepte le devis (public). Un devis accepte une fois suffit.
+  async acceptDocument(token: string, audit?: { ip?: string; ua?: string }) {
+    const doc = await this.resolveDocumentToken(token);
+    if (doc.status === "accepted") return { id: doc.id, status: "accepted", message: "Ce devis est deja accepte." };
+    if (doc.type !== "quote") throw new BadRequestException("Seuls les devis peuvent etre acceptes.");
+    const auditNote = audit ? `\n[Accepté] ${new Date().toISOString()} ip=${audit.ip ?? "?"} ua=${(audit.ua ?? "?").slice(0, 120)}` : "";
+    await this.db.update(batiproDocuments).set({
+      status: "accepted",
+      notes: doc.notes ? `${doc.notes}${auditNote}` : (auditNote.trim() || null),
+    }).where(eq(batiproDocuments.id, doc.id));
+    await this.publish("acceptDocument", ["documents"], "updated", doc.id, doc.organizationId);
+    return { id: doc.id, status: "accepted", message: "Devis accepte. Merci." };
   }
 
   private async publish(kind: string, tables: string[], action: "created" | "updated" | "deleted", entityId: number | string, orgId: number) {

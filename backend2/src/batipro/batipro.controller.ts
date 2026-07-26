@@ -4,6 +4,7 @@ import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentBatiproProject, type BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { BatiproProjectGuard } from "../auth/guards/batipro-project.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -13,16 +14,22 @@ import {
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
+  CreateBatiproDocumentDto,
   CreateBatiproMaterialDto,
   CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
+  CreateBatiproSituationDocumentDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
+  CreateSubcontractorLinkDto,
+  RecordPaymentDto,
+  ReviewSubmissionDto,
   UpdateBatiproBuildingLevelDto,
   UpdateBatiproBuildingModelDto,
   UpdateBatiproChangeOrderDto,
   UpdateBatiproCrewDto,
+  UpdateBatiproDocumentDto,
   UpdateBatiproMaterialDto,
   UpdateBatiproPhaseDto,
   UpdateBatiproProjectDto,
@@ -378,5 +385,153 @@ export class BatiproController {
   @Delete("building-model/:id/plan")
   deleteModelPlan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.deleteModelPlan(id, orgId);
+  }
+
+  // ── Portail sous-traitant : lien + revue des soumissions (Phase 0) ───────
+  @ApiOperation({ summary: "Generate a subcontractor submission link (token opaque)" })
+  @Permissions("create-batipro")
+  @Post("documents/subcontractor-link")
+  createSubcontractorLink(@Body() body: CreateSubcontractorLinkDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createSubcontractorLink(body, orgId);
+  }
+
+  @ApiOperation({ summary: "List inbound subcontractor submissions (optionnel: par chantier)" })
+  @Permissions("readAll-batipro")
+  @Get("documents/submissions")
+  submissions(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
+    return this.batipro.listInboundSubmissions(orgId, projectId ? Number(projectId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Lines of a subcontractor submission" })
+  @Permissions("readAll-batipro")
+  @Get("documents/submissions/:id/lines")
+  submissionLines(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.submissionLines(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Validate or return a subcontractor submission" })
+  @Permissions("update-batipro")
+  @Post("documents/submissions/:id/review")
+  reviewSubmission(@Param("id", ParseIntPipe) id: number, @Body() body: ReviewSubmissionDto, @CurrentOrg() orgId: number) {
+    return this.batipro.reviewSubmission(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream the file attached to a subcontractor submission" })
+  @Permissions("readAll-batipro")
+  @Get("documents/submissions/:id/file")
+  async submissionFile(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const file = await this.batipro.submissionFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  // ── Documents sortants : devis (Phase 1) ─────────────────────────────────
+  // NB : routes litterales (submissions, subcontractor-link) declarees plus haut ;
+  // les routes a parametre :id restent en fin de declaration (matching NestJS).
+  @ApiOperation({ summary: "List outbound documents (devis par defaut) — filtre type/direction/chantier" })
+  @Permissions("readAll-batipro")
+  @Get("documents")
+  documents(
+    @CurrentOrg() orgId: number,
+    @Query("project_id") projectId?: string,
+    @Query("type") type?: string,
+    @Query("direction") direction?: string,
+  ) {
+    return this.batipro.listDocuments(orgId, {
+      projectId: projectId ? Number(projectId) : undefined,
+      type: type || undefined,
+      direction: direction || undefined,
+    });
+  }
+
+  @ApiOperation({ summary: "Suivi budgetaire chantier : devis accepte vs BC engages vs budget/contrat" })
+  @Permissions("readAll-batipro")
+  @Get("documents/budget-summary")
+  budgetSummary(@Query("project_id", ParseIntPipe) projectId: number, @CurrentOrg() orgId: number) {
+    return this.batipro.projectBudgetSummary(projectId, orgId);
+  }
+
+  @ApiOperation({ summary: "Etat d'avancement cumule par phase (pre-remplissage d'une situation)" })
+  @Permissions("readAll-batipro")
+  @Get("documents/situations-advancement")
+  situationsAdvancement(@Query("project_id", ParseIntPipe) projectId: number, @CurrentOrg() orgId: number) {
+    return this.batipro.situationsAdvancement(projectId, orgId);
+  }
+
+  @ApiOperation({ summary: "Create an outbound document (devis ou bon de commande)" })
+  @Permissions("create-batipro")
+  @Post("documents")
+  createDocument(@Body() body: CreateBatiproDocumentDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createDocument(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a situation de travaux (type=situation, calcul du montant periode)" })
+  @Permissions("create-batipro")
+  @Post("documents/situations")
+  createSituationDocument(@Body() body: CreateBatiproSituationDocumentDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createSituationDocument(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate an invoice from a validated situation (type=invoice)" })
+  @Permissions("create-batipro")
+  @Post("documents/situations/:id/invoice")
+  createInvoiceFromSituation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.createInvoiceFromSituation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Get an outbound document (+ lignes)" })
+  @Permissions("readAll-batipro")
+  @Get("documents/:id")
+  getDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.getDocument(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Update an outbound document (patch partiel, recalcul totaux si lignes)" })
+  @Permissions("update-batipro")
+  @Put("documents/:id")
+  updateDocument(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproDocumentDto, @CurrentOrg() orgId: number) {
+    return this.batipro.updateDocument(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete an outbound document" })
+  @Permissions("delete-batipro")
+  @Delete("documents/:id")
+  deleteDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.deleteDocument(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Render the printable HTML preview of a document" })
+  @Permissions("readAll-batipro")
+  @Get("documents/:id/html")
+  async documentHtml(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const html = await this.batipro.documentHtml(id, orgId);
+    res.set({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store" });
+    return html;
+  }
+
+  @ApiOperation({ summary: "Generate/renew the client share token of a document" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/share")
+  shareDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.shareDocument(id, orgId);
+  }
+
+  // ── Phase 4 : emission (comptabilisation ledger) + paiement d'une facture ──
+  @ApiOperation({ summary: "Emet une facture et la comptabilise (ledger postByRules, idempotent)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/issue")
+  issueInvoice(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.postInvoiceToLedger(id, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Enregistre un reglement (partiel/total) sur une facture" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/payment")
+  recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number) {
+    return this.batipro.recordPayment(id, body.amount, orgId);
   }
 }

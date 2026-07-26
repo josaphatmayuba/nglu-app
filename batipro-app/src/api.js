@@ -63,6 +63,37 @@ async function blobUrl(path, retried = false) {
   return { url: URL.createObjectURL(blob), type: blob.type };
 }
 
+// Portail sous-traitant : appels PUBLICS (aucun JWT ; l'autorisation = le token
+// opaque dans l'URL). base = /api/batipro/public/submit.
+const PUBLIC_BASE = `${API_ROOT}/batipro/public/submit`;
+async function publicJson(path, init = {}) {
+  const res = await fetch(`${PUBLIC_BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+async function publicUpload(path, formData) {
+  const res = await fetch(`${PUBLIC_BASE}${path}`, { method: "POST", body: formData });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export const publicApi = {
+  submitContext: (token) => publicJson(`/${encodeURIComponent(token)}`),
+  submitDocument: (token, body) => publicJson(`/${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(body || {}) }),
+  attachFile: (token, documentId, file) => { const fd = new FormData(); fd.append("file", file); return publicUpload(`/${encodeURIComponent(token)}/file/${documentId}`, fd); },
+};
+
 export const api = {
   dashboard: () => jsonFetch("/dashboard"),
   projects: () => jsonFetch("/projects"),
@@ -114,5 +145,56 @@ export const api = {
   // Import du plan de l'architecte (image/PDF) — Phase 2
   uploadModelPlan: (modelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-model/${modelId}/plan`, fd); },
   modelPlanUrl: (modelId) => blobUrl(`/building-model/${modelId}/plan`),
-  deleteModelPlan: (modelId) => jsonFetch(`/building-model/${modelId}/plan`, { method: "DELETE" })
+  deleteModelPlan: (modelId) => jsonFetch(`/building-model/${modelId}/plan`, { method: "DELETE" }),
+  // Portail sous-traitant (Phase 0) — cote gestionnaire
+  createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),
+  submissions: (projectId) => jsonFetch(`/documents/submissions${projectId ? `?project_id=${projectId}` : ""}`),
+  submissionLines: (id) => jsonFetch(`/documents/submissions/${id}/lines`),
+  reviewSubmission: (id, b) => jsonFetch(`/documents/submissions/${id}/review`, { method: "POST", body: JSON.stringify(b || {}) }),
+  submissionFileUrl: (id) => blobUrl(`/documents/submissions/${id}/file`),
+  // Documents sortants : devis (Phase 1)
+  documents: (projectId, type = "quote") => jsonFetch(`/documents?direction=outbound${type ? `&type=${type}` : ""}${projectId ? `&project_id=${projectId}` : ""}`),
+  getDocument: (id) => jsonFetch(`/documents/${id}`),
+  createDocument: (b) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateDocument: (id, b) => jsonFetch(`/documents/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
+  documentHtmlUrl: (id) => blobUrl(`/documents/${id}/html`),
+  shareDocument: (id) => jsonFetch(`/documents/${id}/share`, { method: "POST", body: "{}" }),
+  // Bons de commande (Phase 2) : reutilise les endpoints /documents generiques (type=purchase_order)
+  budgetSummary: (projectId) => jsonFetch(`/documents/budget-summary?project_id=${projectId}`),
+  // Situations de travaux (Phase 3, type=situation) : coexiste avec les situations legacy (/situations)
+  situationsAdvancement: (projectId) => jsonFetch(`/documents/situations-advancement?project_id=${projectId}`),
+  createSituationDocument: (b) => jsonFetch("/documents/situations", { method: "POST", body: JSON.stringify(b || {}) }),
+  // Factures (Phase 4, type=invoice) : generation depuis situation, emission (compta ledger), paiement
+  invoices: (projectId) => jsonFetch(`/documents?direction=outbound&type=invoice${projectId ? `&project_id=${projectId}` : ""}`),
+  createInvoiceFromSituation: (situationId) => jsonFetch(`/documents/situations/${situationId}/invoice`, { method: "POST", body: "{}" }),
+  issueInvoice: (id) => jsonFetch(`/documents/${id}/issue`, { method: "POST", body: "{}" }),
+  recordPayment: (id, amount) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount }) })
+};
+
+// Lien public partageable a copier/envoyer au sous-traitant.
+export function subcontractorSubmitUrl(token) {
+  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
+  return `${origin}/batipro/public/submit/${token}`;
+}
+
+// Lien public du devis a copier/envoyer au client (page /batipro/public/document/:token).
+export function clientDocumentUrl(token) {
+  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
+  return `${origin}/batipro/public/document/${token}`;
+}
+
+// Appels publics client (devis) : aucun JWT, autorisation = token opaque.
+const PUBLIC_DOC_BASE = `${API_ROOT}/batipro/public/documents`;
+export const publicDocApi = {
+  htmlUrl: (token) => `${PUBLIC_DOC_BASE}/${encodeURIComponent(token)}`,
+  accept: async (token) => {
+    const res = await fetch(`${PUBLIC_DOC_BASE}/${encodeURIComponent(token)}/accept`, { method: "POST" });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
 };

@@ -1,5 +1,5 @@
 import React from "react";
-import { api } from "./api.js";
+import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 
@@ -63,14 +63,18 @@ const NAV = [
   { id: "chantiers", label: "Projets / chantiers", icon: "hardHat" },
   { id: "planning", label: "Planning (Gantt)", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D & matériaux", icon: "rotate3d", ia: true },
+  { id: "devis", label: "Devis clients", icon: "receipt" },
+  { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
   { id: "situations", label: "Situations & avenants", icon: "receipt" },
+  { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
+  { id: "factures", label: "Factures", icon: "receipt" },
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "plan3d", "materiaux"];
-const MOB_MORE = ["planning", "situations", "soustraitants"];
+const MOB_MORE = ["planning", "devis", "bonscommande", "situations", "situationstravaux", "factures", "soustraitants"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -163,7 +167,11 @@ function App() {
     chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} />,
     planning: <Planning projects={projectRows} canMutate={canMutate} />,
     plan3d: <Plan3D projects={projectRows} materials={materialRows} canMutate={canMutate} />,
+    devis: <Devis projects={projectRows} canMutate={canMutate} />,
+    bonscommande: <BonsCommande projects={projectRows} canMutate={canMutate} />,
     situations: <Situations projects={projectRows} canMutate={canMutate} />,
+    situationstravaux: <SituationsTravaux projects={projectRows} canMutate={canMutate} />,
+    factures: <Factures projects={projectRows} canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
     soustraitants: <SousTraitants projects={projectRows} canMutate={canMutate} />,
@@ -965,6 +973,849 @@ function Plan3D({ projects, materials, canMutate }) {
     </>
   );
 }
+/* ── Devis clients (documents sortants — Phase 1) ──────────────────────── */
+const DOC_STATUS_TONE = { draft: "ink", sent: "amber", viewed: "amber", accepted: "emerald", refused: "rose", expired: "ink" };
+const DOC_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", viewed: "Consulté", accepted: "Accepté", refused: "Refusé", expired: "Expiré" };
+const emptyDocLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
+
+function Devis({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [docs, setDocs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [error, setError] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+  const cur = selected?.currencyCode;
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setDocs([]); setLoading(false); return; }
+    setLoading(true);
+    api.documents(projectId, "quote")
+      .then((d) => setDocs(d || []))
+      .catch(() => setDocs([]))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const openPreview = async (id) => {
+    try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const removeDoc = async (id) => {
+    if (!window.confirm("Supprimer ce devis ?")) return;
+    try { await api.deleteDocument(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Documents</p><h2 className="title font-display">Devis clients</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau devis</button>
+        </div>
+      </div>
+
+      {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+
+      <div className="card table-card">
+        <table className="bp">
+          <thead><tr><th>Numéro</th><th>Émis le</th><th>Total TTC</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={5} className="muted">Chargement…</td></tr> :
+              !docs.length ? <tr><td colSpan={5} className="muted">Aucun devis pour ce chantier.</td></tr> :
+              docs.map((d) => (
+                <tr key={d.id}>
+                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td><span className={`chip ${DOC_STATUS_TONE[d.status] || "ink"}`}>{DOC_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
+                      {canMutate && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
+                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {(modal?.kind === "new" || modal?.kind === "edit") && (
+        <DevisEditorModal
+          docId={modal.kind === "edit" ? modal.id : null}
+          projectId={projectId}
+          currencyId={selected?.currencyId}
+          currencyCode={cur}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load(); }}
+        />
+      )}
+      {modal?.kind === "share" && <DevisShareModal docId={modal.id} onClose={() => setModal(null)} onShared={load} />}
+    </>
+  );
+}
+
+function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose, onSaved }) {
+  const [lines, setLines] = React.useState([emptyDocLine()]);
+  const [dueDate, setDueDate] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [phases, setPhases] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(!!docId);
+
+  React.useEffect(() => {
+    api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+    if (docId) {
+      api.getDocument(docId)
+        .then((d) => {
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "" })) : [emptyDocLine()]);
+          setDueDate(d.dueDate || "");
+          setNotes(d.notes || "");
+        })
+        .catch((e) => setError(e.message || String(e)))
+        .finally(() => setLoading(false));
+    }
+  }, [docId, projectId]);
+
+  const setLine = (i, k, v) => setLines((c) => c.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
+  const addLine = () => setLines((c) => [...c, emptyDocLine()]);
+  const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
+
+  const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
+  const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
+  const totalTtc = totalHt + totalVat;
+
+  const save = async () => {
+    setError("");
+    const clean = lines.filter((l) => l.designation.trim());
+    if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    setBusy(true);
+    try {
+      const payload = {
+        project_id: projectId,
+        currency_id: currencyId || undefined,
+        due_date: dueDate || undefined,
+        notes: notes.trim() || undefined,
+        lines: clean.map((l) => ({
+          designation: l.designation.trim(),
+          quantity: n(l.quantity),
+          unit_price: n(l.unit_price),
+          vat_rate: n(l.vat_rate),
+          phase_id: l.phase_id ? Number(l.phase_id) : undefined,
+        })),
+      };
+      docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);
+      onSaved();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 720 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{docId ? "Modifier le devis" : "Nouveau devis"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {loading ? <p className="muted">Chargement…</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
+                    <th style={{ padding: "6px" }}>Désignation</th><th style={{ padding: "6px" }}>Qté</th><th style={{ padding: "6px" }}>P.U.</th>
+                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: "3px 6px" }}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ minWidth: 180, width: "100%" }} placeholder="Prestation…" /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ width: 70 }} /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ width: 90 }} /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ width: 70 }} /></td>
+                      <td style={{ padding: "3px 6px" }}>
+                        <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ minWidth: 120 }}>
+                          <option value="">—</option>
+                          {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "3px 6px" }}><button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeLine(i)}>✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
+
+            <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, currencyCode)}</strong></div>
+            </div>
+
+            <label className="field"><span>Validité / échéance</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
+            <label className="field"><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions…" /></label>
+
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer le devis"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DevisShareModal({ docId, onClose, onShared }) {
+  const [link, setLink] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+
+  const generate = async () => {
+    setBusy(true); setError("");
+    try {
+      const res = await api.shareDocument(docId);
+      setLink(clientDocumentUrl(res.token));
+      onShared && onShared();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
+  const whatsapp = () => window.open(`https://wa.me/?text=${encodeURIComponent(`Votre devis : ${link}`)}`, "_blank", "noopener");
+
+  React.useEffect(() => { generate(); }, []);
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card">
+        <div className="modal-head">
+          <div><h2 className="font-display">Envoyer au client</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+        {busy && !link ? <p className="muted">Génération du lien…</p> : link ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <p style={{ fontSize: 13, color: "var(--ink-500)" }}>Partagez ce lien avec le client (il pourra consulter et accepter le devis) :</p>
+            <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13 }} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" onClick={copy}>{copied ? "Copié ✓" : "Copier"}</button>
+              <button className="btn btn-amber grad-amber" onClick={whatsapp}>WhatsApp</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ── Bons de commande (documents sortants — Phase 2) ─────────────────────
+   Calque de Devis : meme socle batipro_documents (type=purchase_order),
+   ajoute le rattachement fournisseur/sous-traitant + le suivi budgétaire
+   chantier (devis accepté vs BC engagés vs budget/contrat). */
+const PO_STATUS_TONE = { draft: "ink", sent: "amber", confirmed: "emerald", received: "emerald", cancelled: "rose" };
+const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", received: "Réceptionné", cancelled: "Annulé" };
+const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
+
+function BonsCommande({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [docs, setDocs] = React.useState([]);
+  const [budget, setBudget] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(null);
+  const [error, setError] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+  const cur = selected?.currencyCode;
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setDocs([]); setBudget(null); setLoading(false); return; }
+    setLoading(true);
+    Promise.all([
+      api.documents(projectId, "purchase_order"),
+      api.budgetSummary(projectId).catch(() => null),
+    ])
+      .then(([d, b]) => { setDocs(d || []); setBudget(b); })
+      .catch(() => { setDocs([]); setBudget(null); })
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const openPreview = async (id) => {
+    try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const removeDoc = async (id) => {
+    if (!window.confirm("Supprimer ce bon de commande ?")) return;
+    try { await api.deleteDocument(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  const budgetCur = budget?.currency_code || cur;
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Documents</p><h2 className="title font-display">Bons de commande</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau BC</button>
+        </div>
+      </div>
+
+      {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+
+      {budget && (
+        <div className="card pad" style={{ marginBottom: 12 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Suivi budgétaire chantier</p>
+          <BudgetBar
+            label="Engagé (BC) vs budget/contrat"
+            txt={`${money(budget.purchase_orders_engaged, budgetCur)} / ${money(budget.contract_amount || budget.budget, budgetCur)}`}
+            pct={budget.engagement_rate != null ? Math.min(100, Math.round(budget.engagement_rate)) : 0}
+          />
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--ink-500)" }}>
+            <span>Devis accepté (prévu) : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.quote_accepted, budgetCur)}</strong></span>
+            <span>Déjà dépensé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.spent, budgetCur)}</strong></span>
+            <span>Reste vs budget : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.remaining_vs_budget, budgetCur)}</strong></span>
+          </div>
+        </div>
+      )}
+
+      <div className="card table-card">
+        <table className="bp">
+          <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+              !docs.length ? <tr><td colSpan={6} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
+              docs.map((d) => (
+                <tr key={d.id}>
+                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td>{d.supplierName || d.subcontractorName || "—"}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
+                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {(modal?.kind === "new" || modal?.kind === "edit") && (
+        <BonCommandeEditorModal
+          docId={modal.kind === "edit" ? modal.id : null}
+          projectId={projectId}
+          currencyId={selected?.currencyId}
+          currencyCode={cur}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, onClose, onSaved }) {
+  const [lines, setLines] = React.useState([emptyPoLine()]);
+  const [dueDate, setDueDate] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [phases, setPhases] = React.useState([]);
+  const [suppliers, setSuppliers] = React.useState([]);
+  const [subcontractors, setSubcontractors] = React.useState([]);
+  const [supplierId, setSupplierId] = React.useState("");
+  const [subcontractorId, setSubcontractorId] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(!!docId);
+
+  React.useEffect(() => {
+    api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+    api.suppliers().then((s) => setSuppliers(s || [])).catch(() => setSuppliers([]));
+    api.subcontractors().then((s) => setSubcontractors(s || [])).catch(() => setSubcontractors([]));
+    if (docId) {
+      api.getDocument(docId)
+        .then((d) => {
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "" })) : [emptyPoLine()]);
+          setDueDate(d.dueDate || "");
+          setNotes(d.notes || "");
+          setSupplierId(d.supplierId || "");
+          setSubcontractorId(d.subcontractorId || "");
+        })
+        .catch((e) => setError(e.message || String(e)))
+        .finally(() => setLoading(false));
+    }
+  }, [docId, projectId]);
+
+  const setLine = (i, k, v) => setLines((c) => c.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
+  const addLine = () => setLines((c) => [...c, emptyPoLine()]);
+  const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
+
+  const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
+  const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
+  const totalTtc = totalHt + totalVat;
+
+  const save = async () => {
+    setError("");
+    const clean = lines.filter((l) => l.designation.trim());
+    if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    setBusy(true);
+    try {
+      const payload = {
+        project_id: projectId,
+        type: "purchase_order",
+        currency_id: currencyId || undefined,
+        supplier_id: supplierId ? Number(supplierId) : undefined,
+        subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
+        due_date: dueDate || undefined,
+        notes: notes.trim() || undefined,
+        lines: clean.map((l) => ({
+          designation: l.designation.trim(),
+          quantity: n(l.quantity),
+          unit_price: n(l.unit_price),
+          vat_rate: n(l.vat_rate),
+          phase_id: l.phase_id ? Number(l.phase_id) : undefined,
+        })),
+      };
+      docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);
+      onSaved();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 720 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{docId ? "Modifier le bon de commande" : "Nouveau bon de commande"}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {loading ? <p className="muted">Chargement…</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: 1, minWidth: 200 }}>
+                <span>Fournisseur</span>
+                <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+                  <option value="">—</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <label className="field" style={{ flex: 1, minWidth: 200 }}>
+                <span>Sous-traitant</span>
+                <select value={subcontractorId} onChange={(e) => setSubcontractorId(e.target.value)}>
+                  <option value="">—</option>
+                  {subcontractors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+            </div>
+
+            {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
+                    <th style={{ padding: "6px" }}>Désignation</th><th style={{ padding: "6px" }}>Qté</th><th style={{ padding: "6px" }}>P.U.</th>
+                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i}>
+                      <td style={{ padding: "3px 6px" }}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ minWidth: 180, width: "100%" }} placeholder="Article / prestation…" /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ width: 70 }} /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ width: 90 }} /></td>
+                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ width: 70 }} /></td>
+                      <td style={{ padding: "3px 6px" }}>
+                        <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ minWidth: 120 }}>
+                          <option value="">—</option>
+                          {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "3px 6px" }}><button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeLine(i)}>✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
+
+            <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, currencyCode)}</strong></div>
+            </div>
+
+            <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
+            <label className="field"><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions…" /></label>
+
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer le bon de commande"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Situations de travaux (Phase 3 — documentaire, type=situation) ───────
+   Nouveau : décompte périodique d'avancement branché sur les PHASES du chantier,
+   sur le socle batipro_documents (type=situation). COEXISTE avec l'onglet legacy
+   "Situations & avenants" (table batipro_situations) — aucun des deux ne casse
+   l'autre. Montant de période calculé serveur = marché_phase × (Δ avancement). */
+const SIT_DOC_STATUS_TONE = { draft: "ink", submitted: "amber", validated: "emerald", invoiced: "emerald" };
+const SIT_DOC_STATUS_LABEL = { draft: "Brouillon", submitted: "Soumise", validated: "Validée", invoiced: "Facturée" };
+
+function SituationsTravaux({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [docs, setDocs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [modal, setModal] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+  const cur = selected?.currencyCode;
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setDocs([]); setLoading(false); return; }
+    setLoading(true);
+    api.documents(projectId, "situation")
+      .then((d) => setDocs(d || []))
+      .catch(() => setDocs([]))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const openPreview = async (id) => {
+    try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const removeDoc = async (id) => {
+    if (!window.confirm("Supprimer cette situation de travaux ?")) return;
+    try { await api.deleteDocument(id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Documents</p><h2 className="title font-display">Situations de travaux</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal(true)}><Icon name="filePlus" /> Nouvelle situation</button>
+        </div>
+      </div>
+
+      {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+
+      <div className="card table-card">
+        <table className="bp">
+          <thead><tr><th>Numéro</th><th>Période</th><th>Émise le</th><th>Montant période TTC</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+              !docs.length ? <tr><td colSpan={6} className="muted">Aucune situation de travaux pour ce chantier.</td></tr> :
+              docs.map((d) => (
+                <tr key={d.id}>
+                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{(d.notes && /Période\s*:\s*([^\n]+)/.exec(d.notes)?.[1]) || "—"}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td><span className={`chip ${SIT_DOC_STATUS_TONE[d.status] || "ink"}`}>{SIT_DOC_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <SituationTravauxEditorModal
+          projectId={projectId}
+          currencyId={selected?.currencyId}
+          currencyCode={cur}
+          onClose={() => setModal(false)}
+          onSaved={() => { setModal(false); load(); }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ── Factures (Phase 4 — type=invoice, compta ledger) ─────────────────────
+   Génération depuis une situation VALIDÉE, émission (= comptabilisation ledger
+   via postByRules, idempotent), suivi paiement/solde. Montants + devise DB. */
+const INV_STATUS_TONE = { draft: "ink", issued: "amber", paid: "emerald", cancelled: "rose" };
+const INV_STATUS_LABEL = { draft: "Brouillon", issued: "Émise", paid: "Payée", cancelled: "Annulée" };
+
+function Factures({ projects, canMutate }) {
+  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+  const [invoices, setInvoices] = React.useState([]);
+  const [situations, setSituations] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(0);
+  const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+
+  const selected = projects.find((p) => p.id === projectId);
+  const cur = selected?.currencyCode;
+
+  const load = React.useCallback(() => {
+    if (!projectId) { setInvoices([]); setSituations([]); setLoading(false); return; }
+    setLoading(true);
+    Promise.all([
+      api.invoices(projectId).catch(() => []),
+      api.documents(projectId, "situation").catch(() => []),
+    ])
+      .then(([inv, sit]) => {
+        setInvoices(inv || []);
+        // Seules les situations VALIDÉES (pas encore facturées) sont facturables.
+        setSituations((sit || []).filter((s) => s.status === "validated"));
+      })
+      .finally(() => setLoading(false));
+  }, [projectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const openPreview = async (id) => {
+    try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+
+  const generateFrom = async (situationId) => {
+    setError(""); setNotice(""); setBusy(situationId);
+    try { await api.createInvoiceFromSituation(situationId); setNotice("Facture générée (brouillon)."); load(); }
+    catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
+  const issue = async (id) => {
+    if (!window.confirm("Émettre et comptabiliser cette facture ? Une écriture comptable sera créée.")) return;
+    setError(""); setNotice(""); setBusy(id);
+    try {
+      const r = await api.issueInvoice(id);
+      setNotice(r?.deferred
+        ? "Facture émise. Écriture comptable EN ATTENTE d'approbation (gate)."
+        : `Facture émise et comptabilisée${r?.ledger_entry_id ? ` (écriture #${r.ledger_entry_id})` : ""}.`);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
+  const pay = async (d) => {
+    const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
+    const raw = window.prompt(`Montant du règlement (solde : ${money(balance, d.currencyCode || cur)}) :`, String(balance));
+    if (raw == null) return;
+    const amount = Number(raw);
+    if (!(amount > 0)) { setError("Montant invalide."); return; }
+    setError(""); setNotice(""); setBusy(d.id);
+    try {
+      const r = await api.recordPayment(d.id, amount);
+      setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Documents</p><h2 className="title font-display">Factures</h2></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      {notice && <div style={{ color: "var(--emerald-600, #047857)", fontSize: 13, marginBottom: 8 }}>{notice}</div>}
+
+      {canMutate && situations.length > 0 && (
+        <div className="card pad" style={{ marginBottom: 12 }}>
+          <div className="kpi-label" style={{ marginBottom: 6 }}>Situations validées à facturer</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {situations.map((s) => (
+              <button key={s.id} className="btn btn-amber grad-amber" disabled={busy === s.id} onClick={() => generateFrom(s.id)}>
+                <Icon name="filePlus" /> {s.number || `#${s.id}`} — {money(s.totalTtc, s.currencyCode || cur)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card table-card" style={{ overflowX: "auto" }}>
+        <table className="bp">
+          <thead><tr><th>Numéro</th><th>Émise le</th><th>Total TTC</th><th>Réglé</th><th>Solde</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={7} className="muted">Chargement…</td></tr> :
+              !invoices.length ? <tr><td colSpan={7} className="muted">Aucune facture pour ce chantier.</td></tr> :
+              invoices.map((d) => {
+                const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
+                return (
+                  <tr key={d.id}>
+                    <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                    <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                    <td>{money(d.paidAmount, d.currencyCode || cur)}</td>
+                    <td>{money(balance, d.currencyCode || cur)}</td>
+                    <td><span className={`chip ${INV_STATUS_TONE[d.status] || "ink"}`}>{INV_STATUS_LABEL[d.status] || d.status}</span></td>
+                    <td>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                        {canMutate && d.status === "draft" && (
+                          <button className="link" disabled={busy === d.id} onClick={() => issue(d.id)}>Émettre / Comptabiliser</button>
+                        )}
+                        {canMutate && (d.status === "issued") && (
+                          <button className="link" style={{ color: "var(--emerald-600)" }} disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onClose, onSaved }) {
+  const [advancement, setAdvancement] = React.useState(null);
+  const [rows, setRows] = React.useState([]); // { phase_id, label, contract_amount, previous_progress_pct, progress_pct }
+  const [period, setPeriod] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    setLoading(true);
+    api.situationsAdvancement(projectId)
+      .then((a) => {
+        setAdvancement(a);
+        setRows((a.phases || []).map((p) => ({
+          phase_id: p.phase_id,
+          label: p.label,
+          contract_amount: p.contract_amount,
+          previous_progress_pct: p.previous_progress_pct,
+          // Pré-remplit avec le cumul précédent (le gestionnaire relève à la valeur courante).
+          progress_pct: p.previous_progress_pct,
+        })));
+      })
+      .catch((e) => setError(e.message || String(e)))
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  const setRow = (i, v) => setRows((c) => c.map((r, idx) => (idx === i ? { ...r, progress_pct: v } : r)));
+
+  // Aperçu du montant de période = marché_phase × (courant − précédent) borné ≥ 0.
+  const periodAmount = (r) => Math.max(0, n(r.progress_pct) - n(r.previous_progress_pct)) / 100 * n(r.contract_amount);
+  const totalPeriod = rows.reduce((s, r) => s + periodAmount(r), 0);
+
+  const save = async () => {
+    setError("");
+    // Ne garde que les phases avec un avancement en progression (delta > 0).
+    const lines = rows
+      .filter((r) => n(r.progress_pct) > n(r.previous_progress_pct))
+      .map((r) => ({ phase_id: r.phase_id, progress_pct: n(r.progress_pct) }));
+    if (!lines.length) { setError("Relevez l'avancement d'au moins une phase (au-dessus du cumul précédent)."); return; }
+    setBusy(true);
+    try {
+      await api.createSituationDocument({
+        project_id: projectId,
+        period: period.trim() || undefined,
+        currency_id: currencyId || undefined,
+        notes: notes.trim() || undefined,
+        lines,
+      });
+      onSaved();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 760 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Nouvelle situation de travaux</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {loading ? <p className="muted">Chargement…</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label className="field"><span>Période</span><input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="ex. Juin 2026" /></label>
+
+            {!rows.length ? (
+              <p className="muted">Ce chantier n'a aucune phase. Ajoutez des phases (onglet Planning) pour établir une situation.</p>
+            ) : (
+              /* scroll horizontal tactile plutot que flexWrap sur mobile */
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ width: "100%", minWidth: 620, borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
+                      <th style={{ padding: "6px" }}>Phase</th>
+                      <th style={{ padding: "6px" }}>Marché</th>
+                      <th style={{ padding: "6px" }}>Cumul préc.</th>
+                      <th style={{ padding: "6px" }}>Avanc. cumulé %</th>
+                      <th style={{ padding: "6px" }}>Montant période</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={r.phase_id}>
+                        <td style={{ padding: "3px 6px" }}>{r.label}</td>
+                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, currencyCode)}</td>
+                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{n(r.previous_progress_pct).toFixed(2)} %</td>
+                        <td style={{ padding: "3px 6px" }}>
+                          <input type="number" min={r.previous_progress_pct} max="100" step="any" value={r.progress_pct} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} />
+                        </td>
+                        <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), currencyCode)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="card pad" style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
+              <span>Montant HT à facturer sur la période</span><strong>{money(totalPeriod, currencyCode)}</strong>
+            </div>
+            <p className="muted" style={{ fontSize: 11 }}>Le montant définitif (TVA/TTC) est recalculé côté serveur à l'enregistrement, sur la base du marché de chaque phase (devis acceptés du chantier).</p>
+
+            <label className="field"><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions…" /></label>
+
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-amber grad-amber" disabled={busy || !rows.length} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer la situation"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Situations & avenants ─────────────────────────────────────────────── */
 const SITUATION_STATUS_TONE = { Payee: "emerald", "Payée": "emerald", En_validation: "amber", Rejetee: "rose" };
 const CHANGE_ORDER_STATUS_TONE = { Valide: "emerald", "Validé": "emerald", En_attente: "amber", Refuse: "rose" };
@@ -973,6 +1824,8 @@ function Situations({ projects, canMutate }) {
   const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
   const [situations, setSituations] = React.useState([]);
   const [changeOrders, setChangeOrders] = React.useState([]);
+  const [submissions, setSubmissions] = React.useState([]);
+  const [subcontractors, setSubcontractors] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
@@ -981,14 +1834,25 @@ function Situations({ projects, canMutate }) {
   const selected = projects.find((p) => p.id === projectId);
 
   const load = React.useCallback(() => {
-    if (!projectId) { setSituations([]); setChangeOrders([]); setLoading(false); return; }
+    if (!projectId) { setSituations([]); setChangeOrders([]); setSubmissions([]); setLoading(false); return; }
     setLoading(true);
-    Promise.all([api.situations(projectId), api.changeOrders(projectId)])
-      .then(([s, c]) => { setSituations(s || []); setChangeOrders(c || []); })
-      .catch(() => { setSituations([]); setChangeOrders([]); })
+    Promise.all([api.situations(projectId), api.changeOrders(projectId), api.submissions(projectId), api.subcontractors()])
+      .then(([s, c, sub, st]) => { setSituations(s || []); setChangeOrders(c || []); setSubmissions(sub || []); setSubcontractors(st || []); })
+      .catch(() => { setSituations([]); setChangeOrders([]); setSubmissions([]); })
       .finally(() => setLoading(false));
   }, [projectId]);
   React.useEffect(() => { load(); }, [load]);
+
+  const reviewSubmission = async (id, action, motif) => {
+    setBusy(true); setError("");
+    try { await api.reviewSubmission(id, { action, motif: motif || undefined }); setModal(null); load(); }
+    catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const openSubmissionFile = async (id) => {
+    try { const { url } = await api.submissionFileUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
 
   const billedToDate = situations.reduce((sum, s) => sum + n(s.amount), 0);
   const changeOrdersTotal = changeOrders.reduce((sum, c) => sum + n(c.amount), 0);
@@ -1021,6 +1885,7 @@ function Situations({ projects, canMutate }) {
           <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
+          <button className="btn" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "subLink" })}><Icon name="userPlus" /> Lien sous-traitant</button>
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "situation" })}><Icon name="filePlus" /> Nouvelle situation</button>
         </div>
       </div>
@@ -1072,9 +1937,113 @@ function Situations({ projects, canMutate }) {
           ))}
       </div>
 
+      <h3 className="font-display" style={{ fontSize: 15, margin: "18px 0 8px" }}>Soumissions sous-traitants</h3>
+      <div className="card table-card" style={{ marginBottom: 18 }}>
+        <table className="bp">
+          <thead><tr><th>Sous-traitant</th><th>Type</th><th>Montant TTC</th><th>Fichier</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+              !submissions.length ? <tr><td colSpan={6} className="muted">Aucune soumission reçue.</td></tr> :
+              submissions.map((s) => (
+                <tr key={s.id}>
+                  <td style={{ fontWeight: 500 }}>{s.subcontractorName || s.submittedByCompany || s.submittedByName || "—"}</td>
+                  <td>{s.type === "invoice" ? "Facture" : "Devis"}</td>
+                  <td>{money(s.totalTtc, s.currencyCode || cur)}</td>
+                  <td>{s.attachedFileKey ? <button className="link" onClick={() => openSubmissionFile(s.id)}><Icon name="eye" /> Voir</button> : <span className="muted">—</span>}</td>
+                  <td><span className={`chip ${SUBMISSION_STATUS_TONE[s.status] || "ink"}`}>{s.status?.replace(/_/g, " ")}</span></td>
+                  <td>
+                    {s.status === "submitted" && canMutate ? (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="link" onClick={() => reviewSubmission(s.id, "validate")}><Icon name="checkCheck" /> Valider</button>
+                        <button className="link" onClick={() => setModal({ kind: "returnSubmission", id: s.id })}>Renvoyer</button>
+                      </div>
+                    ) : <span className="muted">—</span>}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+
       {modal?.kind === "situation" && <SituationModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveSituation} />}
       {modal?.kind === "changeOrder" && <ChangeOrderModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveChangeOrder} />}
+      {modal?.kind === "subLink" && <SubcontractorLinkModal projectId={projectId} subcontractors={subcontractors} onClose={() => setModal(null)} />}
+      {modal?.kind === "returnSubmission" && <ReturnSubmissionModal busy={busy} error={error} onClose={() => setModal(null)} onSubmit={(motif) => reviewSubmission(modal.id, "return", motif)} />}
     </>
+  );
+}
+
+const SUBMISSION_STATUS_TONE = { submitted: "amber", validated: "emerald", returned: "rose" };
+
+function SubcontractorLinkModal({ projectId, subcontractors, onClose }) {
+  const [subId, setSubId] = React.useState("");
+  const [expiryDays, setExpiryDays] = React.useState(7);
+  const [link, setLink] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+
+  const generate = async () => {
+    setBusy(true); setError("");
+    try {
+      const res = await api.createSubcontractorLink({ project_id: projectId, subcontractor_id: subId ? Number(subId) : undefined, expiry_days: Number(expiryDays) || 7 });
+      setLink(subcontractorSubmitUrl(res.token));
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card">
+        <div className="modal-head">
+          <div><h2 className="font-display">Lien sous-traitant</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {!link ? (
+          <div className="form-grid">
+            <label className="field">
+              <span>Sous-traitant (optionnel — sinon lien générique)</span>
+              <select value={subId} onChange={(e) => setSubId(e.target.value)}>
+                <option value="">Lien générique (le sous-traitant s'identifie)</option>
+                {subcontractors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <Field label="Expiration (jours)" type="number" value={expiryDays} onChange={(v) => setExpiryDays(v)} />
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <button className="btn btn-amber grad-amber" disabled={busy} onClick={generate}>{busy ? "Génération…" : "Générer le lien"}</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <p style={{ fontSize: 13, color: "var(--ink-500)" }}>Partagez ce lien avec le sous-traitant (copier / WhatsApp) :</p>
+            <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13 }} />
+            <button className="btn" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReturnSubmissionModal({ busy, error, onClose, onSubmit }) {
+  const [motif, setMotif] = React.useState("");
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSubmit(motif); }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Renvoyer pour correction</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Motif du renvoi</span>
+            <textarea value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Ce qui doit être corrigé…" />
+          </label>
+          {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+          <button className="btn btn-amber grad-amber" type="submit" disabled={busy}>{busy ? "Envoi…" : "Renvoyer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 function SituationModal({ modal, busy, error, onClose, onSave }) {

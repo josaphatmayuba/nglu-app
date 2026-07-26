@@ -13,6 +13,15 @@ import type { BatiproProjectScope } from "../decorators/batipro-project-scope.de
 //  - sinon : chantiers affectes dans batipro_project_assignments (is_active=1)
 //  - aucune affectation -> "all" (FAIL-OPEN : tant qu aucun chantier n est
 //    affecte, on ne cloisonne pas, pour ne pas masquer des donnees existantes).
+//
+// DURCISSEMENT Phase 4 (accès client externe) : le fail-open ci-dessus est
+// dangereux pour un CLIENT (accès externe). On restreint donc UNIQUEMENT les
+// users portant un rôle "client BatiPro" : sans affectation ils voient `[]`
+// (rien), jamais "all". Les rôles INTERNES gardent strictement le comportement
+// historique (rétrocompat totale). Le rôle est détecté par son nom (jamais
+// depuis le token, qui est réputé non fiable) — cf. jwt-auth.guard.
+const BATIPRO_CLIENT_ROLES = new Set(["client_batipro", "Client BatiPro", "Client BâtiPro"]);
+
 @Injectable()
 export class BatiproProjectGuard implements CanActivate {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -20,10 +29,13 @@ export class BatiproProjectGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const user = request.user as
-      | { sub?: number; organizationId?: number; departmentScope?: number | string | null }
+      | { sub?: number; organizationId?: number; departmentScope?: number | string | null; role?: string | null }
       | undefined;
 
-    let scope: BatiproProjectScope = "all";
+    // Rôle client externe = jamais fail-open. Sinon comportement interne inchangé.
+    const isClient = BATIPRO_CLIENT_ROLES.has(user?.role ?? "");
+
+    let scope: BatiproProjectScope = isClient ? [] : "all";
 
     if (user?.sub && user.departmentScope !== "all") {
       const rows = await this.db
@@ -39,6 +51,8 @@ export class BatiproProjectGuard implements CanActivate {
       if (rows.length) {
         scope = rows.map((r) => r.projectId);
       }
+      // Pas d'affectation : interne -> reste "all" (fail-open historique),
+      // client -> reste [] (aucun accès). Aucune régression pour l'existant.
     }
 
     request.batiproProjectScope = scope;

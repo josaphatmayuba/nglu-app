@@ -1338,6 +1338,41 @@
                         "when":  1780948800000,
                         "tag":  "0215_batipro_building_models",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  191,
+                        "version":  "5",
+                        "when":  1780952400000,
+                        "tag":  "0216_batipro_documents",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  192,
+                        "version":  "5",
+                        "when":  1780956000000,
+                        "tag":  "0217_batipro_document_counters",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  193,
+                        "version":  "5",
+                        "when":  1780959600000,
+                        "tag":  "0218_batipro_documents_supplier",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  194,
+                        "version":  "5",
+                        "when":  1780963200000,
+                        "tag":  "0219_batipro_document_lines_progress",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  195,
+                        "version":  "5",
+                        "when":  1780966800000,
+                        "tag":  "0220_batipro_invoice_ledger",
+                        "breakpoints":  true
                     }
                 ]
 }
