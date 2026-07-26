@@ -61,23 +61,13 @@ function Icon({ name, className = "ic" }) {
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "dashboard" },
   { id: "chantiers", label: "Projets / chantiers", icon: "hardHat" },
-  { id: "planning", label: "Planning (Gantt)", icon: "gantt" },
-  { id: "plan3d", label: "Plan 3D & matériaux", icon: "rotate3d", ia: true },
-  { id: "devis", label: "Devis clients", icon: "receipt" },
-  { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
-  { id: "situations", label: "Situations & avenants", icon: "receipt" },
-  { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
-  { id: "photos", label: "Photos de chantier", icon: "camera" },
-  { id: "pointage", label: "Pointage", icon: "calendarCheck" },
-  { id: "factures", label: "Factures", icon: "receipt" },
-  { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
-  { id: "materiaux", label: "Matériaux & achats", icon: "package" },
-  { id: "soustraitants", label: "Sous-traitants", icon: "users" },
   { id: "equipes", label: "Équipes", icon: "userPlus" },
+  { id: "pointage", label: "Pointage", icon: "calendarCheck" },
+  { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
-const MOB_PRIMARY = ["dashboard", "chantiers", "pointage", "materiaux"];
-const MOB_MORE = ["planning", "devis", "bonscommande", "situations", "situationstravaux", "photos", "plan3d", "factures", "soustraitants", "equipes"];
+const MOB_PRIMARY = ["dashboard", "chantiers", "pointage"];
+const MOB_MORE = ["equipes", "previsionnel", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -137,7 +127,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
-  const [focusProjectId, setFocusProjectId] = React.useState(null);
+  const [openProjectId, setOpenProjectId] = React.useState(null);
   const isMobile = useIsMobile();
 
   const loadDashboard = React.useCallback(() => {
@@ -155,10 +145,9 @@ function App() {
 
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
 
-  // Ouvre le chantier concerné par une notification (task/document/project → onglet Projets, préselectionné).
+  // Ouvre le chantier concerné par une notification (task/document/project → page dédiée du projet).
   const goToProject = (projectId) => {
-    setFocusProjectId(projectId ?? null);
-    go("chantiers");
+    if (projectId != null) setOpenProjectId(projectId);
   };
 
   const saveRecord = async (kind, form) => {
@@ -173,23 +162,15 @@ function App() {
   };
 
   const views = {
-    dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} />,
-    chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} focusProjectId={focusProjectId} onFocusHandled={() => setFocusProjectId(null)} />,
-    planning: <Planning projects={projectRows} canMutate={canMutate} />,
-    plan3d: <Plan3D projects={projectRows} materials={materialRows} canMutate={canMutate} />,
-    devis: <Devis projects={projectRows} canMutate={canMutate} />,
-    bonscommande: <BonsCommande projects={projectRows} canMutate={canMutate} />,
-    situations: <Situations projects={projectRows} canMutate={canMutate} />,
-    situationstravaux: <SituationsTravaux projects={projectRows} canMutate={canMutate} />,
-    photos: <SitePhotos projects={projectRows} tasks={taskRows} canMutate={canMutate} />,
+    dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} onOpen={setOpenProjectId} />,
+    chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} onOpen={setOpenProjectId} />,
     pointage: <Pointage projects={projectRows} canMutate={canMutate} />,
-    factures: <Factures projects={projectRows} canMutate={canMutate} />,
-    previsionnel: <Forecast />,
-    materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
-    soustraitants: <SousTraitants projects={projectRows} canMutate={canMutate} />,
     equipes: <Equipes canMutate={canMutate} />,
+    previsionnel: <Forecast />,
     parametres: <Parametres />,
   };
+
+  const openProject = openProjectId != null ? projectRows.find((p) => p.id === openProjectId) : null;
 
   return (
     <div className="app">
@@ -235,7 +216,9 @@ function App() {
           {error && <div className="inline-error">{error}</div>}
           {apiStatus === "loading" && <div className="card pad" style={{ marginBottom: 16 }}><span className="muted">Connexion au serveur…</span></div>}
           {apiStatus === "error" && <div className="inline-error">Impossible de contacter le serveur BâtiPro. Vérifiez votre connexion, puis réessayez.</div>}
-          {apiStatus === "api" && views[route]}
+          {apiStatus === "api" && (openProject
+            ? <ProjectDetail project={openProject} onBack={() => setOpenProjectId(null)} canMutate={canMutate} projects={projectRows} tasks={taskRows} materials={materialRows} />
+            : views[route])}
         </div>
       </main>
 
@@ -243,7 +226,7 @@ function App() {
       <nav className="mob-nav">
         {MOB_PRIMARY.map((id) => {
           const item = NAV.find((x) => x.id === id);
-          const lbl = { dashboard: "Accueil", chantiers: "Chantiers", pointage: "Pointage", materiaux: "Achats" }[id];
+          const lbl = { dashboard: "Accueil", chantiers: "Chantiers", pointage: "Pointage" }[id];
           return (
             <button key={id} className={route === id ? "active" : ""} onClick={() => go(id)}>
               <Icon name={id === "dashboard" ? "home" : item.icon} /><span>{lbl}</span>
@@ -279,7 +262,7 @@ function App() {
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
-function Dashboard({ projects, tasks, go, onNew, canMutate }) {
+function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
   const active = projects.filter((p) => p.status !== "Livre" && p.status !== "Livré");
   const avg = Math.round(projects.reduce((s, p) => s + n(p.progress), 0) / Math.max(1, projects.length));
   const late = tasks.filter((t) => t.status === "Bloque" || t.status === "Bloqué").length;
@@ -309,7 +292,7 @@ function Dashboard({ projects, tasks, go, onNew, canMutate }) {
             <button className="link" onClick={() => go("chantiers")}>Tout voir</button>
           </div>
           {active.slice(0, 4).map((p, i) => (
-            <div className="proj-row" key={p.id}>
+            <div className="proj-row" key={p.id} onClick={() => onOpen?.(p.id)} style={{ cursor: onOpen ? "pointer" : "default" }}>
               <span className={`proj-ic ${projColor(i)}`} style={projColor(i) === "" ? { background: "#0f172a" } : undefined}>
                 <Icon name={i % 3 === 2 ? "home" : "building2"} />
               </span>
@@ -470,19 +453,7 @@ function NotificationBell({ goToProject }) {
   );
 }
 
-function Chantiers({ projects, onNew, canMutate, focusProjectId, onFocusHandled }) {
-  const [selectedId, setSelectedId] = React.useState(projects[0]?.id ?? null);
-  React.useEffect(() => {
-    if (!projects.some((p) => p.id === selectedId)) setSelectedId(projects[0]?.id ?? null);
-  }, [projects, selectedId]);
-  // Arrivée depuis une notification : préselectionne le chantier concerné.
-  React.useEffect(() => {
-    if (focusProjectId != null && projects.some((p) => p.id === focusProjectId)) {
-      setSelectedId(focusProjectId);
-      onFocusHandled?.();
-    }
-  }, [focusProjectId, projects, onFocusHandled]);
-  const selected = projects.find((p) => p.id === selectedId);
+function Chantiers({ projects, onNew, canMutate, onOpen }) {
   return (
     <>
       <div className="topbar">
@@ -492,7 +463,7 @@ function Chantiers({ projects, onNew, canMutate, focusProjectId, onFocusHandled 
 
       <div className="g3" style={{ marginBottom: 18 }}>
         {projects.map((p) => (
-          <div className={`card pad ${p.id === selectedId ? "selected" : ""}`} key={p.id} onClick={() => setSelectedId(p.id)} style={{ cursor: "pointer" }}>
+          <div className="card pad" key={p.id} onClick={() => onOpen?.(p.id)} style={{ cursor: "pointer" }}>
             <div className="proj-card-head">
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
               <span className="chip amber" style={{ marginLeft: "auto" }}>{n(p.progress)} %</span>
@@ -506,30 +477,6 @@ function Chantiers({ projects, onNew, canMutate, focusProjectId, onFocusHandled 
           </div>
         ))}
       </div>
-
-      {selected && (
-        <>
-          <div className="selected-banner grad-amber">
-            <div>
-              <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="hardHat" /> Chantier sélectionné</div>
-              <div className="font-display" style={{ fontSize: 24, fontWeight: 700 }}>{selected.name}</div>
-              <div style={{ fontSize: 12, opacity: .85 }}>{selected.client} · {selected.location} · {selected.manager}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 11, opacity: .85 }}>Avancement</div>
-              <div className="font-display" style={{ fontSize: 36, fontWeight: 700 }}>{n(selected.progress)} %</div>
-            </div>
-          </div>
-
-          <div className="g3">
-            <div className="card pad">
-              <p className="kv-title"><Icon name="pieChart" /> Budget</p>
-              <BudgetBar label="Coût" txt={`${money(selected.spent, selected.currencyCode)} / ${money(selected.budget, selected.currencyCode)}`} pct={n(selected.budget) ? Math.min(100, Math.round((n(selected.spent) / n(selected.budget)) * 100)) : 0} />
-              <BudgetBar label="Facturation" txt={`${money(selected.billedAmount, selected.currencyCode)} / ${money(selected.contractAmount, selected.currencyCode)}`} pct={n(selected.contractAmount) ? Math.min(100, Math.round((n(selected.billedAmount) / n(selected.contractAmount)) * 100)) : 0} />
-            </div>
-          </div>
-        </>
-      )}
     </>
   );
 }
@@ -539,6 +486,85 @@ function BudgetBar({ label, txt, pct }) {
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}><span>{label}</span><span style={{ color: "var(--ink-500)" }}>{txt}</span></div>
       <div className="progress"><span className="grad-amber" style={{ width: `${pct}%` }} /></div>
     </div>
+  );
+}
+
+/* ── ProjectDetail : page dédiée d'un chantier avec tous ses onglets ────── */
+const PROJECT_TABS = [
+  { id: "apercu", label: "Aperçu" },
+  { id: "devis", label: "Devis" },
+  { id: "bonscommande", label: "Bons de commande" },
+  { id: "situations", label: "Situations & avenants" },
+  { id: "situationstravaux", label: "Situations de travaux" },
+  { id: "factures", label: "Factures" },
+  { id: "photos", label: "Photos & rapport" },
+  { id: "planning", label: "Planning" },
+  { id: "plan3d", label: "Plan 3D" },
+  { id: "materiaux", label: "Matériaux" },
+  { id: "soustraitants", label: "Sous-traitants" },
+];
+function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials }) {
+  const [tab, setTab] = React.useState("apercu");
+  const p = project;
+  const projectMaterials = React.useMemo(
+    () => materials.filter((m) => (m.projectId ?? m.project_id) === p.id),
+    [materials, p.id]
+  );
+
+  return (
+    <>
+      <div className="topbar">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button className="btn btn-ghost" onClick={onBack}><Icon name="chevronRight" className="ic" style={{ transform: "rotate(180deg)" }} /> Retour</button>
+          <div>
+            <p className="eyebrow">Chantier</p>
+            <h2 className="title font-display">{p.name}</h2>
+          </div>
+        </div>
+        <span className="chip amber">{n(p.progress)} % avancé</span>
+      </div>
+
+      <div className="selected-banner grad-amber">
+        <div>
+          <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="hardHat" /> {p.client} · {p.location} · {p.manager}</div>
+          <div className="font-display" style={{ fontSize: 24, fontWeight: 700 }}>{p.name}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 11, opacity: .85 }}>Avancement</div>
+          <div className="font-display" style={{ fontSize: 36, fontWeight: 700 }}>{n(p.progress)} %</div>
+        </div>
+      </div>
+
+      <div className="proj-tabs">
+        {PROJECT_TABS.map((t) => (
+          <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="proj-tab-body">
+        {tab === "apercu" && (
+          <div className="g3">
+            <div className="card pad">
+              <p className="kv-title"><Icon name="pieChart" /> Budget</p>
+              <BudgetBar label="Coût" txt={`${money(p.spent, p.currencyCode)} / ${money(p.budget, p.currencyCode)}`} pct={n(p.budget) ? Math.min(100, Math.round((n(p.spent) / n(p.budget)) * 100)) : 0} />
+              <BudgetBar label="Facturation" txt={`${money(p.billedAmount, p.currencyCode)} / ${money(p.contractAmount, p.currencyCode)}`} pct={n(p.contractAmount) ? Math.min(100, Math.round((n(p.billedAmount) / n(p.contractAmount)) * 100)) : 0} />
+            </div>
+          </div>
+        )}
+        {tab === "devis" && <Devis projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "bonscommande" && <BonsCommande projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "situations" && <Situations projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "situationstravaux" && <SituationsTravaux projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "factures" && <Factures projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "photos" && <SitePhotos projects={projects} tasks={tasks} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "planning" && <Planning projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "materiaux" && <Materiaux materials={projectMaterials} canMutate={canMutate} />}
+        {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+      </div>
+    </>
   );
 }
 
@@ -772,8 +798,8 @@ function Parametres() {
   );
 }
 
-function Planning({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function Planning({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [phases, setPhases] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
@@ -820,9 +846,11 @@ function Planning({ projects, canMutate }) {
           <h2 className="title font-display">Planning{selected ? ` — ${selected.name}` : ""}</h2>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({})}><Icon name="plus" /> Phase</button>
         </div>
       </div>
@@ -907,8 +935,8 @@ const Plan2DView = React.lazy(() => import("./Plan2DView.jsx"));
 const PlanOriginalView = React.lazy(() => import("./PlanOriginalView.jsx"));
 const ROOF_LABELS = { flat: "Plat / terrasse", gable: "2 pentes (pignon)", hip: "4 pentes", none: "Sans toit" };
 
-function Plan3D({ projects, materials, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function Plan3D({ projects, materials, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [model, setModel] = React.useState(undefined); // undefined=chargement, null=aucun
   const [tab, setTab] = React.useState("view3d"); // view2d | view3d | editor
   const [levelIdx, setLevelIdx] = React.useState(0);
@@ -1003,9 +1031,11 @@ function Plan3D({ projects, materials, canMutate }) {
     <>
       <div className="topbar">
         <div><p className="eyebrow iris">Plan architectural</p><h2 className="title font-display">Maquette 3D{selected ? ` — ${selected.name}` : ""}</h2></div>
-        <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        {!fixedProjectId && (
+          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
       </div>
 
       {error && <div className="inline-error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -1118,8 +1148,8 @@ const DOC_STATUS_TONE = { draft: "ink", sent: "amber", viewed: "amber", accepted
 const DOC_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", viewed: "Consulté", accepted: "Accepté", refused: "Refusé", expired: "Expiré" };
 const emptyDocLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
 
-function Devis({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function Devis({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
@@ -1153,9 +1183,11 @@ function Devis({ projects, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Documents</p><h2 className="title font-display">Devis clients</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau devis</button>
         </div>
       </div>
@@ -1367,8 +1399,8 @@ const PO_STATUS_TONE = { draft: "ink", sent: "amber", confirmed: "emerald", rece
 const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", received: "Réceptionné", cancelled: "Annulé" };
 const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
 
-function BonsCommande({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function BonsCommande({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [docs, setDocs] = React.useState([]);
   const [budget, setBudget] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -1408,9 +1440,11 @@ function BonsCommande({ projects, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Documents</p><h2 className="title font-display">Bons de commande</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau BC</button>
         </div>
       </div>
@@ -1728,8 +1762,8 @@ function ScanSourcePreview({ photoId }) {
 const SIT_DOC_STATUS_TONE = { draft: "ink", submitted: "amber", validated: "emerald", invoiced: "emerald" };
 const SIT_DOC_STATUS_LABEL = { draft: "Brouillon", submitted: "Soumise", validated: "Validée", invoiced: "Facturée" };
 
-function SituationsTravaux({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function SituationsTravaux({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [docs, setDocs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(false);
@@ -1763,9 +1797,11 @@ function SituationsTravaux({ projects, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Documents</p><h2 className="title font-display">Situations de travaux</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal(true)}><Icon name="filePlus" /> Nouvelle situation</button>
         </div>
       </div>
@@ -1816,8 +1852,8 @@ function SituationsTravaux({ projects, canMutate }) {
 const INV_STATUS_TONE = { draft: "ink", issued: "amber", paid: "emerald", cancelled: "rose" };
 const INV_STATUS_LABEL = { draft: "Brouillon", issued: "Émise", paid: "Payée", cancelled: "Annulée" };
 
-function Factures({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function Factures({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [invoices, setInvoices] = React.useState([]);
   const [situations, setSituations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -1889,9 +1925,11 @@ function Factures({ projects, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Documents</p><h2 className="title font-display">Factures</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
@@ -2073,8 +2111,8 @@ function formatDate(v) {
   try { return new Date(v).toLocaleDateString("fr-CA"); } catch { return String(v).slice(0, 10); }
 }
 
-function SitePhotos({ projects, tasks, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function SitePhotos({ projects, tasks, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [photos, setPhotos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -2103,9 +2141,11 @@ function SitePhotos({ projects, tasks, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Suivi</p><h2 className="title font-display">Photos de chantier</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn btn-ghost" disabled={!projectId} onClick={() => setModal({ kind: "report" })}><Icon name="fileDown" /> Générer un rapport</button>
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "upload" })}><Icon name="camera" /> Ajouter une photo</button>
         </div>
@@ -2356,8 +2396,8 @@ function ReportModal({ projectId, onClose }) {
 const SITUATION_STATUS_TONE = { Payee: "emerald", "Payée": "emerald", En_validation: "amber", Rejetee: "rose" };
 const CHANGE_ORDER_STATUS_TONE = { Valide: "emerald", "Validé": "emerald", En_attente: "amber", Refuse: "rose" };
 
-function Situations({ projects, canMutate }) {
-  const [projectId, setProjectId] = React.useState(projects[0]?.id ?? null);
+function Situations({ projects, canMutate, fixedProjectId }) {
+  const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [situations, setSituations] = React.useState([]);
   const [changeOrders, setChangeOrders] = React.useState([]);
   const [submissions, setSubmissions] = React.useState([]);
@@ -2418,9 +2458,11 @@ function Situations({ projects, canMutate }) {
       <div className="topbar">
         <div><p className="eyebrow">Facturation</p><h2 className="title font-display">Situations & avenants</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          {!fixedProjectId && (
+            <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           <button className="btn" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "subLink" })}><Icon name="userPlus" /> Lien sous-traitant</button>
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "situation" })}><Icon name="filePlus" /> Nouvelle situation</button>
         </div>
@@ -2656,7 +2698,7 @@ function Materiaux({ materials, onNew, canMutate }) {
     <>
       <div className="topbar">
         <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux & achats</h2></div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Bon de commande</button>
+        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Références suivies</div><div className="font-display kpi-value">{materials.length}</div></div>
@@ -2691,7 +2733,7 @@ function Materiaux({ materials, onNew, canMutate }) {
 /* ── Sous-traitants ────────────────────────────────────────────────────── */
 const SUBCONTRACTOR_STATUS_TONE = { Actif: "emerald", En_cours: "amber", Termine: "ink", "Terminé": "ink" };
 
-function SousTraitants({ projects, canMutate }) {
+function SousTraitants({ projects, canMutate, fixedProjectId }) {
   const [subs, setSubs] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
@@ -2703,6 +2745,8 @@ function SousTraitants({ projects, canMutate }) {
     api.subcontractors().then((rows) => setSubs(rows || [])).catch(() => setSubs([])).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { load(); }, [load]);
+
+  const visibleSubs = fixedProjectId ? subs.filter((s) => (s.projectId ?? s.project_id) === fixedProjectId) : subs;
 
   const save = async (form) => {
     setBusy(true); setError("");
@@ -2725,15 +2769,15 @@ function SousTraitants({ projects, canMutate }) {
     <>
       <div className="topbar">
         <div><p className="eyebrow">Partenaires</p><h2 className="title font-display">Sous-traitants</h2></div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Ajouter</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({ projectId: fixedProjectId ?? undefined })}><Icon name="userPlus" /> Ajouter</button>
       </div>
       {loading ? (
         <div className="card pad"><span className="muted">Chargement…</span></div>
-      ) : !subs.length ? (
+      ) : !visibleSubs.length ? (
         <div className="card pad"><span className="muted">Aucun sous-traitant enregistré.</span></div>
       ) : (
         <div className="g3">
-          {subs.map((s) => (
+          {visibleSubs.map((s) => (
             <div className="card pad" key={s.id} onClick={() => canMutate && setModal(s)} style={{ cursor: canMutate ? "pointer" : "default" }}>
               <div className="sub-head">
                 <span className="sub-ic" style={{ background: "#0f172a" }}><Icon name="wrench" /></span>
