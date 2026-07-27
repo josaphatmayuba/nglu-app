@@ -2982,6 +2982,21 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
   // Vue globale (sidebar, hors projet) — comportement inchangé.
   const materials = globalMaterials || [];
   const low = materials.filter((m) => n(m.stock) < n(m.min ?? m.minStock)).length;
+
+  // Bons de commande — tous chantiers (nouveau, en plus du catalogue matériaux).
+  const currencies = useCurrencies();
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises
+  const [allPos, setAllPos] = React.useState([]);
+  const [posLoading, setPosLoading] = React.useState(true);
+  React.useEffect(() => {
+    setPosLoading(true);
+    api.documents(null, "purchase_order")
+      .then((d) => setAllPos(d || []))
+      .catch(() => setAllPos([]))
+      .finally(() => setPosLoading(false));
+  }, []);
+  const filteredPos = curFilter ? allPos.filter((d) => (d.currencyCode || "") === curFilter) : allPos;
+
   return (
     <>
       <div className="topbar">
@@ -2994,7 +3009,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         <div className="card pad"><div className="kpi-label">Réservé total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.reserved), 0)}</div></div>
         <div className="card pad"><div className="kpi-label">En stock total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.stock), 0)}</div></div>
       </div>
-      <div className="card table-card">
+      <div className="card table-card" style={{ marginBottom: 16 }}>
         <table className="bp">
           <thead><tr><th>Matériau</th><th>Stock</th><th>Réservé</th><th>Seuil</th><th>Statut</th></tr></thead>
           <tbody>
@@ -3011,6 +3026,38 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+        <h3 className="font-display" style={{ margin: 0 }}>Bons de commande — tous chantiers</h3>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
+          Devise
+          <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
+            <option value="">Toutes les devises</option>
+            {currencies.map((c) => {
+              const code = c.currencyCode || c.currencyName;
+              return <option key={c.currencyId ?? c.id} value={code}>{code}</option>;
+            })}
+          </select>
+        </label>
+      </div>
+      <div className="card table-card">
+        <table className="bp">
+          <thead><tr><th>N°</th><th>Chantier</th><th>Montant TTC</th><th>Devise</th><th>Statut</th></tr></thead>
+          <tbody>
+            {posLoading ? <tr><td colSpan={5} className="muted">Chargement…</td></tr> :
+              !filteredPos.length ? <tr><td colSpan={5} className="muted">Aucun bon de commande.</td></tr> :
+              filteredPos.map((d) => (
+                <tr key={d.id}>
+                  <td style={{ fontWeight: 500 }}>{d.number}</td>
+                  <td>{d.projectName || "—"}</td>
+                  <td>{money(d.totalTtc, d.currencyCode)}</td>
+                  <td style={{ color: "var(--ink-500)" }}>{d.currencyCode || "—"}</td>
+                  <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>

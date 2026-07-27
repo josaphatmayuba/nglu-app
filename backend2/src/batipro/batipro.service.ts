@@ -1309,11 +1309,13 @@ export class BatiproService {
         currencySymbol: currencies.currencySymbol,
         supplierName: suppliers.name,
         subcontractorName: batiproSubcontractors.name,
+        projectName: batiproProjects.name,
       })
       .from(batiproDocuments)
       .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
       .leftJoin(suppliers, eq(suppliers.id, batiproDocuments.supplierId))
       .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .leftJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
       .where(and(
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.isActive, 1),
