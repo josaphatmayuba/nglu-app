@@ -1455,6 +1455,8 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+  const [busy, setBusy] = React.useState(0);
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -1481,6 +1483,20 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     try { await api.deleteDocument(id); load(); }
     catch (err) { setError(err.message || String(err)); }
   };
+  const pay = async (d) => {
+    const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
+    const raw = window.prompt(`Montant du règlement (solde : ${money(balance, d.currencyCode || cur)}) :`, String(balance));
+    if (raw == null) return;
+    const amount = Number(raw);
+    if (!(amount > 0)) { setError("Montant invalide."); return; }
+    setError(""); setNotice(""); setBusy(d.id);
+    try {
+      const r = await api.recordPayment(d.id, amount);
+      setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
 
   const budgetCur = budget?.currency_code || cur;
 
@@ -1499,6 +1515,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
       </div>
 
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+      {notice && <div style={{ color: "var(--emerald-600, #047857)", fontSize: 13, marginBottom: 8 }}>{notice}</div>}
 
       {budget && (
         <div className="card pad" style={{ marginBottom: 12 }}>
@@ -1518,26 +1535,34 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 
       <div className="card table-card">
         <table className="bp">
-          <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Payé / solde</th><th>Statut</th><th></th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
-              !docs.length ? <tr><td colSpan={6} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
-              docs.map((d) => (
+            {loading ? <tr><td colSpan={7} className="muted">Chargement…</td></tr> :
+              !docs.length ? <tr><td colSpan={7} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
+              docs.map((d) => {
+                const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
+                const canPay = canMutate && d.status !== "draft" && d.status !== "cancelled";
+                return (
                 <tr key={d.id}>
                   <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
                   <td>{d.supplierName || d.subcontractorName || "—"}</td>
                   <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
                   <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td style={{ color: "var(--ink-500)", fontSize: 12 }}>
+                    {money(n(d.paidAmount), d.currencyCode || cur)} / solde {money(balance, d.currencyCode || cur)}
+                  </td>
                   <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canPay && <button className="link" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
           </tbody>
         </table>
       </div>

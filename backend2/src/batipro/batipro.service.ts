@@ -1966,21 +1966,29 @@ export class BatiproService {
   // fixe, ligne a ligne) — a brancher ulterieurement, cf. sale-invoices paidAmount.
   async recordPayment(invoiceDocumentId: number, amount: number, orgId: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
-    if (invoice.type !== "invoice") throw new BadRequestException("Seule une facture peut recevoir un paiement.");
-    if (invoice.status === "cancelled") throw new BadRequestException("Facture annulee : aucun paiement possible.");
-    if (invoice.status === "draft") throw new BadRequestException("Emettez la facture avant d'enregistrer un paiement.");
+    const isPurchaseOrder = invoice.type === "purchase_order";
+    if (invoice.type !== "invoice" && !isPurchaseOrder) {
+      throw new BadRequestException("Seule une facture ou un bon de commande peut recevoir un paiement.");
+    }
+    const docLabel = isPurchaseOrder ? "Bon de commande" : "Facture";
+    if (invoice.status === "cancelled") throw new BadRequestException(`${docLabel} annule(e) : aucun paiement possible.`);
+    if (invoice.status === "draft") throw new BadRequestException(`Emettez ${isPurchaseOrder ? "le bon de commande" : "la facture"} avant d'enregistrer un paiement.`);
     if (!(amount > 0)) throw new BadRequestException("Le montant du paiement doit etre strictement positif.");
 
     const totalTtc = Number(invoice.totalTtc ?? 0);
     const alreadyPaid = Number(invoice.paidAmount ?? 0);
     const newPaid = Math.round((alreadyPaid + amount) * 100) / 100;
     if (newPaid > totalTtc + 0.001) {
-      throw new BadRequestException(`Le total regle (${newPaid}) depasse le montant de la facture (${totalTtc}).`);
+      throw new BadRequestException(`Le total regle (${newPaid}) depasse le montant du document (${totalTtc}).`);
     }
     const fullyPaid = newPaid >= totalTtc - 0.001;
+    // Un BC n'a pas de statut "paid" dans son cycle (draft/sent/cancelled) : la
+    // reception de stock et l'UI sont indexees sur "sent", on ne le remplace donc
+    // jamais. Seul paidAmount suit le reglement pour un BC.
+    const nextStatus = fullyPaid && !isPurchaseOrder ? "paid" : invoice.status;
 
     await this.db.update(batiproDocuments)
-      .set({ paidAmount: String(newPaid), status: fullyPaid ? "paid" : invoice.status })
+      .set({ paidAmount: String(newPaid), status: nextStatus })
       .where(and(eq(batiproDocuments.id, invoiceDocumentId), eq(batiproDocuments.organizationId, orgId)));
 
     await this.publish("recordPayment", ["documents"], "updated", invoiceDocumentId, orgId);
@@ -1988,7 +1996,7 @@ export class BatiproService {
       id: invoiceDocumentId,
       paid_amount: newPaid,
       balance: Math.round((totalTtc - newPaid) * 100) / 100,
-      status: fullyPaid ? "paid" : invoice.status,
+      status: nextStatus,
     };
   }
 
