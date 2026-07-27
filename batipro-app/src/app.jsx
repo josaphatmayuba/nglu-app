@@ -1514,6 +1514,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [budget, setBudget] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
+  const [payModal, setPayModal] = React.useState(null);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [busy, setBusy] = React.useState(0);
@@ -1543,13 +1544,10 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     try { await api.deleteDocument(id); load(); }
     catch (err) { setError(err.message || String(err)); }
   };
-  const pay = async (d) => {
-    const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
-    const raw = window.prompt(`Montant du règlement (solde : ${money(balance, d.currencyCode || cur)}) :`, String(balance));
-    if (raw == null) return;
-    const amount = Number(raw);
-    if (!(amount > 0)) { setError("Montant invalide."); return; }
-    setError(""); setNotice(""); setBusy(d.id);
+  const pay = (d) => setPayModal(d);
+  const confirmPay = async (amount) => {
+    const d = payModal;
+    setError(""); setNotice(""); setBusy(d.id); setPayModal(null);
     try {
       const r = await api.recordPayment(d.id, amount);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
@@ -1653,6 +1651,14 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           onSaved={() => { setModal(null); load(); }}
         />
       )}
+      {payModal && (
+        <PaymentModal
+          balance={Math.max(0, n(payModal.totalTtc) - n(payModal.paidAmount))}
+          currencyCode={payModal.currencyCode || cur}
+          onClose={() => setPayModal(null)}
+          onConfirm={confirmPay}
+        />
+      )}
     </>
   );
 }
@@ -1666,6 +1672,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
   const [subcontractors, setSubcontractors] = React.useState([]);
   const [supplierId, setSupplierId] = React.useState("");
   const [subcontractorId, setSubcontractorId] = React.useState("");
+  const [status, setStatus] = React.useState("draft");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(!!docId);
@@ -1691,6 +1698,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
           setSubcontractorId(d.subcontractorId || "");
+          setStatus(d.status || "draft");
         })
         .catch((e) => setError(e.message || String(e)))
         .finally(() => setLoading(false));
@@ -1771,7 +1779,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
-        ...(docId ? {} : { sourcePhotoId: scanPhotoId || undefined }),
+        ...(docId ? { status } : { sourcePhotoId: scanPhotoId || undefined }),
         lines: clean.map((l) => ({
           designation: l.designation.trim(),
           quantity: n(l.quantity),
@@ -1879,6 +1887,14 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
             </div>
 
             <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
+            {docId && (
+              <label className="field">
+                <span>Statut</span>
+                <select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  {Object.entries(PO_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </label>
+            )}
             <label className="field"><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions…" /></label>
 
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
@@ -2026,6 +2042,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
   const [busy, setBusy] = React.useState(0);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
+  const [payModal, setPayModal] = React.useState(null);
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -2071,13 +2088,10 @@ function Factures({ projects, canMutate, fixedProjectId }) {
     finally { setBusy(0); }
   };
 
-  const pay = async (d) => {
-    const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
-    const raw = window.prompt(`Montant du règlement (solde : ${money(balance, d.currencyCode || cur)}) :`, String(balance));
-    if (raw == null) return;
-    const amount = Number(raw);
-    if (!(amount > 0)) { setError("Montant invalide."); return; }
-    setError(""); setNotice(""); setBusy(d.id);
+  const pay = (d) => setPayModal(d);
+  const confirmPay = async (amount) => {
+    const d = payModal;
+    setError(""); setNotice(""); setBusy(d.id); setPayModal(null);
     try {
       const r = await api.recordPayment(d.id, amount);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
@@ -2148,6 +2162,14 @@ function Factures({ projects, canMutate, fixedProjectId }) {
           </tbody>
         </table>
       </div>
+      {payModal && (
+        <PaymentModal
+          balance={Math.max(0, n(payModal.totalTtc) - n(payModal.paidAmount))}
+          currencyCode={payModal.currencyCode || cur}
+          onClose={() => setPayModal(null)}
+          onConfirm={confirmPay}
+        />
+      )}
     </>
   );
 }
@@ -3065,6 +3087,46 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         </table>
       </div>
     </>
+  );
+}
+
+// Règlement d'un document (bon de commande / facture) — montant toujours dans
+// la devise du document (le backend ne convertit pas), affichée en lecture seule.
+function PaymentModal({ balance, currencyCode, onClose, onConfirm }) {
+  const [amount, setAmount] = React.useState(balance);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    if (!(n(amount) > 0)) { setError("Montant invalide."); return; }
+    setError(""); setBusy(true);
+    try { await onConfirm(n(amount)); }
+    catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Enregistrer un règlement</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Solde dû</span>
+            <input type="text" value={money(balance, currencyCode)} disabled />
+          </label>
+          <label className="field">
+            <span>Montant réglé ({currencyCode || "—"})</span>
+            <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus required />
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
