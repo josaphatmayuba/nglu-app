@@ -23,7 +23,9 @@ export default function SubcontractorSubmit({ token }) {
   const [name, setName] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [notes, setNotes] = React.useState("");
+  const [showDetails, setShowDetails] = React.useState(false);
   const [lines, setLines] = React.useState([emptyLine()]);
+  const [totalAmount, setTotalAmount] = React.useState("");
   const [file, setFile] = React.useState(null);
 
   const [busy, setBusy] = React.useState(false);
@@ -45,12 +47,14 @@ export default function SubcontractorSubmit({ token }) {
   const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
   const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
   const totalTtc = totalHt + totalVat;
+  const filledLines = lines.filter((l) => l.designation.trim());
 
   const submit = async (e) => {
     e.preventDefault();
     setError("");
     if (!ctx?.nominative && !name.trim() && !company.trim()) { setError("Indiquez votre nom ou votre entreprise."); return; }
-    if (!lines.some((l) => l.designation.trim())) { setError("Ajoutez au moins une ligne."); return; }
+    if (showDetails && !filledLines.length) { setError("Ajoutez au moins une ligne, ou retirez le détail."); return; }
+    if (!showDetails && !(n(totalAmount) > 0)) { setError("Indiquez le montant total du devis."); return; }
     setBusy(true);
     try {
       const payload = {
@@ -59,15 +63,16 @@ export default function SubcontractorSubmit({ token }) {
         submitted_by_name: ctx?.nominative ? undefined : (name.trim() || undefined),
         submitted_by_company: ctx?.nominative ? undefined : (company.trim() || undefined),
         notes: notes.trim() || undefined,
-        lines: lines
-          .filter((l) => l.designation.trim())
-          .map((l) => ({
-            designation: l.designation.trim(),
-            quantity: n(l.quantity),
-            unit_price: n(l.unit_price),
-            vat_rate: n(l.vat_rate),
-            phase_id: l.phase_id ? Number(l.phase_id) : undefined,
-          })),
+        total_amount: showDetails ? undefined : n(totalAmount),
+        lines: showDetails
+          ? filledLines.map((l) => ({
+              designation: l.designation.trim(),
+              quantity: n(l.quantity),
+              unit_price: n(l.unit_price),
+              vat_rate: n(l.vat_rate),
+              phase_id: l.phase_id ? Number(l.phase_id) : undefined,
+            }))
+          : undefined,
       };
       const res = await publicApi.submitDocument(token, payload);
       if (file && res?.id) {
@@ -102,6 +107,10 @@ export default function SubcontractorSubmit({ token }) {
       )}
 
       <form onSubmit={submit}>
+        <label style={lbl}>Document (photo ou PDF, ≤ 15 Mo)
+          <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ ...inp, padding: 8 }} />
+        </label>
+
         <label style={lbl}>Type de document
           <select value={type} onChange={(e) => setType(e.target.value)} style={inp}>
             <option value="quote">Devis</option>
@@ -120,46 +129,56 @@ export default function SubcontractorSubmit({ token }) {
           </div>
         )}
 
-        <h3 style={{ fontSize: 15, margin: "18px 0 8px" }}>Détail des prestations</h3>
-        {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "#64748b" }}>
-                <th style={th}>Désignation</th><th style={th}>Qté</th><th style={th}>P.U.</th>
-                <th style={th}>TVA %</th><th style={th}>Phase</th><th style={th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l, i) => (
-                <tr key={i}>
-                  <td style={td}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ ...inp, minWidth: 180 }} placeholder="Travaux…" /></td>
-                  <td style={td}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ ...inp, width: 70 }} /></td>
-                  <td style={td}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ ...inp, width: 90 }} /></td>
-                  <td style={td}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ ...inp, width: 70 }} /></td>
-                  <td style={td}>
-                    <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ ...inp, minWidth: 120 }}>
-                      <option value="">—</option>
-                      {(ctx?.phases || []).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                  </td>
-                  <td style={td}><button type="button" onClick={() => removeLine(i)} style={{ ...btnGhost, color: "#b91c1c" }}>✕</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button type="button" onClick={addLine} style={{ ...btnGhost, marginTop: 8 }}>+ Ajouter une ligne</button>
+        {!showDetails ? (
+          <>
+            <label style={lbl}>Montant total du {type === "invoice" ? "facture" : "devis"}
+              <input type="number" min="0" step="any" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} style={inp} placeholder="0" required />
+            </label>
+            <button type="button" onClick={() => setShowDetails(true)} style={{ ...btnGhost, marginTop: 4 }}>+ Ajouter le détail des prestations</button>
+          </>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "18px 0 8px" }}>
+              <h3 style={{ fontSize: 15, margin: 0 }}>Détail des prestations</h3>
+              <button type="button" onClick={() => setShowDetails(false)} style={btnGhost}>Retirer le détail</button>
+            </div>
+            {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
+            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#64748b" }}>
+                    <th style={th}>Désignation</th><th style={th}>Qté</th><th style={th}>P.U.</th>
+                    <th style={th}>TVA %</th><th style={th}>Phase</th><th style={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i}>
+                      <td style={td}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ ...inp, minWidth: 180 }} placeholder="Travaux…" /></td>
+                      <td style={td}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ ...inp, width: 70 }} /></td>
+                      <td style={td}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ ...inp, width: 90 }} /></td>
+                      <td style={td}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ ...inp, width: 70 }} /></td>
+                      <td style={td}>
+                        <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ ...inp, minWidth: 120 }}>
+                          <option value="">—</option>
+                          {(ctx?.phases || []).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={td}><button type="button" onClick={() => removeLine(i)} style={{ ...btnGhost, color: "#b91c1c" }}>✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button type="button" onClick={addLine} style={{ ...btnGhost, marginTop: 8 }}>+ Ajouter une ligne</button>
 
-        <div style={{ ...box, marginTop: 16, display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={row}><span>Total HT</span><strong>{money(totalHt, cur)}</strong></div>
-          <div style={row}><span>TVA</span><strong>{money(totalVat, cur)}</strong></div>
-          <div style={{ ...row, fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, cur)}</strong></div>
-        </div>
-
-        <label style={lbl}>Document (PDF ou image, ≤ 15 Mo)
-          <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ ...inp, padding: 8 }} />
-        </label>
+            <div style={{ ...box, marginTop: 16, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={row}><span>Total HT</span><strong>{money(totalHt, cur)}</strong></div>
+              <div style={row}><span>TVA</span><strong>{money(totalVat, cur)}</strong></div>
+              <div style={{ ...row, fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, cur)}</strong></div>
+            </div>
+          </>
+        )}
 
         <label style={lbl}>Notes (optionnel)
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...inp, minHeight: 70 }} placeholder="Précisions…" />

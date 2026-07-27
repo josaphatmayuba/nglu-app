@@ -956,8 +956,10 @@ export class BatiproService {
   async submitSubcontractorDocument(token: string, payload: SubmitSubcontractorDocumentDto) {
     const link = await this.resolveLink(token);
     const orgId = link.organizationId;
-    if (!Array.isArray(payload.lines) || !payload.lines.length) {
-      throw new BadRequestException("Au moins une ligne est requise.");
+    const hasLines = Array.isArray(payload.lines) && payload.lines.length > 0;
+    const totalAmount = Number(payload.total_amount ?? 0);
+    if (!hasLines && !(totalAmount > 0)) {
+      throw new BadRequestException("Ajoutez le détail des prestations ou indiquez un montant total.");
     }
     if (link.subcontractorId == null && !payload.submitted_by_name && !payload.submitted_by_company) {
       throw new BadRequestException("Identifiez-vous (nom ou entreprise).");
@@ -972,7 +974,7 @@ export class BatiproService {
     );
 
     let totalHt = 0, totalVat = 0;
-    const lines = payload.lines.map((line, index) => {
+    const lines = (hasLines ? payload.lines! : []).map((line, index) => {
       const qty = Number(line.quantity ?? 0);
       const pu = Number(line.unit_price ?? 0);
       const vatRate = Number(line.vat_rate ?? 0);
@@ -994,7 +996,9 @@ export class BatiproService {
         phaseId,
       };
     });
-    const totalTtc = Math.round((totalHt + totalVat) * 100) / 100;
+    // Sans detail de lignes, le montant total saisi fait foi (pas de ventilation TVA).
+    if (!hasLines) totalHt = Math.round(totalAmount * 100) / 100;
+    const totalTtc = hasLines ? Math.round((totalHt + totalVat) * 100) / 100 : totalHt;
 
     const [result] = await this.db.insert(batiproDocuments).values({
       organizationId: orgId,

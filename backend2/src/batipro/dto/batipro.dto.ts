@@ -182,11 +182,14 @@ export class SubmitSubcontractorDocumentDto {
   @IsOptional() @IsString() @MaxLength(255) submitted_by_name?: string;
   @IsOptional() @IsString() @MaxLength(255) submitted_by_company?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  // Si le sous-traitant ne detaille pas les lignes, il doit indiquer un montant total.
+  @IsOptional() @IsNumber() @Min(0) total_amount?: number;
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(200)
   @ValidateNested({ each: true })
   @Type(() => SubcontractorLineDto)
-  lines!: SubcontractorLineDto[];
+  lines?: SubcontractorLineDto[];
 }
 
 // Revue d'une soumission (cote gestionnaire) : validation ou renvoi.
