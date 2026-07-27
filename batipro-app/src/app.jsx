@@ -508,6 +508,12 @@ const PROJECT_TABS = [
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials }) {
   const [tab, setTab] = React.useState("apercu");
   const p = project;
+  const [budget, setBudget] = React.useState(null);
+  React.useEffect(() => {
+    if (tab !== "apercu" || !p.id) return;
+    api.budgetSummary(p.id).then(setBudget).catch(() => setBudget(null));
+  }, [tab, p.id]);
+  const budgetCur = budget?.currency_code || p.currencyCode;
 
   return (
     <>
@@ -546,9 +552,35 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
         {tab === "apercu" && (
           <div className="g3">
             <div className="card pad">
-              <p className="kv-title"><Icon name="pieChart" /> Budget</p>
-              <BudgetBar label="Coût" txt={`${money(p.spent, p.currencyCode)} / ${money(p.budget, p.currencyCode)}`} pct={n(p.budget) ? Math.min(100, Math.round((n(p.spent) / n(p.budget)) * 100)) : 0} />
-              <BudgetBar label="Facturation" txt={`${money(p.billedAmount, p.currencyCode)} / ${money(p.contractAmount, p.currencyCode)}`} pct={n(p.contractAmount) ? Math.min(100, Math.round((n(p.billedAmount) / n(p.contractAmount)) * 100)) : 0} />
+              <p className="kv-title">
+                <Icon name="pieChart" /> Budget
+                {budget?.has_other_currency && (
+                  <span title="Certains documents sont dans une autre devise, non inclus dans ce total" style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-400)", display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    <Icon name="alert" /> autre devise ignorée
+                  </span>
+                )}
+              </p>
+              <div onClick={() => setTab("bonscommande")} style={{ cursor: "pointer" }}>
+                <BudgetBar
+                  label="Coût"
+                  txt={`${money(budget?.cost_committed, budgetCur)} / ${money(budget?.budget, budgetCur)}`}
+                  pct={n(budget?.budget) ? Math.min(100, Math.round((n(budget?.cost_committed) / n(budget?.budget)) * 100)) : 0}
+                />
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6, marginBottom: 12 }}>
+                  <span>Décaissé : {money(budget?.cost_actual, budgetCur)}</span>
+                  <span>Devis accepté : {money(budget?.quote_accepted, budgetCur)}</span>
+                </div>
+              </div>
+              <div onClick={() => setTab("factures")} style={{ cursor: "pointer" }}>
+                <BudgetBar
+                  label="Facturation"
+                  txt={`${money(budget?.billed_issued, budgetCur)} / ${money(budget?.contract_with_change_orders, budgetCur)}`}
+                  pct={n(budget?.contract_with_change_orders) ? Math.min(100, Math.round((n(budget?.billed_issued) / n(budget?.contract_with_change_orders)) * 100)) : 0}
+                />
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6 }}>
+                  <span>Encaissé : {money(budget?.billed_cashed, budgetCur)}</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -3493,9 +3525,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
                 </select>
               </label>
               <Field label="Budget (coût)" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
-              <Field label="Dépensé" type="number" value={form.spent} onChange={(v) => set("spent", v)} />
               <Field label="Montant contrat (client)" type="number" value={form.contractAmount} onChange={(v) => set("contractAmount", v)} />
-              <Field label="Déjà facturé" type="number" value={form.billedAmount} onChange={(v) => set("billedAmount", v)} />
               <Field label="Échéance" type="date" value={form.dueDate || ""} onChange={(v) => set("dueDate", v)} />
             </>
           ) : (

@@ -187,10 +187,9 @@ export class BatiproService {
     if (input.status !== undefined) patch.status = input.status;
     if (input.progress !== undefined) patch.progress = input.progress;
     if (input.budget !== undefined) patch.budget = String(input.budget);
-    if (input.spent !== undefined) patch.spent = String(input.spent);
+    // spent/billed_amount ne sont plus editables a la main : calcules par projectBudgetSummary.
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.contract_amount !== undefined) patch.contractAmount = String(input.contract_amount);
-    if (input.billed_amount !== undefined) patch.billedAmount = String(input.billed_amount);
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
     if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
     if (input.location !== undefined) patch.location = input.location || null;
@@ -1723,6 +1722,12 @@ export class BatiproService {
   // du chantier. Aucun montant en dur : totaux recalcules cote serveur/DB.
   async projectBudgetSummary(projectId: number, orgId: number) {
     const project = await this.getProject(projectId, orgId);
+    const projectCurrencyId = project.currencyId ?? null;
+    // Filtre devise Phase D : ne totalise que les documents dans la devise du
+    // chantier (ou sans devise renseignee). Pas de conversion inter-devises.
+    const sameCurrency = projectCurrencyId != null
+      ? sql`(${batiproDocuments.currencyId} = ${projectCurrencyId} OR ${batiproDocuments.currencyId} IS NULL)`
+      : sql`${batiproDocuments.currencyId} IS NULL`;
 
     const [quoteAgg] = await this.db
       .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
@@ -1734,10 +1739,14 @@ export class BatiproService {
         eq(batiproDocuments.direction, "outbound"),
         eq(batiproDocuments.type, "quote"),
         eq(batiproDocuments.status, "accepted"),
+        sameCurrency,
       ));
 
     const [poAgg] = await this.db
-      .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
+      .select({
+        total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
+        paid: sql<string>`COALESCE(SUM(${batiproDocuments.paidAmount}), 0)`,
+      })
       .from(batiproDocuments)
       .where(and(
         eq(batiproDocuments.projectId, projectId),
@@ -1746,10 +1755,53 @@ export class BatiproService {
         eq(batiproDocuments.direction, "outbound"),
         eq(batiproDocuments.type, "purchase_order"),
         sql`${batiproDocuments.status} <> 'cancelled'`,
+        sameCurrency,
+      ));
+
+    const [invoiceAgg] = await this.db
+      .select({
+        issued: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
+        cashed: sql<string>`COALESCE(SUM(${batiproDocuments.paidAmount}), 0)`,
+      })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "invoice"),
+        sql`${batiproDocuments.status} IN ('issued', 'paid')`,
+        sameCurrency,
+      ));
+
+    // Statut "valide" d'un avenant : le formulaire front (ChangeOrderModal) n'ecrit
+    // que "Valide", mais des donnees existantes portent l'accent "Validé" -> les deux acceptes.
+    const [changeOrderAgg] = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${batiproChangeOrders.amount}), 0)` })
+      .from(batiproChangeOrders)
+      .where(and(
+        eq(batiproChangeOrders.projectId, projectId),
+        eq(batiproChangeOrders.organizationId, orgId),
+        eq(batiproChangeOrders.isActive, 1),
+        sql`${batiproChangeOrders.status} IN ('Valide', 'Validé')`,
+      ));
+
+    const [otherCurrencyAgg] = await this.db
+      .select({ total: sql<string>`COUNT(*)` })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        sql`NOT ${sameCurrency}`,
       ));
 
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
     const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
+    const costActual = Number(poAgg?.paid ?? 0);
+    const billedIssued = Number(invoiceAgg?.issued ?? 0);
+    const billedCashed = Number(invoiceAgg?.cashed ?? 0);
+    const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
     const budget = Number(project.budget ?? 0);
     const contractAmount = Number(project.contractAmount ?? 0);
     const spent = Number(project.spent ?? 0);
@@ -1765,6 +1817,12 @@ export class BatiproService {
       spent,
       quote_accepted: quoteAccepted,
       purchase_orders_engaged: purchaseOrdersEngaged,
+      cost_committed: purchaseOrdersEngaged,
+      cost_actual: costActual,
+      billed_issued: billedIssued,
+      billed_cashed: billedCashed,
+      contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,
+      has_other_currency: Number(otherCurrencyAgg?.total ?? 0) > 0,
       remaining_vs_budget: Math.round((referenceBudget - purchaseOrdersEngaged) * 100) / 100,
       engagement_rate: referenceBudget > 0 ? Math.round((purchaseOrdersEngaged / referenceBudget) * 10000) / 100 : null,
     };
