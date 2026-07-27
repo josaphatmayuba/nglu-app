@@ -123,9 +123,16 @@ export class BatiproService {
     };
   }
 
-  projects(orgId: number, projectScope: BatiproProjectScope = "all") {
+  // Liste des chantiers pour les cartes/dashboard : renvoie les colonnes brutes
+  // (budget/spent restent les valeurs saisies a la main, conservees telles quelles)
+  // + cost_actual, calcule en batch (1 requete agregee, pas de N+1) de la meme
+  // maniere que projectBudgetSummary (somme des paidAmount des bons de commande
+  // actifs, hors annules), pour que la carte liste affiche le meme "decaisse reel"
+  // que l'onglet Apercu du detail. reference_budget = contract_amount || budget,
+  // meme regle que projectBudgetSummary.
+  async projects(orgId: number, projectScope: BatiproProjectScope = "all") {
     const scopeFilter = this.projectDirectFilter(batiproProjects.id, projectScope);
-    return this.db
+    const rows = await this.db
       .select({
         ...getTableColumns(batiproProjects),
         currencyCode: currencies.currencyCode,
@@ -135,6 +142,44 @@ export class BatiproService {
       .leftJoin(currencies, eq(currencies.id, batiproProjects.currencyId))
       .where(and(eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1), scopeFilter))
       .orderBy(desc(batiproProjects.id));
+
+    if (!rows.length) return rows.map((r) => ({ ...r, cost_actual: 0, reference_budget: 0 }));
+
+    const projectIds = rows.map((r) => r.id);
+    // Meme filtre devise que projectBudgetSummary, mais applique par-projet via
+    // une jointure sur batiproProjects pour rester en une seule requete batch.
+    const costAgg = await this.db
+      .select({
+        projectId: batiproDocuments.projectId,
+        paid: sql<string>`COALESCE(SUM(${batiproDocuments.paidAmount}), 0)`,
+      })
+      .from(batiproDocuments)
+      .innerJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
+      .where(and(
+        inArray(batiproDocuments.projectId, projectIds),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "purchase_order"),
+        sql`${batiproDocuments.status} <> 'cancelled'`,
+        sql`(${batiproDocuments.currencyId} = ${batiproProjects.currencyId} OR ${batiproDocuments.currencyId} IS NULL OR ${batiproProjects.currencyId} IS NULL)`,
+      ))
+      .groupBy(batiproDocuments.projectId);
+
+    const costByProject = new Map<number, number>();
+    for (const row of costAgg) {
+      if (row.projectId != null) costByProject.set(row.projectId, Number(row.paid ?? 0));
+    }
+
+    return rows.map((r) => {
+      const contractAmount = Number(r.contractAmount ?? 0);
+      const budget = Number(r.budget ?? 0);
+      return {
+        ...r,
+        cost_actual: costByProject.get(r.id) ?? 0,
+        reference_budget: contractAmount || budget,
+      };
+    });
   }
 
   async getProject(id: number, orgId: number) {
@@ -1793,15 +1838,23 @@ export class BatiproService {
         sql`${batiproChangeOrders.status} IN ('Valide', 'Validé')`,
       ));
 
-    const [otherCurrencyAgg] = await this.db
-      .select({ total: sql<string>`COUNT(*)` })
+    // Montants ignores (autre devise que celle du chantier) : regroupes par
+    // devise pour affichage, pas de conversion. Reste un simple SELECT groupe,
+    // pas de sur-ingenierie (le nombre de devises differentes par chantier est faible).
+    const otherCurrencyAgg = await this.db
+      .select({
+        currencyCode: currencies.currencyCode,
+        total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
+      })
       .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
       .where(and(
         eq(batiproDocuments.projectId, projectId),
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.isActive, 1),
         sql`NOT ${sameCurrency}`,
-      ));
+      ))
+      .groupBy(currencies.currencyCode);
 
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
     const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
@@ -1813,6 +1866,9 @@ export class BatiproService {
     const contractAmount = Number(project.contractAmount ?? 0);
     const spent = Number(project.spent ?? 0);
     const referenceBudget = contractAmount || budget;
+    const otherCurrencyAmounts = otherCurrencyAgg
+      .map((row) => ({ currency_code: row.currencyCode ?? null, amount: Number(row.total ?? 0) }))
+      .filter((row) => row.amount > 0);
 
     return {
       project_id: projectId,
@@ -1829,7 +1885,12 @@ export class BatiproService {
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
       contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,
-      has_other_currency: Number(otherCurrencyAgg?.total ?? 0) > 0,
+      has_other_currency: otherCurrencyAmounts.length > 0,
+      // Montants non comptes ci-dessus car dans une autre devise que le chantier
+      // (pas de taux de change invente, affichage separe uniquement).
+      other_currency_amounts: otherCurrencyAmounts,
+      other_currency_amount: otherCurrencyAmounts[0]?.amount ?? 0,
+      other_currency_code: otherCurrencyAmounts[0]?.currency_code ?? null,
       remaining_vs_budget: Math.round((referenceBudget - purchaseOrdersEngaged) * 100) / 100,
       engagement_rate: referenceBudget > 0 ? Math.round((purchaseOrdersEngaged / referenceBudget) * 10000) / 100 : null,
     };

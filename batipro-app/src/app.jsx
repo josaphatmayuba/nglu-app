@@ -303,7 +303,7 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Chantiers actifs" value={active.length} sub={`${projects.length} au total`} icon="hardHat" />
         <KPI label="Avancement moyen" value={`${avg} %`} sub="tous projets" subClass="up" icon="trendingUp" />
-        <KPI label="Budget engagé" value={moneyByCurrency(projects, "spent")} sub={`/ ${moneyByCurrency(projects, "budget")} contractés`} icon="wallet" />
+        <KPI label="Budget engagé" value={moneyByCurrency(projects, "cost_actual")} sub={`/ ${moneyByCurrency(projects, "reference_budget")} contractés`} icon="wallet" />
         <KPI label="Retards / blocages" value={late} sub={late ? "à traiter" : "aucun"} subClass={late ? "down" : ""} icon="alert" danger={late > 0} />
       </div>
 
@@ -493,7 +493,7 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
             <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>{p.client} · {p.location}</div>
             <div className="progress"><span className="grad-amber" style={{ width: `${n(p.progress)}%` }} /></div>
             <div className="proj-meta">
-              <span>{money(p.spent, p.currencyCode)} / {money(p.budget, p.currencyCode)}</span>
+              <span>{money(p.cost_actual ?? p.spent, p.currencyCode)} / {money(p.reference_budget ?? p.budget, p.currencyCode)}</span>
               <span className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}>{p.risk}</span>
             </div>
           </div>
@@ -576,8 +576,11 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
               <p className="kv-title">
                 <Icon name="pieChart" /> Budget
                 {budget?.has_other_currency && (
-                  <span title="Certains documents sont dans une autre devise, non inclus dans ce total" style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-400)", display: "inline-flex", alignItems: "center", gap: 2 }}>
-                    <Icon name="alert" /> autre devise ignorée
+                  <span title="Documents dans une autre devise que celle du chantier : montant affiche a part, sans conversion" style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-400)", display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    <Icon name="alert" />
+                    {(budget.other_currency_amounts || []).map((o, i) => (
+                      <span key={o.currency_code || i}>+ {money(o.amount, o.currency_code)} non comptés{i < budget.other_currency_amounts.length - 1 ? " ·" : ""}</span>
+                    ))}
                   </span>
                 )}
               </p>
