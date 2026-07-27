@@ -1422,6 +1422,13 @@
                         "when":  1780992000000,
                         "tag":  "0227_batipro_phases_payment_cap",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  203,
+                        "version":  "5",
+                        "when":  1780995600000,
+                        "tag":  "0228_batipro_situations_merge",
+                        "breakpoints":  true
                     }
                 ]
 }

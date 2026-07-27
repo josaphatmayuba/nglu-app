@@ -48,6 +48,7 @@ const P = {
   logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   x: "M18 6 6 18M6 6l12 12",
   wrench: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2.3-2.3z",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16v-4M12 8h.01",
 };
 function Icon({ name, className = "ic" }) {
   const d = P[name] || P.circle;
@@ -497,9 +498,9 @@ const PROJECT_TABS = [
   { id: "devis", label: "Devis", icon: "receipt" },
   { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
   { id: "materiaux", label: "Matériaux", icon: "hardHat" },
-  { id: "situations", label: "Situations & avenants", icon: "receipt" },
-  { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
-  { id: "factures", label: "Factures", icon: "receipt" },
+  { id: "situations", label: "Avenants & sous-traitants", icon: "receipt", hint: "Le marché : montant initial, avenants (+/-) et soumissions des sous-traitants." },
+  { id: "situationstravaux", label: "Situations de travaux", icon: "receipt", hint: "Décomptes d'avancement : combien vous pouvez facturer selon l'avancement des phases." },
+  { id: "factures", label: "Factures", icon: "receipt", hint: "Réclamer l'argent au client à partir d'une situation validée (génère l'écriture comptable)." },
   { id: "photos", label: "Photos & rapport", icon: "camera" },
   { id: "planning", label: "Planning", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
@@ -541,9 +542,10 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
 
       <div className="proj-tabs">
         {PROJECT_TABS.map((t) => (
-          <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} title={t.hint || undefined}>
             <Icon name={t.icon} />
             <span>{t.label}</span>
+            {t.hint && <span className="tab-info" title={t.hint} aria-hidden="true"><Icon name="info" /></span>}
           </button>
         ))}
       </div>
@@ -2550,7 +2552,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   return (
     <>
       <div className="topbar">
-        <div><p className="eyebrow">Facturation</p><h2 className="title font-display">Situations & avenants</h2></div>
+        <div><p className="eyebrow">Le marché</p><h2 className="title font-display">Avenants & sous-traitants</h2></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!fixedProjectId && (
             <select value={projectId ?? ""} onChange={(e) => setProjectId(Number(e.target.value) || null)}>
@@ -2558,19 +2560,21 @@ function Situations({ projects, canMutate, fixedProjectId }) {
             </select>
           )}
           <button className="btn" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "subLink" })}><Icon name="userPlus" /> Lien sous-traitant</button>
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "situation" })}><Icon name="filePlus" /> Nouvelle situation</button>
         </div>
       </div>
 
       {selected && (
-        <div className="g3" style={{ marginBottom: 16 }}>
+        <div className="g2" style={{ marginBottom: 16 }}>
           <div className="card pad"><div className="kpi-label">Marché initial</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>{money(selected.contractAmount, cur)}</div></div>
-          <div className="card pad" style={{ boxShadow: "inset 0 0 0 1px var(--amber-100)", background: "rgba(254,243,199,.3)" }}><div className="kpi-label" style={{ color: "var(--amber-700)" }}>+ Avenants</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--amber-700)" }}>+{money(changeOrdersTotal, cur)}</div></div>
-          <div className="card pad"><div className="kpi-label">Facturé (situations)</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700 }}>{money(billedToDate, cur)} <span style={{ fontSize: 12, color: "var(--ink-400)", fontWeight: 400 }}>/ {money(n(selected.contractAmount) + changeOrdersTotal, cur)}</span></div></div>
+          <div className="card pad" style={{ boxShadow: "inset 0 0 0 1px var(--amber-100)", background: "rgba(254,243,199,.3)" }}><div className="kpi-label" style={{ color: "var(--amber-700)" }}>Marché révisé (+ avenants)</div><div className="font-display" style={{ fontSize: 20, fontWeight: 700, color: "var(--amber-700)" }}>{money(n(selected.contractAmount) + changeOrdersTotal, cur)} <span style={{ fontSize: 12, color: "var(--ink-400)", fontWeight: 400 }}>(+{money(changeOrdersTotal, cur)})</span></div></div>
         </div>
       )}
 
-      <h3 className="font-display" style={{ fontSize: 15, margin: "0 0 8px" }}>Situations de travaux</h3>
+      <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
+        Les décomptes d'avancement (situations de travaux) se gèrent désormais dans l'onglet <strong>Situations de travaux</strong>.
+      </p>
+
+      {false && (
       <div className="card table-card" style={{ marginBottom: 18 }}>
         <table className="bp">
           <thead><tr><th>Situation</th><th>Période</th><th>Avancement</th><th>Montant</th><th>Statut</th></tr></thead>
@@ -2589,6 +2593,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
           </tbody>
         </table>
       </div>
+      )}
 
       <div className="section-head" style={{ marginBottom: 8 }}>
         <h3 className="font-display" style={{ fontSize: 15, margin: 0 }}>Avenants / ordres de changement</h3>

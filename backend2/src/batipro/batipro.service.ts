@@ -575,7 +575,10 @@ export class BatiproService {
     return { message: "Phase supprimee." };
   }
 
-  // ── Situations de facturation ──────────────────────────────────────────
+  // ── Situations de facturation (LEGACY) ─────────────────────────────────
+  // @deprecated Fusionne vers le socle documentaire (batipro_documents type=situation)
+  // par la migration 0228. Les enregistrements legacy sont soft-deleted (is_active=0)
+  // donc ces methodes renvoient vide en pratique. Conservees pour retro-compat mobile.
   situations(orgId: number, projectId?: number) {
     return this.db
       .select({
