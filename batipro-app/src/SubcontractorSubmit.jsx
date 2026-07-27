@@ -131,7 +131,7 @@ export default function SubcontractorSubmit({ token }) {
 
         {!showDetails ? (
           <>
-            <label style={lbl}>Montant total du {type === "invoice" ? "facture" : "devis"}
+            <label style={lbl}>Montant total du {type === "invoice" ? "facture" : "devis"} ({cur || "USD"})
               <input type="number" min="0" step="any" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} style={inp} placeholder="0" required />
             </label>
             <button type="button" onClick={() => setShowDetails(true)} style={{ ...btnGhost, marginTop: 4 }}>+ Ajouter le détail des prestations</button>
