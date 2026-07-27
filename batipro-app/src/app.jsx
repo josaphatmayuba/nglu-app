@@ -907,6 +907,7 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         planned_budget: form.planned_budget === "" || form.planned_budget == null ? undefined : Number(form.planned_budget),
         planned_duration_days: form.planned_duration_days === "" || form.planned_duration_days == null ? undefined : Number(form.planned_duration_days),
         cap_mode: form.cap_mode || "planning",
+        currency_id: form.currency_id === "" || form.currency_id == null ? undefined : Number(form.currency_id),
       };
       form.id ? await api.updatePhase(form.id, payload) : await api.createPhase(payload);
       setModal(null); load();
@@ -961,18 +962,20 @@ function Planning({ projects, canMutate, fixedProjectId }) {
       )}
 
       {modal && (
-        <PhaseModal modal={modal} busy={busy} error={error} currencyCode={selected?.currencyCode} onClose={() => setModal(null)} onSave={save} />
+        <PhaseModal modal={modal} busy={busy} error={error} currencyId={selected?.currencyId} currencyCode={selected?.currencyCode} onClose={() => setModal(null)} onSave={save} />
       )}
     </>
   );
 }
-function PhaseModal({ modal, busy, error, currencyCode, onClose, onSave }) {
+function PhaseModal({ modal, busy, error, currencyId, currencyCode, onClose, onSave }) {
   const [form, setForm] = React.useState(() => ({
     id: modal.id, label: modal.label || "", position: modal.position ?? 0, status: modal.status || "A_venir",
     progress: modal.progress ?? 0, start_date: modal.startDate || "", end_date: modal.endDate || "",
     planned_budget: modal.plannedBudget ?? "", planned_duration_days: modal.plannedDurationDays ?? "",
     cap_mode: modal.capMode || "planning",
+    currency_id: modal.currencyId || currencyId || "",
   }));
+  const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -996,7 +999,11 @@ function PhaseModal({ modal, busy, error, currencyCode, onClose, onSave }) {
           <Field label="Début" type="date" value={form.start_date} onChange={(v) => set("start_date", v)} />
           <Field label="Fin" type="date" value={form.end_date} onChange={(v) => set("end_date", v)} />
           <label className="field">
-            <span>Budget planifié ({currencyCode || "USD"})</span>
+            <span>Devise</span>
+            <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id)} currencies={currencies} />
+          </label>
+          <label className="field">
+            <span>Budget planifié</span>
             <input type="number" min="0" value={form.planned_budget} onChange={(e) => set("planned_budget", e.target.value)} />
           </label>
           <Field label="Durée planifiée (jours)" type="number" value={form.planned_duration_days} onChange={(v) => set("planned_duration_days", v)} />
