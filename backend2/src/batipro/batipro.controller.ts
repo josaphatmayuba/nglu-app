@@ -584,11 +584,18 @@ export class BatiproController {
     return this.batipro.postInvoiceToLedger(id, orgId, userId || undefined);
   }
 
-  @ApiOperation({ summary: "Enregistre un reglement (partiel/total) sur une facture" })
+  @ApiOperation({ summary: "Comptabilise un bon de commande fournisseur en depense (ledger postByRules, idempotent)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/post-purchase")
+  postPurchase(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.postPurchaseToLedger(id, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Enregistre un reglement (partiel/total) sur une facture ou un bon de commande" })
   @Permissions("update-batipro")
   @Post("documents/:id/payment")
-  recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number) {
-    return this.batipro.recordPayment(id, body.amount, orgId);
+  recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined);
   }
 
   // ── Galerie photo de chantier ─────────────────────────────────────────────

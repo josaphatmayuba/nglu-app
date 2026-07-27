@@ -542,6 +542,7 @@ export class BatiproService {
       startDate: input.start_date ?? null,
       endDate: input.end_date ?? null,
       plannedBudget: input.planned_budget != null ? String(input.planned_budget) : null,
+      currencyId: input.currency_id ?? null,
       plannedDurationDays: input.planned_duration_days ?? null,
       capMode: input.cap_mode ?? "planning",
     }).$returningId();
@@ -561,6 +562,7 @@ export class BatiproService {
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
     if (input.end_date !== undefined) patch.endDate = input.end_date || null;
     if (input.planned_budget !== undefined) patch.plannedBudget = input.planned_budget != null ? String(input.planned_budget) : null;
+    if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.planned_duration_days !== undefined) patch.plannedDurationDays = input.planned_duration_days ?? null;
     if (input.cap_mode !== undefined) patch.capMode = input.cap_mode;
     if (Object.keys(patch).length) await this.db.update(batiproPhases).set(patch).where(eq(batiproPhases.id, id));
@@ -1963,11 +1965,62 @@ export class BatiproService {
     return { id: invoiceDocumentId, ledger_entry_id: ledgerEntryId, deferred };
   }
 
-  // Enregistre un reglement (partiel/total) d'une facture. Met a jour paid_amount
-  // et le statut (issued -> paid). La comptabilisation de l'ENCAISSEMENT (ecriture
-  // banque/creance) est REPORTEE : elle depend du moyen de paiement (compte non
-  // fixe, ligne a ligne) — a brancher ulterieurement, cf. sale-invoices paidAmount.
-  async recordPayment(invoiceDocumentId: number, amount: number, orgId: number) {
+  // Comptabilise un bon de commande fournisseur (DEPENSE) via le ledger (postByRules,
+  // ROLES metier — JAMAIS de compte en dur). Idempotent par idempotencyKey.
+  // Ne touche PAS billedAmount (c'est une depense, pas une facturation de vente).
+  async postPurchaseToLedger(purchaseOrderId: number, orgId: number, userId?: number) {
+    const purchase = await this.getDocument(purchaseOrderId, orgId);
+    if (purchase.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut etre comptabilise en depense.");
+    if (purchase.direction !== "outbound") throw new BadRequestException("Bon de commande invalide : direction inattendue.");
+    if (purchase.status === "cancelled") throw new BadRequestException("Bon de commande annule : comptabilisation impossible.");
+
+    const totalHt = Number(purchase.totalHt ?? 0);
+    const totalVat = Number(purchase.totalVat ?? 0);
+    const totalTtc = Number(purchase.totalTtc ?? 0);
+    if (!(totalTtc > 0)) throw new BadRequestException("Montant du bon de commande nul : rien a comptabiliser.");
+
+    // Roles metier (resolus en comptes via transaction_type_rules, type=batipro_purchase) :
+    //  - expense    = charge / achat           (DEBIT, HT)
+    //  - vat_input  = TVA deductible            (DEBIT, TVA)
+    //  - payable    = dette fournisseur         (CREDIT, TTC)
+    const result = await this.ledger.postByRules(
+      {
+        type: "batipro_purchase",
+        reference: purchase.number ?? `BC-${purchaseOrderId}`,
+        particulars: `Bon de commande BatiPro ${purchase.number ?? purchaseOrderId}`,
+        sourceModule: "batipro",
+        relatedId: String(purchaseOrderId),
+        idempotencyKey: `batipro:purchase:${purchaseOrderId}`,
+        currencyId: purchase.currencyId ?? undefined,
+        amountsByRole: {
+          expense: totalHt,
+          vat_input: totalVat,
+          payable: totalTtc,
+        },
+      },
+      orgId,
+      userId,
+    );
+
+    const deferred = (result as { deferred?: boolean }).deferred === true;
+    const ledgerEntryId = result.id > 0 ? result.id : null;
+
+    if (ledgerEntryId) {
+      await this.db.update(batiproDocuments)
+        .set({ ledgerEntryId })
+        .where(and(eq(batiproDocuments.id, purchaseOrderId), eq(batiproDocuments.organizationId, orgId)));
+    }
+
+    await this.publish("postPurchaseToLedger", ["documents"], "updated", purchaseOrderId, orgId);
+    return { id: purchaseOrderId, ledger_entry_id: ledgerEntryId, deferred };
+  }
+
+  // Enregistre un reglement (partiel/total) d'une facture ou d'un bon de commande.
+  // Met a jour paid_amount et le statut (issued -> paid). Pour une facture (vente),
+  // la comptabilisation de l'ENCAISSEMENT reste REPORTEE (moyen de paiement non fixe).
+  // Pour un bon de commande (achat), le DECAISSEMENT est comptabilise ici (v1 : Cash
+  // par defaut, pas de choix banque/caisse) via batipro_supplier_payment.
+  async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
     const isPurchaseOrder = invoice.type === "purchase_order";
     if (invoice.type !== "invoice" && !isPurchaseOrder) {
@@ -1994,12 +2047,47 @@ export class BatiproService {
       .set({ paidAmount: String(newPaid), status: nextStatus })
       .where(and(eq(batiproDocuments.id, invoiceDocumentId), eq(batiproDocuments.organizationId, orgId)));
 
+    let paymentLedgerEntryId: number | null = null;
+    let paymentDeferred = false;
+    if (isPurchaseOrder) {
+      // Decaissement fournisseur (Cash par defaut v1) :
+      //  - payable = dette fournisseur (DEBIT, apurement)
+      //  - cash    = tresorerie        (CREDIT)
+      // Idempotence sur le CUMUL paye (centimes) pour ne pas avaler les reglements
+      // partiels successifs (un idempotencyKey base sur l'id seul avalerait le 2e reglement).
+      const result = await this.ledger.postByRules(
+        {
+          type: "batipro_supplier_payment",
+          reference: invoice.number ?? `BC-${invoiceDocumentId}`,
+          particulars: `Reglement fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
+          sourceModule: "batipro",
+          relatedId: String(invoiceDocumentId),
+          idempotencyKey: `batipro:supplier_payment:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
+          currencyId: invoice.currencyId ?? undefined,
+          amountsByRole: {
+            payable: amount,
+            cash: amount,
+          },
+        },
+        orgId,
+        userId,
+      );
+      paymentDeferred = (result as { deferred?: boolean }).deferred === true;
+      paymentLedgerEntryId = result.id > 0 ? result.id : null;
+      if (paymentLedgerEntryId) {
+        await this.db.update(batiproDocuments)
+          .set({ paymentLedgerEntryId })
+          .where(and(eq(batiproDocuments.id, invoiceDocumentId), eq(batiproDocuments.organizationId, orgId)));
+      }
+    }
+
     await this.publish("recordPayment", ["documents"], "updated", invoiceDocumentId, orgId);
     return {
       id: invoiceDocumentId,
       paid_amount: newPaid,
       balance: Math.round((totalTtc - newPaid) * 100) / 100,
       status: nextStatus,
+      ...(isPurchaseOrder ? { payment_ledger_entry_id: paymentLedgerEntryId, payment_deferred: paymentDeferred } : {}),
     };
   }
 

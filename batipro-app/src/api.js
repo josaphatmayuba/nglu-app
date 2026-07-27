@@ -197,6 +197,7 @@ export const api = {
   createInvoiceFromSituation: (situationId) => jsonFetch(`/documents/situations/${situationId}/invoice`, { method: "POST", body: "{}" }),
   issueInvoice: (id) => jsonFetch(`/documents/${id}/issue`, { method: "POST", body: "{}" }),
   recordPayment: (id, amount) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount }) }),
+  postPurchase: (id) => jsonFetch(`/documents/${id}/post-purchase`, { method: "POST", body: "{}" }),
   // Galerie photo de chantier — l'upload backend n'accepte que le fichier
   // (champ "photo"). caption/taken_at/task_id sont appliqués via un PUT
   // immédiat après upload (2 appels, cf. batipro.controller.ts).

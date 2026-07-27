@@ -75,6 +75,7 @@ export class CreateBatiproPhaseDto {
   @IsOptional() @IsDateString() start_date?: string;
   @IsOptional() @IsDateString() end_date?: string;
   @IsOptional() @IsNumber() @Min(0) planned_budget?: number;
+  @IsOptional() @IsInt() currency_id?: number;
   @IsOptional() @IsInt() @Min(1) planned_duration_days?: number;
   @IsOptional() @IsIn(["planning", "manual", "off"]) cap_mode?: string;
 }

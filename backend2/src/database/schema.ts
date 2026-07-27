@@ -2350,6 +2350,8 @@ export const batiproPhases = mysqlTable("batipro_phases", {
   startDate: date("start_date", { mode: "string" }),
   endDate: date("end_date", { mode: "string" }),
   plannedBudget: decimal("planned_budget", { precision: 14, scale: 2 }),
+  // Devise propre a la phase (fallback implicite sur celle du chantier si null).
+  currencyId: bigint("currency_id", { mode: "number" }),
   plannedDurationDays: int("planned_duration_days"),
   capMode: varchar("cap_mode", { length: 20 }).default("planning").notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
@@ -2486,6 +2488,8 @@ export const batiproDocuments = mysqlTable("batipro_documents", {
   clientTokenExpiry: timestamp("client_token_expiry"),
   notes: text("notes"),
   ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  // Ecriture de DECAISSEMENT (reglement fournisseur), distincte de ledgerEntryId (achat).
+  paymentLedgerEntryId: bigint("payment_ledger_entry_id", { mode: "number" }),
   // Montant deja regle sur une facture (type=invoice). Suivi du solde/paiement (Phase 4).
   paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
   issueDate: date("issue_date", { mode: "string" }),

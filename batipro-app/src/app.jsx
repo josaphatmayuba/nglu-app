@@ -2,6 +2,7 @@ import React from "react";
 import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
+import CurrencyPicker from "./CurrencyPicker.jsx";
 
 /* ────────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — pas de dépendance externe.
@@ -93,6 +94,24 @@ function moneyByCurrency(projects, field) {
 }
 const n = (v) => Number(v || 0);
 const projectDue = (p) => p.dueDate || p.due || "-";
+
+// Charge la liste des devises actives (pour CurrencyPicker) — même pattern que
+// Ouvriers/RecordModal (api.currencies() -> filtre status actif).
+function useCurrencies() {
+  const [currencies, setCurrencies] = React.useState([]);
+  React.useEffect(() => {
+    api.currencies().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.data || r?.getAllCurrency || []);
+      setCurrencies((arr || []).filter((c) => String(c.status) === "true" || c.status === true));
+    }).catch(() => setCurrencies([]));
+  }, []);
+  return currencies;
+}
+// Résout le code d'une devise depuis son id, dans une liste de devises.
+function resolveCurrencyCode(currencies, id) {
+  const c = (currencies || []).find((x) => String(x.currencyId ?? x.id) === String(id));
+  return c ? (c.currencyCode || c.currencyName || c.name) : null;
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -810,6 +829,12 @@ function Parametres() {
   const lastUpdate = buildDate
     ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
     : "—";
+  const [currencies, setCurrencies] = React.useState([]);
+  React.useEffect(() => {
+    api.currencies()
+      .then((res) => setCurrencies(res?.getAllCurrency || (Array.isArray(res) ? res : [])))
+      .catch(() => setCurrencies([]));
+  }, []);
   const Row = ({ k, v }) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
       <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
@@ -819,6 +844,21 @@ function Parametres() {
   return (
     <section>
       <h1 className="page-title font-display" style={{ marginBottom: 16 }}>Paramètres</h1>
+      <div className="card" style={{ maxWidth: 560, padding: 18, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Devises actives</div>
+        {!currencies.length ? (
+          <span className="muted" style={{ fontSize: 13 }}>Aucune devise chargée.</span>
+        ) : (
+          currencies.map((c) => (
+            <Row
+              key={c.currencyId ?? c.id}
+              k={`${c.currencyCode || "—"} ${c.currencySymbol ? `(${c.currencySymbol})` : ""}`.trim()}
+              v={c.exchangeRate ? `Taux : ${c.exchangeRate}` : "—"}
+            />
+          ))
+        )}
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Gestion des taux dans Comptabilité → Change.</p>
+      </div>
       <div className="card" style={{ maxWidth: 560, padding: 18 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
         <Row k="Version" v={`v${base}`} />
@@ -1294,6 +1334,10 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(!!docId);
+  const currencies = useCurrencies();
+  // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
+  const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
+  const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
     api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
@@ -1325,7 +1369,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     try {
       const payload = {
         project_id: projectId,
-        currency_id: currencyId || undefined,
+        currency_id: docCurrencyId || undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
         lines: clean.map((l) => ({
@@ -1351,6 +1395,10 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         </div>
         {loading ? <p className="muted">Chargement…</p> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label className="field" style={{ maxWidth: 220 }}>
+              <span>Devise</span>
+              <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
+            </label>
             {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
             <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
               <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
@@ -1382,9 +1430,9 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
             <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, currencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, currencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, docCurrencyCode)}</strong></div>
             </div>
 
             <label className="field"><span>Validité / échéance</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
@@ -1500,6 +1548,19 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     finally { setBusy(0); }
   };
 
+  const postPurchase = async (d) => {
+    if (!window.confirm("Comptabiliser ce bon de commande ? Une écriture comptable d'achat sera créée.")) return;
+    setError(""); setNotice(""); setBusy(d.id);
+    try {
+      const r = await api.postPurchase(d.id);
+      setNotice(r?.deferred
+        ? "Bon de commande comptabilisé. Écriture comptable EN ATTENTE d'approbation (gate)."
+        : `Bon de commande comptabilisé${r?.ledger_entry_id ? ` (écriture #${r.ledger_entry_id})` : ""}.`);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
   const budgetCur = budget?.currency_code || cur;
 
   return (
@@ -1544,6 +1605,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
               docs.map((d) => {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
                 const canPay = canMutate && d.status !== "draft" && d.status !== "cancelled";
+                const canPost = canMutate && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
                 return (
                 <tr key={d.id}>
                   <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
@@ -1557,6 +1619,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canPost && <button className="link" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
@@ -1601,6 +1664,10 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
   const [scanPhotoId, setScanPhotoId] = React.useState(null);
   const [scanJustApplied, setScanJustApplied] = React.useState(false);
   const scanInputRef = React.useRef(null);
+  const currencies = useCurrencies();
+  // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
+  const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
+  const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
     api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
@@ -1689,7 +1756,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
       const payload = {
         project_id: projectId,
         type: "purchase_order",
-        currency_id: currencyId || undefined,
+        currency_id: docCurrencyId || undefined,
         supplier_id: supplierId ? Number(supplierId) : undefined,
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
@@ -1753,6 +1820,10 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                   {subcontractors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </label>
+              <label className="field" style={{ flex: 1, minWidth: 180 }}>
+                <span>Devise</span>
+                <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
+              </label>
             </div>
 
             {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
@@ -1792,9 +1863,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
             <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, currencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, currencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, currencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, docCurrencyCode)}</strong></div>
             </div>
 
             <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
@@ -2079,6 +2150,10 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(true);
+  const currencies = useCurrencies();
+  // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
+  const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
+  const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
     if (!projectId) return;
@@ -2119,7 +2194,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
       await api.createSituationDocument({
         project_id: projectId,
         period: period.trim() || undefined,
-        currency_id: currencyId || undefined,
+        currency_id: docCurrencyId || undefined,
         notes: notes.trim() || undefined,
         lines,
       });
@@ -2137,7 +2212,13 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
         </div>
         {loading ? <p className="muted">Chargement…</p> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <label className="field"><span>Période</span><input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="ex. Juin 2026" /></label>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: 1, minWidth: 160 }}><span>Période</span><input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="ex. Juin 2026" /></label>
+              <label className="field" style={{ flex: 1, minWidth: 160 }}>
+                <span>Devise</span>
+                <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
+              </label>
+            </div>
 
             {!rows.length ? (
               <p className="muted">Ce chantier n'a aucune phase. Ajoutez des phases (onglet Planning) pour établir une situation.</p>
@@ -2164,14 +2245,14 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
                             <span className="chip rose" style={{ marginLeft: 6 }} title="L'avancement réel dépasse le plafond planifié">⚠ Dépasse le plafond planifié</span>
                           )}
                         </td>
-                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, currencyCode)}</td>
+                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, docCurrencyCode)}</td>
                         <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{n(r.previous_progress_pct).toFixed(2)} %</td>
                         <td style={{ padding: "3px 6px" }}>
                           <input type="number" min={r.previous_progress_pct} max="100" step="any" value={r.progress_pct} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} />
                         </td>
-                        <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), currencyCode)}</td>
+                        <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), docCurrencyCode)}</td>
                         <td style={{ padding: "3px 6px", color: r.over_cap ? "var(--rose-700, #be123c)" : "var(--ink-500)" }}>
-                          {r.payment_cap != null ? money(r.payment_cap, currencyCode) : "Aucun plafond"}
+                          {r.payment_cap != null ? money(r.payment_cap, docCurrencyCode) : "Aucun plafond"}
                         </td>
                       </tr>
                     ))}
@@ -2181,7 +2262,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
             )}
 
             <div className="card pad" style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-              <span>Montant HT à facturer sur la période</span><strong>{money(totalPeriod, currencyCode)}</strong>
+              <span>Montant HT à facturer sur la période</span><strong>{money(totalPeriod, docCurrencyCode)}</strong>
             </div>
             <p className="muted" style={{ fontSize: 11 }}>Le montant définitif (TVA/TTC) est recalculé côté serveur à l'enregistrement, sur la base du marché de chaque phase (devis acceptés du chantier).</p>
 
@@ -2533,7 +2614,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveSituation = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: selected?.currencyId || null, status: form.status || "En_validation" };
+      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: form.currency_id || null, status: form.status || "En_validation" };
       form.id ? await api.updateSituation(form.id, payload) : await api.createSituation(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -2542,7 +2623,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveChangeOrder = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: selected?.currencyId || null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
+      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: form.currency_id || null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
       form.id ? await api.updateChangeOrder(form.id, payload) : await api.createChangeOrder(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -2642,8 +2723,8 @@ function Situations({ projects, canMutate, fixedProjectId }) {
         </table>
       </div>
 
-      {modal?.kind === "situation" && <SituationModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveSituation} />}
-      {modal?.kind === "changeOrder" && <ChangeOrderModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveChangeOrder} />}
+      {modal?.kind === "situation" && <SituationModal modal={modal} defaultCurrencyId={selected?.currencyId} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveSituation} />}
+      {modal?.kind === "changeOrder" && <ChangeOrderModal modal={modal} defaultCurrencyId={selected?.currencyId} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveChangeOrder} />}
       {modal?.kind === "subLink" && <SubcontractorLinkModal projectId={projectId} subcontractors={subcontractors} onClose={() => setModal(null)} />}
       {modal?.kind === "returnSubmission" && <ReturnSubmissionModal busy={busy} error={error} onClose={() => setModal(null)} onSubmit={(motif) => reviewSubmission(modal.id, "return", motif)} />}
     </>
@@ -2723,8 +2804,9 @@ function ReturnSubmissionModal({ busy, error, onClose, onSubmit }) {
     </div>
   );
 }
-function SituationModal({ modal, busy, error, onClose, onSave }) {
-  const [form, setForm] = React.useState(() => ({ id: modal.id, number: modal.number ?? "", period: modal.period || "", progress: modal.progress ?? 0, amount: modal.amount ?? 0, status: modal.status || "En_validation" }));
+function SituationModal({ modal, defaultCurrencyId, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({ id: modal.id, number: modal.number ?? "", period: modal.period || "", progress: modal.progress ?? 0, amount: modal.amount ?? 0, currency_id: modal.currencyId || defaultCurrencyId || "", status: modal.status || "En_validation" }));
+  const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -2738,6 +2820,10 @@ function SituationModal({ modal, busy, error, onClose, onSave }) {
           <Field label="Période" value={form.period} onChange={(v) => set("period", v)} />
           <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
           <Field label="Montant" type="number" value={form.amount} onChange={(v) => set("amount", v)} />
+          <label className="field">
+            <span>Devise</span>
+            <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id)} currencies={currencies} />
+          </label>
           <label className="field">
             <span>Statut</span>
             <select value={form.status} onChange={(e) => set("status", e.target.value)}>
@@ -2756,8 +2842,9 @@ function SituationModal({ modal, busy, error, onClose, onSave }) {
     </div>
   );
 }
-function ChangeOrderModal({ modal, busy, error, onClose, onSave }) {
-  const [form, setForm] = React.useState(() => ({ id: modal.id, title: modal.title || "", reference: modal.reference || "", amount: modal.amount ?? 0, delay_days: modal.delayDays ?? 0, status: modal.status || "En_attente", notes: modal.notes || "" }));
+function ChangeOrderModal({ modal, defaultCurrencyId, busy, error, onClose, onSave }) {
+  const [form, setForm] = React.useState(() => ({ id: modal.id, title: modal.title || "", reference: modal.reference || "", amount: modal.amount ?? 0, currency_id: modal.currencyId || defaultCurrencyId || "", delay_days: modal.delayDays ?? 0, status: modal.status || "En_attente", notes: modal.notes || "" }));
+  const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -2770,6 +2857,10 @@ function ChangeOrderModal({ modal, busy, error, onClose, onSave }) {
           <Field label="Titre" value={form.title} onChange={(v) => set("title", v)} required />
           <Field label="Référence" value={form.reference} onChange={(v) => set("reference", v)} />
           <Field label="Montant" type="number" value={form.amount} onChange={(v) => set("amount", v)} />
+          <label className="field">
+            <span>Devise</span>
+            <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id)} currencies={currencies} />
+          </label>
           <Field label="Délai ajouté (jours)" type="number" value={form.delay_days} onChange={(v) => set("delay_days", v)} />
           <label className="field">
             <span>Statut</span>
@@ -3010,10 +3101,9 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
   const save = async (form) => {
     setBusy(true); setError("");
     try {
-      const project = projects.find((p) => p.id === Number(form.project_id));
       const payload = {
         name: form.name, trade: form.trade || null, project_id: form.project_id ? Number(form.project_id) : null,
-        contract_amount: n(form.contract_amount), currency_id: project?.currencyId || null,
+        contract_amount: n(form.contract_amount), currency_id: form.currency_id || null,
         status: form.status || "En_cours",
       };
       form.id ? await api.updateSubcontractor(form.id, payload) : await api.createSubcontractor(payload);
@@ -3056,10 +3146,12 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
   );
 }
 function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
+  const project = projects.find((p) => p.id === modal.projectId);
   const [form, setForm] = React.useState(() => ({
     id: modal.id, name: modal.name || "", trade: modal.trade || "", project_id: modal.projectId || "",
-    contract_amount: modal.contractAmount ?? 0, status: modal.status || "En_cours",
+    contract_amount: modal.contractAmount ?? 0, currency_id: modal.currencyId || project?.currencyId || "", status: modal.status || "En_cours",
   }));
+  const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -3079,6 +3171,10 @@ function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
             </select>
           </label>
           <Field label="Montant contrat" type="number" value={form.contract_amount} onChange={(v) => set("contract_amount", v)} />
+          <label className="field">
+            <span>Devise</span>
+            <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id)} currencies={currencies} />
+          </label>
           <label className="field">
             <span>Statut</span>
             <select value={form.status} onChange={(e) => set("status", e.target.value)}>
@@ -3298,10 +3394,7 @@ function WorkerModal({ modal, crews, currencies, busy, error, onClose, onSave })
           <Field label="Taux journalier" type="number" value={form.dailyRate} onChange={(v) => set("dailyRate", v)} />
           <label className="field">
             <span>Devise</span>
-            <select value={form.currencyId} onChange={(e) => set("currencyId", e.target.value)}>
-              <option value="">— Devise —</option>
-              {currencies.map((c) => <option key={c.id} value={c.id}>{c.currencyCode || c.currencyName || c.name}</option>)}
-            </select>
+            <CurrencyPicker value={form.currencyId} onChange={(id) => set("currencyId", id)} currencies={currencies} />
           </label>
           <label className="field">
             <span>Équipe</span>
@@ -3549,10 +3642,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
               <label className="field">
                 <span>Devise</span>
-                <select value={form.currency_id || ""} onChange={(e) => set("currency_id", e.target.value || null)}>
-                  <option value="">— Devise —</option>
-                  {currencies.map((c) => <option key={c.id} value={c.id}>{c.currencyCode || c.currencyName || c.name}</option>)}
-                </select>
+                <CurrencyPicker value={form.currency_id || ""} onChange={(id) => set("currency_id", id || null)} currencies={currencies} />
               </label>
               <Field label="Budget (coût)" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
               <Field label="Montant contrat (client)" type="number" value={form.contractAmount} onChange={(v) => set("contractAmount", v)} />
