@@ -110,10 +110,13 @@ export const api = {
   // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "batipro".
   forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>
     jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { base: API_ROOT }),
-  materials: () => jsonFetch("/materials"),
+  materials: ({ projectId } = {}) => jsonFetch(`/materials${projectId ? `?project_id=${projectId}` : ""}`),
   createMaterial: (b) => jsonFetch("/materials", { method: "POST", body: JSON.stringify(b || {}) }),
   updateMaterial: (id, b) => jsonFetch(`/materials/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteMaterial: (id) => jsonFetch(`/materials/${id}`, { method: "DELETE" }),
+  // Suivi de stock par chantier (mouvements réception/consommation)
+  stockMovements: (projectId) => jsonFetch(`/stock-movements${projectId ? `?project_id=${projectId}` : ""}`),
+  createStockMovement: (b) => jsonFetch("/stock-movements", { method: "POST", body: JSON.stringify(b || {}) }),
   crews: () => jsonFetch("/crews"),
   createCrew: (b) => jsonFetch("/crews", { method: "POST", body: JSON.stringify(b || {}) }),
   updateCrew: (id, b) => jsonFetch(`/crews/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),

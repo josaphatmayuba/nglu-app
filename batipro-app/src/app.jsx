@@ -496,6 +496,7 @@ const PROJECT_TABS = [
   { id: "apercu", label: "Aperçu", icon: "pieChart" },
   { id: "devis", label: "Devis", icon: "receipt" },
   { id: "bonscommande", label: "Bons de commande", icon: "receipt" },
+  { id: "materiaux", label: "Matériaux", icon: "hardHat" },
   { id: "situations", label: "Situations & avenants", icon: "receipt" },
   { id: "situationstravaux", label: "Situations de travaux", icon: "receipt" },
   { id: "factures", label: "Factures", icon: "receipt" },
@@ -552,7 +553,8 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
           </div>
         )}
         {tab === "devis" && <Devis projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
-        {tab === "bonscommande" && <BonsCommande projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "bonscommande" && <BonsCommande projects={projects} canMutate={canMutate} fixedProjectId={p.id} materials={materials} />}
+        {tab === "materiaux" && <Materiaux canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "situations" && <Situations projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "situationstravaux" && <SituationsTravaux projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "factures" && <Factures projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
@@ -828,6 +830,9 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         project_id: projectId, label: form.label, position: Number(form.position || 0),
         status: form.status || "A_venir", progress: Number(form.progress || 0),
         start_date: form.start_date || null, end_date: form.end_date || null,
+        planned_budget: form.planned_budget === "" || form.planned_budget == null ? undefined : Number(form.planned_budget),
+        planned_duration_days: form.planned_duration_days === "" || form.planned_duration_days == null ? undefined : Number(form.planned_duration_days),
+        cap_mode: form.cap_mode || "planning",
       };
       form.id ? await api.updatePhase(form.id, payload) : await api.createPhase(payload);
       setModal(null); load();
@@ -882,15 +887,17 @@ function Planning({ projects, canMutate, fixedProjectId }) {
       )}
 
       {modal && (
-        <PhaseModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={save} />
+        <PhaseModal modal={modal} busy={busy} error={error} currencyCode={selected?.currencyCode} onClose={() => setModal(null)} onSave={save} />
       )}
     </>
   );
 }
-function PhaseModal({ modal, busy, error, onClose, onSave }) {
+function PhaseModal({ modal, busy, error, currencyCode, onClose, onSave }) {
   const [form, setForm] = React.useState(() => ({
     id: modal.id, label: modal.label || "", position: modal.position ?? 0, status: modal.status || "A_venir",
     progress: modal.progress ?? 0, start_date: modal.startDate || "", end_date: modal.endDate || "",
+    planned_budget: modal.plannedBudget ?? "", planned_duration_days: modal.plannedDurationDays ?? "",
+    cap_mode: modal.capMode || "planning",
   }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
@@ -914,6 +921,19 @@ function PhaseModal({ modal, busy, error, onClose, onSave }) {
           <Field label="Ordre" type="number" value={form.position} onChange={(v) => set("position", v)} />
           <Field label="Début" type="date" value={form.start_date} onChange={(v) => set("start_date", v)} />
           <Field label="Fin" type="date" value={form.end_date} onChange={(v) => set("end_date", v)} />
+          <label className="field">
+            <span>Budget planifié ({currencyCode || "USD"})</span>
+            <input type="number" min="0" value={form.planned_budget} onChange={(e) => set("planned_budget", e.target.value)} />
+          </label>
+          <Field label="Durée planifiée (jours)" type="number" value={form.planned_duration_days} onChange={(v) => set("planned_duration_days", v)} />
+          <label className="field">
+            <span>Mode de plafond</span>
+            <select value={form.cap_mode} onChange={(e) => set("cap_mode", e.target.value)}>
+              <option value="planning">Planning</option>
+              <option value="manual">Manuel</option>
+              <option value="off">Désactivé</option>
+            </select>
+          </label>
         </div>
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">
@@ -1394,9 +1414,9 @@ function DevisShareModal({ docId, onClose, onShared }) {
    chantier (devis accepté vs BC engagés vs budget/contrat). */
 const PO_STATUS_TONE = { draft: "ink", sent: "amber", confirmed: "emerald", received: "emerald", cancelled: "rose" };
 const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", received: "Réceptionné", cancelled: "Annulé" };
-const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
+const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "" });
 
-function BonsCommande({ projects, canMutate, fixedProjectId }) {
+function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [docs, setDocs] = React.useState([]);
   const [budget, setBudget] = React.useState(null);
@@ -1496,6 +1516,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId }) {
           projectId={projectId}
           currencyId={selected?.currencyId}
           currencyCode={cur}
+          materials={materials}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
         />
@@ -1504,7 +1525,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId }) {
   );
 }
 
-function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, onClose, onSaved }) {
+function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, materials, onClose, onSaved }) {
   const [lines, setLines] = React.useState([emptyPoLine()]);
   const [dueDate, setDueDate] = React.useState("");
   const [notes, setNotes] = React.useState("");
@@ -1529,7 +1550,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -1592,6 +1613,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
           unit_price: l.unitPrice ?? 0,
           vat_rate: 0,
           phase_id: "",
+          material_id: "",
         })));
       }
       setScanJustApplied(true);
@@ -1620,6 +1642,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
           unit_price: n(l.unit_price),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
+          material_id: l.material_id ? Number(l.material_id) : undefined,
         })),
       };
       docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);
@@ -1679,7 +1702,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
                 <thead>
                   <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
                     <th style={{ padding: "6px" }}>Désignation</th><th style={{ padding: "6px" }}>Qté</th><th style={{ padding: "6px" }}>P.U.</th>
-                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th></th>
+                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th style={{ padding: "6px" }}>Matériau suivi en stock</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1693,6 +1716,12 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, on
                         <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ minWidth: 120 }}>
                           <option value="">—</option>
                           {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "3px 6px" }}>
+                        <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)} style={{ minWidth: 140 }}>
+                          <option value="">— (texte libre)</option>
+                          {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
                       </td>
                       <td style={{ padding: "3px 6px" }}><button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeLine(i)}>✕</button></td>
@@ -2005,6 +2034,8 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
           previous_progress_pct: p.previous_progress_pct,
           // Pré-remplit avec le cumul précédent (le gestionnaire relève à la valeur courante).
           progress_pct: p.previous_progress_pct,
+          payment_cap: p.payment_cap,
+          over_cap: p.over_cap,
         })));
       })
       .catch((e) => setError(e.message || String(e)))
@@ -2062,18 +2093,27 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
                       <th style={{ padding: "6px" }}>Cumul préc.</th>
                       <th style={{ padding: "6px" }}>Avanc. cumulé %</th>
                       <th style={{ padding: "6px" }}>Montant période</th>
+                      <th style={{ padding: "6px" }}>Plafond à ce jour</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r, i) => (
                       <tr key={r.phase_id}>
-                        <td style={{ padding: "3px 6px" }}>{r.label}</td>
+                        <td style={{ padding: "3px 6px" }}>
+                          {r.label}
+                          {r.over_cap && (
+                            <span className="chip rose" style={{ marginLeft: 6 }} title="L'avancement réel dépasse le plafond planifié">⚠ Dépasse le plafond planifié</span>
+                          )}
+                        </td>
                         <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, currencyCode)}</td>
                         <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{n(r.previous_progress_pct).toFixed(2)} %</td>
                         <td style={{ padding: "3px 6px" }}>
                           <input type="number" min={r.previous_progress_pct} max="100" step="any" value={r.progress_pct} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} />
                         </td>
                         <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), currencyCode)}</td>
+                        <td style={{ padding: "3px 6px", color: r.over_cap ? "var(--rose-700, #be123c)" : "var(--ink-500)" }}>
+                          {r.payment_cap != null ? money(r.payment_cap, currencyCode) : "Aucun plafond"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -2689,7 +2729,98 @@ function ChangeOrderModal({ modal, busy, error, onClose, onSave }) {
 }
 
 /* ── Matériaux & achats ────────────────────────────────────────────────── */
-function Materiaux({ materials, onNew, canMutate }) {
+const STOCK_MOVEMENT_LABEL = { reception: "Reçu", consumption: "Consommé", adjustment: "Ajustement" };
+const STOCK_MOVEMENT_TONE = { reception: "emerald", consumption: "amber", adjustment: "ink" };
+
+function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectId }) {
+  // Mode projet (fixedProjectId) : matériaux + mouvements de CE chantier uniquement.
+  // Mode global (sidebar, sans fixedProjectId) : comportement inchangé (props materials).
+  const [projectMaterials, setProjectMaterials] = React.useState([]);
+  const [movements, setMovements] = React.useState([]);
+  const [loading, setLoading] = React.useState(!!fixedProjectId);
+  const [modal, setModal] = React.useState(null);
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(() => {
+    if (!fixedProjectId) return;
+    setLoading(true);
+    Promise.all([
+      api.materials({ projectId: fixedProjectId }),
+      api.stockMovements(fixedProjectId),
+    ])
+      .then(([mats, mvts]) => { setProjectMaterials(mats || []); setMovements(mvts || []); })
+      .catch((err) => setError(err.message || String(err)))
+      .finally(() => setLoading(false));
+  }, [fixedProjectId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  if (fixedProjectId) {
+    const totalReceived = projectMaterials.reduce((s, m) => s + n(m.received), 0);
+    const totalConsumed = projectMaterials.reduce((s, m) => s + n(m.consumed), 0);
+    const totalRemaining = projectMaterials.reduce((s, m) => s + n(m.remaining), 0);
+    return (
+      <>
+        <div className="topbar">
+          <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux du chantier</h2></div>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="box" /> Déclarer une sortie</button>
+        </div>
+        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
+        <div className="g3 kpis" style={{ marginBottom: 16 }}>
+          <div className="card pad"><div className="kpi-label">Reçu (total)</div><div className="font-display kpi-value" style={{ color: "var(--emerald-600)" }}>{totalReceived}</div></div>
+          <div className="card pad"><div className="kpi-label">Consommé (total)</div><div className="font-display kpi-value" style={{ color: "var(--amber-600)" }}>{totalConsumed}</div></div>
+          <div className="card pad"><div className="kpi-label">Restant (total)</div><div className="font-display kpi-value">{totalRemaining}</div></div>
+        </div>
+        <div className="card table-card" style={{ marginBottom: 16 }}>
+          <table className="bp">
+            <thead><tr><th>Matériau</th><th>Reçu</th><th>Consommé</th><th>Restant</th></tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={4} className="muted">Chargement…</td></tr> :
+                !projectMaterials.length ? <tr><td colSpan={4} className="muted">Aucun mouvement de stock pour ce chantier.</td></tr> :
+                projectMaterials.map((m) => (
+                  <tr key={m.id}>
+                    <td style={{ fontWeight: 500 }}>{m.name}</td>
+                    <td style={{ color: "var(--emerald-600)" }}>{n(m.received)} {m.unit}</td>
+                    <td style={{ color: "var(--amber-600)" }}>{n(m.consumed)} {m.unit}</td>
+                    <td style={{ fontWeight: 600 }}>{n(m.remaining)} {m.unit}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="eyebrow" style={{ marginBottom: 8 }}>Historique des mouvements</p>
+        <div className="card table-card">
+          <table className="bp">
+            <thead><tr><th>Date</th><th>Matériau</th><th>Type</th><th>Quantité</th><th>Phase</th><th>Note</th></tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
+                !movements.length ? <tr><td colSpan={6} className="muted">Aucun mouvement enregistré.</td></tr> :
+                movements.map((mv) => (
+                  <tr key={mv.id}>
+                    <td style={{ color: "var(--ink-500)" }}>{mv.createdAt ? String(mv.createdAt).slice(0, 10) : "—"}</td>
+                    <td>{mv.materialName}</td>
+                    <td><span className={`chip ${STOCK_MOVEMENT_TONE[mv.movementType] || "ink"}`}>{STOCK_MOVEMENT_LABEL[mv.movementType] || mv.movementType}</span></td>
+                    <td>{n(mv.quantity)} {mv.materialUnit}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{mv.phaseLabel || "—"}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{mv.note || "—"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+        {modal && (
+          <StockMovementModal
+            projectId={fixedProjectId}
+            materials={projectMaterials.length ? projectMaterials : globalMaterials}
+            onClose={() => setModal(null)}
+            onSaved={() => { setModal(null); load(); }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Vue globale (sidebar, hors projet) — comportement inchangé.
+  const materials = globalMaterials || [];
   const low = materials.filter((m) => n(m.stock) < n(m.min ?? m.minStock)).length;
   return (
     <>
@@ -2724,6 +2855,75 @@ function Materiaux({ materials, onNew, canMutate }) {
         </table>
       </div>
     </>
+  );
+}
+
+// Déclaration d'une sortie (consommation) manuelle — rattachée à une phase du
+// planning du chantier. Le backend force movementType: 'consumption'.
+function StockMovementModal({ projectId, materials, onClose, onSaved }) {
+  const [materialId, setMaterialId] = React.useState("");
+  const [phaseId, setPhaseId] = React.useState("");
+  const [quantity, setQuantity] = React.useState(1);
+  const [note, setNote] = React.useState("");
+  const [phases, setPhases] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+  }, [projectId]);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!materialId) { setError("Choisissez un matériau."); return; }
+    if (!(n(quantity) > 0)) { setError("La quantité doit être supérieure à 0."); return; }
+    setBusy(true);
+    try {
+      await api.createStockMovement({
+        projectId,
+        materialId: Number(materialId),
+        phaseId: phaseId ? Number(phaseId) : undefined,
+        quantity: n(quantity),
+        note: note.trim() || undefined,
+      });
+      onSaved();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Déclarer une sortie de stock</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Matériau</span>
+            <select value={materialId} onChange={(e) => setMaterialId(e.target.value)} required>
+              <option value="">—</option>
+              {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Phase</span>
+            <select value={phaseId} onChange={(e) => setPhaseId(e.target.value)}>
+              <option value="">—</option>
+              {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </label>
+          <Field label="Quantité" type="number" value={quantity} onChange={setQuantity} required />
+          <label className="field"><span>Note (optionnel)</span><textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 50 }} placeholder="Précisions…" /></label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !materialId}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

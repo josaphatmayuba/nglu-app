@@ -2349,6 +2349,9 @@ export const batiproPhases = mysqlTable("batipro_phases", {
   progress: int("progress").default(0).notNull(),
   startDate: date("start_date", { mode: "string" }),
   endDate: date("end_date", { mode: "string" }),
+  plannedBudget: decimal("planned_budget", { precision: 14, scale: 2 }),
+  plannedDurationDays: int("planned_duration_days"),
+  capMode: varchar("cap_mode", { length: 20 }).default("planning").notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -2504,10 +2507,41 @@ export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   lineHt: decimal("line_ht", { precision: 14, scale: 2 }).default("0").notNull(),
   lineTtc: decimal("line_ttc", { precision: 14, scale: 2 }).default("0").notNull(),
   phaseId: bigint("phase_id", { mode: "number" }),
+  // Lien optionnel vers un materiau suivi en stock (batipro_materials). NULL pour
+  // les lignes non-materiel (main d'oeuvre, prestations = designation texte libre).
+  // Une ligne de BC avec material_id genere un mouvement de reception a l'emission.
+  materialId: bigint("material_id", { mode: "number" }),
   // % d'avancement CUMULE de la ligne (situations de travaux, Phase 3). NULL sur
   // les lignes de devis/BC/factures. Le montant de la periode se deduit du delta
   // par rapport a la situation precedente cote service.
   progressPct: decimal("progress_pct", { precision: 6, scale: 2 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Grand livre des mouvements de stock materiaux PAR CHANTIER (inspire de
+// journal_entry_lines). Le stock d'un materiau sur un projet = SUM(reception)
+// - SUM(consumption) +/- SUM(adjustment) filtre sur project_id + material_id ;
+// jamais une valeur ecrasee en dur. batipro_materials reste le catalogue global.
+// movement_type : reception (auto a l'emission d'un BC) / consumption (declaree
+// a la main, rattachee a une phase) / adjustment. quantity toujours positive :
+// le signe est porte par movement_type. Pas de FK stricte (pattern batipro).
+export const batiproStockMovements = mysqlTable("batipro_stock_movements", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  materialId: bigint("material_id", { mode: "number" }).notNull(),
+  // Origine du mouvement : document (BC) a l'origine d'une reception. NULL pour
+  // une consommation ou un ajustement manuel.
+  documentId: bigint("document_id", { mode: "number" }),
+  // Phase du planning (batipro_phases) rattachee au mouvement. Utilise pour les
+  // consommations (savoir combien telle phase a consomme de tel materiau).
+  phaseId: bigint("phase_id", { mode: "number" }),
+  movementType: varchar("movement_type", { length: 20 }).default("reception").notNull(),
+  quantity: decimal("quantity", { precision: 14, scale: 3 }).default("0").notNull(),
+  note: text("note"),
+  createdBy: bigint("created_by", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

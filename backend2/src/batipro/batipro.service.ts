@@ -20,6 +20,7 @@ import {
   batiproProjects,
   batiproSitePhotos,
   batiproSituations,
+  batiproStockMovements,
   batiproSubcontractorLinks,
   batiproSubcontractors,
   batiproTasks,
@@ -46,6 +47,7 @@ import type {
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
   CreateBatiproSituationDocumentDto,
+  CreateStockMovementDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
@@ -263,12 +265,50 @@ export class BatiproService {
     return { message: "Tache supprimee." };
   }
 
-  materials(orgId: number) {
-    return this.db
-      .select()
+  materials(orgId: number, projectId?: number) {
+    if (projectId == null) {
+      return this.db
+        .select()
+        .from(batiproMaterials)
+        .where(and(eq(batiproMaterials.organizationId, orgId), eq(batiproMaterials.isActive, 1)))
+        .orderBy(batiproMaterials.name);
+    }
+    return this.materialsWithProjectStock(orgId, projectId);
+  }
+
+  // Catalogue enrichi scope-projet : ne renvoie que les materiaux ayant au moins
+  // un mouvement de stock sur ce chantier, avec recu/consomme/restant calcules
+  // (SUM par movement_type ; adjustment inclus dans le restant).
+  private async materialsWithProjectStock(orgId: number, projectId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(batiproMaterials),
+        received: sql<string>`COALESCE(SUM(CASE WHEN ${batiproStockMovements.movementType} = 'reception' THEN ${batiproStockMovements.quantity} ELSE 0 END), 0)`,
+        consumed: sql<string>`COALESCE(SUM(CASE WHEN ${batiproStockMovements.movementType} = 'consumption' THEN ${batiproStockMovements.quantity} ELSE 0 END), 0)`,
+        adjusted: sql<string>`COALESCE(SUM(CASE WHEN ${batiproStockMovements.movementType} = 'adjustment' THEN ${batiproStockMovements.quantity} ELSE 0 END), 0)`,
+      })
       .from(batiproMaterials)
+      .innerJoin(batiproStockMovements, and(
+        eq(batiproStockMovements.materialId, batiproMaterials.id),
+        eq(batiproStockMovements.organizationId, orgId),
+        eq(batiproStockMovements.projectId, projectId),
+        eq(batiproStockMovements.isActive, 1),
+      ))
       .where(and(eq(batiproMaterials.organizationId, orgId), eq(batiproMaterials.isActive, 1)))
+      .groupBy(batiproMaterials.id)
       .orderBy(batiproMaterials.name);
+
+    return rows.map((row) => {
+      const received = Number(row.received);
+      const consumed = Number(row.consumed);
+      const adjusted = Number(row.adjusted);
+      return {
+        ...row,
+        received,
+        consumed,
+        remaining: Math.round((received - consumed + adjusted) * 1000) / 1000,
+      };
+    });
   }
 
   async getMaterial(id: number, orgId: number) {
@@ -317,6 +357,57 @@ export class BatiproService {
     await this.db.update(batiproMaterials).set({ isActive: 0 }).where(and(eq(batiproMaterials.id, id), eq(batiproMaterials.organizationId, orgId)));
     await this.publish("deleteMaterial", ["materials"], "deleted", id, orgId);
     return { message: "Materiau supprime." };
+  }
+
+  // ── Mouvements de stock materiaux par chantier ──────────────────────────
+  // Consommation manuelle uniquement (movement_type force serveur) : la
+  // reception ne se cree QUE via receiveStockFromPurchaseOrder (emission BC).
+  async createStockMovement(input: CreateStockMovementDto, orgId: number) {
+    await this.getProject(input.project_id, orgId);
+    await this.getMaterial(input.material_id, orgId);
+    if (input.phase_id != null) await this.getPhase(input.phase_id, orgId);
+    const [result] = await this.db.insert(batiproStockMovements).values({
+      organizationId: orgId,
+      projectId: input.project_id,
+      materialId: input.material_id,
+      phaseId: input.phase_id ?? null,
+      movementType: "consumption",
+      quantity: String(input.quantity),
+      note: input.note ?? null,
+    }).$returningId();
+    const id = Number(result.id);
+    await this.publish("createStockMovement", ["stock_movements"], "created", id, orgId);
+    return this.getStockMovement(id, orgId);
+  }
+
+  private async getStockMovement(id: number, orgId: number) {
+    const [row] = await this.stockMovementsQuery(orgId).where(and(eq(batiproStockMovements.id, id), eq(batiproStockMovements.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Mouvement de stock introuvable.");
+    return row;
+  }
+
+  private stockMovementsQuery(orgId: number) {
+    return this.db
+      .select({
+        ...getTableColumns(batiproStockMovements),
+        materialName: batiproMaterials.name,
+        materialUnit: batiproMaterials.unit,
+        phaseLabel: batiproPhases.label,
+      })
+      .from(batiproStockMovements)
+      .leftJoin(batiproMaterials, eq(batiproMaterials.id, batiproStockMovements.materialId))
+      .leftJoin(batiproPhases, eq(batiproPhases.id, batiproStockMovements.phaseId));
+  }
+
+  // Historique des mouvements de stock d'un chantier, enrichi materiau/phase.
+  stockMovements(orgId: number, projectId: number) {
+    return this.stockMovementsQuery(orgId)
+      .where(and(
+        eq(batiproStockMovements.organizationId, orgId),
+        eq(batiproStockMovements.projectId, projectId),
+        eq(batiproStockMovements.isActive, 1),
+      ))
+      .orderBy(desc(batiproStockMovements.id));
   }
 
   crews(orgId: number) {
@@ -451,6 +542,9 @@ export class BatiproService {
       progress: input.progress ?? 0,
       startDate: input.start_date ?? null,
       endDate: input.end_date ?? null,
+      plannedBudget: input.planned_budget != null ? String(input.planned_budget) : null,
+      plannedDurationDays: input.planned_duration_days ?? null,
+      capMode: input.cap_mode ?? "planning",
     }).$returningId();
     const id = Number(result.id);
     await this.publish("createPhase", ["phases"], "created", id, orgId);
@@ -467,6 +561,9 @@ export class BatiproService {
     if (input.progress !== undefined) patch.progress = input.progress;
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
     if (input.end_date !== undefined) patch.endDate = input.end_date || null;
+    if (input.planned_budget !== undefined) patch.plannedBudget = input.planned_budget != null ? String(input.planned_budget) : null;
+    if (input.planned_duration_days !== undefined) patch.plannedDurationDays = input.planned_duration_days ?? null;
+    if (input.cap_mode !== undefined) patch.capMode = input.cap_mode;
     if (Object.keys(patch).length) await this.db.update(batiproPhases).set(patch).where(eq(batiproPhases.id, id));
     await this.publish("updatePhase", ["phases"], "updated", id, orgId);
     return this.getPhase(id, orgId);
@@ -1158,7 +1255,7 @@ export class BatiproService {
 
   // Recalcule les totaux HT/TVA/TTC depuis les lignes (jamais de confiance au
   // front). Renvoie les lignes normalisees + les totaux arrondis au centime.
-  private computeDocumentTotals(rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number }>, orgId: number, validPhaseIds: Set<number>) {
+  private computeDocumentTotals(rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number }>, orgId: number, validPhaseIds: Set<number>) {
     let totalHt = 0, totalVat = 0;
     const lines = rawLines.map((line, index) => {
       const qty = Number(line.quantity ?? 0);
@@ -1180,6 +1277,7 @@ export class BatiproService {
         lineHt: String(lineHt),
         lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
         phaseId,
+        materialId: line.material_id ?? null,
       };
     });
     return {
@@ -1323,8 +1421,40 @@ export class BatiproService {
       await this.db.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
     }
 
+    // Reception automatique de stock a l'emission du BC (statut -> 'sent').
+    // Ne se declenche qu'une fois (idempotent) et jamais pour un devis/facture.
+    if (doc.type === "purchase_order" && input.status === "sent" && doc.status !== "sent") {
+      await this.receiveStockFromPurchaseOrder(id, orgId);
+    }
+
     await this.publish("updateDocument", ["documents", "document_lines"], "updated", id, orgId);
     return this.getDocument(id, orgId);
+  }
+
+  // Cree un mouvement 'reception' pour chaque ligne du BC ayant un materialId
+  // renseigne. Idempotent : ne rejoue rien si des mouvements existent deja pour
+  // ce document (evite les doublons si la methode est rappelee sur ce document).
+  private async receiveStockFromPurchaseOrder(documentId: number, orgId: number) {
+    const [existing] = await this.db
+      .select({ id: batiproStockMovements.id })
+      .from(batiproStockMovements)
+      .where(and(eq(batiproStockMovements.documentId, documentId), eq(batiproStockMovements.organizationId, orgId)))
+      .limit(1);
+    if (existing) return;
+
+    const doc = await this.getDocument(documentId, orgId);
+    const lines = doc.lines.filter((l) => l.materialId != null && l.isActive === 1);
+    if (!lines.length) return;
+
+    await this.db.insert(batiproStockMovements).values(lines.map((line) => ({
+      organizationId: orgId,
+      projectId: doc.projectId,
+      materialId: line.materialId as number,
+      documentId,
+      movementType: "reception",
+      quantity: line.quantity,
+    })));
+    await this.publish("receiveStockFromPurchaseOrder", ["stock_movements"], "created", documentId, orgId);
   }
 
   async deleteDocument(id: number, orgId: number) {
@@ -1402,6 +1532,63 @@ export class BatiproService {
     return byPhase;
   }
 
+  // Montant deja facture (cumul des situations ANTERIEURES actives) par phase.
+  // Renvoie Map<phaseId, montant_ht_cumule>. Sert au plafond de paiement
+  // (cap - deja_paye) pour ne jamais depasser le budget planifie d'une phase.
+  private async priorPaidAmountByPhase(orgId: number, projectId: number, excludeDocumentId?: number) {
+    const rows = await this.db
+      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "situation"),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocumentLines.isActive, 1),
+        excludeDocumentId ? sql`${batiproDocuments.id} <> ${excludeDocumentId}` : undefined,
+      ));
+    const byPhase = new Map<number, number>();
+    for (const r of rows) {
+      if (r.phaseId == null) continue;
+      byPhase.set(r.phaseId, (byPhase.get(r.phaseId) ?? 0) + Number(r.lineHt ?? 0));
+    }
+    return byPhase;
+  }
+
+  // Plafond de paiement d'une phase a la date T (SCRUM-267).
+  //  - cap_mode = 'off', ou plannedBudget absent → pas de plafond (null).
+  //  - cap_mode = 'manual' → plafond = plannedBudget plein (pas de prorata).
+  //  - cap_mode = 'planning' (defaut) → plafond = plannedBudget * ratio temps
+  //    ecoule, ratio borne [0..1]. Duree = plannedDurationDays si renseignee,
+  //    sinon (endDate - startDate) en jours. Sans aucune duree disponible en
+  //    mode planning : pas de plafond (comportement 'off', pas de crash).
+  private phasePaymentCap(
+    phase: Pick<typeof batiproPhases.$inferSelect, "plannedBudget" | "plannedDurationDays" | "capMode" | "startDate" | "endDate">,
+    dateT: Date = new Date(),
+  ): number | null {
+    const plannedBudget = phase.plannedBudget != null ? Number(phase.plannedBudget) : null;
+    const capMode = phase.capMode ?? "planning";
+    if (capMode === "off" || plannedBudget == null) return null;
+    if (capMode === "manual") return plannedBudget;
+
+    // capMode === "planning"
+    let durationDays = phase.plannedDurationDays ?? null;
+    if (durationDays == null && phase.startDate && phase.endDate) {
+      const start = new Date(phase.startDate);
+      const end = new Date(phase.endDate);
+      const diffMs = end.getTime() - start.getTime();
+      durationDays = Math.round(diffMs / 86400000);
+    }
+    if (!phase.startDate || !durationDays || durationDays <= 0) return null;
+
+    const start = new Date(phase.startDate);
+    const elapsedDays = (dateT.getTime() - start.getTime()) / 86400000;
+    const ratio = Math.min(1, Math.max(0, elapsedDays / durationDays));
+    return Math.round(plannedBudget * ratio * 100) / 100;
+  }
+
   // Etat d'avancement cumule par phase (pour pre-remplir une nouvelle situation).
   // Renvoie, pour chaque phase active du chantier : montant de marche, %
   // deja acte (cumul precedent), et progression physique de la phase.
@@ -1410,18 +1597,35 @@ export class BatiproService {
     const phases = await this.phases(orgId, projectId);
     const contract = await this.phaseContractAmounts(orgId, projectId);
     const prior = await this.priorProgressByPhase(orgId, projectId);
+    const priorPaid = await this.priorPaidAmountByPhase(orgId, projectId);
+    const now = new Date();
     return {
       project_id: projectId,
       currency_id: project.currencyId ?? null,
       currency_code: project.currencyCode ?? null,
       currency_symbol: project.currencySymbol ?? null,
-      phases: phases.map((p) => ({
-        phase_id: p.id,
-        label: p.label,
-        physical_progress: Number(p.progress ?? 0),
-        contract_amount: Math.round((contract.get(p.id) ?? 0) * 100) / 100,
-        previous_progress_pct: prior.get(p.id) ?? 0,
-      })),
+      phases: phases.map((p) => {
+        const contractAmount = Math.round((contract.get(p.id) ?? 0) * 100) / 100;
+        const previousProgressPct = prior.get(p.id) ?? 0;
+        const alreadyPaid = priorPaid.get(p.id) ?? 0;
+        const cap = this.phasePaymentCap(p, now);
+        // Montant que produirait l'avancement physique actuel de la phase,
+        // avant plafonnement (pour signaler un depassement de plafond).
+        const uncappedRemaining = Math.round((contractAmount * (Number(p.progress ?? 0) / 100) - alreadyPaid) * 100) / 100;
+        const overCap = cap != null && uncappedRemaining > (cap - alreadyPaid);
+        return {
+          phase_id: p.id,
+          label: p.label,
+          physical_progress: Number(p.progress ?? 0),
+          contract_amount: contractAmount,
+          previous_progress_pct: previousProgressPct,
+          planned_budget: p.plannedBudget != null ? Number(p.plannedBudget) : null,
+          planned_duration_days: p.plannedDurationDays ?? null,
+          cap_mode: p.capMode,
+          payment_cap: cap,
+          over_cap: overCap,
+        };
+      }),
     };
   }
 
@@ -1439,23 +1643,34 @@ export class BatiproService {
     const validPhases = await this.validPhaseIds(orgId, input.project_id);
     const contract = await this.phaseContractAmounts(orgId, input.project_id, input.parent_document_id ?? null);
     const prior = await this.priorProgressByPhase(orgId, input.project_id);
-    const phaseLabels = new Map((await this.phases(orgId, input.project_id)).map((p) => [p.id, p.label] as const));
+    const priorPaid = await this.priorPaidAmountByPhase(orgId, input.project_id);
+    const phasesById = new Map((await this.phases(orgId, input.project_id)).map((p) => [p.id, p] as const));
+    const situationDate = input.issue_date ? new Date(input.issue_date) : new Date();
 
     let totalHt = 0, totalVat = 0;
     const lines = input.lines
       .filter((l) => validPhases.has(l.phase_id))
       .map((l, index) => {
+        const phase = phasesById.get(l.phase_id);
         const contractAmount = l.contract_amount != null ? Number(l.contract_amount) : (contract.get(l.phase_id) ?? 0);
         const current = Number(l.progress_pct);
         const previous = prior.get(l.phase_id) ?? 0;
         // Delta borne >= 0 (on ne facture jamais un avancement negatif).
         const deltaPct = Math.max(0, current - previous);
-        const periodHt = Math.round(contractAmount * (deltaPct / 100) * 100) / 100;
+        const computedPeriodHt = Math.round(contractAmount * (deltaPct / 100) * 100) / 100;
+
+        // Plafond de paiement par phase (SCRUM-267) : jamais depasser le
+        // budget planifie de la phase, prorata temps si cap_mode=planning.
+        const alreadyPaid = priorPaid.get(l.phase_id) ?? 0;
+        const cap = phase ? this.phasePaymentCap(phase, situationDate) : null;
+        const remainingUnderCap = cap != null ? Math.max(0, cap - alreadyPaid) : null;
+        const periodHt = remainingUnderCap != null ? Math.min(computedPeriodHt, remainingUnderCap) : computedPeriodHt;
+
         const vatRate = Number(l.vat_rate ?? 0);
         const lineVat = Math.round(periodHt * (vatRate / 100) * 100) / 100;
         totalHt += periodHt;
         totalVat += lineVat;
-        const label = l.designation || phaseLabels.get(l.phase_id) || `Phase ${l.phase_id}`;
+        const label = l.designation || phase?.label || `Phase ${l.phase_id}`;
         return {
           organizationId: orgId,
           documentId: 0,

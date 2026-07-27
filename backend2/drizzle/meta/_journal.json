@@ -1408,6 +1408,20 @@
                         "when":  1780984800000,
                         "tag":  "0225_batipro_level_plans",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  201,
+                        "version":  "5",
+                        "when":  1780988400000,
+                        "tag":  "0226_batipro_stock_movements",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  202,
+                        "version":  "5",
+                        "when":  1780992000000,
+                        "tag":  "0227_batipro_phases_payment_cap",
+                        "breakpoints":  true
                     }
                 ]
 }

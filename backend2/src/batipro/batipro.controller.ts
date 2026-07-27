@@ -24,6 +24,7 @@ import {
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
+  CreateStockMovementDto,
   CreateSubcontractorLinkDto,
   RecordPaymentDto,
   ReviewSubmissionDto,
@@ -139,11 +140,11 @@ export class BatiproController {
     return this.batipro.deleteTask(id, orgId);
   }
 
-  @ApiOperation({ summary: "List BatiPro materials" })
+  @ApiOperation({ summary: "List BatiPro materials (optionnel: recu/consomme/restant par chantier via project_id)" })
   @Permissions("readAll-batipro")
   @Get("materials")
-  materials(@CurrentOrg() orgId: number) {
-    return this.batipro.materials(orgId);
+  materials(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
+    return this.batipro.materials(orgId, projectId ? Number(projectId) : undefined);
   }
 
   @ApiOperation({ summary: "Create BatiPro material" })
@@ -165,6 +166,20 @@ export class BatiproController {
   @Delete("materials/:id")
   deleteMaterial(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.deleteMaterial(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List stock movements of a project (reception/consumption/adjustment), enrichi materiau/phase" })
+  @Permissions("readAll-batipro")
+  @Get("stock-movements")
+  stockMovements(@Query("project_id", ParseIntPipe) projectId: number, @CurrentOrg() orgId: number) {
+    return this.batipro.stockMovements(orgId, projectId);
+  }
+
+  @ApiOperation({ summary: "Declare a manual stock consumption (movement_type force server-side)" })
+  @Permissions("create-batipro")
+  @Post("stock-movements")
+  createStockMovement(@Body() body: CreateStockMovementDto, @CurrentOrg() orgId: number) {
+    return this.batipro.createStockMovement(body, orgId);
   }
 
   @ApiOperation({ summary: "List BatiPro crews" })

@@ -74,6 +74,9 @@ export class CreateBatiproPhaseDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
   @IsOptional() @IsDateString() start_date?: string;
   @IsOptional() @IsDateString() end_date?: string;
+  @IsOptional() @IsNumber() @Min(0) planned_budget?: number;
+  @IsOptional() @IsInt() @Min(1) planned_duration_days?: number;
+  @IsOptional() @IsIn(["planning", "manual", "off"]) cap_mode?: string;
 }
 
 export class UpdateBatiproPhaseDto extends CreateBatiproPhaseDto {
@@ -207,6 +210,7 @@ export class DocumentLineDto {
   @IsOptional() @IsNumber() @Min(0) unit_price?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
+  @IsOptional() @IsInt() material_id?: number;
 }
 
 // Creation d'un devis ou d'un bon de commande (direction=outbound impose cote
@@ -335,4 +339,15 @@ export class UpdateBatiproDocumentDto {
   @ValidateNested({ each: true })
   @Type(() => DocumentLineDto)
   lines?: DocumentLineDto[];
+}
+
+// Declaration d'une consommation manuelle de materiau sur un chantier (Stock,
+// Phase 2). movement_type est force serveur a 'consumption' : cet endpoint ne
+// permet jamais de creer une reception (reservee au flux BC automatique).
+export class CreateStockMovementDto {
+  @IsInt() project_id!: number;
+  @IsInt() material_id!: number;
+  @IsOptional() @IsInt() phase_id?: number;
+  @IsNumber() @Min(0.001) quantity!: number;
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
 }
