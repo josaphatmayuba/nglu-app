@@ -665,6 +665,7 @@ function Journaux({ transactions, onNew, canMutate }) {
     label: t.particulars,
     debit: Number(t.totalDebit ?? t.amount ?? 0),
     credit: Number(t.totalCredit ?? t.amount ?? 0),
+    currencyCode: t.currencyCode || CUR,
   }));
   const list = rows;
   // Journaux agrégés en temps réel depuis les écritures.
@@ -706,7 +707,7 @@ function Journaux({ transactions, onNew, canMutate }) {
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? `${nf.format(r.debit)} ${r.currencyCode}` : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? `${nf.format(r.credit)} ${r.currencyCode}` : <span className="muted">—</span>}</td></tr>
               ))}
               {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
@@ -1307,7 +1308,7 @@ function GrandLivre({ curFilter, dateRange }) {
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               {(entries || []).map((e) => (
                 <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
@@ -1315,15 +1316,14 @@ function GrandLivre({ curFilter, dateRange }) {
                   <td className="muted">{e.reference || `#${e.id}`}</td>
                   <td style={{ fontVariantNumeric: "normal" }}>{e.particulars}</td>
                   <td><span className="chip">{e.sourceModule || "—"}</span></td>
-                  <td><span className="chip">{e.currencyCode || "—"}</span></td>
-                  <td className="r pos">{fmt(e.totalDebit)}</td>
-                  <td className="r neg">{fmt(e.totalCredit)}</td>
+                  <td className="r pos">{fmt(e.totalDebit)} {e.currencyCode || CUR}</td>
+                  <td className="r neg">{fmt(e.totalCredit)} {e.currencyCode || CUR}</td>
                   <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
                   <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => setReverseId(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
                 </tr>
               ))}
-              {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
-              {entries && entries.length === 0 && <tr><td colSpan={9} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
+              {entries === null && <tr><td colSpan={8} className="muted">Chargement…</td></tr>}
+              {entries && entries.length === 0 && <tr><td colSpan={8} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1368,17 +1368,17 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
-            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
+            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th className="r">Solde</th></tr></thead>
             <tbody>
               {page.shown.map((a) => (
-                <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
+                <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
-              {(!accounts || accounts.length === 0) && <tr><td colSpan={5} className="muted">Aucun sous-compte réel disponible.</td></tr>}
+              {(!accounts || accounts.length === 0) && <tr><td colSpan={4} className="muted">Aucun sous-compte réel disponible.</td></tr>}
             </tbody>
             <tfoot>
-              <tr><td colSpan={4}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td></tr>
+              <tr><td colSpan={3}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td></tr>
               {(trialBalance?.byCurrency || []).map((c) => (
-                <tr key={`tb-${c.currencyId ?? "x"}`}><td colSpan={4} className="muted">Débit / Crédit ({c.currencyCode || "—"})</td><td className="r">{nf.format(Number(c.totalDebit || 0))} / {nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+                <tr key={`tb-${c.currencyId ?? "x"}`}><td colSpan={3} className="muted">Débit / Crédit ({c.currencyCode || "—"})</td><td className="r">{nf.format(Number(c.totalDebit || 0))} / {nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
               ))}
             </tfoot>
           </table>
@@ -1463,8 +1463,8 @@ function Tiers({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes auxiliaires</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 620 }}>
-              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{page.shown.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
           <ShowMore page={page} />
@@ -1558,7 +1558,7 @@ function Change({ accounts = [], currencies = [], canMutate }) {
                   <td style={{ color: "var(--ink-500)" }}>→</td>
                   <td className="r pos">{nf.format(Number(r.toAmount || 0))} <span className="chip">{code(r.toCurrencyId)}</span></td>
                   <td className="r">{Number(r.rate || 0).toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</td>
-                  <td className="r">{Number(r.feeAmount || 0) > 0 ? nf.format(Number(r.feeAmount)) : "—"}</td>
+                  <td className="r">{Number(r.feeAmount || 0) > 0 ? `${nf.format(Number(r.feeAmount))} ${code(r.fromCurrencyId)}` : "—"}</td>
                   <td>{r.status === "reversed" ? <span className="chip">annulé</span> : <span className="chip" style={{ background: "var(--blue-100)", color: "var(--blue-600)" }}>comptabilisé</span>}</td>
                   <td>{canMutate && r.status !== "reversed" && <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => reverse(r.id)}>Annuler</button>}</td>
                 </tr>
@@ -1714,8 +1714,8 @@ function Tresorerie({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes banque & caisse</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className="r pos">{mc(Number(a.totalDebit || 0), a)}</td><td className="r neg">{mc(Number(a.totalCredit || 0), a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
           <ShowMore page={page} />
@@ -1749,8 +1749,8 @@ function Immo({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes immobilisations</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
           <ShowMore page={page} />
@@ -1969,7 +1969,7 @@ function Analytique() {
       <div className="card pad table-card tbl-scroll">
         <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Projet (financeur)</th><th className="r">Devise</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
             {/* SIFA : une ligne par (projet, devise) — aucun melange inter-devises. */}
             {(projects || []).flatMap((p) => {
@@ -1978,7 +1978,7 @@ function Analytique() {
               return cur.map((b, i) => {
                 const prod = b.totalRevenue || 0, charge = b.totalExpenses || 0, solde = b.net || 0;
                 const code = b.currencyCode || curCode(currencies, b.currencyId) || CUR;
-                return <tr key={`${p.id}-${b.currencyId ?? i}`}><td style={{ fontWeight: 500 }}>{i === 0 ? <>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</> : ""}</td><td className="r"><span className="chip">{code}</span></td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+                return <tr key={`${p.id}-${b.currencyId ?? i}`}><td style={{ fontWeight: 500 }}>{i === 0 ? <>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</> : ""}</td><td className="r pos">{prod ? `${nf.format(prod)} ${code}` : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)} {code}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)} {code}</td></tr>;
               });
             })}
           </tbody>
@@ -2147,7 +2147,7 @@ function Capacite({ accounts = [] }) {
             <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager (toutes lignes)</span></div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
               <span className="muted">Budget encore disponible</span>
-              <span className="pos">{nf.format(Math.round(remaining))}</span>
+              <span className="pos">{nf.format(Math.round(remaining))} {CUR}</span>
             </div>
           </div>
         );
@@ -2392,14 +2392,13 @@ function Achats({ canMutate }) {
         <div className="section-head"><h3 className="font-display">Liste des factures d'achat</h3><span className="tiny">{rows ? `${rows.length} facture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th>Devise</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
             <tbody>
               {page.shown.map((r) => (
                 <tr key={r.id}>
                   <td>{String(r.date || "").slice(0, 10)}</td>
                   <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
                   <td style={{ fontWeight: 500 }}>{r.supplierName || `Fournisseur #${r.supplierId}`}</td>
-                  <td><span className="chip">{r.currencyCode || "—"}</span></td>
                   <td className="r">{mc(Number(r.totalAmount || 0), r)}</td>
                   <td className={`r ${Number(r.dueAmount) > 0 ? "neg" : "pos"}`}>{mc(Number(r.dueAmount || 0), r)}</td>
                   <td className="r">
@@ -2494,7 +2493,7 @@ function Stock() {
                     <td className="muted">{o.reference || `PO-${o.id}`}</td>
                     <td>{o.supplierName || (o.supplierId ? `Fournisseur #${o.supplierId}` : "—")}</td>
                     <td><span className={`chip ${o.status === "received" ? "pos" : o.status === "cancelled" ? "" : "ink"}`}>{ORDER_STATUS_FR[o.status] || o.status}</span></td>
-                    <td className="r">{nf.format(Number(o.totalAmount || 0))}</td>
+                    <td className="r">{mc(Number(o.totalAmount || 0), o)}</td>
                     <td className="r">
                       {o.status !== "received" && o.status !== "cancelled"
                         ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => receive(o.id)}>Recevoir</button>
@@ -2634,15 +2633,15 @@ function Etats({ is, bs, tb, curFilter = "" }) {
           <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]], [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })), ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))])}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Intitulé</th><th>Devise</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
+              <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
               <tbody>
                 {[...(liveTb.debits || []).map((r) => ({ ...r, debit: r.balance, credit: null })), ...(liveTb.credits || []).map((r) => ({ ...r, debit: null, credit: Math.abs(r.balance) }))].map((r) => (
-                  <tr key={`${r.id}-${r.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td><span className="chip">{r.currencyCode || "—"}</span></td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                  <tr key={`${r.id}-${r.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td className="r">{r.debit ? `${r.currencyCode || ""} ${nf.format(r.debit)}`.trim() : <span className="muted">—</span>}</td><td className="r">{r.credit ? `${r.currencyCode || ""} ${nf.format(r.credit)}`.trim() : <span className="muted">—</span>}</td></tr>
                 ))}
               </tbody>
               <tfoot>
                 {(liveTb.byCurrency || []).map((c) => (
-                  <tr key={`tot-${c.currencyId ?? "x"}`}><td colSpan={2}>Totaux</td><td><span className="chip">{c.currencyCode || "—"}</span></td><td className="r">{nf.format(Number(c.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+                  <tr key={`tot-${c.currencyId ?? "x"}`}><td colSpan={2}>Totaux</td><td className="r">{`${c.currencyCode || ""} ${nf.format(Number(c.totalDebit || 0))}`.trim()}</td><td className="r">{`${c.currencyCode || ""} ${nf.format(Math.abs(Number(c.totalCredit || 0)))}`.trim()}</td></tr>
                 ))}
               </tfoot>
             </table>
@@ -2664,10 +2663,10 @@ function Etats({ is, bs, tb, curFilter = "" }) {
             <h3 className="block-title font-display">Flux de trésorerie (méthode indirecte)</h3>
             <div className="stmt num">
               <div className="ln bold"><span>Activités opérationnelles</span><span /></div>
-              <div className="ln"><span className="muted">Résultat net de l'exercice</span><span className={profit >= 0 ? "pos" : "neg"}>{nf.format(profit)}</span></div>
+              <div className="ln"><span className="muted">Résultat net de l'exercice</span><span className={profit >= 0 ? "pos" : "neg"}>{nf.format(profit)} {CUR}</span></div>
               <div className="ln bold" style={{ marginTop: 10 }}><span>Position de trésorerie</span><span /></div>
               {treasury.length
-                ? treasury.map((a, i) => <div className="ln" key={i}><span className="muted">{a.subAccount || a.account}</span><span className={Number(a.amount) >= 0 ? "pos" : "neg"}>{nf.format(Number(a.amount || 0))}</span></div>)
+                ? treasury.map((a, i) => <div className="ln" key={i}><span className="muted">{a.subAccount || a.account}</span><span className={Number(a.amount) >= 0 ? "pos" : "neg"}>{nf.format(Number(a.amount || 0))} {a.currencyCode || CUR}</span></div>)
                 : <div className="ln"><span className="muted">Aucun compte de trésorerie</span><span className="muted">—</span></div>}
               <div className="ln total" style={{ background: cashPos >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
                 <span style={{ color: cashPos >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Trésorerie de clôture</span>
@@ -2746,8 +2745,8 @@ function Tva({ accounts = [], canMutate = true }) {
           <div className="section-head"><h3 className="font-display">Soldes fiscaux</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
           <ShowMore page={page} />
