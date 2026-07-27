@@ -26,11 +26,13 @@ import {
   batiproTasks,
   batiproWorkers,
   currencies,
+  projects,
   suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService } from "../ledger/ledger.service";
+import { ProjectsService } from "../projects/projects.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
 import { OcrService } from "./ocr.service";
 import { parseSupplierDocument } from "./ocr-parser.util";
@@ -78,7 +80,34 @@ export class BatiproService {
     private readonly objectStorage: ObjectStorageService,
     private readonly ledger: LedgerService,
     private readonly ocr: OcrService,
+    private readonly projectsService: ProjectsService,
   ) {}
+
+  // Resout le project_id du REGISTRE PARTAGE `projects` correspondant a un
+  // chantier BatiPro (source_system='batipro', external_ref = id du chantier).
+  // Best-effort : jamais bloquant pour la comptabilisation (null => pas de
+  // dimension analytique sur les lignes). Sync prealable pour couvrir un
+  // chantier tout juste cree (list()/ledgerReport() ne sont pas encore passes).
+  private async resolveAnalyticProjectId(batiproProjectId: number | null | undefined, orgId: number) {
+    if (!batiproProjectId) return undefined;
+    try {
+      await this.projectsService.ensureBatiproProjects(orgId);
+      const [row] = await this.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.organizationId, orgId),
+            eq(projects.sourceSystem, "batipro"),
+            sql`${projects.externalRef} = cast(${batiproProjectId} as char) collate utf8mb4_0900_ai_ci`,
+          ),
+        )
+        .limit(1);
+      return row?.id ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // ── Helpers RBAC par chantier (BatiPro, Phase 2) ─────────────────────────
   // Filtre DIRECT sur l id du chantier (table batipro_projects). "all" => pas de
@@ -1984,6 +2013,8 @@ export class BatiproService {
     //  - receivable  = creance client        (DEBIT, TTC)
     //  - revenue     = produit / vente        (CREDIT, HT)
     //  - vat_output  = TVA collectee          (CREDIT, TVA)
+    // Dimension analytique : projet du registre partage lie au chantier BatiPro.
+    const analyticProjectId = await this.resolveAnalyticProjectId(invoice.projectId, orgId);
     const result = await this.ledger.postByRules(
       {
         type: "batipro_invoice",
@@ -1998,6 +2029,7 @@ export class BatiproService {
           revenue: totalHt,
           vat_output: totalVat,
         },
+        dimensions: { projectId: analyticProjectId },
       },
       orgId,
       userId,
@@ -2046,6 +2078,8 @@ export class BatiproService {
     //  - expense    = charge / achat           (DEBIT, HT)
     //  - vat_input  = TVA deductible            (DEBIT, TVA)
     //  - payable    = dette fournisseur         (CREDIT, TTC)
+    // Dimension analytique : projet du registre partage lie au chantier BatiPro.
+    const analyticProjectId = await this.resolveAnalyticProjectId(purchase.projectId, orgId);
     const result = await this.ledger.postByRules(
       {
         type: "batipro_purchase",
@@ -2060,6 +2094,7 @@ export class BatiproService {
           vat_input: totalVat,
           payable: totalTtc,
         },
+        dimensions: { projectId: analyticProjectId },
       },
       orgId,
       userId,
@@ -2118,6 +2153,8 @@ export class BatiproService {
       //  - cash    = tresorerie        (CREDIT)
       // Idempotence sur le CUMUL paye (centimes) pour ne pas avaler les reglements
       // partiels successifs (un idempotencyKey base sur l'id seul avalerait le 2e reglement).
+      // Dimension analytique : projet du registre partage lie au chantier BatiPro.
+      const analyticProjectId = await this.resolveAnalyticProjectId(invoice.projectId, orgId);
       const result = await this.ledger.postByRules(
         {
           type: "batipro_supplier_payment",
@@ -2131,6 +2168,7 @@ export class BatiproService {
             payable: amount,
             cash: amount,
           },
+          dimensions: { projectId: analyticProjectId },
         },
         orgId,
         userId,

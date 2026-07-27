@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   accounts,
+  batiproProjects,
   currencies,
   journalEntries,
   journalEntryLines,
@@ -32,6 +33,14 @@ export class ProjectsService {
     } catch (err) {
       this.logger.warn(
         `ensureMaintenanceProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
+      );
+    }
+    // Idem pour les chantiers BatiPro (registre partage : reference par id, pas de copie).
+    try {
+      await this.ensureBatiproProjects(orgId);
+    } catch (err) {
+      this.logger.warn(
+        `ensureBatiproProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
       );
     }
     return this.db
@@ -108,6 +117,48 @@ export class ProjectsService {
         and l.project_id is null
         and coalesce(c.is_active, 1) = 1
         and coalesce(c.project_id, m.project_id) is not null
+    `);
+  }
+
+  /**
+   * Synchro auxiliaire des chantiers BatiPro vers le registre partage `projects`
+   * (principe SIFA : on REFERENCE par id via source_system/external_ref, on ne
+   * duplique pas la donnee metier). Idempotent (NOT EXISTS), rejouable a chaque
+   * appel. Pas de rollback de colonne cote batipro_projects : la resolution du
+   * project_id analytique se fait a la volee via external_ref.
+   *
+   * Public : BatiproService l'appelle avant chaque comptabilisation pour qu'un
+   * chantier tout juste cree ait deja son projet analytique.
+   */
+  async ensureBatiproProjects(orgId: number) {
+    await this.db.execute(sql`
+      insert into ${projects} (
+        organization_id,
+        code,
+        name,
+        budget_amount,
+        currency_id,
+        source_system,
+        external_ref
+      )
+      select
+        b.organization_id,
+        concat('BTP-', b.id),
+        concat('Chantier: ', b.name),
+        if(coalesce(b.budget, 0) > 0, b.budget, null),
+        b.currency_id,
+        'batipro',
+        cast(b.id as char)
+      from ${batiproProjects} b
+      where b.organization_id = ${orgId}
+        and coalesce(b.is_active, 1) = 1
+        and not exists (
+          select 1
+          from ${projects} p
+          where p.organization_id = b.organization_id
+            and p.source_system = 'batipro'
+            and p.external_ref = cast(b.id as char) collate utf8mb4_0900_ai_ci
+        )
     `);
   }
 
@@ -266,6 +317,13 @@ export class ProjectsService {
     } catch (err) {
       this.logger.warn(
         `ensureMaintenanceProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
+      );
+    }
+    try {
+      await this.ensureBatiproProjects(orgId);
+    } catch (err) {
+      this.logger.warn(
+        `ensureBatiproProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
       );
     }
     const project = await this.findOne(projectId, orgId);
