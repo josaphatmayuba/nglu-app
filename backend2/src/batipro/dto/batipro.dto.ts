@@ -176,6 +176,7 @@ export class SubcontractorLineDto {
   @IsOptional() @IsNumber() @Min(0) unit_price?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
+  @IsOptional() @IsInt() currency_id?: number;
 }
 
 // Soumission d'un document par un sous-traitant via le token public.
@@ -212,6 +213,7 @@ export class DocumentLineDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
   @IsOptional() @IsInt() material_id?: number;
+  @IsOptional() @IsInt() currency_id?: number;
 }
 
 // Creation d'un devis ou d'un bon de commande (direction=outbound impose cote
@@ -251,6 +253,7 @@ export class SituationLineDto {
   @IsOptional() @IsNumber() @Min(0) contract_amount?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsString() @MaxLength(500) designation?: string;
+  @IsOptional() @IsInt() currency_id?: number;
 }
 
 // Creation d'une situation de travaux (documentaire, type=situation).

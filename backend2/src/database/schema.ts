@@ -2541,6 +2541,12 @@ export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   // les lignes non-materiel (main d'oeuvre, prestations = designation texte libre).
   // Une ligne de BC avec material_id genere un mouvement de reception a l'emission.
   materialId: bigint("material_id", { mode: "number" }),
+  // Devise PROPRE a la ligne (migration 0232). Nullable, sans FK physique (pattern
+  // batipro). NULL = la ligne herite de la devise du document
+  // (batipro_documents.currency_id), qui reste la devise principale et pre-remplit
+  // les nouvelles lignes. Un document peut donc melanger plusieurs devises : les
+  // totaux ventilas par devise vivent dans batipro_document_totals.
+  currencyId: bigint("currency_id", { mode: "number" }),
   // % d'avancement CUMULE de la ligne (situations de travaux, Phase 3). NULL sur
   // les lignes de devis/BC/factures. Le montant de la periode se deduit du delta
   // par rapport a la situation precedente cote service.
@@ -2551,6 +2557,27 @@ export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   // reception pour ce document + ce materiau. received_quantity < quantity =>
   // document partially_received ; egalite sur toutes les lignes => received.
   receivedQuantity: decimal("received_quantity", { precision: 14, scale: 3 }).default("0").notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Totaux d un document VENTILES PAR DEVISE (migration 0232). Un document dont les
+// lignes portent plusieurs devises produit une ligne de totaux par devise ; un
+// document mono devise en produit une seule. Unicite (document_id, currency_id)
+// garantie par l index `batipro_document_totals_doc_currency_uq` cote DB.
+// ledgerEntryId : ecriture comptable propre a cette devise (nullable tant que le
+// document n est pas comptabilise). Pas de FK stricte (pattern batipro).
+export const batiproDocumentTotals = mysqlTable("batipro_document_totals", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  documentId: bigint("document_id", { mode: "number" }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }).notNull(),
+  totalHt: decimal("total_ht", { precision: 14, scale: 2 }).default("0").notNull(),
+  totalVat: decimal("total_vat", { precision: 14, scale: 2 }).default("0").notNull(),
+  totalTtc: decimal("total_ttc", { precision: 14, scale: 2 }).default("0").notNull(),
+  paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
+  ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

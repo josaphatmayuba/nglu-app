@@ -95,6 +95,28 @@ function moneyByCurrency(projects, field) {
 const n = (v) => Number(v || 0);
 const projectDue = (p) => p.dueDate || p.due || "-";
 
+// Regroupe des lignes de document {quantity, unit_price, vat_rate, currency_id} par devise
+// effective (currency_id de la ligne, sinon devise par défaut du document).
+// Retourne [{code, ht, vat, ttc}] — une seule entrée pour les documents mono-devise.
+function sumLinesByCurrency(lines, currencies, defaultCurrencyCode) {
+  const byCurrency = new Map();
+  for (const l of lines || []) {
+    const code = (l.currency_id && resolveCurrencyCode(currencies, l.currency_id)) || defaultCurrencyCode || "USD";
+    const ht = n(l.quantity) * n(l.unit_price);
+    const vat = ht * (n(l.vat_rate) / 100);
+    const cur = byCurrency.get(code) || { code, ht: 0, vat: 0, ttc: 0 };
+    cur.ht += ht; cur.vat += vat; cur.ttc += ht + vat;
+    byCurrency.set(code, cur);
+  }
+  return [...byCurrency.values()];
+}
+// Formate un tableau [{code, ht|vat|ttc, ...}] pour un champ donné, dans le même style
+// de jointure " + " que moneyByCurrency (ex: "500 000 USD + 200 000 CDF").
+function moneyByCurrencyList(totals, field) {
+  if (!totals || !totals.length) return money(0);
+  return totals.map((t) => money(t[field], t.code)).join(" + ");
+}
+
 // Charge la liste des devises actives (pour CurrencyPicker) — même pattern que
 // Ouvriers/RecordModal (api.currencies() -> filtre status actif).
 function useCurrencies() {
@@ -1247,7 +1269,7 @@ function Plan3D({ projects, materials, canMutate, fixedProjectId }) {
 /* ── Devis clients (documents sortants — Phase 1) ──────────────────────── */
 const DOC_STATUS_TONE = { draft: "ink", sent: "amber", viewed: "amber", accepted: "emerald", refused: "rose", expired: "ink" };
 const DOC_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", viewed: "Consulté", accepted: "Accepté", refused: "Refusé", expired: "Expiré" };
-const emptyDocLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "" });
+const emptyDocLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", currency_id: "" });
 
 function Devis({ projects, canMutate, fixedProjectId }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
@@ -1354,7 +1376,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "" })) : [emptyDocLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
         })
@@ -1367,9 +1389,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const addLine = () => setLines((c) => [...c, emptyDocLine()]);
   const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
 
-  const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
-  const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
-  const totalTtc = totalHt + totalVat;
+  const totalsByCurrency = sumLinesByCurrency(lines, currencies, docCurrencyCode);
 
   const save = async () => {
     setError("");
@@ -1388,6 +1408,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
           unit_price: n(l.unit_price),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
+          currency_id: l.currency_id ? Number(l.currency_id) : undefined,
         })),
       };
       docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);
@@ -1406,7 +1427,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         {loading ? <p className="muted">Chargement…</p> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <label className="field" style={{ maxWidth: 220 }}>
-              <span>Devise</span>
+              <span>Devise par défaut</span>
               <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1434,6 +1455,10 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                       <span>P.U.</span>
                       <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
                     </label>
+                    <label className="field" style={{ flex: "1 1 130px", minWidth: 130 }}>
+                      <span>Devise</span>
+                      <CurrencyPicker value={l.currency_id || docCurrencyId} onChange={(id) => setLine(i, "currency_id", id)} currencies={currencies} />
+                    </label>
                     <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
                       <span>TVA %</span>
                       <input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} />
@@ -1452,10 +1477,13 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
             <button type="button" className="btn btn-ghost" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, docCurrencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{moneyByCurrencyList(totalsByCurrency, "ht")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{moneyByCurrencyList(totalsByCurrency, "vat")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{moneyByCurrencyList(totalsByCurrency, "ttc")}</strong></div>
             </div>
+            {totalsByCurrency.length > 1 && (
+              <div style={{ fontSize: 12, color: "var(--amber-700, #b45309)" }}>Ce document mélange plusieurs devises : la comptabilisation ne sera pas possible tant qu'il n'y a pas une seule devise.</div>
+            )}
 
             <label className="field"><span>Validité / échéance</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
             <label className="field"><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions…" /></label>
@@ -1521,7 +1549,7 @@ const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confi
 // Statuts manuels proposés dans le select de l'éditeur — confirmed/partially_received/received
 // sont dérivés des actions dédiées (Confirmer/Réceptionner), pas des choix libres.
 const PO_STATUS_MANUAL_LABEL = { draft: "Brouillon", sent: "Envoyé", cancelled: "Annulé" };
-const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "" });
+const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "", currency_id: "" });
 
 function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
@@ -1775,7 +1803,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -1800,9 +1828,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
   const addLine = () => setLines((c) => [...c, emptyPoLine()]);
   const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
 
-  const totalHt = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price), 0);
-  const totalVat = lines.reduce((s, l) => s + n(l.quantity) * n(l.unit_price) * (n(l.vat_rate) / 100), 0);
-  const totalTtc = totalHt + totalVat;
+  const totalsByCurrency = sumLinesByCurrency(lines, currencies, docCurrencyCode);
 
   // Upload immediat + OCR best-effort. Pre-remplit les champs EXISTANTS du
   // formulaire (fournisseur/lignes/echeance/notes) qui restent 100% editables
@@ -1840,6 +1866,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           vat_rate: 0,
           phase_id: "",
           material_id: "",
+          currency_id: "",
         })));
       }
       setScanJustApplied(true);
@@ -1869,6 +1896,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
           material_id: l.material_id ? Number(l.material_id) : undefined,
+          currency_id: l.currency_id ? Number(l.currency_id) : undefined,
         })),
       };
       docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);
@@ -1921,7 +1949,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                 </select>
               </label>
               <label className="field" style={{ flex: 1, minWidth: 180 }}>
-                <span>Devise</span>
+                <span>Devise par défaut</span>
                 <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
               </label>
             </div>
@@ -1964,6 +1992,10 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                       <span>TVA %</span>
                       <input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} />
                     </label>
+                    <label className="field" style={{ flex: "1 1 130px", minWidth: 130 }}>
+                      <span>Devise</span>
+                      <CurrencyPicker value={l.currency_id || docCurrencyId} onChange={(id) => setLine(i, "currency_id", id)} currencies={currencies} />
+                    </label>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
@@ -1990,10 +2022,13 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
             <button type="button" className="btn btn-ghost" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{money(totalVat, docCurrencyCode)}</strong></div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{money(totalTtc, docCurrencyCode)}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{moneyByCurrencyList(totalsByCurrency, "ht")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>TVA</span><strong>{moneyByCurrencyList(totalsByCurrency, "vat")}</strong></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><span>Total TTC</span><strong>{moneyByCurrencyList(totalsByCurrency, "ttc")}</strong></div>
             </div>
+            {totalsByCurrency.length > 1 && (
+              <div style={{ fontSize: 12, color: "var(--amber-700, #b45309)" }}>Ce document mélange plusieurs devises : la comptabilisation (règlement) ne sera pas possible tant qu'il n'y a pas une seule devise.</div>
+            )}
 
             <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
             {docId && (
@@ -2525,6 +2560,10 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
           progress_pct: p.previous_progress_pct,
           payment_cap: p.payment_cap,
           over_cap: p.over_cap,
+          // Devise propre à la phase (hérite de celle du chantier si absente côté API) —
+          // affichage lecture seule uniquement, pas de picker éditable sur cet écran.
+          currency_id: p.currency_id ?? p.currencyId ?? "",
+          currency_code: p.currency_code ?? p.currencyCode ?? null,
         })));
       })
       .catch((e) => setError(e.message || String(e)))
@@ -2535,7 +2574,21 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
 
   // Aperçu du montant de période = marché_phase × (courant − précédent) borné ≥ 0.
   const periodAmount = (r) => Math.max(0, n(r.progress_pct) - n(r.previous_progress_pct)) / 100 * n(r.contract_amount);
-  const totalPeriod = rows.reduce((s, r) => s + periodAmount(r), 0);
+  const rowCurrencyCode = (r) => r.currency_code || resolveCurrencyCode(currencies, r.currency_id) || docCurrencyCode;
+  // Groupe le montant de période par devise de PHASE (pas un picker éditable ici — la
+  // devise suit celle de la phase). Un seul groupe si toutes les phases partagent la
+  // même devise (cas normal) → affichage strictement identique à avant.
+  const periodTotalsByCurrency = React.useMemo(() => {
+    const byCurrency = new Map();
+    for (const r of rows) {
+      const code = rowCurrencyCode(r);
+      byCurrency.set(code, (byCurrency.get(code) || 0) + periodAmount(r));
+    }
+    return [...byCurrency.entries()].map(([code, ttc]) => ({ code, ttc }));
+  }, [rows, currencies, docCurrencyCode]);
+  const totalPeriodLabel = periodTotalsByCurrency.length
+    ? periodTotalsByCurrency.map((t) => money(t.ttc, t.code)).join(" + ")
+    : money(0, docCurrencyCode);
 
   const save = async () => {
     setError("");
@@ -2570,7 +2623,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <label className="field" style={{ flex: 1, minWidth: 160 }}><span>Période</span><input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="ex. Juin 2026" /></label>
               <label className="field" style={{ flex: 1, minWidth: 160 }}>
-                <span>Devise</span>
+                <span>Devise par défaut</span>
                 <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
               </label>
             </div>
@@ -2587,6 +2640,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
                       <th style={{ padding: "6px" }}>Marché</th>
                       <th style={{ padding: "6px" }}>Cumul préc.</th>
                       <th style={{ padding: "6px" }}>Avanc. cumulé %</th>
+                      <th style={{ padding: "6px" }}>Devise</th>
                       <th style={{ padding: "6px" }}>Montant période</th>
                       <th style={{ padding: "6px" }}>Plafond à ce jour</th>
                     </tr>
@@ -2600,14 +2654,16 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
                             <span className="chip rose" style={{ marginLeft: 6 }} title="L'avancement réel dépasse le plafond planifié">⚠ Dépasse le plafond planifié</span>
                           )}
                         </td>
-                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, docCurrencyCode)}</td>
+                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{money(r.contract_amount, rowCurrencyCode(r))}</td>
                         <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{n(r.previous_progress_pct).toFixed(2)} %</td>
                         <td style={{ padding: "3px 6px" }}>
                           <input type="number" min={r.previous_progress_pct} max="100" step="any" value={r.progress_pct} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} />
                         </td>
-                        <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), docCurrencyCode)}</td>
+                        {/* Devise pilotée par la phase — lecture seule, pas de picker sur cet écran. */}
+                        <td style={{ padding: "3px 6px", color: "var(--ink-500)" }}>{rowCurrencyCode(r)}</td>
+                        <td style={{ padding: "3px 6px", fontWeight: 600 }}>{money(periodAmount(r), rowCurrencyCode(r))}</td>
                         <td style={{ padding: "3px 6px", color: r.over_cap ? "var(--rose-700, #be123c)" : "var(--ink-500)" }}>
-                          {r.payment_cap != null ? money(r.payment_cap, docCurrencyCode) : "Aucun plafond"}
+                          {r.payment_cap != null ? money(r.payment_cap, rowCurrencyCode(r)) : "Aucun plafond"}
                         </td>
                       </tr>
                     ))}
@@ -2617,7 +2673,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
             )}
 
             <div className="card pad" style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-              <span>Montant HT à facturer sur la période</span><strong>{money(totalPeriod, docCurrencyCode)}</strong>
+              <span>Montant HT à facturer sur la période</span><strong>{totalPeriodLabel}</strong>
             </div>
             <p className="muted" style={{ fontSize: 11 }}>Le montant définitif (TVA/TTC) est recalculé côté serveur à l'enregistrement, sur la base du marché de chaque phase (devis acceptés du chantier).</p>
 

@@ -1,6 +1,6 @@
 import { BadRequestException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
@@ -12,6 +12,7 @@ import {
   batiproCrews,
   batiproDocumentCounters,
   batiproDocumentLines,
+  batiproDocumentTotals,
   batiproDocuments,
   batiproMaterials,
   batiproNotifications,
@@ -1153,7 +1154,9 @@ export class BatiproService {
         .map((p) => p.id),
     );
 
+    const defaultCurrencyId = payload.currency_id ?? null;
     let totalHt = 0, totalVat = 0;
+    const totalsByCurrencyMap = new Map<number, { totalHt: number; totalVat: number; totalTtc: number }>();
     const lines = (hasLines ? payload.lines! : []).map((line, index) => {
       const qty = Number(line.quantity ?? 0);
       const pu = Number(line.unit_price ?? 0);
@@ -1163,6 +1166,14 @@ export class BatiproService {
       totalHt += lineHt;
       totalVat += lineVat;
       const phaseId = line.phase_id != null && phaseIds.has(line.phase_id) ? line.phase_id : null;
+      const effectiveCurrencyId = line.currency_id ?? defaultCurrencyId ?? null;
+      if (effectiveCurrencyId != null) {
+        const entry = totalsByCurrencyMap.get(effectiveCurrencyId) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
+        entry.totalHt += lineHt;
+        entry.totalVat += lineVat;
+        entry.totalTtc += lineHt + lineVat;
+        totalsByCurrencyMap.set(effectiveCurrencyId, entry);
+      }
       return {
         organizationId: orgId,
         documentId: 0,
@@ -1174,30 +1185,43 @@ export class BatiproService {
         lineHt: String(lineHt),
         lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
         phaseId,
+        currencyId: line.currency_id ?? null,
       };
     });
     // Sans detail de lignes, le montant total saisi fait foi (pas de ventilation TVA).
     if (!hasLines) totalHt = Math.round(totalAmount * 100) / 100;
     const totalTtc = hasLines ? Math.round((totalHt + totalVat) * 100) / 100 : totalHt;
 
-    const [result] = await this.db.insert(batiproDocuments).values({
-      organizationId: orgId,
-      projectId: link.projectId,
-      type: payload.type ?? "quote",
-      direction: "inbound",
-      status: "submitted",
-      currencyId: payload.currency_id ?? null,
-      totalHt: String(Math.round(totalHt * 100) / 100),
-      totalVat: String(Math.round(totalVat * 100) / 100),
-      totalTtc: String(totalTtc),
-      subcontractorId: link.subcontractorId ?? null,
-      submittedByName: link.subcontractorId == null ? (payload.submitted_by_name ?? null) : null,
-      submittedByCompany: link.subcontractorId == null ? (payload.submitted_by_company ?? null) : null,
-      notes: payload.notes ?? null,
-    }).$returningId();
-    const documentId = Number(result.id);
-    for (const line of lines) line.documentId = documentId;
-    if (lines.length) await this.db.insert(batiproDocumentLines).values(lines);
+    const documentId = await this.db.transaction(async (tx) => {
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: link.projectId,
+        type: payload.type ?? "quote",
+        direction: "inbound",
+        status: "submitted",
+        currencyId: payload.currency_id ?? null,
+        totalHt: String(Math.round(totalHt * 100) / 100),
+        totalVat: String(Math.round(totalVat * 100) / 100),
+        totalTtc: String(totalTtc),
+        subcontractorId: link.subcontractorId ?? null,
+        submittedByName: link.subcontractorId == null ? (payload.submitted_by_name ?? null) : null,
+        submittedByCompany: link.subcontractorId == null ? (payload.submitted_by_company ?? null) : null,
+        notes: payload.notes ?? null,
+      }).$returningId();
+      const id = Number(result.id);
+      for (const line of lines) line.documentId = id;
+      if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+      if (hasLines && totalsByCurrencyMap.size) {
+        const totalsByCurrency = Array.from(totalsByCurrencyMap.entries()).map(([currencyId, t]) => ({
+          currencyId,
+          totalHt: Math.round(t.totalHt * 100) / 100,
+          totalVat: Math.round(t.totalVat * 100) / 100,
+          totalTtc: Math.round(t.totalTtc * 100) / 100,
+        }));
+        await this.replaceDocumentTotals(tx, id, orgId, totalsByCurrency);
+      }
+      return id;
+    });
 
     await this.publish("submitSubcontractorDocument", ["documents", "document_lines"], "created", documentId, orgId);
     return { id: documentId, message: "Soumission enregistree." };
@@ -1269,12 +1293,32 @@ export class BatiproService {
   }
 
   async submissionLines(documentId: number, orgId: number) {
-    await this.getInboundDocument(documentId, orgId);
-    return this.db
-      .select()
+    const doc = await this.getInboundDocument(documentId, orgId);
+    let docCurrencyCode: string | null = null, docCurrencySymbol: string | null = null;
+    if (doc.currencyId != null) {
+      const [docCurrency] = await this.db
+        .select({ currencyCode: currencies.currencyCode, currencySymbol: currencies.currencySymbol })
+        .from(currencies)
+        .where(eq(currencies.id, doc.currencyId))
+        .limit(1);
+      docCurrencyCode = docCurrency?.currencyCode ?? null;
+      docCurrencySymbol = docCurrency?.currencySymbol ?? null;
+    }
+    const lineRows = await this.db
+      .select({
+        ...getTableColumns(batiproDocumentLines),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(batiproDocumentLines)
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentLines.currencyId))
       .where(and(eq(batiproDocumentLines.documentId, documentId), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
       .orderBy(batiproDocumentLines.position);
+    return lineRows.map((l) => ({
+      ...l,
+      currencyCode: l.currencyCode ?? docCurrencyCode,
+      currencySymbol: l.currencySymbol ?? docCurrencySymbol,
+    }));
   }
 
   async reviewSubmission(documentId: number, input: ReviewSubmissionDto, orgId: number) {
@@ -1338,17 +1382,40 @@ export class BatiproService {
 
   // Recalcule les totaux HT/TVA/TTC depuis les lignes (jamais de confiance au
   // front). Renvoie les lignes normalisees + les totaux arrondis au centime.
-  private computeDocumentTotals(rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number }>, orgId: number, validPhaseIds: Set<number>) {
-    let totalHt = 0, totalVat = 0;
+  //
+  // Multi-devise par ligne (migration 0232) : chaque ligne peut porter sa
+  // propre currency_id (sinon elle herite de `defaultCurrencyId`, la devise du
+  // document). Les totaux sont ventiles par devise dans `totalsByCurrency`.
+  // IMPORTANT (retro-compatibilite) : les scalaires `totalHt/totalVat/totalTtc`
+  // retournes restent le total de la SEULE `defaultCurrencyId` (pas la somme
+  // toutes devises), car ils alimentent batipro_documents.total_ht/vat/ttc qui
+  // n'a jamais ete pense pour agreger plusieurs devises. Pour un document
+  // mono-devise (cas d'aujourd'hui, toutes lignes currency_id=NULL), ce sont
+  // exactement les memes valeurs qu'avant ce changement.
+  private computeDocumentTotals(
+    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
+    orgId: number,
+    validPhaseIds: Set<number>,
+    defaultCurrencyId: number | null = null,
+  ) {
+    const totalsByCurrencyMap = new Map<number | null, { totalHt: number; totalVat: number; totalTtc: number }>();
+    const addToCurrency = (currencyId: number | null, lineHt: number, lineVat: number) => {
+      const entry = totalsByCurrencyMap.get(currencyId) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
+      entry.totalHt += lineHt;
+      entry.totalVat += lineVat;
+      entry.totalTtc += lineHt + lineVat;
+      totalsByCurrencyMap.set(currencyId, entry);
+    };
+
     const lines = rawLines.map((line, index) => {
       const qty = Number(line.quantity ?? 0);
       const pu = Number(line.unit_price ?? 0);
       const vatRate = Number(line.vat_rate ?? 0);
       const lineHt = Math.round(qty * pu * 100) / 100;
       const lineVat = Math.round(lineHt * (vatRate / 100) * 100) / 100;
-      totalHt += lineHt;
-      totalVat += lineVat;
       const phaseId = line.phase_id != null && validPhaseIds.has(line.phase_id) ? line.phase_id : null;
+      const effectiveCurrencyId = line.currency_id ?? defaultCurrencyId ?? null;
+      addToCurrency(effectiveCurrencyId, lineHt, lineVat);
       return {
         organizationId: orgId,
         documentId: 0,
@@ -1361,13 +1428,29 @@ export class BatiproService {
         lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
         phaseId,
         materialId: line.material_id ?? null,
+        currencyId: line.currency_id ?? null,
       };
     });
+
+    const totalsByCurrency = Array.from(totalsByCurrencyMap.entries())
+      .filter(([currencyId]) => currencyId != null)
+      .map(([currencyId, t]) => ({
+        currencyId: currencyId as number,
+        totalHt: Math.round(t.totalHt * 100) / 100,
+        totalVat: Math.round(t.totalVat * 100) / 100,
+        totalTtc: Math.round(t.totalTtc * 100) / 100,
+      }));
+
+    // Scalaires retro-compatibles : uniquement le total de la devise par defaut
+    // du document (jamais une somme toutes devises confondues).
+    const defaultTotals = totalsByCurrencyMap.get(defaultCurrencyId ?? null) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
+
     return {
       lines,
-      totalHt: Math.round(totalHt * 100) / 100,
-      totalVat: Math.round(totalVat * 100) / 100,
-      totalTtc: Math.round((totalHt + totalVat) * 100) / 100,
+      totalsByCurrency,
+      totalHt: Math.round(defaultTotals.totalHt * 100) / 100,
+      totalVat: Math.round(defaultTotals.totalVat * 100) / 100,
+      totalTtc: Math.round(defaultTotals.totalTtc * 100) / 100,
     };
   }
 
@@ -1434,6 +1517,57 @@ export class BatiproService {
       .orderBy(desc(batiproDocuments.id));
   }
 
+  // Remplace (soft-delete + insert) les lignes de totaux ventiles par devise
+  // d'un document (batipro_document_totals), dans la transaction fournie. Suit
+  // exactement le meme pattern que le remplacement des lignes de document
+  // (soft-delete des actives puis insert des nouvelles, jamais de DELETE).
+  private async replaceDocumentTotals(
+    tx: any,
+    documentId: number,
+    orgId: number,
+    totalsByCurrency: Array<{ currencyId: number; totalHt: number; totalVat: number; totalTtc: number }>,
+  ) {
+    await tx.update(batiproDocumentTotals).set({ isActive: 0 })
+      .where(and(eq(batiproDocumentTotals.documentId, documentId), eq(batiproDocumentTotals.organizationId, orgId)));
+    if (!totalsByCurrency.length) return;
+    // L'index unique (document_id, currency_id) n'inclut pas is_active : le
+    // soft-delete ci-dessus laisse la ligne en place, donc un ré-insert du meme
+    // couple doit passer par ON DUPLICATE KEY UPDATE (memes reactive isActive=1),
+    // jamais un insert nu qui violerait l'unicite.
+    await tx.insert(batiproDocumentTotals).values(
+      totalsByCurrency.map((t) => ({
+        organizationId: orgId,
+        documentId,
+        currencyId: t.currencyId,
+        totalHt: String(t.totalHt),
+        totalVat: String(t.totalVat),
+        totalTtc: String(t.totalTtc),
+        isActive: 1,
+      })),
+    ).onDuplicateKeyUpdate({
+      set: {
+        totalHt: sql`VALUES(total_ht)`,
+        totalVat: sql`VALUES(total_vat)`,
+        totalTtc: sql`VALUES(total_ttc)`,
+        isActive: 1,
+      },
+    });
+  }
+
+  // Garde-fou comptabilisation : une ecriture ledger SIFA est mono-devise par
+  // construction. Un document dont les lignes utilisent reellement PLUSIEURS
+  // devises (batipro_document_totals.length > 1) ne peut pas encore etre
+  // comptabilise automatiquement — bloque explicitement plutot que de
+  // comptabiliser un montant errone. Documents mono-devise (cas normal
+  // aujourd'hui) : aucun changement, ce garde-fou ne se declenche jamais.
+  private assertSingleCurrencyForLedger(doc: { totalsByCurrency?: Array<{ currencyId: number }> }) {
+    if ((doc.totalsByCurrency?.length ?? 0) > 1) {
+      throw new BadRequestException(
+        "Ce document contient plusieurs devises : la comptabilisation multi-devise n'est pas encore disponible, veuillez séparer les lignes par devise sur des documents distincts.",
+      );
+    }
+  }
+
   async getDocument(id: number, orgId: number) {
     const [row] = await this.db
       .select({
@@ -1450,12 +1584,38 @@ export class BatiproService {
       .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.isActive, 1)))
       .limit(1);
     if (!row) throw new NotFoundException("Document introuvable.");
-    const lines = await this.db
-      .select()
+    const lineRows = await this.db
+      .select({
+        ...getTableColumns(batiproDocumentLines),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(batiproDocumentLines)
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentLines.currencyId))
       .where(and(eq(batiproDocumentLines.documentId, id), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
       .orderBy(batiproDocumentLines.position);
-    return { ...row, lines };
+    // Ligne sans devise propre = herite de la devise du document (jamais de
+    // NULL affiche cote front).
+    const lines = lineRows.map((l) => ({
+      ...l,
+      currencyCode: l.currencyCode ?? row.currencyCode ?? null,
+      currencySymbol: l.currencySymbol ?? row.currencySymbol ?? null,
+    }));
+    const totalsByCurrencyRows = await this.db
+      .select({
+        currencyId: batiproDocumentTotals.currencyId,
+        totalHt: batiproDocumentTotals.totalHt,
+        totalVat: batiproDocumentTotals.totalVat,
+        totalTtc: batiproDocumentTotals.totalTtc,
+        paidAmount: batiproDocumentTotals.paidAmount,
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(batiproDocumentTotals)
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentTotals.currencyId))
+      .where(and(eq(batiproDocumentTotals.documentId, id), eq(batiproDocumentTotals.organizationId, orgId), eq(batiproDocumentTotals.isActive, 1)))
+      .orderBy(batiproDocumentTotals.currencyId);
+    return { ...row, lines, totalsByCurrency: totalsByCurrencyRows };
   }
 
   async createDocument(input: CreateBatiproDocumentDto, orgId: number) {
@@ -1464,7 +1624,8 @@ export class BatiproService {
     const type = input.type ?? "quote";
     if (type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
     const phaseIds = await this.validPhaseIds(orgId, input.project_id);
-    const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
+    const defaultCurrencyId = input.currency_id ?? null;
+    const { lines, totalHt, totalVat, totalTtc, totalsByCurrency } = this.computeDocumentTotals(input.lines, orgId, phaseIds, defaultCurrencyId);
     const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
 
     const documentId = await this.db.transaction(async (tx) => {
@@ -1489,6 +1650,7 @@ export class BatiproService {
       const id = Number(result.id);
       for (const line of lines) line.documentId = id;
       if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+      await this.replaceDocumentTotals(tx, id, orgId, totalsByCurrency);
       return id;
     });
 
@@ -1542,7 +1704,9 @@ export class BatiproService {
     if (input.lines !== undefined) {
       if (doc.type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
       const phaseIds = await this.validPhaseIds(orgId, doc.projectId);
-      const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
+      // Devise par defaut = celle du patch si fournie, sinon celle deja sur le document.
+      const defaultCurrencyId = input.currency_id !== undefined ? (input.currency_id ?? null) : (doc.currencyId ?? null);
+      const { lines, totalHt, totalVat, totalTtc, totalsByCurrency } = this.computeDocumentTotals(input.lines, orgId, phaseIds, defaultCurrencyId);
       patch.totalHt = String(totalHt);
       patch.totalVat = String(totalVat);
       patch.totalTtc = String(totalTtc);
@@ -1552,6 +1716,7 @@ export class BatiproService {
           .where(and(eq(batiproDocumentLines.documentId, id), eq(batiproDocumentLines.organizationId, orgId)));
         for (const line of lines) line.documentId = id;
         if (lines.length) await tx.insert(batiproDocumentLines).values(lines);
+        await this.replaceDocumentTotals(tx, id, orgId, totalsByCurrency);
         if (Object.keys(patch).length) await tx.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
       });
     } else if (Object.keys(patch).length) {
@@ -1805,14 +1970,19 @@ export class BatiproService {
   //    montant de periode dans line_ht (quantity=1, unit_price=montant periode)
   //    pour rester compatible avec le rendu HTML/totaux generiques.
 
-  // Montant de marche par phase, deduit des devis sortants du chantier.
-  // parentDocumentId : si fourni, ne considere que ce devis ; sinon tous les
-  // devis actifs du chantier. Renvoie Map<phaseId, montant_ht>.
+  // Montant de marche par phase, deduit des devis sortants du chantier, VENTILE
+  // PAR DEVISE (une ligne peut porter sa propre devise, migration 0232 ; sinon
+  // elle herite de la devise du document). Renvoie Map<phaseId, Map<currencyId
+  // (0 = sans devise), montant_ht>>. parentDocumentId : si fourni, ne considere
+  // que ce devis ; sinon tous les devis actifs du chantier.
+  // IMPORTANT : ne JAMAIS sommer aveuglement toutes devises confondues — les
+  // appelants doivent comparer un plafond dans la devise de la phase.
   private async phaseContractAmounts(orgId: number, projectId: number, parentDocumentId?: number | null) {
     const rows = await this.db
-      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt })
+      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt, lineCurrencyId: batiproDocumentLines.currencyId, phaseCurrencyId: batiproPhases.currencyId })
       .from(batiproDocumentLines)
       .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(batiproPhases, eq(batiproPhases.id, batiproDocumentLines.phaseId))
       .where(and(
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.projectId, projectId),
@@ -1822,10 +1992,16 @@ export class BatiproService {
         eq(batiproDocumentLines.isActive, 1),
         parentDocumentId ? eq(batiproDocuments.id, parentDocumentId) : undefined,
       ));
-    const byPhase = new Map<number, number>();
+    const byPhase = new Map<number, Map<number, number>>();
     for (const r of rows) {
       if (r.phaseId == null) continue;
-      byPhase.set(r.phaseId, (byPhase.get(r.phaseId) ?? 0) + Number(r.lineHt ?? 0));
+      // Meme regle de fallback que phaseAmountInCurrency : la ligne herite de la
+      // devise de la phase (jamais du document), pour que les deux cotes
+      // (ecriture ici, lecture dans phaseAmountInCurrency) bucketisent pareil.
+      const currencyId = r.lineCurrencyId ?? r.phaseCurrencyId ?? 0;
+      const byCurrency = byPhase.get(r.phaseId) ?? new Map<number, number>();
+      byCurrency.set(currencyId, (byCurrency.get(currencyId) ?? 0) + Number(r.lineHt ?? 0));
+      byPhase.set(r.phaseId, byCurrency);
     }
     return byPhase;
   }
@@ -1856,14 +2032,17 @@ export class BatiproService {
     return byPhase;
   }
 
-  // Montant deja facture (cumul des situations ANTERIEURES actives) par phase.
-  // Renvoie Map<phaseId, montant_ht_cumule>. Sert au plafond de paiement
-  // (cap - deja_paye) pour ne jamais depasser le budget planifie d'une phase.
+  // Montant deja facture (cumul des situations ANTERIEURES actives) par phase,
+  // VENTILE PAR DEVISE (meme logique que phaseContractAmounts, voir plus haut).
+  // Renvoie Map<phaseId, Map<currencyId (0 = sans devise), montant_ht_cumule>>.
+  // Sert au plafond de paiement (cap - deja_paye) pour ne jamais depasser le
+  // budget planifie d'une phase, comparaison faite dans la devise de la phase.
   private async priorPaidAmountByPhase(orgId: number, projectId: number, excludeDocumentId?: number) {
     const rows = await this.db
-      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt })
+      .select({ phaseId: batiproDocumentLines.phaseId, lineHt: batiproDocumentLines.lineHt, lineCurrencyId: batiproDocumentLines.currencyId, phaseCurrencyId: batiproPhases.currencyId })
       .from(batiproDocumentLines)
       .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(batiproPhases, eq(batiproPhases.id, batiproDocumentLines.phaseId))
       .where(and(
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.projectId, projectId),
@@ -1873,10 +2052,14 @@ export class BatiproService {
         eq(batiproDocumentLines.isActive, 1),
         excludeDocumentId ? sql`${batiproDocuments.id} <> ${excludeDocumentId}` : undefined,
       ));
-    const byPhase = new Map<number, number>();
+    const byPhase = new Map<number, Map<number, number>>();
     for (const r of rows) {
       if (r.phaseId == null) continue;
-      byPhase.set(r.phaseId, (byPhase.get(r.phaseId) ?? 0) + Number(r.lineHt ?? 0));
+      // Meme regle de fallback que phaseAmountInCurrency (ligne -> phase, jamais document).
+      const currencyId = r.lineCurrencyId ?? r.phaseCurrencyId ?? 0;
+      const byCurrency = byPhase.get(r.phaseId) ?? new Map<number, number>();
+      byCurrency.set(currencyId, (byCurrency.get(currencyId) ?? 0) + Number(r.lineHt ?? 0));
+      byPhase.set(r.phaseId, byCurrency);
     }
     return byPhase;
   }
@@ -1913,6 +2096,21 @@ export class BatiproService {
     return Math.round(plannedBudget * ratio * 100) / 100;
   }
 
+  // Extrait, depuis une Map<phaseId, Map<currencyId, montant>> (voir
+  // phaseContractAmounts/priorPaidAmountByPhase), le montant DANS LA DEVISE DE
+  // LA PHASE uniquement (0 = sans devise). Ne mélange jamais plusieurs devises :
+  // un montant dans une autre devise que celle de la phase est ignoré ici (le
+  // plafond de paiement compare toujours des montants de meme devise).
+  private phaseAmountInCurrency(
+    byPhase: Map<number, Map<number, number>>,
+    phaseId: number,
+    phaseCurrencyId: number | null,
+  ): number {
+    const byCurrency = byPhase.get(phaseId);
+    if (!byCurrency) return 0;
+    return byCurrency.get(phaseCurrencyId ?? 0) ?? 0;
+  }
+
   // Etat d'avancement cumule par phase (pour pre-remplir une nouvelle situation).
   // Renvoie, pour chaque phase active du chantier : montant de marche, %
   // deja acte (cumul precedent), et progression physique de la phase.
@@ -1922,6 +2120,8 @@ export class BatiproService {
     const contract = await this.phaseContractAmounts(orgId, projectId);
     const prior = await this.priorProgressByPhase(orgId, projectId);
     const priorPaid = await this.priorPaidAmountByPhase(orgId, projectId);
+    const currencyRows = await this.db.select().from(currencies);
+    const currencyById = new Map(currencyRows.map((c) => [c.id, c] as const));
     const now = new Date();
     return {
       project_id: projectId,
@@ -1929,14 +2129,16 @@ export class BatiproService {
       currency_code: project.currencyCode ?? null,
       currency_symbol: project.currencySymbol ?? null,
       phases: phases.map((p) => {
-        const contractAmount = Math.round((contract.get(p.id) ?? 0) * 100) / 100;
+        const contractAmount = Math.round(this.phaseAmountInCurrency(contract, p.id, p.currencyId ?? null) * 100) / 100;
         const previousProgressPct = prior.get(p.id) ?? 0;
-        const alreadyPaid = priorPaid.get(p.id) ?? 0;
+        const alreadyPaid = this.phaseAmountInCurrency(priorPaid, p.id, p.currencyId ?? null);
         const cap = this.phasePaymentCap(p, now);
         // Montant que produirait l'avancement physique actuel de la phase,
         // avant plafonnement (pour signaler un depassement de plafond).
         const uncappedRemaining = Math.round((contractAmount * (Number(p.progress ?? 0) / 100) - alreadyPaid) * 100) / 100;
         const overCap = cap != null && uncappedRemaining > (cap - alreadyPaid);
+        // Devise de la phase (migration 0230) : si absente, herite de la devise du chantier.
+        const phaseCurrency = p.currencyId != null ? currencyById.get(p.currencyId) : null;
         return {
           phase_id: p.id,
           label: p.label,
@@ -1948,6 +2150,8 @@ export class BatiproService {
           cap_mode: p.capMode,
           payment_cap: cap,
           over_cap: overCap,
+          currency_id: p.currencyId ?? null,
+          currency_code: phaseCurrency?.currencyCode ?? project.currencyCode ?? null,
         };
       }),
     };
@@ -1971,12 +2175,15 @@ export class BatiproService {
     const phasesById = new Map((await this.phases(orgId, input.project_id)).map((p) => [p.id, p] as const));
     const situationDate = input.issue_date ? new Date(input.issue_date) : new Date();
 
+    const defaultCurrencyId = input.currency_id ?? null;
     let totalHt = 0, totalVat = 0;
+    const totalsByCurrencyMap = new Map<number | null, { totalHt: number; totalVat: number; totalTtc: number }>();
     const lines = input.lines
       .filter((l) => validPhases.has(l.phase_id))
       .map((l, index) => {
         const phase = phasesById.get(l.phase_id);
-        const contractAmount = l.contract_amount != null ? Number(l.contract_amount) : (contract.get(l.phase_id) ?? 0);
+        const phaseCurrencyId = phase?.currencyId ?? null;
+        const contractAmount = l.contract_amount != null ? Number(l.contract_amount) : this.phaseAmountInCurrency(contract, l.phase_id, phaseCurrencyId);
         const current = Number(l.progress_pct);
         const previous = prior.get(l.phase_id) ?? 0;
         // Delta borne >= 0 (on ne facture jamais un avancement negatif).
@@ -1984,8 +2191,9 @@ export class BatiproService {
         const computedPeriodHt = Math.round(contractAmount * (deltaPct / 100) * 100) / 100;
 
         // Plafond de paiement par phase (SCRUM-267) : jamais depasser le
-        // budget planifie de la phase, prorata temps si cap_mode=planning.
-        const alreadyPaid = priorPaid.get(l.phase_id) ?? 0;
+        // budget planifie de la phase (dans la devise de la phase), prorata
+        // temps si cap_mode=planning.
+        const alreadyPaid = this.phaseAmountInCurrency(priorPaid, l.phase_id, phaseCurrencyId);
         const cap = phase ? this.phasePaymentCap(phase, situationDate) : null;
         const remainingUnderCap = cap != null ? Math.max(0, cap - alreadyPaid) : null;
         const periodHt = remainingUnderCap != null ? Math.min(computedPeriodHt, remainingUnderCap) : computedPeriodHt;
@@ -1995,6 +2203,13 @@ export class BatiproService {
         totalHt += periodHt;
         totalVat += lineVat;
         const label = l.designation || phase?.label || `Phase ${l.phase_id}`;
+        // Devise de la ligne : celle saisie sur la ligne, sinon celle de la phase, sinon celle du document.
+        const effectiveCurrencyId = l.currency_id ?? phase?.currencyId ?? defaultCurrencyId ?? null;
+        const entry = totalsByCurrencyMap.get(effectiveCurrencyId) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
+        entry.totalHt += periodHt;
+        entry.totalVat += lineVat;
+        entry.totalTtc += periodHt + lineVat;
+        totalsByCurrencyMap.set(effectiveCurrencyId, entry);
         return {
           organizationId: orgId,
           documentId: 0,
@@ -2007,11 +2222,20 @@ export class BatiproService {
           lineTtc: String(Math.round((periodHt + lineVat) * 100) / 100),
           phaseId: l.phase_id,
           progressPct: String(current),
+          currencyId: l.currency_id ?? null,
         };
       });
     if (!lines.length) throw new BadRequestException("Aucune phase valide pour ce chantier.");
     const totalTtc = Math.round((totalHt + totalVat) * 100) / 100;
     const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
+    const totalsByCurrency = Array.from(totalsByCurrencyMap.entries())
+      .filter(([currencyId]) => currencyId != null)
+      .map(([currencyId, t]) => ({
+        currencyId: currencyId as number,
+        totalHt: Math.round(t.totalHt * 100) / 100,
+        totalVat: Math.round(t.totalVat * 100) / 100,
+        totalTtc: Math.round(t.totalTtc * 100) / 100,
+      }));
 
     const documentId = await this.db.transaction(async (tx) => {
       const { number } = await this.nextDocumentNumber(tx, orgId, "situation", year);
@@ -2034,6 +2258,7 @@ export class BatiproService {
       const id = Number(result.id);
       for (const line of lines) line.documentId = id;
       await tx.insert(batiproDocumentLines).values(lines);
+      await this.replaceDocumentTotals(tx, id, orgId, totalsByCurrency);
       return id;
     });
 
@@ -2114,7 +2339,26 @@ export class BatiproService {
     // Montants ignores (autre devise que celle du chantier) : regroupes par
     // devise pour affichage, pas de conversion. Reste un simple SELECT groupe,
     // pas de sur-ingenierie (le nombre de devises differentes par chantier est faible).
-    const otherCurrencyAgg = await this.db
+    //
+    // Deux sources combinees :
+    //  (a) documents SANS aucune ligne batipro_document_totals (crees avant la
+    //      migration 0232, ou entierement mono-devise NULL) : comportement
+    //      HISTORIQUE inchange, lu depuis batipro_documents.currency_id/total_ttc.
+    //  (b) documents AVEC des lignes batipro_document_totals (migration 0232) :
+    //      ventilation reelle par devise, y compris un document dont les LIGNES
+    //      melangent plusieurs devises differentes de celle du chantier.
+    const docsWithTotalsRows = (await this.db
+      .select({ documentId: batiproDocumentTotals.documentId })
+      .from(batiproDocumentTotals)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentTotals.documentId))
+      .where(and(
+        eq(batiproDocumentTotals.organizationId, orgId),
+        eq(batiproDocumentTotals.isActive, 1),
+        eq(batiproDocuments.projectId, projectId),
+      )))
+      .map((r) => r.documentId);
+
+    const otherCurrencyAggLegacy = await this.db
       .select({
         currencyCode: currencies.currencyCode,
         total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
@@ -2126,8 +2370,39 @@ export class BatiproService {
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.isActive, 1),
         sql`NOT ${sameCurrency}`,
+        docsWithTotalsRows.length ? notInArray(batiproDocuments.id, docsWithTotalsRows) : undefined,
       ))
       .groupBy(currencies.currencyCode);
+
+    const sameCurrencyTotals = projectCurrencyId != null
+      ? eq(batiproDocumentTotals.currencyId, projectCurrencyId)
+      : sql`1 = 0`;
+    const otherCurrencyAggFromTotals = await this.db
+      .select({
+        currencyCode: currencies.currencyCode,
+        total: sql<string>`COALESCE(SUM(${batiproDocumentTotals.totalTtc}), 0)`,
+      })
+      .from(batiproDocumentTotals)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentTotals.documentId))
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentTotals.currencyId))
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocumentTotals.organizationId, orgId),
+        eq(batiproDocumentTotals.isActive, 1),
+        sql`NOT (${sameCurrencyTotals})`,
+      ))
+      .groupBy(currencies.currencyCode);
+
+    // Fusion JS des deux sources (par code devise) : pas de sur-ingenierie SQL,
+    // le nombre de devises differentes par chantier reste faible.
+    const otherCurrencyMerged = new Map<string | null, number>();
+    for (const row of [...otherCurrencyAggLegacy, ...otherCurrencyAggFromTotals]) {
+      const key = row.currencyCode ?? null;
+      otherCurrencyMerged.set(key, (otherCurrencyMerged.get(key) ?? 0) + Number(row.total ?? 0));
+    }
+    const otherCurrencyAgg = Array.from(otherCurrencyMerged.entries()).map(([currencyCode, total]) => ({ currencyCode, total }));
 
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
     const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
@@ -2249,6 +2524,7 @@ export class BatiproService {
     if (invoice.type !== "invoice") throw new BadRequestException("Seule une facture peut etre comptabilisee.");
     if (invoice.direction !== "outbound") throw new BadRequestException("Seule une facture sortante peut etre comptabilisee.");
     if (invoice.status === "cancelled") throw new BadRequestException("Facture annulee : comptabilisation impossible.");
+    this.assertSingleCurrencyForLedger(invoice);
 
     const totalHt = Number(invoice.totalHt ?? 0);
     const totalVat = Number(invoice.totalVat ?? 0);
@@ -2314,6 +2590,7 @@ export class BatiproService {
     if (purchase.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut etre comptabilise en depense.");
     if (purchase.direction !== "outbound") throw new BadRequestException("Bon de commande invalide : direction inattendue.");
     if (purchase.status === "cancelled") throw new BadRequestException("Bon de commande annule : comptabilisation impossible.");
+    this.assertSingleCurrencyForLedger(purchase);
 
     const totalHt = Number(purchase.totalHt ?? 0);
     const totalVat = Number(purchase.totalVat ?? 0);
@@ -2392,6 +2669,10 @@ export class BatiproService {
     // Un BC n'a pas de statut "paid" dans son cycle (draft/sent/confirmed/
     // partially_received/received/cancelled) : paidAmount suit seul le reglement.
     const nextStatus = fullyPaid && !isPurchaseOrder ? "paid" : invoice.status;
+
+    // Garde-fou mono-devise AVANT toute ecriture : un document multi-devise ne
+    // doit jamais etre marque paye sans ecriture comptable en face.
+    if (isPurchaseOrder) this.assertSingleCurrencyForLedger(invoice);
 
     await this.db.update(batiproDocuments)
       .set({ paidAmount: String(newPaid), status: nextStatus })
@@ -2490,20 +2771,26 @@ export class BatiproService {
     const dateFr = (d: any) => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }) : "—";
     const issued = dateFr(doc.issueDate || doc.createdAt);
     const docLines = doc.lines || [];
+    // Multi-devise par ligne (migration 0232) : n'affiche une colonne/mention
+    // devise par ligne QUE si le document en compte reellement plusieurs
+    // (sinon rendu strictement identique a avant, pas de regression visuelle).
+    const totalsByCurrency: Array<{ currencyId: number; totalHt: any; totalVat: any; totalTtc: any; currencyCode?: string | null }> = doc.totalsByCurrency || [];
+    const isMultiCurrency = totalsByCurrency.length > 1;
+    const lineCurrency = (l: any) => (l.currencyCode || cur);
     // Situation : colonnes metier (phase, % avancement cumule, montant periode).
     const situationRows = docLines.map((l: any) => `<tr>
         <td>${esc(l.designation)}</td>
         <td class="amount">${l.progressPct != null ? `${fmt(l.progressPct)} %` : "—"}</td>
-        <td class="amount">${fmt(l.lineHt)}</td>
+        <td class="amount">${fmt(l.lineHt)}${isMultiCurrency ? ` ${esc(lineCurrency(l))}` : ""}</td>
       </tr>`).join("");
     const rows = docLines.map((l: any) => {
       const vat = Number(l.vatRate || 0);
       return `<tr>
         <td>${esc(l.designation)}</td>
         <td class="amount">${fmt(l.quantity)}</td>
-        <td class="amount">${fmt(l.unitPrice)}</td>
+        <td class="amount">${fmt(l.unitPrice)}${isMultiCurrency ? ` ${esc(lineCurrency(l))}` : ""}</td>
         <td class="amount">${vat ? `${fmt(vat)} %` : "—"}</td>
-        <td class="amount">${fmt(l.lineHt)}</td>
+        <td class="amount">${fmt(l.lineHt)}${isMultiCurrency ? ` ${esc(lineCurrency(l))}` : ""}</td>
       </tr>`;
     }).join("");
 
@@ -2564,13 +2851,21 @@ ${isSituation
   <tbody>${rows || `<tr><td colspan="5" style="color:#999;text-align:center;font-style:italic">Aucune ligne</td></tr>`}</tbody>
 </table>`}
 
-<table class="totals">
+${isMultiCurrency
+  ? totalsByCurrency.map((t) => `<table class="totals">
+  <tbody>
+    <tr><td>Total HT (${esc(t.currencyCode || "")})</td><td class="amount">${fmt(t.totalHt)} ${esc(t.currencyCode || "")}</td></tr>
+    <tr class="total-row"><td>TVA</td><td class="amount">${fmt(t.totalVat)} ${esc(t.currencyCode || "")}</td></tr>
+    <tr class="ttc-row"><td>Total TTC</td><td class="amount">${fmt(t.totalTtc)} ${esc(t.currencyCode || "")}</td></tr>
+  </tbody>
+</table>`).join("")
+  : `<table class="totals">
   <tbody>
     <tr><td>Total HT</td><td class="amount">${fmt(doc.totalHt)} ${esc(cur)}</td></tr>
     <tr class="total-row"><td>TVA</td><td class="amount">${fmt(doc.totalVat)} ${esc(cur)}</td></tr>
     <tr class="ttc-row"><td>Total TTC</td><td class="amount">${fmt(doc.totalTtc)} ${esc(cur)}</td></tr>
   </tbody>
-</table>
+</table>`}
 
 ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
 
@@ -2612,11 +2907,33 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
   async publicDocumentHtml(token: string): Promise<string> {
     const doc = await this.resolveDocumentToken(token);
     const orgId = doc.organizationId;
-    const lines = await this.db
-      .select()
+    const lineRows = await this.db
+      .select({
+        ...getTableColumns(batiproDocumentLines),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(batiproDocumentLines)
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentLines.currencyId))
       .where(and(eq(batiproDocumentLines.documentId, doc.id), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
       .orderBy(batiproDocumentLines.position);
+    const lines = lineRows.map((l) => ({
+      ...l,
+      currencyCode: l.currencyCode ?? doc.currencyCode ?? null,
+      currencySymbol: l.currencySymbol ?? doc.currencySymbol ?? null,
+    }));
+    const totalsByCurrency = await this.db
+      .select({
+        currencyId: batiproDocumentTotals.currencyId,
+        totalHt: batiproDocumentTotals.totalHt,
+        totalVat: batiproDocumentTotals.totalVat,
+        totalTtc: batiproDocumentTotals.totalTtc,
+        currencyCode: currencies.currencyCode,
+      })
+      .from(batiproDocumentTotals)
+      .leftJoin(currencies, eq(currencies.id, batiproDocumentTotals.currencyId))
+      .where(and(eq(batiproDocumentTotals.documentId, doc.id), eq(batiproDocumentTotals.organizationId, orgId), eq(batiproDocumentTotals.isActive, 1)))
+      .orderBy(batiproDocumentTotals.currencyId);
     const [project] = await this.db
       .select({ name: batiproProjects.name, code: batiproProjects.code, client: batiproProjects.client, location: batiproProjects.location })
       .from(batiproProjects)
@@ -2626,7 +2943,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     if (doc.status === "sent") {
       try { await this.db.update(batiproDocuments).set({ status: "viewed" as any }).where(eq(batiproDocuments.id, doc.id)); } catch { /* best-effort */ }
     }
-    return this.renderDocumentHtml({ ...doc, lines }, project ?? null, (setting?.companyName as string | null) || "Mon Organisation");
+    return this.renderDocumentHtml({ ...doc, lines, totalsByCurrency }, project ?? null, (setting?.companyName as string | null) || "Mon Organisation");
   }
 
   // Le client accepte le devis (public). Un devis accepte une fois suffit.

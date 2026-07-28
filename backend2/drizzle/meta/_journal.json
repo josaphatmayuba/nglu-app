@@ -1,1455 +1,1469 @@
 {
-    "version": "7",
-    "dialect": "mysql",
-    "entries": [
-        {
-            "idx": 0,
-            "version": "5",
-            "when": 1778344498351,
-            "tag": "0000_nervous_rumiko_fujikawa",
-            "breakpoints": true
-        },
-        {
-            "idx": 1,
-            "version": "5",
-            "when": 1778371200000,
-            "tag": "0001_add_tenant_details",
-            "breakpoints": true
-        },
-        {
-            "idx": 2,
-            "version": "5",
-            "when": 1778457600000,
-            "tag": "0002_add_tenant_onboardings",
-            "breakpoints": true
-        },
-        {
-            "idx": 3,
-            "version": "5",
-            "when": 1778459400000,
-            "tag": "0003_add_tenant_onboarding_token",
-            "breakpoints": true
-        },
-        {
-            "idx": 4,
-            "version": "5",
-            "when": 1778547600000,
-            "tag": "0004_add_hr_modules",
-            "breakpoints": true
-        },
-        {
-            "idx": 5,
-            "version": "5",
-            "when": 1778549400000,
-            "tag": "0005_grant_hr_module_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 6,
-            "version": "5",
-            "when": 1778551200000,
-            "tag": "0006_add_remaining_front_modules",
-            "breakpoints": true
-        },
-        {
-            "idx": 7,
-            "version": "5",
-            "when": 1778553000000,
-            "tag": "0007_grant_remaining_module_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 8,
-            "version": "5",
-            "when": 1778554800000,
-            "tag": "0008_add_legacy_crud_tables",
-            "breakpoints": true
-        },
-        {
-            "idx": 9,
-            "version": "5",
-            "when": 1778556600000,
-            "tag": "0009_grant_legacy_module_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 10,
-            "version": "5",
-            "when": 1778558400000,
-            "tag": "0010_add_customer_google_id",
-            "breakpoints": true
-        },
-        {
-            "idx": 11,
-            "version": "5",
-            "when": 1778560200000,
-            "tag": "0011_add_contract_templates",
-            "breakpoints": true
-        },
-        {
-            "idx": 12,
-            "version": "5",
-            "when": 1778562000000,
-            "tag": "0012_add_contract_template_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 13,
-            "version": "5",
-            "when": 1779038400000,
-            "tag": "0014_add_currency_id_to_property_units",
-            "breakpoints": true
-        },
-        {
-            "idx": 14,
-            "version": "5",
-            "when": 1779120000000,
-            "tag": "0015_add_currency_id_to_property",
-            "breakpoints": true
-        },
-        {
-            "idx": 15,
-            "version": "5",
-            "when": 1779474244498,
-            "tag": "0015_add_billing_fields_to_app_settings",
-            "breakpoints": true
-        },
-        {
-            "idx": 16,
-            "version": "5",
-            "when": 1779474381032,
-            "tag": "0016_add_notification_preferences",
-            "breakpoints": true
-        },
-        {
-            "idx": 17,
-            "version": "5",
-            "when": 1779477515415,
-            "tag": "0017_add_email_invoice_templates",
-            "breakpoints": true
-        },
-        {
-            "idx": 18,
-            "version": "5",
-            "when": 1748649600000,
-            "tag": "0035_add_leave_reason_to_users",
-            "breakpoints": true
-        },
-        {
-            "idx": 19,
-            "version": "5",
-            "when": 1779840000000,
-            "tag": "0036_repair_soft_delete_columns",
-            "breakpoints": true
-        },
-        {
-            "idx": 20,
-            "version": "5",
-            "when": 1780012800000,
-            "tag": "0037_add_messages_table",
-            "breakpoints": true
-        },
-        {
-            "idx": 21,
-            "version": "5",
-            "when": 1780016400000,
-            "tag": "0038_add_message_sync_fields",
-            "breakpoints": true
-        },
-        {
-            "idx": 22,
-            "version": "5",
-            "when": 1779877030441,
-            "tag": "0022_lumpy_mongoose",
-            "breakpoints": true
-        },
-        {
-            "idx": 23,
-            "version": "5",
-            "when": 1780099200000,
-            "tag": "0039_add_message_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 24,
-            "version": "5",
-            "when": 1780102800000,
-            "tag": "0040_add_system_email_logs",
-            "breakpoints": true
-        },
-        {
-            "idx": 25,
-            "version": "5",
-            "when": 1780106400000,
-            "tag": "0041_add_mail_account_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 26,
-            "version": "5",
-            "when": 1780110000000,
-            "tag": "0042_add_organizations_foundation",
-            "breakpoints": true
-        },
-        {
-            "idx": 27,
-            "version": "5",
-            "when": 1780113600000,
-            "tag": "0043_add_invoice_soft_delete_status",
-            "breakpoints": true
-        },
-        {
-            "idx": 28,
-            "version": "5",
-            "when": 1780117200000,
-            "tag": "0044_add_lease_overdue_reminder_date",
-            "breakpoints": true
-        },
-        {
-            "idx": 29,
-            "version": "5",
-            "when": 1780120800000,
-            "tag": "0045_add_tenant_salary_currency",
-            "breakpoints": true
-        },
-        {
-            "idx": 30,
-            "version": "5",
-            "when": 1780124400000,
-            "tag": "0046_add_maintenance_currency",
-            "breakpoints": true
-        },
-        {
-            "idx": 31,
-            "version": "5",
-            "when": 1780128000000,
-            "tag": "0047_add_maintenance_assignee",
-            "breakpoints": true
-        },
-        {
-            "idx": 32,
-            "version": "5",
-            "when": 1780131600000,
-            "tag": "0048_make_tenant_history_nullable",
-            "breakpoints": true
-        },
-        {
-            "idx": 33,
-            "version": "5",
-            "when": 1780135200000,
-            "tag": "0049_make_tenant_hiring_date_nullable",
-            "breakpoints": true
-        },
-        {
-            "idx": 34,
-            "version": "5",
-            "when": 1780138800000,
-            "tag": "0050_create_farmos_tables",
-            "breakpoints": true
-        },
-        {
-            "idx": 35,
-            "version": "5",
-            "when": 1780142400000,
-            "tag": "0051_grant_farmos_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 36,
-            "version": "5",
-            "when": 1780146000000,
-            "tag": "0052_farmos_diseases_catalog",
-            "breakpoints": true
-        },
-        {
-            "idx": 37,
-            "version": "5",
-            "when": 1780149600000,
-            "tag": "0053_farmos_animals_uniq_key",
-            "breakpoints": true
-        },
-        {
-            "idx": 38,
-            "version": "5",
-            "when": 1780153200000,
-            "tag": "0054_farmos_production_logs",
-            "breakpoints": true
-        },
-        {
-            "idx": 39,
-            "version": "5",
-            "when": 1780156800000,
-            "tag": "0055_farmos_vaccinations_and_insights",
-            "breakpoints": true
-        },
-        {
-            "idx": 40,
-            "version": "5",
-            "when": 1780160400000,
-            "tag": "0056_farmos_lookups",
-            "breakpoints": true
-        },
-        {
-            "idx": 41,
-            "version": "5",
-            "when": 1780164000000,
-            "tag": "0057_farmos_animals_count",
-            "breakpoints": true
-        },
-        {
-            "idx": 42,
-            "version": "5",
-            "when": 1780167600000,
-            "tag": "0058_farmos_animal_photos",
-            "breakpoints": true
-        },
-        {
-            "idx": 43,
-            "version": "5",
-            "when": 1780171200000,
-            "tag": "0059_farmos_semen_bank",
-            "breakpoints": true
-        },
-        {
-            "idx": 44,
-            "version": "5",
-            "when": 1780174800000,
-            "tag": "0064_repair_farmos_production_logs",
-            "breakpoints": true
-        },
-        {
-            "idx": 45,
-            "version": "5",
-            "when": 1780178400000,
-            "tag": "0065_farmos_sale_transaction_types",
-            "breakpoints": true
-        },
-        {
-            "idx": 46,
-            "version": "5",
-            "when": 1780182000000,
-            "tag": "0066_farmos_animals_room_type",
-            "breakpoints": true
-        },
-        {
-            "idx": 47,
-            "version": "5",
-            "when": 1780185600000,
-            "tag": "0067_farmos_price_list",
-            "breakpoints": true
-        },
-        {
-            "idx": 48,
-            "version": "5",
-            "when": 1780189200000,
-            "tag": "0068_grant_batipro_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 49,
-            "version": "5",
-            "when": 1780192800000,
-            "tag": "0069_create_batipro_tables",
-            "breakpoints": true
-        },
-        {
-            "idx": 50,
-            "version": "5",
-            "when": 1780196400000,
-            "tag": "0070_refresh_token_rotation",
-            "breakpoints": true
-        },
-        {
-            "idx": 51,
-            "version": "5",
-            "when": 1780200000000,
-            "tag": "0071_hr_modules",
-            "breakpoints": true
-        },
-        {
-            "idx": 52,
-            "version": "5",
-            "when": 1780203600000,
-            "tag": "0072_hr_timesheets",
-            "breakpoints": true
-        },
-        {
-            "idx": 53,
-            "version": "5",
-            "when": 1780207200000,
-            "tag": "0073_hr_money_currency_ids",
-            "breakpoints": true
-        },
-        {
-            "idx": 54,
-            "version": "5",
-            "when": 1780210800000,
-            "tag": "0074_hr_employee_requests",
-            "breakpoints": true
-        },
-        {
-            "idx": 55,
-            "version": "5",
-            "when": 1780214400000,
-            "tag": "0075_hr_timesheet_period_dates",
-            "breakpoints": true
-        },
-        {
-            "idx": 56,
-            "version": "5",
-            "when": 1780218000000,
-            "tag": "0076_hr_contract_professional_fields",
-            "breakpoints": true
-        },
-        {
-            "idx": 57,
-            "version": "5",
-            "when": 1780221600000,
-            "tag": "0077_hr_employee_complete_fields",
-            "breakpoints": true
-        },
-        {
-            "idx": 58,
-            "version": "5",
-            "when": 1780225200000,
-            "tag": "0078_hr_payrolls",
-            "breakpoints": true
-        },
-        {
-            "idx": 59,
-            "version": "5",
-            "when": 1780228800000,
-            "tag": "0079_hr_project_assignments",
-            "breakpoints": true
-        },
-        {
-            "idx": 60,
-            "version": "5",
-            "when": 1780232400000,
-            "tag": "0080_hr_timesheets_project_id",
-            "breakpoints": true
-        },
-        {
-            "idx": 61,
-            "version": "5",
-            "when": 1780236000000,
-            "tag": "0081_hr_attendances",
-            "breakpoints": true
-        },
-        {
-            "idx": 62,
-            "version": "5",
-            "when": 1780239600000,
-            "tag": "0082_hr_leave_workflow",
-            "breakpoints": true
-        },
-        {
-            "idx": 63,
-            "version": "5",
-            "when": 1780243200000,
-            "tag": "0083_hr_document_generation",
-            "breakpoints": true
-        },
-        {
-            "idx": 64,
-            "version": "5",
-            "when": 1780246800000,
-            "tag": "0084_hr_candidates",
-            "breakpoints": true
-        },
-        {
-            "idx": 65,
-            "version": "5",
-            "when": 1780250400000,
-            "tag": "0085_hr_payroll_approval",
-            "breakpoints": true
-        },
-        {
-            "idx": 66,
-            "version": "5",
-            "when": 1780254000000,
-            "tag": "0086_hr_personal_documents",
-            "breakpoints": true
-        },
-        {
-            "idx": 67,
-            "version": "5",
-            "when": 1780257600000,
-            "tag": "0087_hr_tax_rules",
-            "breakpoints": true
-        },
-        {
-            "idx": 68,
-            "version": "5",
-            "when": 1780261200000,
-            "tag": "0088_hr_public_holidays",
-            "breakpoints": true
-        },
-        {
-            "idx": 69,
-            "version": "5",
-            "when": 1780264800000,
-            "tag": "0089_hr_leave_entitlements",
-            "breakpoints": true
-        },
-        {
-            "idx": 70,
-            "version": "5",
-            "when": 1780268400000,
-            "tag": "0090_hr_payroll_period_lock",
-            "breakpoints": true
-        },
-        {
-            "idx": 71,
-            "version": "5",
-            "when": 1780272000000,
-            "tag": "0091_hr_document_approval",
-            "breakpoints": true
-        },
-        {
-            "idx": 72,
-            "version": "5",
-            "when": 1780275600000,
-            "tag": "0092_hr_document_signature_hash",
-            "breakpoints": true
-        },
-        {
-            "idx": 73,
-            "version": "5",
-            "when": 1780279200000,
-            "tag": "0093_hr_candidate_evaluations",
-            "breakpoints": true
-        },
-        {
-            "idx": 74,
-            "version": "5",
-            "when": 1780282800000,
-            "tag": "0094_domus_tax_farmos_species_columns",
-            "breakpoints": true
-        },
-        {
-            "idx": 75,
-            "version": "5",
-            "when": 1780286400000,
-            "tag": "0095_farmos_vet_dossier",
-            "breakpoints": true
-        },
-        {
-            "idx": 76,
-            "version": "5",
-            "when": 1780290000000,
-            "tag": "0096_farmos_documents",
-            "breakpoints": true
-        },
-        {
-            "idx": 77,
-            "version": "5",
-            "when": 1780293600000,
-            "tag": "0097_farmos_buildings",
-            "breakpoints": true
-        },
-        {
-            "idx": 78,
-            "version": "5",
-            "when": 1780297200000,
-            "tag": "0098_farmos_vet_exam_clinical",
-            "breakpoints": true
-        },
-        {
-            "idx": 79,
-            "version": "5",
-            "when": 1780300800000,
-            "tag": "0099_farmos_disease_library",
-            "breakpoints": true
-        },
-        {
-            "idx": 80,
-            "version": "5",
-            "when": 1780304400000,
-            "tag": "0100_farmos_animal_lineage",
-            "breakpoints": true
-        },
-        {
-            "idx": 81,
-            "version": "5",
-            "when": 1780308000000,
-            "tag": "0101_farmos_roles_permissions",
-            "breakpoints": true
-        },
-        {
-            "idx": 82,
-            "version": "5",
-            "when": 1780311600000,
-            "tag": "0102_farmos_disease_causes_exams",
-            "breakpoints": true
-        },
-        {
-            "idx": 83,
-            "version": "5",
-            "when": 1780315200000,
-            "tag": "0103_farmos_mortality_enrich",
-            "breakpoints": true
-        },
-        {
-            "idx": 84,
-            "version": "5",
-            "when": 1780318800000,
-            "tag": "0104_farmos_weighings",
-            "breakpoints": true
-        },
-        {
-            "idx": 85,
-            "version": "5",
-            "when": 1780322400000,
-            "tag": "0105_ledger_core",
-            "breakpoints": true
-        },
-        {
-            "idx": 86,
-            "version": "5",
-            "when": 1780326000000,
-            "tag": "0106_ledger_seed_rules",
-            "breakpoints": true
-        },
-        {
-            "idx": 87,
-            "version": "5",
-            "when": 1780329600000,
-            "tag": "0107_ledger_seed_rules_fix",
-            "breakpoints": true
-        },
-        {
-            "idx": 88,
-            "version": "5",
-            "when": 1780333200000,
-            "tag": "0108_workflow_core",
-            "breakpoints": true
-        },
-        {
-            "idx": 89,
-            "version": "5",
-            "when": 1780336800000,
-            "tag": "0109_budget_core",
-            "breakpoints": true
-        },
-        {
-            "idx": 90,
-            "version": "5",
-            "when": 1780340400000,
-            "tag": "0110_workflow_core_fix",
-            "breakpoints": true
-        },
-        {
-            "idx": 91,
-            "version": "5",
-            "when": 1780344000000,
-            "tag": "0111_ledger_approval_requirements",
-            "breakpoints": true
-        },
-        {
-            "idx": 92,
-            "version": "5",
-            "when": 1780347600000,
-            "tag": "0112_ledger_pending_entries",
-            "breakpoints": true
-        },
-        {
-            "idx": 93,
-            "version": "5",
-            "when": 1780351200000,
-            "tag": "0113_procurement_stock",
-            "breakpoints": true
-        },
-        {
-            "idx": 94,
-            "version": "5",
-            "when": 1780354800000,
-            "tag": "0114_documents",
-            "breakpoints": true
-        },
-        {
-            "idx": 95,
-            "version": "5",
-            "when": 1780358400000,
-            "tag": "0115_projects",
-            "breakpoints": true
-        },
-        {
-            "idx": 96,
-            "version": "5",
-            "when": 1780362000000,
-            "tag": "0116_farmos_vaccines",
-            "breakpoints": true
-        },
-        {
-            "idx": 97,
-            "version": "5",
-            "when": 1780365600000,
-            "tag": "0117_farmos_vaccines_seed",
-            "breakpoints": true
-        },
-        {
-            "idx": 98,
-            "version": "5",
-            "when": 1780369200000,
-            "tag": "0118_farmos_expenses_project",
-            "breakpoints": true
-        },
-        {
-            "idx": 99,
-            "version": "5",
-            "when": 1780372800000,
-            "tag": "0119_vaccine_registry",
-            "breakpoints": true
-        },
-        {
-            "idx": 100,
-            "version": "5",
-            "when": 1780376400000,
-            "tag": "0120_vaccine_registry_protocols",
-            "breakpoints": true
-        },
-        {
-            "idx": 101,
-            "version": "5",
-            "when": 1780380000000,
-            "tag": "0121_vaccine_registry_seed_dims",
-            "breakpoints": true
-        },
-        {
-            "idx": 102,
-            "version": "5",
-            "when": 1780383600000,
-            "tag": "0122_vaccine_registry_seed_vaccines",
-            "breakpoints": true
-        },
-        {
-            "idx": 103,
-            "version": "5",
-            "when": 1780387200000,
-            "tag": "0123_vaccine_registry_seed_links",
-            "breakpoints": true
-        },
-        {
-            "idx": 104,
-            "version": "5",
-            "when": 1780390800000,
-            "tag": "0124_vaccine_registry_seed_protocols",
-            "breakpoints": true
-        },
-        {
-            "idx": 105,
-            "version": "5",
-            "when": 1780394400000,
-            "tag": "0125_vaccine_sync_etl",
-            "breakpoints": true
-        },
-        {
-            "idx": 106,
-            "version": "5",
-            "when": 1780398000000,
-            "tag": "0126_projects_shared_registry",
-            "breakpoints": true
-        },
-        {
-            "idx": 107,
-            "version": "5",
-            "when": 1780401600000,
-            "tag": "0127_maintenance_project_link",
-            "breakpoints": true
-        },
-        {
-            "idx": 108,
-            "version": "5",
-            "when": 1780405200000,
-            "tag": "0128_backfill_maintenance_projects",
-            "breakpoints": true
-        },
-        {
-            "idx": 109,
-            "version": "5",
-            "when": 1780408800000,
-            "tag": "0129_projects_source_ref_org_index",
-            "breakpoints": true
-        },
-        {
-            "idx": 110,
-            "version": "5",
-            "when": 1780412400000,
-            "tag": "0130_currency_exchanges",
-            "breakpoints": true
-        },
-        {
-            "idx": 111,
-            "version": "5",
-            "when": 1780416000000,
-            "tag": "0131_exchange_subaccounts",
-            "breakpoints": true
-        },
-        {
-            "idx": 112,
-            "version": "5",
-            "when": 1780419600000,
-            "tag": "0132_fix_account_types",
-            "breakpoints": true
-        },
-        {
-            "idx": 113,
-            "version": "5",
-            "when": 1780423200000,
-            "tag": "0133_hr_projects_source_ref",
-            "breakpoints": true
-        },
-        {
-            "idx": 114,
-            "version": "5",
-            "when": 1780426800000,
-            "tag": "0134_view_reversed_entries_permission",
-            "breakpoints": true
-        },
-        {
-            "idx": 115,
-            "version": "5",
-            "when": 1780430400000,
-            "tag": "0135_legacy_compta",
-            "breakpoints": true
-        },
-        {
-            "idx": 116,
-            "version": "5",
-            "when": 1780434000000,
-            "tag": "0136_legacy_immo",
-            "breakpoints": true
-        },
-        {
-            "idx": 117,
-            "version": "5",
-            "when": 1780437600000,
-            "tag": "0137_legacy_comm",
-            "breakpoints": true
-        },
-        {
-            "idx": 118,
-            "version": "5",
-            "when": 1780441200000,
-            "tag": "0138_legacy_users_devis",
-            "breakpoints": true
-        },
-        {
-            "idx": 119,
-            "version": "5",
-            "when": 1780444800000,
-            "tag": "0143_merge_currency_duplicates",
-            "breakpoints": true
-        },
-        {
-            "idx": 120,
-            "version": "5",
-            "when": 1780448400000,
-            "tag": "0144_legacy_null_currency_usd",
-            "breakpoints": true
-        },
-        {
-            "idx": 121,
-            "version": "5",
-            "when": 1780452000000,
-            "tag": "0145_legacy_user_salary_histories",
-            "breakpoints": true
-        },
-        {
-            "idx": 122,
-            "version": "5",
-            "when": 1780455600000,
-            "tag": "0146_journal_entries_null_currency_usd",
-            "breakpoints": true
-        },
-        {
-            "idx": 123,
-            "version": "5",
-            "when": 1780459200000,
-            "tag": "0147_journal_entries_orphan_currency_usd",
-            "breakpoints": true
-        },
-        {
-            "idx": 124,
-            "version": "5",
-            "when": 1780462800000,
-            "tag": "0148_journal_entries_nullcode_currency_usd",
-            "breakpoints": true
-        },
-        {
-            "idx": 125,
-            "version": "5",
-            "when": 1780466400000,
-            "tag": "0149_expense_subaccounts_regroup",
-            "breakpoints": true
-        },
-        {
-            "idx": 126,
-            "version": "5",
-            "when": 1780470000000,
-            "tag": "0150_expense_remap_fix",
-            "breakpoints": true
-        },
-        {
-            "idx": 127,
-            "version": "5",
-            "when": 1780473600000,
-            "tag": "0151_transaction_types_expense_cleanup",
-            "breakpoints": true
-        },
-        {
-            "idx": 128,
-            "version": "5",
-            "when": 1780477200000,
-            "tag": "0152_transaction_attachments",
-            "breakpoints": true
-        },
-        {
-            "idx": 129,
-            "version": "5",
-            "when": 1780480800000,
-            "tag": "0153_treasury_transaction_types_fix",
-            "breakpoints": true
-        },
-        {
-            "idx": 130,
-            "version": "5",
-            "when": 1780484400000,
-            "tag": "0154_treasury_types_deposit_sense_fix",
-            "breakpoints": true
-        },
-        {
-            "idx": 131,
-            "version": "5",
-            "when": 1780488000000,
-            "tag": "0155_suppliers_central_registry",
-            "breakpoints": true
-        },
-        {
-            "idx": 132,
-            "version": "5",
-            "when": 1780491600000,
-            "tag": "0156_supplier_party_type",
-            "breakpoints": true
-        },
-        {
-            "idx": 133,
-            "version": "5",
-            "when": 1780495200000,
-            "tag": "0157_journal_entreprise",
-            "breakpoints": true
-        },
-        {
-            "idx": 134,
-            "version": "5",
-            "when": 1780498800000,
-            "tag": "0158_journal_discussions",
-            "breakpoints": true
-        },
-        {
-            "idx": 135,
-            "version": "5",
-            "when": 1780502400000,
-            "tag": "0159_chat_channels",
-            "breakpoints": true
-        },
-        {
-            "idx": 136,
-            "version": "5",
-            "when": 1780506000000,
-            "tag": "0160_farmos_zones",
-            "breakpoints": true
-        },
-        {
-            "idx": 137,
-            "version": "5",
-            "when": 1780509600000,
-            "tag": "0161_farmos_building_positions",
-            "breakpoints": true
-        },
-        {
-            "idx": 138,
-            "version": "5",
-            "when": 1780513200000,
-            "tag": "0162_farmos_land_features",
-            "breakpoints": true
-        },
-        {
-            "idx": 139,
-            "version": "5",
-            "when": 1780516800000,
-            "tag": "0163_farmos_farms",
-            "breakpoints": true
-        },
-        {
-            "idx": 140,
-            "version": "5",
-            "when": 1780520400000,
-            "tag": "0164_repair_farm_zone_cols",
-            "breakpoints": true
-        },
-        {
-            "idx": 141,
-            "version": "5",
-            "when": 1780524000000,
-            "tag": "0165_farmos_species_canonical",
-            "breakpoints": true
-        },
-        {
-            "idx": 142,
-            "version": "5",
-            "when": 1780527600000,
-            "tag": "0166_farmos_animals_inventory_prod",
-            "breakpoints": true
-        },
-        {
-            "idx": 143,
-            "version": "5",
-            "when": 1780531200000,
-            "tag": "0167_farmos_egg_sales",
-            "breakpoints": true
-        },
-        {
-            "idx": 144,
-            "version": "5",
-            "when": 1780534800000,
-            "tag": "0168_farmos_boxes",
-            "breakpoints": true
-        },
-        {
-            "idx": 145,
-            "version": "5",
-            "when": 1780538400000,
-            "tag": "0169_forecast_snapshots",
-            "breakpoints": true
-        },
-        {
-            "idx": 146,
-            "version": "5",
-            "when": 1780542000000,
-            "tag": "0170_forecast_external_refs",
-            "breakpoints": true
-        },
-        {
-            "idx": 147,
-            "version": "5",
-            "when": 1780545600000,
-            "tag": "0171_farmos_mortality_zb_deaths",
-            "breakpoints": true
-        },
-        {
-            "idx": 148,
-            "version": "5",
-            "when": 1780549200000,
-            "tag": "0172_farmos_mortality_zb_repair",
-            "breakpoints": true
-        },
-        {
-            "idx": 149,
-            "version": "5",
-            "when": 1780552800000,
-            "tag": "0173_farmos_boxes_dedupe",
-            "breakpoints": true
-        },
-        {
-            "idx": 150,
-            "version": "5",
-            "when": 1780556400000,
-            "tag": "0174_batipro_projects_billing",
-            "breakpoints": true
-        },
-        {
-            "idx": 151,
-            "version": "5",
-            "when": 1780560000000,
-            "tag": "0175_super_owner_role",
-            "breakpoints": true
-        },
-        {
-            "idx": 152,
-            "version": "5",
-            "when": 1780563600000,
-            "tag": "0176_chart_of_accounts_org",
-            "breakpoints": true
-        },
-        {
-            "idx": 153,
-            "version": "5",
-            "when": 1780567200000,
-            "tag": "0177_org_public_id",
-            "breakpoints": true
-        },
-        {
-            "idx": 154,
-            "version": "5",
-            "when": 1780570800000,
-            "tag": "0178_remaining_tables_org",
-            "breakpoints": true
-        },
-        {
-            "idx": 155,
-            "version": "5",
-            "when": 1780574400000,
-            "tag": "0179_supplier_payment_method_org",
-            "breakpoints": true
-        },
-        {
-            "idx": 156,
-            "version": "5",
-            "when": 1780578000000,
-            "tag": "0180_hr_catalogs_org",
-            "breakpoints": true
-        },
-        {
-            "idx": 157,
-            "version": "5",
-            "when": 1780581600000,
-            "tag": "0181_org_plan",
-            "breakpoints": true
-        },
-        {
-            "idx": 158,
-            "version": "5",
-            "when": 1780585200000,
-            "tag": "0182_farmos_tasks",
-            "breakpoints": true
-        },
-        {
-            "idx": 159,
-            "version": "5",
-            "when": 1780588800000,
-            "tag": "0183_farmos_field_notes",
-            "breakpoints": true
-        },
-        {
-            "idx": 160,
-            "version": "5",
-            "when": 1780592400000,
-            "tag": "0184_farmos_repro_porcine",
-            "breakpoints": true
-        },
-        {
-            "idx": 161,
-            "version": "5",
-            "when": 1780596000000,
-            "tag": "0185_farmos_saved_reports",
-            "breakpoints": true
-        },
-        {
-            "idx": 162,
-            "version": "5",
-            "when": 1780599600000,
-            "tag": "0187_farmos_species_assignments",
-            "breakpoints": true
-        },
-        {
-            "idx": 163,
-            "version": "5",
-            "when": 1780603200000,
-            "tag": "0188_real_estate_property_assignments",
-            "breakpoints": true
-        },
-        {
-            "idx": 164,
-            "version": "5",
-            "when": 1780606800000,
-            "tag": "0189_roles_per_organization",
-            "breakpoints": true
-        },
-        {
-            "idx": 165,
-            "version": "5",
-            "when": 1780610400000,
-            "tag": "0190_batipro_project_assignments",
-            "breakpoints": true
-        },
-        {
-            "idx": 166,
-            "version": "5",
-            "when": 1780614000000,
-            "tag": "0191_real_estate_property_photos",
-            "breakpoints": true
-        },
-        {
-            "idx": 167,
-            "version": "5",
-            "when": 1780617600000,
-            "tag": "0192_real_estate_reservations",
-            "breakpoints": true
-        },
-        {
-            "idx": 168,
-            "version": "5",
-            "when": 1780621200000,
-            "tag": "0193_real_estate_coupons",
-            "breakpoints": true
-        },
-        {
-            "idx": 169,
-            "version": "5",
-            "when": 1780624800000,
-            "tag": "0194_real_estate_photo_units",
-            "breakpoints": true
-        },
-        {
-            "idx": 170,
-            "version": "5",
-            "when": 1780628400000,
-            "tag": "0195_unit_property_available_for_booking",
-            "breakpoints": true
-        },
-        {
-            "idx": 171,
-            "version": "5",
-            "when": 1780714800000,
-            "tag": "0196_real_estate_lease_documents",
-            "breakpoints": true
-        },
-        {
-            "idx": 172,
-            "version": "5",
-            "when": 1780801200000,
-            "tag": "0197_real_estate_contracts_signed_document",
-            "breakpoints": true
-        },
-        {
-            "idx": 173,
-            "version": "5",
-            "when": 1780887600000,
-            "tag": "0198_real_estate_reservation_paid_at",
-            "breakpoints": true
-        },
-        {
-            "idx": 174,
-            "version": "5",
-            "when": 1780891200000,
-            "tag": "0199_tenant_onboardings_organization_id",
-            "breakpoints": true
-        },
-        {
-            "idx": 175,
-            "version": "5",
-            "when": 1780894800000,
-            "tag": "0200_real_estate_leases_signing_city",
-            "breakpoints": true
-        },
-        {
-            "idx": 176,
-            "version": "5",
-            "when": 1780898400000,
-            "tag": "0201_appsetting_landlord_contact",
-            "breakpoints": true
-        },
-        {
-            "idx": 177,
-            "version": "5",
-            "when": 1780902000000,
-            "tag": "0202_tenant_details_id_number",
-            "breakpoints": true
-        },
-        {
-            "idx": 178,
-            "version": "5",
-            "when": 1780905600000,
-            "tag": "0203_domus_residential_template_v2",
-            "breakpoints": true
-        },
-        {
-            "idx": 179,
-            "version": "5",
-            "when": 1780909200000,
-            "tag": "0204_contract_welcome_message_sent_at",
-            "breakpoints": true
-        },
-        {
-            "idx": 180,
-            "version": "5",
-            "when": 1780912800000,
-            "tag": "0205_tenant_onboardings_sent_at",
-            "breakpoints": true
-        },
-        {
-            "idx": 181,
-            "version": "5",
-            "when": 1780916400000,
-            "tag": "0206_tenant_onboardings_sms_delivery",
-            "breakpoints": true
-        },
-        {
-            "idx": 182,
-            "version": "5",
-            "when": 1780920000000,
-            "tag": "0207_tenant_marital_status_normalize",
-            "breakpoints": true
-        },
-        {
-            "idx": 183,
-            "version": "5",
-            "when": 1780923600000,
-            "tag": "0208_domus_template_optional_notes",
-            "breakpoints": true
-        },
-        {
-            "idx": 184,
-            "version": "5",
-            "when": 1780927200000,
-            "tag": "0209_chat_calls",
-            "breakpoints": true
-        },
-        {
-            "idx": 185,
-            "version": "5",
-            "when": 1780930800000,
-            "tag": "0210_journal_messages_voice",
-            "breakpoints": true
-        },
-        {
-            "idx": 186,
-            "version": "5",
-            "when": 1780934400000,
-            "tag": "0211_chat_direct_discussions",
-            "breakpoints": true
-        },
-        {
-            "idx": 187,
-            "version": "5",
-            "when": 1780938000000,
-            "tag": "0212_repair_chat_user_mojibake",
-            "breakpoints": true
-        },
-        {
-            "idx": 188,
-            "version": "5",
-            "when": 1780941600000,
-            "tag": "0213_chat_calls_video",
-            "breakpoints": true
-        },
-        {
-            "idx": 189,
-            "version": "5",
-            "when": 1780945200000,
-            "tag": "0214_batipro_phases_situations_subs",
-            "breakpoints": true
-        },
-        {
-            "idx": 190,
-            "version": "5",
-            "when": 1780948800000,
-            "tag": "0215_batipro_building_models",
-            "breakpoints": true
-        },
-        {
-            "idx": 191,
-            "version": "5",
-            "when": 1780952400000,
-            "tag": "0216_batipro_documents",
-            "breakpoints": true
-        },
-        {
-            "idx": 192,
-            "version": "5",
-            "when": 1780956000000,
-            "tag": "0217_batipro_document_counters",
-            "breakpoints": true
-        },
-        {
-            "idx": 193,
-            "version": "5",
-            "when": 1780959600000,
-            "tag": "0218_batipro_documents_supplier",
-            "breakpoints": true
-        },
-        {
-            "idx": 194,
-            "version": "5",
-            "when": 1780963200000,
-            "tag": "0219_batipro_document_lines_progress",
-            "breakpoints": true
-        },
-        {
-            "idx": 195,
-            "version": "5",
-            "when": 1780966800000,
-            "tag": "0220_batipro_invoice_ledger",
-            "breakpoints": true
-        },
-        {
-            "idx": 196,
-            "version": "5",
-            "when": 1780970400000,
-            "tag": "0221_batipro_site_photos",
-            "breakpoints": true
-        },
-        {
-            "idx": 197,
-            "version": "5",
-            "when": 1780974000000,
-            "tag": "0222_batipro_workers",
-            "breakpoints": true
-        },
-        {
-            "idx": 198,
-            "version": "5",
-            "when": 1780977600000,
-            "tag": "0223_batipro_attendance",
-            "breakpoints": true
-        },
-        {
-            "idx": 199,
-            "version": "5",
-            "when": 1780981200000,
-            "tag": "0224_batipro_notifications",
-            "breakpoints": true
-        },
-        {
-            "idx": 200,
-            "version": "5",
-            "when": 1780984800000,
-            "tag": "0225_batipro_level_plans",
-            "breakpoints": true
-        },
-        {
-            "idx": 201,
-            "version": "5",
-            "when": 1780988400000,
-            "tag": "0226_batipro_stock_movements",
-            "breakpoints": true
-        },
-        {
-            "idx": 202,
-            "version": "5",
-            "when": 1780992000000,
-            "tag": "0227_batipro_phases_payment_cap",
-            "breakpoints": true
-        },
-        {
-            "idx": 203,
-            "version": "5",
-            "when": 1780995600000,
-            "tag": "0228_batipro_situations_merge",
-            "breakpoints": true
-        },
-        {
-            "idx": 204,
-            "version": "5",
-            "when": 1780999200000,
-            "tag": "0229_batipro_purchase_ledger",
-            "breakpoints": true
-        },
-        {
-            "idx": 205,
-            "version": "5",
-            "when": 1781002800000,
-            "tag": "0230_batipro_phases_currency",
-            "breakpoints": true
-        },
-        {
-            "idx": 206,
-            "version": "5",
-            "when": 1781006400000,
-            "tag": "0231_batipro_po_receipt",
-            "breakpoints": true
-        }
-    ]
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1778344498351,
+      "tag": "0000_nervous_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778371200000,
+      "tag": "0001_add_tenant_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778457600000,
+      "tag": "0002_add_tenant_onboardings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778459400000,
+      "tag": "0003_add_tenant_onboarding_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1778547600000,
+      "tag": "0004_add_hr_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778549400000,
+      "tag": "0005_grant_hr_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778551200000,
+      "tag": "0006_add_remaining_front_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778553000000,
+      "tag": "0007_grant_remaining_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1778554800000,
+      "tag": "0008_add_legacy_crud_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1778556600000,
+      "tag": "0009_grant_legacy_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1778558400000,
+      "tag": "0010_add_customer_google_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1778560200000,
+      "tag": "0011_add_contract_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1778562000000,
+      "tag": "0012_add_contract_template_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1779038400000,
+      "tag": "0014_add_currency_id_to_property_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1779120000000,
+      "tag": "0015_add_currency_id_to_property",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1779474244498,
+      "tag": "0015_add_billing_fields_to_app_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1779474381032,
+      "tag": "0016_add_notification_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1779477515415,
+      "tag": "0017_add_email_invoice_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1748649600000,
+      "tag": "0035_add_leave_reason_to_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1779840000000,
+      "tag": "0036_repair_soft_delete_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1780012800000,
+      "tag": "0037_add_messages_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1780016400000,
+      "tag": "0038_add_message_sync_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1779877030441,
+      "tag": "0022_lumpy_mongoose",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1780099200000,
+      "tag": "0039_add_message_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1780102800000,
+      "tag": "0040_add_system_email_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1780106400000,
+      "tag": "0041_add_mail_account_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1780110000000,
+      "tag": "0042_add_organizations_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1780113600000,
+      "tag": "0043_add_invoice_soft_delete_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1780117200000,
+      "tag": "0044_add_lease_overdue_reminder_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1780120800000,
+      "tag": "0045_add_tenant_salary_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1780124400000,
+      "tag": "0046_add_maintenance_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1780128000000,
+      "tag": "0047_add_maintenance_assignee",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1780131600000,
+      "tag": "0048_make_tenant_history_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1780135200000,
+      "tag": "0049_make_tenant_hiring_date_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1780138800000,
+      "tag": "0050_create_farmos_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1780142400000,
+      "tag": "0051_grant_farmos_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1780146000000,
+      "tag": "0052_farmos_diseases_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1780149600000,
+      "tag": "0053_farmos_animals_uniq_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1780153200000,
+      "tag": "0054_farmos_production_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1780156800000,
+      "tag": "0055_farmos_vaccinations_and_insights",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1780160400000,
+      "tag": "0056_farmos_lookups",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1780164000000,
+      "tag": "0057_farmos_animals_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1780167600000,
+      "tag": "0058_farmos_animal_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1780171200000,
+      "tag": "0059_farmos_semen_bank",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1780174800000,
+      "tag": "0064_repair_farmos_production_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1780178400000,
+      "tag": "0065_farmos_sale_transaction_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1780182000000,
+      "tag": "0066_farmos_animals_room_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1780185600000,
+      "tag": "0067_farmos_price_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1780189200000,
+      "tag": "0068_grant_batipro_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1780192800000,
+      "tag": "0069_create_batipro_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1780196400000,
+      "tag": "0070_refresh_token_rotation",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1780200000000,
+      "tag": "0071_hr_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1780203600000,
+      "tag": "0072_hr_timesheets",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1780207200000,
+      "tag": "0073_hr_money_currency_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1780210800000,
+      "tag": "0074_hr_employee_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1780214400000,
+      "tag": "0075_hr_timesheet_period_dates",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1780218000000,
+      "tag": "0076_hr_contract_professional_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1780221600000,
+      "tag": "0077_hr_employee_complete_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1780225200000,
+      "tag": "0078_hr_payrolls",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "5",
+      "when": 1780228800000,
+      "tag": "0079_hr_project_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1780232400000,
+      "tag": "0080_hr_timesheets_project_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1780236000000,
+      "tag": "0081_hr_attendances",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1780239600000,
+      "tag": "0082_hr_leave_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "5",
+      "when": 1780243200000,
+      "tag": "0083_hr_document_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1780246800000,
+      "tag": "0084_hr_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1780250400000,
+      "tag": "0085_hr_payroll_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1780254000000,
+      "tag": "0086_hr_personal_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1780257600000,
+      "tag": "0087_hr_tax_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1780261200000,
+      "tag": "0088_hr_public_holidays",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1780264800000,
+      "tag": "0089_hr_leave_entitlements",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1780268400000,
+      "tag": "0090_hr_payroll_period_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1780272000000,
+      "tag": "0091_hr_document_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1780275600000,
+      "tag": "0092_hr_document_signature_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "5",
+      "when": 1780279200000,
+      "tag": "0093_hr_candidate_evaluations",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "5",
+      "when": 1780282800000,
+      "tag": "0094_domus_tax_farmos_species_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "5",
+      "when": 1780286400000,
+      "tag": "0095_farmos_vet_dossier",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "5",
+      "when": 1780290000000,
+      "tag": "0096_farmos_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "5",
+      "when": 1780293600000,
+      "tag": "0097_farmos_buildings",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "5",
+      "when": 1780297200000,
+      "tag": "0098_farmos_vet_exam_clinical",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "5",
+      "when": 1780300800000,
+      "tag": "0099_farmos_disease_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "5",
+      "when": 1780304400000,
+      "tag": "0100_farmos_animal_lineage",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1780308000000,
+      "tag": "0101_farmos_roles_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1780311600000,
+      "tag": "0102_farmos_disease_causes_exams",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "5",
+      "when": 1780315200000,
+      "tag": "0103_farmos_mortality_enrich",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "5",
+      "when": 1780318800000,
+      "tag": "0104_farmos_weighings",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "5",
+      "when": 1780322400000,
+      "tag": "0105_ledger_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "5",
+      "when": 1780326000000,
+      "tag": "0106_ledger_seed_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "5",
+      "when": 1780329600000,
+      "tag": "0107_ledger_seed_rules_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "5",
+      "when": 1780333200000,
+      "tag": "0108_workflow_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "5",
+      "when": 1780336800000,
+      "tag": "0109_budget_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "5",
+      "when": 1780340400000,
+      "tag": "0110_workflow_core_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "5",
+      "when": 1780344000000,
+      "tag": "0111_ledger_approval_requirements",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "5",
+      "when": 1780347600000,
+      "tag": "0112_ledger_pending_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "5",
+      "when": 1780351200000,
+      "tag": "0113_procurement_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "5",
+      "when": 1780354800000,
+      "tag": "0114_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "5",
+      "when": 1780358400000,
+      "tag": "0115_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "5",
+      "when": 1780362000000,
+      "tag": "0116_farmos_vaccines",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "5",
+      "when": 1780365600000,
+      "tag": "0117_farmos_vaccines_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "5",
+      "when": 1780369200000,
+      "tag": "0118_farmos_expenses_project",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "5",
+      "when": 1780372800000,
+      "tag": "0119_vaccine_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "5",
+      "when": 1780376400000,
+      "tag": "0120_vaccine_registry_protocols",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "5",
+      "when": 1780380000000,
+      "tag": "0121_vaccine_registry_seed_dims",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "5",
+      "when": 1780383600000,
+      "tag": "0122_vaccine_registry_seed_vaccines",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "5",
+      "when": 1780387200000,
+      "tag": "0123_vaccine_registry_seed_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "5",
+      "when": 1780390800000,
+      "tag": "0124_vaccine_registry_seed_protocols",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "5",
+      "when": 1780394400000,
+      "tag": "0125_vaccine_sync_etl",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "5",
+      "when": 1780398000000,
+      "tag": "0126_projects_shared_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "5",
+      "when": 1780401600000,
+      "tag": "0127_maintenance_project_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "5",
+      "when": 1780405200000,
+      "tag": "0128_backfill_maintenance_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "5",
+      "when": 1780408800000,
+      "tag": "0129_projects_source_ref_org_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "5",
+      "when": 1780412400000,
+      "tag": "0130_currency_exchanges",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "5",
+      "when": 1780416000000,
+      "tag": "0131_exchange_subaccounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "5",
+      "when": 1780419600000,
+      "tag": "0132_fix_account_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "5",
+      "when": 1780423200000,
+      "tag": "0133_hr_projects_source_ref",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "5",
+      "when": 1780426800000,
+      "tag": "0134_view_reversed_entries_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "5",
+      "when": 1780430400000,
+      "tag": "0135_legacy_compta",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "5",
+      "when": 1780434000000,
+      "tag": "0136_legacy_immo",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "5",
+      "when": 1780437600000,
+      "tag": "0137_legacy_comm",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "5",
+      "when": 1780441200000,
+      "tag": "0138_legacy_users_devis",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "5",
+      "when": 1780444800000,
+      "tag": "0143_merge_currency_duplicates",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "5",
+      "when": 1780448400000,
+      "tag": "0144_legacy_null_currency_usd",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "5",
+      "when": 1780452000000,
+      "tag": "0145_legacy_user_salary_histories",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "5",
+      "when": 1780455600000,
+      "tag": "0146_journal_entries_null_currency_usd",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "5",
+      "when": 1780459200000,
+      "tag": "0147_journal_entries_orphan_currency_usd",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "5",
+      "when": 1780462800000,
+      "tag": "0148_journal_entries_nullcode_currency_usd",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "5",
+      "when": 1780466400000,
+      "tag": "0149_expense_subaccounts_regroup",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "5",
+      "when": 1780470000000,
+      "tag": "0150_expense_remap_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "5",
+      "when": 1780473600000,
+      "tag": "0151_transaction_types_expense_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "5",
+      "when": 1780477200000,
+      "tag": "0152_transaction_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "5",
+      "when": 1780480800000,
+      "tag": "0153_treasury_transaction_types_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "5",
+      "when": 1780484400000,
+      "tag": "0154_treasury_types_deposit_sense_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "5",
+      "when": 1780488000000,
+      "tag": "0155_suppliers_central_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "5",
+      "when": 1780491600000,
+      "tag": "0156_supplier_party_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "5",
+      "when": 1780495200000,
+      "tag": "0157_journal_entreprise",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "5",
+      "when": 1780498800000,
+      "tag": "0158_journal_discussions",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "5",
+      "when": 1780502400000,
+      "tag": "0159_chat_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "5",
+      "when": 1780506000000,
+      "tag": "0160_farmos_zones",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "5",
+      "when": 1780509600000,
+      "tag": "0161_farmos_building_positions",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "5",
+      "when": 1780513200000,
+      "tag": "0162_farmos_land_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "5",
+      "when": 1780516800000,
+      "tag": "0163_farmos_farms",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "5",
+      "when": 1780520400000,
+      "tag": "0164_repair_farm_zone_cols",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "5",
+      "when": 1780524000000,
+      "tag": "0165_farmos_species_canonical",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "5",
+      "when": 1780527600000,
+      "tag": "0166_farmos_animals_inventory_prod",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "5",
+      "when": 1780531200000,
+      "tag": "0167_farmos_egg_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "5",
+      "when": 1780534800000,
+      "tag": "0168_farmos_boxes",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "5",
+      "when": 1780538400000,
+      "tag": "0169_forecast_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "5",
+      "when": 1780542000000,
+      "tag": "0170_forecast_external_refs",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "5",
+      "when": 1780545600000,
+      "tag": "0171_farmos_mortality_zb_deaths",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "5",
+      "when": 1780549200000,
+      "tag": "0172_farmos_mortality_zb_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "5",
+      "when": 1780552800000,
+      "tag": "0173_farmos_boxes_dedupe",
+      "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "5",
+      "when": 1780556400000,
+      "tag": "0174_batipro_projects_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "5",
+      "when": 1780560000000,
+      "tag": "0175_super_owner_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "5",
+      "when": 1780563600000,
+      "tag": "0176_chart_of_accounts_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "5",
+      "when": 1780567200000,
+      "tag": "0177_org_public_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "5",
+      "when": 1780570800000,
+      "tag": "0178_remaining_tables_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "5",
+      "when": 1780574400000,
+      "tag": "0179_supplier_payment_method_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "5",
+      "when": 1780578000000,
+      "tag": "0180_hr_catalogs_org",
+      "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "5",
+      "when": 1780581600000,
+      "tag": "0181_org_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "5",
+      "when": 1780585200000,
+      "tag": "0182_farmos_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "5",
+      "when": 1780588800000,
+      "tag": "0183_farmos_field_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "5",
+      "when": 1780592400000,
+      "tag": "0184_farmos_repro_porcine",
+      "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "5",
+      "when": 1780596000000,
+      "tag": "0185_farmos_saved_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "5",
+      "when": 1780599600000,
+      "tag": "0187_farmos_species_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 163,
+      "version": "5",
+      "when": 1780603200000,
+      "tag": "0188_real_estate_property_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 164,
+      "version": "5",
+      "when": 1780606800000,
+      "tag": "0189_roles_per_organization",
+      "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "5",
+      "when": 1780610400000,
+      "tag": "0190_batipro_project_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "5",
+      "when": 1780614000000,
+      "tag": "0191_real_estate_property_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 167,
+      "version": "5",
+      "when": 1780617600000,
+      "tag": "0192_real_estate_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "5",
+      "when": 1780621200000,
+      "tag": "0193_real_estate_coupons",
+      "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "5",
+      "when": 1780624800000,
+      "tag": "0194_real_estate_photo_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "5",
+      "when": 1780628400000,
+      "tag": "0195_unit_property_available_for_booking",
+      "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "5",
+      "when": 1780714800000,
+      "tag": "0196_real_estate_lease_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "5",
+      "when": 1780801200000,
+      "tag": "0197_real_estate_contracts_signed_document",
+      "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "5",
+      "when": 1780887600000,
+      "tag": "0198_real_estate_reservation_paid_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "5",
+      "when": 1780891200000,
+      "tag": "0199_tenant_onboardings_organization_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 175,
+      "version": "5",
+      "when": 1780894800000,
+      "tag": "0200_real_estate_leases_signing_city",
+      "breakpoints": true
+    },
+    {
+      "idx": 176,
+      "version": "5",
+      "when": 1780898400000,
+      "tag": "0201_appsetting_landlord_contact",
+      "breakpoints": true
+    },
+    {
+      "idx": 177,
+      "version": "5",
+      "when": 1780902000000,
+      "tag": "0202_tenant_details_id_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 178,
+      "version": "5",
+      "when": 1780905600000,
+      "tag": "0203_domus_residential_template_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "5",
+      "when": 1780909200000,
+      "tag": "0204_contract_welcome_message_sent_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 180,
+      "version": "5",
+      "when": 1780912800000,
+      "tag": "0205_tenant_onboardings_sent_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 181,
+      "version": "5",
+      "when": 1780916400000,
+      "tag": "0206_tenant_onboardings_sms_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 182,
+      "version": "5",
+      "when": 1780920000000,
+      "tag": "0207_tenant_marital_status_normalize",
+      "breakpoints": true
+    },
+    {
+      "idx": 183,
+      "version": "5",
+      "when": 1780923600000,
+      "tag": "0208_domus_template_optional_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 184,
+      "version": "5",
+      "when": 1780927200000,
+      "tag": "0209_chat_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 185,
+      "version": "5",
+      "when": 1780930800000,
+      "tag": "0210_journal_messages_voice",
+      "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "5",
+      "when": 1780934400000,
+      "tag": "0211_chat_direct_discussions",
+      "breakpoints": true
+    },
+    {
+      "idx": 187,
+      "version": "5",
+      "when": 1780938000000,
+      "tag": "0212_repair_chat_user_mojibake",
+      "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "5",
+      "when": 1780941600000,
+      "tag": "0213_chat_calls_video",
+      "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "5",
+      "when": 1780945200000,
+      "tag": "0214_batipro_phases_situations_subs",
+      "breakpoints": true
+    },
+    {
+      "idx": 190,
+      "version": "5",
+      "when": 1780948800000,
+      "tag": "0215_batipro_building_models",
+      "breakpoints": true
+    },
+    {
+      "idx": 191,
+      "version": "5",
+      "when": 1780952400000,
+      "tag": "0216_batipro_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "5",
+      "when": 1780956000000,
+      "tag": "0217_batipro_document_counters",
+      "breakpoints": true
+    },
+    {
+      "idx": 193,
+      "version": "5",
+      "when": 1780959600000,
+      "tag": "0218_batipro_documents_supplier",
+      "breakpoints": true
+    },
+    {
+      "idx": 194,
+      "version": "5",
+      "when": 1780963200000,
+      "tag": "0219_batipro_document_lines_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 195,
+      "version": "5",
+      "when": 1780966800000,
+      "tag": "0220_batipro_invoice_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 196,
+      "version": "5",
+      "when": 1780970400000,
+      "tag": "0221_batipro_site_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 197,
+      "version": "5",
+      "when": 1780974000000,
+      "tag": "0222_batipro_workers",
+      "breakpoints": true
+    },
+    {
+      "idx": 198,
+      "version": "5",
+      "when": 1780977600000,
+      "tag": "0223_batipro_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 199,
+      "version": "5",
+      "when": 1780981200000,
+      "tag": "0224_batipro_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 200,
+      "version": "5",
+      "when": 1780984800000,
+      "tag": "0225_batipro_level_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 201,
+      "version": "5",
+      "when": 1780988400000,
+      "tag": "0226_batipro_stock_movements",
+      "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "5",
+      "when": 1780992000000,
+      "tag": "0227_batipro_phases_payment_cap",
+      "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "5",
+      "when": 1780995600000,
+      "tag": "0228_batipro_situations_merge",
+      "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "5",
+      "when": 1780999200000,
+      "tag": "0229_batipro_purchase_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "5",
+      "when": 1781002800000,
+      "tag": "0230_batipro_phases_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 206,
+      "version": "5",
+      "when": 1781006400000,
+      "tag": "0231_batipro_po_receipt",
+      "breakpoints": true
+    },
+    {
+      "idx": 207,
+      "version": "5",
+      "when": 1781010000000,
+      "tag": "0232_batipro_line_currency",
+      "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "5",
+      "when": 1781013600000,
+      "tag": "0233_batipro_document_totals_backfill",
+      "breakpoints": true
+    }
+  ]
 }
