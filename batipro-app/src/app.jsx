@@ -1563,6 +1563,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     const d = payModal;
     setError(""); setNotice(""); setBusy(d.id); setPayModal(null);
     try {
+      if (d.status === "draft") await api.shareDocument(d.id);
       const r = await api.recordPayment(d.id, amount);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
       load();
@@ -1648,7 +1649,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
               !docs.length ? <tr><td colSpan={8} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
               docs.map((d) => {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
-                const canPay = canMutate && d.status !== "draft" && d.status !== "cancelled";
+                const canPay = canMutate && d.status !== "cancelled";
                 const canPost = canMutate && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
                 const canConfirm = canMutate && d.status === "sent";
                 const canReceive = canMutate && ["sent", "confirmed", "partially_received"].includes(d.status);
