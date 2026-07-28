@@ -1671,6 +1671,10 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
     catch (err) { setError(err.message || String(err)); }
   };
+  const openAttachment = async (id) => {
+    try { const { url } = await api.documentAttachmentUrl(id); window.open(url, "_blank", "noopener"); }
+    catch (err) { setError(err.message || String(err)); }
+  };
   const removeDoc = async (id) => {
     if (!window.confirm("Supprimer ce bon de commande ?")) return;
     try { await api.deleteDocument(id); load(); }
@@ -1757,6 +1761,24 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     finally { setBusy(0); }
   };
 
+  // Photo/scan de la facture papier (achat en magasin) rattachée à une facture
+  // fournisseur existante — input file caché, un seul déclenché à la fois via attachTarget.
+  const attachInputRef = React.useRef(null);
+  const [attachTarget, setAttachTarget] = React.useState(null); // { invoice, po }
+  const triggerAttach = (invoice, po) => { setAttachTarget({ invoice, po }); attachInputRef.current?.click(); };
+  const handleAttachFile = async (file) => {
+    const target = attachTarget;
+    if (!file || !target) return;
+    const { invoice, po } = target;
+    setError(""); setNotice(""); setBusy(invoice.id);
+    try {
+      await api.uploadDocumentAttachment(invoice.id, file);
+      setNotice("Photo de la facture attachée.");
+      loadPoInvoices(po.id);
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); setAttachTarget(null); }
+  };
+
   const budgetCur = budget?.currency_code || cur;
 
   return (
@@ -1775,6 +1797,15 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {notice && <div style={{ color: "var(--emerald-600, #047857)", fontSize: 13, marginBottom: 8 }}>{notice}</div>}
+
+      <input
+        ref={attachInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handleAttachFile(f); }}
+      />
 
       {budget && (
         <div className="card pad" style={{ marginBottom: 12 }}>
@@ -1877,9 +1908,19 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                       <td>{money(n(inv.paidAmount), inv.currencyCode || cur)} / solde {money(invBalance, inv.currencyCode || cur)}</td>
                                       <td><span className={`chip ${inv.status === "paid" ? "emerald" : inv.status === "cancelled" ? "rose" : "amber"}`}>{inv.status}</span></td>
                                       <td>
-                                        <div style={{ display: "flex", gap: 6 }}>
+                                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                           <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
                                           {canPayInv && <button className="link" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
+                                          {inv.attachedFileKey && (
+                                            <button className="link" onClick={() => openAttachment(inv.id)}>
+                                              <Icon name="eye" /> Voir photo
+                                            </button>
+                                          )}
+                                          {canMutate && (
+                                            <button className="link" disabled={busy === inv.id} onClick={() => triggerAttach(inv, d)}>
+                                              <Icon name="camera" /> {inv.attachedFileKey ? "Reprendre photo" : "Photo"}
+                                            </button>
+                                          )}
                                         </div>
                                       </td>
                                     </tr>

@@ -597,6 +597,41 @@ export class BatiproController {
     return this.batipro.shareDocument(id, orgId);
   }
 
+  // ── Photo/scan de la facture papier attachee a un document (BC/facture...) ──
+  @ApiOperation({ summary: "Upload/replace the attached file (photo/scan) of a document" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("documents/:id/attachment")
+  uploadDocumentAttachment(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    if (!file) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.attachDocumentFile(id, file, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Stream the attached file (photo/scan) of a document" })
+  @Permissions("readAll-batipro")
+  @Get("documents/:id/attachment")
+  async documentAttachmentFile(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res({ passthrough: true }) res: Response) {
+    const file = await this.batipro.documentAttachmentFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
   // ── Phase 4 : emission (comptabilisation ledger) + paiement d'une facture ──
   @ApiOperation({ summary: "Emet une facture et la comptabilise (ledger postByRules, idempotent)" })
   @Permissions("update-batipro")

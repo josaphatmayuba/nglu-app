@@ -184,6 +184,9 @@ export const api = {
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
   documentHtmlUrl: (id) => blobUrl(`/documents/${id}/html`),
   shareDocument: (id) => jsonFetch(`/documents/${id}/share`, { method: "POST", body: "{}" }),
+  // Photo/scan de la facture papier attachee a un document (ex. facture fournisseur, BC).
+  uploadDocumentAttachment: (id, file) => { const fd = new FormData(); fd.append("file", file); return uploadForm(`/documents/${id}/attachment`, fd); },
+  documentAttachmentUrl: (id) => blobUrl(`/documents/${id}/attachment`),
   // Scan OCR d'un devis/BC fournisseur (photo ou PDF) : upload + best-effort OCR,
   // ne cree aucun document — retourne { photoId, rawText, parsed } pour pre-remplir le formulaire.
   ocrScanDocument: (projectId, file) => { const fd = new FormData(); fd.append("scan", file); return uploadForm(`/projects/${projectId}/documents/ocr-scan`, fd); },

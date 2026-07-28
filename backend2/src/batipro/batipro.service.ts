@@ -1618,6 +1618,43 @@ export class BatiproService {
     return { ...row, lines, totalsByCurrency: totalsByCurrencyRows };
   }
 
+  // Charge un document sortant (BC/facture/devis...) par id+org, sans les
+  // lignes/totaux — reutilise pour l'attachement de fichier (photo/scan facture
+  // papier). Generique a tout type de batipro_documents (pas restreint a inbound).
+  private async getDocumentRow(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproDocuments)
+      .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Document introuvable.");
+    return row;
+  }
+
+  // Attache/remplace le fichier (photo/scan) d'un document — ex. photo de la
+  // facture papier recue en magasin, rattachee a une facture fournisseur.
+  async attachDocumentFile(documentId: number, file: any, orgId: number, userId?: number) {
+    const doc = await this.getDocumentRow(documentId, orgId);
+    const stored = await this.objectStorage.putDocument(file, `batipro/documents/${orgId}/${documentId}`);
+    if (doc.attachedFileKey) {
+      try { await this.objectStorage.deleteObject(doc.attachedFileKey); } catch { /* best-effort */ }
+    }
+    await this.db.update(batiproDocuments).set({
+      attachedFileKey: stored.objectKey,
+      attachedFileFormat: stored.mimeType === "application/pdf" ? "pdf" : (stored.mimeType.split("/")[1] || null),
+      attachedFileSize: stored.sizeBytes,
+    }).where(eq(batiproDocuments.id, documentId));
+    await this.publish("attachDocumentFile", ["documents"], "updated", documentId, orgId);
+    return { id: documentId, message: "Fichier attache." };
+  }
+
+  async documentAttachmentFile(documentId: number, orgId: number) {
+    const doc = await this.getDocumentRow(documentId, orgId);
+    if (!doc.attachedFileKey) throw new NotFoundException("Aucun fichier attache.");
+    const object = await this.objectStorage.getObject(doc.attachedFileKey);
+    return { ...object, mimeType: object.contentType };
+  }
+
   async createDocument(input: CreateBatiproDocumentDto, orgId: number) {
     await this.getProject(input.project_id, orgId);
     if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une ligne est requise.");
