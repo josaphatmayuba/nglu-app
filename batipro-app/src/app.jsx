@@ -1741,9 +1741,14 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   };
   const confirmCreatePoInvoice = async (payload) => {
     const d = invoiceModal?.po;
+    const { photo, ...body } = payload;
     setError(""); setNotice(""); setBusy(d.id); setInvoiceModal(null);
     try {
-      await api.createInvoiceFromPurchaseOrder(d.id, payload);
+      const created = await api.createInvoiceFromPurchaseOrder(d.id, body);
+      if (photo && created?.id) {
+        try { await api.uploadDocumentAttachment(created.id, photo); }
+        catch { /* facture créée, photo à réessayer depuis la ligne */ }
+      }
       setNotice("Facture fournisseur créée.");
       loadPoInvoices(d.id);
       load();
@@ -2002,14 +2007,16 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 // avec le solde restant à facturer (facturation totale en un clic si rien n'est changé).
 function PoInvoiceModal({ po, remaining, currencyCode, onClose, onConfirm }) {
   const [amountTtc, setAmountTtc] = React.useState(remaining);
+  const [photo, setPhoto] = React.useState(null);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const photoInputRef = React.useRef(null);
   const save = async (e) => {
     e.preventDefault();
     if (!(n(amountTtc) > 0)) { setError("Montant invalide."); return; }
     if (n(amountTtc) > remaining + 0.01) { setError(`Le montant dépasse le solde restant à facturer (${money(remaining, currencyCode)}).`); return; }
     setError(""); setBusy(true);
-    try { await onConfirm({ amount_ttc: n(amountTtc) }); }
+    try { await onConfirm({ amount_ttc: n(amountTtc), photo }); }
     catch (err) { setError(err.message || String(err)); setBusy(false); }
   };
   return (
@@ -2028,6 +2035,20 @@ function PoInvoiceModal({ po, remaining, currencyCode, onClose, onConfirm }) {
             <span>Montant de cette facture TTC ({currencyCode || "—"})</span>
             <input type="number" step="0.01" min="0" max={remaining} value={amountTtc} onChange={(e) => setAmountTtc(e.target.value)} autoFocus required />
           </label>
+        </div>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
+          style={{ display: "none" }}
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setPhoto(f); }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-ghost" onClick={() => photoInputRef.current?.click()}>
+            <Icon name="camera" /> {photo ? "Reprendre la photo" : "Photo de la facture"}
+          </button>
+          {photo && <span className="chip amber" style={{ fontSize: 12 }}>{photo.name}</span>}
         </div>
         <p className="muted" style={{ fontSize: 12 }}>Une facturation partielle est possible : plusieurs factures peuvent être créées successivement sur ce BC.</p>
         {error && <div className="login-error">{error}</div>}
