@@ -1409,35 +1409,47 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
               <span>Devise</span>
               <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
             </label>
-            {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
-            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
-                    <th style={{ padding: "6px" }}>Désignation</th><th style={{ padding: "6px" }}>Qté</th><th style={{ padding: "6px" }}>P.U.</th>
-                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "3px 6px" }}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ minWidth: 180, width: "100%" }} placeholder="Prestation…" /></td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ width: 70 }} /></td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ width: 90 }} /></td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ width: 70 }} /></td>
-                      <td style={{ padding: "3px 6px" }}>
-                        <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ minWidth: 120 }}>
-                          <option value="">—</option>
-                          {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "3px 6px" }}><button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeLine(i)}>✕</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {lines.map((l, i) => (
+                <div key={i} className="card pad" style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Supprimer la ligne"
+                    style={{ position: "absolute", top: 6, right: 6, color: "var(--rose-600, #b91c1c)" }}
+                    onClick={() => removeLine(i)}
+                  >
+                    <Icon name="x" />
+                  </button>
+                  <label className="field" style={{ paddingRight: 28 }}>
+                    <span>Désignation</span>
+                    <input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} placeholder="Prestation…" />
+                  </label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
+                      <span>Qté</span>
+                      <input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
+                      <span>P.U.</span>
+                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
+                      <span>TVA %</span>
+                      <input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                      <span>Phase</span>
+                      <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)}>
+                        <option value="">—</option>
+                        {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
             </div>
-            <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
+            <button type="button" className="btn btn-ghost" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
@@ -1914,56 +1926,68 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
               </label>
             </div>
 
-            {/* scroll horizontal tactile plutot que flexWrap sur mobile */}
-            <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-              <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
-                    <th style={{ padding: "6px" }}>Désignation</th><th style={{ padding: "6px" }}>Qté</th><th style={{ padding: "6px" }}>P.U.</th>
-                    <th style={{ padding: "6px" }}>TVA %</th><th style={{ padding: "6px" }}>Phase</th><th style={{ padding: "6px" }}>Matériau suivi en stock</th><th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: "3px 6px" }}>
-                        <input
-                          value={l.designation}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            const match = (materials || []).find((m) => m.name.trim().toLowerCase() === v.trim().toLowerCase());
-                            setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: match ? match.id : "" } : line)));
-                          }}
-                          list="batipro-materials-list"
-                          style={{ minWidth: 180, width: "100%" }}
-                          placeholder="Article / prestation… (tapez pour retrouver un matériau)"
-                        />
-                      </td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ width: 70 }} /></td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ width: 90 }} /></td>
-                      <td style={{ padding: "3px 6px" }}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ width: 70 }} /></td>
-                      <td style={{ padding: "3px 6px" }}>
-                        <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)} style={{ minWidth: 120 }}>
-                          <option value="">—</option>
-                          {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "3px 6px" }}>
-                        <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)} style={{ minWidth: 140 }}>
-                          <option value="">— (texte libre)</option>
-                          {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "3px 6px" }}><button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeLine(i)}>✕</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {lines.map((l, i) => (
+                <div key={i} className="card pad" style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Supprimer la ligne"
+                    style={{ position: "absolute", top: 6, right: 6, color: "var(--rose-600, #b91c1c)" }}
+                    onClick={() => removeLine(i)}
+                  >
+                    <Icon name="x" />
+                  </button>
+                  <label className="field" style={{ paddingRight: 28 }}>
+                    <span>Désignation</span>
+                    <input
+                      value={l.designation}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const match = (materials || []).find((m) => m.name.trim().toLowerCase() === v.trim().toLowerCase());
+                        setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: match ? match.id : "" } : line)));
+                      }}
+                      list="batipro-materials-list"
+                      placeholder="Article / prestation… (tapez pour retrouver un matériau)"
+                    />
+                  </label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
+                      <span>Qté</span>
+                      <input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
+                      <span>P.U.</span>
+                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
+                      <span>TVA %</span>
+                      <input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                      <span>Phase</span>
+                      <select value={l.phase_id} onChange={(e) => setLine(i, "phase_id", e.target.value)}>
+                        <option value="">—</option>
+                        {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                      <span>Matériau suivi en stock</span>
+                      <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
+                        <option value="">— (texte libre)</option>
+                        {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              ))}
               <datalist id="batipro-materials-list">
                 {(materials || []).map((m) => <option key={m.id} value={m.name} />)}
               </datalist>
             </div>
-            <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
+            <button type="button" className="btn btn-ghost" onClick={addLine}>+ Ajouter une ligne</button>
 
             <div className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}><span>Total HT</span><strong>{money(totalHt, docCurrencyCode)}</strong></div>
