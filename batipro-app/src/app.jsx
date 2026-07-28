@@ -1379,7 +1379,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     try {
       const payload = {
         project_id: projectId,
-        currency_id: docCurrencyId || undefined,
+        currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
         lines: clean.map((l) => ({
@@ -1774,7 +1774,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
       const payload = {
         project_id: projectId,
         type: "purchase_order",
-        currency_id: docCurrencyId || undefined,
+        currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
         supplier_id: supplierId ? Number(supplierId) : undefined,
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
@@ -2226,7 +2226,7 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
       await api.createSituationDocument({
         project_id: projectId,
         period: period.trim() || undefined,
-        currency_id: docCurrencyId || undefined,
+        currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
         notes: notes.trim() || undefined,
         lines,
       });
