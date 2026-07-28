@@ -1803,8 +1803,8 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         {loading ? <p className="muted">Chargement…</p> : (
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 280 }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", minWidth: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 0 }}>
             {!docId && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <input
