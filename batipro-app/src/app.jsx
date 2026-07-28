@@ -1494,10 +1494,6 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                 )}
               </div>
             )}
-            <label className="field" style={{ maxWidth: 220 }}>
-              <span>Devise par défaut</span>
-              <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
-            </label>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {lines.map((l, i) => (
                 <div key={i} className="card pad" style={{ display: "flex", flexDirection: "column", gap: 8, position: "relative" }}>
@@ -2177,10 +2173,6 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                   <option value="">—</option>
                   {subcontractors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-              </label>
-              <label className="field" style={{ flex: 1, minWidth: 180 }}>
-                <span>Devise par défaut</span>
-                <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
               </label>
             </div>
 
