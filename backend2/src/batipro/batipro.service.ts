@@ -1371,6 +1371,35 @@ export class BatiproService {
     };
   }
 
+  // Pour un bon de commande : si une ligne porte une designation mais aucun
+  // material_id (saisie "texte libre"), rattache automatiquement un materiau
+  // existant du meme nom (insensible a la casse) ou en cree un a la volee,
+  // pour eviter la double saisie fournisseur/achat puis materiaux.
+  private async resolveMaterialIdsForPurchaseOrder(
+    lines: Array<{ designation: string; material_id?: number }>,
+    orgId: number,
+  ) {
+    const existing = await this.db
+      .select({ id: batiproMaterials.id, name: batiproMaterials.name })
+      .from(batiproMaterials)
+      .where(and(eq(batiproMaterials.organizationId, orgId), eq(batiproMaterials.isActive, 1)));
+    const byName = new Map(existing.map((m) => [m.name.trim().toLowerCase(), m.id]));
+
+    for (const line of lines) {
+      if (line.material_id) continue;
+      const name = (line.designation || "").trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      let materialId = byName.get(key);
+      if (!materialId) {
+        const created = await this.createMaterial({ name, unit: "unite" } as CreateBatiproMaterialDto, orgId);
+        materialId = created.id;
+        byName.set(key, materialId);
+      }
+      line.material_id = materialId;
+    }
+  }
+
   private async validPhaseIds(orgId: number, projectId: number) {
     const rows = await this.db
       .select({ id: batiproPhases.id })
@@ -1433,6 +1462,7 @@ export class BatiproService {
     await this.getProject(input.project_id, orgId);
     if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une ligne est requise.");
     const type = input.type ?? "quote";
+    if (type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
     const phaseIds = await this.validPhaseIds(orgId, input.project_id);
     const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
     const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
@@ -1510,6 +1540,7 @@ export class BatiproService {
     if (input.notes !== undefined) patch.notes = input.notes || null;
 
     if (input.lines !== undefined) {
+      if (doc.type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
       const phaseIds = await this.validPhaseIds(orgId, doc.projectId);
       const { lines, totalHt, totalVat, totalTtc } = this.computeDocumentTotals(input.lines, orgId, phaseIds);
       patch.totalHt = String(totalHt);

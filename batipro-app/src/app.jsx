@@ -1926,7 +1926,19 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                 <tbody>
                   {lines.map((l, i) => (
                     <tr key={i}>
-                      <td style={{ padding: "3px 6px" }}><input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} style={{ minWidth: 180, width: "100%" }} placeholder="Article / prestation…" /></td>
+                      <td style={{ padding: "3px 6px" }}>
+                        <input
+                          value={l.designation}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const match = (materials || []).find((m) => m.name.trim().toLowerCase() === v.trim().toLowerCase());
+                            setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: match ? match.id : "" } : line)));
+                          }}
+                          list="batipro-materials-list"
+                          style={{ minWidth: 180, width: "100%" }}
+                          placeholder="Article / prestation… (tapez pour retrouver un matériau)"
+                        />
+                      </td>
                       <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} style={{ width: 70 }} /></td>
                       <td style={{ padding: "3px 6px" }}><input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} style={{ width: 90 }} /></td>
                       <td style={{ padding: "3px 6px" }}><input type="number" min="0" max="100" step="any" value={l.vat_rate} onChange={(e) => setLine(i, "vat_rate", e.target.value)} style={{ width: 70 }} /></td>
@@ -1947,6 +1959,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                   ))}
                 </tbody>
               </table>
+              <datalist id="batipro-materials-list">
+                {(materials || []).map((m) => <option key={m.id} value={m.name} />)}
+              </datalist>
             </div>
             <button type="button" className="link" onClick={addLine}>+ Ajouter une ligne</button>
 
