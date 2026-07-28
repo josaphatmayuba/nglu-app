@@ -113,8 +113,8 @@ function resolveCurrencyCode(currencies, id) {
   return c ? (c.currencyCode || c.currencyName || c.name) : null;
 }
 
-function useIsMobile() {
-  const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
+function useIsMobile(breakpoint = 960) {
+  const get = () => (typeof window !== "undefined" ? window.innerWidth <= breakpoint : false);
   const [m, setM] = React.useState(get);
   React.useEffect(() => {
     const on = () => setM(get());
@@ -1504,17 +1504,23 @@ function DevisShareModal({ docId, onClose, onShared }) {
    Calque de Devis : meme socle batipro_documents (type=purchase_order),
    ajoute le rattachement fournisseur/sous-traitant + le suivi budgétaire
    chantier (devis accepté vs BC engagés vs budget/contrat). */
-const PO_STATUS_TONE = { draft: "ink", sent: "amber", confirmed: "emerald", received: "emerald", cancelled: "rose" };
-const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", received: "Réceptionné", cancelled: "Annulé" };
+const PO_STATUS_TONE = { draft: "ink", sent: "amber", confirmed: "sky", partially_received: "amber", received: "emerald", cancelled: "rose" };
+const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", partially_received: "Reçu partiellement", received: "Réceptionné", cancelled: "Annulé" };
+// Statuts manuels proposés dans le select de l'éditeur — confirmed/partially_received/received
+// sont dérivés des actions dédiées (Confirmer/Réceptionner), pas des choix libres.
+const PO_STATUS_MANUAL_LABEL = { draft: "Brouillon", sent: "Envoyé", cancelled: "Annulé" };
 const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "" });
 
 function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
   const [docs, setDocs] = React.useState([]);
+  const [linesById, setLinesById] = React.useState({});
   const [budget, setBudget] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
   const [payModal, setPayModal] = React.useState(null);
+  const [confirmModal, setConfirmModal] = React.useState(null);
+  const [receiveModal, setReceiveModal] = React.useState(null);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [busy, setBusy] = React.useState(0);
@@ -1523,14 +1529,22 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const cur = selected?.currencyCode;
 
   const load = React.useCallback(() => {
-    if (!projectId) { setDocs([]); setBudget(null); setLoading(false); return; }
+    if (!projectId) { setDocs([]); setBudget(null); setLinesById({}); setLoading(false); return; }
     setLoading(true);
     Promise.all([
       api.documents(projectId, "purchase_order"),
       api.budgetSummary(projectId).catch(() => null),
     ])
-      .then(([d, b]) => { setDocs(d || []); setBudget(b); })
-      .catch(() => { setDocs([]); setBudget(null); })
+      .then(([d, b]) => {
+        setDocs(d || []);
+        setBudget(b);
+        // Lignes (dont received_quantity) uniquement pour les BC ayant quitté le
+        // brouillon — la liste /documents ne les renvoie pas (fiche = getDocument).
+        const relevant = (d || []).filter((doc) => doc.status !== "draft" && doc.status !== "cancelled");
+        Promise.all(relevant.map((doc) => api.getDocument(doc.id).then((full) => [doc.id, full.lines || []]).catch(() => [doc.id, []])))
+          .then((pairs) => setLinesById(Object.fromEntries(pairs)));
+      })
+      .catch(() => { setDocs([]); setBudget(null); setLinesById({}); })
       .finally(() => setLoading(false));
   }, [projectId]);
   React.useEffect(() => { load(); }, [load]);
@@ -1551,6 +1565,28 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     try {
       const r = await api.recordPayment(d.id, amount);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
+  const confirmDoc = async (payload) => {
+    const d = confirmModal;
+    setError(""); setNotice(""); setBusy(d.id); setConfirmModal(null);
+    try {
+      await api.confirmDocument(d.id, payload);
+      setNotice("Bon de commande confirmé par le fournisseur.");
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
+  const receiveDoc = async (payload) => {
+    const d = receiveModal;
+    setError(""); setNotice(""); setBusy(d.id); setReceiveModal(null);
+    try {
+      await api.receiveDocument(d.id, payload);
+      setNotice("Réception enregistrée.");
       load();
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(0); }
@@ -1606,14 +1642,20 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 
       <div className="card table-card">
         <table className="bp">
-          <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Payé / solde</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Payé / solde</th><th>Statut</th><th>Réception</th><th></th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={7} className="muted">Chargement…</td></tr> :
-              !docs.length ? <tr><td colSpan={7} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
+            {loading ? <tr><td colSpan={8} className="muted">Chargement…</td></tr> :
+              !docs.length ? <tr><td colSpan={8} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
               docs.map((d) => {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
                 const canPay = canMutate && d.status !== "draft" && d.status !== "cancelled";
                 const canPost = canMutate && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
+                const canConfirm = canMutate && d.status === "sent";
+                const canReceive = canMutate && ["sent", "confirmed", "partially_received"].includes(d.status);
+                const trackedLines = (linesById[d.id] || []).filter((l) => l.materialId);
+                const orderedQty = trackedLines.reduce((s, l) => s + n(l.quantity), 0);
+                const receivedQty = trackedLines.reduce((s, l) => s + n(l.receivedQuantity), 0);
+                const showProgress = d.status !== "draft" && trackedLines.length > 0;
                 return (
                 <tr key={d.id}>
                   <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
@@ -1624,9 +1666,21 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                     {money(n(d.paidAmount), d.currencyCode || cur)} / solde {money(balance, d.currencyCode || cur)}
                   </td>
                   <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                    {showProgress ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 70 }}>
+                        <span>{receivedQty}/{orderedQty}</span>
+                        <div style={{ height: 4, borderRadius: 2, background: "var(--ink-200, #e2e8f0)", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${orderedQty > 0 ? Math.min(100, Math.round((receivedQty / orderedQty) * 100)) : 0}%`, background: "var(--emerald-500, #10b981)" }} />
+                        </div>
+                      </div>
+                    ) : "—"}
+                  </td>
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canConfirm && <button className="link" disabled={busy === d.id} onClick={() => setConfirmModal(d)}>Confirmer</button>}
+                      {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
                       {canPost && <button className="link" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
@@ -1657,6 +1711,21 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           currencyCode={payModal.currencyCode || cur}
           onClose={() => setPayModal(null)}
           onConfirm={confirmPay}
+        />
+      )}
+      {confirmModal && (
+        <ConfirmPoModal
+          doc={confirmModal}
+          onClose={() => setConfirmModal(null)}
+          onConfirm={confirmDoc}
+        />
+      )}
+      {receiveModal && (
+        <ReceivePoModal
+          doc={receiveModal}
+          currencyCode={receiveModal.currencyCode || cur}
+          onClose={() => setReceiveModal(null)}
+          onConfirm={receiveDoc}
         />
       )}
     </>
@@ -1891,7 +1960,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
               <label className="field">
                 <span>Statut</span>
                 <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  {Object.entries(PO_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  {Object.entries(PO_STATUS_MANUAL_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
             )}
@@ -1906,6 +1975,220 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
               <ScanSourcePreview photoId={scanPhotoId} />
             </div>
           )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Confirmation fournisseur d'un BC envoyé (sent -> confirmed). Champs facultatifs.
+function ConfirmPoModal({ doc, onClose, onConfirm }) {
+  const [supplierReference, setSupplierReference] = React.useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await onConfirm({
+        supplier_reference: supplierReference.trim() || undefined,
+        expected_delivery_date: expectedDeliveryDate || undefined,
+      });
+    } catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Confirmer le bon de commande {doc.number || `#${doc.id}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Référence fournisseur (facultatif)</span>
+            <input value={supplierReference} onChange={(e) => setSupplierReference(e.target.value)} placeholder="N° de commande côté fournisseur…" />
+          </label>
+          <label className="field">
+            <span>Livraison prévue (facultatif)</span>
+            <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} />
+          </label>
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Confirmation…" : "Confirmer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Réception (partielle ou totale) d'un BC — une ligne par article suivi en
+// stock (material_id). Les lignes sans material_id (main d'œuvre/prestation)
+// sont satisfaites automatiquement côté backend, affichées en lecture seule ici.
+function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
+  const isNarrow = useIsMobile(640);
+  const [lines, setLines] = React.useState([]);
+  const [untrackedCount, setUntrackedCount] = React.useState(0);
+  const [receipts, setReceipts] = React.useState([]);
+  const [receivedDate, setReceivedDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [note, setNote] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [cancellingId, setCancellingId] = React.useState(null);
+
+  const reload = React.useCallback(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([api.getDocument(doc.id), api.stockMovements(doc.projectId)])
+      .then(([full, movements]) => {
+        if (!active) return;
+        const all = full.lines || [];
+        const tracked = all.filter((l) => l.materialId != null);
+        setUntrackedCount(all.length - tracked.length);
+        setLines(tracked.map((l) => {
+          const ordered = n(l.quantity);
+          const received = n(l.receivedQuantity);
+          const remaining = Math.max(0, ordered - received);
+          return { id: l.id, designation: l.designation, ordered, received, remaining, input: remaining };
+        }));
+        setReceipts((movements || []).filter((m) => m.documentId === doc.id && m.movementType === "reception"));
+      })
+      .catch((err) => setError(err.message || String(err)))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [doc.id, doc.projectId]);
+
+  React.useEffect(() => reload(), [reload]);
+
+  const setInput = (lineId, v) => setLines((c) => c.map((l) => (l.id === lineId ? { ...l, input: v } : l)));
+  const receiveAll = () => setLines((c) => c.map((l) => ({ ...l, input: l.remaining })));
+
+  const cancelOne = async (movementId) => {
+    setError("");
+    setCancellingId(movementId);
+    try { await api.cancelReceipt(doc.id, movementId); reload(); }
+    catch (err) { setError(err.message || String(err)); }
+    finally { setCancellingId(null); }
+  };
+
+  const save = async () => {
+    setError("");
+    const payload = {
+      lines: lines
+        .filter((l) => n(l.input) > 0)
+        .map((l) => ({ line_id: l.id, quantity: n(l.input) })),
+      note: note.trim() || undefined,
+      received_date: receivedDate || undefined,
+    };
+    if (!payload.lines.length) { setError("Saisissez au moins une quantité reçue."); return; }
+    setBusy(true);
+    try { await onConfirm(payload); }
+    catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxWidth: 720 }}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Réceptionner le bon de commande {doc.number || `#${doc.id}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {loading ? <p className="muted">Chargement…</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+            {!lines.length ? (
+              <p className="muted">Aucun article suivi en stock sur ce bon de commande.</p>
+            ) : (
+              <>
+                <button type="button" className="link" style={{ alignSelf: "flex-start" }} onClick={receiveAll}>Tout réceptionner</button>
+
+                {isNarrow ? (
+                  // Mobile (<640px) : cartes empilées plutôt qu'un tableau à colonnes numériques qui déborderait.
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {lines.map((l) => (
+                      <div key={l.id} className="card pad" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <strong>{l.designation}</strong>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--ink-500)" }}>
+                          <span>Commandé : {l.ordered}</span><span>Déjà reçu : {l.received}</span><span>Reste : {l.remaining}</span>
+                        </div>
+                        <label className="field">
+                          <span>Reçu maintenant</span>
+                          <input type="number" min="0" max={l.remaining} step="any" value={l.input}
+                            onChange={(e) => setInput(l.id, e.target.value)} />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  // Desktop/tablette : tableau avec scroll horizontal tactile (cf. fix cbecb119, min-width:0 sur les parents flex).
+                  <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", minWidth: 0 }}>
+                    <table style={{ width: "100%", minWidth: 520, borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ textAlign: "left", color: "var(--ink-500)" }}>
+                          <th style={{ padding: "6px" }}>Désignation</th>
+                          <th style={{ padding: "6px" }}>Commandé</th>
+                          <th style={{ padding: "6px" }}>Déjà reçu</th>
+                          <th style={{ padding: "6px" }}>Reste</th>
+                          <th style={{ padding: "6px" }}>Reçu maintenant</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lines.map((l) => (
+                          <tr key={l.id}>
+                            <td style={{ padding: "3px 6px" }}>{l.designation}</td>
+                            <td style={{ padding: "3px 6px" }}>{l.ordered}</td>
+                            <td style={{ padding: "3px 6px" }}>{l.received}</td>
+                            <td style={{ padding: "3px 6px" }}>{l.remaining}</td>
+                            <td style={{ padding: "3px 6px" }}>
+                              <input type="number" min="0" max={l.remaining} step="any" value={l.input}
+                                onChange={(e) => setInput(l.id, e.target.value)} style={{ width: 90 }} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {untrackedCount > 0 && (
+                  <p className="muted" style={{ fontSize: 12 }}>
+                    {untrackedCount} ligne(s) de main d'œuvre / prestation (sans matériau suivi en stock) — satisfaites automatiquement, aucune saisie requise.
+                  </p>
+                )}
+              </>
+            )}
+
+            {receipts.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Réceptions enregistrées</span>
+                {receipts.map((r) => (
+                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, gap: 8, padding: "4px 0", borderBottom: "1px solid var(--ink-100, #e2e8f0)" }}>
+                    <span>{r.materialName || "—"} · {r.quantity}{r.materialUnit ? ` ${r.materialUnit}` : ""}{r.createdAt ? ` · ${new Date(r.createdAt).toLocaleDateString("fr-FR")}` : ""}</span>
+                    <button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }}
+                      disabled={cancellingId === r.id} onClick={() => cancelOne(r.id)}>
+                      {cancellingId === r.id ? "Annulation…" : "Annuler"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label className="field" style={{ flex: "1 1 200px" }}>
+                <span>Date de réception</span>
+                <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+              </label>
+            </div>
+            <label className="field"><span>Note</span><textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions sur la réception…" /></label>
+
+            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+              <button className="btn btn-amber grad-amber" disabled={busy || !lines.length} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer la réception"}</button>
+            </div>
           </div>
         )}
       </div>

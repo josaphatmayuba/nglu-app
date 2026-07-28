@@ -11,6 +11,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   BulkUpsertAttendanceDto,
+  ConfirmBatiproDocumentDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -26,6 +27,7 @@ import {
   CreateBatiproWorkerDto,
   CreateStockMovementDto,
   CreateSubcontractorLinkDto,
+  ReceiveBatiproDocumentDto,
   RecordPaymentDto,
   ReviewSubmissionDto,
   UpdateBatiproAttendanceDto,
@@ -596,6 +598,42 @@ export class BatiproController {
   @Post("documents/:id/payment")
   recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined);
+  }
+
+  // ── Bon de commande : confirmation fournisseur + reception physique (migration 0231) ──
+  @ApiOperation({ summary: "Confirme un bon de commande (accuse de reception fournisseur, sent -> confirmed)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/confirm")
+  confirmPurchaseOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ConfirmBatiproDocumentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.batipro.confirmPurchaseOrder(id, body, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Reception physique (partielle ou totale) d'un bon de commande, decouplee de l'emission" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/receive")
+  receivePurchaseOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ReceiveBatiproDocumentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.batipro.receivePurchaseOrder(id, body, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Annule (soft delete) un mouvement de reception errone et recalcule le statut du BC" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/receipts/:movementId/cancel")
+  cancelReceipt(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("movementId", ParseIntPipe) movementId: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.batipro.cancelReceipt(id, movementId, orgId);
   }
 
   // ── Galerie photo de chantier ─────────────────────────────────────────────

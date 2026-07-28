@@ -1443,6 +1443,13 @@
             "when": 1781002800000,
             "tag": "0230_batipro_phases_currency",
             "breakpoints": true
+        },
+        {
+            "idx": 206,
+            "version": "5",
+            "when": 1781006400000,
+            "tag": "0231_batipro_po_receipt",
+            "breakpoints": true
         }
     ]
 }

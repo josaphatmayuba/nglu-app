@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Max, Min, ValidateNested, IsDateString } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString } from "class-validator";
 import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
@@ -324,6 +324,27 @@ export class UpdateBatiproAttendanceDto {
   @IsOptional() @IsString() @MaxLength(255) notes?: string;
 }
 
+// Statuts admis via le PUT generique (tous types de documents confondus).
+// "confirmed"/"partially_received"/"received" (cycle BC, migration 0231) sont
+// EXCLUS ici volontairement : ils ne doivent etre atteints que via les
+// endpoints dedies /confirm et /receive, jamais par un simple PUT qui
+// contournerait les controles metier (idempotence, ledger avance fournisseur).
+const UPDATABLE_DOCUMENT_STATUSES = [
+  "draft",
+  "sent",
+  "viewed",
+  "accepted",
+  "refused",
+  "expired",
+  "cancelled",
+  "submitted",
+  "validated",
+  "returned",
+  "invoiced",
+  "issued",
+  "paid",
+] as const;
+
 // Mise a jour partielle d'un devis/BC. Si `lines` est fourni, remplace
 // l'ensemble des lignes et recalcule les totaux.
 export class UpdateBatiproDocumentDto {
@@ -332,7 +353,7 @@ export class UpdateBatiproDocumentDto {
   @IsOptional() @IsInt() subcontractor_id?: number;
   @IsOptional() @IsDateString() issue_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
-  @IsOptional() @IsString() @MaxLength(40) status?: string;
+  @IsOptional() @IsIn(UPDATABLE_DOCUMENT_STATUSES) status?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
   @IsOptional()
   @IsArray()
@@ -340,6 +361,30 @@ export class UpdateBatiproDocumentDto {
   @ValidateNested({ each: true })
   @Type(() => DocumentLineDto)
   lines?: DocumentLineDto[];
+}
+
+// Confirmation fournisseur d'un BC (accuse de reception, status sent -> confirmed).
+export class ConfirmBatiproDocumentDto {
+  @IsOptional() @IsString() @MaxLength(120) supplier_reference?: string;
+  @IsOptional() @IsDateString() expected_delivery_date?: string;
+}
+
+// Une ligne receptionnee : quantite physiquement recue sur cette ligne du BC
+// (peut etre appelee plusieurs fois/partiellement, cumul controle cote service).
+export class ReceiveDocumentLineDto {
+  @IsInt() line_id!: number;
+  @IsNumber() @IsPositive() quantity!: number;
+}
+
+// Reception physique (partielle ou totale) d'un BC, decouplee de l'emission.
+export class ReceiveBatiproDocumentDto {
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ReceiveDocumentLineDto)
+  lines!: ReceiveDocumentLineDto[];
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
+  @IsOptional() @IsDateString() received_date?: string;
 }
 
 // Declaration d'une consommation manuelle de materiau sur un chantier (Stock,

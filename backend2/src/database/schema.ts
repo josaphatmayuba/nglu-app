@@ -2494,10 +2494,36 @@ export const batiproDocuments = mysqlTable("batipro_documents", {
   paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
   issueDate: date("issue_date", { mode: "string" }),
   dueDate: date("due_date", { mode: "string" }),
+  // === Bon de commande : confirmation fournisseur (migration 0231) ===
+  // Accuse de reception du BC par le fournisseur. status passe sent -> confirmed.
+  confirmedAt: timestamp("confirmed_at"),
+  confirmedBy: bigint("confirmed_by", { mode: "number" }),
+  // Numero de commande chez le fournisseur (sa propre reference).
+  supplierReference: varchar("supplier_reference", { length: 120 }),
+  // Date de livraison annoncee par le fournisseur a la confirmation.
+  expectedDeliveryDate: date("expected_delivery_date", { mode: "string" }),
+  // === Bon de commande : reception physique (migration 0231) ===
+  // Decouplee de l emission : renseignee quand tout est recu (status received).
+  receivedAt: timestamp("received_at"),
+  receivedBy: bigint("received_by", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// Valeurs admises pour batipro_documents.status quand type = purchase_order
+// (migration 0231). status reste un varchar(40) : la contrainte est applicative.
+// Cycle : draft -> sent -> confirmed -> partially_received -> received.
+// cancelled est atteignable depuis tout etat sauf received.
+export const BATIPRO_PURCHASE_ORDER_STATUSES = [
+  "draft",
+  "sent",
+  "confirmed",
+  "partially_received",
+  "received",
+  "cancelled",
+] as const;
+export type BatiproPurchaseOrderStatus = (typeof BATIPRO_PURCHASE_ORDER_STATUSES)[number];
 
 export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   id: serial("id").primaryKey(),
@@ -2519,6 +2545,12 @@ export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   // les lignes de devis/BC/factures. Le montant de la periode se deduit du delta
   // par rapport a la situation precedente cote service.
   progressPct: decimal("progress_pct", { precision: 6, scale: 2 }),
+  // Quantite deja receptionnee sur cette ligne de BC (migration 0231). CACHE
+  // denormalise pour eviter un agregat a chaque lecture : la source de verite
+  // reste SUM(batipro_stock_movements.quantity) filtre sur movement_type =
+  // reception pour ce document + ce materiau. received_quantity < quantity =>
+  // document partially_received ; egalite sur toutes les lignes => received.
+  receivedQuantity: decimal("received_quantity", { precision: 14, scale: 3 }).default("0").notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

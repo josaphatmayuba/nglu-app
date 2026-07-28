@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { accounts, paymentMethods, subAccounts, transactionTypes } from "../schema";
+import { accounts, paymentMethods, subAccounts, transactionTypeRules, transactionTypes } from "../schema";
 import type { Database } from "../types";
 
 // Plan comptable canonique (multi-tenant P2/P3) : rejoue pour UNE organisation
@@ -36,6 +36,21 @@ const SUB_ACCOUNTS: Array<{ name: string; accountName: string }> = [
   { name: "Tax", accountName: "Liability" },
   { name: "Currency Exchange Clearing", accountName: "Asset" },
   { name: "Exchange Fees", accountName: "Expense" },
+  // Avance fournisseur BatiPro (migration 0231) : acompte verse avant reception
+  // physique du BC = creance sur le fournisseur, donc ACTIF (pas une charge).
+  { name: "Supplier Advance", accountName: "Asset" },
+];
+
+// Regles transaction_type_rules (postByRules) liees a l avance fournisseur BatiPro
+// (migration 0231, memes noms de role/type que la migration SQL). accountName =
+// nom du SOUS-COMPTE (resolu par nom, pas par id fige) pour cette org.
+const TRANSACTION_TYPE_RULES: Array<{ type: string; role: string; accountName: string; side: "DEBIT" | "CREDIT"; sortOrder: number }> = [
+  // Acompte verse avant reception : DEBIT avance fournisseur / CREDIT tresorerie.
+  { type: "batipro_supplier_advance", role: "supplier_advance", accountName: "Supplier Advance", side: "DEBIT", sortOrder: 1 },
+  { type: "batipro_supplier_advance", role: "cash", accountName: "Cash", side: "CREDIT", sortOrder: 2 },
+  // Solde de l avance a la reception : DEBIT dette fournisseur / CREDIT avance fournisseur.
+  { type: "batipro_advance_offset", role: "payable", accountName: "Accounts Payable", side: "DEBIT", sortOrder: 1 },
+  { type: "batipro_advance_offset", role: "supplier_advance", accountName: "Supplier Advance", side: "CREDIT", sortOrder: 2 },
 ];
 
 // debit/credit = noms de sous-comptes (resolus par nom pour cette org).
@@ -144,6 +159,32 @@ export async function provisionOrgChartOfAccounts(db: Database, orgId: number) {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       } as any);
     }
+  }
+
+  // 5) Regles comptables par role (transaction_type_rules) pour l avance
+  //    fournisseur BatiPro. Idempotent : verifie (org, type, role) avant insert.
+  const existingRules = await db
+    .select({ type: transactionTypeRules.type, role: transactionTypeRules.role })
+    .from(transactionTypeRules)
+    .where(eq(transactionTypeRules.organizationId, orgId));
+  const existingRuleKeys = new Set(existingRules.map((r) => `${r.type}:${r.role}`));
+
+  for (const r of TRANSACTION_TYPE_RULES) {
+    const key = `${r.type}:${r.role}`;
+    if (existingRuleKeys.has(key)) continue;
+    const accountId = subIdByName.get(r.accountName);
+    if (!accountId) throw new Error(`provisionOrgChartOfAccounts: sous-compte "${r.accountName}" introuvable pour la regle "${key}".`);
+    await db.insert(transactionTypeRules).values({
+      organizationId: orgId,
+      type: r.type,
+      role: r.role,
+      accountId,
+      side: r.side,
+      sortOrder: r.sortOrder,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    } as any);
   }
 
   return { accountIdByName, subIdByName };

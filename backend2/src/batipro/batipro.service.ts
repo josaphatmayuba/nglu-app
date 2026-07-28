@@ -26,7 +26,10 @@ import {
   batiproTasks,
   batiproWorkers,
   currencies,
+  journalEntries,
+  journalEntryLines,
   projects,
+  subAccounts,
   suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -39,6 +42,7 @@ import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   BulkUpsertAttendanceDto,
+  ConfirmBatiproDocumentDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -54,6 +58,7 @@ import type {
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
   CreateSubcontractorLinkDto,
+  ReceiveBatiproDocumentDto,
   ReviewSubmissionDto,
   SubmitSubcontractorDocumentDto,
   UpdateBatiproAttendanceDto,
@@ -1474,6 +1479,27 @@ export class BatiproService {
 
   async updateDocument(id: number, input: UpdateBatiproDocumentDto, orgId: number) {
     const doc = await this.getDocument(id, orgId);
+
+    // Garde-fou : un BC dont du stock a deja ete receptionne ne peut plus etre
+    // annule (le stock est physiquement entre, l'annulation le laisserait
+    // fantome). Il faut d'abord contre-passer les receptions (endpoint /cancel
+    // sur chaque mouvement) avant de pouvoir annuler le document.
+    if (doc.type === "purchase_order" && input.status === "cancelled" && doc.status !== "cancelled") {
+      const [movement] = await this.db
+        .select({ id: batiproStockMovements.id })
+        .from(batiproStockMovements)
+        .where(and(
+          eq(batiproStockMovements.documentId, id),
+          eq(batiproStockMovements.organizationId, orgId),
+          eq(batiproStockMovements.movementType, "reception"),
+          eq(batiproStockMovements.isActive, 1),
+        ))
+        .limit(1);
+      if (movement) {
+        throw new BadRequestException("Impossible d'annuler ce bon de commande : du stock a deja ete receptionne. Annulez d'abord les receptions.");
+      }
+    }
+
     const patch: Partial<typeof batiproDocuments.$inferInsert> = {};
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id ?? null;
@@ -1501,40 +1527,227 @@ export class BatiproService {
       await this.db.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
     }
 
-    // Reception automatique de stock a l'emission du BC (statut -> 'sent').
-    // Ne se declenche qu'une fois (idempotent) et jamais pour un devis/facture.
-    if (doc.type === "purchase_order" && input.status === "sent" && doc.status !== "sent") {
-      await this.receiveStockFromPurchaseOrder(id, orgId);
-    }
-
     await this.publish("updateDocument", ["documents", "document_lines"], "updated", id, orgId);
     return this.getDocument(id, orgId);
   }
 
-  // Cree un mouvement 'reception' pour chaque ligne du BC ayant un materialId
-  // renseigne. Idempotent : ne rejoue rien si des mouvements existent deja pour
-  // ce document (evite les doublons si la methode est rappelee sur ce document).
-  private async receiveStockFromPurchaseOrder(documentId: number, orgId: number) {
-    const [existing] = await this.db
-      .select({ id: batiproStockMovements.id })
-      .from(batiproStockMovements)
-      .where(and(eq(batiproStockMovements.documentId, documentId), eq(batiproStockMovements.organizationId, orgId)))
+  // ── Bon de commande : confirmation fournisseur (migration 0231) ─────────
+  // Accuse de reception du BC par le fournisseur : sent -> confirmed. Refuse
+  // pour un devis/facture, un BC encore en brouillon (emettre d'abord) ou annule.
+  async confirmPurchaseOrder(id: number, input: ConfirmBatiproDocumentDto, orgId: number, userId?: number) {
+    const doc = await this.getDocument(id, orgId);
+    if (doc.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut etre confirme.");
+    if (doc.status === "draft") throw new BadRequestException("Emettez d'abord le bon de commande avant de le confirmer.");
+    if (doc.status === "cancelled") throw new BadRequestException("Bon de commande annule : confirmation impossible.");
+    if (doc.status !== "sent") throw new BadRequestException(`Ce bon de commande est deja au statut "${doc.status}".`);
+
+    await this.db.update(batiproDocuments).set({
+      status: "confirmed",
+      confirmedAt: sql`CURRENT_TIMESTAMP`,
+      confirmedBy: userId ?? null,
+      supplierReference: input.supplier_reference ?? null,
+      expectedDeliveryDate: input.expected_delivery_date ?? null,
+    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+
+    await this.publish("confirmPurchaseOrder", ["documents"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
+  }
+
+  // Montant d'avance fournisseur DEJA VERSE et PAS ENCORE SOLDE pour ce BC :
+  // somme des DEBIT sur le sous-compte "Supplier Advance" pour les ecritures
+  // liees a ce document (sourceModule=batipro, relatedId=id, type=avance),
+  // moins les CREDIT deja poses dessus (solde partiel eventuel a une reception
+  // precedente). Une seule reception peut soit tout solder soit rien si aucune
+  // avance n'a ete versee -> le calcul reste correct dans les deux cas.
+  private async outstandingSupplierAdvance(documentId: number, orgId: number): Promise<number> {
+    const [subAccount] = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(and(eq(subAccounts.organizationId, orgId), eq(subAccounts.name, "Supplier Advance")))
       .limit(1);
-    if (existing) return;
+    if (!subAccount) return 0;
 
+    const rows = await this.db
+      .select({ side: journalEntryLines.side, amount: journalEntryLines.amount })
+      .from(journalEntryLines)
+      .innerJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
+      .where(and(
+        eq(journalEntryLines.organizationId, orgId),
+        eq(journalEntryLines.accountId, subAccount.id),
+        eq(journalEntries.sourceModule, "batipro"),
+        eq(journalEntries.relatedId, String(documentId)),
+        sql`${journalEntries.status} <> 'reversed'`,
+      ));
+    let outstanding = 0;
+    for (const r of rows) {
+      const amt = Number(r.amount ?? 0);
+      outstanding += r.side === "DEBIT" ? amt : -amt;
+    }
+    return Math.round(outstanding * 100) / 100;
+  }
+
+  // ── Bon de commande : reception physique par ligne (migration 0231) ─────
+  // Decouplee de l'emission. Cree un mouvement 'reception' par ligne receptionnee,
+  // met a jour received_quantity (cache) et recalcule le statut du document.
+  // Refuse : draft/cancelled, sur-reception (cumul > quantite commandee), ligne
+  // hors document/org. Solde l'avance fournisseur deja versee si applicable.
+  async receivePurchaseOrder(documentId: number, input: ReceiveBatiproDocumentDto, orgId: number, userId?: number) {
     const doc = await this.getDocument(documentId, orgId);
-    const lines = doc.lines.filter((l) => l.materialId != null && l.isActive === 1);
-    if (!lines.length) return;
+    if (doc.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut etre receptionne.");
+    if (doc.status === "draft") throw new BadRequestException("Emettez d'abord le bon de commande avant de le receptionner.");
+    if (doc.status === "cancelled") throw new BadRequestException("Bon de commande annule : reception impossible.");
+    if (doc.status === "received") throw new BadRequestException("Ce bon de commande est deja entierement receptionne.");
+    if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une ligne receptionnee est requise.");
 
-    await this.db.insert(batiproStockMovements).values(lines.map((line) => ({
-      organizationId: orgId,
-      projectId: doc.projectId,
-      materialId: line.materialId as number,
-      documentId,
-      movementType: "reception",
-      quantity: line.quantity,
-    })));
-    await this.publish("receiveStockFromPurchaseOrder", ["stock_movements"], "created", documentId, orgId);
+    const lineById = new Map(doc.lines.filter((l) => l.isActive === 1).map((l) => [l.id, l]));
+    for (const entry of input.lines) {
+      const line = lineById.get(entry.line_id);
+      if (!line) throw new BadRequestException(`Ligne ${entry.line_id} introuvable sur ce document.`);
+      const ordered = Number(line.quantity ?? 0);
+      const alreadyReceived = Number(line.receivedQuantity ?? 0);
+      const cumulative = Math.round((alreadyReceived + entry.quantity) * 100000) / 100000;
+      if (cumulative > ordered + 0.0005) {
+        throw new BadRequestException(`Quantite recue (${cumulative}) superieure a la quantite commandee (${ordered}) pour la ligne "${line.designation}".`);
+      }
+    }
+
+    const receivedAt = input.received_date ? new Date(input.received_date) : undefined;
+    const materialLines = doc.lines.filter((l) => l.isActive === 1 && l.materialId != null);
+
+    await this.db.transaction(async (tx) => {
+      for (const entry of input.lines) {
+        const line = lineById.get(entry.line_id)!;
+        await tx.insert(batiproStockMovements).values({
+          organizationId: orgId,
+          projectId: doc.projectId,
+          materialId: (line.materialId as number) ?? 0,
+          documentId,
+          movementType: "reception",
+          quantity: String(entry.quantity),
+          note: input.note ?? null,
+          createdBy: userId ?? null,
+          ...(receivedAt ? { createdAt: receivedAt as any } : {}),
+        });
+        await tx.update(batiproDocumentLines)
+          .set({ receivedQuantity: sql`${batiproDocumentLines.receivedQuantity} + ${entry.quantity}` })
+          .where(and(eq(batiproDocumentLines.id, entry.line_id), eq(batiproDocumentLines.organizationId, orgId)));
+      }
+
+      // Recalcule le statut a partir des quantites a jour (lignes sans materialId
+      // = main d'oeuvre/prestations, exclues du calcul et considerees satisfaites).
+      const refreshed = await tx
+        .select({ id: batiproDocumentLines.id, quantity: batiproDocumentLines.quantity, receivedQuantity: batiproDocumentLines.receivedQuantity })
+        .from(batiproDocumentLines)
+        .where(and(eq(batiproDocumentLines.documentId, documentId), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)));
+      const trackedLines = refreshed.filter((l) => materialLines.some((m) => m.id === l.id));
+      const anyReceived = trackedLines.some((l) => Number(l.receivedQuantity ?? 0) > 0.0005);
+      const allReceived = trackedLines.length > 0 && trackedLines.every((l) => Number(l.receivedQuantity ?? 0) >= Number(l.quantity ?? 0) - 0.0005);
+      const nextStatus = allReceived ? "received" : anyReceived ? "partially_received" : doc.status;
+
+      const patch: Partial<typeof batiproDocuments.$inferInsert> = { status: nextStatus };
+      if (nextStatus === "received") {
+        patch.receivedAt = sql`CURRENT_TIMESTAMP` as any;
+        patch.receivedBy = userId ?? null;
+      }
+      await tx.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, documentId));
+    });
+
+    // Solde de l'avance fournisseur eventuellement versee AVANT reception,
+    // uniquement lorsque le BC devient entierement receptionne (une avance
+    // partielle ne se solde pas au fil des receptions partielles : v1, simple).
+    const refreshedDoc = await this.getDocument(documentId, orgId);
+    let advanceOffsetLedgerEntryId: number | null = null;
+    if (refreshedDoc.status === "received") {
+      const outstanding = await this.outstandingSupplierAdvance(documentId, orgId);
+      if (outstanding > 0.005) {
+        const analyticProjectId = await this.resolveAnalyticProjectId(doc.projectId, orgId);
+        const result = await this.ledger.postByRules(
+          {
+            type: "batipro_advance_offset",
+            reference: doc.number ?? `BC-${documentId}`,
+            particulars: `Solde avance fournisseur BC ${doc.number ?? documentId}`,
+            sourceModule: "batipro",
+            relatedId: String(documentId),
+            idempotencyKey: `batipro:advance_offset:${documentId}:${Math.round(outstanding * 100)}`,
+            currencyId: doc.currencyId ?? undefined,
+            amountsByRole: {
+              payable: outstanding,
+              supplier_advance: outstanding,
+            },
+            dimensions: { projectId: analyticProjectId },
+          },
+          orgId,
+          userId,
+        );
+        advanceOffsetLedgerEntryId = result.id > 0 ? result.id : null;
+      }
+    }
+
+    await this.publish("receivePurchaseOrder", ["documents", "document_lines", "stock_movements"], "updated", documentId, orgId);
+    return { ...refreshedDoc, advance_offset_ledger_entry_id: advanceOffsetLedgerEntryId };
+  }
+
+  // Annule (soft delete) un mouvement de reception errone et recalcule le statut
+  // du document (peut redescendre de received/partially_received vers un statut
+  // anterieur). N'annule PAS le solde d'avance deja comptabilise (contre-passation
+  // manuelle via l'ecran ledger si necessaire : hors scope v1).
+  async cancelReceipt(documentId: number, movementId: number, orgId: number) {
+    const doc = await this.getDocument(documentId, orgId);
+    if (doc.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut avoir des receptions.");
+
+    const [movement] = await this.db
+      .select()
+      .from(batiproStockMovements)
+      .where(and(
+        eq(batiproStockMovements.id, movementId),
+        eq(batiproStockMovements.documentId, documentId),
+        eq(batiproStockMovements.organizationId, orgId),
+        eq(batiproStockMovements.movementType, "reception"),
+        eq(batiproStockMovements.isActive, 1),
+      ))
+      .limit(1);
+    if (!movement) throw new NotFoundException("Mouvement de reception introuvable.");
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(batiproStockMovements).set({ isActive: 0 }).where(eq(batiproStockMovements.id, movementId));
+
+      if (movement.materialId) {
+        const [line] = await tx
+          .select({ id: batiproDocumentLines.id })
+          .from(batiproDocumentLines)
+          .where(and(
+            eq(batiproDocumentLines.documentId, documentId),
+            eq(batiproDocumentLines.organizationId, orgId),
+            eq(batiproDocumentLines.materialId, movement.materialId),
+            eq(batiproDocumentLines.isActive, 1),
+          ))
+          .limit(1);
+        if (line) {
+          await tx.update(batiproDocumentLines)
+            .set({ receivedQuantity: sql`GREATEST(${batiproDocumentLines.receivedQuantity} - ${movement.quantity}, 0)` })
+            .where(eq(batiproDocumentLines.id, line.id));
+        }
+      }
+
+      const refreshed = await tx
+        .select({ id: batiproDocumentLines.id, quantity: batiproDocumentLines.quantity, receivedQuantity: batiproDocumentLines.receivedQuantity, materialId: batiproDocumentLines.materialId })
+        .from(batiproDocumentLines)
+        .where(and(eq(batiproDocumentLines.documentId, documentId), eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)));
+      const trackedLines = refreshed.filter((l) => l.materialId != null);
+      const anyReceived = trackedLines.some((l) => Number(l.receivedQuantity ?? 0) > 0.0005);
+      const allReceived = trackedLines.length > 0 && trackedLines.every((l) => Number(l.receivedQuantity ?? 0) >= Number(l.quantity ?? 0) - 0.0005);
+      const nextStatus = allReceived ? "received" : anyReceived ? "partially_received" : "confirmed";
+
+      const patch: Partial<typeof batiproDocuments.$inferInsert> = { status: nextStatus };
+      if (nextStatus !== "received") {
+        patch.receivedAt = null;
+        patch.receivedBy = null;
+      }
+      await tx.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, documentId));
+    });
+
+    await this.publish("cancelReceipt", ["documents", "document_lines", "stock_movements"], "updated", documentId, orgId);
+    return this.getDocument(documentId, orgId);
   }
 
   async deleteDocument(id: number, orgId: number) {
@@ -2119,7 +2332,14 @@ export class BatiproService {
   // Met a jour paid_amount et le statut (issued -> paid). Pour une facture (vente),
   // la comptabilisation de l'ENCAISSEMENT reste REPORTEE (moyen de paiement non fixe).
   // Pour un bon de commande (achat), le DECAISSEMENT est comptabilise ici (v1 : Cash
-  // par defaut, pas de choix banque/caisse) via batipro_supplier_payment.
+  // par defaut, pas de choix banque/caisse).
+  //   - Si le BC n'est PAS encore entierement receptionne (status <> 'received') :
+  //     le reglement est une AVANCE (acompte verse avant livraison) -> role
+  //     batipro_supplier_advance (DEBIT supplier_advance / CREDIT cash). L'avance
+  //     est une CREANCE sur le fournisseur (actif), pas encore une dette apuree.
+  //   - Sinon (BC deja receptionne) : reglement classique batipro_supplier_payment
+  //     (DEBIT payable / CREDIT cash), comme avant. Le solde de l'avance deja
+  //     versee (le cas echeant) est gere a part, a la reception (receivePurchaseOrder).
   async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
     const isPurchaseOrder = invoice.type === "purchase_order";
@@ -2138,9 +2358,8 @@ export class BatiproService {
       throw new BadRequestException(`Le total regle (${newPaid}) depasse le montant du document (${totalTtc}).`);
     }
     const fullyPaid = newPaid >= totalTtc - 0.001;
-    // Un BC n'a pas de statut "paid" dans son cycle (draft/sent/cancelled) : la
-    // reception de stock et l'UI sont indexees sur "sent", on ne le remplace donc
-    // jamais. Seul paidAmount suit le reglement pour un BC.
+    // Un BC n'a pas de statut "paid" dans son cycle (draft/sent/confirmed/
+    // partially_received/received/cancelled) : paidAmount suit seul le reglement.
     const nextStatus = fullyPaid && !isPurchaseOrder ? "paid" : invoice.status;
 
     await this.db.update(batiproDocuments)
@@ -2150,28 +2369,41 @@ export class BatiproService {
     let paymentLedgerEntryId: number | null = null;
     let paymentDeferred = false;
     if (isPurchaseOrder) {
-      // Decaissement fournisseur (Cash par defaut v1) :
-      //  - payable = dette fournisseur (DEBIT, apurement)
-      //  - cash    = tresorerie        (CREDIT)
+      const isAdvance = invoice.status !== "received";
       // Idempotence sur le CUMUL paye (centimes) pour ne pas avaler les reglements
       // partiels successifs (un idempotencyKey base sur l'id seul avalerait le 2e reglement).
       // Dimension analytique : projet du registre partage lie au chantier BatiPro.
       const analyticProjectId = await this.resolveAnalyticProjectId(invoice.projectId, orgId);
       const result = await this.ledger.postByRules(
-        {
-          type: "batipro_supplier_payment",
-          reference: invoice.number ?? `BC-${invoiceDocumentId}`,
-          particulars: `Reglement fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
-          sourceModule: "batipro",
-          relatedId: String(invoiceDocumentId),
-          idempotencyKey: `batipro:supplier_payment:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
-          currencyId: invoice.currencyId ?? undefined,
-          amountsByRole: {
-            payable: amount,
-            cash: amount,
-          },
-          dimensions: { projectId: analyticProjectId },
-        },
+        isAdvance
+          ? {
+              type: "batipro_supplier_advance",
+              reference: invoice.number ?? `BC-${invoiceDocumentId}`,
+              particulars: `Avance fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
+              sourceModule: "batipro",
+              relatedId: String(invoiceDocumentId),
+              idempotencyKey: `batipro:supplier_advance:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
+              currencyId: invoice.currencyId ?? undefined,
+              amountsByRole: {
+                supplier_advance: amount,
+                cash: amount,
+              },
+              dimensions: { projectId: analyticProjectId },
+            }
+          : {
+              type: "batipro_supplier_payment",
+              reference: invoice.number ?? `BC-${invoiceDocumentId}`,
+              particulars: `Reglement fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
+              sourceModule: "batipro",
+              relatedId: String(invoiceDocumentId),
+              idempotencyKey: `batipro:supplier_payment:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
+              currencyId: invoice.currencyId ?? undefined,
+              amountsByRole: {
+                payable: amount,
+                cash: amount,
+              },
+              dimensions: { projectId: analyticProjectId },
+            },
         orgId,
         userId,
       );
