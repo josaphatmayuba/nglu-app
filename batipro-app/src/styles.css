@@ -232,8 +232,23 @@ table.bp td .danger-txt { color: var(--rose-600); }
 .modal-head p { margin: 2px 0 0; color: var(--ink-500); font-size: 12px; }
 .icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--ink-200); background: #fff; cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+/* Carte de ligne (devis/BC/etc.) : fond legerement distinct du modal blanc pour rester lisible. */
+.modal-card .card.pad { background: var(--ink-50); border-color: var(--ink-100); }
+.modal-card .card.pad .field input, .modal-card .card.pad .field select, .modal-card .card.pad .field textarea { background: #fff; }
+.modal-card .card.pad .field { color: var(--ink-500); }
 .field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-600); }
-.field input { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; }
+.field input, .field select, .field textarea {
+  border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px;
+  width: 100%; font-weight: 400; font-size: 13px; color: var(--ink-900); background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+}
+.field select { min-height: 40px; padding-right: 30px; cursor: pointer; }
+.field textarea { padding: 9px 11px; min-height: 60px; resize: vertical; }
+.field input:hover, .field select:hover, .field textarea:hover { border-color: var(--ink-300); }
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none; border-color: var(--amber-400); box-shadow: 0 0 0 3px rgba(251,191,36,.18);
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--ink-400); font-weight: 400; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ── Galerie photo de chantier ────────────────────────────────────────── */
