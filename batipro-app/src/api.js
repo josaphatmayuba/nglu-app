@@ -198,6 +198,10 @@ export const api = {
   issueInvoice: (id) => jsonFetch(`/documents/${id}/issue`, { method: "POST", body: "{}" }),
   recordPayment: (id, amount) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount }) }),
   postPurchase: (id) => jsonFetch(`/documents/${id}/post-purchase`, { method: "POST", body: "{}" }),
+  // Factures fournisseur (type=invoice, direction=inbound) rattachees a un BC : un BC peut
+  // recevoir plusieurs factures (livraisons/facturation partielles), chacune avec son propre reglement.
+  createInvoiceFromPurchaseOrder: (poId, b) => jsonFetch(`/documents/purchase-orders/${poId}/invoice`, { method: "POST", body: JSON.stringify(b || {}) }),
+  purchaseOrderInvoices: (poId) => jsonFetch(`/documents/purchase-orders/${poId}/invoices`),
   // Cycle de vie Bon de commande (SCRUM) : confirmation fournisseur puis réception par ligne.
   confirmDocument: (id, b) => jsonFetch(`/documents/${id}/confirm`, { method: "POST", body: JSON.stringify(b || {}) }),
   receiveDocument: (id, b) => jsonFetch(`/documents/${id}/receive`, { method: "POST", body: JSON.stringify(b || {}) }),

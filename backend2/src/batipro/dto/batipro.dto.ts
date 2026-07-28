@@ -277,6 +277,21 @@ export class RecordPaymentDto {
   @IsNumber() @Min(0) amount!: number;
 }
 
+// Creation d'une facture FOURNISSEUR (type=invoice, direction=inbound) depuis
+// un bon de commande. Deux modes exclusifs : `lines` (facturation ligne par
+// ligne) OU `amount_ht`/`amount_ttc` (facturation par montant global, le mode
+// le plus courant). Si rien n'est fourni, facture le solde restant du BC.
+export class CreateInvoiceFromPurchaseOrderDto {
+  @IsOptional() @IsNumber() @Min(0) amount_ht?: number;
+  @IsOptional() @IsNumber() @Min(0) amount_ttc?: number;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => DocumentLineDto)
+  lines?: DocumentLineDto[];
+}
+
 // Galerie photo de chantier (site + documents sources scannes).
 export class UpdateBatiproSitePhotoDto {
   @IsOptional() @IsString() @MaxLength(255) caption?: string;

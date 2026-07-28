@@ -2515,6 +2515,177 @@ export class BatiproService {
     return this.getDocument(documentId, orgId);
   }
 
+  // Genere une facture FOURNISSEUR (type=invoice, direction=inbound) depuis un
+  // bon de commande, chainee par parent_document_id. Un BC peut recevoir
+  // PLUSIEURS factures fournisseur (livraisons/facturation partielles) : le
+  // montant facturable restant = total_ttc du BC - somme(total_ttc des factures
+  // inbound actives deja rattachees). Deux modes :
+  //  - `lines` fourni : recopie des lignes choisies (permet une facturation
+  //    ligne par ligne, ex. une partie des materiaux commandes).
+  //  - sinon `amount_ht`/`amount_ttc` : une ligne unique "Facture partielle/totale
+  //    BC <numero>" du montant demande (facturation echelonnee sans repartition
+  //    par ligne, cas le plus courant fournisseur).
+  // IMPORTANT (choix de design) : cette facture ne repasse PAS par
+  // postPurchaseToLedger — la DEPENSE (charge + TVA deductible + dette
+  // fournisseur) est deja comptabilisee UNE SEULE FOIS au niveau du BC
+  // (postPurchaseToLedger). La facture fournisseur ne sert qu'au SUIVI
+  // (rapprochement livraison/facturation, cumul facture) et au REGLEMENT
+  // (recordPayment sur la facture elle-meme, cf. plus bas). Si le BC n'a pas
+  // encore ete comptabilise, aucune ecriture n'est posee par cette methode.
+  async createInvoiceFromPurchaseOrder(
+    purchaseOrderId: number,
+    orgId: number,
+    input: { amount_ht?: number; amount_ttc?: number; lines?: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }> } = {},
+  ) {
+    const po = await this.getDocument(purchaseOrderId, orgId);
+    if (po.type !== "purchase_order") throw new BadRequestException("Le document source n'est pas un bon de commande.");
+    if (po.direction !== "outbound") throw new BadRequestException("Bon de commande invalide : direction inattendue.");
+    if (po.status === "draft") throw new BadRequestException("Emettez le bon de commande avant de le facturer.");
+    if (po.status === "cancelled") throw new BadRequestException("Bon de commande annule : facturation impossible.");
+
+    // Cumul deja facture par les factures fournisseur (inbound) rattachees.
+    const existingInvoices = await this.db
+      .select({ totalTtc: batiproDocuments.totalTtc })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.parentDocumentId, purchaseOrderId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.type, "invoice"),
+        eq(batiproDocuments.direction, "inbound"),
+        eq(batiproDocuments.isActive, 1),
+        sql`${batiproDocuments.status} <> 'cancelled'`,
+      ));
+    const alreadyInvoiced = existingInvoices.reduce((sum, r) => sum + Number(r.totalTtc ?? 0), 0);
+    const poTotalTtc = Number(po.totalTtc ?? 0);
+    const remainingTtc = Math.round((poTotalTtc - alreadyInvoiced) * 100) / 100;
+    if (remainingTtc <= 0.001) {
+      throw new BadRequestException("Ce bon de commande est deja entierement facture.");
+    }
+
+    const year = new Date().getFullYear();
+    let lines: Array<Record<string, unknown>>;
+    let totalHt: number;
+    let totalVat: number;
+    let totalTtc: number;
+
+    if (Array.isArray(input.lines) && input.lines.length) {
+      const phaseIds = await this.validPhaseIds(orgId, po.projectId);
+      const computed = this.computeDocumentTotals(input.lines, orgId, phaseIds, po.currencyId ?? null);
+      lines = computed.lines;
+      totalHt = computed.totalHt;
+      totalVat = computed.totalVat;
+      totalTtc = computed.totalTtc;
+    } else {
+      // Facturation par montant global (pas de repartition par ligne). Si aucun
+      // montant fourni, facture le solde restant (facturation totale en une fois).
+      const requestedTtc = input.amount_ttc != null ? Number(input.amount_ttc) : (input.amount_ht != null ? null : remainingTtc);
+      const poVatRate = poTotalTtc > 0 ? (Number(po.totalVat ?? 0) / (Number(po.totalHt ?? 0) || 1)) * 100 : 0;
+      let lineHt: number;
+      let lineVat: number;
+      if (input.amount_ht != null) {
+        lineHt = Math.round(Number(input.amount_ht) * 100) / 100;
+        lineVat = Math.round(lineHt * (poVatRate / 100) * 100) / 100;
+      } else {
+        const ttc = requestedTtc ?? remainingTtc;
+        lineHt = Math.round((ttc / (1 + poVatRate / 100)) * 100) / 100;
+        lineVat = Math.round((ttc - lineHt) * 100) / 100;
+      }
+      totalHt = lineHt;
+      totalVat = lineVat;
+      totalTtc = Math.round((lineHt + lineVat) * 100) / 100;
+      if (totalTtc > remainingTtc + 0.01) {
+        throw new BadRequestException(`Le montant facture (${totalTtc}) depasse le solde restant a facturer (${remainingTtc}).`);
+      }
+      lines = [{
+        organizationId: orgId,
+        documentId: 0,
+        position: 0,
+        designation: `Facture fournisseur BC ${po.number ?? purchaseOrderId}`,
+        quantity: "1",
+        unitPrice: String(lineHt),
+        vatRate: String(Math.round(poVatRate * 100) / 100),
+        lineHt: String(lineHt),
+        lineTtc: String(totalTtc),
+        phaseId: null,
+        materialId: null,
+        currencyId: null,
+      }];
+    }
+
+    if (totalTtc <= 0) throw new BadRequestException("Le montant de la facture doit etre strictement positif.");
+    if (Math.round((alreadyInvoiced + totalTtc) * 100) / 100 > poTotalTtc + 0.01) {
+      throw new BadRequestException(`Le total facture depasserait le montant du bon de commande (${poTotalTtc}).`);
+    }
+
+    const documentId = await this.db.transaction(async (tx) => {
+      const { number } = await this.nextDocumentNumber(tx, orgId, "invoice", year);
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: po.projectId,
+        type: "invoice",
+        direction: "inbound",
+        number,
+        status: "issued",
+        currencyId: po.currencyId ?? null,
+        supplierId: po.supplierId ?? null,
+        parentDocumentId: po.id,
+        totalHt: String(totalHt),
+        totalVat: String(totalVat),
+        totalTtc: String(totalTtc),
+        notes: po.notes ?? null,
+        issueDate: sql`CURRENT_DATE` as any,
+      }).$returningId();
+      const id = Number(result.id);
+      for (const line of lines) line.documentId = id;
+      if (lines.length) await tx.insert(batiproDocumentLines).values(lines as any);
+      return id;
+    });
+
+    await this.publish("createInvoiceFromPurchaseOrder", ["documents", "document_lines"], "created", documentId, orgId);
+    return this.getDocument(documentId, orgId);
+  }
+
+  // Liste les factures fournisseur (type=invoice, direction=inbound) rattachees
+  // a un bon de commande + le cumul facture/paye vs le total du BC, pour
+  // affichage du solde restant a facturer/payer sur la fiche BC. Retro-
+  // compatible : un BC sans facture rattachee renvoie une liste vide et son
+  // propre paidAmount reste la seule source de suivi (paiement direct historique).
+  async listPurchaseOrderInvoices(purchaseOrderId: number, orgId: number) {
+    const po = await this.getDocument(purchaseOrderId, orgId);
+    if (po.type !== "purchase_order") throw new BadRequestException("Le document n'est pas un bon de commande.");
+
+    const invoices = await this.db
+      .select({
+        ...getTableColumns(batiproDocuments),
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(batiproDocuments)
+      .leftJoin(currencies, eq(currencies.id, batiproDocuments.currencyId))
+      .where(and(
+        eq(batiproDocuments.parentDocumentId, purchaseOrderId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.type, "invoice"),
+        eq(batiproDocuments.direction, "inbound"),
+        eq(batiproDocuments.isActive, 1),
+      ))
+      .orderBy(desc(batiproDocuments.id));
+
+    const activeInvoices = invoices.filter((i) => i.status !== "cancelled");
+    const invoicedTtc = Math.round(activeInvoices.reduce((sum, i) => sum + Number(i.totalTtc ?? 0), 0) * 100) / 100;
+    const paidTtc = Math.round(activeInvoices.reduce((sum, i) => sum + Number(i.paidAmount ?? 0), 0) * 100) / 100;
+    const poTotalTtc = Number(po.totalTtc ?? 0);
+
+    return {
+      purchase_order_id: purchaseOrderId,
+      po_total_ttc: poTotalTtc,
+      invoiced_ttc: invoicedTtc,
+      remaining_to_invoice_ttc: Math.round((poTotalTtc - invoicedTtc) * 100) / 100,
+      paid_ttc: paidTtc,
+      invoices,
+    };
+  }
+
   // Comptabilise une facture via le ledger (postByRules, ROLES metier — JAMAIS de
   // compte en dur). Idempotent par idempotencyKey (re-appel ne double pas
   // l'ecriture). Respecte gate d'approbation + periodes cloturees (gere par le
@@ -2636,25 +2807,38 @@ export class BatiproService {
     return { id: purchaseOrderId, ledger_entry_id: ledgerEntryId, deferred };
   }
 
-  // Enregistre un reglement (partiel/total) d'une facture ou d'un bon de commande.
-  // Met a jour paid_amount et le statut (issued -> paid). Pour une facture (vente),
-  // la comptabilisation de l'ENCAISSEMENT reste REPORTEE (moyen de paiement non fixe).
-  // Pour un bon de commande (achat), le DECAISSEMENT est comptabilise ici (v1 : Cash
-  // par defaut, pas de choix banque/caisse).
-  //   - Si le BC n'est PAS encore entierement receptionne (status <> 'received') :
-  //     le reglement est une AVANCE (acompte verse avant livraison) -> role
-  //     batipro_supplier_advance (DEBIT supplier_advance / CREDIT cash). L'avance
-  //     est une CREANCE sur le fournisseur (actif), pas encore une dette apuree.
+  // Enregistre un reglement (partiel/total) d'une facture, d'un bon de commande
+  // ou d'une facture FOURNISSEUR (type=invoice, direction=inbound, rattachee a
+  // un BC via parent_document_id). Met a jour paid_amount et le statut
+  // (issued -> paid). Pour une facture de VENTE (direction=outbound), la
+  // comptabilisation de l'ENCAISSEMENT reste REPORTEE (moyen de paiement non
+  // fixe). Pour un reglement fournisseur (achat) — BC direct (retro-
+  // compatibilite, BC sans facture separee) OU facture fournisseur rattachee —
+  // le DECAISSEMENT est comptabilise ici (v1 : Cash par defaut, pas de choix
+  // banque/caisse) :
+  //   - Si le BC associe n'est PAS encore entierement receptionne
+  //     (status <> 'received') : le reglement est une AVANCE (acompte verse
+  //     avant livraison) -> role batipro_supplier_advance (DEBIT supplier_advance
+  //     / CREDIT cash). L'avance est une CREANCE sur le fournisseur (actif), pas
+  //     encore une dette apuree.
   //   - Sinon (BC deja receptionne) : reglement classique batipro_supplier_payment
   //     (DEBIT payable / CREDIT cash), comme avant. Le solde de l'avance deja
   //     versee (le cas echeant) est gere a part, a la reception (receivePurchaseOrder).
+  // NB design : une facture fournisseur ne comptabilise PAS sa propre charge/TVA
+  // (deja fait une fois par postPurchaseToLedger sur le BC parent) — seul le
+  // REGLEMENT (avance/paiement) passe par le ledger ici, exactement comme pour
+  // un paiement direct sur BC.
   async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
     const isPurchaseOrder = invoice.type === "purchase_order";
-    if (invoice.type !== "invoice" && !isPurchaseOrder) {
+    const isSupplierInvoice = invoice.type === "invoice" && invoice.direction === "inbound";
+    if (!isPurchaseOrder && !isSupplierInvoice && invoice.type !== "invoice") {
       throw new BadRequestException("Seule une facture ou un bon de commande peut recevoir un paiement.");
     }
-    const docLabel = isPurchaseOrder ? "Bon de commande" : "Facture";
+    // Le reglement suit la comptabilisation "achat" (avance/paiement fournisseur)
+    // pour un BC direct OU une facture fournisseur inbound rattachee a un BC.
+    const isSupplierSettlement = isPurchaseOrder || isSupplierInvoice;
+    const docLabel = isPurchaseOrder ? "Bon de commande" : isSupplierInvoice ? "Facture fournisseur" : "Facture";
     if (invoice.status === "cancelled") throw new BadRequestException(`${docLabel} annule(e) : aucun paiement possible.`);
     if (invoice.status === "draft") throw new BadRequestException(`Emettez ${isPurchaseOrder ? "le bon de commande" : "la facture"} avant d'enregistrer un paiement.`);
     if (!(amount > 0)) throw new BadRequestException("Le montant du paiement doit etre strictement positif.");
@@ -2668,11 +2852,25 @@ export class BatiproService {
     const fullyPaid = newPaid >= totalTtc - 0.001;
     // Un BC n'a pas de statut "paid" dans son cycle (draft/sent/confirmed/
     // partially_received/received/cancelled) : paidAmount suit seul le reglement.
+    // Une facture fournisseur (comme une facture de vente) suit issued -> paid.
     const nextStatus = fullyPaid && !isPurchaseOrder ? "paid" : invoice.status;
 
     // Garde-fou mono-devise AVANT toute ecriture : un document multi-devise ne
     // doit jamais etre marque paye sans ecriture comptable en face.
-    if (isPurchaseOrder) this.assertSingleCurrencyForLedger(invoice);
+    if (isSupplierSettlement) this.assertSingleCurrencyForLedger(invoice);
+
+    // Pour une facture fournisseur, l'etat "receptionne" se lit sur le BC PARENT
+    // (parent_document_id), pas sur la facture elle-meme (qui n'a pas de cycle
+    // de reception propre).
+    let referenceDocumentStatus = invoice.status;
+    if (isSupplierInvoice && invoice.parentDocumentId) {
+      const [parentPo] = await this.db
+        .select({ status: batiproDocuments.status })
+        .from(batiproDocuments)
+        .where(and(eq(batiproDocuments.id, invoice.parentDocumentId), eq(batiproDocuments.organizationId, orgId)))
+        .limit(1);
+      referenceDocumentStatus = parentPo?.status ?? invoice.status;
+    }
 
     await this.db.update(batiproDocuments)
       .set({ paidAmount: String(newPaid), status: nextStatus })
@@ -2680,18 +2878,19 @@ export class BatiproService {
 
     let paymentLedgerEntryId: number | null = null;
     let paymentDeferred = false;
-    if (isPurchaseOrder) {
-      const isAdvance = invoice.status !== "received";
+    if (isSupplierSettlement) {
+      const isAdvance = referenceDocumentStatus !== "received";
       // Idempotence sur le CUMUL paye (centimes) pour ne pas avaler les reglements
       // partiels successifs (un idempotencyKey base sur l'id seul avalerait le 2e reglement).
       // Dimension analytique : projet du registre partage lie au chantier BatiPro.
       const analyticProjectId = await this.resolveAnalyticProjectId(invoice.projectId, orgId);
+      const refLabel = isSupplierInvoice ? "Facture fournisseur" : "BC";
       const result = await this.ledger.postByRules(
         isAdvance
           ? {
               type: "batipro_supplier_advance",
-              reference: invoice.number ?? `BC-${invoiceDocumentId}`,
-              particulars: `Avance fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
+              reference: invoice.number ?? `${refLabel}-${invoiceDocumentId}`,
+              particulars: `Avance fournisseur ${refLabel} ${invoice.number ?? invoiceDocumentId}`,
               sourceModule: "batipro",
               relatedId: String(invoiceDocumentId),
               idempotencyKey: `batipro:supplier_advance:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
@@ -2704,8 +2903,8 @@ export class BatiproService {
             }
           : {
               type: "batipro_supplier_payment",
-              reference: invoice.number ?? `BC-${invoiceDocumentId}`,
-              particulars: `Reglement fournisseur BC ${invoice.number ?? invoiceDocumentId}`,
+              reference: invoice.number ?? `${refLabel}-${invoiceDocumentId}`,
+              particulars: `Reglement fournisseur ${refLabel} ${invoice.number ?? invoiceDocumentId}`,
               sourceModule: "batipro",
               relatedId: String(invoiceDocumentId),
               idempotencyKey: `batipro:supplier_payment:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
@@ -2734,7 +2933,7 @@ export class BatiproService {
       paid_amount: newPaid,
       balance: Math.round((totalTtc - newPaid) * 100) / 100,
       status: nextStatus,
-      ...(isPurchaseOrder ? { payment_ledger_entry_id: paymentLedgerEntryId, payment_deferred: paymentDeferred } : {}),
+      ...(isSupplierSettlement ? { payment_ledger_entry_id: paymentLedgerEntryId, payment_deferred: paymentDeferred } : {}),
     };
   }
 

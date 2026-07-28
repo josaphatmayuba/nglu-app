@@ -29,6 +29,7 @@ import {
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
   RecordPaymentDto,
+  CreateInvoiceFromPurchaseOrderDto,
   ReviewSubmissionDto,
   UpdateBatiproAttendanceDto,
   UpdateBatiproBuildingLevelDto,
@@ -539,6 +540,24 @@ export class BatiproController {
   @Post("documents/situations/:id/invoice")
   createInvoiceFromSituation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.createInvoiceFromSituation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate a supplier invoice from a purchase order (type=invoice, direction=inbound)" })
+  @Permissions("create-batipro")
+  @Post("documents/purchase-orders/:id/invoice")
+  createInvoiceFromPurchaseOrder(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateInvoiceFromPurchaseOrderDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.batipro.createInvoiceFromPurchaseOrder(id, orgId, body);
+  }
+
+  @ApiOperation({ summary: "Liste les factures fournisseur rattachees a un bon de commande + solde facture/paye" })
+  @Permissions("readAll-batipro")
+  @Get("documents/purchase-orders/:id/invoices")
+  listPurchaseOrderInvoices(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.batipro.listPurchaseOrderInvoices(id, orgId);
   }
 
   @ApiOperation({ summary: "Get an outbound document (+ lignes)" })

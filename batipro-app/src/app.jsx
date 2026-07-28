@@ -1366,6 +1366,11 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(!!docId);
+  // Scan OCR (pre-remplissage) : le formulaire reste entierement editable ensuite.
+  const [scanBusy, setScanBusy] = React.useState(false);
+  const [scanPhotoId, setScanPhotoId] = React.useState(null);
+  const [scanJustApplied, setScanJustApplied] = React.useState(false);
+  const scanInputRef = React.useRef(null);
   const currencies = useCurrencies();
   // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
   const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
@@ -1382,6 +1387,12 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         })
         .catch((e) => setError(e.message || String(e)))
         .finally(() => setLoading(false));
+      api.listPhotos(projectId)
+        .then((photos) => {
+          const src = (photos || []).find((p) => p.linkedDocumentId === docId);
+          if (src) setScanPhotoId(src.id);
+        })
+        .catch(() => {});
     }
   }, [docId, projectId]);
 
@@ -1390,6 +1401,43 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
 
   const totalsByCurrency = sumLinesByCurrency(lines, currencies, docCurrencyCode);
+
+  // Upload immediat + OCR best-effort. Pre-remplit les champs EXISTANTS du
+  // formulaire (lignes/echeance/notes) qui restent 100% editables ensuite.
+  const handleScanFile = async (file) => {
+    if (!file) return;
+    setError(""); setScanBusy(true); setScanJustApplied(false);
+    try {
+      const res = await api.ocrScanDocument(projectId, file);
+      setScanPhotoId(res?.photoId ?? null);
+      const parsed = res?.parsed || {};
+      if (parsed.date) {
+        const m = parsed.date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (m) {
+          const [, d, mo, y] = m;
+          const yyyy = y.length === 2 ? `20${y}` : y;
+          setDueDate(`${yyyy}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`);
+        }
+      }
+      const noteBits = [];
+      if (parsed.documentNumber) noteBits.push(`N° document : ${parsed.documentNumber}`);
+      if (parsed.totalHt != null) noteBits.push(`Total HT scanné : ${parsed.totalHt}`);
+      if (parsed.totalTtc != null) noteBits.push(`Total TTC scanné : ${parsed.totalTtc}`);
+      if (noteBits.length) setNotes((c) => (c ? `${c}\n${noteBits.join(" — ")}` : noteBits.join(" — ")));
+      if (Array.isArray(parsed.lines) && parsed.lines.length) {
+        setLines(parsed.lines.map((l) => ({
+          designation: l.designation || "",
+          quantity: l.quantity ?? 1,
+          unit_price: l.unitPrice ?? 0,
+          vat_rate: 0,
+          phase_id: "",
+          currency_id: "",
+        })));
+      }
+      setScanJustApplied(true);
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setScanBusy(false); }
+  };
 
   const save = async () => {
     setError("");
@@ -1402,6 +1450,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
+        ...(!docId ? { sourcePhotoId: scanPhotoId || undefined } : {}),
         lines: clean.map((l) => ({
           designation: l.designation.trim(),
           quantity: n(l.quantity),
@@ -1419,13 +1468,32 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
 
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
-      <div className="modal-card" style={{ maxWidth: 720 }}>
+      <div className="modal-card" style={{ maxWidth: scanPhotoId ? 1040 : 720 }}>
         <div className="modal-head">
           <div><h2 className="font-display">{docId ? "Modifier le devis" : "Nouveau devis"}</h2></div>
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         {loading ? <p className="muted">Chargement…</p> : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", minWidth: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 0 }}>
+            {!docId && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <input
+                  ref={scanInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; handleScanFile(f); }}
+                />
+                <button type="button" className="btn btn-ghost" disabled={scanBusy} onClick={() => scanInputRef.current?.click()}>
+                  <Icon name={scanBusy ? "loader" : "camera"} /> {scanBusy ? "Analyse du document…" : "Scanner un document"}
+                </button>
+                {scanJustApplied && (
+                  <span className="chip amber" style={{ fontSize: 12 }}>Champs extraits automatiquement — vérifiez avant d'enregistrer</span>
+                )}
+              </div>
+            )}
             <label className="field" style={{ maxWidth: 220 }}>
               <span>Devise par défaut</span>
               <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
@@ -1490,6 +1558,13 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
 
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
             <button className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer le devis"}</button>
+          </div>
+          {scanPhotoId != null && (
+            <div style={{ flex: "1 1 260px", minWidth: 220, maxWidth: 320 }}>
+              <p className="eyebrow" style={{ marginBottom: 6 }}>Document scanné</p>
+              <ScanSourcePreview photoId={scanPhotoId} />
+            </div>
+          )}
           </div>
         )}
       </div>
@@ -1564,6 +1639,13 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [busy, setBusy] = React.useState(0);
+  // Factures fournisseur (type=invoice, direction=inbound) rattachées à un BC —
+  // un BC peut en recevoir plusieurs (facturation partielle/échelonnée). Panneau
+  // repliable par BC, chargé à la demande (évite N appels au chargement de la liste).
+  const [expandedPoId, setExpandedPoId] = React.useState(null);
+  const [poInvoices, setPoInvoices] = React.useState({});
+  const [invoiceModal, setInvoiceModal] = React.useState(null); // { po }
+  const [invoicePayModal, setInvoicePayModal] = React.useState(null); // { invoice, po }
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -1646,6 +1728,39 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     finally { setBusy(0); }
   };
 
+  // Factures fournisseur rattachées à un BC (chargement à la demande, à l'ouverture du panneau).
+  const loadPoInvoices = React.useCallback((poId) => {
+    api.purchaseOrderInvoices(poId)
+      .then((r) => setPoInvoices((c) => ({ ...c, [poId]: r })))
+      .catch((err) => setError(err.message || String(err)));
+  }, []);
+  const toggleInvoices = (d) => {
+    const next = expandedPoId === d.id ? null : d.id;
+    setExpandedPoId(next);
+    if (next && !poInvoices[next]) loadPoInvoices(next);
+  };
+  const confirmCreatePoInvoice = async (payload) => {
+    const d = invoiceModal?.po;
+    setError(""); setNotice(""); setBusy(d.id); setInvoiceModal(null);
+    try {
+      await api.createInvoiceFromPurchaseOrder(d.id, payload);
+      setNotice("Facture fournisseur créée.");
+      loadPoInvoices(d.id);
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+  const confirmPayInvoice = async (amount) => {
+    const { invoice, po } = invoicePayModal;
+    setError(""); setNotice(""); setBusy(invoice.id); setInvoicePayModal(null);
+    try {
+      const r = await api.recordPayment(invoice.id, amount);
+      setNotice(`Règlement enregistré. Solde : ${money(r.balance, invoice.currencyCode || cur)}.`);
+      loadPoInvoices(po.id);
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(0); }
+  };
+
   const budgetCur = budget?.currency_code || cur;
 
   return (
@@ -1697,8 +1812,11 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                 const orderedQty = trackedLines.reduce((s, l) => s + n(l.quantity), 0);
                 const receivedQty = trackedLines.reduce((s, l) => s + n(l.receivedQuantity), 0);
                 const showProgress = d.status !== "draft" && trackedLines.length > 0;
+                const canInvoice = canMutate && d.status !== "draft" && d.status !== "cancelled";
+                const invData = poInvoices[d.id];
                 return (
-                <tr key={d.id}>
+                <React.Fragment key={d.id}>
+                <tr>
                   <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
                   <td>{d.supplierName || d.subcontractorName || "—"}</td>
                   <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
@@ -1724,11 +1842,62 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
                       {canPost && <button className="link" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
+                      {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
+                {expandedPoId === d.id && (
+                  <tr>
+                    <td colSpan={8} style={{ background: "var(--ink-50, #f8fafc)", padding: "10px 14px" }}>
+                      {!invData ? <span className="muted" style={{ fontSize: 12 }}>Chargement des factures fournisseur…</span> : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                            <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                              Facturé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(invData.invoiced_ttc, d.currencyCode || cur)}</strong>
+                              {" / "}{money(invData.po_total_ttc, d.currencyCode || cur)}
+                              {" — "}Reste à facturer : <strong style={{ color: "var(--ink-900, #111)" }}>{money(invData.remaining_to_invoice_ttc, d.currencyCode || cur)}</strong>
+                            </div>
+                            {canInvoice && invData.remaining_to_invoice_ttc > 0.001 && (
+                              <button className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setInvoiceModal({ po: d, remaining: invData.remaining_to_invoice_ttc })}>
+                                <Icon name="filePlus" /> Facture
+                              </button>
+                            )}
+                          </div>
+                          {!invData.invoices.length ? (
+                            <span className="muted" style={{ fontSize: 12 }}>Aucune facture fournisseur rattachée. Le paiement direct sur le BC ci-dessus reste utilisable.</span>
+                          ) : (
+                            <table className="bp" style={{ fontSize: 12 }}>
+                              <thead><tr><th>N° facture</th><th>Total TTC</th><th>Payé / solde</th><th>Statut</th><th></th></tr></thead>
+                              <tbody>
+                                {invData.invoices.map((inv) => {
+                                  const invBalance = Math.max(0, n(inv.totalTtc) - n(inv.paidAmount));
+                                  const canPayInv = canMutate && inv.status !== "cancelled" && invBalance > 0.001;
+                                  return (
+                                    <tr key={inv.id}>
+                                      <td>{inv.number || `#${inv.id}`}</td>
+                                      <td>{money(inv.totalTtc, inv.currencyCode || cur)}</td>
+                                      <td>{money(n(inv.paidAmount), inv.currencyCode || cur)} / solde {money(invBalance, inv.currencyCode || cur)}</td>
+                                      <td><span className={`chip ${inv.status === "paid" ? "emerald" : inv.status === "cancelled" ? "rose" : "amber"}`}>{inv.status}</span></td>
+                                      <td>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                          <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
+                                          {canPayInv && <button className="link" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
                 );
               })}
           </tbody>
@@ -1769,7 +1938,68 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           onConfirm={receiveDoc}
         />
       )}
+      {invoiceModal && (
+        <PoInvoiceModal
+          po={invoiceModal.po}
+          remaining={invoiceModal.remaining}
+          currencyCode={invoiceModal.po.currencyCode || cur}
+          onClose={() => setInvoiceModal(null)}
+          onConfirm={confirmCreatePoInvoice}
+        />
+      )}
+      {invoicePayModal && (
+        <PaymentModal
+          balance={Math.max(0, n(invoicePayModal.invoice.totalTtc) - n(invoicePayModal.invoice.paidAmount))}
+          currencyCode={invoicePayModal.invoice.currencyCode || cur}
+          onClose={() => setInvoicePayModal(null)}
+          onConfirm={confirmPayInvoice}
+        />
+      )}
     </>
+  );
+}
+
+// Création d'une facture fournisseur (type=invoice, direction=inbound) depuis un BC.
+// V1 : facturation par MONTANT global (pas de répartition ligne par ligne) — le mode le
+// plus courant fournisseur (facturation échelonnée sans détail par ligne). Pré-rempli
+// avec le solde restant à facturer (facturation totale en un clic si rien n'est changé).
+function PoInvoiceModal({ po, remaining, currencyCode, onClose, onConfirm }) {
+  const [amountTtc, setAmountTtc] = React.useState(remaining);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    if (!(n(amountTtc) > 0)) { setError("Montant invalide."); return; }
+    if (n(amountTtc) > remaining + 0.01) { setError(`Le montant dépasse le solde restant à facturer (${money(remaining, currencyCode)}).`); return; }
+    setError(""); setBusy(true);
+    try { await onConfirm({ amount_ttc: n(amountTtc) }); }
+    catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Facture fournisseur — BC {po.number || `#${po.id}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field">
+            <span>Reste à facturer</span>
+            <input type="text" value={money(remaining, currencyCode)} disabled />
+          </label>
+          <label className="field">
+            <span>Montant de cette facture TTC ({currencyCode || "—"})</span>
+            <input type="number" step="0.01" min="0" max={remaining} value={amountTtc} onChange={(e) => setAmountTtc(e.target.value)} autoFocus required />
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 12 }}>Une facturation partielle est possible : plusieurs factures peuvent être créées successivement sur ce BC.</p>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Création…" : "Créer la facture"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -2541,8 +2771,8 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const currencies = useCurrencies();
-  // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
-  const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
+  // Pas de picker : la devise est pilotée par phase (voir rowCurrencyCode ci-dessous).
+  const docCurrencyId = currencyId || "";
   const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
@@ -2622,10 +2852,6 @@ function SituationTravauxEditorModal({ projectId, currencyId, currencyCode, onCl
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <label className="field" style={{ flex: 1, minWidth: 160 }}><span>Période</span><input value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="ex. Juin 2026" /></label>
-              <label className="field" style={{ flex: 1, minWidth: 160 }}>
-                <span>Devise par défaut</span>
-                <CurrencyPicker value={docCurrencyId} onChange={setDocCurrencyId} currencies={currencies} />
-              </label>
             </div>
 
             {!rows.length ? (
