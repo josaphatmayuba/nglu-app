@@ -106,6 +106,8 @@ export const api = {
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
   budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
+  createBudget: (body) => jsonFetch("/budget", { method: "POST", body: JSON.stringify(body) }),
+  addBudgetLine: (budgetId, body) => jsonFetch(`/budget/${budgetId}/lines`, { method: "POST", body: JSON.stringify(body) }),
 
   // ── Fournisseurs (référentiel central des tiers — partagé entre apps) ─
   suppliers: (params) => jsonFetch(withQuery("/supplier", { query: "all", ...(params || {}) })),

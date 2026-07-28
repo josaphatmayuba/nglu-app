@@ -1997,28 +1997,98 @@ function Budget() {
   const [budgets, setBudgets] = React.useState(null);
   const [statuses, setStatuses] = React.useState({}); // id -> status live
   const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
+  const [projects, setProjects] = React.useState([]);
+  const [accounts, setAccounts] = React.useState([]);
+  const [currencies, setCurrencies] = React.useState([]);
+  const [defCur, setDefCur] = React.useState("");
 
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.budgets();
+      const arr = Array.isArray(list) ? list : [];
+      setBudgets(arr);
+      const entries = await Promise.all(arr.map(async (b) => {
+        try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
+      }));
+      setStatuses(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setBudgets([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  // Projets + comptes + devises pour le formulaire (best-effort, n'empêche pas l'écran).
   React.useEffect(() => {
     (async () => {
       try {
-        const list = await api.budgets();
-        const arr = Array.isArray(list) ? list : [];
-        setBudgets(arr);
-        const entries = await Promise.all(arr.map(async (b) => {
-          try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
-        }));
-        setStatuses(Object.fromEntries(entries));
-      } catch (e) { setError(String(e.message || e)); setBudgets([]); }
+        const [proj, acc, cur, set] = await Promise.allSettled([api.projects(), api.accounts(), api.currencies(), api.setting()]);
+        if (proj.status === "fulfilled") setProjects(Array.isArray(proj.value) ? proj.value : []);
+        if (acc.status === "fulfilled") setAccounts(asArray(acc.value, "balances"));
+        const curList = cur.status === "fulfilled" ? (cur.value?.getAllCurrency || (Array.isArray(cur.value) ? cur.value : [])) : [];
+        setCurrencies(curList);
+        const sId = set.status === "fulfilled" ? set.value?.currencyId : null;
+        setDefCur(sId != null ? String(sId) : (curList[0] ? String(curList[0].currencyId ?? curList[0].id) : ""));
+      } catch { /* ignore : la création reste possible mais sans listes */ }
     })();
   }, []);
+
+  const expenseAccounts = accounts.filter((a) => accountType(a) === "Expense");
+  const curOptions = currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyCode || c.currencyName || String(c.currencyId ?? c.id) }));
+  const projectOptions = projects.map((p) => ({ value: String(p.id), label: p.name }));
+
+  const newBudget = () => setShowNew(true);
+  const submitBudget = async (form) => {
+    const plannedAmount = Number(String(form.plannedAmount || "").replace(/\s/g, ""));
+    if (!plannedAmount || plannedAmount <= 0) { setError("Le montant planifié doit être positif."); return; }
+    if (!form.accountId) { setError("Choisir un compte comptable pour la ligne budgétaire."); return; }
+    setBusy(true); setError("");
+    try {
+      const budget = await api.createBudget({
+        name: form.name,
+        projectId: form.projectId ? Number(form.projectId) : undefined,
+        currencyId: form.currencyId ? Number(form.currencyId) : undefined,
+      });
+      await api.addBudgetLine(budget.id, {
+        accountId: Number(form.accountId),
+        plannedAmount,
+        label: form.label || undefined,
+        projectId: form.projectId ? Number(form.projectId) : undefined,
+      });
+      setShowNew(false);
+      await load();
+    } catch (e) { setError(permError(e, "créer le budget")); }
+    finally { setBusy(false); }
+  };
+
+  const newBudgetModal = showNew && (
+    <FormModal
+      title="Nouveau budget"
+      subtitle="Budget lié à un projet + première ligne budgétaire"
+      submitLabel="Créer le budget"
+      busy={busy}
+      onClose={() => setShowNew(false)}
+      onSubmit={submitBudget}
+      fields={[
+        { key: "name", label: "Nom du budget", required: true },
+        { key: "projectId", label: "Projet lié (optionnel)", type: "select", options: projectOptions },
+        { key: "accountId", label: "Compte comptable (ligne budgétaire)", type: "select", required: true,
+          options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+        { key: "label", label: "Libellé de la ligne (optionnel)" },
+        { key: "plannedAmount", label: "Montant planifié", type: "money", required: true, placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curOptions: curOptions, default: "", curDefault: defCur },
+      ]}
+    />
+  );
 
   // Pas de budget réel (ou API indispo) : ne pas afficher de fausses lignes.
   if (budgets && budgets.length === 0) {
     return (
       <>
-        <PageHead eyebrow="Suivi budgétaire" title="Budget vs réalisé" />
+        <PageHead eyebrow="Suivi budgétaire" title="Budget vs réalisé" action="Nouveau budget" onAction={newBudget} disabled={busy} />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API budget indisponible.</b> <span className="tiny">{error}</span></div>}
-        <EmptyState title="Aucun budget réel" detail="Le suivi budgétaire utilise `/budget/:id/status-ledger` et s'affichera après création d'un budget avec lignes." icon="piggyBank" />
+        <EmptyState title="Aucun budget réel" detail="Le suivi budgétaire utilise `/budget/:id/status-ledger` et s'affichera après création d'un budget avec lignes." action="Nouveau budget" onAction={newBudget} icon="piggyBank" />
+        {newBudgetModal}
       </>
     );
   }
@@ -2026,7 +2096,7 @@ function Budget() {
   const fmt = (v) => nf.format(Number(v || 0));
   return (
     <>
-      <PageHead eyebrow="Suivi budgétaire · live grand livre" title="Budget vs réalisé" />
+      <PageHead eyebrow="Suivi budgétaire · live grand livre" title="Budget vs réalisé" action="Nouveau budget" onAction={newBudget} disabled={busy} />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       {budgets === null && <div className="card pad muted">Chargement…</div>}
       {(budgets || []).map((b) => {
@@ -2054,6 +2124,7 @@ function Budget() {
           </div>
         );
       })}
+      {newBudgetModal}
     </>
   );
 }
