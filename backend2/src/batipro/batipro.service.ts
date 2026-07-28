@@ -1893,7 +1893,9 @@ export class BatiproService {
     const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
     const budget = Number(project.budget ?? 0);
     const contractAmount = Number(project.contractAmount ?? 0);
-    const spent = Number(project.spent ?? 0);
+    // "spent" reflete le decaisse reel (paye sur BC actifs), pas la colonne figee
+    // batipro_projects.spent (saisie manuelle historique, jamais recalculee).
+    const spent = costActual;
     const referenceBudget = contractAmount || budget;
     const otherCurrencyAmounts = otherCurrencyAgg
       .map((row) => ({ currency_code: row.currencyCode ?? null, amount: Number(row.total ?? 0) }))
