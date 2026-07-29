@@ -37,51 +37,51 @@ const CATS = [
   { key:'finance', icon:I.wallet, c:grad('#2563eb','#0ea5e9'),
     fr:'Finance', en:'Finance', fr_s:'Compta, factures, trésorerie', en_s:'Accounting, billing, cash',
     apps:[
-      {fr:'Comptabilité',en:'Accounting',fr_d:'Multi-devises',en_d:'Multi-currency',icon:I.wallet,c:grad('#2563eb','#0ea5e9')},
-      {fr:'Facturation',en:'Invoicing',fr_d:'Devis & factures',en_d:'Quotes & bills',icon:I.file,c:grad('#38bdf8','#0284c7')},
-      {fr:'Dépenses',en:'Expenses',fr_d:'Notes de frais',en_d:'Expense reports',icon:I.receipt,c:grad('#0ea5e9','#0369a1')},
-      {fr:'Analytique',en:'Analytics',fr_d:'Tableaux de bord',en_d:'Dashboards',icon:I.chart,c:grad('#60a5fa','#2563eb')},
-      {fr:'KodaPay',en:'KodaPay',fr_d:'Commande & paiement resto (QR code)',en_d:'Restaurant order & payment (QR code)',icon:I.qrpay,c:grad('#1f6d75','#123f46'),soon:true},
+      {fr:'Comptabilité',en:'Accounting',fr_d:'Multi-devises',en_d:'Multi-currency',icon:I.wallet},
+      {fr:'Facturation',en:'Invoicing',fr_d:'Devis & factures',en_d:'Quotes & bills',icon:I.file},
+      {fr:'Dépenses',en:'Expenses',fr_d:'Notes de frais',en_d:'Expense reports',icon:I.receipt},
+      {fr:'Analytique',en:'Analytics',fr_d:'Tableaux de bord',en_d:'Dashboards',icon:I.chart},
+      {fr:'KodaPay',en:'KodaPay',fr_d:'Commande & paiement resto (QR code)',en_d:'Restaurant order & payment (QR code)',icon:I.qrpay,soon:true},
     ]},
   { key:'sales', icon:I.target, c:grad('#a78bfa','#7c3aed'),
     fr:'Ventes', en:'Sales', fr_s:'CRM, devis, point de vente', en_s:'CRM, quotes, POS',
     apps:[
-      {fr:'CRM',en:'CRM',fr_d:'Pipeline & opportunités',en_d:'Pipeline & deals',icon:I.target,c:grad('#a78bfa','#7c3aed')},
-      {fr:'Ventes',en:'Sales',fr_d:'Bons de commande',en_d:'Sales orders',icon:I.file,c:grad('#8b5cf6','#6d28d9')},
-      {fr:'Point de vente',en:'Point of Sale',fr_d:'Caisse & terrain',en_d:'Cashier & field',icon:I.cart,c:grad('#fb923c','#ea580c')},
-      {fr:'Emailing',en:'Email Marketing',fr_d:'Campagnes',en_d:'Campaigns',icon:I.mail,c:grad('#f472b6','#db2777')},
+      {fr:'CRM',en:'CRM',fr_d:'Pipeline & opportunités',en_d:'Pipeline & deals',icon:I.target},
+      {fr:'Ventes',en:'Sales',fr_d:'Bons de commande',en_d:'Sales orders',icon:I.file},
+      {fr:'Point de vente',en:'Point of Sale',fr_d:'Caisse & terrain',en_d:'Cashier & field',icon:I.cart},
+      {fr:'Emailing',en:'Email Marketing',fr_d:'Campagnes',en_d:'Campaigns',icon:I.mail},
     ]},
   { key:'ops', icon:I.pkg, c:grad('#34d399','#059669'),
     fr:'Opérations', en:'Operations', fr_s:'Stock, achats, logistique', en_s:'Inventory, purchase, logistics',
     apps:[
-      {fr:'Stock',en:'Inventory',fr_d:'Entrepôts & lots',en_d:'Warehouses & lots',icon:I.pkg,c:grad('#34d399','#059669')},
-      {fr:'Achats',en:'Purchase',fr_d:'Fournisseurs',en_d:'Suppliers',icon:I.truck,c:grad('#fb7185','#e11d48')},
-      {fr:'Maintenance',en:'Maintenance',fr_d:'Interventions',en_d:'Work orders',icon:I.wrench,c:grad('#f59e0b','#d97706')},
+      {fr:'Stock',en:'Inventory',fr_d:'Entrepôts & lots',en_d:'Warehouses & lots',icon:I.pkg},
+      {fr:'Achats',en:'Purchase',fr_d:'Fournisseurs',en_d:'Suppliers',icon:I.truck},
+      {fr:'Maintenance',en:'Maintenance',fr_d:'Interventions',en_d:'Work orders',icon:I.wrench},
     ]},
-  { key:'field', icon:FARMOS_IMG, img:true,
+  { key:'field', icon:FARMOS_IMG, img:true, c:grad('#2dd4bf','#0d9488'),
     fr:'Métiers de terrain', en:'Field businesses', fr_s:'Immobilier, chantier, élevage', en_s:'Real estate, construction, livestock',
     apps:[
-      {fr:'Immobilier',en:'Real Estate',fr_d:'Baux & loyers',en_d:'Leases & rent',icon:I.building,c:grad('#2dd4bf','#0d9488')},
-      {fr:'BatiPro',en:'BatiPro',fr_d:'Chantiers BTP',en_d:'Construction sites',icon:I.hat,c:grad('#1d4ed8','#f59e0b')},
+      {fr:'Immobilier',en:'Real Estate',fr_d:'Baux & loyers',en_d:'Leases & rent',icon:I.building},
+      {fr:'BatiPro',en:'BatiPro',fr_d:'Chantiers BTP',en_d:'Construction sites',icon:I.hat},
       {fr:'FarmOS',en:'FarmOS',fr_d:'Élevage & culture',en_d:'Livestock & crops',img:FARMOS_IMG},
-      {fr:'Cultures',en:'Crops',fr_d:'Parcelles & récoltes',en_d:'Plots & harvests',icon:I.leaf,c:grad('#65a30d','#3f6212'),soon:true},
+      {fr:'Cultures',en:'Crops',fr_d:'Parcelles & récoltes',en_d:'Plots & harvests',icon:I.leaf,soon:true},
     ]},
   { key:'hr', icon:I.brief, c:grad('#14b8a6','#0f766e'),
     fr:'Ressources humaines', en:'Human Resources', fr_s:'Paie, congés, recrutement', en_s:'Payroll, leave, hiring',
     apps:[
-      {fr:'Employés',en:'Employees',fr_d:'Annuaire RH',en_d:'HR directory',icon:I.users,c:grad('#14b8a6','#0f766e')},
-      {fr:'Paie',en:'Payroll',fr_d:'Bulletins & cotisations',en_d:'Payslips & contributions',icon:I.wallet,c:grad('#0d9488','#115e59')},
-      {fr:'Congés',en:'Time Off',fr_d:'Demandes & soldes',en_d:'Requests & balances',icon:I.calendar,c:grad('#2dd4bf','#0d9488')},
-      {fr:'Recrutement',en:'Recruitment',fr_d:'Candidats & CV',en_d:'Applicants & CVs',icon:I.brief,c:grad('#2dd4bf','#0f766e')},
+      {fr:'Employés',en:'Employees',fr_d:'Annuaire RH',en_d:'HR directory',icon:I.users},
+      {fr:'Paie',en:'Payroll',fr_d:'Bulletins & cotisations',en_d:'Payslips & contributions',icon:I.wallet},
+      {fr:'Congés',en:'Time Off',fr_d:'Demandes & soldes',en_d:'Requests & balances',icon:I.calendar},
+      {fr:'Recrutement',en:'Recruitment',fr_d:'Candidats & CV',en_d:'Applicants & CVs',icon:I.brief},
     ]},
   { key:'prod', icon:I.kanban, c:grad('#84cc16','#4d7c0f'),
     fr:'Productivité', en:'Productivity', fr_s:'Projets, IA, paramétrage', en_s:'Projects, AI, settings',
     apps:[
-      {fr:'Projets',en:'Projects',fr_d:'Tâches & temps',en_d:'Tasks & time',icon:I.kanban,c:grad('#84cc16','#4d7c0f')},
-      {fr:'Assistant IA',en:'AI Assistant',fr_d:'Demandez, il agit',en_d:'Ask, it acts',icon:I.spark,c:grad('#6d5efc','#a78bfa')},
-      {fr:'Feuilles de temps',en:'Timesheets',fr_d:'Suivi des heures',en_d:'Hours tracking',icon:I.clock,c:grad('#84cc16','#4d7c0f')},
-      {fr:'Documents',en:'Documents',fr_d:'GED & signatures',en_d:'Files & e-sign',icon:I.book,c:grad('#94a3b8','#475569')},
-      {fr:'Paramètres',en:'Settings',fr_d:'Rôles & permissions',en_d:'Roles & permissions',icon:I.cog,c:grad('#64748b','#334155')},
+      {fr:'Projets',en:'Projects',fr_d:'Tâches & temps',en_d:'Tasks & time',icon:I.kanban},
+      {fr:'Assistant IA',en:'AI Assistant',fr_d:'Demandez, il agit',en_d:'Ask, it acts',icon:I.spark},
+      {fr:'Feuilles de temps',en:'Timesheets',fr_d:'Suivi des heures',en_d:'Hours tracking',icon:I.clock},
+      {fr:'Documents',en:'Documents',fr_d:'GED & signatures',en_d:'Files & e-sign',icon:I.book},
+      {fr:'Paramètres',en:'Settings',fr_d:'Rôles & permissions',en_d:'Roles & permissions',icon:I.cog},
     ]},
 ];
 
@@ -115,8 +115,9 @@ function det(a){
   return DET[a.en] || { fr_p:a.fr_d, en_p:a.en_d, f:[[a.fr_d,a.en_d],['Intégré au reste de la plateforme','Integrated with the rest of the platform'],['Inclus, même dans le forfait gratuit','Included, even on the free plan']] };
 }
 
-// rattache chaque app à sa catégorie (pour l'en-tête du modal)
-CATS.forEach(c => c.apps.forEach(a => { a._cat = c; }));
+// rattache chaque app à sa catégorie (pour l'en-tête du modal) ; les apps héritent
+// de la couleur de leur catégorie sauf si elles définissent la leur explicitement
+CATS.forEach(c => c.apps.forEach(a => { a._cat = c; if (!a.c) a.c = c.c; }));
 
 const isEn = computed(() => props.lang === 'en');
 const t = (fr, en) => (isEn.value ? en : fr);

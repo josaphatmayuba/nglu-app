@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Site marketing Avelomi — palette de la page "Toutes les applications" réduite à une couleur par catégorie (confort visuel).** [SCRUM] `avelomi-site/src/AllApps.vue` : chaque app avait sa propre couleur de dégradé (~22 teintes différentes affichées simultanément), ce qui chargeait visuellement la page sans réel gain de repérage. Les apps héritent désormais du dégradé de leur catégorie (6 couleurs au total) sauf déclaration explicite ; la catégorie "Métiers de terrain" (Immobilier/BâtiPro/FarmOS/Cultures), auparavant sans couleur propre, reçoit un dégradé teal. Purement visuel, aucun changement de comportement.
+
 - **Site marketing Avelomi — contraste des dégradés d'icônes trop clairs corrigé (accessibilité).** [SCRUM] `avelomi-site/src/AllApps.vue` : les dégradés `#a3e635`→`#65a30d` (Productivité, Projets, Feuilles de temps) et `#5eead4`→`#14b8a6` (Recrutement) offraient un contraste insuffisant avec les icônes/texte blancs superposés. Remplacés par des teintes plus foncées de la même famille (`#84cc16`→`#4d7c0f` pour le vert-citron, `#2dd4bf`→`#0f766e` pour le turquoise Recrutement), sans changer la palette globale ni le design. Purement visuel, aucun changement backend.
 
 - **Site marketing Avelomi — ajout de KodaPay (plateforme commande/paiement resto via QR code) dans la liste "Toutes les applications".** [SCRUM] `avelomi-site/src/AllApps.vue` : nouvelle entrée dans la catégorie Finance, badge "Bientôt" (aucune implémentation branchée, mockup autonome sous `mockup/KodaPay/`), avec une icône dédiée (`I.qrpay`, mini QR code) distincte du wallet générique et un dégradé teal reprenant l'identité visuelle du mockup. Purement front statique, aucun changement backend/migration.
