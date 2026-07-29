@@ -28,6 +28,7 @@ const I = {
   book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
   clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  qrpay:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM14 20h3M20 14v3M17 20h4v-3"/>',
 };
 const grad = (a, b) => `linear-gradient(135deg,${a},${b})`;
 const FARMOS_IMG = '/img/farmos-icon.png';
@@ -40,6 +41,7 @@ const CATS = [
       {fr:'Facturation',en:'Invoicing',fr_d:'Devis & factures',en_d:'Quotes & bills',icon:I.file,c:grad('#38bdf8','#0284c7')},
       {fr:'Dépenses',en:'Expenses',fr_d:'Notes de frais',en_d:'Expense reports',icon:I.receipt,c:grad('#0ea5e9','#0369a1')},
       {fr:'Analytique',en:'Analytics',fr_d:'Tableaux de bord',en_d:'Dashboards',icon:I.chart,c:grad('#60a5fa','#2563eb')},
+      {fr:'KodaPay',en:'KodaPay',fr_d:'Commande & paiement resto (QR code)',en_d:'Restaurant order & payment (QR code)',icon:I.qrpay,c:grad('#1f6d75','#123f46'),soon:true},
     ]},
   { key:'sales', icon:I.target, c:grad('#a78bfa','#7c3aed'),
     fr:'Ventes', en:'Sales', fr_s:'CRM, devis, point de vente', en_s:'CRM, quotes, POS',
