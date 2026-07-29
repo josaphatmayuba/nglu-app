@@ -1671,10 +1671,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     try { const { url } = await api.documentHtmlUrl(id); window.open(url, "_blank", "noopener"); }
     catch (err) { setError(err.message || String(err)); }
   };
-  const openAttachment = async (id) => {
-    try { const { url } = await api.documentAttachmentUrl(id); window.open(url, "_blank", "noopener"); }
-    catch (err) { setError(err.message || String(err)); }
-  };
+  const [attachModal, setAttachModal] = React.useState(null); // { id } de la facture dont on affiche la photo
   const removeDoc = async (id) => {
     if (!window.confirm("Supprimer ce bon de commande ?")) return;
     try { await api.deleteDocument(id); load(); }
@@ -1917,7 +1914,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                           <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
                                           {canPayInv && <button className="link" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
                                           {inv.attachedFileKey && (
-                                            <button className="link" onClick={() => openAttachment(inv.id)}>
+                                            <button className="link" onClick={() => setAttachModal({ id: inv.id })}>
                                               <Icon name="eye" /> Voir photo
                                             </button>
                                           )}
@@ -1997,7 +1994,46 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           onConfirm={confirmPayInvoice}
         />
       )}
+      {attachModal && (
+        <DocumentAttachmentModal id={attachModal.id} onClose={() => setAttachModal(null)} />
+      )}
     </>
+  );
+}
+
+// Modale de consultation de la photo/scan attachee a une facture fournisseur
+// (bouton "Voir photo") — fetch blob authentifie (jamais <img src> direct).
+function DocumentAttachmentModal({ id, onClose }) {
+  const [src, setSrc] = React.useState(null);
+  const [type, setType] = React.useState(null);
+  const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    let revoke; let active = true;
+    api.documentAttachmentUrl(id).then(({ url, type: t }) => {
+      if (!active) { URL.revokeObjectURL(url); return; }
+      revoke = url; setSrc(url); setType(t);
+    }).catch((err) => setError(err.message || String(err)));
+    return () => { active = false; if (revoke) URL.revokeObjectURL(revoke); };
+  }, [id]);
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Photo de la facture</h2></div>
+          <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="modal-body">
+          {error ? <p className="error-text">{error}</p> :
+            !src ? <p className="muted" style={{ fontSize: 12 }}>Chargement de l'aperçu…</p> :
+            type === "application/pdf" ? (
+              <embed src={src} type="application/pdf" style={{ width: "100%", height: 480, border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8 }} />
+            ) : (
+              <img src={src} alt="Photo de la facture" style={{ width: "100%", borderRadius: 8, border: "1px solid var(--ink-200, #cbd5e1)" }} />
+            )}
+        </div>
+      </div>
+    </div>
   );
 }
 
