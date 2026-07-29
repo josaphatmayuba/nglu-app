@@ -1334,7 +1334,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
-                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -1869,11 +1869,11 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canConfirm && <button className="link" disabled={busy === d.id} onClick={() => setConfirmModal(d)}>Confirmer</button>}
                       {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
-                      {canPost && <button className="link" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
-                      {canPay && <button className="link" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
+                      {canPost && <button className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
+                      {canPay && <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
                       {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
-                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -1912,7 +1912,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                       <td>
                                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                           <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
-                                          {canPayInv && <button className="link" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
+                                          {canPayInv && <button className="link link-success" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
                                           {inv.attachedFileKey && (
                                             <button className="link" onClick={() => setAttachModal({ id: inv.id })}>
                                               <Icon name="eye" /> Voir photo
@@ -2562,7 +2562,7 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
                 {receipts.map((r) => (
                   <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, gap: 8, padding: "4px 0", borderBottom: "1px solid var(--ink-100, #e2e8f0)" }}>
                     <span>{r.materialName || "—"} · {r.quantity}{r.materialUnit ? ` ${r.materialUnit}` : ""}{r.createdAt ? ` · ${new Date(r.createdAt).toLocaleDateString("fr-FR")}` : ""}</span>
-                    <button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }}
+                    <button type="button" className="link link-danger"
                       disabled={cancellingId === r.id} onClick={() => cancelOne(r.id)}>
                       {cancellingId === r.id ? "Annulation…" : "Annuler"}
                     </button>
@@ -2684,7 +2684,7 @@ function SituationsTravaux({ projects, canMutate, fixedProjectId }) {
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
-                      {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -2827,10 +2827,10 @@ function Factures({ projects, canMutate, fixedProjectId }) {
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                         {canMutate && d.status === "draft" && (
-                          <button className="link" disabled={busy === d.id} onClick={() => issue(d.id)}>Émettre / Comptabiliser</button>
+                          <button className="link link-accent" disabled={busy === d.id} onClick={() => issue(d.id)}>Émettre / Comptabiliser</button>
                         )}
                         {canMutate && (d.status === "issued") && (
-                          <button className="link" style={{ color: "var(--emerald-600)" }} disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
+                          <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
                         )}
                       </div>
                     </td>
@@ -3217,7 +3217,7 @@ function PhotoLightbox({ photo, tasks, canMutate, onClose, removePhoto }) {
           </div>
         ) : canMutate && (
           <div className="modal-actions">
-            <button type="button" className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => removePhoto(current.id)}>Retirer de la galerie</button>
+            <button type="button" className="link link-danger" onClick={() => removePhoto(current.id)}>Retirer de la galerie</button>
             <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)}>Modifier</button>
           </div>
         )}
@@ -3439,7 +3439,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
                   <td>
                     {s.status === "submitted" && canMutate ? (
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button className="link" onClick={() => reviewSubmission(s.id, "validate")}><Icon name="checkCheck" /> Valider</button>
+                        <button className="link link-accent" onClick={() => reviewSubmission(s.id, "validate")}><Icon name="checkCheck" /> Valider</button>
                         <button className="link" onClick={() => setModal({ kind: "returnSubmission", id: s.id })}>Renvoyer</button>
                       </div>
                     ) : <span className="muted">—</span>}
@@ -4073,7 +4073,7 @@ function Equipes({ canMutate }) {
                       <td>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           {canMutate && <button className="link" onClick={() => setModal(c)}>Modifier</button>}
-                          {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => remove(c.id)}>Suppr.</button>}
+                          {canMutate && <button className="link link-danger" onClick={() => remove(c.id)}>Suppr.</button>}
                         </div>
                       </td>
                     </tr>
@@ -4165,7 +4165,7 @@ function Ouvriers({ crews, canMutate }) {
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {canMutate && <button className="link" onClick={() => setModal(w)}>Modifier</button>}
-                        {canMutate && <button className="link" style={{ color: "var(--rose-600, #b91c1c)" }} onClick={() => remove(w.id)}>Suppr.</button>}
+                        {canMutate && <button className="link link-danger" onClick={() => remove(w.id)}>Suppr.</button>}
                       </div>
                     </td>
                   </tr>

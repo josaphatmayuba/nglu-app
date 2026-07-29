@@ -105,6 +105,17 @@ button, input, select, textarea { font: inherit; }
 .btn-ghost { background: #fff; border: 1px solid var(--ink-200); color: var(--ink-700); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
+/* Boutons d'action texte dans les listes/tableaux (Apercu, Confirmer, Suppr...) */
+.link { height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--ink-200); background: #fff; color: var(--ink-700); font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background .12s, border-color .12s; }
+.link:hover:not(:disabled) { background: var(--ink-50); border-color: var(--ink-300); }
+.link:disabled { opacity: .5; cursor: not-allowed; }
+.link-accent { color: var(--iris-700); border-color: var(--iris-100); background: var(--iris-50); }
+.link-accent:hover:not(:disabled) { background: var(--iris-100); border-color: var(--iris-500); }
+.link-success { color: var(--emerald-700); border-color: var(--emerald-100); background: #ecfdf5; }
+.link-success:hover:not(:disabled) { background: var(--emerald-100); border-color: var(--emerald-500); }
+.link-danger { color: var(--rose-700); border-color: var(--rose-200); background: var(--rose-100); }
+.link-danger:hover:not(:disabled) { background: var(--rose-200); border-color: var(--rose-500); }
+
 /* Cards & chips */
 .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; }
 .pad { padding: 18px; }
