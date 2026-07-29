@@ -1833,7 +1833,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
               !docs.length ? <tr><td colSpan={8} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
               docs.map((d) => {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
-                const canPay = canMutate && d.status !== "cancelled";
+                const canPay = canMutate && d.status !== "cancelled" && balance > 0.001;
                 const canPost = canMutate && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
                 const canConfirm = canMutate && d.status === "sent";
                 const canReceive = canMutate && ["sent", "confirmed", "partially_received"].includes(d.status);
