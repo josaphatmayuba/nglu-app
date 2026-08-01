@@ -229,6 +229,29 @@ export class BatiproService {
       .where(and(eq(batiproProjects.id, id), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
       .limit(1);
     if (!row) throw new NotFoundException("Chantier introuvable.");
+    // Si le marche n'a jamais ete saisi a la main sur le chantier, on retombe
+    // sur le total du devis accepte (meme regle que projectBudgetSummary), pour
+    // que l'onglet Avenants & sous-traitants n'affiche pas 0 par defaut.
+    if (Number(row.contractAmount ?? 0) === 0) {
+      const projectCurrencyId = row.currencyId ?? null;
+      const sameCurrency = projectCurrencyId != null
+        ? sql`(${batiproDocuments.currencyId} = ${projectCurrencyId} OR ${batiproDocuments.currencyId} IS NULL)`
+        : sql`${batiproDocuments.currencyId} IS NULL`;
+      const [quoteAgg] = await this.db
+        .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
+        .from(batiproDocuments)
+        .where(and(
+          eq(batiproDocuments.projectId, id),
+          eq(batiproDocuments.organizationId, orgId),
+          eq(batiproDocuments.isActive, 1),
+          eq(batiproDocuments.direction, "outbound"),
+          eq(batiproDocuments.type, "quote"),
+          eq(batiproDocuments.status, "accepted"),
+          sameCurrency,
+        ));
+      const quoteAccepted = Number(quoteAgg?.total ?? 0);
+      if (quoteAccepted > 0) row.contractAmount = String(quoteAccepted);
+    }
     return row;
   }
 
@@ -3206,7 +3229,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     }
   }
 
-  async uploadSitePhoto(projectId: number, file: any, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+  async uploadSitePhoto(projectId: number, file: any, orgId: number, userId: number | undefined, scope: BatiproProjectScope, opts?: { kind?: string; linkedDocumentId?: number }) {
     await this.assertProjectInScope(projectId, orgId, scope);
     const stored = await this.objectStorage.putDocument(file, `batipro/site-photos/${orgId}/${projectId}`);
     const [result] = await this.db.insert(batiproSitePhotos).values({
@@ -3216,14 +3239,15 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
       fileFormat: stored.mimeType.split("/")[1] || null,
       fileSize: stored.sizeBytes,
       uploadedBy: userId ?? null,
-      kind: "site",
+      kind: opts?.kind || "site",
+      linkedDocumentId: opts?.linkedDocumentId ?? null,
     }).$returningId();
     const id = Number(result.id);
     await this.publish("createSitePhoto", ["photos"], "created", id, orgId);
     return this.getSitePhoto(id, orgId);
   }
 
-  async sitePhotos(projectId: number, orgId: number, scope: BatiproProjectScope, filters: { from?: string; to?: string; taskId?: number }) {
+  async sitePhotos(projectId: number, orgId: number, scope: BatiproProjectScope, filters: { from?: string; to?: string; taskId?: number; linkedDocumentId?: number }) {
     await this.assertProjectInScope(projectId, orgId, scope);
     const conditions = [
       eq(batiproSitePhotos.projectId, projectId),
@@ -3233,6 +3257,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     if (filters.from) conditions.push(gte(batiproSitePhotos.takenAt, new Date(filters.from)));
     if (filters.to) conditions.push(lte(batiproSitePhotos.takenAt, new Date(filters.to)));
     if (filters.taskId) conditions.push(eq(batiproSitePhotos.taskId, filters.taskId));
+    if (filters.linkedDocumentId) conditions.push(eq(batiproSitePhotos.linkedDocumentId, filters.linkedDocumentId));
     return this.db
       .select()
       .from(batiproSitePhotos)
