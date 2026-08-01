@@ -708,9 +708,14 @@ export class BatiproController {
     @CurrentOrg() orgId: number,
     @CurrentUserId() userId: number,
     @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Query("kind") kind?: string,
+    @Query("linkedDocumentId") linkedDocumentId?: string,
   ) {
     if (!photo) throw new BadRequestException("Aucun fichier.");
-    return this.batipro.uploadSitePhoto(projectId, photo, orgId, userId || undefined, scope);
+    return this.batipro.uploadSitePhoto(projectId, photo, orgId, userId || undefined, scope, {
+      kind,
+      linkedDocumentId: linkedDocumentId ? Number(linkedDocumentId) : undefined,
+    });
   }
 
   @ApiOperation({ summary: "List site photos of a project (chronological, filters optionnels)" })
@@ -723,8 +728,13 @@ export class BatiproController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("taskId") taskId?: string,
+    @Query("linkedDocumentId") linkedDocumentId?: string,
   ) {
-    return this.batipro.sitePhotos(projectId, orgId, scope, { from, to, taskId: taskId ? Number(taskId) : undefined });
+    return this.batipro.sitePhotos(projectId, orgId, scope, {
+      from, to,
+      taskId: taskId ? Number(taskId) : undefined,
+      linkedDocumentId: linkedDocumentId ? Number(linkedDocumentId) : undefined,
+    });
   }
 
   @ApiOperation({ summary: "Stream a site photo file" })

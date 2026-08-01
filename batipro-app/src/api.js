@@ -212,10 +212,14 @@ export const api = {
   // Galerie photo de chantier — l'upload backend n'accepte que le fichier
   // (champ "photo"). caption/taken_at/task_id sont appliqués via un PUT
   // immédiat après upload (2 appels, cf. batipro.controller.ts).
-  uploadPhoto: async (projectId, file, { caption, takenAt, taskId } = {}) => {
+  uploadPhoto: async (projectId, file, { caption, takenAt, taskId, kind, linkedDocumentId } = {}) => {
     const fd = new FormData();
     fd.append("photo", file);
-    const created = await uploadForm(`/projects/${projectId}/photos`, fd);
+    const uq = new URLSearchParams();
+    if (kind) uq.set("kind", kind);
+    if (linkedDocumentId) uq.set("linkedDocumentId", linkedDocumentId);
+    const uqs = uq.toString();
+    const created = await uploadForm(`/projects/${projectId}/photos${uqs ? `?${uqs}` : ""}`, fd);
     const patch = {};
     if (caption) patch.caption = caption;
     if (takenAt) patch.taken_at = takenAt;
@@ -223,11 +227,12 @@ export const api = {
     if (created?.id && Object.keys(patch).length) return jsonFetch(`/photos/${created.id}`, { method: "PUT", body: JSON.stringify(patch) });
     return created;
   },
-  listPhotos: (projectId, { from, to, taskId } = {}) => {
+  listPhotos: (projectId, { from, to, taskId, linkedDocumentId } = {}) => {
     const qs = new URLSearchParams();
     if (from) qs.set("from", from);
     if (to) qs.set("to", to);
     if (taskId) qs.set("taskId", taskId);
+    if (linkedDocumentId) qs.set("linkedDocumentId", linkedDocumentId);
     const q = qs.toString();
     return jsonFetch(`/projects/${projectId}/photos${q ? `?${q}` : ""}`);
   },
