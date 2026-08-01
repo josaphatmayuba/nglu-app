@@ -186,7 +186,7 @@ function App() {
   const materialRows = snapshot?.materials || [];
   const canMutate = apiStatus === "api";
 
-  const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
+  const go = (id) => { setRoute(id); setOpenProjectId(null); setMoreOpen(false); window.scrollTo(0, 0); };
 
   // Ouvre le chantier concerné par une notification (task/document/project → page dédiée du projet).
   const goToProject = (projectId) => {
@@ -2434,12 +2434,15 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [cancellingId, setCancellingId] = React.useState(null);
+  const [photos, setPhotos] = React.useState([]);
+  const [existingPhotos, setExistingPhotos] = React.useState([]);
+  const [uploadingPhotos, setUploadingPhotos] = React.useState(false);
 
   const reload = React.useCallback(() => {
     let active = true;
     setLoading(true);
-    Promise.all([api.getDocument(doc.id), api.stockMovements(doc.projectId)])
-      .then(([full, movements]) => {
+    Promise.all([api.getDocument(doc.id), api.stockMovements(doc.projectId), api.listPhotos(doc.projectId, { linkedDocumentId: doc.id })])
+      .then(([full, movements, docPhotos]) => {
         if (!active) return;
         const all = full.lines || [];
         const tracked = all.filter((l) => l.materialId != null);
@@ -2451,6 +2454,7 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
           return { id: l.id, designation: l.designation, ordered, received, remaining, input: remaining };
         }));
         setReceipts((movements || []).filter((m) => m.documentId === doc.id && m.movementType === "reception"));
+        setExistingPhotos((docPhotos || []).filter((p) => p.kind === "reception"));
       })
       .catch((err) => setError(err.message || String(err)))
       .finally(() => { if (active) setLoading(false); });
@@ -2461,6 +2465,13 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
 
   const setInput = (lineId, v) => setLines((c) => c.map((l) => (l.id === lineId ? { ...l, input: v } : l)));
   const receiveAll = () => setLines((c) => c.map((l) => ({ ...l, input: l.remaining })));
+
+  const addPhotos = (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setPhotos((c) => [...c, ...files]);
+  };
+  const removePhoto = (idx) => setPhotos((c) => c.filter((_, i) => i !== idx));
 
   const cancelOne = async (movementId) => {
     setError("");
@@ -2481,8 +2492,17 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
     };
     if (!payload.lines.length) { setError("Saisissez au moins une quantité reçue."); return; }
     setBusy(true);
-    try { await onConfirm(payload); }
-    catch (err) { setError(err.message || String(err)); setBusy(false); }
+    try {
+      await onConfirm(payload);
+      if (photos.length) {
+        setUploadingPhotos(true);
+        for (const file of photos) {
+          await api.uploadPhoto(doc.projectId, file, { takenAt: receivedDate, kind: "reception", linkedDocumentId: doc.id });
+        }
+        setUploadingPhotos(false);
+      }
+    }
+    catch (err) { setError(err.message || String(err)); setBusy(false); setUploadingPhotos(false); }
   };
 
   return (
@@ -2579,10 +2599,33 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
             </div>
             <label className="field"><span>Note</span><textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions sur la réception…" /></label>
 
+            <label className="field">
+              <span>Photos de la réception (optionnel, plusieurs possibles)</span>
+              <input type="file" accept="image/*" capture="environment" multiple onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
+            </label>
+            {photos.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {photos.map((f, idx) => (
+                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, background: "var(--ink-50)", borderRadius: 6, padding: "4px 8px" }}>
+                    <span>{f.name}</span>
+                    <button type="button" className="icon-btn" onClick={() => removePhoto(idx)}><Icon name="x" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {existingPhotos.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Photos déjà jointes</span>
+                <div className="photo-grid">
+                  {existingPhotos.map((p) => <PhotoThumb key={p.id} photo={p} onOpen={() => {}} />)}
+                </div>
+              </div>
+            )}
+
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-              <button className="btn btn-amber grad-amber" disabled={busy || !lines.length} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer la réception"}</button>
+              <button className="btn btn-amber grad-amber" disabled={busy || !lines.length} onClick={save}>{uploadingPhotos ? "Envoi des photos…" : busy ? "Enregistrement…" : "Enregistrer la réception"}</button>
             </div>
           </div>
         )}
