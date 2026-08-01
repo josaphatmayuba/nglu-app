@@ -63,6 +63,9 @@ export class BatiproPublicDocumentsController {
   @ApiParam({ name: "token", type: String })
   @Header("Content-Type", "text/html; charset=utf-8")
   @Header("Cache-Control", "no-store")
+  // Surcharge le CSP global (frame-ancestors 'none' pose par Helmet) : cette page
+  // est concue pour etre chargee dans l'iframe de ClientDocument.jsx, meme origine.
+  @Header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'self'")
   @Get(":token")
   view(@Param("token") token: string) {
     return this.batipro.publicDocumentHtml(token);
