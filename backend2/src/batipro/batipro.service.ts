@@ -263,7 +263,7 @@ export class BatiproService {
       client: input.client ?? null,
       manager: input.manager ?? null,
       status: input.status ?? "Planifie",
-      progress: input.progress ?? 0,
+      progress: 0,
       budget: String(input.budget ?? 0),
       spent: String(input.spent ?? 0),
       currencyId: input.currency_id ?? null,
@@ -288,9 +288,8 @@ export class BatiproService {
     if (input.client !== undefined) patch.client = input.client || null;
     if (input.manager !== undefined) patch.manager = input.manager || null;
     if (input.status !== undefined) patch.status = input.status;
-    if (input.progress !== undefined) patch.progress = input.progress;
+    // progress/spent/billed_amount ne sont plus editables a la main : calcules serveur (phases/projectBudgetSummary).
     if (input.budget !== undefined) patch.budget = String(input.budget);
-    // spent/billed_amount ne sont plus editables a la main : calcules par projectBudgetSummary.
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.contract_amount !== undefined) patch.contractAmount = String(input.contract_amount);
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
@@ -624,6 +623,22 @@ export class BatiproService {
       .orderBy(batiproPhases.projectId, batiproPhases.position);
   }
 
+  // Avancement du chantier = moyenne des % des phases actives, ponderee par
+  // plannedBudget. Si aucune phase n'a de budget planifie renseigne, on
+  // retombe sur une moyenne simple. Sans phase, avancement = 0.
+  private async recomputeProjectProgress(orgId: number, projectId: number) {
+    const phases = await this.phases(orgId, projectId);
+    if (!phases.length) {
+      await this.db.update(batiproProjects).set({ progress: 0 }).where(eq(batiproProjects.id, projectId));
+      return;
+    }
+    const totalBudget = phases.reduce((sum, p) => sum + Number(p.plannedBudget || 0), 0);
+    const progress = totalBudget > 0
+      ? phases.reduce((sum, p) => sum + Number(p.progress || 0) * Number(p.plannedBudget || 0), 0) / totalBudget
+      : phases.reduce((sum, p) => sum + Number(p.progress || 0), 0) / phases.length;
+    await this.db.update(batiproProjects).set({ progress: Math.round(progress) }).where(eq(batiproProjects.id, projectId));
+  }
+
   async getPhase(id: number, orgId: number) {
     const [row] = await this.db
       .select()
@@ -650,12 +665,13 @@ export class BatiproService {
       capMode: input.cap_mode ?? "planning",
     }).$returningId();
     const id = Number(result.id);
+    await this.recomputeProjectProgress(orgId, input.project_id);
     await this.publish("createPhase", ["phases"], "created", id, orgId);
     return this.getPhase(id, orgId);
   }
 
   async updatePhase(id: number, input: UpdateBatiproPhaseDto, orgId: number) {
-    await this.getPhase(id, orgId);
+    const existing = await this.getPhase(id, orgId);
     const patch: Partial<typeof batiproPhases.$inferInsert> = {};
     if (input.project_id !== undefined) patch.projectId = input.project_id;
     if (input.label !== undefined) patch.label = input.label;
@@ -669,13 +685,15 @@ export class BatiproService {
     if (input.planned_duration_days !== undefined) patch.plannedDurationDays = input.planned_duration_days ?? null;
     if (input.cap_mode !== undefined) patch.capMode = input.cap_mode;
     if (Object.keys(patch).length) await this.db.update(batiproPhases).set(patch).where(eq(batiproPhases.id, id));
+    await this.recomputeProjectProgress(orgId, input.project_id ?? existing.projectId);
     await this.publish("updatePhase", ["phases"], "updated", id, orgId);
     return this.getPhase(id, orgId);
   }
 
   async deletePhase(id: number, orgId: number) {
-    await this.getPhase(id, orgId);
+    const existing = await this.getPhase(id, orgId);
     await this.db.update(batiproPhases).set({ isActive: 0 }).where(and(eq(batiproPhases.id, id), eq(batiproPhases.organizationId, orgId)));
+    await this.recomputeProjectProgress(orgId, existing.projectId);
     await this.publish("deletePhase", ["phases"], "deleted", id, orgId);
     return { message: "Phase supprimee." };
   }

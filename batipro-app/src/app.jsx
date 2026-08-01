@@ -4464,7 +4464,7 @@ function payloadFor(kind, form) {
   if (kind === "project") {
     return {
       code: form.code || `BAT-${Date.now()}`, name: form.name, client: form.client || null, manager: form.manager || null,
-      status: form.status || "Planifie", progress: n(form.progress), budget: n(form.budget), spent: n(form.spent),
+      status: form.status || "Planifie", budget: n(form.budget), spent: n(form.spent),
       currency_id: form.currency_id ? Number(form.currency_id) : null,
       contract_amount: n(form.contractAmount), billed_amount: n(form.billedAmount),
       due_date: form.dueDate || form.due || null, location: form.location || null, risk: form.risk || "Faible",
@@ -4509,7 +4509,6 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Client" value={form.client || ""} onChange={(v) => set("client", v)} />
               <Field label="Responsable" value={form.manager || ""} onChange={(v) => set("manager", v)} />
               <Field label="Lieu" value={form.location || ""} onChange={(v) => set("location", v)} />
-              <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
               <label className="field">
                 <span>Devise</span>
                 <CurrencyPicker value={form.currency_id || ""} onChange={(id) => set("currency_id", id || null)} currencies={currencies} />
