@@ -2450,6 +2450,7 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
   const [photos, setPhotos] = React.useState([]);
   const [existingPhotos, setExistingPhotos] = React.useState([]);
   const [uploadingPhotos, setUploadingPhotos] = React.useState(false);
+  const receptionPhotoInputRef = React.useRef(null);
 
   const reload = React.useCallback(() => {
     let active = true;
@@ -2612,10 +2613,21 @@ function ReceivePoModal({ doc, currencyCode, onClose, onConfirm }) {
             </div>
             <label className="field"><span>Note</span><textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 60 }} placeholder="Précisions sur la réception…" /></label>
 
-            <label className="field">
-              <span>Photos de la réception (optionnel, plusieurs possibles)</span>
-              <input type="file" accept="image/*" capture="environment" multiple onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }} />
-            </label>
+            <input
+              ref={receptionPhotoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => receptionPhotoInputRef.current?.click()}>
+                <Icon name="camera" /> Photos de la réception
+              </button>
+              <span className="muted" style={{ fontSize: 12 }}>Optionnel, plusieurs possibles</span>
+            </div>
             {photos.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {photos.map((f, idx) => (
@@ -3173,6 +3185,7 @@ function PhotoUploadModal({ projectId, tasks, onClose, onSaved }) {
   const [taskId, setTaskId] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const photoFileInputRef = React.useRef(null);
 
   const save = async () => {
     if (!file) { setError("Choisissez ou prenez une photo."); return; }
@@ -3192,10 +3205,20 @@ function PhotoUploadModal({ projectId, tasks, onClose, onSaved }) {
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <label className="field">
-            <span>Photo</span>
-            <input type="file" accept="image/*" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          </label>
+          <input
+            ref={photoFileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-ghost" onClick={() => photoFileInputRef.current?.click()}>
+              <Icon name="camera" /> {file ? "Reprendre la photo" : "Photo"}
+            </button>
+            {file && <span className="chip amber" style={{ fontSize: 12 }}>{file.name}</span>}
+          </div>
           <label className="field"><span>Légende (optionnel)</span><input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Ex. Coulage dalle RDC" /></label>
           <label className="field"><span>Date</span><input type="date" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} /></label>
           <label className="field">
