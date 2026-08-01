@@ -514,6 +514,19 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
             </div>
             <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>{p.client} · {p.location}</div>
             <div className="progress"><span className="grad-amber" style={{ width: `${n(p.progress)}%` }} /></div>
+            {(() => {
+              const budget = n(p.reference_budget ?? p.budget);
+              const spent = n(p.cost_actual ?? p.spent);
+              const budgetPct = budget ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  <div className="progress" style={{ flex: 1 }}>
+                    <span style={{ width: `${budgetPct}%`, background: "var(--ink-900)" }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{budgetPct} %</span>
+                </div>
+              );
+            })()}
             <div className="proj-meta">
               <span>{money(p.cost_actual ?? p.spent, p.currencyCode)} / {money(p.reference_budget ?? p.budget, p.currencyCode)}</span>
               <span className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}>{p.risk}</span>
