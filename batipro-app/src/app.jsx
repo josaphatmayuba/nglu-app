@@ -510,27 +510,34 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
           <div className="card pad" key={p.id} onClick={() => onOpen?.(p.id)} style={{ cursor: "pointer" }}>
             <div className="proj-card-head">
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-              <span className="chip amber" style={{ marginLeft: "auto" }}>{n(p.progress)} %</span>
             </div>
-            <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>{p.client} · {p.location}</div>
-            <div className="progress"><span className="grad-amber" style={{ width: `${n(p.progress)}%` }} /></div>
+            <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 10 }}>{p.client} · {p.location}</div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>
+              <span>Avancement chantier</span>
+              <b style={{ fontSize: 13, color: "var(--ink-900)" }}>{n(p.progress)} %</b>
+            </div>
+            <div className="progress" style={{ marginBottom: 10 }}><span className="grad-amber" style={{ width: `${n(p.progress)}%` }} /></div>
+
             {(() => {
               const budget = n(p.reference_budget ?? p.budget);
               const spent = n(p.cost_actual ?? p.spent);
               const budgetPct = budget ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
               return (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
-                  <div className="progress" style={{ flex: 1 }}>
-                    <span style={{ width: `${budgetPct}%`, background: "var(--ink-900)" }} />
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>
+                    <span>Budget consommé</span>
+                    <b style={{ fontSize: 13, color: "var(--ink-900)" }}>{budgetPct} %</b>
                   </div>
-                  <span style={{ fontSize: 11, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{budgetPct} %</span>
-                </div>
+                  <div className="progress"><span style={{ width: `${budgetPct}%`, background: "var(--ink-900)" }} /></div>
+                </>
               );
             })()}
-            <div className="proj-meta">
+
+            <div className="proj-meta" style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--ink-100)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>{money(p.cost_actual ?? p.spent, p.currencyCode)} / {money(p.reference_budget ?? p.budget, p.currencyCode)}</span>
               <span
-                className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}
+                className={`chip ${p.risk === "Eleve" || p.risk === "Élevé" ? "rose" : p.risk === "Moyen" ? "amber" : "emerald"}`}
                 title="Risque calcule automatiquement (EVM par phase) : cout engage vs avancement. Voir l'onglet Aperçu du chantier pour le detail par phase."
               >
                 {p.risk}
