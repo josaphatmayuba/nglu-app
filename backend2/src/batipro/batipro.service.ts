@@ -627,16 +627,19 @@ export class BatiproService {
   }
 
   // Avancement du chantier = moyenne des % des phases actives, ponderee par
-  // plannedBudget. Si aucune phase n'a de budget planifie renseigne, on
-  // retombe sur une moyenne simple. Sans phase, avancement = 0.
+  // plannedBudget UNIQUEMENT SI TOUTES les phases ont un budget planifie
+  // renseigne (sinon une phase sans budget aurait un poids de 0 et son
+  // progress serait totalement ignore). Sinon, moyenne simple. Sans phase,
+  // avancement = 0.
   private async recomputeProjectProgress(orgId: number, projectId: number) {
     const phases = await this.phases(orgId, projectId);
     if (!phases.length) {
       await this.db.update(batiproProjects).set({ progress: 0 }).where(eq(batiproProjects.id, projectId));
       return;
     }
+    const allHaveBudget = phases.every((p) => Number(p.plannedBudget || 0) > 0);
     const totalBudget = phases.reduce((sum, p) => sum + Number(p.plannedBudget || 0), 0);
-    const progress = totalBudget > 0
+    const progress = allHaveBudget && totalBudget > 0
       ? phases.reduce((sum, p) => sum + Number(p.progress || 0) * Number(p.plannedBudget || 0), 0) / totalBudget
       : phases.reduce((sum, p) => sum + Number(p.progress || 0), 0) / phases.length;
     await this.db.update(batiproProjects).set({ progress: Math.round(progress) }).where(eq(batiproProjects.id, projectId));
