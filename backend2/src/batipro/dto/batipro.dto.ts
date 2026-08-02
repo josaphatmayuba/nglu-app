@@ -17,6 +17,9 @@ export class CreateBatiproProjectDto {
   @IsOptional() @IsDateString() start_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
   @IsOptional() @IsString() location?: string;
+  // Ignore par updateProject (risque = calcule serveur via EVM par phase, voir
+  // recomputeProjectRisk). Reste accepte a la creation uniquement (valeur initiale
+  // "Faible" avant qu'aucune phase/BC n'existe).
   @IsOptional() @IsString() risk?: string;
   @IsOptional() @IsString() notes?: string;
 }

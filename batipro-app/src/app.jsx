@@ -529,7 +529,12 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
             })()}
             <div className="proj-meta">
               <span>{money(p.cost_actual ?? p.spent, p.currencyCode)} / {money(p.reference_budget ?? p.budget, p.currencyCode)}</span>
-              <span className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}>{p.risk}</span>
+              <span
+                className={p.risk === "Eleve" || p.risk === "Élevé" ? "danger-txt" : ""}
+                title="Risque calcule automatiquement (EVM par phase) : cout engage vs avancement. Voir l'onglet Aperçu du chantier pour le detail par phase."
+              >
+                {p.risk}
+              </span>
             </div>
           </div>
         ))}
@@ -641,6 +646,41 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
                 </div>
               </div>
             </div>
+            {(() => {
+              const phasesEvm = budget?.phases_evm || [];
+              const worst = phasesEvm.reduce((acc, ph) => {
+                const rank = { Faible: 0, Moyen: 1, Eleve: 2 };
+                return !acc || rank[ph.risk] > rank[acc.risk] ? ph : acc;
+              }, null);
+              const lowCoverage = budget && n(budget.coverage_pct) < 60 && phasesEvm.length > 0;
+              const tone = p.risk === "Eleve" || p.risk === "Élevé" ? "rose" : (p.risk === "Moyen" ? "amber" : "emerald");
+              return (
+                <div className="card pad">
+                  <p className="kv-title"><Icon name="alert" /> Risque (calcul automatique)</p>
+                  <div
+                    className={`chip ${tone}`}
+                    style={{ marginBottom: 8 }}
+                    title="Calcule automatiquement par phase (EVM : cout engage en BC vs avancement saisi). Plus editable a la main."
+                  >
+                    {p.risk}
+                  </div>
+                  {worst ? (
+                    <div style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                      Phase la plus a risque : <strong>{worst.label}</strong> — avancement {n(worst.progress)}%,
+                      {" "}engagé {money(worst.spent_amount, worst.currency_code || budgetCur)} / prévu {money(worst.planned_budget, worst.currency_code || budgetCur)}
+                      {worst.cpi != null && <> (CPI {worst.cpi})</>}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "var(--ink-500)" }}>Aucun signal de derive détecté sur les phases actives.</div>
+                  )}
+                  {lowCoverage && (
+                    <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 6, display: "flex", alignItems: "center", gap: 4 }}>
+                      <Icon name="alert" /> Estimation partielle : {n(budget.coverage_pct)}% des achats seulement sont rattachés à une phase.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
         {tab === "devis" && <Devis projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}

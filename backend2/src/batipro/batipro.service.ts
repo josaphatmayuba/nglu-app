@@ -272,6 +272,9 @@ export class BatiproService {
       startDate: input.start_date ?? null,
       dueDate: input.due_date ?? null,
       location: input.location ?? null,
+      // Valeur initiale seulement : sans phase ni BC a la creation, le risque EVM
+      // est de toute facon "Faible" (aucun signal). Recalcule automatiquement des
+      // qu'une phase ou un bon de commande est ajoute (recomputeProjectRisk).
       risk: input.risk ?? "Faible",
       notes: input.notes ?? null,
     }).$returningId();
@@ -288,14 +291,14 @@ export class BatiproService {
     if (input.client !== undefined) patch.client = input.client || null;
     if (input.manager !== undefined) patch.manager = input.manager || null;
     if (input.status !== undefined) patch.status = input.status;
-    // progress/spent/billed_amount ne sont plus editables a la main : calcules serveur (phases/projectBudgetSummary).
+    // progress/spent/billed_amount/risk ne sont plus editables a la main : calcules
+    // serveur (phases/projectBudgetSummary pour progress/spent, EVM par phase pour risk).
     if (input.budget !== undefined) patch.budget = String(input.budget);
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.contract_amount !== undefined) patch.contractAmount = String(input.contract_amount);
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
     if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
     if (input.location !== undefined) patch.location = input.location || null;
-    if (input.risk !== undefined) patch.risk = input.risk;
     if (input.notes !== undefined) patch.notes = input.notes || null;
     if (Object.keys(patch).length) await this.db.update(batiproProjects).set(patch).where(eq(batiproProjects.id, id));
     await this.publish("updateProject", ["projects"], "updated", id, orgId);
@@ -639,6 +642,118 @@ export class BatiproService {
     await this.db.update(batiproProjects).set({ progress: Math.round(progress) }).where(eq(batiproProjects.id, projectId));
   }
 
+  // Montant ENGAGE en bons de commande par phase, VENTILE PAR DEVISE (meme
+  // gabarit que priorPaidAmountByPhase, mais filtre sur les BC actifs non
+  // annules plutot que les situations). Renvoie aussi le taux de couverture
+  // (part des lignes de BC qui portent un phase_id), pour ne pas halluciner
+  // un risque "Eleve" quand la majorite des achats ne sont pas ventiles par
+  // phase (BC recus en vrac, import OCR, etc. forcent souvent phase_id=null).
+  private async phaseCommittedAmounts(orgId: number, projectId: number) {
+    const rows = await this.db
+      .select({
+        phaseId: batiproDocumentLines.phaseId,
+        lineHt: batiproDocumentLines.lineHt,
+        lineCurrencyId: batiproDocumentLines.currencyId,
+        phaseCurrencyId: batiproPhases.currencyId,
+      })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(batiproPhases, eq(batiproPhases.id, batiproDocumentLines.phaseId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "purchase_order"),
+        sql`${batiproDocuments.status} <> 'cancelled'`,
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocumentLines.isActive, 1),
+      ));
+    const byPhase = new Map<number, Map<number, number>>();
+    let withPhase = 0;
+    for (const r of rows) {
+      if (r.phaseId != null) withPhase += 1;
+      if (r.phaseId == null) continue;
+      // Meme regle de fallback que phaseAmountInCurrency (ligne -> phase, jamais document).
+      const currencyId = r.lineCurrencyId ?? r.phaseCurrencyId ?? 0;
+      const byCurrency = byPhase.get(r.phaseId) ?? new Map<number, number>();
+      byCurrency.set(currencyId, (byCurrency.get(currencyId) ?? 0) + Number(r.lineHt ?? 0));
+      byPhase.set(r.phaseId, byCurrency);
+    }
+    const coveragePct = rows.length > 0 ? Math.round((withPhase / rows.length) * 10000) / 100 : 100;
+    return { byPhase, coveragePct };
+  }
+
+  // Risque EVM (Earned Value Management simplifie) d'une phase :
+  //  - EV (valeur acquise) = plannedBudget * progress/100.
+  //  - AC (cout reel engage) = montant BC engage sur la phase (phaseCommittedAmounts).
+  //  - CPI (Cost Performance Index) = EV / AC. CPI >= 1 = depense conforme ou
+  //    inferieure a la valeur produite ; CPI < 1 = on depense plus qu'on avance.
+  //  - Sans AC engage (rien achete sur la phase) : pas de signal de derive
+  //    possible, phase consideree saine (Faible), meme si progress = 0.
+  //  - Sans plannedBudget renseigne : phase ignoree (aucun signal fiable).
+  private phaseEvmRisk(ev: number, ac: number): { cpi: number | null; risk: "Faible" | "Moyen" | "Eleve" } {
+    if (ac <= 0) return { cpi: null, risk: "Faible" };
+    const cpi = ev / ac;
+    if (cpi >= 0.9) return { cpi, risk: "Faible" };
+    if (cpi >= 0.75) return { cpi, risk: "Moyen" };
+    return { cpi, risk: "Eleve" };
+  }
+
+  // Calcule le detail EVM par phase (utilise par projectBudgetSummary pour le
+  // tooltip front) + le risque global du chantier (utilise par
+  // recomputeProjectRisk pour persister batipro_projects.risk).
+  // Risque global = pire cas parmi les phases avec un signal valide (budget
+  // planifie renseigne, et progress>0 OU montant engage>0 : une phase a 0%/0
+  // engage est du bruit, pas un signal). Plafonne a "Moyen" si la couverture
+  // des BC par phase est < 60% (achats mal ventiles = pas de motif fiable
+  // d'afficher "Eleve").
+  private async projectEvmRisk(orgId: number, projectId: number) {
+    const phases = await this.phases(orgId, projectId);
+    const { byPhase: committed, coveragePct } = await this.phaseCommittedAmounts(orgId, projectId);
+    const rank = { Faible: 0, Moyen: 1, Eleve: 2 } as const;
+
+    const phasesEvm = phases
+      .map((p) => {
+        const plannedBudget = p.plannedBudget != null ? Number(p.plannedBudget) : null;
+        const progress = Number(p.progress ?? 0);
+        const ac = this.phaseAmountInCurrency(committed, p.id, p.currencyId ?? null);
+        if (plannedBudget == null || plannedBudget <= 0) return null; // pas de budget = pas de signal
+        if (progress <= 0 && ac <= 0) return null; // bruit : rien avance, rien depense
+        const ev = plannedBudget * (progress / 100);
+        const { cpi, risk } = this.phaseEvmRisk(ev, ac);
+        return {
+          phase_id: p.id,
+          label: p.label,
+          planned_budget: plannedBudget,
+          progress,
+          spent_amount: Math.round(ac * 100) / 100,
+          cpi: cpi != null ? Math.round(cpi * 100) / 100 : null,
+          risk,
+          currency_id: p.currencyId ?? null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+
+    let projectRisk: "Faible" | "Moyen" | "Eleve" = "Faible";
+    for (const p of phasesEvm) {
+      if (rank[p.risk] > rank[projectRisk]) projectRisk = p.risk;
+    }
+    // Couverture faible (BC pas ventiles par phase) : on ne fait pas confiance
+    // a un signal "Eleve" issu d'une minorite de lignes rattachees.
+    if (coveragePct < 60 && rank[projectRisk] > rank.Moyen) projectRisk = "Moyen";
+
+    return { phasesEvm, projectRisk, coveragePct };
+  }
+
+  // Recalcule et persiste batipro_projects.risk (SCRUM EVM) : plus editable a
+  // la main (meme principe que recomputeProjectProgress pour progress). A
+  // appeler aux memes points de declenchement que progress : creation/maj
+  // d'une phase, et creation/maj/annulation d'un bon de commande.
+  private async recomputeProjectRisk(orgId: number, projectId: number) {
+    const { projectRisk } = await this.projectEvmRisk(orgId, projectId);
+    await this.db.update(batiproProjects).set({ risk: projectRisk }).where(eq(batiproProjects.id, projectId));
+  }
+
   async getPhase(id: number, orgId: number) {
     const [row] = await this.db
       .select()
@@ -666,6 +781,7 @@ export class BatiproService {
     }).$returningId();
     const id = Number(result.id);
     await this.recomputeProjectProgress(orgId, input.project_id);
+    await this.recomputeProjectRisk(orgId, input.project_id);
     await this.publish("createPhase", ["phases"], "created", id, orgId);
     return this.getPhase(id, orgId);
   }
@@ -686,6 +802,7 @@ export class BatiproService {
     if (input.cap_mode !== undefined) patch.capMode = input.cap_mode;
     if (Object.keys(patch).length) await this.db.update(batiproPhases).set(patch).where(eq(batiproPhases.id, id));
     await this.recomputeProjectProgress(orgId, input.project_id ?? existing.projectId);
+    await this.recomputeProjectRisk(orgId, input.project_id ?? existing.projectId);
     await this.publish("updatePhase", ["phases"], "updated", id, orgId);
     return this.getPhase(id, orgId);
   }
@@ -694,6 +811,7 @@ export class BatiproService {
     const existing = await this.getPhase(id, orgId);
     await this.db.update(batiproPhases).set({ isActive: 0 }).where(and(eq(batiproPhases.id, id), eq(batiproPhases.organizationId, orgId)));
     await this.recomputeProjectProgress(orgId, existing.projectId);
+    await this.recomputeProjectRisk(orgId, existing.projectId);
     await this.publish("deletePhase", ["phases"], "deleted", id, orgId);
     return { message: "Phase supprimee." };
   }
@@ -1743,6 +1861,7 @@ export class BatiproService {
         ));
     }
 
+    if (type === "purchase_order") await this.recomputeProjectRisk(orgId, input.project_id);
     await this.publish("createDocument", ["documents", "document_lines"], "created", documentId, orgId);
     return this.getDocument(documentId, orgId);
   }
@@ -1801,6 +1920,11 @@ export class BatiproService {
       await this.db.update(batiproDocuments).set(patch).where(eq(batiproDocuments.id, id));
     }
 
+    // Lignes ou statut (dont annulation) d'un BC modifies : le montant engage
+    // par phase a pu changer, le risque EVM du chantier doit etre recalcule.
+    if (doc.type === "purchase_order" && (input.lines !== undefined || input.status !== undefined)) {
+      await this.recomputeProjectRisk(orgId, doc.projectId);
+    }
     await this.publish("updateDocument", ["documents", "document_lines"], "updated", id, orgId);
     return this.getDocument(id, orgId);
   }
@@ -2025,8 +2149,9 @@ export class BatiproService {
   }
 
   async deleteDocument(id: number, orgId: number) {
-    await this.getDocument(id, orgId);
+    const doc = await this.getDocument(id, orgId);
     await this.db.update(batiproDocuments).set({ isActive: 0 }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    if (doc.type === "purchase_order") await this.recomputeProjectRisk(orgId, doc.projectId);
     await this.publish("deleteDocument", ["documents"], "deleted", id, orgId);
     return { message: "Document supprime." };
   }
@@ -2498,6 +2623,16 @@ export class BatiproService {
       .map((row) => ({ currency_code: row.currencyCode ?? null, amount: Number(row.total ?? 0) }))
       .filter((row) => row.amount > 0);
 
+    // Detail EVM par phase (risque automatique) pour le tooltip front sur le
+    // badge de risque : phase la plus a risque + taux de couverture des BC.
+    const { phasesEvm, coveragePct } = await this.projectEvmRisk(orgId, projectId);
+    const currencyRowsForEvm = await this.db.select().from(currencies);
+    const currencyByIdForEvm = new Map(currencyRowsForEvm.map((c) => [c.id, c] as const));
+    const phasesEvmOut = phasesEvm.map((p) => ({
+      ...p,
+      currency_code: (p.currency_id != null ? currencyByIdForEvm.get(p.currency_id)?.currencyCode : null) ?? project.currencyCode ?? null,
+    }));
+
     return {
       project_id: projectId,
       currency_id: project.currencyId ?? null,
@@ -2521,6 +2656,9 @@ export class BatiproService {
       other_currency_code: otherCurrencyAmounts[0]?.currency_code ?? null,
       remaining_vs_budget: Math.round((referenceBudget - purchaseOrdersEngaged) * 100) / 100,
       engagement_rate: referenceBudget > 0 ? Math.round((purchaseOrdersEngaged / referenceBudget) * 10000) / 100 : null,
+      // Detail risque EVM par phase (badge risque du chantier + tooltip front).
+      phases_evm: phasesEvmOut,
+      coverage_pct: coveragePct,
     };
   }
 
