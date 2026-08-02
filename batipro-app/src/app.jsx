@@ -963,6 +963,12 @@ function Planning({ projects, canMutate, fixedProjectId }) {
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [budget, setBudget] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!projectId) { setBudget(null); return; }
+    api.budgetSummary(projectId).then(setBudget).catch(() => setBudget(null));
+  }, [projectId]);
 
   const load = React.useCallback(() => {
     if (!projectId) { setPhases([]); setLoading(false); return; }
@@ -1047,12 +1053,17 @@ function Planning({ projects, canMutate, fixedProjectId }) {
       )}
 
       {modal && (
-        <PhaseModal modal={modal} busy={busy} error={error} currencyId={selected?.currencyId} currencyCode={selected?.currencyCode} onClose={() => setModal(null)} onSave={save} />
+        <PhaseModal
+          modal={modal} busy={busy} error={error}
+          currencyId={selected?.currencyId} currencyCode={selected?.currencyCode}
+          remainingBudget={budget?.budget != null ? Number(budget.budget) - Number(budget.cost_committed || 0) : null}
+          onClose={() => setModal(null)} onSave={save}
+        />
       )}
     </>
   );
 }
-function PhaseModal({ modal, busy, error, currencyId, currencyCode, onClose, onSave }) {
+function PhaseModal({ modal, busy, error, currencyId, currencyCode, remainingBudget, onClose, onSave }) {
   const [form, setForm] = React.useState(() => ({
     id: modal.id, label: modal.label || "", position: modal.position ?? 0, status: modal.status || "A_venir",
     progress: modal.progress ?? 0, start_date: modal.startDate || "", end_date: modal.endDate || "",
@@ -1062,6 +1073,12 @@ function PhaseModal({ modal, busy, error, currencyId, currencyCode, onClose, onS
   }));
   const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const sameCurrencyAsProject = !form.currency_id || Number(form.currency_id) === Number(currencyId);
+  // Le budget deja alloue a cette phase (avant edition) redevient disponible :
+  // sinon rouvrir la meme phase la bloquerait sur son propre montant.
+  const alreadyOnThisPhase = modal.plannedBudget != null ? Number(modal.plannedBudget) : 0;
+  const cap = sameCurrencyAsProject && remainingBudget != null ? remainingBudget + alreadyOnThisPhase : null;
+  const overCap = cap != null && form.planned_budget !== "" && Number(form.planned_budget) > cap;
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(form); }}>
@@ -1089,7 +1106,12 @@ function PhaseModal({ modal, busy, error, currencyId, currencyCode, onClose, onS
           </label>
           <label className="field">
             <span>Budget planifié</span>
-            <input type="number" min="0" value={form.planned_budget} onChange={(e) => set("planned_budget", e.target.value)} />
+            <input type="number" min="0" max={cap != null ? cap : undefined} value={form.planned_budget} onChange={(e) => set("planned_budget", e.target.value)} />
+            {cap != null && (
+              <span style={{ color: overCap ? "var(--red-600, #b91c1c)" : "var(--ink-500)", fontSize: 12, marginTop: 4 }}>
+                Budget restant du chantier : {money(cap, currencyCode)}
+              </span>
+            )}
           </label>
           <Field label="Durée planifiée (jours)" type="number" value={form.planned_duration_days} onChange={(v) => set("planned_duration_days", v)} />
           <label className="field">
@@ -1101,10 +1123,11 @@ function PhaseModal({ modal, busy, error, currencyId, currencyCode, onClose, onS
             </select>
           </label>
         </div>
+        {overCap && <div className="login-error">Le budget planifié dépasse le budget restant du chantier ({money(cap, currencyCode)}).</div>}
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-amber grad-amber" disabled={busy || !form.label}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.label || overCap}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
         </div>
       </form>
     </div>

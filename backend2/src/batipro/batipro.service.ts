@@ -767,7 +767,37 @@ export class BatiproService {
     return row;
   }
 
+  // Le budget d'une phase ne peut pas depasser le budget restant du chantier
+  // (budget projet - engage sur BC), dans la meme devise. Une phase dans une
+  // autre devise que le projet n'est pas comparable sans taux de change : pas
+  // de blocage dans ce cas (voir front PhaseModal, meme regle).
+  private async assertPhaseBudgetWithinProject(
+    orgId: number,
+    projectId: number,
+    plannedBudget: number | null,
+    phaseCurrencyId: number | null,
+    excludePhaseId?: number,
+  ) {
+    if (plannedBudget == null || plannedBudget <= 0) return;
+    const project = await this.getProject(projectId, orgId);
+    if (phaseCurrencyId != null && project.currencyId != null && phaseCurrencyId !== project.currencyId) return;
+    const summary = await this.projectBudgetSummary(projectId, orgId);
+    if (!summary.budget) return;
+    const remaining = summary.budget - summary.cost_committed
+      + (excludePhaseId ? Number((await this.getPhase(excludePhaseId, orgId)).plannedBudget ?? 0) : 0);
+    if (plannedBudget > remaining) {
+      throw new BadRequestException(
+        `Le budget planifie de la phase (${plannedBudget}) depasse le budget restant du chantier (${Math.round(remaining * 100) / 100}).`,
+      );
+    }
+  }
+
   async createPhase(input: CreateBatiproPhaseDto, orgId: number) {
+    await this.assertPhaseBudgetWithinProject(
+      orgId, input.project_id,
+      input.planned_budget != null ? Number(input.planned_budget) : null,
+      input.currency_id ?? null,
+    );
     const [result] = await this.db.insert(batiproPhases).values({
       organizationId: orgId,
       projectId: input.project_id,
@@ -791,6 +821,14 @@ export class BatiproService {
 
   async updatePhase(id: number, input: UpdateBatiproPhaseDto, orgId: number) {
     const existing = await this.getPhase(id, orgId);
+    if (input.planned_budget !== undefined) {
+      await this.assertPhaseBudgetWithinProject(
+        orgId, input.project_id ?? existing.projectId,
+        input.planned_budget != null ? Number(input.planned_budget) : null,
+        input.currency_id !== undefined ? (input.currency_id ?? null) : existing.currencyId,
+        id,
+      );
+    }
     const patch: Partial<typeof batiproPhases.$inferInsert> = {};
     if (input.project_id !== undefined) patch.projectId = input.project_id;
     if (input.label !== undefined) patch.label = input.label;
