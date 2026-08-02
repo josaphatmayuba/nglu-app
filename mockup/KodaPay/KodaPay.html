@@ -95,10 +95,12 @@
   </div>
   <div class="sw sw-active" data-surf="bo" onclick="setBiz&&setBiz('resto');showSurf('bo',this)"><i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>Back-office resto</div>
   <div class="sw" data-surf="bo" onclick="setBiz&&setBiz('market');showSurf('bo',this)"><i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>Supermarché</div>
+  <div class="sw" data-surf="bo" onclick="setBiz&&setBiz('pharma');showSurf('bo',this)"><i data-lucide="pill" class="w-3.5 h-3.5"></i>Pharmacie</div>
   <div class="sw" data-surf="client" onclick="showSurf('client',this)"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>App client (QR)</div>
   <div class="sw" data-surf="tv" onclick="showSurf('tv',this)"><i data-lucide="tv" class="w-3.5 h-3.5"></i>Écran cuisine</div>
   <div class="sw" data-surf="pos" onclick="showSurf('pos',this)"><i data-lucide="tablet" class="w-3.5 h-3.5"></i>Caisse POS</div>
   <div class="sw" data-surf="posm" onclick="showSurf('posm',this)"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>POS mobile</div>
+  <div class="sw" data-surf="scanm" onclick="showSurf('scanm',this)"><i data-lucide="scan-barcode" class="w-3.5 h-3.5"></i>Scan mobile</div>
   <div class="sw" data-surf="admin" onclick="showSurf('admin',this)"><i data-lucide="globe" class="w-3.5 h-3.5"></i>Super Admin</div>
 </div>
 
@@ -470,7 +472,7 @@
           <button class="btn btn-ghost btn-xs ml-3" onclick="toast('Sélecteur de service (mockup)')">Service midi<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
           <div class="ml-auto flex items-center gap-2">
             <button class="btn btn-ghost !px-2.5" onclick="toast('Recherche (mockup)')"><i data-lucide="search" class="w-4 h-4"></i></button>
-            <button class="btn btn-ghost !px-2.5" onclick="toast('Scanner code-barres (mockup)')"><i data-lucide="scan-line" class="w-4 h-4"></i></button>
+            <button class="btn btn-ghost !px-2.5" onclick="modalPair()"><i data-lucide="scan-line" class="w-4 h-4"></i></button>
             <i data-lucide="wifi" class="w-4 h-4 text-ink-400 ml-1"></i>
             <button class="relative p-1.5" onclick="toast('3 notifications (mockup)')"><i data-lucide="bell" class="w-4 h-4 text-ink-500"></i><span class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-blue-600 text-[8px] font-bold text-white flex items-center justify-center">3</span></button>
             <div class="w-8 h-8 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center">AD</div>
@@ -600,6 +602,55 @@
       </div>
     </div>
     <p class="text-center text-[11.5px] text-ink-500 mt-4">Caisse POS sur smartphone : prise de commande en salle, addition en feuille coulissante, encaissement.</p>
+  </div>
+</section>
+
+<!-- ============================================================================ -->
+<!-- SURFACE 4ter : SCAN MOBILE (téléphone jumelé à la caisse, code-barres → POS)  -->
+<!-- ============================================================================ -->
+<section id="surf-scanm" class="surface">
+  <div class="py-8 px-4">
+    <div class="phone">
+      <div class="phone-screen !bg-[#f4f6f8]">
+        <div class="bg-white border-b border-ink-200 px-4 pt-3 pb-3">
+          <div class="flex items-center justify-between text-[12px] font-semibold mb-2.5 px-1 text-ink-800"><span>9:41</span><span class="flex items-center gap-1.5"><i data-lucide="signal" class="w-3.5 h-3.5"></i><i data-lucide="wifi" class="w-3.5 h-3.5"></i><i data-lucide="battery-full" class="w-4 h-4"></i></span></div>
+          <div class="flex items-center gap-2.5">
+            <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="scan-barcode" class="w-4 h-4 text-white"></i></div>
+            <span class="font-display font-bold text-[15px]">Scanner KodaPay</span>
+          </div>
+        </div>
+
+        <!-- écran 1 : non jumelé, saisie du code de session -->
+        <div id="scanm-pair" class="flex-1 flex flex-col items-center justify-center px-6 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-kp-50 flex items-center justify-center mb-4"><i data-lucide="qr-code" class="w-8 h-8 text-kp-600"></i></div>
+          <h3 class="font-display font-bold text-[16px] mb-1">Jumeler avec une caisse</h3>
+          <p class="text-[12px] text-ink-500 mb-5">Scannez le QR affiché sur la tablette/PC caisse, ou saisissez le code à 6 chiffres.</p>
+          <button class="btn btn-teal w-full justify-center mb-3" onclick="toast('Scan QR (mockup) — code détecté')"><i data-lucide="qr-code" class="w-4 h-4"></i>Scanner le QR de la caisse</button>
+          <div class="text-[11px] text-ink-400 mb-3">— ou —</div>
+          <input id="scanm-code" class="field !text-center !text-[20px] !font-display !font-bold !tracking-[0.3em] mb-3" maxlength="6" placeholder="••••••"/>
+          <button class="btn btn-acc w-full justify-center" onclick="scanmPair()"><i data-lucide="link" class="w-4 h-4"></i>Rejoindre la caisse</button>
+        </div>
+
+        <!-- écran 2 : jumelé, scanner actif -->
+        <div id="scanm-live" class="hidden flex-1 flex-col">
+          <div class="px-4 pt-3">
+            <div class="rounded-xl bg-emerald-50 text-emerald-700 text-[11.5px] font-semibold px-3 py-2 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Jumelé à <b id="scanm-posname" class="ml-0.5">Caisse principale</b><button class="ml-auto text-ink-400" onclick="scanmUnpair()"><i data-lucide="log-out" class="w-3.5 h-3.5"></i></button></div>
+          </div>
+          <div class="px-4 pt-4 flex-1 flex flex-col items-center">
+            <div class="w-full rounded-2xl border-2 border-dashed border-kp-300 bg-white py-10 mb-4 text-center relative overflow-hidden">
+              <i data-lucide="scan-line" class="w-12 h-12 text-kp-400 mx-auto"></i>
+              <div class="text-[12px] text-ink-400 mt-2">Visez le code-barres de l'article</div>
+            </div>
+            <button class="btn btn-teal w-full justify-center mb-5" onclick="scanmSimulate()"><i data-lucide="camera" class="w-4 h-4"></i>Simuler un scan</button>
+            <div class="w-full">
+              <div class="text-[11px] font-semibold text-ink-500 mb-2">Envoyés à la caisse</div>
+              <div id="scanm-log" class="space-y-2 max-h-[260px] overflow-y-auto"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-center text-[11.5px] text-ink-500 mt-4">Le téléphone d'un employé sert de scanner code-barres : chaque scan s'ajoute en direct à l'addition sur la caisse (tablette/PC) jumelée.</p>
   </div>
 </section>
 
@@ -754,6 +805,7 @@ const boModules={
 const boModes={
   'Restaurant':{ic:'utensils-crossed',sub:'Espace restaurateur',mods:['dashboard','commandes','produits','ingredients','qr','paiements','depenses','employes','rapports','parametres']},
   'Supermarché':{ic:'shopping-cart',sub:'Espace commerçant',mods:['dashboard','commandes','produits','stock','paiements','depenses','employes','rapports','parametres']},
+  'Pharmacie':{ic:'pill',sub:'Espace pharmacien',mods:['dashboard','commandes','produits','stock','paiements','depenses','employes','rapports','parametres']},
   'Quincaillerie':{ic:'wrench',sub:'Espace commerçant',mods:['dashboard','commandes','produits','stock','paiements','depenses','employes','rapports','parametres']},
   'Boutique / Services':{ic:'store',sub:'Espace commerçant',mods:['dashboard','commandes','produits','qr','paiements','depenses','employes','rapports','parametres']},
 };
@@ -998,6 +1050,16 @@ bo.stock=[
 ];
 const stockState=s=>s.qty<=0?'out':s.qty<=s.seuil?'low':'ok';
 
+/* ===== Stock (mode Pharmacie) : médicaments suivis en quantité ===== */
+bo.stockPharma=[
+  {id:1,n:'Paracétamol 500mg (boîte 20)',cb:'6161100411001',qty:86,seuil:20,buy:0.90,sell:1.80,mv:[]},
+  {id:2,n:'Amoxicilline 500mg (boîte 12)',cb:'6161100411002',qty:6,seuil:15,buy:2.40,sell:4.50,mv:[]},
+  {id:3,n:'Sérum physiologique 500ml',cb:'6161100411003',qty:0,seuil:12,buy:1.10,sell:2.20,mv:[]},
+  {id:4,n:'Sirop antitussif 120ml',cb:'6161100411004',qty:34,seuil:10,buy:1.60,sell:3.20,mv:[]},
+  {id:5,n:'Gants latex (boîte 100)',cb:'6161100411005',qty:52,seuil:15,buy:3.80,sell:6.50,mv:[]},
+  {id:6,n:'Test de grossesse',cb:'6161100411006',qty:9,seuil:10,buy:1.20,sell:2.80,mv:[]},
+];
+
 bo.ingUnits={'kg':{base:'g',factor:1000},'L':{base:'ml',factor:1000},'pièce':{base:'pièce',factor:1}};
 bo.ingredients=[
   {id:1,n:'Entrecôte de bœuf',unit:'kg',price:18.00},
@@ -1131,7 +1193,7 @@ function boViewHtml(v){
       <p class="text-[12px] text-ink-500 mb-3">Choisissez votre activité : KodaPay active les modules adaptés (recettes pour un restaurant, stock pour un supermarché…). Le socle ventes / paiements / dépenses reste identique.</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       ${Object.keys(boModes).map(mode=>{const m=boModes[mode];const on=bo.mode===mode;
-        const feats={'Restaurant':'Recettes, ingrédients, commande à table','Supermarché':'Stock, codes-barres, inventaire','Quincaillerie':'Stock, codes-barres, ventes au comptoir','Boutique / Services':'Catalogue simple, prestations'}[mode];
+        const feats={'Restaurant':'Recettes, ingrédients, commande à table','Supermarché':'Stock, codes-barres, inventaire','Pharmacie':'Stock, codes-barres, médicaments','Quincaillerie':'Stock, codes-barres, ventes au comptoir','Boutique / Services':'Catalogue simple, prestations'}[mode];
         return `<button class="text-left rounded-xl border-2 p-3.5 transition ${on?'border-kp-500 bg-kp-50':'border-ink-200 hover:border-ink-300'}" onclick="setBoMode('${mode.replace(/'/g,"\\'")}');boGo('Paramètres')">
         <div class="flex items-center justify-between"><div class="w-9 h-9 rounded-xl ${on?'bg-kp-500 text-white':'bg-ink-100 text-ink-600'} flex items-center justify-center"><i data-lucide="${m.ic}" class="w-4.5 h-4.5 w-4 h-4"></i></div>
         ${on?'<i data-lucide="check-circle-2" class="w-5 h-5 text-kp-600"></i>':''}</div>
@@ -1232,7 +1294,7 @@ function stockRows(){return bo.stock.map((x,i)=>{const st=stockState(x);
   <button class="btn btn-ghost btn-xs !px-2" onclick="modalStockHist(${i})" title="Historique"><i data-lucide="history" class="w-3.5 h-3.5"></i></button></div></td></tr>`;}).join('')
   ||'<tr><td colspan="8" class="text-center text-ink-400 py-6">Aucun article en stock.</td></tr>';}
 function renderStock(){const el=document.getElementById('bo-stock');if(el){el.innerHTML=stockRows();lucide.createIcons();}if(bo.view==='Stock')boGo('Stock');
-  if(typeof adaptDashboard==='function'&&window.biz==='market')adaptDashboard();}
+  if(typeof adaptDashboard==='function'&&(window.biz==='market'||window.biz==='pharma'))adaptDashboard();}
 function stockMove(i,delta){const x=bo.stock[i];if(x.qty+delta<0){toast('Stock déjà à zéro');return;}
   x.qty+=delta;x.mv.unshift({d:'13 mai 2025',t:delta>0?'Entrée':'Sortie',q:Math.abs(delta),note:'Ajustement manuel'});
   renderStock();
@@ -1776,12 +1838,83 @@ function renderTicket(){
   if(posRefs.payT)posRefs.payT.innerHTML='<i data-lucide="credit-card" class="w-4 h-4"></i>Payer&nbsp; '+usd(tot);
   if(posRefs.payM)posRefs.payM.innerHTML='<i data-lucide="credit-card" class="w-4 h-4"></i>Payer&nbsp; '+usd(tot);
   if(posRefs.barCnt){posRefs.barCnt.textContent=cnt;posRefs.barSub.textContent=cnt+' article'+(cnt>1?'s':'');posRefs.barTot.textContent=usd(tot);}
-  document.querySelectorAll('.pos-no').forEach(e=>e.textContent=(window.biz==='market'?'Ticket ':'Commande ')+pos.no);
+  document.querySelectorAll('.pos-no').forEach(e=>e.textContent=((window.biz==='market'||window.biz==='pharma')?'Ticket ':'Commande ')+pos.no);
   posRefs.tabs&&posRefs.tabs.forEach(g=>g.forEach(sp=>{const on=sp.textContent.trim()===pos.tab;
     sp.className='pb-2 cursor-pointer '+(on?'border-b-2 border-blue-600 text-blue-600':'text-ink-500');}));
   lucide.createIcons();
 }
 function renderPosAll(){renderPosCats();renderPosGrid();renderTicket();}
+
+/* ================= Jumelage téléphone-scanner ↔ caisse (BroadcastChannel, mockup local) ================= */
+const scanCh=(typeof BroadcastChannel!=='undefined')?new BroadcastChannel('koda-scan'):null;
+let scanSession=null; /* {code, paired:bool} côté caisse */
+function scanGenCode(){return String(Math.floor(100000+Math.random()*899999));}
+function modalPair(){
+  scanSession={code:scanGenCode(),paired:false};
+  localStorage.setItem('koda-scan-code',scanSession.code);
+  openModal(mHead('Scanner avec un téléphone')+`<div class="px-5 pb-5 text-center">
+  <p class="text-[12.5px] text-ink-500 mb-4">Sur le téléphone, ouvrez la page « Scan mobile » puis saisissez ce code (ou scannez ce QR).</p>
+  <div class="mx-auto w-36 h-36 rounded-2xl bg-ink-50 border border-ink-200 flex items-center justify-center mb-4"><i data-lucide="qr-code" class="w-20 h-20 text-ink-700"></i></div>
+  <div class="font-display font-bold text-[32px] tracking-[0.3em] mb-1" id="pair-code">${scanSession.code}</div>
+  <div id="pair-status" class="chip bg-amber-50 text-amber-600 mx-auto w-max"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>En attente du téléphone…</div>
+  </div>`);
+}
+function scanmPairStatusUpdate(){
+  const st=document.getElementById('pair-status');if(!st)return;
+  st.className='chip bg-emerald-50 text-emerald-600 mx-auto w-max';
+  st.innerHTML='<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Téléphone jumelé — prêt à scanner';
+}
+let scanmSession=null;
+if(scanCh)scanCh.onmessage=(ev)=>{
+  const msg=ev.data||{};
+  if(msg.type==='pair-request'&&scanSession&&msg.code===scanSession.code){
+    scanSession.paired=true;scanmPairStatusUpdate();
+    scanCh.postMessage({type:'paired',code:scanSession.code,posName:(document.getElementById('bo-biz-name')&&document.getElementById('bo-biz-name').textContent)||'Caisse principale'});
+    toast('Téléphone jumelé au POS');
+  }else if(msg.type==='scan'&&scanSession&&scanSession.paired&&msg.code===scanSession.code){
+    const it=pos.items[msg.itemIndex];
+    if(it){addPos(msg.itemIndex);toast('📱 Scanné depuis le téléphone : '+it.n);}
+  }else if(msg.type==='paired'&&scanmSession&&msg.code===scanmSession.code){
+    scanmSession.paired=true;scanmSession.posName=msg.posName||'Caisse';
+    const nm=document.getElementById('scanm-posname');if(nm)nm.textContent=scanmSession.posName;
+  }else if(msg.type==='sale-complete'&&scanmSession&&msg.code===scanmSession.code){
+    const log=document.getElementById('scanm-log');if(log)log.innerHTML='';
+    toast('✅ Vente encaissée — toujours jumelé, prêt pour la commande suivante');
+  }
+};
+
+/* ---- côté téléphone (surface Scan mobile) ---- */
+function scanmPair(){
+  const code=(document.getElementById('scanm-code').value||'').trim();
+  if(code.length!==6){toast('Code à 6 chiffres requis');return;}
+  scanmSession={code,posName:'Caisse',paired:false};
+  if(scanCh)scanCh.postMessage({type:'pair-request',code});
+  /* fallback même onglet : code stocké par modalPair() dans localStorage */
+  if(localStorage.getItem('koda-scan-code')===code)scanmSession.paired=true;
+  document.getElementById('scanm-pair').classList.add('hidden');
+  document.getElementById('scanm-live').classList.remove('hidden');
+  document.getElementById('scanm-live').classList.add('flex');
+  toast('Recherche de la caisse…');
+}
+function scanmUnpair(){
+  scanmSession=null;
+  document.getElementById('scanm-live').classList.add('hidden');
+  document.getElementById('scanm-live').classList.remove('flex');
+  document.getElementById('scanm-pair').classList.remove('hidden');
+  document.getElementById('scanm-code').value='';
+}
+function scanmSimulate(){
+  if(!scanmSession){toast('Pas encore jumelé');return;}
+  const i=Math.floor(Math.random()*pos.items.length),it=pos.items[i];
+  if(scanCh)scanCh.postMessage({type:'scan',code:scanmSession.code,itemIndex:i,itemName:it.n});
+  else if(scanmSession.paired)addPos(i);
+  const log=document.getElementById('scanm-log');
+  if(log){const row=document.createElement('div');
+    row.className='flex items-center gap-2.5 bg-white border border-ink-200 rounded-xl px-3 py-2 text-[12.5px]';
+    row.innerHTML=`<span class="text-[18px]">${it.em||'📦'}</span><span class="flex-1 truncate font-medium">${it.n}</span><span class="chip bg-emerald-50 text-emerald-600"><i data-lucide="check" class="w-3 h-3"></i>Envoyé</span>`;
+    log.prepend(row);lucide.createIcons();}
+  toast('Scan envoyé à la caisse : '+it.n);
+}
 function editLine(ix){const l=pos.ticket[ix],it=pos.items[l.i];
   openModal(mHead('Modifier — '+it.n)+`<div class="px-5 pb-5">
   <div class="flex items-center justify-center gap-4 my-2">
@@ -1810,14 +1943,15 @@ function paySuccess(tot){
   <div class="flex gap-2 justify-center mt-5">
   <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
   <button class="btn btn-teal" onclick="closeModal();toast('Ticket imprimé')"><i data-lucide="printer" class="w-4 h-4"></i>Imprimer le reçu</button></div></div>`);
-  /* supermarché/quincaillerie : la vente décrémente le stock ; restaurant : envoi en cuisine */
-  if(window.biz==='market'){
+  /* supermarché/pharmacie/quincaillerie : la vente décrémente le stock ; restaurant : envoi en cuisine */
+  if(window.biz==='market'||window.biz==='pharma'){
     pos.ticket.forEach(l=>{const it=pos.items[l.i];const s=it&&it.stockId?bo.stock.find(x=>x.id===it.stockId):null;
       if(s){s.qty=Math.max(0,s.qty-l.q);s.mv.unshift({d:'13 mai 2025',t:'Vente',q:l.q,note:'Caisse — ticket '+pos.no});
         if(s.qty===0){toast('⚠ Rupture : '+s.n);it.dispo=false;}
         else if(s.qty<=s.seuil)toast('Stock faible : '+s.n+' ('+s.qty+' restants)');}});
     if(typeof renderStock==='function')renderStock();renderPosGrid();
   }else if(typeof tvSt!=='undefined'){tvSt.prep.push(pos.no);tvRender();}
+  if(scanCh&&scanSession&&scanSession.paired)scanCh.postMessage({type:'sale-complete',code:scanSession.code});
   pos.ticket=[];pos.discount=0;pos.no++;pos.tab='Addition';renderTicket();closePosmTicket();
 }
 function modalScan(){openModal(mHead('Scanner un article')+`<div class="px-5 pb-5 text-center">
@@ -2004,6 +2138,9 @@ lucide.createIcons();
 const mkEmoji={1:'🍚',2:'🫒',3:'🧂',4:'🥛',5:'🧼',6:'🌾'};
 const mkCat={4:'Boissons & frais',5:'Hygiène'};
 const mkVentes=[34,27,51,45,88,19];
+const phEmoji={1:'💊',2:'💊',3:'💉',4:'🍯',5:'🧤',6:'🧪'};
+const phCat={1:'Médicaments',2:'Médicaments',3:'Parapharmacie',4:'Médicaments',5:'Matériel médical',6:'Parapharmacie'};
+const phVentes=[112,38,64,45,29,17];
 const bizData={
   resto:{name:'Le Jardin Grill',desc:'Cuisine française · Grillades',mode:'Restaurant',
     prods:bo.prods,posCats:null,posItems:pos.items.slice()},
@@ -2011,7 +2148,12 @@ const bizData={
     prods:bo.stock.map((s,ix)=>({em:mkEmoji[s.id]||'🛒',photo:'',n:s.n,c:mkCat[s.id]||'Épicerie',p:s.sell.toFixed(2).replace('.',',')+' €',cost:s.buy,v:mkVentes[ix%mkVentes.length],actif:true,stockId:s.id})),
     posCats:[['shopping-basket','Épicerie',4,'bg-emerald-500'],['cup-soda','Boissons & frais',1,'bg-blue-500'],['sparkles','Hygiène',1,'bg-violet-500'],['badge-percent','Promotions',0,'bg-teal-600'],['scan-line','Scanner','','bg-ink-100 !text-ink-700']],
     posItems:bo.stock.map((s,ix)=>({em:mkEmoji[s.id]||'🛒',n:s.n,p:s.sell,cat:mkCat[s.id]||'Épicerie',dispo:s.qty>0,pop:100-ix,stockId:s.id}))},
+  pharma:{name:'Pharmacie Ubuntu',desc:'Pharmacie · Médicaments & parapharmacie',mode:'Pharmacie',
+    prods:bo.stockPharma.map((s,ix)=>({em:phEmoji[s.id]||'💊',photo:'',n:s.n,c:phCat[s.id]||'Médicaments',p:s.sell.toFixed(2).replace('.',',')+' €',cost:s.buy,v:phVentes[ix%phVentes.length],actif:true,stockId:s.id})),
+    posCats:[['pill','Médicaments',3,'bg-rose-500'],['syringe','Matériel médical',1,'bg-blue-500'],['heart-pulse','Parapharmacie',2,'bg-violet-500'],['badge-percent','Promotions',0,'bg-teal-600'],['scan-line','Scanner','','bg-ink-100 !text-ink-700']],
+    posItems:bo.stockPharma.map((s,ix)=>({em:phEmoji[s.id]||'💊',n:s.n,p:s.sell,cat:phCat[s.id]||'Médicaments',dispo:s.qty>0,pop:100-ix,stockId:s.id}))},
 };
+const bizStock={market:bo.stock,pharma:bo.stockPharma};
 window.biz='resto';
 function setBiz(b){if(window.biz===b)return;window.biz=b;const d=bizData[b];
   /* identité du commerce dans la sidebar */
@@ -2019,38 +2161,41 @@ function setBiz(b){if(window.biz===b)return;window.biz=b;const d=bizData[b];
   if(n)n.textContent=d.name;if(ds)ds.textContent=d.desc;
   /* catalogue back-office */
   bo.prods=d.prods;bo.catFilter='Toutes catégories';bo.search='';
+  /* stock (Supermarché / Pharmacie partagent le même écran de gestion de stock) */
+  if(bizStock[b])bo.stock=bizStock[b];
   /* caisse POS : catalogue + remise à zéro de la commande en cours */
   window.__posCats=d.posCats;pos.items=d.posItems;pos.ticket=[];pos.discount=0;pos.cat='Tous';pos.tab='Addition';pos.search='';
   renderPosAll();
-  /* mode = menu adapté (Stock pour le marché, Ingrédients pour le resto) */
+  /* mode = menu adapté (Stock pour marché/pharmacie, Ingrédients pour le resto) */
   setBoMode(d.mode);
   adaptDashboard();
 }
 /* le tableau de bord change de peau selon le commerce */
 function adaptDashboard(){
-  const mk=window.biz==='market';
+  const mk=window.biz==='market',ph=window.biz==='pharma',stocked=mk||ph;
+  const stock=ph?bo.stockPharma:bo.stock;
   const set=(id,txt)=>{const e=document.getElementById(id);if(e)e.textContent=txt;};
-  set('kpi-orders-lbl',mk?'Tickets de caisse du jour':'Total commandes du jour');
-  set('kpi-pop-lbl',mk?'Article le plus vendu':'Produit populaire');
-  set('kpi-pop',mk?'Savon de ménage':'Entrecôte grillée');
-  set('kpi-pop-sub',mk?'88 ventes':'32 commandes');
+  set('kpi-orders-lbl',mk?'Tickets de caisse du jour':ph?'Ventes du jour (pharmacie)':'Total commandes du jour');
+  set('kpi-pop-lbl',mk?'Article le plus vendu':ph?'Médicament le plus vendu':'Produit populaire');
+  set('kpi-pop',mk?'Savon de ménage':ph?'Paracétamol 500mg':'Entrecôte grillée');
+  set('kpi-pop-sub',mk?'88 ventes':ph?'112 ventes':'32 commandes');
   /* la carte « en préparation » devient « ruptures de stock » */
-  const out=bo.stock.filter(s=>s.qty<=0).length,low=bo.stock.filter(s=>s.qty>0&&s.qty<=s.seuil).length;
-  set('kpi-prep-lbl',mk?'Articles en rupture':'Commandes en préparation');
-  set('kpi-prep',mk?String(out):'23');
+  const out=stock.filter(s=>s.qty<=0).length,low=stock.filter(s=>s.qty>0&&s.qty<=s.seuil).length;
+  set('kpi-prep-lbl',stocked?'Articles en rupture':'Commandes en préparation');
+  set('kpi-prep',stocked?String(out):'23');
   const chip=document.getElementById('kpi-prep-chip');
-  if(chip){chip.textContent=mk?(low+' en stock faible'):'En cours';
-    chip.className='chip mt-1 '+(mk?(out?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-600'):'bg-orange-50 text-acc-600');}
+  if(chip){chip.textContent=stocked?(low+' en stock faible'):'En cours';
+    chip.className='chip mt-1 '+(stocked?(out?'bg-red-50 text-red-500':'bg-emerald-50 text-emerald-600'):'bg-orange-50 text-acc-600');}
   /* donut de commandes → état du stock ; QR codes → masqué */
   const rep=document.getElementById('card-repartition');
   if(rep){if(!rep.dataset.orig)rep.dataset.orig=rep.innerHTML;
-    if(mk){rep.innerHTML=`<h3 class="font-display font-semibold text-[14.5px] mb-3">État du stock</h3>
-      <div class="space-y-2.5">${bo.stock.slice().sort((a,b)=>(a.qty/Math.max(1,a.seuil))-(b.qty/Math.max(1,b.seuil))).map(s=>{const st=stockState(s);
+    if(stocked){rep.innerHTML=`<h3 class="font-display font-semibold text-[14.5px] mb-3">État du stock</h3>
+      <div class="space-y-2.5">${stock.slice().sort((a,b)=>(a.qty/Math.max(1,a.seuil))-(b.qty/Math.max(1,b.seuil))).map(s=>{const st=stockState(s);
         return `<div class="flex items-center gap-2.5 text-[12.5px]"><span class="w-2 h-2 rounded-full flex-none ${st==='out'?'bg-red-500':st==='low'?'bg-amber-500':'bg-emerald-500'}"></span>
         <span class="flex-1 truncate">${s.n}</span><b>${s.qty}</b><span class="chip ${stockStChip(st)}">${stockStLbl(st)}</span></div>`;}).join('')}</div>
       <button class="btn btn-ghost btn-xs w-full justify-center mt-3" onclick="boGo('Stock')"><i data-lucide="boxes" class="w-3.5 h-3.5"></i>Gérer le stock</button>`;}
     else rep.innerHTML=rep.dataset.orig;}
-  const qr=document.getElementById('card-qr');if(qr)qr.style.display=mk?'none':'';
+  const qr=document.getElementById('card-qr');if(qr)qr.style.display=stocked?'none':'';
   /* Studio IA : exemple adapté */
   lucide.createIcons();
 }
