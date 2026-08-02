@@ -538,7 +538,7 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
               <span>{money(p.cost_actual ?? p.spent, p.currencyCode)} / {money(p.reference_budget ?? p.budget, p.currencyCode)}</span>
               <span
                 className={`chip ${p.risk === "Eleve" || p.risk === "Élevé" ? "rose" : p.risk === "Moyen" ? "amber" : "emerald"}`}
-                title="Risque calcule automatiquement (EVM par phase) : cout engage vs avancement. Voir l'onglet Aperçu du chantier pour le detail par phase."
+                title="Risque budget calcule automatiquement (EVM par phase) : cout engage vs avancement. Ne couvre pas le retard de planning. Voir l'onglet Aperçu du chantier pour le detail par phase."
               >
                 {p.risk}
               </span>
@@ -663,11 +663,11 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
               const tone = p.risk === "Eleve" || p.risk === "Élevé" ? "rose" : (p.risk === "Moyen" ? "amber" : "emerald");
               return (
                 <div className="card pad">
-                  <p className="kv-title"><Icon name="alert" /> Risque (calcul automatique)</p>
+                  <p className="kv-title"><Icon name="alert" /> Risque budget (calcul automatique)</p>
                   <div
                     className={`chip ${tone}`}
                     style={{ marginBottom: 8 }}
-                    title="Calcule automatiquement par phase (EVM : cout engage en BC vs avancement saisi). Plus editable a la main."
+                    title="Calcule automatiquement par phase (EVM : cout engage en BC vs avancement saisi). Ne couvre pas le retard de planning. Plus editable a la main."
                   >
                     {p.risk}
                   </div>
@@ -1111,6 +1111,11 @@ function PhaseModal({ modal, busy, error, currencyId, currencyCode, remainingBud
             {cap != null && (
               <span style={{ color: overCap ? "var(--red-600, #b91c1c)" : "var(--ink-500)", fontSize: 12, marginTop: 4 }}>
                 Budget restant du chantier : {money(cap, currencyCode)}
+              </span>
+            )}
+            {!sameCurrencyAsProject && (
+              <span style={{ color: "var(--amber-600, #b45309)", fontSize: 12, marginTop: 4 }}>
+                Devise différente de celle du chantier : aucun plafond de budget ne s'applique (pas de taux de change disponible).
               </span>
             )}
           </label>
