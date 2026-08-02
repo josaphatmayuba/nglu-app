@@ -776,15 +776,17 @@ export class BatiproService {
     projectId: number,
     plannedBudget: number | null,
     phaseCurrencyId: number | null,
-    excludePhaseId?: number,
   ) {
     if (plannedBudget == null || plannedBudget <= 0) return;
     const project = await this.getProject(projectId, orgId);
     if (phaseCurrencyId != null && project.currencyId != null && phaseCurrencyId !== project.currencyId) return;
     const summary = await this.projectBudgetSummary(projectId, orgId);
     if (!summary.budget) return;
-    const remaining = summary.budget - summary.cost_committed
-      + (excludePhaseId ? Number((await this.getPhase(excludePhaseId, orgId)).plannedBudget ?? 0) : 0);
+    // cost_committed = bons de commande engages sur le chantier, independamment
+    // du planned_budget des phases (pas de lien direct BC <-> planned_budget).
+    // Donc pas de reintegration de l'ancien planned_budget de la phase editee :
+    // le plafond est toujours budget - cost_committed, en create comme en update.
+    const remaining = summary.budget - summary.cost_committed;
     if (plannedBudget > remaining) {
       throw new BadRequestException(
         `Le budget planifie de la phase (${plannedBudget}) depasse le budget restant du chantier (${Math.round(remaining * 100) / 100}).`,
@@ -826,7 +828,6 @@ export class BatiproService {
         orgId, input.project_id ?? existing.projectId,
         input.planned_budget != null ? Number(input.planned_budget) : null,
         input.currency_id !== undefined ? (input.currency_id ?? null) : existing.currencyId,
-        id,
       );
     }
     const patch: Partial<typeof batiproPhases.$inferInsert> = {};

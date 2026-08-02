@@ -1074,10 +1074,11 @@ function PhaseModal({ modal, busy, error, currencyId, currencyCode, remainingBud
   const currencies = useCurrencies();
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const sameCurrencyAsProject = !form.currency_id || Number(form.currency_id) === Number(currencyId);
-  // Le budget deja alloue a cette phase (avant edition) redevient disponible :
-  // sinon rouvrir la meme phase la bloquerait sur son propre montant.
-  const alreadyOnThisPhase = modal.plannedBudget != null ? Number(modal.plannedBudget) : 0;
-  const cap = sameCurrencyAsProject && remainingBudget != null ? remainingBudget + alreadyOnThisPhase : null;
+  // remainingBudget = budget chantier - cout engage (bons de commande), qui
+  // n'inclut pas le planned_budget des phases : pas de reintegration a faire
+  // ici (sinon rouvrir/agrandir une phase deja budgetee gonfle artificiellement
+  // le plafond, cf. bug QA SCRUM budget plafonne).
+  const cap = sameCurrencyAsProject && remainingBudget != null ? remainingBudget : null;
   const overCap = cap != null && form.planned_budget !== "" && Number(form.planned_budget) > cap;
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
