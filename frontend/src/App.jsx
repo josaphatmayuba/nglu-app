@@ -18,7 +18,10 @@ import { getSetting } from "./redux/rtk/features/setting/settingSlice";
 import ServerError from "./components/404/ServerError";
 import SignContractPage from "./components/propertyManagement/SignContractPage";
 import TenantOnboardingPage from "./components/propertyManagement/TenantOnboardingPage";
-const SignatureRequestPage = lazy(() => import("./components/signatures/SignatureRequestPage"));
+// Import direct (pas de lazy) comme les autres routes publiques ci-dessus : ces
+// routes sont declarees hors de tout <Suspense>, un composant lazy y suspendrait
+// sans frontiere et rendrait une page blanche.
+import SignatureRequestPage from "./components/signatures/SignatureRequestPage";
 const CustomerLayout = lazy(() => import("@/layouts/CustomerLayout"));
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
 
