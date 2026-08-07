@@ -47,6 +47,11 @@ jobs:
       chat: ${{ steps.decide.outputs.chat }}
       marketing: ${{ steps.decide.outputs.marketing }}
       avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
+      # Matrice des apps statiques reduite aux seules apps modifiees, pour que
+      # le workflow n'affiche pas de jobs vides (parite avec les
+      # changesets.includePaths de Bitbucket).
+      static_matrix: ${{ steps.decide.outputs.static_matrix }}
+      static_any: ${{ steps.decide.outputs.static_any }}
     steps:
       # fetch-depth: 0 obligatoire ici : paths-filter compare deux commits et
       # echoue sur un clone shallow ("fatal: shallow file has changed since we
@@ -156,11 +161,45 @@ jobs:
                    batipro hr comptabilite migration chat marketing avelomi_site; do
             if [ "$ALL" = "true" ]; then
               echo "$k=true" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=true"
             else
               v=$(printf '%s' "$FILTER" | jq -r --arg k "$k" '.[$k] // "false"')
               echo "$k=$v" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=$v"
             fi
           done
+
+          # Definition des apps statiques (source unique : le job static-prod
+          # consomme cette matrice au lieu de la redeclarer).
+          all_static='[
+            {"app":"domus-app",        "flag":"domus",        "base":"/domus/",        "build":"build"},
+            {"app":"journal-app",      "flag":"journal",      "base":"/journal/",      "build":"build"},
+            {"app":"tickets-app",      "flag":"tickets",      "base":"/tickets/",      "build":"build"},
+            {"app":"farmos-app",       "flag":"farmos",       "base":"/farmos/",       "build":"build"},
+            {"app":"batipro-app",      "flag":"batipro",      "base":"/batipro/",      "build":"build"},
+            {"app":"hr-app",           "flag":"hr",           "base":"/hr/",           "build":"build"},
+            {"app":"comptabilite-app", "flag":"comptabilite", "base":"/comptabilite/", "build":"build:prod"},
+            {"app":"migration-app",    "flag":"migration",    "base":"/migration/",    "build":"build"},
+            {"app":"chat-app",         "flag":"chat",         "base":"/chat/",         "build":"build:prod"}
+          ]'
+
+          # Ne garde que les apps dont le flag vaut true.
+          selected='[]'
+          for row in $(printf '%s' "$all_static" | jq -c '.[]'); do
+            f=$(printf '%s' "$row" | jq -r '.flag')
+            eval "v=\${flag_$f}"
+            if [ "$v" = "true" ]; then
+              selected=$(printf '%s' "$selected" | jq -c --argjson r "$row" '. + [$r]')
+            fi
+          done
+
+          count=$(printf '%s' "$selected" | jq 'length')
+          echo "static_matrix=$(printf '%s' "$selected" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "static_any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "static_any=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ───────────────────────────── Backend2 → prod ─────────────────────────────
   backend2-prod:
@@ -217,39 +256,24 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     environment: production
+    # Matrice calculee par le job `changes` : elle ne contient QUE les apps
+    # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
+    # par etape (`steps.gate`) devient inutile : un job present est un job a faire.
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { app: domus-app,        flag: domus,        base: '/domus/',        build: build }
-          - { app: journal-app,      flag: journal,      base: '/journal/',      build: build }
-          - { app: tickets-app,      flag: tickets,      base: '/tickets/',      build: build }
-          - { app: farmos-app,       flag: farmos,       base: '/farmos/',       build: build }
-          - { app: batipro-app,      flag: batipro,      base: '/batipro/',      build: build }
-          - { app: hr-app,           flag: hr,           base: '/hr/',           build: build }
-          - { app: comptabilite-app, flag: comptabilite, base: '/comptabilite/', build: 'build:prod' }
-          - { app: migration-app,    flag: migration,    base: '/migration/',    build: build }
-          - { app: chat-app,         flag: chat,         base: '/chat/',         build: 'build:prod' }
-    if: needs.changes.outputs.domus == 'true' || needs.changes.outputs.journal == 'true' || needs.changes.outputs.tickets == 'true' || needs.changes.outputs.farmos == 'true' || needs.changes.outputs.batipro == 'true' || needs.changes.outputs.hr == 'true' || needs.changes.outputs.comptabilite == 'true' || needs.changes.outputs.migration == 'true' || needs.changes.outputs.chat == 'true'
+      matrix: ${{ fromJSON(needs.changes.outputs.static_matrix) }}
+    if: needs.changes.outputs.static_any == 'true'
     steps:
       - uses: actions/checkout@v4
-      - name: Should run
-        id: gate
-        run: echo "run=${{ needs.changes.outputs[matrix.flag] }}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.run == 'true'
         with: { node-version: '20' }
       - uses: ./.github/actions/ssh-setup
-        if: steps.gate.outputs.run == 'true'
         with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
       - uses: ./.github/actions/ssh-setup
-        if: steps.gate.outputs.run == 'true'
         with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
       - name: Build (une fois pour les 2 prods)
-        if: steps.gate.outputs.run == 'true'
         run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && npm run ${{ matrix.build }}
       - name: Deploy ongdngolu (bloquant)
-        if: steps.gate.outputs.run == 'true'
         env:
           SERVER: ${{ env.ONGD_SERVER }}
           BASE_URL: https://ongdngolu.org
@@ -258,7 +282,6 @@ jobs:
           SCP: scp -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
         run: sh scripts/ci/deploy-prod-static-app.sh ${{ matrix.app }} ${{ matrix.base }}
       - name: Deploy Avelomi (tolerant)
-        if: steps.gate.outputs.run == 'true'
         env:
           SERVER: ${{ env.AVELOMI_SERVER }}
           BASE_URL: https://avelomi.com

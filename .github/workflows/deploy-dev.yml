@@ -47,6 +47,12 @@ jobs:
       chat: ${{ steps.decide.outputs.chat }}
       marketing: ${{ steps.decide.outputs.marketing }}
       avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
+      # Matrice des apps statiques reduite aux seules apps modifiees, pour que
+      # le workflow n'affiche pas de jobs vides (parite avec les
+      # changesets.includePaths de Bitbucket, ou une etape non concernee
+      # n'existe tout simplement pas).
+      static_matrix: ${{ steps.decide.outputs.static_matrix }}
+      static_any: ${{ steps.decide.outputs.static_any }}
     steps:
       # fetch-depth: 0 obligatoire ici : paths-filter compare deux commits et
       # echoue sur un clone shallow ("fatal: shallow file has changed since we
@@ -105,11 +111,45 @@ jobs:
                    batipro hr comptabilite migration chat marketing avelomi_site; do
             if [ "$ALL" = "true" ]; then
               echo "$k=true" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=true"
             else
               v=$(printf '%s' "$FILTER" | jq -r --arg k "$k" '.[$k] // "false"')
               echo "$k=$v" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=$v"
             fi
           done
+
+          # Definition des apps statiques (source unique : le job static-dev
+          # consomme cette matrice au lieu de la redeclarer). `conf` = l'app
+          # embarque une conf nginx a resynchroniser.
+          all_static='[
+            {"app":"frontend",         "flag":"frontend",     "build":"build:dev"},
+            {"app":"domus-app",        "flag":"domus",        "build":"build"},
+            {"app":"journal-app",      "flag":"journal",      "build":"build"},
+            {"app":"farmos-app",       "flag":"farmos",       "build":"build"},
+            {"app":"batipro-app",      "flag":"batipro",      "build":"build",     "conf":true},
+            {"app":"hr-app",           "flag":"hr",           "build":"build",     "conf":true},
+            {"app":"comptabilite-app", "flag":"comptabilite", "build":"build:dev", "conf":true},
+            {"app":"chat-app",         "flag":"chat",         "build":"build:dev", "conf":true}
+          ]'
+
+          # Ne garde que les apps dont le flag vaut true.
+          selected='[]'
+          for row in $(printf '%s' "$all_static" | jq -c '.[]'); do
+            f=$(printf '%s' "$row" | jq -r '.flag')
+            eval "v=\${flag_$f}"
+            if [ "$v" = "true" ]; then
+              selected=$(printf '%s' "$selected" | jq -c --argjson r "$row" '. + [$r]')
+            fi
+          done
+
+          count=$(printf '%s' "$selected" | jq 'length')
+          echo "static_matrix=$(printf '%s' "$selected" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "static_any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "static_any=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ───────────────────────────── Backend2 → dev ─────────────────────────────
   backend2-dev:
@@ -175,37 +215,24 @@ jobs:
   static-dev:
     needs: changes
     runs-on: ubuntu-latest
+    # Matrice calculee par le job `changes` : elle ne contient QUE les apps
+    # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
+    # par etape (`steps.gate`) devient inutile : un job present est un job a faire.
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - { app: frontend,          flag: frontend,     build: 'build:dev' }
-          - { app: domus-app,         flag: domus,        build: build }
-          - { app: journal-app,       flag: journal,      build: build }
-          - { app: farmos-app,        flag: farmos,       build: build }
-          - { app: batipro-app,       flag: batipro,      build: build,      conf: true }
-          - { app: hr-app,            flag: hr,           build: build,      conf: true }
-          - { app: comptabilite-app,  flag: comptabilite, build: 'build:dev', conf: true }
-          - { app: chat-app,          flag: chat,         build: 'build:dev', conf: true }
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.domus == 'true' || needs.changes.outputs.journal == 'true' || needs.changes.outputs.farmos == 'true' || needs.changes.outputs.batipro == 'true' || needs.changes.outputs.hr == 'true' || needs.changes.outputs.comptabilite == 'true' || needs.changes.outputs.chat == 'true'
+      matrix: ${{ fromJSON(needs.changes.outputs.static_matrix) }}
+    if: needs.changes.outputs.static_any == 'true'
     steps:
       - uses: actions/checkout@v4
-      - name: Should run
-        id: gate
-        run: echo "run=${{ needs.changes.outputs[matrix.flag] }}" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.run == 'true'
         with: { node-version: '20' }
       - uses: ./.github/actions/ssh-setup
-        if: steps.gate.outputs.run == 'true'
         with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
       - name: Build
-        if: steps.gate.outputs.run == 'true'
         # npm audit informatif (|| true) : ne PAS bloquer sur une vuln transitive de
         # build, sinon dist/ reste vide et le deploy echoue.
         run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run ${{ matrix.build }}
       - name: Deploy
-        if: steps.gate.outputs.run == 'true'
         env:
           SERVER: ${{ env.ONGD_SERVER }}
           A: ${{ matrix.app }}
