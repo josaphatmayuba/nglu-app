@@ -48,7 +48,11 @@ jobs:
       marketing: ${{ steps.decide.outputs.marketing }}
       avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
     steps:
+      # fetch-depth: 0 obligatoire ici : paths-filter compare deux commits et
+      # echoue sur un clone shallow ("fatal: shallow file has changed since we
+      # read it"). Les autres jobs gardent le checkout shallow par defaut.
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: dorny/paths-filter@v3
         id: filter
         with:
