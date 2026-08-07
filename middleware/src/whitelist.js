@@ -118,6 +118,13 @@ module.exports = [
   { method: '*',    prefix: '/procurement',                   auth: true  },
   { method: '*',    prefix: '/documents',                     auth: true  },
   { method: '*',    prefix: '/projects',                      auth: true  },
+
+  // ── Signatures manuscrites ─────────────────────
+  // Le lien envoye est ouvert sans compte : le token de l'URL fait autorisation.
+  // Route publique declaree AVANT la route admin (prefixes distincts, mais on
+  // garde l'ordre specifique -> general impose par ce fichier).
+  { method: '*',    prefix: '/public/signature',              auth: false },
+  { method: '*',    prefix: '/signature-requests',            auth: true  },
   { method: '*',    prefix: '/vaccine-registry',              auth: true  },
   { method: '*',    prefix: '/transaction',                   auth: true  },
   { method: '*',    prefix: '/transaction-type',              auth: true  },

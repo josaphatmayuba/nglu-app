@@ -53,6 +53,7 @@ import { BudgetModule } from "./budget/budget.module";
 import { ProcurementModule } from "./procurement/procurement.module";
 import { DocumentsModule } from "./documents/documents.module";
 import { ProjectsModule } from "./projects/projects.module";
+import { SignaturesModule } from "./signatures/signatures.module";
 import { VaccineRegistryModule } from "./vaccine-registry/vaccine-registry.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
@@ -111,6 +112,7 @@ import { UsersModule } from "./users/users.module";
     ProcurementModule,
     DocumentsModule,
     ProjectsModule,
+    SignaturesModule,
     VaccineRegistryModule,
     TransactionTypesModule,
     UomModule,

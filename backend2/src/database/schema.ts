@@ -3297,3 +3297,34 @@ export const forecastExternalRefs = mysqlTable("forecast_external_refs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// Demandes de signature manuscrite par lien public (migration 0234).
+// Un seul lien porte les deux cases a signer ; publicToken remplace toute
+// authentification, c'est donc le seul secret de la page publique.
+export const signatureRequests = mysqlTable("signature_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  publicToken: varchar("public_token", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  completedAt: timestamp("completed_at"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Une ligne par signature tracee (deux au maximum : bianca puis liam).
+// signerName = qui a physiquement signe (Roxanna), partyLabel = pour qui.
+export const signatureSignatures = mysqlTable("signature_signatures", {
+  id: serial("id").primaryKey(),
+  requestId: bigint("request_id", { mode: "number" }).notNull(),
+  partyKey: varchar("party_key", { length: 40 }).notNull(),
+  partyLabel: varchar("party_label", { length: 120 }).notNull(),
+  signerName: varchar("signer_name", { length: 160 }),
+  signatureData: mediumtext("signature_data").notNull(),
+  signedAt: timestamp("signed_at").defaultNow().notNull(),
+  ipAddress: varchar("ip_address", { length: 64 }),
+  userAgent: text("user_agent"),
+});
