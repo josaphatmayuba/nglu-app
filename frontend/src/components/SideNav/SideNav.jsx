@@ -736,6 +736,17 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       label: "Gestion",
     },
     {
+      // Pas de `permit` : le module n'a pas encore de permission RBAC dediee,
+      // l'ecran est protege par le JWT seul (voir SignaturesController).
+      label: (
+        <NavLink to="/admin/signature-requests">
+          <span>Signatures</span>
+        </NavLink>
+      ),
+      key: "signatureRequests",
+      icon: <FileSyncOutlined />,
+    },
+    {
       label: "Comptabilité",
       permit: {
         permissions: [
