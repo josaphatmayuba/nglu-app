@@ -56,7 +56,8 @@ case "$SMOKE_ROUTE" in
 esac
 
 APP_SAFE="$(printf "%s" "$APP_DIR" | tr -c 'A-Za-z0-9._-' '-')"
-STAMP="${BITBUCKET_BUILD_NUMBER:-manual}-$(date +%s)"
+# Numero de build : Bitbucket ou GitHub Actions selon le CI qui execute le script.
+STAMP="${BITBUCKET_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-manual}}-$(date +%s)"
 LOCAL_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"
 LOCAL_SUPPORT_ARCHIVE="/tmp/nglu-prod-support-${APP_SAFE}-${STAMP}.tgz"
 REMOTE_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"

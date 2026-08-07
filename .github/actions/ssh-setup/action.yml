@@ -1,0 +1,58 @@
+name: SSH setup
+description: >
+  Ecrit la cle SSH de deploiement dans ~/.ssh/<name>.pem et exporte SSH/SCP.
+  Remplace le mecanisme Bitbucket (BITBUCKET_SSH_KEY_FILE) qui n'existe pas
+  chez GitHub : ici la cle vient TOUJOURS d'un secret explicite.
+
+inputs:
+  key:
+    description: Cle privee PEM (brute, avec \n echappes, ou encodee base64)
+    required: true
+  name:
+    description: Nom du fichier de cle sous ~/.ssh (sans extension)
+    required: false
+    default: deploy
+
+runs:
+  using: composite
+  steps:
+    - name: Write SSH key
+      shell: bash
+      env:
+        KEY_MATERIAL: ${{ inputs.key }}
+        KEY_NAME: ${{ inputs.name }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${KEY_MATERIAL:-}" ]; then
+          echo "::error::Secret SSH manquant. Definis-le dans Settings > Secrets and variables > Actions." >&2
+          exit 1
+        fi
+
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        target=~/.ssh/"$KEY_NAME".pem
+
+        # Meme logique que l'anchor avelomi-ssh-setup de bitbucket-pipelines.yml :
+        # PEM brut / PEM avec \n echappes / base64.
+        if printf '%s\n' "$KEY_MATERIAL" | grep -q -- "-----BEGIN .*PRIVATE KEY-----"; then
+          printf '%b\n' "$KEY_MATERIAL" > "$target"
+        else
+          printf '%s' "$KEY_MATERIAL" | base64 -d > "$target" || {
+            echo "::error::La cle SSH n'est ni un PEM ni du base64 valide." >&2
+            exit 1
+          }
+        fi
+
+        chmod 600 "$target"
+        ssh-keygen -y -f "$target" >/dev/null || {
+          echo "::error::Cle SSH invalide ou protegee par passphrase." >&2
+          exit 1
+        }
+
+        # Exporte SSH/SCP pour les steps suivants du job (equivalent des
+        # `export SSH=... SCP=...` repetes dans chaque step Bitbucket).
+        opts="-i $target -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+        {
+          echo "SSH=ssh $opts -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+          echo "SCP=scp $opts"
+        } >> "$GITHUB_ENV"
