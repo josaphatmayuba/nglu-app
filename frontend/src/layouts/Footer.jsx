@@ -6,17 +6,7 @@ function Footer({ data }) {
   return (
     <div className="flex items-center justify-center py-3">
       {!data?.footer ? (
-        <p>
-          {year}{" "}
-          <a
-            href="https://solution.omega.ac"
-            className="font-weight-bold"
-            target="_blank"
-            rel="noreferrer">
-            Omega Solution
-          </a>{" "}
-          One stop solution.
-        </p>
+        <p>{year}</p>
       ) : (
         <span
           dangerouslySetInnerHTML={{
