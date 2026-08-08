@@ -63,6 +63,11 @@ jobs:
         with:
           # NB: pas d'ancre YAML ici — paths-filter reparse ce bloc et une ancre
           # produirait une liste imbriquee qu'il refuse. Chemins explicites.
+          # Sans base explicite, paths-filter cherche le merge-base avec `main`
+          # (son defaut interne) : ce repo n'a pas de branche `main` (master/develop
+          # seulement) -> "No merge base found" -> comparaison directe qui marque
+          # TOUT comme modifie.
+          base: HEAD^
           filters: |
             backend2:
               - 'backend2/**'
