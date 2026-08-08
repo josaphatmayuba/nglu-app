@@ -1,10 +1,11 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { computeLotBenchmarks } from "./farmos-benchmarks";
 import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -12,6 +13,8 @@ import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.servi
 import type {
   CreateAnimalDto,
   ImportAnimalsDto,
+  CreateBatchAdjustmentDto,
+  CreateBatchTransferDto,
   CreateDiseaseDto,
   CreateExpenseDto,
   CreateMedicineDto,
@@ -1342,8 +1345,78 @@ export class FarmosService {
       weanedCount: input.weaned_count ?? null,
       weaningDate: input.weaning_date ?? null,
     }).$returningId();
-    await this.publishFarmosUpdate("createReproductionEvent", ["reproductionEvents", "semenStraws"], "created", res.id, orgId);
-    return { id: res.id };
+
+    // Mise bas avec nés vivants : ajoute directement le(s) lot(s) au cheptel,
+    // avec lien mère/père pour la traçabilité généalogique (consanguinité).
+    let createdAnimalIds: number[] = [];
+    if (input.event_type === "birthing" && (input.offspring_count ?? 0) > 0) {
+      createdAnimalIds = await this.createOffspringAnimals(input, a, orgId);
+    }
+
+    await this.publishFarmosUpdate("createReproductionEvent", ["reproductionEvents", "semenStraws", ...(createdAnimalIds.length ? ["animals"] : [])], "created", res.id, orgId);
+    return { id: res.id, created_animal_ids: createdAnimalIds };
+  }
+
+  private async createOffspringAnimals(
+    input: CreateReproductionEventDto,
+    mother: typeof farmosAnimals.$inferSelect,
+    orgId: number,
+  ): Promise<number[]> {
+    const total = input.offspring_count ?? 0;
+    const male = input.born_male_count ?? 0;
+    const female = input.born_female_count ?? 0;
+
+    let fatherId: string | null = null;
+    if (input.sire_animal_id) {
+      const [sire] = await this.db.select().from(farmosAnimals)
+        .where(and(eq(farmosAnimals.id, input.sire_animal_id), eq(farmosAnimals.organizationId, orgId)))
+        .limit(1);
+      if (sire) fatherId = sire.externalId || String(sire.id);
+    } else if (input.sire_straw_id) {
+      const [straw] = await this.db.select().from(farmosSemenStraws)
+        .where(and(eq(farmosSemenStraws.id, input.sire_straw_id), eq(farmosSemenStraws.organizationId, orgId)))
+        .limit(1);
+      if (straw) fatherId = straw.sireRegistration || straw.sireName || null;
+    }
+    const motherId = mother.externalId || String(mother.id);
+
+    const base = {
+      organizationId: orgId,
+      species: mother.species,
+      race: mother.race ?? null,
+      dateOfBirth: input.event_date,
+      lot: mother.lot ?? null,
+      buildingId: mother.buildingId ?? null,
+      boxId: mother.boxId ?? null,
+      zoneId: mother.zoneId ?? null,
+      type: "portee",
+      status: "healthy" as const,
+      motherId,
+      fatherId,
+    };
+
+    const groups: { sex: "M" | "F" | null; label: string; count: number }[] = (male > 0 || female > 0)
+      ? [
+          ...(male > 0 ? [{ sex: "M" as const, label: "M", count: male }] : []),
+          ...(female > 0 ? [{ sex: "F" as const, label: "F", count: female }] : []),
+          ...(male + female < total ? [{ sex: null, label: "X", count: total - male - female }] : []),
+        ]
+      : [{ sex: null, label: "X", count: total }];
+
+    // Identifiant du lot = traçable jusqu'à la mère + date de mise bas,
+    // indispensable pour retrouver le lot dans l'écran Animaux et pour
+    // que la détection de consanguinité (quickentry.jsx) fonctionne sur
+    // les portées suivantes.
+    const ids: number[] = [];
+    for (const g of groups) {
+      const suffix = groups.length > 1 ? `-${g.label}` : "";
+      const externalId = `${motherId}-${input.event_date}${suffix}`;
+      const [row] = await this.db.insert(farmosAnimals)
+        .values({ ...base, sex: g.sex, count: g.count, externalId })
+        .$returningId();
+      ids.push(row.id);
+    }
+    return ids;
   }
 
   async deleteReproductionEvent(id: number, orgId: number) {
@@ -2906,6 +2979,159 @@ export class FarmosService {
     }
     await this.publishFarmosUpdate("createMortalityEvent", ["mortalityEvents", "animals"], "created", res.id, orgId);
     return { id: res.id };
+  }
+
+  // ─── Ajustement manuel de lot (achat externe, transfert, correction) ────
+  // Complete createMortalityEvent (sortie deces) et applyAnimalSale (sortie
+  // vente) avec un mecanisme d entree/sortie manuelle trace : delta positif =
+  // ajout au lot, negatif = retrait. Contrairement a createOffspringAnimals,
+  // ne cree PAS de nouvelle ligne farmosAnimals : ajuste le count d un lot
+  // deja existant, avec historique pour l audit.
+  async createBatchAdjustment(input: CreateBatchAdjustmentDto, orgId: number) {
+    const delta = Number(input.delta);
+    if (!Number.isInteger(delta) || delta === 0) {
+      throw new BadRequestException("Delta requis (entier non nul, positif = ajout, negatif = retrait).");
+    }
+    const animal = await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    if (!animal) throw new NotFoundException("Animal introuvable.");
+
+    const countBefore = Number(animal.count ?? 0);
+    let countAfter = countBefore + delta;
+    if (delta < 0 && Math.abs(delta) > countBefore) {
+      throw new BadRequestException(`Retrait superieur au nombre disponible. Maximum: ${countBefore}.`);
+    }
+    if (countAfter < 0) countAfter = 0;
+
+    await this.db
+      .update(farmosAnimals)
+      .set({ count: countAfter })
+      .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+
+    const [res] = await this.db.insert(farmosBatchAdjustments).values({
+      organizationId: orgId,
+      animalId: animal.id,
+      adjustmentDate: input.adjustment_date,
+      delta,
+      reason: input.reason,
+      notes: input.notes ?? null,
+      countBefore,
+      countAfter,
+    }).$returningId();
+
+    await this.publishFarmosUpdate("createBatchAdjustment", ["animals", "batchAdjustments"], "created", res.id, orgId);
+    return { id: res.id, count_before: countBefore, count_after: countAfter };
+  }
+
+  async listBatchAdjustments(animalId: number, orgId: number) {
+    return this.db
+      .select()
+      .from(farmosBatchAdjustments)
+      .where(and(
+        eq(farmosBatchAdjustments.animalId, animalId),
+        eq(farmosBatchAdjustments.organizationId, orgId),
+        eq(farmosBatchAdjustments.isActive, 1),
+      ))
+      .orderBy(desc(farmosBatchAdjustments.adjustmentDate), desc(farmosBatchAdjustments.id));
+  }
+
+  // Transfert atomique de N tetes d un lot source vers un lot destination
+  // existant (meme espece). Decremente/incremente farmosAnimals.count et trace
+  // 2 lignes farmos_batch_adjustments (transfer_out / transfer_in) liees par
+  // transfer_group_id, dans une seule transaction DB.
+  async createBatchTransfer(input: CreateBatchTransferDto, orgId: number) {
+    const count = Number(input.count);
+    if (!Number.isInteger(count) || count <= 0) {
+      throw new BadRequestException("Le nombre de tetes a transferer doit etre un entier positif.");
+    }
+    if (Number(input.from_animal_id) === Number(input.to_animal_id)) {
+      throw new BadRequestException("Le lot source et le lot destination doivent etre differents.");
+    }
+
+    // Verifie les deux lots (statut writable + memes organisation/espece)
+    // avant d ouvrir la transaction.
+    const fromAnimal = await this.assertAnimalWritableById(Number(input.from_animal_id), orgId);
+    const toAnimal = await this.assertAnimalWritableById(Number(input.to_animal_id), orgId);
+    if (!fromAnimal) throw new NotFoundException("Lot source introuvable.");
+    if (!toAnimal) throw new NotFoundException("Lot destination introuvable.");
+    if (String(fromAnimal.species) !== String(toAnimal.species)) {
+      throw new BadRequestException("Le lot source et le lot destination doivent etre de la meme espece.");
+    }
+
+    const transferGroupId = randomUUID();
+
+    const result = await this.db.transaction(async (tx) => {
+      const [fromRow] = await tx
+        .select()
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.id, fromAnimal.id), eq(farmosAnimals.organizationId, orgId)))
+        .limit(1)
+        .for("update");
+      const [toRow] = await tx
+        .select()
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.id, toAnimal.id), eq(farmosAnimals.organizationId, orgId)))
+        .limit(1)
+        .for("update");
+      if (!fromRow) throw new NotFoundException("Lot source introuvable.");
+      if (!toRow) throw new NotFoundException("Lot destination introuvable.");
+
+      const fromCountBefore = Number(fromRow.count ?? 0);
+      if (count > fromCountBefore) {
+        throw new BadRequestException(`Transfert superieur au nombre disponible sur le lot source. Maximum: ${fromCountBefore}.`);
+      }
+      const fromCountAfter = fromCountBefore - count;
+      const toCountBefore = Number(toRow.count ?? 0);
+      const toCountAfter = toCountBefore + count;
+
+      await tx
+        .update(farmosAnimals)
+        .set({ count: fromCountAfter })
+        .where(and(eq(farmosAnimals.id, fromRow.id), eq(farmosAnimals.organizationId, orgId)));
+      await tx
+        .update(farmosAnimals)
+        .set({ count: toCountAfter })
+        .where(and(eq(farmosAnimals.id, toRow.id), eq(farmosAnimals.organizationId, orgId)));
+
+      const [outRes] = await tx.insert(farmosBatchAdjustments).values({
+        organizationId: orgId,
+        animalId: fromRow.id,
+        adjustmentDate: input.transfer_date,
+        delta: -count,
+        reason: "transfer_out",
+        transferGroupId,
+        notes: input.notes ?? null,
+        countBefore: fromCountBefore,
+        countAfter: fromCountAfter,
+      }).$returningId();
+
+      const [inRes] = await tx.insert(farmosBatchAdjustments).values({
+        organizationId: orgId,
+        animalId: toRow.id,
+        adjustmentDate: input.transfer_date,
+        delta: count,
+        reason: "transfer_in",
+        transferGroupId,
+        notes: input.notes ?? null,
+        countBefore: toCountBefore,
+        countAfter: toCountAfter,
+      }).$returningId();
+
+      return {
+        out_id: outRes.id,
+        in_id: inRes.id,
+        from_count_after: fromCountAfter,
+        to_count_after: toCountAfter,
+      };
+    });
+
+    await this.publishFarmosUpdate("createBatchTransfer", ["animals", "batchAdjustments"], "created", result.out_id, orgId);
+    return {
+      transfer_group_id: transferGroupId,
+      out_adjustment_id: result.out_id,
+      in_adjustment_id: result.in_id,
+      from_count_after: result.from_count_after,
+      to_count_after: result.to_count_after,
+    };
   }
 
   // ─── Pesées / courbe de croissance ──────────────────────────────────────

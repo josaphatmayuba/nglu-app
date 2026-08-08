@@ -957,6 +957,238 @@ const DeathDeclareModal = ({ lang, animal, onClose, onSaved }) => {
   );
 };
 
+// Ajustement manuel d'un lot existant : achat de porcelets externes, transfert
+// entre lots, correction d'inventaire. Complète le décès (DeathDeclareModal)
+// et la vente avec un mécanisme d'ajout/retrait tracé (motif + notes).
+const BATCH_ADJUSTMENT_REASONS = [
+  { value: "purchase", fr: "Achat externe", en: "External purchase" },
+  { value: "transfer_in", fr: "Transfert entrant", en: "Transfer in" },
+  { value: "transfer_out", fr: "Transfert sortant", en: "Transfer out" },
+  { value: "inventory_correction", fr: "Correction d'inventaire", en: "Inventory correction" },
+  { value: "other", fr: "Autre", en: "Other" },
+];
+
+const BatchAdjustModal = ({ lang, animal, onClose, onSaved }) => {
+  const fr = lang === "fr";
+  const currentCount = Math.max(0, Math.floor(Number(animal.count ?? 0)) || 0);
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), delta: "", reason: "purchase", notes: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const typedDelta = Number(form.delta);
+  const hasValidDelta = Number.isInteger(typedDelta) && typedDelta !== 0;
+  const previewAfter = hasValidDelta ? Math.max(0, currentCount + typedDelta) : currentCount;
+  const submit = async () => {
+    if (saving) return;
+    if (!form.date) {
+      setError(fr ? "Date requise." : "Date required.");
+      return;
+    }
+    if (!hasValidDelta) {
+      setError(fr ? "Quantité requise (positive pour un ajout, négative pour un retrait)." : "Amount required (positive to add, negative to remove).");
+      return;
+    }
+    if (typedDelta < 0 && Math.abs(typedDelta) > currentCount) {
+      setError(fr ? `Retrait supérieur au nombre disponible. Maximum : ${currentCount}.` : `Removal exceeds available count. Maximum: ${currentCount}.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await api.createBatchAdjustment({
+        animal_id: animal._pk,
+        adjustment_date: form.date,
+        delta: typedDelta,
+        reason: form.reason,
+        notes: form.notes.trim() || null,
+      });
+      onSaved && onSaved();
+    } catch (e) {
+      setError((fr ? "Échec : " : "Failed: ") + (e.message || ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const lbl = { fontSize: 12, color: "var(--fg-2)", display: "block" };
+  const title = animal.name || animal.id || `#${animal._pk}`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 460, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: "var(--ink-50)", color: "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="layers" size={20} color="currentColor"/>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{fr ? "Ajuster le lot" : "Adjust batch"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--ink-50)", borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
+          {fr
+            ? `Effectif actuel : ${currentCount}. Après ajustement : ${previewAfter}.`
+            : `Current count: ${currentCount}. After adjustment: ${previewAfter}.`}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={lbl}>{fr ? "Date de l'ajustement" : "Adjustment date"}
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Quantité (+ ajout / − retrait)" : "Amount (+ add / − remove)"}
+            <input className="input mono" type="number" step="1" value={form.delta} onChange={(e) => set("delta", e.target.value)} placeholder={fr ? "ex. 5 ou -3" : "e.g. 5 or -3"} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Motif" : "Reason"}
+            <select className="input" value={form.reason} onChange={(e) => set("reason", e.target.value)} style={{ width: "100%", marginTop: 4 }}>
+              {BATCH_ADJUSTMENT_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>{fr ? r.fr : r.en}</option>
+              ))}
+            </select>
+          </label>
+          <label style={lbl}>{fr ? "Commentaire" : "Comment"}
+            <textarea className="input" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder={fr ? "Note affichée dans l'historique…" : "Note shown in history…"} style={{ width: "100%", marginTop: 4, resize: "vertical" }}/>
+          </label>
+        </div>
+
+        {error && <div style={{ color: "var(--oxblood-700)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={saving}>{fr ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-sm" onClick={submit} disabled={saving} style={{ background: "var(--ink-700)", color: "#fff", borderColor: "var(--ink-700)" }}>
+            {saving ? (fr ? "Enregistrement…" : "Saving…") : (fr ? "Confirmer l'ajustement" : "Confirm adjustment")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Transfert atomique de N tetes du lot courant vers un autre lot existant de
+// meme espece (ex. deplacement d'un batiment/box a un autre deja suivi comme
+// lot separe). Distinct de BatchAdjustModal (ajout/retrait isole, sans lot
+// destination) : ici les 2 mouvements sont lies et tracables des 2 cotes.
+const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
+  const fr = lang === "fr";
+  const currentCount = Math.max(0, Math.floor(Number(animal.count ?? 0)) || 0);
+  const [candidates, setCandidates] = React.useState([]);
+  const [loadingCandidates, setLoadingCandidates] = React.useState(true);
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), toAnimalId: "", count: "", notes: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    api.listAnimals().then((rows) => {
+      const list = (rows || []).filter((a) =>
+        a._pk !== animal._pk
+        && String(a.species) === String(animal.species)
+        && !isSaleLockedAnimal(a),
+      );
+      setCandidates(list);
+    }).catch(() => setCandidates([])).finally(() => setLoadingCandidates(false));
+  }, [animal._pk, animal.species]);
+
+  const typedCount = Number(form.count);
+  const hasValidCount = Number.isInteger(typedCount) && typedCount > 0;
+  const targetAnimal = candidates.find((a) => String(a._pk) === String(form.toAnimalId));
+  const previewFromAfter = hasValidCount ? Math.max(0, currentCount - typedCount) : currentCount;
+  const previewToAfter = hasValidCount && targetAnimal ? Math.max(0, Number(targetAnimal.count ?? 0) + typedCount) : (targetAnimal ? Number(targetAnimal.count ?? 0) : null);
+
+  const submit = async () => {
+    if (saving) return;
+    if (!form.date) {
+      setError(fr ? "Date requise." : "Date required.");
+      return;
+    }
+    if (!targetAnimal) {
+      setError(fr ? "Sélectionnez un lot destination." : "Select a destination batch.");
+      return;
+    }
+    if (!hasValidCount) {
+      setError(fr ? "Quantité requise (entier positif)." : "Amount required (positive integer).");
+      return;
+    }
+    if (typedCount > currentCount) {
+      setError(fr ? `Transfert supérieur au nombre disponible. Maximum : ${currentCount}.` : `Transfer exceeds available count. Maximum: ${currentCount}.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await api.createBatchTransfer({
+        from_animal_id: animal._pk,
+        to_animal_id: targetAnimal._pk,
+        count: typedCount,
+        transfer_date: form.date,
+        notes: form.notes.trim() || null,
+      });
+      onSaved && onSaved();
+    } catch (e) {
+      setError((fr ? "Échec : " : "Failed: ") + (e.message || ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const lbl = { fontSize: 12, color: "var(--fg-2)", display: "block" };
+  const title = animal.name || animal.id || `#${animal._pk}`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 460, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: "var(--ink-50)", color: "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="layers" size={20} color="currentColor"/>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{fr ? "Transférer vers un autre lot" : "Transfer to another batch"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--ink-50)", borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
+          {fr
+            ? `Lot source : ${currentCount} → ${previewFromAfter}.${targetAnimal ? ` Lot destination : ${Number(targetAnimal.count ?? 0)} → ${previewToAfter}.` : ""}`
+            : `Source batch: ${currentCount} → ${previewFromAfter}.${targetAnimal ? ` Destination batch: ${Number(targetAnimal.count ?? 0)} → ${previewToAfter}.` : ""}`}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={lbl}>{fr ? "Date du transfert" : "Transfer date"}
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Lot destination" : "Destination batch"}
+            <select className="input" value={form.toAnimalId} onChange={(e) => set("toAnimalId", e.target.value)} style={{ width: "100%", marginTop: 4 }} disabled={loadingCandidates}>
+              <option value="">{loadingCandidates ? (fr ? "Chargement…" : "Loading…") : (fr ? "Sélectionner…" : "Select…")}</option>
+              {candidates.map((a) => (
+                <option key={a._pk} value={a._pk}>
+                  {(a.name || a.id || `#${a._pk}`) + " — " + (a.lot ? a.lot + " · " : "") + (fr ? "effectif " : "count ") + Math.max(0, Math.floor(Number(a.count ?? 0)) || 0)}
+                </option>
+              ))}
+            </select>
+            {!loadingCandidates && candidates.length === 0 && (
+              <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 4 }}>
+                {fr ? "Aucun autre lot de la même espèce disponible." : "No other batch of the same species available."}
+              </div>
+            )}
+          </label>
+          <label style={lbl}>{fr ? "Quantité à transférer" : "Amount to transfer"}
+            <input className="input mono" type="number" step="1" min="1" value={form.count} onChange={(e) => set("count", e.target.value)} placeholder={fr ? "ex. 10" : "e.g. 10"} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Commentaire" : "Comment"}
+            <textarea className="input" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder={fr ? "Note affichée dans l'historique…" : "Note shown in history…"} style={{ width: "100%", marginTop: 4, resize: "vertical" }}/>
+          </label>
+        </div>
+
+        {error && <div style={{ color: "var(--oxblood-700)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={saving}>{fr ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-sm" onClick={submit} disabled={saving} style={{ background: "var(--ink-700)", color: "#fff", borderColor: "var(--ink-700)" }}>
+            {saving ? (fr ? "Enregistrement…" : "Saving…") : (fr ? "Confirmer le transfert" : "Confirm transfer")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const sp = speciesById(animal.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", frSing: animal.species, enSing: animal.species, fields: [] };
   const groups = groupFields(sp.fields);
@@ -965,6 +1197,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
   const [declaringDeath, setDeclaringDeath] = React.useState(false);
+  const [adjustingBatch, setAdjustingBatch] = React.useState(false);
+  const [transferringBatch, setTransferringBatch] = React.useState(false);
+  const [batchAdjustments, setBatchAdjustments] = React.useState([]);
   const [deathEvent, setDeathEvent] = React.useState(null);
   const deceased = isDeceasedStatus(animal.status);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
@@ -998,6 +1233,13 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       .catch(() => {});
     return () => { cancel = true; };
   }, [animal._pk, animal.status, animal.count]);
+  const reloadBatchAdjustments = React.useCallback(() => {
+    if (!animal._pk) { setBatchAdjustments([]); return; }
+    api.listBatchAdjustments(animal._pk).then((rows) => setBatchAdjustments(Array.isArray(rows) ? rows : [])).catch(() => {});
+  }, [animal._pk]);
+  React.useEffect(() => {
+    reloadBatchAdjustments();
+  }, [reloadBatchAdjustments]);
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
@@ -1083,6 +1325,22 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           onSaved={() => { setDeclaringDeath(false); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
         />
       )}
+      {adjustingBatch && (
+        <BatchAdjustModal
+          lang={lang}
+          animal={animal}
+          onClose={() => setAdjustingBatch(false)}
+          onSaved={() => { setAdjustingBatch(false); reloadBatchAdjustments(); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
+        />
+      )}
+      {transferringBatch && (
+        <BatchTransferModal
+          lang={lang}
+          animal={animal}
+          onClose={() => setTransferringBatch(false)}
+          onSaved={() => { setTransferringBatch(false); reloadBatchAdjustments(); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
+        />
+      )}
 
       {/* Hero */}
       <div style={{ background: "var(--paper)", borderBottom: "1px solid var(--border-1)", padding: "20px 22px" }}>
@@ -1103,6 +1361,16 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             {animal._pk && (
               <button className="btn btn-sm btn-ghost" onClick={() => setEditing(true)} title={lang === "fr" ? "Modifier" : "Edit"}>
                 <Icon name="edit" size={13} color="var(--ink-700)"/>
+              </button>
+            )}
+            {animal._pk && (Math.floor(Number(animal.count ?? 0)) || 0) >= 1 && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setAdjustingBatch(true)} title={lang === "fr" ? "Ajuster le lot" : "Adjust batch"}>
+                <Icon name="layers" size={13} color="var(--ink-700)"/>
+              </button>
+            )}
+            {animal._pk && (Math.floor(Number(animal.count ?? 0)) || 0) >= 1 && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setTransferringBatch(true)} title={lang === "fr" ? "Transférer vers un autre lot" : "Transfer to another batch"}>
+                <Icon name="arrowRight" size={13} color="var(--ink-700)"/>
               </button>
             )}
             {animal._pk && (
@@ -1236,6 +1504,32 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
                       <div className={f.mono ? "mono" : ""} style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>{f.val}</div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+            {batchAdjustments.length > 0 && (
+              <div>
+                <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "Ajustements du lot" : "Batch adjustments"}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {batchAdjustments.map((adj) => {
+                    const delta = Number(adj.delta ?? 0);
+                    const reasonDef = BATCH_ADJUSTMENT_REASONS.find((r) => r.value === (adj.reason || ""));
+                    const reasonLabel = reasonDef ? (lang === "fr" ? reasonDef.fr : reasonDef.en) : (adj.reason || "");
+                    return (
+                      <div key={adj.id} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: delta >= 0 ? "var(--forest-700, #2f7a4d)" : "var(--oxblood-700)", minWidth: 42 }}>
+                          {delta >= 0 ? `+${delta}` : delta}
+                        </span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 12.5, color: "var(--ink-900)" }}>{reasonLabel}</div>
+                          {adj.notes && <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{adj.notes}</div>}
+                        </div>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)", whiteSpace: "nowrap" }}>
+                          {(adj.adjustmentDate || adj.adjustment_date || "").slice(0, 10)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -1471,6 +1471,20 @@
       "when": 1781017200000,
       "tag": "0234_signature_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 210,
+      "version": "5",
+      "when": 1781020800000,
+      "tag": "0235_farmos_batch_adjustments",
+      "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "5",
+      "when": 1781024400000,
+      "tag": "0236_farmos_batch_adjustments_transfer_group",
+      "breakpoints": true
     }
   ]
 }

@@ -1774,6 +1774,8 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       mummified_count: kind === "birth" && form.mummified ? Number(form.mummified) : null,
       avg_birth_weight: kind === "birth" && form.weight ? Number(form.weight) : null,
       birth_difficulty: kind === "birth" ? (form.difficulty || null) : null,
+      born_male_count: kind === "birth" && form.bornMale ? Number(form.bornMale) : null,
+      born_female_count: kind === "birth" && form.bornFemale ? Number(form.bornFemale) : null,
       outcome: kind === "birth" ? "success" : "pending",
       partner_external_id: form.male || null,
       notes: form.notes || null,
@@ -1782,9 +1784,13 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       sire_animal_id: kind === "ai" && form.breeding_type === "natural" ? (form.sire_animal_id || null) : null,
     };
     try {
-      await api.createReproductionEvent(payload);
+      const res = await api.createReproductionEvent(payload);
       window.dispatchEvent(new CustomEvent("farmos:repro-created"));
-      onSaved && onSaved({ kind: "repro", severity: "success", message: lang === "fr" ? (kind === "heat" ? "Chaleur enregistrée" : kind === "ai" ? "IA enregistrée" : "Mise bas enregistrée") : (kind === "heat" ? "Heat saved" : kind === "ai" ? "AI saved" : "Birth saved") });
+      const addedToHerd = kind === "birth" && (res?.created_animal_ids?.length || 0) > 0;
+      const birthMsg = addedToHerd
+        ? (lang === "fr" ? `Mise bas enregistrée · ${payload.offspring_count} ajouté(s) au cheptel` : `Birth saved · ${payload.offspring_count} added to herd`)
+        : (lang === "fr" ? "Mise bas enregistrée" : "Birth saved");
+      onSaved && onSaved({ kind: "repro", severity: "success", message: lang === "fr" ? (kind === "heat" ? "Chaleur enregistrée" : kind === "ai" ? "IA enregistrée" : birthMsg) : (kind === "heat" ? "Heat saved" : kind === "ai" ? "AI saved" : birthMsg) });
       onClose();
     } catch (err) {
       onSaved && onSaved({ kind: "repro", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -1913,10 +1919,20 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
             </FormField>
           </FormGrid>
         )}
-        <FormGrid cols={2}>
+        <FormGrid cols={3}>
           {kind === "birth" && (
             <FormField label={lang === "fr" ? "Nb. nés vivants" : "Live births"}>
               <input className="input mono" type="number" placeholder={form.species === "pig" ? "11" : "1"} value={form.live || ""} onChange={(e) => set("live", e.target.value)}/>
+            </FormField>
+          )}
+          {kind === "birth" && (
+            <FormField label={lang === "fr" ? "dont mâles (si connu)" : "of which males (if known)"}>
+              <input className="input mono" type="number" placeholder="—" value={form.bornMale || ""} onChange={(e) => set("bornMale", e.target.value)}/>
+            </FormField>
+          )}
+          {kind === "birth" && (
+            <FormField label={lang === "fr" ? "dont femelles (si connu)" : "of which females (if known)"}>
+              <input className="input mono" type="number" placeholder="—" value={form.bornFemale || ""} onChange={(e) => set("bornFemale", e.target.value)}/>
             </FormField>
           )}
         </FormGrid>

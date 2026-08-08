@@ -2971,6 +2971,31 @@ export const farmosMortalityEvents = mysqlTable("farmos_mortality_events", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Ajustement manuel d un lot existant (farmosAnimals.count > 1) : achat de
+// porcelets externes integres a un lot deja en cheptel, transfert entre lots,
+// correction d inventaire. Distinct de createOffspringAnimals (nouveau lot a
+// la mise bas) et de createMortalityEvent (deces, deja trace ailleurs).
+// delta positif = ajout, negatif = retrait. countBefore/countAfter = snapshot
+// d audit au moment de l ajustement, independant de l etat courant de l animal.
+export const farmosBatchAdjustments = mysqlTable("farmos_batch_adjustments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  adjustmentDate: date("adjustment_date", { mode: "string" }).notNull(),
+  delta: int("delta").notNull(),
+  reason: varchar("reason", { length: 100 }).notNull(),
+  // Lie les 2 lignes (transfer_out / transfer_in) generees par un transfert
+  // atomique entre lots (POST /farmos/batch-transfers). Null pour un ajustement
+  // simple (achat, correction, etc.). Migration 0236.
+  transferGroupId: varchar("transfer_group_id", { length: 64 }),
+  notes: text("notes"),
+  countBefore: int("count_before").notNull(),
+  countAfter: int("count_after").notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosAiInsights = mysqlTable("farmos_ai_insights", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

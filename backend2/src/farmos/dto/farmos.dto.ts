@@ -357,6 +357,26 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class CreateBatchAdjustmentDto {
+  @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() adjustment_date: string;
+  @ApiProperty({ description: "Positif = ajout, negatif = retrait.", example: 5 }) @Type(() => Number) @IsInt() delta: number;
+  @ApiProperty({ enum: ["purchase", "transfer_in", "transfer_out", "inventory_correction", "other"], example: "purchase" })
+  @IsIn(["purchase", "transfer_in", "transfer_out", "inventory_correction", "other"])
+  reason: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateBatchTransferDto {
+  @ApiProperty({ description: "Animal/lot source." }) @Type(() => Number) @IsInt() from_animal_id: number;
+  @ApiProperty({ description: "Animal/lot destination." }) @Type(() => Number) @IsInt() to_animal_id: number;
+  @ApiProperty({ description: "Nombre de tetes transferees, positif.", example: 10 })
+  @Type(() => Number) @IsInt() @Min(1)
+  count: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() transfer_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class CreateWeighingDto {
   @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
   @ApiProperty({ example: "2026-06-10" }) @IsDateString() weigh_date: string;
@@ -622,6 +642,8 @@ export class CreateReproductionEventDto {
   @ApiPropertyOptional({ description: "Difficulté: easy/assisted/hard/cesarean." }) @IsOptional() @IsString() birth_difficulty?: string | null;
   @ApiPropertyOptional({ description: "Nombre de sevrés." }) @IsOptional() @Type(() => Number) @IsInt() weaned_count?: number | null;
   @ApiPropertyOptional({ description: "Date de sevrage." }) @IsOptional() @IsDateString() weaning_date?: string | null;
+  @ApiPropertyOptional({ description: "Nés vivants mâles (si connu à la mise bas)." }) @IsOptional() @Type(() => Number) @IsInt() born_male_count?: number | null;
+  @ApiPropertyOptional({ description: "Nées vivantes femelles (si connu à la mise bas)." }) @IsOptional() @Type(() => Number) @IsInt() born_female_count?: number | null;
 }
 
 // ─── Semen straws (banque de semence pour IA) ───────────────────────────

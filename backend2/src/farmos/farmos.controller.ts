@@ -28,6 +28,8 @@ import {
   CreateFarmosStaffDto,
   CreateDiseaseDto,
   CreateExpenseDto,
+  CreateBatchAdjustmentDto,
+  CreateBatchTransferDto,
   CreateMedicineDto,
   CreateMortalityEventDto,
   CreateWeighingDto,
@@ -782,6 +784,27 @@ export class FarmosController {
   @Post("mortality-events")
   createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createMortalityEvent(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajuste manuellement le count d'un lot existant (achat, transfert, correction)." })
+  @Permissions("create-farmos")
+  @Post("batch-adjustments")
+  createBatchAdjustment(@Body() body: CreateBatchAdjustmentDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchAdjustment(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Historique des ajustements manuels d'un lot (animal)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/batch-adjustments")
+  listBatchAdjustments(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.listBatchAdjustments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Transfere N tetes d'un lot vers un autre lot existant (meme espece), en une seule operation atomique et tracee." })
+  @Permissions("create-farmos")
+  @Post("batch-transfers")
+  createBatchTransfer(@Body() body: CreateBatchTransferDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchTransfer(body, orgId);
   }
 
   // ─── Pesées ──────────────────────────────────────────────────────────────
