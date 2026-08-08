@@ -8,7 +8,7 @@ import { speciesById, SPECIES, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
-import { AutocompleteDB } from "./quickentry";
+import { AutocompleteDB, Autocomplete } from "./quickentry";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { animalStatusColor, animalStatusLabel, isDeceasedStatus, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
@@ -1155,14 +1155,17 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
             <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
           </label>
           <label style={lbl}>{fr ? "Lot destination" : "Destination batch"}
-            <select className="input" value={form.toAnimalId} onChange={(e) => set("toAnimalId", e.target.value)} style={{ width: "100%", marginTop: 4 }} disabled={loadingCandidates}>
-              <option value="">{loadingCandidates ? (fr ? "Chargement…" : "Loading…") : (fr ? "Sélectionner…" : "Select…")}</option>
-              {candidates.map((a) => (
-                <option key={a._pk} value={a._pk}>
-                  {(a.name || a.id || `#${a._pk}`) + " — " + (a.lot ? a.lot + " · " : "") + (fr ? "effectif " : "count ") + Math.max(0, Math.floor(Number(a.count ?? 0)) || 0)}
-                </option>
-              ))}
-            </select>
+            <div style={{ marginTop: 4 }}>
+              <Autocomplete
+                value={form.toAnimalId}
+                onChange={(v) => set("toAnimalId", v)}
+                placeholder={loadingCandidates ? (fr ? "Chargement…" : "Loading…") : (fr ? "Rechercher un lot…" : "Search a batch…")}
+                options={candidates.map((a) => ({
+                  value: String(a._pk),
+                  label: (a.name || a.id || `#${a._pk}`) + " — " + (a.lot ? a.lot + " · " : "") + (fr ? "effectif " : "count ") + Math.max(0, Math.floor(Number(a.count ?? 0)) || 0),
+                }))}
+              />
+            </div>
             {!loadingCandidates && candidates.length === 0 && (
               <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 4 }}>
                 {fr ? "Aucun autre lot de la même espèce disponible." : "No other batch of the same species available."}
