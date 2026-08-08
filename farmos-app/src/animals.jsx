@@ -744,8 +744,8 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
               borderRadius: 10, padding: "10px 12px", cursor: "pointer",
               display: "flex", gap: 10, alignItems: "center", boxShadow: "var(--shadow-1)",
             }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <AnimalGlyph kind={sp.glyph} size={18} color="currentColor"/>
+              <div style={{ width: 44, height: 44, borderRadius: 10, background: sp.accentBg, color: sp.accent, border: `1px solid ${sp.accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <AnimalGlyph kind={sp.glyph} size={27} color="currentColor" strokeWidth={1.9}/>
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
@@ -792,7 +792,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
       <div style={{ minWidth: 880 }}>
       {/* Header */}
       <div style={{
-        display: "grid", gridTemplateColumns: "32px 1fr 130px 80px 100px 130px 120px 80px",
+        display: "grid", gridTemplateColumns: "44px 1fr 130px 80px 100px 130px 120px 80px",
         padding: "10px 14px", borderBottom: "1px solid var(--border-1)",
         background: "var(--bg-sunken)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--fg-2)",
       }}>
@@ -813,16 +813,16 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
         const statusLbl = animalStatusLabel(a.status, lang);
         return (
           <div key={a.id} onClick={() => onSelect(a.id)} style={{
-            display: "grid", gridTemplateColumns: "32px 1fr 130px 80px 100px 130px 120px 80px",
-            padding: `${(rowH-28)/2}px 14px`, alignItems: "center",
+            display: "grid", gridTemplateColumns: "44px 1fr 130px 80px 100px 130px 120px 80px",
+            padding: `${Math.max(5, (rowH-36)/2)}px 14px`, alignItems: "center",
             borderBottom: "1px solid var(--border-1)",
             background: sel ? "var(--bg-sunken)" : locked || a.withdrawal ? "rgba(122, 31, 43, 0.03)" : "var(--paper)",
             cursor: "pointer", transition: "background 80ms",
             position: "relative",
           }}>
             {sel && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--oxblood-700)" }}/>}
-            <div style={{ width: 24, height: 24, borderRadius: 6, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <AnimalGlyph kind={sp.glyph} size={15} color="currentColor"/>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: sp.accentBg, color: sp.accent, border: `1px solid ${sp.accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <AnimalGlyph kind={sp.glyph} size={22} color="currentColor" strokeWidth={1.9}/>
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
