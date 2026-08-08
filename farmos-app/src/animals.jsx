@@ -1076,6 +1076,8 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
   const refresh = useDataRefresh(["animals"]);
+  const speciesMeta = speciesById(animal.species);
+  const speciesLabel = ((fr ? speciesMeta?.fr : speciesMeta?.en) || animal.species || "").toLowerCase();
 
   React.useEffect(() => {
     let cancel = false;
@@ -1174,9 +1176,16 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
                 }))}
               />
             </div>
-            {!loadingCandidates && candidates.length === 0 && (
+            {/* Le transfert n'est possible qu'entre lots de la MEME espece : on
+                affiche explicitement l'espece et le nombre de lots trouves, sinon
+                une liste courte (ex. 2 lots de vaches) passe pour un bug. */}
+            {!loadingCandidates && (
               <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 4 }}>
-                {fr ? "Aucun autre lot de la même espèce disponible." : "No other batch of the same species available."}
+                {candidates.length === 0
+                  ? (fr ? `Aucun autre lot de ${speciesLabel} disponible (un transfert ne peut se faire qu'entre lots de la même espèce).`
+                        : `No other ${speciesLabel} batch available (transfers only happen between batches of the same species).`)
+                  : (fr ? `${candidates.length} lot${candidates.length > 1 ? "s" : ""} de ${speciesLabel} disponible${candidates.length > 1 ? "s" : ""} (même espèce uniquement).`
+                        : `${candidates.length} ${speciesLabel} batch${candidates.length > 1 ? "es" : ""} available (same species only).`)}
               </div>
             )}
           </label>
