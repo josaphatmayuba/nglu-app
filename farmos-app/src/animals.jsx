@@ -1081,6 +1081,7 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
       const list = (rows || []).filter((a) =>
         a._pk !== animal._pk
         && String(a.species) === String(animal.species)
+        && (Math.floor(Number(a.count ?? 0)) || 0) > 1
         && !isSaleLockedAnimal(a),
       );
       setCandidates(list);
