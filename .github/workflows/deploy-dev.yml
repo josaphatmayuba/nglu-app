@@ -65,9 +65,11 @@ jobs:
           # Sans base explicite, paths-filter cherche le merge-base avec `main`
           # (son defaut interne) : ce repo n'a pas de branche `main` (master/develop
           # seulement) -> "No merge base found" -> comparaison directe qui marque
-          # TOUT comme modifie. HEAD^ = commit precedent sur develop (fetch-depth 0
-          # ci-dessus garantit qu'il est disponible).
-          base: HEAD^
+          # TOUT comme modifie. `HEAD^` n'est PAS un refspec valide pour le
+          # `git fetch` interne de l'action (fatal: invalid refspec) -> on donne le
+          # vrai SHA d'avant-push fourni par GitHub. Sur workflow_dispatch (pas de
+          # "before"), retombe sur HEAD~1.
+          base: ${{ github.event.before || 'HEAD~1' }}
           filters: |
             backend2:
               - 'backend2/**'
