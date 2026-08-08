@@ -296,6 +296,10 @@ export const api = {
   deletePrice: (id) => jsonMutate("deletePrice", `/prices/${id}`, { method: "DELETE" }),
   unlistAnimalFromSale: (id) => mutate({ kind: "unlistAnimalSale", method: "DELETE", path: `/animals/${id}/listing` }),
   listAnimals:    cachedList("animals", "/animals"),
+  // Fetch réseau direct (pas de cache stale-while-revalidate) — pour les
+  // écrans qui ont besoin de la liste à jour immédiatement (ex. sélection
+  // d'un lot destination dans un transfert).
+  listAnimalsFresh: () => jsonFetch("/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),
   listDiseases:   (species) => cachedList("diseases", `/diseases${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),

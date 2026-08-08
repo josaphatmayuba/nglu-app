@@ -1075,9 +1075,16 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
+  const refresh = useDataRefresh(["animals"]);
 
   React.useEffect(() => {
-    api.listAnimals().then((rows) => {
+    let cancel = false;
+    setLoadingCandidates(true);
+    // listAnimals() sert d'abord le cache local (stale-while-revalidate) : ce
+    // modal a besoin de la liste fraîche des lots, donc on force un fetch
+    // réseau direct plutôt que de risquer d'afficher un cache périmé.
+    api.listAnimalsFresh().then((rows) => {
+      if (cancel) return;
       const list = (rows || []).filter((a) =>
         a._pk !== animal._pk
         && String(a.species) === String(animal.species)
@@ -1085,8 +1092,9 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
         && !isSaleLockedAnimal(a),
       );
       setCandidates(list);
-    }).catch(() => setCandidates([])).finally(() => setLoadingCandidates(false));
-  }, [animal._pk, animal.species]);
+    }).catch(() => { if (!cancel) setCandidates([]); }).finally(() => { if (!cancel) setLoadingCandidates(false); });
+    return () => { cancel = true; };
+  }, [animal._pk, animal.species, refresh]);
 
   const typedCount = Number(form.count);
   const hasValidCount = Number.isInteger(typedCount) && typedCount > 0;
