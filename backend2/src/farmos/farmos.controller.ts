@@ -30,6 +30,7 @@ import {
   CreateExpenseDto,
   CreateBatchAdjustmentDto,
   CreateBatchTransferDto,
+  CreateBatchSplitDto,
   CreateMedicineDto,
   CreateMortalityEventDto,
   CreateWeighingDto,
@@ -805,6 +806,13 @@ export class FarmosController {
   @Post("batch-transfers")
   createBatchTransfer(@Body() body: CreateBatchTransferDto, @CurrentOrg() orgId: number) {
     return this.farmos.createBatchTransfer(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Scinde un lot : extrait N tetes pour en faire N fiches animales individuelles distinctes (suivi propre), en conservant filiation et localisation." })
+  @Permissions("create-farmos")
+  @Post("batch-splits")
+  createBatchSplit(@Body() body: CreateBatchSplitDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchSplit(body, orgId);
   }
 
   // ─── Pesées ──────────────────────────────────────────────────────────────

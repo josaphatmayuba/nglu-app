@@ -361,8 +361,8 @@ export class CreateBatchAdjustmentDto {
   @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
   @ApiProperty({ example: "2026-06-10" }) @IsDateString() adjustment_date: string;
   @ApiProperty({ description: "Positif = ajout, negatif = retrait.", example: 5 }) @Type(() => Number) @IsInt() delta: number;
-  @ApiProperty({ enum: ["purchase", "transfer_in", "transfer_out", "inventory_correction", "other"], example: "purchase" })
-  @IsIn(["purchase", "transfer_in", "transfer_out", "inventory_correction", "other"])
+  @ApiProperty({ enum: ["purchase", "transfer_in", "transfer_out", "inventory_correction", "split_out", "other"], example: "purchase" })
+  @IsIn(["purchase", "transfer_in", "transfer_out", "inventory_correction", "split_out", "other"])
   reason: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
@@ -374,6 +374,19 @@ export class CreateBatchTransferDto {
   @Type(() => Number) @IsInt() @Min(1)
   count: number;
   @ApiProperty({ example: "2026-06-10" }) @IsDateString() transfer_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateBatchSplitDto {
+  @ApiProperty({ description: "Lot source (animal avec count>=1)." }) @Type(() => Number) @IsInt() from_animal_id: number;
+  @ApiPropertyOptional({ description: "Nombre d'individus a extraire du lot (une fiche individuelle par tete). Defaut 1.", default: 1 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  count?: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() split_date: string;
+  @ApiPropertyOptional({ description: "Nom du nouvel individu (utilise seulement si count=1)." }) @IsOptional() @IsString() name?: string | null;
+  @ApiPropertyOptional({ description: "Identifiant externe/tag du nouvel individu (suffixe -1/-2 auto-genere si count>1)." })
+    @IsOptional() @IsString() external_id?: string | null;
+  @ApiPropertyOptional({ enum: ["M", "F"] }) @IsOptional() @IsIn(["M", "F"]) sex?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 

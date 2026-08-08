@@ -15,6 +15,7 @@ import type {
   ImportAnimalsDto,
   CreateBatchAdjustmentDto,
   CreateBatchTransferDto,
+  CreateBatchSplitDto,
   CreateDiseaseDto,
   CreateExpenseDto,
   CreateMedicineDto,
@@ -3131,6 +3132,100 @@ export class FarmosService {
       in_adjustment_id: result.in_id,
       from_count_after: result.from_count_after,
       to_count_after: result.to_count_after,
+    };
+  }
+
+  // Scission : extrait N tetes d un lot source pour en faire N fiches
+  // individuelles distinctes (count=1 chacune), avec suivi propre (nom,
+  // poids, sante) tout en heritant filiation/localisation du lot source.
+  // Contrairement a createBatchTransfer (destination deja existante), ici
+  // les lignes farmosAnimals destination sont creees a la volee.
+  async createBatchSplit(input: CreateBatchSplitDto, orgId: number) {
+    const count = Number(input.count ?? 1);
+    if (!Number.isInteger(count) || count <= 0) {
+      throw new BadRequestException("Le nombre d'individus a extraire doit etre un entier positif.");
+    }
+    if (input.external_id && count > 1) {
+      throw new BadRequestException("external_id ne peut etre fourni que pour l'extraction d'un seul individu (count=1). Laissez vide pour une generation automatique avec suffixes.");
+    }
+
+    const fromAnimal = await this.assertAnimalWritableById(Number(input.from_animal_id), orgId);
+    if (!fromAnimal) throw new NotFoundException("Lot source introuvable.");
+
+    const result = await this.db.transaction(async (tx) => {
+      const [fromRow] = await tx
+        .select()
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.id, fromAnimal.id), eq(farmosAnimals.organizationId, orgId)))
+        .limit(1)
+        .for("update");
+      if (!fromRow) throw new NotFoundException("Lot source introuvable.");
+
+      const countBefore = Number(fromRow.count ?? 0);
+      if (count > countBefore) {
+        throw new BadRequestException(`Extraction superieure au nombre disponible sur le lot source. Maximum: ${countBefore}.`);
+      }
+      const countAfter = Math.max(0, countBefore - count);
+
+      await tx
+        .update(farmosAnimals)
+        .set({ count: countAfter })
+        .where(and(eq(farmosAnimals.id, fromRow.id), eq(farmosAnimals.organizationId, orgId)));
+
+      const motherId = fromRow.motherId ?? null;
+      const fatherId = fromRow.fatherId ?? null;
+      const baseSourceId = fromRow.externalId || String(fromRow.id);
+
+      const createdAnimalIds: number[] = [];
+      for (let i = 0; i < count; i++) {
+        const suffix = count > 1 ? `-${i + 1}` : "";
+        const externalId = count === 1
+          ? (input.external_id || `${baseSourceId}-split-${input.split_date}`)
+          : `${input.external_id || baseSourceId}-split-${input.split_date}${suffix}`;
+        const [row] = await tx.insert(farmosAnimals).values({
+          organizationId: orgId,
+          externalId,
+          name: count === 1 ? (input.name ?? null) : (input.name ? `${input.name}${suffix}` : null),
+          species: fromRow.species,
+          race: fromRow.race ?? null,
+          sex: (input.sex as "M" | "F" | undefined) ?? null,
+          dateOfBirth: fromRow.dateOfBirth ?? null,
+          count: 1,
+          lot: fromRow.lot ?? null,
+          buildingId: fromRow.buildingId ?? null,
+          boxId: fromRow.boxId ?? null,
+          zoneId: fromRow.zoneId ?? null,
+          type: null,
+          status: "healthy",
+          motherId,
+          fatherId,
+        }).$returningId();
+        createdAnimalIds.push(row.id);
+      }
+
+      const [adjRes] = await tx.insert(farmosBatchAdjustments).values({
+        organizationId: orgId,
+        animalId: fromRow.id,
+        adjustmentDate: input.split_date,
+        delta: -count,
+        reason: "split_out",
+        notes: [
+          `Scission: ${count} individu(s) extrait(s) -> animal id(s) ${createdAnimalIds.join(", ")}.`,
+          input.notes || null,
+        ].filter(Boolean).join(" "),
+        countBefore,
+        countAfter,
+      }).$returningId();
+
+      return { createdAnimalIds, adjustmentId: adjRes.id, countBefore, countAfter };
+    });
+
+    await this.publishFarmosUpdate("createBatchSplit", ["animals", "batchAdjustments"], "created", result.adjustmentId, orgId);
+    return {
+      created_animal_ids: result.createdAnimalIds,
+      adjustment_id: result.adjustmentId,
+      count_before: result.countBefore,
+      count_after: result.countAfter,
     };
   }
 

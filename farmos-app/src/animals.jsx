@@ -1189,6 +1189,122 @@ const BatchTransferModal = ({ lang, animal, onClose, onSaved }) => {
   );
 };
 
+// Scission d'un lot : extrait N tetes du lot courant pour en faire N fiches
+// individuelles distinctes, avec suivi propre (nom, poids, sante), tout en
+// conservant filiation (mere/pere) et localisation heritees du lot source.
+// Distinct de BatchTransferModal (destination = lot deja existant) : ici les
+// nouvelles fiches sont creees a la volee, il n'y a pas de destination au prealable.
+const BatchSplitModal = ({ lang, animal, onClose, onSaved }) => {
+  const fr = lang === "fr";
+  const currentCount = Math.max(0, Math.floor(Number(animal.count ?? 0)) || 0);
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), count: "1", name: "", externalId: "", sex: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const typedCount = Number(form.count);
+  const hasValidCount = Number.isInteger(typedCount) && typedCount > 0;
+  const previewAfter = hasValidCount ? Math.max(0, currentCount - typedCount) : currentCount;
+
+  const submit = async () => {
+    if (saving) return;
+    if (!form.date) {
+      setError(fr ? "Date requise." : "Date required.");
+      return;
+    }
+    if (!hasValidCount) {
+      setError(fr ? "Nombre à extraire requis (entier positif)." : "Amount to extract required (positive integer).");
+      return;
+    }
+    if (typedCount > currentCount) {
+      setError(fr ? `Extraction supérieure au nombre disponible. Maximum : ${currentCount}.` : `Extraction exceeds available count. Maximum: ${currentCount}.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await api.createBatchSplit({
+        from_animal_id: animal._pk,
+        count: typedCount,
+        split_date: form.date,
+        name: typedCount === 1 ? (form.name.trim() || null) : (form.name.trim() || null),
+        external_id: form.externalId.trim() || null,
+        sex: form.sex || null,
+      });
+      onSaved && onSaved();
+    } catch (e) {
+      setError((fr ? "Échec : " : "Failed: ") + (e.message || ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const lbl = { fontSize: 12, color: "var(--fg-2)", display: "block" };
+  const title = animal.name || animal.id || `#${animal._pk}`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 460, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: "var(--ink-50)", color: "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="user" size={20} color="currentColor"/>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{fr ? "Sortir un individu du lot" : "Split individual from batch"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--ink-50)", borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
+          {fr
+            ? `Lot source : ${currentCount} → ${previewAfter}. Chaque tête extraite devient une fiche animale individuelle à part entière (suivi poids/santé propre), avec la même filiation et localisation que le lot.`
+            : `Source batch: ${currentCount} → ${previewAfter}. Each extracted head becomes its own individual animal record (own weight/health tracking), inheriting the batch's parentage and location.`}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={lbl}>{fr ? "Date de la scission" : "Split date"}
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Nombre d'individus à extraire" : "Number of individuals to extract"}
+            <input className="input mono" type="number" step="1" min="1" max={currentCount || undefined} value={form.count} onChange={(e) => set("count", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          {hasValidCount && typedCount > 1 && (
+            <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>
+              {fr
+                ? `${typedCount} fiches individuelles distinctes seront créées (pas un mini-lot).`
+                : `${typedCount} separate individual records will be created (not a mini-batch).`}
+            </div>
+          )}
+          <label style={lbl}>{fr ? "Nom (optionnel)" : "Name (optional)"}
+            <input className="input" type="text" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={fr ? "ex. Bella" : "e.g. Bella"} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Identifiant / tag (optionnel)" : "Tag / ID (optional)"}
+            <input className="input" type="text" value={form.externalId} onChange={(e) => set("externalId", e.target.value)} disabled={hasValidCount && typedCount > 1} placeholder={fr ? "généré automatiquement si vide" : "auto-generated if empty"} style={{ width: "100%", marginTop: 4 }}/>
+            {hasValidCount && typedCount > 1 && (
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 3 }}>
+                {fr ? "Non disponible pour plusieurs individus (généré automatiquement avec suffixes)." : "Not available for multiple individuals (auto-generated with suffixes)."}
+              </div>
+            )}
+          </label>
+          <label style={lbl}>{fr ? "Sexe (optionnel)" : "Sex (optional)"}
+            <select className="input" value={form.sex} onChange={(e) => set("sex", e.target.value)} style={{ width: "100%", marginTop: 4 }}>
+              <option value="">{fr ? "Non précisé" : "Not specified"}</option>
+              <option value="F">{fr ? "Femelle" : "Female"}</option>
+              <option value="M">{fr ? "Mâle" : "Male"}</option>
+            </select>
+          </label>
+        </div>
+
+        {error && <div style={{ color: "var(--oxblood-700)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={saving}>{fr ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-sm" onClick={submit} disabled={saving} style={{ background: "var(--ink-700)", color: "#fff", borderColor: "var(--ink-700)" }}>
+            {saving ? (fr ? "Enregistrement…" : "Saving…") : (fr ? "Confirmer la scission" : "Confirm split")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const sp = speciesById(animal.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", frSing: animal.species, enSing: animal.species, fields: [] };
   const groups = groupFields(sp.fields);
@@ -1199,6 +1315,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [declaringDeath, setDeclaringDeath] = React.useState(false);
   const [adjustingBatch, setAdjustingBatch] = React.useState(false);
   const [transferringBatch, setTransferringBatch] = React.useState(false);
+  const [splittingBatch, setSplittingBatch] = React.useState(false);
   const [batchAdjustments, setBatchAdjustments] = React.useState([]);
   const [deathEvent, setDeathEvent] = React.useState(null);
   const deceased = isDeceasedStatus(animal.status);
@@ -1341,6 +1458,14 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           onSaved={() => { setTransferringBatch(false); reloadBatchAdjustments(); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
         />
       )}
+      {splittingBatch && (
+        <BatchSplitModal
+          lang={lang}
+          animal={animal}
+          onClose={() => setSplittingBatch(false)}
+          onSaved={() => { setSplittingBatch(false); reloadBatchAdjustments(); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
+        />
+      )}
 
       {/* Hero */}
       <div style={{ background: "var(--paper)", borderBottom: "1px solid var(--border-1)", padding: "20px 22px" }}>
@@ -1371,6 +1496,11 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             {animal._pk && (Math.floor(Number(animal.count ?? 0)) || 0) >= 1 && (
               <button className="btn btn-sm btn-ghost" onClick={() => setTransferringBatch(true)} title={lang === "fr" ? "Transférer vers un autre lot" : "Transfer to another batch"}>
                 <Icon name="arrowRight" size={13} color="var(--ink-700)"/>
+              </button>
+            )}
+            {animal._pk && (Math.floor(Number(animal.count ?? 0)) || 0) >= 1 && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setSplittingBatch(true)} title={lang === "fr" ? "Sortir un individu du lot" : "Split individual from batch"}>
+                <Icon name="user" size={13} color="var(--ink-700)"/>
               </button>
             )}
             {animal._pk && (
