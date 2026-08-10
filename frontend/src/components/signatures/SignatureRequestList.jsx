@@ -56,6 +56,13 @@ export default function SignatureRequestList() {
     }
   };
 
+  const handleDownload = (item, sig) => {
+    const a = document.createElement("a");
+    a.href = sig.signatureData;
+    a.download = `signature-${item.title}-${sig.label}.png`.replace(/\s+/g, "_");
+    a.click();
+  };
+
   const handleDeactivate = async (item) => {
     if (!window.confirm(`Désactiver « ${item.title} » ? Le lien ne fonctionnera plus.`)) return;
     try {
@@ -132,6 +139,9 @@ export default function SignatureRequestList() {
                             {sig.signedAt ? ` le ${new Date(sig.signedAt).toLocaleString("fr-FR")}` : ""}
                           </div>
                           <img src={sig.signatureData} alt={`Signature ${sig.label}`} style={S.sigImg} />
+                          <button type="button" style={S.btnGhost} onClick={() => handleDownload(item, sig)}>
+                            Télécharger
+                          </button>
                         </>
                       ) : (
                         <div style={S.muted}>Pas encore signé</div>

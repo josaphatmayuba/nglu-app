@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **CRM — téléchargement de la signature (PNG).** `frontend/src/components/signatures/SignatureRequestList.jsx` : ajout d'un bouton "Télécharger" sous chaque signature déposée, qui exporte le `data:image/png;base64,...` déjà stocké (format garanti PNG côté backend, `signatures.service.ts`) en fichier `.png`.
+
 - **CRM — lien "Signatures" absent du menu.** `frontend/src/components/SideNav/SideNav.jsx` : l'entrée existait dans une ancienne structure de menu (Ant Design `items`/`key`) qui n'était plus rendue par le composant actuel (`flatSections`), la rendant invisible même en super-admin bien que la route `/admin/signature-requests` fonctionne. Ajoutée dans la section "Gestion" de `flatSections`, sans permission RBAC dédiée (écran protégé par le JWT seul, comme l'original). Signalé par l'utilisateur.
 
 - **FarmOS — icône d'espèce trop petite dans la liste des animaux.** [SCRUM] `farmos-app\src\animals.jsx` : la pastille de la ligne desktop passe de 24×24 (glyphe 15px) à 36×36 (glyphe 22px), la colonne de grille de 32px à 44px (ligne + entête), le padding vertical s'adapte à la nouvelle hauteur ; la carte mobile passe de 34×34 (glyphe 18px) à 44×44 (glyphe 27px). Ajout d'un liseré `accent22` et d'un trait légèrement plus épais (`strokeWidth 1.9`) pour un glyphe lisible d'un coup d'œil. Signalé par l'utilisateur en QA visuelle (capture d'écran).
