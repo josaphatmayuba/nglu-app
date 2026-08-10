@@ -34,11 +34,13 @@ import {
   BookOpen,
   DatabaseZap,
   Ticket,
+  Store,
 } from "lucide-react";
 
 const AVAILABLE_APPS = [
   { key: "dashboard", name: "Tableau de bord", path: "/admin/dashboard", icon: LayoutDashboard, gradient: "from-brand-500 to-brand-700" },
   { key: "pos", name: "Point de Vente", path: "/admin/pos", icon: ShoppingCart, gradient: "from-orange-400 to-orange-600" },
+  { key: "kodatill", name: "KodaTill", path: "/kodatill/", icon: Store, gradient: "from-teal-600 to-teal-800", external: true },
   { key: "products", name: "Produits", path: "/admin/product", icon: Package, gradient: "from-emerald-400 to-emerald-600" },
   { key: "sale", name: "Ventes", path: "/admin/sale", icon: FileText, gradient: "from-violet-400 to-violet-600" },
   { key: "customer", name: "Clients", path: "/admin/customer", icon: Users, gradient: "from-sky-400 to-sky-600" },
