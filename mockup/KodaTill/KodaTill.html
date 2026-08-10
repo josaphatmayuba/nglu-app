@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KodaPay — Plateforme restaurant · Mockup</title>
+  <title>KodaTill — Plateforme restaurant · Mockup</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -85,12 +85,21 @@
   </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="logo-kodatill" viewBox="0 0 64 64">
+    <rect x="14" y="42" width="36" height="10" rx="3" fill="#fff" opacity="0.9"/>
+    <rect x="20" y="46" width="24" height="2.4" rx="1.2" fill="#1f6d75"/>
+    <rect x="18" y="12" width="6.5" height="26" rx="2" fill="#fff"/>
+    <path d="M24.5 24 L36 12 H45 L30 26 Z" fill="#fff"/>
+    <path d="M24.5 26 L30 26 L45 40 H36 Z" fill="#fff"/>
+  </symbol>
+</svg>
 
 <!-- ===================== SWITCHER DE SURFACES (chrome mockup) ===================== -->
 <div id="switcher">
   <div class="flex items-center gap-2 pr-3 mr-1 border-r border-white/15">
-    <div class="grad-leaf w-6 h-6 rounded-md flex items-center justify-center"><i data-lucide="leaf" class="w-3.5 h-3.5 text-white"></i></div>
-    <span class="font-display font-bold text-white text-[13px]">KodaPay</span>
+    <div class="grad-leaf w-6 h-6 rounded-md flex items-center justify-center"><svg class="w-3.5 h-3.5"><use href="#logo-kodatill"/></svg></div>
+    <span class="font-display font-bold text-white text-[13px]">KodaTill</span>
     <span class="text-[10px] text-ink-400">mockup</span>
   </div>
   <div class="sw sw-active" data-surf="bo" onclick="setBiz&&setBiz('resto');showSurf('bo',this)"><i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>Back-office resto</div>
@@ -112,10 +121,10 @@
   <aside id="bo-sidebar" class="grad-teal text-ink-300">
     <div class="flex items-center gap-3 px-5 py-5">
       <div class="grad-leaf w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-kp-950/50">
-        <i data-lucide="leaf" class="w-5 h-5 text-white"></i>
+        <svg class="w-5 h-5"><use href="#logo-kodatill"/></svg>
       </div>
       <div>
-        <div class="font-display font-bold text-white text-[15px] leading-tight">KodaPay</div>
+        <div class="font-display font-bold text-white text-[15px] leading-tight">KodaTill</div>
         <div class="text-[10.5px] text-kp-300/70" id="bo-sub">Espace restaurateur</div>
       </div>
     </div>
@@ -141,7 +150,7 @@
       <button class="btn btn-ghost btn-xs w-full justify-center mt-2.5 !bg-white/10 !border-white/15 !text-white" onclick="toast('Gestion abonnement (mockup)')">Gérer mon abonnement</button>
     </div>
     <div class="px-4 pb-4">
-      <div class="flex items-center gap-2.5 cursor-pointer hover:bg-white/5 rounded-xl p-2" onclick="toast('Support KodaPay (mockup)')">
+      <div class="flex items-center gap-2.5 cursor-pointer hover:bg-white/5 rounded-xl p-2" onclick="toast('Support KodaTill (mockup)')">
         <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"><i data-lucide="headphones" class="w-4 h-4 text-kp-300"></i></div>
         <div>
           <div class="text-[12px] font-semibold text-white">Besoin d'aide ?</div>
@@ -452,7 +461,7 @@
           <i data-lucide="user" class="w-5 h-5"></i>Présentez-vous <b class="text-lime-300">au comptoir</b> quand votre numéro apparaît.
         </div>
       </div>
-      <div class="text-center text-[10px] text-ink-400 pt-2">KodaPay</div>
+      <div class="text-center text-[10px] text-ink-400 pt-2">KodaTill</div>
     </div>
     <p class="text-center text-[11.5px] text-ink-500 mt-4">Affichage TV en salle : les numéros passent automatiquement de « En préparation » à « Prêtes ».</p>
   </div>
@@ -467,8 +476,8 @@
       <div class="bg-[#f4f6f8] rounded-2xl overflow-hidden">
         <!-- topbar POS -->
         <div class="bg-white border-b border-ink-200 px-5 py-3 flex items-center gap-3">
-          <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="leaf" class="w-4 h-4 text-white"></i></div>
-          <span class="font-display font-bold text-[16px]">KodaPay <span class="text-blue-600 text-[12px] font-extrabold align-top">POS</span></span>
+          <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><svg class="w-4 h-4"><use href="#logo-kodatill"/></svg></div>
+          <span class="font-display font-bold text-[16px]">KodaTill <span class="text-blue-600 text-[12px] font-extrabold align-top">POS</span></span>
           <button class="btn btn-ghost btn-xs ml-3" onclick="toast('Sélecteur de service (mockup)')">Service midi<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
           <div class="ml-auto flex items-center gap-2">
             <button class="btn btn-ghost !px-2.5" onclick="toast('Recherche (mockup)')"><i data-lucide="search" class="w-4 h-4"></i></button>
@@ -535,8 +544,8 @@
         <div class="bg-white border-b border-ink-200 px-4 pt-3 pb-3">
           <div class="flex items-center justify-between text-[12px] font-semibold mb-2.5 px-1 text-ink-800"><span>9:41</span><span class="flex items-center gap-1.5"><i data-lucide="signal" class="w-3.5 h-3.5"></i><i data-lucide="wifi" class="w-3.5 h-3.5"></i><i data-lucide="battery-full" class="w-4 h-4"></i></span></div>
           <div class="flex items-center gap-2.5">
-            <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="leaf" class="w-4 h-4 text-white"></i></div>
-            <span class="font-display font-bold text-[15px]">KodaPay <span class="text-blue-600 text-[11px] font-extrabold align-top">POS</span></span>
+            <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><svg class="w-4 h-4"><use href="#logo-kodatill"/></svg></div>
+            <span class="font-display font-bold text-[15px]">KodaTill <span class="text-blue-600 text-[11px] font-extrabold align-top">POS</span></span>
             <button class="btn btn-ghost btn-xs ml-1" onclick="toast('Sélecteur de service (mockup)')">Midi<i data-lucide="chevron-down" class="w-3 h-3"></i></button>
             <div class="ml-auto flex items-center gap-1.5">
               <button class="p-1.5" onclick="toast('Scanner code-barres (mockup)')"><i data-lucide="scan-line" class="w-4 h-4 text-ink-500"></i></button>
@@ -616,7 +625,7 @@
           <div class="flex items-center justify-between text-[12px] font-semibold mb-2.5 px-1 text-ink-800"><span>9:41</span><span class="flex items-center gap-1.5"><i data-lucide="signal" class="w-3.5 h-3.5"></i><i data-lucide="wifi" class="w-3.5 h-3.5"></i><i data-lucide="battery-full" class="w-4 h-4"></i></span></div>
           <div class="flex items-center gap-2.5">
             <div class="grad-leaf w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="scan-barcode" class="w-4 h-4 text-white"></i></div>
-            <span class="font-display font-bold text-[15px]">Scanner KodaPay</span>
+            <span class="font-display font-bold text-[15px]">Scanner KodaTill</span>
           </div>
         </div>
 
@@ -661,8 +670,8 @@
   <div class="flex">
     <aside class="hidden lg:flex w-[230px] flex-none grad-teal text-ink-300 flex-col min-h-[calc(100vh-46px)] sticky top-[46px]">
       <div class="flex items-center gap-3 px-5 py-5">
-        <div class="grad-leaf w-9 h-9 rounded-xl flex items-center justify-center"><i data-lucide="leaf" class="w-4.5 h-4.5 w-4 h-4 text-white"></i></div>
-        <div class="font-display font-bold text-white text-[16px]">KodaPay</div>
+        <div class="grad-leaf w-9 h-9 rounded-xl flex items-center justify-center"><svg class="w-4.5 h-4.5 w-4 h-4"><use href="#logo-kodatill"/></svg></div>
+        <div class="font-display font-bold text-white text-[16px]">KodaTill</div>
       </div>
       <nav class="flex-1 px-3 space-y-0.5" id="adm-nav"></nav>
       <div class="mx-4 my-3 rounded-xl bg-white/5 border border-white/10 p-3">
@@ -674,7 +683,7 @@
       <div class="px-4 pb-4">
         <div class="flex items-center gap-2.5 rounded-xl bg-white/5 p-2.5 cursor-pointer" onclick="toast('Compte super admin (mockup)')">
           <div class="w-8 h-8 rounded-full bg-white/15 text-white text-[10.5px] font-bold flex items-center justify-center">SA</div>
-          <div class="min-w-0"><div class="text-[12px] font-semibold text-white">Super Admin</div><div class="text-[10px] text-kp-300/70 truncate">admin@kodapay.com</div></div>
+          <div class="min-w-0"><div class="text-[12px] font-semibold text-white">Super Admin</div><div class="text-[10px] text-kp-300/70 truncate">admin@kodatill.com</div></div>
           <i data-lucide="chevron-down" class="w-3.5 h-3.5 ml-auto"></i>
         </div>
       </div>
@@ -1138,7 +1147,7 @@ function boViewHtml(v){
     <div class="scrollx"><table class="tbl w-full"><thead><tr><th>Nom / Emplacement</th><th>Type</th><th>Scans aujourd’hui</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="bo-qrcodes-full">${qrRows()}</tbody></table></div></div>`;
   if(v==='Paiements')return `<div class="grid grid-cols-2 md:grid-cols-3 gap-3.5 mb-4">
     <div class="card p-4"><div class="text-[11.5px] text-ink-500">Encaissé aujourd’hui</div><div class="font-display text-[22px] font-bold">4 890,50 €</div></div>
-    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Commission KodaPay (1%)</div><div class="font-display text-[22px] font-bold">48,91 €</div></div>
+    <div class="card p-4"><div class="text-[11.5px] text-ink-500">Commission KodaTill (1%)</div><div class="font-display text-[22px] font-bold">48,91 €</div></div>
     <div class="card p-4"><div class="text-[11.5px] text-ink-500">Prochain versement</div><div class="font-display text-[22px] font-bold">15 mai</div></div></div>
     <div class="card"><div class="p-4 flex items-center gap-2"><h3 class="font-display font-semibold text-[14.5px] mr-auto">Derniers encaissements</h3>
     <button class="btn btn-ghost btn-xs" onclick="dlCSV('paiements.csv',[['Date','Méthode','Montant'],...bo.pays.map(p=>[p.d,p.m,p.mt])])"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exporter</button></div>
@@ -1190,7 +1199,7 @@ function boViewHtml(v){
   if(v==='Paramètres')return `
     <div class="card p-5 max-w-2xl mb-4">
       <h3 class="font-display font-semibold text-[15px] mb-1">Type de commerce</h3>
-      <p class="text-[12px] text-ink-500 mb-3">Choisissez votre activité : KodaPay active les modules adaptés (recettes pour un restaurant, stock pour un supermarché…). Le socle ventes / paiements / dépenses reste identique.</p>
+      <p class="text-[12px] text-ink-500 mb-3">Choisissez votre activité : KodaTill active les modules adaptés (recettes pour un restaurant, stock pour un supermarché…). Le socle ventes / paiements / dépenses reste identique.</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       ${Object.keys(boModes).map(mode=>{const m=boModes[mode];const on=bo.mode===mode;
         const feats={'Restaurant':'Recettes, ingrédients, commande à table','Supermarché':'Stock, codes-barres, inventaire','Pharmacie':'Stock, codes-barres, médicaments','Quincaillerie':'Stock, codes-barres, ventes au comptoir','Boutique / Services':'Catalogue simple, prestations'}[mode];
@@ -1515,7 +1524,7 @@ function modalQrView(i){const q=bo.qrs[i];
   openModal(mHead('QR Code — '+q.n)+`<div class="px-5 pb-5 text-center">
   <canvas id="qr-cv" width="210" height="210" class="mx-auto rounded-xl border border-ink-200 p-2"></canvas>
   <div class="text-[12.5px] text-ink-500 mt-3">Type : <b class="text-ink-800">${q.t}</b> · Scans aujourd’hui : <b class="text-ink-800">${q.s}</b></div>
-  <div class="text-[11.5px] text-ink-400 mt-1">kodapay.app/r/jardin-grill/${q.n.toLowerCase().replace(/\s+/g,'-')}</div>
+  <div class="text-[11.5px] text-ink-400 mt-1">kodatill.app/r/jardin-grill/${q.n.toLowerCase().replace(/\s+/g,'-')}</div>
   <div class="flex gap-2 justify-center mt-4"><button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
   <button class="btn btn-teal" onclick="dlQr('${q.n}')"><i data-lucide="download" class="w-4 h-4"></i>Télécharger PNG</button></div></div>`);
   drawQr(document.getElementById('qr-cv'),(i+3)*97);}
@@ -1589,7 +1598,7 @@ rewire([
   ['3 notifications',(e,el)=>menuNotifs(e,el,bo.notifs)],
   ['Profil (mockup)',e=>menuProfil(e)],
   ['Gestion abonnement',()=>modalAbo()],
-  ['Support KodaPay',()=>modalSupport()],
+  ['Support KodaTill',()=>modalSupport()],
   ['Génération IA lancée',e=>iaEnhance(e)],
   ['Image choisie',()=>toast('✔ Image définie comme photo du produit')],
   ['Variantes générées',()=>iaVariants()],
@@ -1992,7 +2001,7 @@ function modalArticles(){openModal(mHead('Disponibilité des articles')+`<div cl
     ['Sélecteur de service',(e,el)=>popMenu(e,['Service midi','Service soir','Brunch week-end'].map(s=>({lb:s,ic:'clock',fn:()=>{el.innerHTML=s+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';lucide.createIcons();toast(s+' activé');}})))],
     ['Recherche (mockup)',()=>modalPosSearch()],
     ['Scanner code-barres',()=>modalScan()],
-    ['3 notifications',(e,el)=>menuNotifs(e,el,[['receipt-text','Commande 1041 en attente depuis 12 min','Il y a 2 min'],['package','Stock faible : Saumon rôti (3 restants)','Il y a 20 min'],['info','Mise à jour KodaPay POS disponible','Hier']])],
+    ['3 notifications',(e,el)=>menuNotifs(e,el,[['receipt-text','Commande 1041 en attente depuis 12 min','Il y a 2 min'],['package','Stock faible : Saumon rôti (3 restants)','Il y a 20 min'],['info','Mise à jour KodaTill POS disponible','Hier']])],
     ['Tri (mockup)',(e,el)=>popMenu(e,['Populaire','Prix croissant','Prix décroissant'].map(s=>({lb:s,ic:'arrow-up-down',fn:()=>{pos.sort=s;el.innerHTML=s+' <i data-lucide="chevron-down" class="w-3 h-3"></i>';renderPosGrid();lucide.createIcons();}})))],
     ['Options commande',(e)=>popMenu(e,[{lb:'Imprimer en cuisine',ic:'printer',fn:()=>toast('Ticket envoyé en cuisine')},{lb:'Mettre en attente',ic:'pause',fn:()=>{pos.openOrders.push({no:pos.no,n:pos.ticket.length,tot:posSub()});pos.ticket=[];pos.no++;renderTicket();toast('Commande mise en attente');}},{lb:'Annuler la commande',ic:'trash-2',danger:true,fn:()=>confirmModal('Annuler la commande','Tous les articles seront supprimés.','Annuler la commande',()=>{pos.ticket=[];pos.discount=0;renderTicket();toast('Commande annulée');})}])],
     ['Commandes (mockup)',()=>modalOrders()],
@@ -2116,11 +2125,11 @@ function renderAdmGws(){document.getElementById('adm-gateways').innerHTML=adm.gw
 
 rewire([
   ['Période (mockup)',(e,el)=>popMenu(e,['30 avr. – 30 mai 2025','1 avr. – 30 avr. 2025','Année 2025'].map(p=>({lb:p,ic:'calendar',fn:()=>{el.innerHTML=p+' <i data-lucide="calendar" class="w-4 h-4"></i>';lucide.createIcons();toast('Période : '+p);}})))],
-  ['Export (mockup)',()=>dlCSV('kodapay-plateforme.csv',[['Entreprise','Pays','Statut','Plan','Ventes','Commission'],...adm.cos.map(c=>[c.n,c.pays.slice(5),c.st,c.plan,c.cavg,c.com])])],
+  ['Export (mockup)',()=>dlCSV('kodatill-plateforme.csv',[['Entreprise','Pays','Statut','Plan','Ventes','Commission'],...adm.cos.map(c=>[c.n,c.pays.slice(5),c.st,c.plan,c.cavg,c.com])])],
   ['6 notifications',(e,el)=>menuNotifs(e,el,adm.notifs)],
   ['Profil (mockup)',e=>popMenu(e,[{head:'Super Admin'},{lb:'Mon compte',ic:'user',fn:()=>toast('Compte super admin (mockup)')},{lb:'Paramètres plateforme',ic:'settings',fn:()=>admGo('Paramètres plateforme')},{sep:true},{lb:'Déconnexion',ic:'log-out',danger:true,fn:()=>confirmModal('Déconnexion','Se déconnecter de la console plateforme ?','Se déconnecter',()=>toast('Déconnecté (mockup)'))}])],
   ['Compte super admin',e=>popMenu(e,[{lb:'Mon compte',ic:'user',fn:()=>toast('Compte super admin (mockup)')},{lb:'Déconnexion',ic:'log-out',danger:true,fn:()=>toast('Déconnecté (mockup)')}])],
-  ['Page statut',()=>openModal(mHead('Statut de la plateforme')+`<div class="px-5 pb-5">${[['API KodaPay','Opérationnelle'],['Paiements','Opérationnels'],['Écrans cuisine','Opérationnels'],['Studio IA','Dégradé — files d’attente ralenties']].map(([s,st])=>`<div class="flex items-center gap-2.5 py-2 border-b border-ink-100 last:border-0 text-[13px]"><span class="w-2 h-2 rounded-full ${st.startsWith('Op')?'bg-emerald-500':'bg-amber-500'}"></span><b class="flex-1">${s}</b><span class="text-ink-500">${st}</span></div>`).join('')}</div>`)],
+  ['Page statut',()=>openModal(mHead('Statut de la plateforme')+`<div class="px-5 pb-5">${[['API KodaTill','Opérationnelle'],['Paiements','Opérationnels'],['Écrans cuisine','Opérationnels'],['Studio IA','Dégradé — files d’attente ralenties']].map(([s,st])=>`<div class="flex items-center gap-2.5 py-2 border-b border-ink-100 last:border-0 text-[13px]"><span class="w-2 h-2 rounded-full ${st.startsWith('Op')?'bg-emerald-500':'bg-amber-500'}"></span><b class="flex-1">${s}</b><span class="text-ink-500">${st}</span></div>`).join('')}</div>`)],
   ['Liste entreprises',()=>admGo('Entreprises','Tous')],
   ['Factures (mockup)',()=>modalFactures()],
   ['Gestion passerelles',()=>admGo('Paiements mondiaux')],

@@ -1,0 +1,20 @@
+/* KodaTill — tokens de base (memes noms de variables que farmos-app pour
+   rester coherent visuellement avec le reste du projet). */
+:root {
+  --bg-app: #FBF8F2;
+  --paper: #FFFFFF;
+  --fg-1: #0E2418;
+  --fg-2: #36425A;
+  --fg-3: #6b6b6b;
+  --border-1: #E7EBF1;
+  --border-2: #D6DCE5;
+  --oxblood-50: #FBEEF0;
+  --oxblood-800: #5E1620;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+html { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-app); }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button { font-family: inherit; }
+.input { font-family: inherit; }

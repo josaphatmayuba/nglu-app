@@ -137,6 +137,7 @@ module.exports = [
   { method: '*',    prefix: '/chat',                           auth: true  },
   { method: '*',    prefix: '/farmos',                         auth: true  },
   { method: '*',    prefix: '/batipro',                       auth: true  },
+  { method: '*',    prefix: '/kodatill',                       auth: true  },
   // Migration Cockpit — lecture seule (GET uniquement), JWT requis.
   { method: 'GET',  prefix: '/migration',                     auth: true  },
   { method: '*',    prefix: '/currency',                      auth: true  },

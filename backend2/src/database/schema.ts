@@ -3353,3 +3353,283 @@ export const signatureSignatures = mysqlTable("signature_signatures", {
   ipAddress: varchar("ip_address", { length: 64 }),
   userAgent: text("user_agent"),
 });
+
+// ---------------------------------------------------------------------------
+// KodaTill (SCRUM-278 / SCRUM-279) : systeme de caisse POS multi-activite.
+// Prefixe kt_ pour isoler le domaine des tables produit/stock historiques.
+// Migrations 0237_kodatill_core / 0238_kodatill_orders / 0239_kodatill_cash.
+// ---------------------------------------------------------------------------
+
+export const ktBusinessProfiles = mysqlTable("kt_business_profiles", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  activityType: mysqlEnum("activity_type", [
+    "restaurant",
+    "supermarket",
+    "pharmacy",
+    "hardware",
+    "shop",
+  ]).default("shop").notNull(),
+  enabledModules: json("enabled_modules"),
+  defaultCurrencyCode: varchar("default_currency_code", { length: 3 }).default("USD").notNull(),
+  taxMode: varchar("tax_mode", { length: 20 }).default("exclusive").notNull(),
+  receiptFooter: text("receipt_footer"),
+  serviceChargeRate: decimal("service_charge_rate", { precision: 5, scale: 2 })
+    .default("0.00")
+    .notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktBranches = mysqlTable("kt_branches", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  address: varchar("address", { length: 255 }),
+  phone: varchar("phone", { length: 40 }),
+  timezone: varchar("timezone", { length: 64 }).default("Africa/Kinshasa").notNull(),
+  isDefault: tinyint("is_default").default(0).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// pairingCode / pairedUntil : appairage temporaire dune tablette caisse.
+export const ktRegisters = mysqlTable("kt_registers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  branchId: bigint("branch_id", { mode: "number" }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  deviceLabel: varchar("device_label", { length: 160 }),
+  pairingCode: varchar("pairing_code", { length: 6 }),
+  pairedUntil: datetime("paired_until"),
+  lastSeenAt: datetime("last_seen_at"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktCategories = mysqlTable("kt_categories", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  icon: varchar("icon", { length: 80 }),
+  colorClass: varchar("color_class", { length: 80 }),
+  sortOrder: int("sort_order").default(0).notNull(),
+  parentId: bigint("parent_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// barcode : index NON unique (MySQL 8 na pas dindex unique partiel). Lunicite
+// par organisation est verifiee cote service catalogue. Detail dans 0237.
+export const ktProducts = mysqlTable("kt_products", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  categoryId: bigint("category_id", { mode: "number" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  sku: varchar("sku", { length: 80 }),
+  barcode: varchar("barcode", { length: 64 }),
+  photoUrl: text("photo_url"),
+  emojiFallback: varchar("emoji_fallback", { length: 16 }),
+  salePrice: decimal("sale_price", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  purchaseCost: decimal("purchase_cost", { precision: 14, scale: 2 }),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  costMode: mysqlEnum("cost_mode", ["manual", "recipe"]).default("manual").notNull(),
+  taxRateId: bigint("tax_rate_id", { mode: "number" }),
+  isAvailable: tinyint("is_available").default(1).notNull(),
+  trackStock: tinyint("track_stock").default(0).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Profil POS dun utilisateur existant (users.id) : role caisse + code PIN hashe.
+export const ktStaffProfiles = mysqlTable(
+  "kt_staff_profiles",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }),
+    posRole: mysqlEnum("pos_role", ["admin", "manager", "cashier", "waiter", "chef"])
+      .default("cashier")
+      .notNull(),
+    pinHash: varchar("pin_hash", { length: 255 }),
+    pinUpdatedAt: datetime("pin_updated_at"),
+    canDiscount: tinyint("can_discount").default(0).notNull(),
+    maxDiscountPct: decimal("max_discount_pct", { precision: 5, scale: 2 }),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    orgUserUnique: unique("uq_kt_staff_org_user").on(table.organizationId, table.userId),
+  }),
+);
+
+// Numerotation quotidienne par succursale (UPSERT atomique sur la cle unique).
+export const ktOrderCounters = mysqlTable(
+  "kt_order_counters",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }).notNull(),
+    day: date("day", { mode: "string" }).notNull(),
+    lastNumber: int("last_number").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    dayUnique: unique("uq_kt_order_counters_day").on(
+      table.organizationId,
+      table.branchId,
+      table.day,
+    ),
+  }),
+);
+
+// orderStatus = etat metier, status = soft delete projet (les deux coexistent).
+// clientUuid + cle unique (organization_id, client_uuid) = idempotence offline.
+export const ktOrders = mysqlTable(
+  "kt_orders",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }).notNull(),
+    registerId: bigint("register_id", { mode: "number" }),
+    orderNumber: int("order_number").default(0).notNull(),
+    publicRef: varchar("public_ref", { length: 64 }).notNull(),
+    channel: mysqlEnum("channel", ["pos", "qr", "mobile", "kitchen"]).default("pos").notNull(),
+    tableId: bigint("table_id", { mode: "number" }),
+    customerName: varchar("customer_name", { length: 160 }),
+    customerPhone: varchar("customer_phone", { length: 40 }),
+    orderStatus: mysqlEnum("order_status", [
+      "draft",
+      "received",
+      "preparing",
+      "ready",
+      "served",
+      "completed",
+      "cancelled",
+    ]).default("draft").notNull(),
+    subtotal: decimal("subtotal", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    discountTotal: decimal("discount_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    taxTotal: decimal("tax_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    serviceTotal: decimal("service_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    total: decimal("total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+    paidTotal: decimal("paid_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    dueTotal: decimal("due_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    openedByUserId: bigint("opened_by_user_id", { mode: "number" }),
+    closedAt: datetime("closed_at"),
+    clientUuid: varchar("client_uuid", { length: 36 }).notNull(),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    publicRefUnique: unique("uq_kt_orders_public_ref").on(table.publicRef),
+    clientUuidUnique: unique("uq_kt_orders_client_uuid").on(table.organizationId, table.clientUuid),
+  }),
+);
+
+// name / unitPrice / unitCost sont des snapshots : le ticket et la marge
+// historique restent exacts meme si le catalogue evolue ensuite.
+export const ktOrderLines = mysqlTable("kt_order_lines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  orderId: bigint("order_id", { mode: "number" }).notNull(),
+  productId: bigint("product_id", { mode: "number" }),
+  variantId: bigint("variant_id", { mode: "number" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  qty: decimal("qty", { precision: 10, scale: 2 }).default("1.00").notNull(),
+  unitPrice: decimal("unit_price", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  lineDiscount: decimal("line_discount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  lineTotal: decimal("line_total", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  unitCost: decimal("unit_cost", { precision: 14, scale: 2 }),
+  note: text("note"),
+  kitchenStatus: mysqlEnum("kitchen_status", ["pending", "preparing", "ready", "served"]),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktPaymentMethods = mysqlTable("kt_payment_methods", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  kind: mysqlEnum("kind", ["cash", "card", "mobile", "voucher", "credit"]).default("cash").notNull(),
+  gatewayCode: varchar("gateway_code", { length: 60 }),
+  requiresReference: tinyint("requires_reference").default(0).notNull(),
+  sortOrder: int("sort_order").default(0).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktPayments = mysqlTable("kt_payments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  orderId: bigint("order_id", { mode: "number" }).notNull(),
+  methodId: bigint("method_id", { mode: "number" }),
+  amount: decimal("amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  reference: varchar("reference", { length: 160 }),
+  gatewayStatus: varchar("gateway_status", { length: 60 }),
+  gatewayPayload: json("gateway_payload"),
+  receivedAt: datetime("received_at"),
+  userId: bigint("user_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktOrderStatusHistory = mysqlTable("kt_order_status_history", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  orderId: bigint("order_id", { mode: "number" }).notNull(),
+  fromStatus: varchar("from_status", { length: 40 }),
+  toStatus: varchar("to_status", { length: 40 }).notNull(),
+  userId: bigint("user_id", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ledgerEntryId : branchement futur vers le module comptable ERP/SIFA. La colonne
+// est posee des la fondation pour eviter un ALTER sur une table volumineuse.
+export const ktCashSessions = mysqlTable("kt_cash_sessions", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  branchId: bigint("branch_id", { mode: "number" }).notNull(),
+  registerId: bigint("register_id", { mode: "number" }),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  openedAt: datetime("opened_at"),
+  openingFloat: decimal("opening_float", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  closedAt: datetime("closed_at"),
+  expectedCash: decimal("expected_cash", { precision: 14, scale: 2 }),
+  countedCash: decimal("counted_cash", { precision: 14, scale: 2 }),
+  variance: decimal("variance", { precision: 14, scale: 2 }),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  cashStatus: mysqlEnum("cash_status", ["open", "closed"]).default("open").notNull(),
+  ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktCashMovements = mysqlTable("kt_cash_movements", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sessionId: bigint("session_id", { mode: "number" }).notNull(),
+  type: mysqlEnum("type", ["in", "out"]).default("in").notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  reason: varchar("reason", { length: 255 }),
+  userId: bigint("user_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});

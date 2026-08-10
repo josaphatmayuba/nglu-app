@@ -122,6 +122,7 @@ definitions:
     node-marketing: marketing-site/node_modules
     node-avelomi: avelomi-site/node_modules
     node-chat: chat-app/node_modules
+    node-kodatill: kodatill-app/node_modules
 
 pipelines:
   branches:
@@ -343,6 +344,21 @@ pipelines:
                 - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
                 - $SSH $SERVER "{ find $APP/chat-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/chat-app/dist -mindepth 1 -delete; } && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: KodaTill → dev
+              caches: [node-kodatill]
+              condition: { changesets: { includePaths: ["kodatill-app/**", "nginx/nginx.frontend.conf"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - $SSH $SERVER "set -e; mkdir -p $APP/kodatill-app/dist $PROD_APP/nginx 2>/dev/null || sudo -n mkdir -p $APP/kodatill-app/dist $PROD_APP/nginx; chmod 777 $APP/kodatill-app/dist 2>/dev/null || sudo -n chmod 777 $APP/kodatill-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/kodatill-app-dist && mkdir -p /tmp/kodatill-app-dist"
+                - scp -o StrictHostKeyChecking=no -r kodatill-app/dist/* $SERVER:/tmp/kodatill-app-dist/
+                - $SSH $SERVER "{ find $APP/kodatill-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/kodatill-app/dist -mindepth 1 -delete; } && cp -r /tmp/kodatill-app-dist/. $APP/kodatill-app/dist/ && rm -rf /tmp/kodatill-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
@@ -636,6 +652,22 @@ pipelines:
                 - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
+              name: KodaTill → prod (ongdngolu + Avelomi)
+              caches: [node-kodatill]
+              condition: { changesets: { includePaths: ["kodatill-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Chat).
+                - *avelomi-ssh-setup
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
               name: Marketing → prod
               caches: [node-marketing]
               condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf"] } }
@@ -808,6 +840,7 @@ pipelines:
                 - for a in domus-app farmos-app journal-app tickets-app batipro-app hr-app migration-app; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
                 - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
@@ -820,3 +853,4 @@ pipelines:
                 - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
                 - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
                 - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/

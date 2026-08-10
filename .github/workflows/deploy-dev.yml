@@ -45,6 +45,7 @@ jobs:
       comptabilite: ${{ steps.decide.outputs.comptabilite }}
       migration: ${{ steps.decide.outputs.migration }}
       chat: ${{ steps.decide.outputs.chat }}
+      kodatill: ${{ steps.decide.outputs.kodatill }}
       marketing: ${{ steps.decide.outputs.marketing }}
       avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
       # Matrice des apps statiques reduite aux seules apps modifiees, pour que
@@ -105,6 +106,9 @@ jobs:
             chat:
               - 'chat-app/**'
               - 'nginx/nginx.frontend.conf'
+            kodatill:
+              - 'kodatill-app/**'
+              - 'nginx/nginx.frontend.conf'
             marketing:
               - 'marketing-site/**'
             avelomi_site:
@@ -116,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           for k in backend2 middleware frontend domus journal tickets farmos \
-                   batipro hr comptabilite migration chat marketing avelomi_site; do
+                   batipro hr comptabilite migration chat kodatill marketing avelomi_site; do
             if [ "$ALL" = "true" ]; then
               echo "$k=true" >> "$GITHUB_OUTPUT"
               eval "flag_$k=true"
@@ -138,7 +142,8 @@ jobs:
             {"app":"batipro-app",      "flag":"batipro",      "build":"build",     "conf":true},
             {"app":"hr-app",           "flag":"hr",           "build":"build",     "conf":true},
             {"app":"comptabilite-app", "flag":"comptabilite", "build":"build:dev", "conf":true},
-            {"app":"chat-app",         "flag":"chat",         "build":"build:dev", "conf":true}
+            {"app":"chat-app",         "flag":"chat",         "build":"build:dev", "conf":true},
+            {"app":"kodatill-app",     "flag":"kodatill",     "build":"build:dev", "conf":true}
           ]'
 
           # Ne garde que les apps dont le flag vaut true.

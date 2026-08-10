@@ -19,5 +19,7 @@ COPY comptabilite-app/dist/ /usr/share/nginx/html-comptabilite-prod
 COPY migration-app/dist/ /usr/share/nginx/html-migration-prod
 # Chat SPA at /chat/
 COPY chat-app/dist/ /usr/share/nginx/html-chat-prod
+# KodaTill SPA (caisse/POS) at /kodatill/
+COPY kodatill-app/dist/ /usr/share/nginx/html-kodatill-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)
 EXPOSE 80

@@ -18,6 +18,7 @@ import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { FarmosModule } from "./farmos/farmos.module";
+import { KodatillModule } from "./kodatill/kodatill.module";
 import { JournalEntrepriseModule } from "./journal-entreprise/journal-entreprise.module";
 import { DiscussionModule } from "./discussion/discussion.module";
 import { ChatModule } from "./chat/chat.module";
@@ -78,6 +79,7 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     EmailTemplatesModule,
     FarmosModule,
+    KodatillModule,
     JournalEntrepriseModule,
     DiscussionModule,
     ChatModule,

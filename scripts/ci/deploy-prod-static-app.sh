@@ -181,7 +181,7 @@ sudo -n chown "$REMOTE_USER:$REMOTE_USER" \
   "$REMOTE_ROOT/nginx/nginx.frontend.conf"
 
 echo "[remote] ensuring first-deploy dist directories exist"
-for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do
+for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app kodatill-app; do
   write_placeholder "$REMOTE_ROOT/$static_app/dist" "$static_app"
 done
 

@@ -45,6 +45,7 @@ jobs:
       comptabilite: ${{ steps.decide.outputs.comptabilite }}
       migration: ${{ steps.decide.outputs.migration }}
       chat: ${{ steps.decide.outputs.chat }}
+      kodatill: ${{ steps.decide.outputs.kodatill }}
       marketing: ${{ steps.decide.outputs.marketing }}
       avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
       # Matrice des apps statiques reduite aux seules apps modifiees, pour que
@@ -149,6 +150,13 @@ jobs:
               - 'docker-compose.prod.yml'
               - 'nginx/nginx.frontend.conf'
               - 'nginx/nginx.avelomi.conf'
+            kodatill:
+              - 'kodatill-app/**'
+              - 'scripts/ci/deploy-prod-static-app.sh'
+              - 'frontend/Dockerfile.prod'
+              - 'docker-compose.prod.yml'
+              - 'nginx/nginx.frontend.conf'
+              - 'nginx/nginx.avelomi.conf'
             marketing:
               - 'marketing-site/**'
               - 'scripts/ci/deploy-prod-static-app.sh'
@@ -166,7 +174,7 @@ jobs:
         run: |
           set -euo pipefail
           for k in backend2 middleware frontend domus journal tickets farmos \
-                   batipro hr comptabilite migration chat marketing avelomi_site; do
+                   batipro hr comptabilite migration chat kodatill marketing avelomi_site; do
             if [ "$ALL" = "true" ]; then
               echo "$k=true" >> "$GITHUB_OUTPUT"
               eval "flag_$k=true"
@@ -188,7 +196,8 @@ jobs:
             {"app":"hr-app",           "flag":"hr",           "base":"/hr/",           "build":"build"},
             {"app":"comptabilite-app", "flag":"comptabilite", "base":"/comptabilite/", "build":"build:prod"},
             {"app":"migration-app",    "flag":"migration",    "base":"/migration/",    "build":"build"},
-            {"app":"chat-app",         "flag":"chat",         "base":"/chat/",         "build":"build:prod"}
+            {"app":"chat-app",         "flag":"chat",         "base":"/chat/",         "build":"build:prod"},
+            {"app":"kodatill-app",     "flag":"kodatill",     "base":"/kodatill/",     "build":"build:prod"}
           ]'
 
           # Ne garde que les apps dont le flag vaut true.

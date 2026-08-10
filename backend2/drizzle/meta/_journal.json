@@ -1485,6 +1485,27 @@
       "when": 1781024400000,
       "tag": "0236_farmos_batch_adjustments_transfer_group",
       "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "5",
+      "when": 1781028000000,
+      "tag": "0237_kodatill_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 213,
+      "version": "5",
+      "when": 1781031600000,
+      "tag": "0238_kodatill_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 214,
+      "version": "5",
+      "when": 1781035200000,
+      "tag": "0239_kodatill_cash",
+      "breakpoints": true
     }
   ]
 }
