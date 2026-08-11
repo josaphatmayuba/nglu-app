@@ -1,6 +1,7 @@
 // Shell KodaTill — sidebar minimale + topbar, meme pattern que farmos-app/src/shell.jsx.
 import React from "react";
 import { clearAuth } from "./auth.jsx";
+import { isSuperOwner } from "./platform-admin.jsx";
 import { Brand } from "./icons.jsx";
 
 // Liens toujours presents, quelle que soit l'activite.
@@ -49,6 +50,10 @@ export function navForActivityProfile(profile) {
   links.push(DEPENSES_NAV);
   links.push(SCAN_NAV);
   links.push({ id: "parametres", label: "Paramètres", icon: "⚙️" });
+  // SCRUM-303 — lien conditionne par le ROLE (super_owner), pas par l'activite
+  // de commerce comme le reste de ce mapping : ajoute inconditionnellement ici,
+  // filtre a l'affichage dans Sidebar via isSuperOwner().
+  links.push({ id: "admin", label: "Super Admin", icon: "🛡️", superOwnerOnly: true });
   return links;
 }
 
@@ -67,7 +72,11 @@ function readCurrentUser() {
 
 export const Sidebar = ({ active, onNav, nav }) => {
   const user = readCurrentUser();
-  const NAV = nav || navForActivityProfile(null);
+  const superOwner = isSuperOwner();
+  // superOwnerOnly filtre a l'affichage : le lien existe dans le tableau nav
+  // (navForActivityProfile) mais n'est rendu que si le role courant est
+  // super_owner. Le backend refuse de toute facon via SuperOwnerGuard.
+  const NAV = (nav || navForActivityProfile(null)).filter((n) => !n.superOwnerOnly || superOwner);
   return (
     <aside style={{
       width: 220, flexShrink: 0, height: "100%", display: "flex", flexDirection: "column",

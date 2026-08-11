@@ -3889,3 +3889,94 @@ export const ktQrScans = mysqlTable("kt_qr_scans", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// KodaTill Phase 4 (SCRUM-300) : couche plateforme (plans, souscriptions,
+// commissions). Migration 0245_kodatill_platform.sql.
+// ---------------------------------------------------------------------------
+
+// Seule table kt_ SANS organizationId : un plan est global a la plateforme et
+// partage par toutes les organisations, ce nest pas une donnee cloisonnee.
+// code est la cle fonctionnelle stable referencee par ktSubscriptions.planCode.
+// commissionRate est un POURCENTAGE : 1.00 vaut 1 pour cent, pas 100 pour cent.
+// isActive masque le plan a la vente sans toucher aux souscriptions en cours,
+// alors que status reste le soft delete technique.
+export const ktPlans = mysqlTable(
+  "kt_plans",
+  {
+    id: serial("id").primaryKey(),
+    code: varchar("code", { length: 40 }).notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    monthlyPrice: decimal("monthly_price", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+    commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).default("0.00").notNull(),
+    limits: json("limits"),
+    isActive: boolean("is_active").default(true).notNull(),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    codeUnique: unique("uq_kt_plans_code").on(table.code),
+  }),
+);
+
+// organizationId nest PAS le scope multi-locataire habituel des tables kt_ :
+// lorganisation est ici le sujet meme de la ligne. Son type suit donc celui de
+// organizations.id (serial = BIGINT UNSIGNED) et non le BIGINT signe DEFAULT 1
+// utilise comme colonne de cloisonnement ailleurs.
+// La contrainte UNIQUE impose une seule souscription par organisation : un
+// changement de formule met a jour la ligne existante au lieu den empiler.
+// subStatus porte letat metier et ne sappelle deliberement PAS status : cette
+// colonne est reservee au soft delete (true / false), piege deja rencontre en
+// Phase 1 sur kt_orders qui a du renommer son etat en orderStatus.
+export const ktSubscriptions = mysqlTable(
+  "kt_subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number", unsigned: true }).notNull(),
+    planCode: varchar("plan_code", { length: 40 }).notNull(),
+    subStatus: mysqlEnum("sub_status", [
+      "trial",
+      "active",
+      "past_due",
+      "suspended",
+      "cancelled",
+    ]).default("trial").notNull(),
+    startedAt: datetime("started_at").notNull(),
+    trialEndsAt: datetime("trial_ends_at"),
+    renewsAt: datetime("renews_at"),
+    cancelledAt: datetime("cancelled_at"),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    organizationUnique: unique("uq_kt_subscriptions_org").on(table.organizationId),
+  }),
+);
+
+// Journal detaille des commissions, forte volumetrie (une ligne par commande
+// commissionnee). baseAmount et rate sont des snapshots figes au calcul : un
+// changement de taux du plan ne doit jamais reecrire une commission passee.
+// commissionAmount est stocke plutot que recalcule pour resister a toute
+// evolution de la regle darrondi. periodMonth au format 2026-08 se trie
+// lexicographiquement dans lordre chronologique. settledAt nul = commission
+// due et non encore reglee.
+export const ktCommissionEntries = mysqlTable("kt_commission_entries", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number", unsigned: true }).notNull(),
+  orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+  paymentId: bigint("payment_id", { mode: "number", unsigned: true }),
+  baseAmount: decimal("base_amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  rate: decimal("rate", { precision: 5, scale: 2 }).default("0.00").notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 14, scale: 2 })
+    .default("0.00")
+    .notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  periodMonth: varchar("period_month", { length: 7 }).notNull(),
+  settledAt: datetime("settled_at"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});

@@ -4,6 +4,7 @@ import React from "react";
 import { Sidebar, Topbar, navForActivityProfile } from "./shell.jsx";
 import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
 import { PublicMenuScreen, PublicOrderTrackingScreen } from "./public-menu.jsx";
+import { SuperAdminScreen, isSuperOwner } from "./platform-admin.jsx";
 import { LoginScreen, useAuthToken } from "./auth.jsx";
 import { api } from "./api.js";
 
@@ -18,6 +19,7 @@ const ROUTE_SLUGS = {
   depenses: "depenses",
   scan: "scan",
   parametres: "parametres",
+  admin: "admin",
 };
 const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
 // Base injectee par vite : "/kodatill/".
@@ -45,6 +47,9 @@ const ROUTE_META = {
   depenses:    { title: "Dépenses",        subtitle: "Charges & sorties de caisse" },
   scan:        { title: "Scanner",         subtitle: "Jumelage caisse & scan mobile" },
   parametres:  { title: "Paramètres",      subtitle: "Profil d'activité & configuration" },
+  // SCRUM-303 — espace reserve super_owner, premier jalon d'une console
+  // multi-modules future (pas seulement KodaTill).
+  admin:       { title: "Super Admin",     subtitle: "Console propriétaire de la plateforme" },
 };
 
 // SCRUM-296 — /kodatill/r/:orgSlug/:qrToken : surface publique (scan QR par
@@ -103,6 +108,27 @@ function AppShell() {
   return <App />;
 }
 
+// SCRUM-303 — affiche quand un non-super_owner atteint /kodatill/admin
+// directement (URL tapee/partagee). Pas de crash, retour propre au dashboard.
+function AccessDeniedScreen({ onBack }) {
+  return (
+    <div style={{ padding: 32, textAlign: "center", color: "var(--fg-3, #6b6b6b)" }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--fg-1, #0E2418)", marginBottom: 8 }}>
+        Accès réservé
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        Cet espace est réservé au propriétaire de la plateforme.
+      </div>
+      <button onClick={onBack} style={{
+        background: "#1f6d75", color: "#FBF8F2", padding: "8px 16px", border: 0,
+        borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer",
+      }}>
+        Retour au tableau de bord
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const [route, setRouteState] = React.useState(routeFromLocation);
   const [profile, setProfile] = React.useState(null);
@@ -146,6 +172,11 @@ function App() {
       case "depenses":    return <DepensesScreen />;
       case "scan":        return <ScanScreen />;
       case "parametres":  return <ParametresScreen profile={profile} onSaved={loadProfile} />;
+      // SCRUM-303 — la route est accessible dans le routeur (pushState direct
+      // possible) mais l'ecran lui-meme re-verifie isSuperOwner() et affiche un
+      // message d'acces refuse plutot que de planter si un non-super_owner
+      // atteint l'URL ; le backend refuse de toute facon via SuperOwnerGuard.
+      case "admin":       return isSuperOwner() ? <SuperAdminScreen /> : <AccessDeniedScreen onBack={() => setRoute("dashboard")} />;
       default:            return <DashboardScreen />;
     }
   };

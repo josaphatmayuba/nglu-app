@@ -8,6 +8,10 @@ const NATIVE = typeof window !== "undefined"
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.KODATILL_API_HOST) || "https://dev.ongdngolu.org";
 const BASE = (NATIVE ? API_HOST : "") + "/api/kodatill";
+// SCRUM-303 — /organizations/:publicId/suspend|reactivate existent AVANT
+// KodaTill (console super_owner generique, organizations.controller.ts) et ne
+// sont pas sous /kodatill : base HTTP dediee, meme host/prefixe /api que BASE.
+const ROOT_BASE = (NATIVE ? API_HOST : "") + "/api";
 
 const buildQuery = (params) => {
   const q = Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
@@ -48,6 +52,34 @@ async function doJsonFetch(path, init = {}, retried = false) {
 
 async function jsonFetch(path, init = {}) {
   return doJsonFetch(path, init);
+}
+
+// SCRUM-303 — meme logique que doJsonFetch (retry 401 via refresh) mais sur
+// ROOT_BASE ("/api") au lieu de BASE ("/api/kodatill"), pour les routes
+// generiques hors module KodaTill (ex: /organizations/...).
+async function doRootJsonFetch(path, init = {}, retried = false) {
+  const res = await fetch(`${ROOT_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return doRootJsonFetch(path, init, true);
+      }
+      clearAuth();
+      window.dispatchEvent(new CustomEvent("kodatill:auth-changed"));
+    }
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // SCRUM-296 — surface publique (scan QR, sans JWT). Client HTTP dedie et
@@ -177,4 +209,28 @@ export const api = {
   removeRegister: (id) => jsonFetch(`/registers/${id}`, { method: "DELETE" }),
   requestPairingCode: (id) => jsonFetch(`/registers/${id}/pairing-code`, { method: "POST" }),
   pairWithCode: (pairingCode) => jsonFetch("/registers/pair", { method: "POST", body: JSON.stringify({ pairingCode }) }),
+
+  // Espace Super Admin plateforme (SCRUM-303). Ce sous-ensemble d'appels est
+  // pense comme un premier jalon reutilisable pour d'autres modules futurs
+  // (pas seulement KodaTill) : la console super_owner est generique cote
+  // backend (organizations.controller.ts existe depuis avant KodaTill), seule
+  // la vue "platform/*" est specifique KodaTill pour l'instant.
+  getPlatformOverview: () => jsonFetch("/platform/overview"),
+  listPlatformCompanies: (params = {}) => jsonFetch(`/platform/companies${buildQuery(params)}`),
+  listPlans: () => jsonFetch("/platform/plans"),
+  createPlan: (body) => jsonFetch("/platform/plans", { method: "POST", body: JSON.stringify(body) }),
+  updatePlan: (id, body) => jsonFetch(`/platform/plans/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removePlan: (id) => jsonFetch(`/platform/plans/${id}`, { method: "DELETE" }),
+  getMySubscription: () => jsonFetch("/my-subscription"),
+  createSubscription: (body) => jsonFetch("/platform/subscriptions", { method: "POST", body: JSON.stringify(body) }),
+  updateSubscription: (organizationId, body) => jsonFetch(`/platform/subscriptions/${organizationId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  computeCommissions: (body) => jsonFetch("/platform/commissions/compute", { method: "POST", body: JSON.stringify(body) }),
+  listCommissions: (period) => jsonFetch(`/platform/commissions${buildQuery({ period })}`),
+  // Console organisations : routes racine /organizations/... (pas /kodatill/...).
+  // listOrganizations expose organizationId <-> publicId (necessaire pour
+  // suspendre/reactiver depuis la liste platform/companies, qui ne renvoie
+  // que l'id interne — jointure faite cote ecran, pas de doublon backend).
+  listOrganizations: () => doRootJsonFetch("/organizations"),
+  suspendOrganization: (publicId, reason) => doRootJsonFetch(`/organizations/${encodeURIComponent(publicId)}/suspend`, { method: "POST", body: JSON.stringify({ reason }) }),
+  reactivateOrganization: (publicId) => doRootJsonFetch(`/organizations/${encodeURIComponent(publicId)}/reactivate`, { method: "POST" }),
 };

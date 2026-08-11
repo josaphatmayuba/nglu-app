@@ -18,6 +18,14 @@ import { OrdersController } from "./orders.controller";
 import { OrdersService } from "./orders.service";
 import { PaymentMethodsController } from "./payment-methods.controller";
 import { PaymentMethodsService } from "./payment-methods.service";
+import { PlatformCommissionsController } from "./platform-commissions.controller";
+import { PlatformCommissionsService } from "./platform-commissions.service";
+import { PlatformOverviewController } from "./platform-overview.controller";
+import { PlatformOverviewService } from "./platform-overview.service";
+import { PlatformPlansController } from "./platform-plans.controller";
+import { PlatformPlansService } from "./platform-plans.service";
+import { PlatformSubscriptionsController } from "./platform-subscriptions.controller";
+import { PlatformSubscriptionsService } from "./platform-subscriptions.service";
 import { PublicController } from "./public.controller";
 import { PublicService } from "./public.service";
 import { QrCodesController } from "./qr-codes.controller";
@@ -49,6 +57,10 @@ import { VariantsService } from "./variants.service";
     PublicController,
     KitchenController,
     RegistersController,
+    PlatformPlansController,
+    PlatformSubscriptionsController,
+    PlatformCommissionsController,
+    PlatformOverviewController,
   ],
   providers: [
     CatalogService,
@@ -66,6 +78,10 @@ import { VariantsService } from "./variants.service";
     PublicService,
     KitchenService,
     RegistersService,
+    PlatformPlansService,
+    PlatformSubscriptionsService,
+    PlatformCommissionsService,
+    PlatformOverviewService,
   ],
   exports: [
     CatalogService,
@@ -82,6 +98,10 @@ import { VariantsService } from "./variants.service";
     QrCodesService,
     KitchenService,
     RegistersService,
+    PlatformPlansService,
+    PlatformSubscriptionsService,
+    PlatformCommissionsService,
+    PlatformOverviewService,
   ],
 })
 export class KodatillModule {}
