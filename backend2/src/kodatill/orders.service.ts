@@ -84,7 +84,19 @@ export class OrdersService {
     return row?.lastNumber ?? 1;
   }
 
-  async create(input: CreateOrderDto, orgId: number, userId: number) {
+  /**
+   * initialStatus : "draft" par defaut (caisse authentifiee, POST /orders).
+   * Le canal public (SCRUM-296, PublicService.createOrder) passe "received"
+   * car une commande QR est directement transmise, jamais un brouillon
+   * caisse. userId est nullable pour ce meme canal (pas d'utilisateur
+   * authentifie derriere un scan client).
+   */
+  async create(
+    input: CreateOrderDto,
+    orgId: number,
+    userId: number | null,
+    initialStatus: OrderStatus = "draft",
+  ) {
     return this.db.transaction(async (tx) => {
       // Idempotence : un client_uuid deja vu pour cette org renvoie la commande
       // existante au lieu d'en creer une seconde (comportement UPSERT logique).
@@ -124,7 +136,7 @@ export class OrdersService {
         tableId: input.tableId,
         customerName: input.customerName,
         customerPhone: input.customerPhone,
-        orderStatus: "draft",
+        orderStatus: initialStatus,
         subtotal: subtotal.toFixed(2),
         discountTotal: discountTotal.toFixed(2),
         taxTotal: "0.00",
@@ -160,8 +172,8 @@ export class OrdersService {
         organizationId: orgId,
         orderId,
         fromStatus: null,
-        toStatus: "draft",
-        userId,
+        toStatus: initialStatus,
+        userId: userId ?? undefined,
       });
 
       return this.findOneInternal(tx, orderId, orgId);

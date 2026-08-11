@@ -50,6 +50,31 @@ async function jsonFetch(path, init = {}) {
   return doJsonFetch(path, init);
 }
 
+// SCRUM-296 — surface publique (scan QR, sans JWT). Client HTTP dedie et
+// volontairement distinct de jsonFetch : pas d'Authorization, pas de retry
+// 401/refresh (aucune session a restaurer sur cette page), erreurs remontees
+// telles quelles pour affichage cote ecran.
+async function publicJsonFetch(path, init = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export const publicApi = {
+  getMenu: (orgSlug, qrToken) => publicJsonFetch(`/public/menu/${encodeURIComponent(orgSlug)}/${encodeURIComponent(qrToken)}`),
+  createOrder: (body) => publicJsonFetch("/public/orders", { method: "POST", body: JSON.stringify(body) }),
+  // SCRUM-297 — memes donnees pour le suivi de commande public-menu.jsx
+  // (GET /public/orders/:publicRef, statut + lignes + total, sans compte).
+  getOrder: (publicRef) => publicJsonFetch(`/public/orders/${encodeURIComponent(publicRef)}`),
+};
+
 export const api = {
   // Catalogue
   listCategories: () => jsonFetch("/categories"),
@@ -140,4 +165,16 @@ export const api = {
 
   setProductModifierGroups: (productId, body) => jsonFetch(`/products/${productId}/modifier-groups`, { method: "PUT", body: JSON.stringify(body) }),
   getProductSaleOptions: (productId) => jsonFetch(`/products/${productId}/sale-options`),
+
+  // Ecran cuisine (SCRUM-298)
+  getKitchenBoard: (params = {}) => jsonFetch(`/kitchen/board${buildQuery(params)}`),
+  updateKitchenLineStatus: (lineId, body) => jsonFetch(`/kitchen/lines/${lineId}/status`, { method: "POST", body: JSON.stringify(body) }),
+
+  // Caisses & jumelage scanner mobile (SCRUM-299)
+  listRegisters: (params = {}) => jsonFetch(`/registers${buildQuery(params)}`),
+  createRegister: (body) => jsonFetch("/registers", { method: "POST", body: JSON.stringify(body) }),
+  updateRegister: (id, body) => jsonFetch(`/registers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeRegister: (id) => jsonFetch(`/registers/${id}`, { method: "DELETE" }),
+  requestPairingCode: (id) => jsonFetch(`/registers/${id}/pairing-code`, { method: "POST" }),
+  pairWithCode: (pairingCode) => jsonFetch("/registers/pair", { method: "POST", body: JSON.stringify({ pairingCode }) }),
 };

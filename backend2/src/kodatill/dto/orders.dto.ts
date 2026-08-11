@@ -163,6 +163,15 @@ export class CreateOrderPaymentDto {
   gatewayStatus?: string;
 }
 
+export const KITCHEN_LINE_STATUSES = ["pending", "preparing", "ready", "served"] as const;
+export type KitchenLineStatus = (typeof KITCHEN_LINE_STATUSES)[number];
+
+export class UpdateKitchenLineStatusDto {
+  @ApiProperty({ enum: KITCHEN_LINE_STATUSES })
+  @IsIn(KITCHEN_LINE_STATUSES)
+  status!: KitchenLineStatus;
+}
+
 export class ListOrdersQueryDto {
   @ApiPropertyOptional()
   @IsOptional()

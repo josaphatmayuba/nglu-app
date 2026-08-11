@@ -3846,3 +3846,46 @@ export const ktProductBranchPrices = mysqlTable(
     ),
   }),
 );
+
+// SCRUM-294 (KodaTill Phase 3) : QR de commande poses sur une table, une zone
+// ou un comptoir. publicToken est un jeton opaque genere cote application
+// (aleatoire cryptographique), unique globalement pour permettre la resolution
+// publique sans connaitre lorganisation. scanCount / lastScanAt sont des
+// compteurs denormalises maintenus a lecriture, la verite detaillee restant
+// kt_qr_scans.
+export const ktQrCodes = mysqlTable(
+  "kt_qr_codes",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }).notNull(),
+    label: varchar("label", { length: 160 }).notNull(),
+    type: mysqlEnum("type", ["table", "zone", "counter"]).default("table").notNull(),
+    slug: varchar("slug", { length: 160 }).notNull(),
+    publicToken: varchar("public_token", { length: 64 }).notNull(),
+    scanCount: int("scan_count").default(0).notNull(),
+    lastScanAt: datetime("last_scan_at"),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    publicTokenUnique: unique("uq_kt_qr_codes_public_token").on(table.publicToken),
+  }),
+);
+
+// Journal des scans, table a forte volumetrie. userAgentHash est une empreinte
+// du user agent (pas le user agent brut) pour la deduplication sans donnee
+// identifiante. orderId reste nullable : un scan ne debouche pas toujours sur
+// une commande, il est rattache a posteriori.
+export const ktQrScans = mysqlTable("kt_qr_scans", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  qrCodeId: bigint("qr_code_id", { mode: "number" }).notNull(),
+  scannedAt: datetime("scanned_at").notNull(),
+  userAgentHash: varchar("user_agent_hash", { length: 64 }),
+  orderId: bigint("order_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});

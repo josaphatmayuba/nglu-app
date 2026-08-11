@@ -18,6 +18,9 @@ const CAISSE_NAV = { id: "caisse", label: "Caisse", icon: "🧮" };
 // ajoute inconditionnellement dans navForActivityProfile, pas via le mapping
 // module -> profil comme stock/ingredients.
 const DEPENSES_NAV = { id: "depenses", label: "Dépenses", icon: "💸" };
+// Scanner (SCRUM-299) : meme logique que Dépenses — besoin universel, pas lie
+// a un type de commerce, ajoute inconditionnellement quel que soit le profil.
+const SCAN_NAV = { id: "scan", label: "Scanner", icon: "📷" };
 
 // Mapping module -> lien de nav (ecrans disponibles dans app.jsx).
 const NAV_LINKS_BY_MODULE = {
@@ -44,6 +47,7 @@ export function navForActivityProfile(profile) {
   if (!links.some((l) => l.id === "dashboard")) links.unshift(NAV_LINKS_BY_MODULE.dashboard);
   if (!links.some((l) => l.id === "caisse")) links.push(NAV_LINKS_BY_MODULE.caisse);
   links.push(DEPENSES_NAV);
+  links.push(SCAN_NAV);
   links.push({ id: "parametres", label: "Paramètres", icon: "⚙️" });
   return links;
 }

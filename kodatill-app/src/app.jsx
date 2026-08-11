@@ -2,7 +2,8 @@
 // (state + window.history.pushState, pas de react-router dans ce monorepo).
 import React from "react";
 import { Sidebar, Topbar, navForActivityProfile } from "./shell.jsx";
-import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen } from "./screens.jsx";
+import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
+import { PublicMenuScreen, PublicOrderTrackingScreen } from "./public-menu.jsx";
 import { LoginScreen, useAuthToken } from "./auth.jsx";
 import { api } from "./api.js";
 
@@ -15,6 +16,7 @@ const ROUTE_SLUGS = {
   ingredients: "ingredients",
   caisse: "caisse",
   depenses: "depenses",
+  scan: "scan",
   parametres: "parametres",
 };
 const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
@@ -41,12 +43,63 @@ const ROUTE_META = {
   ingredients: { title: "Ingrédients",     subtitle: "Matières premières & coûts de recette" },
   caisse:      { title: "Caisse",          subtitle: "Point de vente" },
   depenses:    { title: "Dépenses",        subtitle: "Charges & sorties de caisse" },
+  scan:        { title: "Scanner",         subtitle: "Jumelage caisse & scan mobile" },
   parametres:  { title: "Paramètres",      subtitle: "Profil d'activité & configuration" },
 };
 
+// SCRUM-296 — /kodatill/r/:orgSlug/:qrToken : surface publique (scan QR par
+// le client final), SANS verification JWT/auth.jsx. Detectee AVANT le gate
+// d'authentification pour fonctionner meme deconnecte. Route dediee, pas
+// integree a ROUTE_SLUGS (qui suppose un premier segment fixe parmi un
+// ensemble connu ; ici orgSlug/qrToken sont dynamiques).
+function publicMenuParamsFromLocation() {
+  if (typeof window === "undefined") return null;
+  const p = window.location.pathname || "";
+  if (!p.startsWith(BASE)) return null;
+  const parts = p.slice(BASE.length).replace(/\/$/, "").split("/");
+  if (parts[0] !== "r" || !parts[1] || !parts[2]) return null;
+  return { orgSlug: parts[1], qrToken: parts[2] };
+}
+
+// SCRUM-297 — /kodatill/r/:orgSlug/suivi/:orderRef : suivi de commande public,
+// meme detection AVANT le gate JWT que publicMenuParamsFromLocation (fonctionne
+// deconnecte, autorisation via publicRef opaque plutot que qrToken).
+function publicOrderTrackingParamsFromLocation() {
+  if (typeof window === "undefined") return null;
+  const p = window.location.pathname || "";
+  if (!p.startsWith(BASE)) return null;
+  const parts = p.slice(BASE.length).replace(/\/$/, "").split("/");
+  if (parts[0] !== "r" || !parts[1] || parts[2] !== "suivi" || !parts[3]) return null;
+  return { orgSlug: parts[1], publicRef: parts[3] };
+}
+
+// SCRUM-298 — /kodatill/cuisine : ecran cuisine plein ecran (TV/tablette
+// fixe en cuisine). Route authentifiee (JWT requis, contrairement a /r/...)
+// mais volontairement rendue HORS du wrapper Sidebar/Topbar de <App/> : pas
+// de navigation admin sur un ecran cuisine fixe, tout l'espace est dedie au
+// board de commandes.
+function isKitchenScreenLocation() {
+  if (typeof window === "undefined") return false;
+  const p = window.location.pathname || "";
+  if (!p.startsWith(BASE)) return false;
+  const slug = p.slice(BASE.length).replace(/\/$/, "").split("/")[0] || "";
+  return slug === "cuisine";
+}
+
 function AppShell() {
+  const [trackingParams] = React.useState(publicOrderTrackingParamsFromLocation);
+  const [publicParams] = React.useState(publicMenuParamsFromLocation);
+  const [isKitchen] = React.useState(isKitchenScreenLocation);
+  if (trackingParams) {
+    return <PublicOrderTrackingScreen orgSlug={trackingParams.orgSlug} publicRef={trackingParams.publicRef} />;
+  }
+  if (publicParams) {
+    return <PublicMenuScreen orgSlug={publicParams.orgSlug} qrToken={publicParams.qrToken} />;
+  }
+
   const token = useAuthToken();
   if (!token) return <LoginScreen lang="fr" />;
+  if (isKitchen) return <KitchenScreen />;
   return <App />;
 }
 
@@ -91,6 +144,7 @@ function App() {
       case "ingredients": return <IngredientsScreen />;
       case "caisse":      return <CaisseScreen />;
       case "depenses":    return <DepensesScreen />;
+      case "scan":        return <ScanScreen />;
       case "parametres":  return <ParametresScreen profile={profile} onSaved={loadProfile} />;
       default:            return <DashboardScreen />;
     }

@@ -137,6 +137,14 @@ module.exports = [
   { method: '*',    prefix: '/chat',                           auth: true  },
   { method: '*',    prefix: '/farmos',                         auth: true  },
   { method: '*',    prefix: '/batipro',                       auth: true  },
+  // SCRUM-296 : menu + commande QR consultes sans compte par le client final
+  // (scan de table). Meme pattern que /batipro/public plus haut : entree
+  // publique DECLAREE AVANT le catch-all '/kodatill' generique, car ce fichier
+  // utilise whitelist.find() (index.js) qui retourne la PREMIERE entree dont
+  // le prefixe correspond — l'ordre du tableau fait donc foi, pas une notion
+  // de specificite. Autorisation portee par orgSlug/qrToken resolus cote
+  // backend2, jamais par le JWT.
+  { method: '*',    prefix: '/kodatill/public',                 auth: false },
   { method: '*',    prefix: '/kodatill',                       auth: true  },
   // Migration Cockpit — lecture seule (GET uniquement), JWT requis.
   { method: 'GET',  prefix: '/migration',                     auth: true  },

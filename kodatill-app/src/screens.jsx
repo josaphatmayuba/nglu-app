@@ -3744,3 +3744,323 @@ export const DepensesScreen = () => {
     </div>
   );
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ecran cuisine (SCRUM-298) — affiche sur une TV/tablette fixe en cuisine,
+// donc PAS de Shell/sidebar admin (voir app.jsx : rendu hors du wrapper
+// authentifie habituel), plein ecran, police large et contrastes forts pour
+// une lecture a distance.
+//
+// Choix realtime vs polling (documente pour la revue) : pas de branchement
+// sur backend2/src/realtime (RealtimeDataPublisherService) pour cette phase.
+// Ce module publie des evenements types (DataUpdateEntity fixe dans
+// data-update-rules.ts, aucune entree "kodatill" existante) avec regles
+// (module/tags/pages/dataLoaders) validees par un script de contrat
+// (scripts/check-data-update-rules.mjs) : l'integrer proprement demanderait
+// d'etendre ce contrat partage et d'ajouter un dataLoader frontend dedie,
+// une portee plus large que ce ticket. Polling 5s = compromis simple et
+// suffisant pour un ecran cuisine (latence de quelques secondes acceptable).
+// ─────────────────────────────────────────────────────────────────────────
+const KITCHEN_BOARD_POLL_MS = 5000;
+const KITCHEN_CHANNEL_LABELS = { pos: "Caisse", qr: "QR Table", mobile: "Mobile", kitchen: "Cuisine" };
+const KITCHEN_LINE_STATUS_LABELS = { pending: "En attente", preparing: "En préparation", ready: "Prête", served: "Servie" };
+const KITCHEN_LINE_NEXT_STATUS = { pending: "preparing", preparing: "ready", ready: "served" };
+const KITCHEN_LINE_STATUS_COLORS = { pending: "#8a8a8a", preparing: "#b8860b", ready: "#2f7d4f", served: "#123F46" };
+
+function KitchenLineStatusBadge({ status }) {
+  const color = KITCHEN_LINE_STATUS_COLORS[status] || "#8a8a8a";
+  return (
+    <span style={{
+      display: "inline-block", padding: "4px 14px", borderRadius: 14, fontSize: 15,
+      fontWeight: 700, color: "#FBF8F2", background: color, whiteSpace: "nowrap",
+    }}>
+      {KITCHEN_LINE_STATUS_LABELS[status] || status}
+    </span>
+  );
+}
+
+function KitchenOrderCard({ order, onAdvanceLine, advancingLineId }) {
+  return (
+    <div style={{
+      background: "var(--paper, #fff)", border: "2px solid var(--border-1, #E7EBF1)",
+      borderRadius: 16, padding: 20, display: "flex", flexDirection: "column", gap: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 26, fontWeight: 800, color: "var(--fg-1, #0E2418)" }}>
+          {order.publicRef || `#${order.orderNumber}`}
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--fg-3, #6b6b6b)" }}>
+          {KITCHEN_CHANNEL_LABELS[order.channel] || order.channel}
+          {order.tableId ? ` · Table ${order.tableId}` : ""}
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--fg-3, #6b6b6b)" }}>{formatTime(order.createdAt)}</span>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {order.lines.map((line) => {
+          const next = KITCHEN_LINE_NEXT_STATUS[line.kitchenStatus];
+          const isAdvancing = advancingLineId === line.id;
+          return (
+            <div key={line.id} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+              padding: "10px 12px", borderRadius: 10, background: "var(--bg-app, #FBF8F2)", flexWrap: "wrap",
+            }}>
+              <span style={{ fontSize: 20, fontWeight: 700, color: "var(--fg-1, #0E2418)", flex: 1, minWidth: 160 }}>
+                {Number(line.qty) > 1 ? `${Number(line.qty)}× ` : ""}{line.name}
+              </span>
+              <KitchenLineStatusBadge status={line.kitchenStatus} />
+              {next && (
+                <button
+                  onClick={() => onAdvanceLine(line.id, next)}
+                  disabled={isAdvancing}
+                  style={{
+                    background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 10,
+                    padding: "10px 18px", fontWeight: 700, fontSize: 15,
+                    cursor: isAdvancing ? "default" : "pointer", opacity: isAdvancing ? 0.6 : 1,
+                  }}
+                >
+                  {isAdvancing ? "…" : `→ ${KITCHEN_LINE_STATUS_LABELS[next]}`}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export const KitchenScreen = () => {
+  const [orders, setOrders] = React.useState([]);
+  const [error, setError] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [advancingLineId, setAdvancingLineId] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const board = await api.getKitchenBoard();
+      setOrders(Array.isArray(board) ? board : []);
+      setError(null);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    load();
+    const timer = setInterval(load, KITCHEN_BOARD_POLL_MS);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const advanceLine = React.useCallback(async (lineId, nextStatus) => {
+    setAdvancingLineId(lineId);
+    try {
+      await api.updateKitchenLineStatus(lineId, { status: nextStatus });
+      await load();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setAdvancingLineId(null);
+    }
+  }, [load]);
+
+  const preparingOrders = orders.filter((o) =>
+    o.lines.some((l) => l.kitchenStatus === "pending" || l.kitchenStatus === "preparing"));
+  const readyOrders = orders.filter((o) =>
+    o.lines.some((l) => l.kitchenStatus === "ready") && !preparingOrders.includes(o));
+
+  return (
+    <div style={{
+      height: "100vh", width: "100vw", overflow: "auto", boxSizing: "border-box",
+      background: "var(--bg-app, #FBF8F2)", padding: 24, display: "flex", flexDirection: "column", gap: 16,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, color: "var(--fg-1, #0E2418)" }}>Écran cuisine</h1>
+        {loading && <span style={{ fontSize: 16, color: "var(--fg-3, #6b6b6b)" }}>Chargement…</span>}
+      </div>
+
+      <ErrorBanner message={error} onRetry={load} />
+
+      {!loading && orders.length === 0 && !error && (
+        <CenteredNote>
+          <span style={{ fontSize: 20 }}>Aucune commande en cuisine pour le moment.</span>
+        </CenteredNote>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, flex: 1, minHeight: 0, overflow: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#b8860b" }}>En préparation</h2>
+          {preparingOrders.map((o) => (
+            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} />
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#2f7d4f" }}>Prêtes</h2>
+          {readyOrders.map((o) => (
+            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Scanner mobile (SCRUM-299) ──────────────────────────────────────────
+// Etape 1 (non jumele) : saisie du code a 6 chiffres genere par la caisse
+// principale (POST /registers/:id/pairing-code) -> POST /registers/pair.
+// Etape 2 (jumele) : reutilise EXACTEMENT le meme pattern de champ
+// scan/Enter que CaisseScreen#onSearchKeyDown / StockScreen#onSearchKeyDown
+// (GET /products/barcode/:code sur Enter).
+//
+// LIMITATION DOCUMENTEE (hors scope de ce ticket) : la liste de produits
+// scannes ci-dessous est purement LOCALE a cet ecran — elle n'est PAS
+// synchronisee en temps reel avec le ticket de vente de la caisse jumelee.
+// Le jumelage sert uniquement a memoriser a quelle caisse/succursale ce
+// scanner est rattache (id/name/branchId), pas a partager un panier. Une
+// synchronisation temps reel du ticket serait une fonctionnalite bien plus
+// complexe (etat partage, push/poll, gestion de conflits) a traiter dans un
+// futur ticket dedie.
+export const ScanScreen = () => {
+  const [pairedRegister, setPairedRegister] = React.useState(null);
+  const [pairingCode, setPairingCode] = React.useState("");
+  const [pairError, setPairError] = React.useState(null);
+  const [pairing, setPairing] = React.useState(false);
+
+  const [search, setSearch] = React.useState("");
+  const [scanMessage, setScanMessage] = React.useState(null);
+  const [scanned, setScanned] = React.useState([]);
+
+  const onJoin = async (e) => {
+    e.preventDefault();
+    if (!pairingCode.trim()) return;
+    setPairing(true);
+    setPairError(null);
+    try {
+      const register = await api.pairWithCode(pairingCode.trim());
+      setPairedRegister(register);
+      setPairingCode("");
+    } catch (err) {
+      setPairError("Code invalide ou expiré. Demandez un nouveau code sur la caisse principale.");
+    } finally {
+      setPairing(false);
+    }
+  };
+
+  const onUnpair = () => {
+    setPairedRegister(null);
+    setScanned([]);
+    setScanMessage(null);
+  };
+
+  // Meme pattern que CaisseScreen#onSearchKeyDown : Enter tente un lookup
+  // code-barres exact cote serveur (comportement d'une douchette).
+  const onSearchKeyDown = async (e) => {
+    if (e.key !== "Enter" || !search.trim()) return;
+    setScanMessage(null);
+    try {
+      const product = await api.getProductByBarcode(search.trim());
+      if (product) {
+        setScanned((list) => [{ ...product, scannedAt: new Date().toISOString() }, ...list]);
+        setScanMessage(`Ajouté : ${product.name}`);
+        setSearch("");
+      }
+    } catch (err) {
+      setScanMessage("Aucun produit pour ce code-barres.");
+    }
+  };
+
+  if (!pairedRegister) {
+    return (
+      <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        <CenteredNote>
+          <form onSubmit={onJoin} style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--fg-1, #0E2418)" }}>
+              Rejoindre une caisse
+            </div>
+            <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>
+              Saisissez le code à 6 chiffres affiché sur la caisse principale.
+            </div>
+            <input
+              value={pairingCode}
+              onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              inputMode="numeric"
+              maxLength={6}
+              style={{ ...fieldInputStyle, fontSize: 22, textAlign: "center", letterSpacing: 4 }}
+            />
+            {pairError && <div style={{ fontSize: 12, color: "var(--oxblood-800, #7a1f2b)" }}>{pairError}</div>}
+            <button
+              type="submit"
+              disabled={pairing || pairingCode.trim().length !== 6}
+              style={{
+                background: "var(--accent-1, #1f6d75)", color: "#fff", border: 0, borderRadius: 8,
+                padding: "12px 16px", fontWeight: 700, fontSize: 14,
+                cursor: pairing ? "default" : "pointer", opacity: pairing ? 0.7 : 1,
+              }}
+            >
+              {pairing ? "Vérification…" : "Rejoindre"}
+            </button>
+          </form>
+        </CenteredNote>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+        background: "rgba(31,109,117,0.10)", border: "1px solid rgba(31,109,117,0.35)",
+        borderRadius: 10, padding: "10px 16px", fontSize: 13,
+      }}>
+        <span>
+          Jumelé à : <strong>{pairedRegister.name}</strong>
+        </span>
+        <button onClick={onUnpair} style={{
+          background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 6,
+          padding: "6px 12px", fontSize: 12, cursor: "pointer",
+        }}>
+          Se dé-jumeler
+        </button>
+      </div>
+
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        onKeyDown={onSearchKeyDown}
+        autoFocus
+        placeholder="Scanner un code-barres…"
+        style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14 }}
+      />
+      {scanMessage && <div style={{ fontSize: 12, color: "#1f6d75" }}>{scanMessage}</div>}
+
+      <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)" }}>
+        Liste locale à cet appareil — non synchronisée avec le ticket de la caisse jumelée.
+      </div>
+
+      {scanned.length === 0 ? (
+        <CenteredNote>Aucun produit scanné pour l'instant.</CenteredNote>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {scanned.map((p, i) => (
+            <div key={`${p.id}-${p.scannedAt}-${i}`} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14,
+            }}>
+              <span>{p.name}</span>
+              <span style={{ fontWeight: 700 }}>{formatMoney(p.salePrice, p.currencyCode)}</span>
+            </div>
+          ))}
+          <button onClick={() => setScanned([])} style={{
+            alignSelf: "flex-start", background: "transparent", border: "1px solid var(--border-2, #d8c8a8)",
+            borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", marginTop: 4,
+          }}>
+            Vider la liste
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

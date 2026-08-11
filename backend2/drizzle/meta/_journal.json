@@ -1534,6 +1534,13 @@
       "when": 1781049600000,
       "tag": "0243_kodatill_stock_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "5",
+      "when": 1781053200000,
+      "tag": "0244_kodatill_qr",
+      "breakpoints": true
     }
   ]
 }
