@@ -3,12 +3,50 @@ import React from "react";
 import { clearAuth } from "./auth.jsx";
 import { Brand } from "./icons.jsx";
 
-const NAV = [
+// Liens toujours presents, quelle que soit l'activite.
+const BASE_NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "📊" },
-  { id: "produits",  label: "Produits",        icon: "📦" },
-  { id: "commandes", label: "Commandes",       icon: "🧾" },
-  { id: "caisse",    label: "Caisse",          icon: "🧮" },
 ];
+const COMMON_NAV = [
+  { id: "commandes",   label: "Commandes",   icon: "🧾" },
+  { id: "produits",    label: "Produits",    icon: "📦" },
+  { id: "stock",       label: "Stock",       icon: "📥" },
+  { id: "ingredients", label: "Ingrédients", icon: "🥕" },
+];
+const CAISSE_NAV = { id: "caisse", label: "Caisse", icon: "🧮" };
+// Depenses (SCRUM-292) : besoin universel, pas lie a un type de commerce —
+// ajoute inconditionnellement dans navForActivityProfile, pas via le mapping
+// module -> profil comme stock/ingredients.
+const DEPENSES_NAV = { id: "depenses", label: "Dépenses", icon: "💸" };
+
+// Mapping module -> lien de nav (ecrans disponibles dans app.jsx).
+const NAV_LINKS_BY_MODULE = {
+  dashboard: BASE_NAV[0],
+  commandes: COMMON_NAV[0],
+  produits: COMMON_NAV[1],
+  stock: COMMON_NAV[2],
+  ingredients: COMMON_NAV[3],
+  caisse: CAISSE_NAV,
+};
+
+// Modules par activite (repris du mapping backend business-profile.service.ts).
+// - restaurant : dashboard, commandes, produits, ingredients, caisse
+// - supermarket/pharmacy/hardware : dashboard, commandes, produits, stock, caisse
+// - shop : dashboard, commandes, produits, caisse
+const DEFAULT_NAV = ["dashboard", "commandes", "produits", "caisse"];
+
+export function navForActivityProfile(profile) {
+  const modules = Array.isArray(profile?.enabledModules) && profile.enabledModules.length
+    ? profile.enabledModules
+    : DEFAULT_NAV;
+  const links = modules.map((m) => NAV_LINKS_BY_MODULE[m]).filter(Boolean);
+  // Toujours garantir dashboard + caisse meme si le profil ne les liste pas.
+  if (!links.some((l) => l.id === "dashboard")) links.unshift(NAV_LINKS_BY_MODULE.dashboard);
+  if (!links.some((l) => l.id === "caisse")) links.push(NAV_LINKS_BY_MODULE.caisse);
+  links.push(DEPENSES_NAV);
+  links.push({ id: "parametres", label: "Paramètres", icon: "⚙️" });
+  return links;
+}
 
 function readCurrentUser() {
   try {
@@ -23,8 +61,9 @@ function readCurrentUser() {
   }
 }
 
-export const Sidebar = ({ active, onNav }) => {
+export const Sidebar = ({ active, onNav, nav }) => {
   const user = readCurrentUser();
+  const NAV = nav || navForActivityProfile(null);
   return (
     <aside style={{
       width: 220, flexShrink: 0, height: "100%", display: "flex", flexDirection: "column",

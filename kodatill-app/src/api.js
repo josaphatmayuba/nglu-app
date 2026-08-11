@@ -89,4 +89,55 @@ export const api = {
   createBranch: (body) => jsonFetch("/branches", { method: "POST", body: JSON.stringify(body) }),
   updateBranch: (id, body) => jsonFetch(`/branches/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeBranch: (id) => jsonFetch(`/branches/${id}`, { method: "DELETE" }),
+
+  // Profil d'activite (parametres)
+  listBusinessProfile: () => jsonFetch("/business-profile"),
+  updateBusinessProfile: (body) => jsonFetch("/business-profile", { method: "PUT", body: JSON.stringify(body) }),
+
+  // Stock (SCRUM-289)
+  listStock: (params = {}) => jsonFetch(`/stock${buildQuery(params)}`),
+  listStockAlerts: () => jsonFetch("/stock/alerts"),
+  listStockMovements: (id) => jsonFetch(`/stock/${id}/movements`),
+  restockItem: (id, body) => jsonFetch(`/stock/${id}/restock`, { method: "POST", body: JSON.stringify(body) }),
+  adjustStock: (id, body) => jsonFetch(`/stock/${id}/adjust`, { method: "POST", body: JSON.stringify(body) }),
+
+  // Ingredients (SCRUM-291)
+  listIngredients: (params = {}) => jsonFetch(`/ingredients${buildQuery(params)}`),
+  getIngredient: (id) => jsonFetch(`/ingredients/${id}`),
+  createIngredient: (body) => jsonFetch("/ingredients", { method: "POST", body: JSON.stringify(body) }),
+  updateIngredient: (id, body) => jsonFetch(`/ingredients/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeIngredient: (id) => jsonFetch(`/ingredients/${id}`, { method: "DELETE" }),
+
+  // Recette produit (SCRUM-291) — computedCost toujours recalcule cote serveur.
+  getProductRecipe: (productId) => jsonFetch(`/products/${productId}/recipe`),
+  saveProductRecipe: (productId, body) => jsonFetch(`/products/${productId}/recipe`, { method: "PUT", body: JSON.stringify(body) }),
+  removeProductRecipe: (productId) => jsonFetch(`/products/${productId}/recipe`, { method: "DELETE" }),
+
+  // Depenses (SCRUM-292)
+  listExpenseCategories: () => jsonFetch("/expenses/categories"),
+  createExpenseCategory: (body) => jsonFetch("/expenses/categories", { method: "POST", body: JSON.stringify(body) }),
+  updateExpenseCategory: (id, body) => jsonFetch(`/expenses/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeExpenseCategory: (id) => jsonFetch(`/expenses/categories/${id}`, { method: "DELETE" }),
+  listExpenses: (params = {}) => jsonFetch(`/expenses${buildQuery(params)}`),
+  createExpense: (body) => jsonFetch("/expenses", { method: "POST", body: JSON.stringify(body) }),
+  updateExpense: (id, body) => jsonFetch(`/expenses/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeExpense: (id) => jsonFetch(`/expenses/${id}`, { method: "DELETE" }),
+  getExpensesSummary: (params) => jsonFetch(`/expenses/summary${buildQuery(params)}`),
+
+  // Variantes & modificateurs (SCRUM-293)
+  listProductVariants: (productId) => jsonFetch(`/products/${productId}/variants`),
+  createProductVariant: (productId, body) => jsonFetch(`/products/${productId}/variants`, { method: "POST", body: JSON.stringify(body) }),
+  updateProductVariant: (id, body) => jsonFetch(`/variants/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeProductVariant: (id) => jsonFetch(`/variants/${id}`, { method: "DELETE" }),
+
+  listModifierGroups: () => jsonFetch("/modifier-groups"),
+  createModifierGroup: (body) => jsonFetch("/modifier-groups", { method: "POST", body: JSON.stringify(body) }),
+  updateModifierGroup: (id, body) => jsonFetch(`/modifier-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeModifierGroup: (id) => jsonFetch(`/modifier-groups/${id}`, { method: "DELETE" }),
+  createModifier: (groupId, body) => jsonFetch(`/modifier-groups/${groupId}/modifiers`, { method: "POST", body: JSON.stringify(body) }),
+  updateModifier: (id, body) => jsonFetch(`/modifiers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeModifier: (id) => jsonFetch(`/modifiers/${id}`, { method: "DELETE" }),
+
+  setProductModifierGroups: (productId, body) => jsonFetch(`/products/${productId}/modifier-groups`, { method: "PUT", body: JSON.stringify(body) }),
+  getProductSaleOptions: (productId) => jsonFetch(`/products/${productId}/sale-options`),
 };

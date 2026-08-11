@@ -1506,6 +1506,34 @@
       "when": 1781035200000,
       "tag": "0239_kodatill_cash",
       "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "5",
+      "when": 1781038800000,
+      "tag": "0240_kodatill_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "5",
+      "when": 1781042400000,
+      "tag": "0241_kodatill_recipes",
+      "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "5",
+      "when": 1781046000000,
+      "tag": "0242_kodatill_variants",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "5",
+      "when": 1781049600000,
+      "tag": "0243_kodatill_stock_permission",
+      "breakpoints": true
     }
   ]
 }

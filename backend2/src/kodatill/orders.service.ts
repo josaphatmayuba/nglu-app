@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -9,6 +9,9 @@ import {
   ktOrders,
   ktPaymentMethods,
   ktPayments,
+  ktProducts,
+  ktStockItems,
+  ktStockMovements,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import {
@@ -37,6 +40,8 @@ const EDITABLE_STATUSES: OrderStatus[] = ["draft", "received"];
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   private round2(n: number): number {
@@ -393,8 +398,114 @@ export class OrdersService {
         userId,
       });
 
+      if (nextStatus === "completed") {
+        await this.decrementStockForOrder(tx, order, orgId, userId);
+      }
+
       return this.findOneInternal(tx, id, orgId);
     });
+  }
+
+  /**
+   * Decrement atomique du stock a la finalisation d'une commande (SCRUM-288).
+   *
+   * Choix critique : UPDATE ... SET qty = qty - :n WHERE id = :id AND qty >= :n
+   * (comparaison ET decrement dans la meme requete conditionnelle), jamais un
+   * read-modify-write (SELECT qty puis UPDATE qty = valeur calculee) qui casse
+   * sous concurrence — deux caisses vendant le dernier article en meme temps
+   * liraient la meme qty de depart et l'une des deux ventes decrementerait a
+   * partir d'une valeur perimee (stock qui devient incorrect, voire negatif).
+   *
+   * Si le decrement echoue (aucune ligne affectee : stock insuffisant, ou
+   * aucun kt_stock_items pour ce produit/succursale), on NE bloque PAS la
+   * vente : le paiement est deja acte cote caisse a ce stade (order_status
+   * passe a completed apres encaissement), donc empecher la transition ferait
+   * perdre une vente reelle a cause d'un desaccord de stock. C'est un probleme
+   * de gestion de stock (a corriger via /kodatill/stock/:id/adjust), pas un
+   * probleme de vente : on logge l'anomalie et on continue.
+   */
+  private async decrementStockForOrder(
+    tx: Database,
+    order: typeof ktOrders.$inferSelect,
+    orgId: number,
+    userId: number,
+  ): Promise<void> {
+    const lines = await tx
+      .select({
+        productId: ktOrderLines.productId,
+        qty: ktOrderLines.qty,
+      })
+      .from(ktOrderLines)
+      .where(
+        and(
+          eq(ktOrderLines.orderId, order.id),
+          eq(ktOrderLines.organizationId, orgId),
+          eq(ktOrderLines.status, "true"),
+        ),
+      );
+
+    for (const line of lines) {
+      if (!line.productId) continue;
+
+      const [product] = await tx
+        .select({ trackStock: ktProducts.trackStock })
+        .from(ktProducts)
+        .where(and(eq(ktProducts.id, line.productId), eq(ktProducts.organizationId, orgId)))
+        .limit(1);
+
+      if (!product?.trackStock) continue;
+
+      const [stockItem] = await tx
+        .select({ id: ktStockItems.id, qty: ktStockItems.qty })
+        .from(ktStockItems)
+        .where(
+          and(
+            eq(ktStockItems.organizationId, orgId),
+            eq(ktStockItems.branchId, order.branchId),
+            eq(ktStockItems.productId, line.productId),
+            eq(ktStockItems.status, "true"),
+          ),
+        )
+        .limit(1);
+
+      if (!stockItem) {
+        this.logger.warn(
+          `Vente completed sans article de stock (order=${order.id}, productId=${line.productId}, branchId=${order.branchId}) : decrement ignore.`,
+        );
+        continue;
+      }
+
+      const qtySold = Number(line.qty);
+
+      // Decrement atomique : condition et ecriture dans la meme requete SQL,
+      // pas de read-modify-write (voir commentaire methode).
+      const [result]: any = await tx.execute(sql`
+        UPDATE kt_stock_items
+        SET qty = qty - ${qtySold}
+        WHERE id = ${stockItem.id} AND qty >= ${qtySold}
+      `);
+      const affectedRows = Number(result?.affectedRows ?? 0);
+
+      if (affectedRows === 0) {
+        this.logger.warn(
+          `Stock insuffisant lors de la vente (order=${order.id}, stockItemId=${stockItem.id}, productId=${line.productId}) : decrement ignore, vente non bloquee.`,
+        );
+        continue;
+      }
+
+      const newQty = Number(stockItem.qty) - qtySold;
+      await tx.insert(ktStockMovements).values({
+        organizationId: orgId,
+        stockItemId: stockItem.id,
+        type: "sale",
+        qty: qtySold.toFixed(3),
+        qtyAfter: newQty.toFixed(3),
+        refType: "order",
+        refId: order.id,
+        userId,
+        createdAt: new Date(),
+      });
+    }
   }
 
   async addPayment(id: number, input: CreateOrderPaymentDto, orgId: number, userId: number) {

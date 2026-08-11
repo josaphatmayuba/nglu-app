@@ -532,11 +532,19 @@ export const CaisseScreen = () => {
   const [search, setSearch] = React.useState("");
   const [scanMessage, setScanMessage] = React.useState(null);
 
-  const [ticket, setTicket] = React.useState([]); // { key, productId, name, qty, unitPrice, currencyCode }
+  const [ticket, setTicket] = React.useState([]); // { key, productId, variantId, name, qty, unitPrice, currencyCode }
   const [checkoutOrder, setCheckoutOrder] = React.useState(null); // commande creee cote serveur, en attente de paiement
   const [checkoutError, setCheckoutError] = React.useState(null);
   const [checkoutSubmitting, setCheckoutSubmitting] = React.useState(false);
   const [confirmation, setConfirmation] = React.useState(null);
+
+  // Modal variantes/modificateurs (SCRUM-293) : ouvert seulement si le produit
+  // clique a des variantes et/ou des groupes de modificateurs. On decouvre ca
+  // via GET /products/:id/sale-options au clic (pas de flag pre-charge sur la
+  // liste catalogue pour eviter d'alourdir GET /products, appele tres souvent).
+  const [saleOptionsProduct, setSaleOptionsProduct] = React.useState(null);
+  const [saleOptionsLoading, setSaleOptionsLoading] = React.useState(false);
+  const [saleOptionsError, setSaleOptionsError] = React.useState(null);
 
   // Succursale par defaut (is_default=true, sinon la premiere de la liste) et
   // methodes de paiement actives de l'organisation, chargees au montage.
@@ -623,23 +631,68 @@ export const CaisseScreen = () => {
     loadPaymentMethods();
   }, [loadSession, loadCatalog, loadBranches, loadPaymentMethods]);
 
-  const addToTicket = (product) => {
+  // selection = { variant, modifiers: [...] } quand le produit a des options
+  // choisies via SaleOptionsModal ; undefined pour un produit simple (flux
+  // inchange). Chaque combinaison variante+modificateurs distincte devient sa
+  // propre ligne de ticket (key dediee), pour ne pas fusionner par erreur des
+  // choix differents sous un meme produit.
+  const addToTicket = (product, selection) => {
+    const variant = selection?.variant || null;
+    const modifiers = selection?.modifiers || [];
+
+    const namePart = [
+      product.name,
+      variant ? variant.name : null,
+      modifiers.length ? `(${modifiers.map((m) => m.name).join(", ")})` : null,
+    ].filter(Boolean).join(" — ").replace(" — (", " (");
+
+    const unitPrice = Number(product.salePrice)
+      + (variant ? Number(variant.priceDelta) : 0)
+      + modifiers.reduce((s, m) => s + Number(m.priceDelta), 0);
+
+    const key = [product.id, variant?.id || 0, modifiers.map((m) => m.id).sort((a, b) => a - b).join("-")].join(":");
+
     setTicket((lines) => {
-      const idx = lines.findIndex((l) => l.productId === product.id);
+      const idx = lines.findIndex((l) => l.key === key);
       if (idx >= 0) {
         const next = [...lines];
         next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
         return next;
       }
       return [...lines, {
-        key: product.id,
+        key,
         productId: product.id,
-        name: product.name,
+        variantId: variant?.id,
+        name: namePart,
         qty: 1,
-        unitPrice: Number(product.salePrice),
+        unitPrice,
         currencyCode: product.currencyCode,
       }];
     });
+  };
+
+  // Clic sur un produit du catalogue : verifie s'il a des variantes/groupes de
+  // modificateurs. Si oui -> modal de selection avant ajout. Sinon -> ajout
+  // direct au ticket, comportement identique a avant ce ticket.
+  const onProductClick = async (product) => {
+    setSaleOptionsError(null);
+    setSaleOptionsLoading(true);
+    try {
+      const options = await api.getProductSaleOptions(product.id);
+      const hasVariants = Array.isArray(options?.variants) && options.variants.length > 0;
+      const hasModifierGroups = Array.isArray(options?.modifierGroups) && options.modifierGroups.length > 0;
+      if (hasVariants || hasModifierGroups) {
+        setSaleOptionsProduct({ product, options });
+      } else {
+        addToTicket(product);
+      }
+    } catch (err) {
+      // Echec de la verification des options : on ne bloque pas la vente,
+      // on ajoute le produit tel quel (comportement simple par defaut).
+      addToTicket(product);
+    } finally {
+      setSaleOptionsLoading(false);
+    }
   };
 
   const changeQty = (key, delta) => {
@@ -695,6 +748,7 @@ export const CaisseScreen = () => {
         clientUuid: crypto.randomUUID(),
         lines: ticket.map((l) => ({
           productId: l.productId,
+          variantId: l.variantId,
           name: l.name,
           qty: l.qty,
           unitPrice: l.unitPrice,
@@ -825,11 +879,11 @@ export const CaisseScreen = () => {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
             {filteredProducts.map((p) => (
-              <button key={p.id} onClick={() => addToTicket(p)}
+              <button key={p.id} onClick={() => onProductClick(p)} disabled={saleOptionsLoading}
                 style={{
                   textAlign: "left", cursor: "pointer", border: "1px solid var(--border-1, #E7EBF1)",
                   borderRadius: 12, padding: 14, background: "var(--paper, #fff)", display: "flex",
-                  flexDirection: "column", gap: 8, minHeight: 90,
+                  flexDirection: "column", gap: 8, minHeight: 90, opacity: saleOptionsLoading ? 0.7 : 1,
                 }}>
                 <div style={{ fontSize: 24 }}>{p.emojiFallback || "🛒"}</div>
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--fg-1, #0E2418)" }}>{p.name}</div>
@@ -935,9 +989,140 @@ export const CaisseScreen = () => {
           onClose={onZReportClosed}
         />
       )}
+
+      {saleOptionsProduct && (
+        <SaleOptionsModal
+          product={saleOptionsProduct.product}
+          options={saleOptionsProduct.options}
+          onConfirm={(selection) => {
+            addToTicket(saleOptionsProduct.product, selection);
+            setSaleOptionsProduct(null);
+          }}
+          onCancel={() => setSaleOptionsProduct(null)}
+        />
+      )}
+      {saleOptionsError && <ErrorBanner message={saleOptionsError} />}
     </div>
   );
 };
+
+// Modal de selection variante + modificateurs avant ajout au ticket
+// (SCRUM-293). Une seule variante selectionnable (ou aucune si le produit
+// n'en a pas) ; par groupe de modificateurs, respecte minSelect/maxSelect
+// (validation avant confirmation, pas seulement a la saisie).
+function SaleOptionsModal({ product, options, onConfirm, onCancel }) {
+  const variants = options.variants || [];
+  const modifierGroups = options.modifierGroups || [];
+
+  const [variantId, setVariantId] = React.useState(variants[0]?.id ?? null);
+  const [selectedByGroup, setSelectedByGroup] = React.useState({}); // { [groupId]: Set<modifierId> }
+  const [error, setError] = React.useState(null);
+
+  const toggleModifier = (group, modifier) => {
+    setSelectedByGroup((prev) => {
+      const current = new Set(prev[group.id] || []);
+      if (current.has(modifier.id)) {
+        current.delete(modifier.id);
+      } else {
+        if (group.maxSelect > 0 && current.size >= group.maxSelect) {
+          // maxSelect=1 : on remplace la selection au lieu de bloquer, plus
+          // pratique qu'un refus silencieux pour un choix unique (radio-like).
+          if (group.maxSelect === 1) {
+            current.clear();
+            current.add(modifier.id);
+            return { ...prev, [group.id]: current };
+          }
+          return prev;
+        }
+        current.add(modifier.id);
+      }
+      return { ...prev, [group.id]: current };
+    });
+  };
+
+  const confirm = () => {
+    for (const group of modifierGroups) {
+      const count = (selectedByGroup[group.id] || new Set()).size;
+      if (count < group.minSelect) {
+        setError(`"${group.name}" : sélectionnez au moins ${group.minSelect} option(s).`);
+        return;
+      }
+      if (group.maxSelect > 0 && count > group.maxSelect) {
+        setError(`"${group.name}" : maximum ${group.maxSelect} option(s).`);
+        return;
+      }
+    }
+
+    const variant = variants.find((v) => v.id === variantId) || null;
+    const modifiers = modifierGroups.flatMap((group) => {
+      const ids = selectedByGroup[group.id] || new Set();
+      return (group.modifiers || []).filter((m) => ids.has(m.id));
+    });
+
+    onConfirm({ variant, modifiers });
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <div style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(420px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>{product.name}</div>
+
+        {variants.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Variante</div>
+            {variants.map((v) => (
+              <label key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+                <input type="radio" name="variant" checked={variantId === v.id} onChange={() => setVariantId(v.id)} />
+                <span style={{ flex: 1 }}>{v.name}</span>
+                <span style={{ color: "var(--fg-3, #6b6b6b)" }}>
+                  {Number(v.priceDelta) !== 0 ? formatMoney(v.priceDelta, product.currencyCode) : ""}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {modifierGroups.map((group) => (
+          <div key={group.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {group.name}
+              <span style={{ fontWeight: 400, color: "var(--fg-3, #6b6b6b)", fontSize: 11.5 }}>
+                {" "}({group.minSelect > 0 ? `${group.minSelect} min` : "optionnel"}
+                {group.maxSelect ? `, ${group.maxSelect} max` : ""})
+              </span>
+            </div>
+            {(group.modifiers || []).map((m) => (
+              <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+                <input
+                  type="checkbox"
+                  checked={(selectedByGroup[group.id] || new Set()).has(m.id)}
+                  onChange={() => toggleModifier(group, m)}
+                />
+                <span style={{ flex: 1 }}>{m.name}</span>
+                <span style={{ color: "var(--fg-3, #6b6b6b)" }}>
+                  {Number(m.priceDelta) !== 0 ? formatMoney(m.priceDelta, product.currencyCode) : ""}
+                </span>
+              </label>
+            ))}
+          </div>
+        ))}
+
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} style={secondaryBtnStyle}>Annuler</button>
+          <button type="button" onClick={confirm} style={primaryBtnStyle}>Ajouter au ticket</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const qtyBtnStyle = {
   width: 22, height: 22, borderRadius: 6, border: "1px solid var(--border-2, #d8c8a8)",
@@ -1021,6 +1206,7 @@ function KpiCard({ label, value, sub }) {
 export const DashboardScreen = () => {
   const [session, setSession] = React.useState(undefined); // undefined=chargement, null=aucune
   const [orders, setOrders] = React.useState(null);
+  const [expensesSummary, setExpensesSummary] = React.useState(null); // null tant que non charge/echec
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
@@ -1029,15 +1215,19 @@ export const DashboardScreen = () => {
     setError(null);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [ordersList, currentSession] = await Promise.all([
+      const [ordersList, currentSession, todaysExpenses] = await Promise.all([
         api.listOrders({ from: today, to: today }),
         api.getCurrentCashSession().catch((err) => {
           if (/404/.test(err.message || "")) return null;
           throw err;
         }),
+        // Depenses du jour (SCRUM-292) : echec silencieux pour ne jamais
+        // casser le dashboard existant (ex: aucune permission depenses).
+        api.getExpensesSummary({ from: today, to: today }).catch(() => null),
       ]);
       setOrders(Array.isArray(ordersList) ? ordersList : []);
       setSession(currentSession);
+      setExpensesSummary(todaysExpenses);
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -1096,6 +1286,9 @@ export const DashboardScreen = () => {
         <KpiCard label="Commandes du jour" value={orderCount} />
         <KpiCard label="Ventes du jour" value={formatMoney(totalSales, currencyCode)} />
         <KpiCard label="Commande moyenne" value={formatMoney(avgOrder, currencyCode)} />
+        {expensesSummary && expensesSummary.totals.length > 0 && expensesSummary.totals.map((t) => (
+          <KpiCard key={t.currencyCode} label="Dépenses du jour" value={formatMoney(t.total, t.currencyCode)} />
+        ))}
       </div>
 
       <div>
@@ -1134,8 +1327,12 @@ function ProductForm({ product, categories, onSaved, onCancel }) {
   const [barcode, setBarcode] = React.useState(product?.barcode || "");
   const [sku, setSku] = React.useState(product?.sku || "");
   const [isAvailable, setIsAvailable] = React.useState(product?.isAvailable !== false);
+  const [costMode, setCostMode] = React.useState(product?.costMode || "manual");
   const [error, setError] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
+  // Le produit courant (mis a jour apres save) permet d'afficher la section
+  // Recette juste apres la creation, sans devoir fermer/rouvrir le modal.
+  const [savedProduct, setSavedProduct] = React.useState(product || null);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -1159,8 +1356,10 @@ function ProductForm({ product, categories, onSaved, onCancel }) {
         barcode: barcode.trim() || undefined,
         sku: sku.trim() || undefined,
         isAvailable,
+        costMode,
       };
       const saved = product ? await api.updateProduct(product.id, body) : await api.createProduct(body);
+      setSavedProduct(saved);
       onSaved(saved);
     } catch (err) {
       setError(err.message || String(err));
@@ -1223,6 +1422,14 @@ function ProductForm({ product, categories, onSaved, onCancel }) {
           Disponible à la vente
         </label>
 
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Mode de calcul du coût</span>
+          <select value={costMode} onChange={(e) => setCostMode(e.target.value)} style={fieldInputStyle}>
+            <option value="manual">Manuel (coût d'achat saisi à la main)</option>
+            <option value="recipe">Recette (coût calculé à partir des ingrédients)</option>
+          </select>
+        </label>
+
         {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
 
         <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
@@ -1235,7 +1442,632 @@ function ProductForm({ product, categories, onSaved, onCancel }) {
             {submitting ? "Enregistrement…" : "Enregistrer"}
           </button>
         </div>
+
+        {/* Recette (SCRUM-291) : disponible uniquement sur un produit deja
+            enregistre (besoin d'un productId) et en mode costMode="recipe".
+            En dehors du <form> submit du produit : sa sauvegarde est
+            independante (PUT /recipe), elle ne ferme pas ce modal. */}
+        {savedProduct?.id && costMode === "recipe" && (
+          <RecipeEditor product={savedProduct} />
+        )}
+
+        {/* Variantes + modificateurs (SCRUM-293) : disponibles uniquement sur
+            un produit deja enregistre (besoin d'un productId), meme logique
+            que la Recette ci-dessus — sauvegarde independante du <form>. */}
+        {savedProduct?.id && (
+          <ProductVariantsSection product={savedProduct} />
+        )}
+        {savedProduct?.id && (
+          <ProductModifierGroupsSection product={savedProduct} />
+        )}
       </form>
+    </div>
+  );
+}
+
+// Editeur de recette d'un produit — SCRUM-291. Le cout (computedCost) est
+// TOUJOURS calcule et retourne par le serveur (RecipesService.computeCost) ;
+// on ne recalcule jamais ce montant cote frontend, on l'affiche tel quel.
+function RecipeEditor({ product }) {
+  const [ingredientsList, setIngredientsList] = React.useState([]);
+  const [recipe, setRecipe] = React.useState(null); // null = pas encore chargee / inexistante
+  const [lines, setLines] = React.useState([]); // [{ ingredientId, qtyBase }]
+  const [wastePct, setWastePct] = React.useState("0");
+  const [consumablePct, setConsumablePct] = React.useState("0");
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const allIngredients = await api.listIngredients();
+      setIngredientsList(Array.isArray(allIngredients) ? allIngredients : []);
+      try {
+        const existing = await api.getProductRecipe(product.id);
+        setRecipe(existing);
+        setLines((existing.lines || []).map((l) => ({ ingredientId: l.ingredientId, qtyBase: String(l.qtyBase) })));
+        setWastePct(String(existing.wastePct ?? "0"));
+        setConsumablePct(String(existing.consumablePct ?? "0"));
+      } catch {
+        // Pas de recette existante pour ce produit : etat vide, ce n'est pas
+        // une erreur bloquante pour l'ecran.
+        setRecipe(null);
+        setLines([]);
+      }
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [product.id]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const addLine = () => {
+    if (!ingredientsList.length) return;
+    setLines((ls) => [...ls, { ingredientId: ingredientsList[0].id, qtyBase: "" }]);
+  };
+  const removeLine = (idx) => setLines((ls) => ls.filter((_, i) => i !== idx));
+  const updateLine = (idx, patch) => setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+
+  const saveRecipe = async () => {
+    setError(null);
+    if (lines.length === 0) {
+      setError("Ajoutez au moins une ligne d'ingrédient.");
+      return;
+    }
+    for (const l of lines) {
+      const q = Number(l.qtyBase);
+      if (!Number.isFinite(q) || q <= 0) {
+        setError("Chaque quantité d'ingrédient doit être un nombre positif.");
+        return;
+      }
+    }
+    const waste = Number(wastePct);
+    const consumable = Number(consumablePct);
+    if (!Number.isFinite(waste) || waste < 0 || !Number.isFinite(consumable) || consumable < 0) {
+      setError("Les pourcentages de perte/consommables doivent être des nombres positifs.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const body = {
+        wastePct: waste,
+        consumablePct: consumable,
+        lines: lines.map((l) => ({ ingredientId: Number(l.ingredientId), qtyBase: Number(l.qtyBase) })),
+      };
+      const saved = await api.saveProductRecipe(product.id, body);
+      setRecipe(saved);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteRecipe = async () => {
+    if (!window.confirm("Supprimer la recette de ce produit ? Pensez à repasser le mode de calcul sur \"Manuel\" si besoin.")) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.removeProductRecipe(product.id);
+      setRecipe(null);
+      setLines([]);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const ingredientById = React.useMemo(() => {
+    const map = new Map();
+    ingredientsList.forEach((i) => map.set(i.id, i));
+    return map;
+  }, [ingredientsList]);
+
+  const computedCost = recipe?.computedCost != null ? Number(recipe.computedCost) : null;
+  const recipeCurrency = recipe?.lines?.[0]?.currencyCode || ingredientsList[0]?.currencyCode;
+  const salePrice = product.salePrice != null ? Number(product.salePrice) : null;
+  const margin = computedCost != null && salePrice != null ? salePrice - computedCost : null;
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>Recette</div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Chargement de la recette…</div>
+      ) : ingredientsList.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>
+          Aucun ingrédient n'est encore enregistré. Ajoutez-en depuis l'écran Ingrédients.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {lines.map((l, idx) => (
+              <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <select value={l.ingredientId} onChange={(e) => updateLine(idx, { ingredientId: Number(e.target.value) })} style={{ ...fieldInputStyle, flex: 2 }}>
+                  {ingredientsList.map((i) => (
+                    <option key={i.id} value={i.id}>{i.name} ({i.baseUnit})</option>
+                  ))}
+                </select>
+                <input
+                  type="number" min="0" step="0.0001" placeholder="Qté"
+                  value={l.qtyBase}
+                  onChange={(e) => updateLine(idx, { qtyBase: e.target.value })}
+                  style={{ ...fieldInputStyle, flex: 1 }}
+                />
+                <span style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", minWidth: 28 }}>
+                  {ingredientById.get(l.ingredientId)?.baseUnit || ""}
+                </span>
+                <button type="button" onClick={() => removeLine(idx)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>×</button>
+              </div>
+            ))}
+            <button type="button" onClick={addLine} style={secondaryBtnStyle}>+ Ligne d'ingrédient</button>
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={fieldCaptionStyle}>Perte (%)</span>
+              <input type="number" min="0" step="0.1" value={wastePct} onChange={(e) => setWastePct(e.target.value)} style={fieldInputStyle} />
+            </label>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={fieldCaptionStyle}>Consommables (%)</span>
+              <input type="number" min="0" step="0.1" value={consumablePct} onChange={(e) => setConsumablePct(e.target.value)} style={fieldInputStyle} />
+            </label>
+          </div>
+
+          {computedCost != null && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 13, background: "var(--bg-app, #FBF8F2)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--fg-3, #6b6b6b)" }}>Coût de revient calculé</span>
+                <span style={{ fontWeight: 700 }}>{formatMoney(computedCost, recipeCurrency)}</span>
+              </div>
+              {margin != null && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--fg-3, #6b6b6b)" }}>Marge (prix de vente − coût)</span>
+                  <span style={{ fontWeight: 700, color: margin < 0 ? "var(--oxblood-800, #7a1f2b)" : "inherit" }}>
+                    {formatMoney(margin, product.currencyCode || recipeCurrency)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+          <div style={{ display: "flex", gap: 10 }}>
+            {recipe && (
+              <button type="button" onClick={deleteRecipe} disabled={submitting}
+                style={{ ...secondaryBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>
+                Supprimer la recette
+              </button>
+            )}
+            <button type="button" onClick={saveRecipe} disabled={submitting} style={{ ...primaryBtnStyle, opacity: submitting ? 0.7 : 1 }}>
+              {submitting ? "Enregistrement…" : "Enregistrer la recette"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Section "Variantes" de ProductForm (SCRUM-293) : liste simple avec
+// ajout/edition/suppression (nom + supplement de prix, priceDelta signe).
+// Sauvegarde independante du <form> produit, meme pattern que RecipeEditor.
+function ProductVariantsSection({ product }) {
+  const [variants, setVariants] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [editingId, setEditingId] = React.useState(null); // null=aucun formulaire, 0=creation, id=edition
+  const [name, setName] = React.useState("");
+  const [priceDelta, setPriceDelta] = React.useState("0");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await api.listProductVariants(product.id);
+      setVariants(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [product.id]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const resetForm = () => { setEditingId(null); setName(""); setPriceDelta("0"); };
+
+  const startEdit = (v) => {
+    setEditingId(v.id);
+    setName(v.name || "");
+    setPriceDelta(String(v.priceDelta ?? "0"));
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Le nom de la variante est obligatoire.");
+      return;
+    }
+    const delta = Number(priceDelta);
+    if (!Number.isFinite(delta)) {
+      setError("Le supplément de prix doit être un nombre.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = { name: name.trim(), priceDelta: delta };
+      if (editingId) await api.updateProductVariant(editingId, body);
+      else await api.createProductVariant(product.id, body);
+      resetForm();
+      load();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const remove = async (v) => {
+    if (!window.confirm(`Désactiver la variante "${v.name}" ?`)) return;
+    try {
+      await api.removeProductVariant(v.id);
+      load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>Variantes</div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Chargement…</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {variants.length === 0 && <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucune variante.</div>}
+          {variants.map((v) => (
+            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13.5, padding: "6px 8px", borderRadius: 6, background: "var(--bg-app, #FBF8F2)" }}>
+              <span>{v.name} {Number(v.priceDelta) !== 0 && <span style={{ color: "var(--fg-3, #6b6b6b)" }}>({formatMoney(v.priceDelta, product.currencyCode)})</span>}</span>
+              <span style={{ display: "flex", gap: 8 }}>
+                <button type="button" onClick={() => startEdit(v)} style={smallBtnStyle}>Modifier</button>
+                <button type="button" onClick={() => remove(v)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{editingId ? "Modifier la variante" : "Nouvelle variante"}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input placeholder="Nom (ex: Grande)" value={name} onChange={(e) => setName(e.target.value)} style={{ ...fieldInputStyle, flex: 2 }} />
+          <input type="number" step="0.01" placeholder="Supplément" value={priceDelta} onChange={(e) => setPriceDelta(e.target.value)} style={{ ...fieldInputStyle, flex: 1 }} />
+        </div>
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {editingId && (
+            <button type="button" onClick={resetForm} style={secondaryBtnStyle}>Annuler</button>
+          )}
+          <button type="button" onClick={submit} disabled={submitting} style={{ ...primaryBtnStyle, opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "…" : editingId ? "Mettre à jour" : "Ajouter"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Section "Modificateurs" de ProductForm (SCRUM-293) : selection par
+// checkbox parmi les groupes de modificateurs existants de l'organisation.
+// La gestion des groupes/modificateurs eux-memes se fait dans ModifierGroupsPanel,
+// accessible via le bouton "Gérer les groupes" (meme pattern que CategoryPanel).
+function ProductModifierGroupsSection({ product }) {
+  const [allGroups, setAllGroups] = React.useState([]);
+  const [selectedIds, setSelectedIds] = React.useState(new Set());
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [showManage, setShowManage] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [groups, saleOptions] = await Promise.all([
+        api.listModifierGroups(),
+        api.getProductSaleOptions(product.id),
+      ]);
+      setAllGroups(Array.isArray(groups) ? groups : []);
+      const linked = Array.isArray(saleOptions?.modifierGroups) ? saleOptions.modifierGroups : [];
+      setSelectedIds(new Set(linked.map((g) => g.id)));
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [product.id]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const toggle = (groupId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.setProductModifierGroups(product.id, { groupIds: [...selectedIds] });
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>Modificateurs</div>
+        <button type="button" onClick={() => setShowManage(true)} style={smallBtnStyle}>Gérer les groupes</button>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Chargement…</div>
+      ) : allGroups.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>
+          Aucun groupe de modificateurs. Créez-en un via "Gérer les groupes".
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {allGroups.map((g) => (
+            <label key={g.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+              <input type="checkbox" checked={selectedIds.has(g.id)} onChange={() => toggle(g.id)} />
+              <span>{g.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+      <button type="button" onClick={save} disabled={submitting || loading} style={{ ...primaryBtnStyle, opacity: submitting ? 0.7 : 1, alignSelf: "flex-start" }}>
+        {submitting ? "Enregistrement…" : "Enregistrer les groupes associés"}
+      </button>
+
+      {showManage && (
+        <ModifierGroupsPanel
+          onChanged={load}
+          onClose={() => setShowManage(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Panneau de gestion des groupes de modificateurs + leurs modificateurs
+// (SCRUM-293), meme pattern que CategoryPanel/ExpenseCategoryPanel. Portee
+// organisation (pas liee a un produit) : accessible depuis n'importe quel
+// produit via ProductModifierGroupsSection.
+function ModifierGroupsPanel({ onChanged, onClose }) {
+  const [groups, setGroups] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  // priceDelta n'a pas de devise propre en base (delta applique au prix du
+  // produit) : ce panneau etant a portee organisation (pas un produit
+  // precis), on affiche le supplement dans la devise par defaut de
+  // l'organisation, chargee depuis le profil d'activite.
+  const [defaultCurrencyCode, setDefaultCurrencyCode] = React.useState("USD");
+
+  const [editingGroupId, setEditingGroupId] = React.useState(null);
+  const [groupName, setGroupName] = React.useState("");
+  const [minSelect, setMinSelect] = React.useState("0");
+  const [maxSelect, setMaxSelect] = React.useState("1");
+
+  const [modifierGroupId, setModifierGroupId] = React.useState(null); // groupe cible pour ajout de modificateur
+  const [modifierName, setModifierName] = React.useState("");
+  const [modifierPriceDelta, setModifierPriceDelta] = React.useState("0");
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [list, profile] = await Promise.all([
+        api.listModifierGroups(),
+        api.listBusinessProfile().catch(() => null),
+      ]);
+      setGroups(Array.isArray(list) ? list : []);
+      if (profile?.defaultCurrencyCode) setDefaultCurrencyCode(profile.defaultCurrencyCode);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const notifyAndReload = async () => {
+    await load();
+    onChanged?.();
+  };
+
+  const resetGroupForm = () => { setEditingGroupId(null); setGroupName(""); setMinSelect("0"); setMaxSelect("1"); };
+
+  const startEditGroup = (g) => {
+    setEditingGroupId(g.id);
+    setGroupName(g.name || "");
+    setMinSelect(String(g.minSelect ?? 0));
+    setMaxSelect(String(g.maxSelect ?? 1));
+  };
+
+  const submitGroup = async (e) => {
+    e.preventDefault();
+    if (!groupName.trim()) {
+      setError("Le nom du groupe est obligatoire.");
+      return;
+    }
+    const min = Number(minSelect);
+    const max = Number(maxSelect);
+    if (!Number.isInteger(min) || min < 0 || !Number.isInteger(max) || max < 0) {
+      setError("minSelect/maxSelect doivent être des entiers positifs.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = { name: groupName.trim(), minSelect: min, maxSelect: max };
+      if (editingGroupId) await api.updateModifierGroup(editingGroupId, body);
+      else await api.createModifierGroup(body);
+      resetGroupForm();
+      await notifyAndReload();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const removeGroup = async (g) => {
+    if (!window.confirm(`Désactiver le groupe "${g.name}" ?`)) return;
+    try {
+      await api.removeModifierGroup(g.id);
+      await notifyAndReload();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  const submitModifier = async (e) => {
+    e.preventDefault();
+    if (!modifierGroupId) return;
+    if (!modifierName.trim()) {
+      setError("Le nom du modificateur est obligatoire.");
+      return;
+    }
+    const delta = Number(modifierPriceDelta);
+    if (!Number.isFinite(delta)) {
+      setError("Le supplément de prix doit être un nombre.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.createModifier(modifierGroupId, { name: modifierName.trim(), priceDelta: delta });
+      setModifierName("");
+      setModifierPriceDelta("0");
+      await notifyAndReload();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const removeModifier = async (m) => {
+    if (!window.confirm(`Désactiver le modificateur "${m.name}" ?`)) return;
+    try {
+      await api.removeModifier(m.id);
+      await notifyAndReload();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16,
+    }}>
+      <div style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(480px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>Groupes de modificateurs</div>
+
+        {loading ? (
+          <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Chargement…</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 320, overflow: "auto" }}>
+            {groups.length === 0 && <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucun groupe.</div>}
+            {groups.map((g) => (
+              <div key={g.id} style={{ border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13.5 }}>
+                  <span style={{ fontWeight: 600 }}>{g.name} <span style={{ fontWeight: 400, color: "var(--fg-3, #6b6b6b)", fontSize: 11.5 }}>({g.minSelect} min, {g.maxSelect} max)</span></span>
+                  <span style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={() => startEditGroup(g)} style={smallBtnStyle}>Modifier</button>
+                    <button type="button" onClick={() => removeGroup(g)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {(g.modifiers || []).map((m) => (
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, padding: "4px 8px", borderRadius: 6, background: "var(--bg-app, #FBF8F2)" }}>
+                      <span>{m.name} {Number(m.priceDelta) !== 0 && <span style={{ color: "var(--fg-3, #6b6b6b)" }}>({formatMoney(m.priceDelta, defaultCurrencyCode)})</span>}</span>
+                      <button type="button" onClick={() => removeModifier(m)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>×</button>
+                    </div>
+                  ))}
+                </div>
+
+                {modifierGroupId === g.id ? (
+                  <form onSubmit={submitModifier} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input placeholder="Nom" value={modifierName} onChange={(e) => setModifierName(e.target.value)} style={{ ...fieldInputStyle, flex: 2 }} />
+                    <input type="number" step="0.01" placeholder="Supplément" value={modifierPriceDelta} onChange={(e) => setModifierPriceDelta(e.target.value)} style={{ ...fieldInputStyle, flex: 1 }} />
+                    <button type="submit" disabled={submitting} style={smallBtnStyle}>Ajouter</button>
+                    <button type="button" onClick={() => setModifierGroupId(null)} style={smallBtnStyle}>×</button>
+                  </form>
+                ) : (
+                  <button type="button" onClick={() => { setModifierGroupId(g.id); setModifierName(""); setModifierPriceDelta("0"); }} style={{ ...smallBtnStyle, alignSelf: "flex-start" }}>
+                    + Modificateur
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={submitGroup} style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border-1, #E7EBF1)", paddingTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{editingGroupId ? "Modifier le groupe" : "Nouveau groupe"}</div>
+          <input placeholder="Nom (ex: Sauces)" value={groupName} onChange={(e) => setGroupName(e.target.value)} style={fieldInputStyle} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={fieldCaptionStyle}>Min</span>
+              <input type="number" min="0" step="1" value={minSelect} onChange={(e) => setMinSelect(e.target.value)} style={fieldInputStyle} />
+            </label>
+            <label style={{ ...fieldLabelStyle, flex: 1 }}>
+              <span style={fieldCaptionStyle}>Max</span>
+              <input type="number" min="0" step="1" value={maxSelect} onChange={(e) => setMaxSelect(e.target.value)} style={fieldInputStyle} />
+            </label>
+          </div>
+          {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            {editingGroupId && (
+              <button type="button" onClick={resetGroupForm} style={secondaryBtnStyle}>Annuler</button>
+            )}
+            <button type="submit" disabled={submitting} style={{ ...primaryBtnStyle, opacity: submitting ? 0.7 : 1 }}>
+              {submitting ? "…" : editingGroupId ? "Mettre à jour" : "Ajouter"}
+            </button>
+          </div>
+        </form>
+
+        <button type="button" onClick={onClose} style={secondaryBtnStyle}>Fermer</button>
+      </div>
     </div>
   );
 }
@@ -1712,4 +2544,1203 @@ const fieldInputStyle = { width: "100%", boxSizing: "border-box", padding: "10px
 const smallBtnStyle = { background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", flexShrink: 0 };
 const primaryBtnStyle = { background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13.5, cursor: "pointer" };
 const secondaryBtnStyle = { background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 16px", fontWeight: 600, fontSize: 13.5, cursor: "pointer" };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Parametres (SCRUM-287) — premier ecran de parametres du projet : formulaire
+// minimal, pas de multi-onglets. Sauvegarde le profil d'activite (activite,
+// devise par defaut, % service, pied de ticket) via PUT /business-profile.
+// ─────────────────────────────────────────────────────────────────────────
+const ACTIVITY_TYPE_LABELS = {
+  restaurant: "Restaurant",
+  supermarket: "Supermarché",
+  pharmacy: "Pharmacie",
+  hardware: "Quincaillerie",
+  shop: "Boutique / Services",
+};
+
+export const ParametresScreen = ({ profile, onSaved }) => {
+  const [activityType, setActivityType] = React.useState(profile?.activityType || "shop");
+  const [defaultCurrencyCode, setDefaultCurrencyCode] = React.useState(profile?.defaultCurrencyCode || "USD");
+  const [serviceChargeRate, setServiceChargeRate] = React.useState(profile?.serviceChargeRate ?? "0.00");
+  const [receiptFooter, setReceiptFooter] = React.useState(profile?.receiptFooter || "");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [success, setSuccess] = React.useState(false);
+
+  // Re-synchronise le formulaire quand le profil parent est (re)charge —
+  // ex: apres le premier appel API au montage du shell.
+  React.useEffect(() => {
+    if (!profile) return;
+    setActivityType(profile.activityType || "shop");
+    setDefaultCurrencyCode(profile.defaultCurrencyCode || "USD");
+    setServiceChargeRate(profile.serviceChargeRate ?? "0.00");
+    setReceiptFooter(profile.receiptFooter || "");
+  }, [profile]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      await api.updateBusinessProfile({
+        activityType,
+        defaultCurrencyCode: defaultCurrencyCode.trim().toUpperCase(),
+        serviceChargeRate: String(serviceChargeRate || "0"),
+        receiptFooter: receiptFooter.trim() || undefined,
+      });
+      setSuccess(true);
+      if (onSaved) await onSaved();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
+      <ErrorBanner message={error} />
+      {profile?.isDefault && (
+        <div style={{
+          background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)",
+          borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)", marginBottom: 16,
+        }}>
+          Aucun profil enregistré pour le moment — valeurs par défaut affichées. Elles ne seront sauvegardées qu'après avoir cliqué sur « Enregistrer ».
+        </div>
+      )}
+      <form onSubmit={submit} style={{
+        display: "flex", flexDirection: "column", gap: 16, background: "var(--paper, #fff)",
+        border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, padding: 24, maxWidth: 480,
+      }}>
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Type d'activité</span>
+          <select value={activityType} onChange={(e) => setActivityType(e.target.value)} style={fieldInputStyle}>
+            {Object.entries(ACTIVITY_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Devise par défaut</span>
+          <input type="text" maxLength={3} value={defaultCurrencyCode}
+            onChange={(e) => setDefaultCurrencyCode(e.target.value.toUpperCase())}
+            placeholder="USD" style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Pourcentage de service (%)</span>
+          <input type="number" min="0" max="100" step="0.01" value={serviceChargeRate}
+            onChange={(e) => setServiceChargeRate(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Pied de ticket</span>
+          <textarea value={receiptFooter} onChange={(e) => setReceiptFooter(e.target.value)}
+            rows={3} placeholder="Merci de votre visite !" style={{ ...fieldInputStyle, resize: "vertical" }} />
+        </label>
+
+        {success && <div style={{ color: "#1f6d75", fontSize: 12.5, fontWeight: 600 }}>Paramètres enregistrés.</div>}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button type="submit" disabled={saving} style={{ ...primaryBtnStyle, opacity: saving ? 0.7 : 1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
 const filterInputStyle = { padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Stock — SCRUM-289
+// ─────────────────────────────────────────────────────────────────────────
+// GET /stock retourne les lignes brutes de kt_stock_items (pas de jointure
+// produit/succursale cote backend — voir stock.service.ts#list) : le nom du
+// produit et de la succursale sont donc resolus ici a partir de listProducts()
+// / listBranches() deja disponibles. L'etat (ok/bas/rupture) peut aussi etre
+// recalcule cote client a partir de qty/reorderThreshold, meme logique que
+// stock.service.ts#list (qty<=0 => rupture, qty<=seuil => bas), pour l'affichage
+// sans dependre du filtre state de l'API.
+function stockState(item) {
+  const qty = Number(item.qty);
+  const threshold = item.reorderThreshold !== null && item.reorderThreshold !== undefined ? Number(item.reorderThreshold) : null;
+  if (qty <= 0) return "out";
+  if (threshold !== null && qty <= threshold) return "low";
+  return "ok";
+}
+
+const STOCK_STATE_META = {
+  ok:  { label: "OK",      color: "#1f6d75", bg: "rgba(31,109,117,0.12)" },
+  low: { label: "Bas",     color: "#a05a00", bg: "rgba(160,90,0,0.12)" },
+  out: { label: "Rupture", color: "#7a1f2b", bg: "rgba(122,31,43,0.12)" },
+};
+
+function StockStateBadge({ state }) {
+  const meta = STOCK_STATE_META[state] || STOCK_STATE_META.ok;
+  return (
+    <span style={{
+      display: "inline-block", padding: "3px 10px", borderRadius: 12, fontSize: 11.5,
+      fontWeight: 700, color: meta.color, background: meta.bg, whiteSpace: "nowrap",
+    }}>
+      {meta.label}
+    </span>
+  );
+}
+
+function RestockForm({ item, productName, onSaved, onCancel }) {
+  const [qty, setQty] = React.useState("");
+  const [supplierName, setSupplierName] = React.useState("");
+  const [purchasePrice, setPurchasePrice] = React.useState("");
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const q = Number(qty);
+    if (!Number.isFinite(q) || q <= 0) {
+      setError("La quantité doit être un nombre positif.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = { qty: q };
+      if (supplierName.trim()) body.supplierName = supplierName.trim();
+      if (purchasePrice.trim() !== "") {
+        const p = Number(purchasePrice);
+        if (!Number.isFinite(p) || p < 0) {
+          setError("Le prix d'achat doit être un nombre positif.");
+          setSubmitting(false);
+          return;
+        }
+        body.purchasePrice = p;
+      }
+      const updated = await api.restockItem(item.id, body);
+      onSaved(updated);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <form onSubmit={submit} style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(420px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>
+          Réapprovisionner
+        </div>
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>{productName}</div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Quantité reçue *</span>
+          <input autoFocus type="number" min="0" step="0.001" value={qty} onChange={(e) => setQty(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Fournisseur (optionnel)</span>
+          <input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Prix d'achat (optionnel, {item.currencyCode})</span>
+          <input type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} disabled={submitting}
+            style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "12px 16px", fontWeight: 600, cursor: "pointer" }}>
+            Annuler
+          </button>
+          <button type="submit" disabled={submitting}
+            style={{ flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "12px 16px", fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "Enregistrement…" : "Réapprovisionner"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AdjustForm({ item, productName, onSaved, onCancel }) {
+  const [delta, setDelta] = React.useState("");
+  const [reason, setReason] = React.useState("");
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const d = Number(delta);
+    if (!Number.isFinite(d) || d === 0) {
+      setError("L'écart doit être un nombre différent de zéro.");
+      return;
+    }
+    if (!reason.trim()) {
+      setError("Le motif est obligatoire.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const updated = await api.adjustStock(item.id, { delta: d, reason: reason.trim() });
+      onSaved(updated);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <form onSubmit={submit} style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(420px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>
+          Ajustement manuel
+        </div>
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>{productName}</div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Écart (peut être négatif) *</span>
+          <input autoFocus type="number" step="0.001" value={delta} onChange={(e) => setDelta(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Motif *</span>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Casse, inventaire, péremption…" style={fieldInputStyle} />
+        </label>
+
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} disabled={submitting}
+            style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "12px 16px", fontWeight: 600, cursor: "pointer" }}>
+            Annuler
+          </button>
+          <button type="submit" disabled={submitting}
+            style={{ flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "12px 16px", fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "Enregistrement…" : "Ajuster"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const MOVEMENT_TYPE_LABELS = {
+  in: "Entrée",
+  out: "Sortie",
+  sale: "Vente",
+  adjust: "Ajustement",
+  loss: "Perte",
+  transfer: "Transfert",
+};
+
+function MovementsPanel({ item, productName, onClose }) {
+  const [movements, setMovements] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await api.listStockMovements(item.id);
+      setMovements(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [item.id]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <div style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(480px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>
+          Historique des mouvements
+        </div>
+        <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>{productName}</div>
+
+        {loading ? (
+          <CenteredNote>Chargement…</CenteredNote>
+        ) : error ? (
+          <ErrorBanner message={error} onRetry={load} />
+        ) : movements.length === 0 ? (
+          <CenteredNote>Aucun mouvement enregistré.</CenteredNote>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {movements.map((m) => (
+              <div key={m.id} style={{
+                display: "flex", flexDirection: "column", gap: 2, padding: "8px 0",
+                borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontWeight: 600 }}>{MOVEMENT_TYPE_LABELS[m.type] || m.type}</span>
+                  <span style={{ fontWeight: 700, color: Number(m.qty) < 0 ? "var(--oxblood-800, #7a1f2b)" : "#1f6d75" }}>
+                    {Number(m.qty) > 0 ? "+" : ""}{Number(m.qty)}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
+                  <span>
+                    {formatTime(m.createdAt)}
+                    {m.supplierName ? ` · ${m.supplierName}` : ""}
+                    {m.reason ? ` · ${m.reason}` : ""}
+                  </span>
+                  <span>Solde : {Number(m.qtyAfter)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export const StockScreen = () => {
+  const [items, setItems] = React.useState([]);
+  const [products, setProducts] = React.useState([]);
+  const [branches, setBranches] = React.useState([]);
+  const [alerts, setAlerts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  const [activeBranchId, setActiveBranchId] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [scanMessage, setScanMessage] = React.useState(null);
+  const [highlightedItemId, setHighlightedItemId] = React.useState(null);
+
+  const [restockingItem, setRestockingItem] = React.useState(null);
+  const [adjustingItem, setAdjustingItem] = React.useState(null);
+  const [movementsItem, setMovementsItem] = React.useState(null);
+
+  const itemRefs = React.useRef({});
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [stockList, prods, branchList, alertList] = await Promise.all([
+        api.listStock(activeBranchId ? { branchId: activeBranchId } : {}),
+        api.listProducts(),
+        api.listBranches(),
+        api.listStockAlerts(),
+      ]);
+      setItems(Array.isArray(stockList) ? stockList : []);
+      setProducts(Array.isArray(prods) ? prods : []);
+      setBranches(Array.isArray(branchList) ? branchList : []);
+      setAlerts(Array.isArray(alertList) ? alertList : []);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [activeBranchId]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const productById = React.useMemo(() => {
+    const map = new Map();
+    products.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [products]);
+
+  const branchById = React.useMemo(() => {
+    const map = new Map();
+    branches.forEach((b) => map.set(b.id, b));
+    return map;
+  }, [branches]);
+
+  const productName = (item) => productById.get(item.productId)?.name || `Produit #${item.productId}`;
+  const branchName = (item) => branchById.get(item.branchId)?.name || `Succursale #${item.branchId}`;
+
+  // Recherche/scan code-barres : meme pattern que CaisseScreen#onSearchKeyDown
+  // (champ texte filtre par nom au fil de la frappe ; Enter tente un lookup
+  // code-barres exact cote serveur, puis scroll/surligne l'item de stock
+  // correspondant a ce produit s'il existe).
+  const onSearchKeyDown = async (e) => {
+    if (e.key !== "Enter" || !search.trim()) return;
+    setScanMessage(null);
+    try {
+      const product = await api.getProductByBarcode(search.trim());
+      if (product) {
+        const match = items.find((it) => it.productId === product.id);
+        if (match) {
+          setHighlightedItemId(match.id);
+          setSearch("");
+          setScanMessage(`Trouvé : ${product.name}`);
+          itemRefs.current[match.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          setScanMessage(`« ${product.name} » n'a pas d'article de stock sur cette succursale.`);
+        }
+      }
+    } catch {
+      // Pas trouve par code-barres : le filtre texte reste actif, ce n'est
+      // pas une erreur bloquante (l'utilisateur tapait peut-etre un nom).
+      setScanMessage(null);
+    }
+  };
+
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((it) => {
+      const p = productById.get(it.productId);
+      return (p?.name || "").toLowerCase().includes(q)
+        || (p?.barcode || "").toLowerCase().includes(q)
+        || (p?.sku || "").toLowerCase().includes(q);
+    });
+  }, [items, search, productById]);
+
+  const applyUpdatedItem = (updated) => {
+    setItems((list) => list.map((it) => (it.id === updated.id ? updated : it)));
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      <ErrorBanner message={error} onRetry={load} />
+
+      {alerts.length > 0 && (
+        <div style={{
+          background: "rgba(160,90,0,0.10)", border: "1px solid rgba(160,90,0,0.35)",
+          borderRadius: 10, padding: "12px 16px", fontSize: 13,
+        }}>
+          <div style={{ fontWeight: 700, color: "#a05a00", marginBottom: 4 }}>
+            {alerts.length} article{alerts.length > 1 ? "s" : ""} sous le seuil de réapprovisionnement
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, color: "var(--fg-2, #333)" }}>
+            {alerts.slice(0, 5).map((a) => (
+              <span key={a.id}>{productName(a)} — {branchName(a)} · {Number(a.qty)} restant{Number(a.qty) > 1 ? "s" : ""}</span>
+            ))}
+            {alerts.length > 5 && <span style={{ color: "var(--fg-3, #6b6b6b)" }}>… et {alerts.length - 5} autre(s).</span>}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={onSearchKeyDown}
+          placeholder="Rechercher un article ou scanner un code-barres…"
+          style={{ flex: 1, minWidth: 220, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14 }}
+        />
+        {branches.length > 1 && (
+          <select value={activeBranchId} onChange={(e) => setActiveBranchId(e.target.value)} style={filterInputStyle}>
+            <option value="">Toutes les succursales</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      {scanMessage && <div style={{ fontSize: 12, color: "#1f6d75" }}>{scanMessage}</div>}
+
+      {loading ? (
+        <CenteredNote>Chargement du stock…</CenteredNote>
+      ) : filtered.length === 0 ? (
+        <CenteredNote>Aucun article de stock ne correspond à cette recherche.</CenteredNote>
+      ) : (
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+          {filtered.map((it) => {
+            const state = stockState(it);
+            const isHighlighted = highlightedItemId === it.id;
+            return (
+              <div key={it.id} ref={(el) => { itemRefs.current[it.id] = el; }} style={{
+                display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+                borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+                background: isHighlighted ? "rgba(31,109,117,0.08)" : "transparent",
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{productName(it)}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
+                    {branchName(it)}{it.reorderThreshold !== null && it.reorderThreshold !== undefined ? ` · Seuil ${Number(it.reorderThreshold)}` : ""}
+                  </div>
+                </div>
+                <StockStateBadge state={state} />
+                <div style={{ fontWeight: 700, minWidth: 70, textAlign: "right" }}>{Number(it.qty)}</div>
+                {it.purchasePrice != null && (
+                  <div style={{ minWidth: 90, textAlign: "right", color: "var(--fg-3, #6b6b6b)" }}>
+                    {formatMoney(it.purchasePrice, it.currencyCode)}
+                  </div>
+                )}
+                <button onClick={() => setMovementsItem(it)} style={smallBtnStyle}>Historique</button>
+                <button onClick={() => setAdjustingItem(it)} style={smallBtnStyle}>Ajuster</button>
+                <button onClick={() => setRestockingItem(it)} style={{ ...smallBtnStyle, color: "#1f6d75" }}>Réapprovisionner</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {restockingItem && (
+        <RestockForm
+          item={restockingItem}
+          productName={productName(restockingItem)}
+          onSaved={(updated) => { applyUpdatedItem(updated); setRestockingItem(null); load(); }}
+          onCancel={() => setRestockingItem(null)}
+        />
+      )}
+
+      {adjustingItem && (
+        <AdjustForm
+          item={adjustingItem}
+          productName={productName(adjustingItem)}
+          onSaved={(updated) => { applyUpdatedItem(updated); setAdjustingItem(null); load(); }}
+          onCancel={() => setAdjustingItem(null)}
+        />
+      )}
+
+      {movementsItem && (
+        <MovementsPanel
+          item={movementsItem}
+          productName={productName(movementsItem)}
+          onClose={() => setMovementsItem(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ingredients — SCRUM-291
+// ─────────────────────────────────────────────────────────────────────────
+
+function IngredientForm({ ingredient, onSaved, onCancel }) {
+  const [name, setName] = React.useState(ingredient?.name || "");
+  const [purchaseUnit, setPurchaseUnit] = React.useState(ingredient?.purchaseUnit || "kg");
+  const [baseUnit, setBaseUnit] = React.useState(ingredient?.baseUnit || "g");
+  const [unitFactor, setUnitFactor] = React.useState(ingredient?.unitFactor ?? "1000");
+  const [purchasePrice, setPurchasePrice] = React.useState(ingredient?.purchasePrice ?? "");
+  const [currencyCode, setCurrencyCode] = React.useState(ingredient?.currencyCode || "USD");
+  const [currentQty, setCurrentQty] = React.useState(ingredient?.currentQty ?? "0");
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Le nom de l'ingrédient est obligatoire.");
+      return;
+    }
+    const price = purchasePrice === "" ? undefined : Number(purchasePrice);
+    if (price !== undefined && (!Number.isFinite(price) || price < 0)) {
+      setError("Le prix d'achat doit être un nombre positif.");
+      return;
+    }
+    const factor = Number(unitFactor);
+    if (!Number.isFinite(factor) || factor <= 0) {
+      setError("Le facteur de conversion doit être un nombre positif.");
+      return;
+    }
+    const qty = currentQty === "" ? undefined : Number(currentQty);
+    if (qty !== undefined && (!Number.isFinite(qty) || qty < 0)) {
+      setError("La quantité en stock doit être un nombre positif ou nul.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = {
+        name: name.trim(),
+        purchaseUnit,
+        baseUnit,
+        unitFactor: factor,
+        purchasePrice: price,
+        currencyCode,
+        currentQty: qty,
+      };
+      const saved = ingredient ? await api.updateIngredient(ingredient.id, body) : await api.createIngredient(body);
+      onSaved(saved);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <form onSubmit={submit} style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(440px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>
+          {ingredient ? "Modifier l'ingrédient" : "Nouvel ingrédient"}
+        </div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Nom *</span>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <label style={{ ...fieldLabelStyle, flex: 1 }}>
+            <span style={fieldCaptionStyle}>Unité d'achat</span>
+            <select value={purchaseUnit} onChange={(e) => setPurchaseUnit(e.target.value)} style={fieldInputStyle}>
+              <option value="kg">kg</option>
+              <option value="L">L</option>
+              <option value="piece">pièce</option>
+            </select>
+          </label>
+          <label style={{ ...fieldLabelStyle, flex: 1 }}>
+            <span style={fieldCaptionStyle}>Unité de base</span>
+            <select value={baseUnit} onChange={(e) => setBaseUnit(e.target.value)} style={fieldInputStyle}>
+              <option value="g">g</option>
+              <option value="ml">ml</option>
+              <option value="piece">pièce</option>
+            </select>
+          </label>
+        </div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Facteur de conversion (achat → base) *</span>
+          <input type="number" min="0.0001" step="0.0001" value={unitFactor} onChange={(e) => setUnitFactor(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <label style={{ ...fieldLabelStyle, flex: 2 }}>
+            <span style={fieldCaptionStyle}>Prix d'achat</span>
+            <input type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} style={fieldInputStyle} />
+          </label>
+          <label style={{ ...fieldLabelStyle, flex: 1 }}>
+            <span style={fieldCaptionStyle}>Devise</span>
+            <input value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())} style={fieldInputStyle} maxLength={3} />
+          </label>
+        </div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Quantité en stock</span>
+          <input type="number" min="0" step="0.001" value={currentQty} onChange={(e) => setCurrentQty(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} disabled={submitting}
+            style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "12px 16px", fontWeight: 600, cursor: "pointer" }}>
+            Annuler
+          </button>
+          <button type="submit" disabled={submitting}
+            style={{ flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "12px 16px", fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export const IngredientsScreen = () => {
+  const [ingredients, setIngredients] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+  const [search, setSearch] = React.useState("");
+  const [editingIngredient, setEditingIngredient] = React.useState(null); // null=ferme, {}=creation, objet=edition
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await api.listIngredients(search ? { search } : {});
+      setIngredients(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const removeIngredient = async (ing) => {
+    if (!window.confirm(`Désactiver l'ingrédient "${ing.name}" ?`)) return;
+    try {
+      await api.removeIngredient(ing.id);
+      load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      <ErrorBanner message={error} onRetry={load} />
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un ingrédient par nom…"
+          style={{ flex: 1, minWidth: 220, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14 }}
+        />
+        <button onClick={() => setEditingIngredient({})} style={primaryBtnStyle}>+ Ingrédient</button>
+      </div>
+
+      {loading ? (
+        <CenteredNote>Chargement des ingrédients…</CenteredNote>
+      ) : ingredients.length === 0 ? (
+        <CenteredNote>Aucun ingrédient ne correspond à cette recherche.</CenteredNote>
+      ) : (
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+          {ingredients.map((ing) => (
+            <div key={ing.id} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+              borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{ing.name}</div>
+                <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
+                  {Number(ing.currentQty ?? 0)} {ing.baseUnit || ""} en stock · 1 {ing.purchaseUnit || "?"} = {Number(ing.unitFactor ?? 0)} {ing.baseUnit || ""}
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, minWidth: 110, textAlign: "right" }}>
+                {ing.purchasePrice != null ? `${formatMoney(ing.purchasePrice, ing.currencyCode)} / ${ing.purchaseUnit || ""}` : "—"}
+              </div>
+              <button onClick={() => setEditingIngredient(ing)} style={smallBtnStyle}>Modifier</button>
+              <button onClick={() => removeIngredient(ing)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editingIngredient && (
+        <IngredientForm
+          ingredient={editingIngredient.id ? editingIngredient : null}
+          onSaved={() => { setEditingIngredient(null); load(); }}
+          onCancel={() => setEditingIngredient(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Depenses — SCRUM-292
+// ─────────────────────────────────────────────────────────────────────────
+
+// Meme pattern que CategoryPanel (produits) mais branche sur les endpoints
+// /kodatill/expenses/categories (nom + ordre d'affichage, pas d'icone).
+function ExpenseCategoryPanel({ categories, onChanged, onClose }) {
+  const [name, setName] = React.useState("");
+  const [sortOrder, setSortOrder] = React.useState("0");
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+
+  const resetForm = () => { setName(""); setSortOrder("0"); setEditingId(null); };
+
+  const startEdit = (c) => {
+    setEditingId(c.id);
+    setName(c.name || "");
+    setSortOrder(String(c.sortOrder ?? 0));
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Le nom de la catégorie est obligatoire.");
+      return;
+    }
+    const order = Number(sortOrder);
+    if (!Number.isInteger(order)) {
+      setError("L'ordre doit être un nombre entier.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = { name: name.trim(), sortOrder: order };
+      if (editingId) await api.updateExpenseCategory(editingId, body);
+      else await api.createExpenseCategory(body);
+      resetForm();
+      onChanged();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const remove = async (c) => {
+    if (!window.confirm(`Désactiver la catégorie "${c.name}" ?`)) return;
+    try {
+      await api.removeExpenseCategory(c.id);
+      onChanged();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <div style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(420px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>Catégories de dépense</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflow: "auto" }}>
+          {categories.length === 0 && <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucune catégorie.</div>}
+          {categories.map((c) => (
+            <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13.5, padding: "6px 8px", borderRadius: 6, background: "var(--bg-app, #FBF8F2)" }}>
+              <span>{c.name}</span>
+              <span style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => startEdit(c)} style={smallBtnStyle}>Modifier</button>
+                <button onClick={() => remove(c)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border-1, #E7EBF1)", paddingTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{editingId ? "Modifier la catégorie" : "Nouvelle catégorie"}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input placeholder="Nom" value={name} onChange={(e) => setName(e.target.value)} style={{ ...fieldInputStyle, flex: 2 }} />
+            <input type="number" step="1" placeholder="Ordre" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} style={{ ...fieldInputStyle, flex: 1 }} />
+          </div>
+          {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            {editingId && (
+              <button type="button" onClick={resetForm} style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
+                Annuler
+              </button>
+            )}
+            <button type="submit" disabled={submitting} style={{ flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "10px 14px", fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.7 : 1 }}>
+              {submitting ? "…" : editingId ? "Mettre à jour" : "Ajouter"}
+            </button>
+          </div>
+        </form>
+
+        <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
+          Fermer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
+  const [categoryId, setCategoryId] = React.useState(expense?.categoryId ?? (categories[0]?.id ?? ""));
+  const [branchId, setBranchId] = React.useState(expense?.branchId ?? "");
+  const [label, setLabel] = React.useState(expense?.label || "");
+  const [amount, setAmount] = React.useState(expense?.amount ?? "");
+  const [currencyCode, setCurrencyCode] = React.useState(expense?.currencyCode || "USD");
+  const [expenseDate, setExpenseDate] = React.useState(expense?.expenseDate ? String(expense.expenseDate).slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [note, setNote] = React.useState(expense?.note || "");
+  const [error, setError] = React.useState(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!label.trim()) {
+      setError("Le libellé est obligatoire.");
+      return;
+    }
+    if (!categoryId) {
+      setError("La catégorie est obligatoire.");
+      return;
+    }
+    const a = Number(amount);
+    if (!Number.isFinite(a) || a <= 0) {
+      setError("Le montant doit être un nombre positif.");
+      return;
+    }
+    if (!expenseDate) {
+      setError("La date est obligatoire.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body = {
+        categoryId: Number(categoryId),
+        label: label.trim(),
+        amount: a,
+        currencyCode,
+        expenseDate,
+        note: note.trim() || undefined,
+      };
+      if (branchId) body.branchId = Number(branchId);
+      const saved = expense?.id ? await api.updateExpense(expense.id, body) : await api.createExpense(body);
+      onSaved(saved);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(6,32,37,0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16,
+    }}>
+      <form onSubmit={submit} style={{
+        background: "var(--paper, #fff)", borderRadius: 14, padding: 24, width: "min(440px, 100%)",
+        display: "flex", flexDirection: "column", gap: 14, maxHeight: "90vh", overflow: "auto",
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>
+          {expense?.id ? "Modifier la dépense" : "Nouvelle dépense"}
+        </div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Libellé *</span>
+          <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Catégorie *</span>
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={fieldInputStyle}>
+            <option value="">— Sélectionner —</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+
+        {branches.length > 1 && (
+          <label style={fieldLabelStyle}>
+            <span style={fieldCaptionStyle}>Succursale (optionnel)</span>
+            <select value={branchId} onChange={(e) => setBranchId(e.target.value)} style={fieldInputStyle}>
+              <option value="">Toutes / non spécifiée</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <label style={{ ...fieldLabelStyle, flex: 2 }}>
+            <span style={fieldCaptionStyle}>Montant *</span>
+            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} style={fieldInputStyle} />
+          </label>
+          <label style={{ ...fieldLabelStyle, flex: 1 }}>
+            <span style={fieldCaptionStyle}>Devise</span>
+            <input value={currencyCode} onChange={(e) => setCurrencyCode(e.target.value.toUpperCase())} style={fieldInputStyle} maxLength={3} />
+          </label>
+        </div>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Date *</span>
+          <input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        <label style={fieldLabelStyle}>
+          <span style={fieldCaptionStyle}>Note (optionnel)</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} style={fieldInputStyle} />
+        </label>
+
+        {error && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} disabled={submitting}
+            style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "12px 16px", fontWeight: 600, cursor: "pointer" }}>
+            Annuler
+          </button>
+          <button type="submit" disabled={submitting}
+            style={{ flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8, padding: "12px 16px", fontWeight: 700, cursor: "pointer", opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function monthRange(date = new Date()) {
+  const from = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10);
+  const to = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().slice(0, 10);
+  return { from, to };
+}
+
+export const DepensesScreen = () => {
+  const [expenses, setExpenses] = React.useState([]);
+  const [categories, setCategories] = React.useState([]);
+  const [branches, setBranches] = React.useState([]);
+  const [summary, setSummary] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  const [categoryFilter, setCategoryFilter] = React.useState("");
+  const [branchFilter, setBranchFilter] = React.useState("");
+  const [fromFilter, setFromFilter] = React.useState("");
+  const [toFilter, setToFilter] = React.useState("");
+
+  const [editingExpense, setEditingExpense] = React.useState(null); // null=ferme, {}=creation, objet=edition
+  const [showCategoryPanel, setShowCategoryPanel] = React.useState(false);
+
+  const { from: monthFrom, to: monthTo } = React.useMemo(() => monthRange(), []);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const filters = {};
+      if (categoryFilter) filters.categoryId = categoryFilter;
+      if (branchFilter) filters.branchId = branchFilter;
+      if (fromFilter) filters.from = fromFilter;
+      if (toFilter) filters.to = toFilter;
+      const [list, cats, branchList, monthSummary] = await Promise.all([
+        api.listExpenses(filters),
+        api.listExpenseCategories(),
+        api.listBranches(),
+        api.getExpensesSummary({ from: monthFrom, to: monthTo }),
+      ]);
+      setExpenses(Array.isArray(list) ? list : []);
+      setCategories(Array.isArray(cats) ? cats : []);
+      setBranches(Array.isArray(branchList) ? branchList : []);
+      setSummary(monthSummary);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [categoryFilter, branchFilter, fromFilter, toFilter, monthFrom, monthTo]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const categoryById = React.useMemo(() => {
+    const map = new Map();
+    categories.forEach((c) => map.set(c.id, c));
+    return map;
+  }, [categories]);
+
+  const branchById = React.useMemo(() => {
+    const map = new Map();
+    branches.forEach((b) => map.set(b.id, b));
+    return map;
+  }, [branches]);
+
+  const removeExpense = async (exp) => {
+    if (!window.confirm(`Désactiver la dépense "${exp.label}" ?`)) return;
+    try {
+      await api.removeExpense(exp.id);
+      load();
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+      <ErrorBanner message={error} onRetry={load} />
+
+      {summary && (
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {summary.totals.length === 0 ? (
+            <KpiCard label="Dépenses du mois" value={formatMoney(0, "")} />
+          ) : (
+            summary.totals.map((t) => (
+              <KpiCard key={t.currencyCode} label="Dépenses du mois" value={formatMoney(t.total, t.currencyCode)} />
+            ))
+          )}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={filterInputStyle}>
+          <option value="">Toutes les catégories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {branches.length > 1 && (
+          <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} style={filterInputStyle}>
+            <option value="">Toutes les succursales</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
+        <input type="date" value={fromFilter} onChange={(e) => setFromFilter(e.target.value)} style={filterInputStyle} />
+        <span style={{ color: "var(--fg-3, #6b6b6b)", fontSize: 13 }}>à</span>
+        <input type="date" value={toFilter} onChange={(e) => setToFilter(e.target.value)} style={filterInputStyle} />
+        <div style={{ flex: 1 }} />
+        <button onClick={() => setShowCategoryPanel(true)} style={secondaryBtnStyle}>Catégories</button>
+        <button onClick={() => setEditingExpense({})} style={primaryBtnStyle}>+ Dépense</button>
+      </div>
+
+      {loading ? (
+        <CenteredNote>Chargement des dépenses…</CenteredNote>
+      ) : expenses.length === 0 ? (
+        <CenteredNote>Aucune dépense ne correspond à ces filtres.</CenteredNote>
+      ) : (
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+          {expenses.map((exp) => (
+            <div key={exp.id} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+              borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{exp.label}</div>
+                <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
+                  {String(exp.expenseDate).slice(0, 10)} · {categoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`}
+                  {exp.branchId ? ` · ${branchById.get(exp.branchId)?.name || `Succursale #${exp.branchId}`}` : ""}
+                  {exp.note ? ` · ${exp.note}` : ""}
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, minWidth: 100, textAlign: "right" }}>{formatMoney(exp.amount, exp.currencyCode)}</div>
+              <button onClick={() => setEditingExpense(exp)} style={smallBtnStyle}>Modifier</button>
+              <button onClick={() => removeExpense(exp)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editingExpense && (
+        <ExpenseForm
+          expense={editingExpense.id ? editingExpense : null}
+          categories={categories}
+          branches={branches}
+          onSaved={() => { setEditingExpense(null); load(); }}
+          onCancel={() => setEditingExpense(null)}
+        />
+      )}
+
+      {showCategoryPanel && (
+        <ExpenseCategoryPanel
+          categories={categories}
+          onChanged={load}
+          onClose={() => setShowCategoryPanel(false)}
+        />
+      )}
+    </div>
+  );
+};

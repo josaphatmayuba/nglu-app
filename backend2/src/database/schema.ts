@@ -3633,3 +3633,216 @@ export const ktCashMovements = mysqlTable("kt_cash_movements", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// KodaTill Phase 2 (SCRUM-286) : stock, depenses, recettes, variantes.
+// Migrations 0240_kodatill_stock / 0241_kodatill_recipes / 0242_kodatill_variants.
+// ---------------------------------------------------------------------------
+
+// Une ligne de stock par couple produit/succursale (cle unique). purchasePrice et
+// salePrice nulls = on retombe sur les prix du catalogue kt_products.
+export const ktStockItems = mysqlTable(
+  "kt_stock_items",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }).notNull(),
+    productId: bigint("product_id", { mode: "number" }).notNull(),
+    qty: decimal("qty", { precision: 14, scale: 3 }).default("0.000").notNull(),
+    reorderThreshold: decimal("reorder_threshold", { precision: 14, scale: 3 }),
+    purchasePrice: decimal("purchase_price", { precision: 14, scale: 2 }),
+    salePrice: decimal("sale_price", { precision: 14, scale: 2 }),
+    currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    orgBranchProductUnique: unique("uq_kt_stock_items_org_branch_product").on(
+      table.organizationId,
+      table.branchId,
+      table.productId,
+    ),
+  }),
+);
+
+// Journal append-only des variations de stock. qtyAfter = solde apres mouvement
+// (audit sans rejeu). refType / refId = lien polymorphe vers lorigine, sans FK.
+export const ktStockMovements = mysqlTable("kt_stock_movements", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  stockItemId: bigint("stock_item_id", { mode: "number" }).notNull(),
+  type: mysqlEnum("type", ["in", "out", "sale", "adjust", "loss", "transfer"])
+    .default("in")
+    .notNull(),
+  qty: decimal("qty", { precision: 14, scale: 3 }).default("0.000").notNull(),
+  qtyAfter: decimal("qty_after", { precision: 14, scale: 3 }).default("0.000").notNull(),
+  reason: varchar("reason", { length: 255 }),
+  supplierName: varchar("supplier_name", { length: 160 }),
+  refType: varchar("ref_type", { length: 40 }),
+  refId: bigint("ref_id", { mode: "number" }),
+  userId: bigint("user_id", { mode: "number" }),
+  // DEFAULT CURRENT_TIMESTAMP est porte par MySQL (voir 0240) : le builder
+  // datetime de Drizzle nexpose pas defaultNow, le service passe la valeur.
+  createdAt: datetime("created_at").notNull(),
+});
+
+export const ktExpenseCategories = mysqlTable("kt_expense_categories", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  sortOrder: int("sort_order").default(0).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ledgerEntryId : branchement comptable ERP/SIFA de la Phase 5, NULL pour linstant.
+export const ktExpenses = mysqlTable("kt_expenses", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  branchId: bigint("branch_id", { mode: "number" }),
+  categoryId: bigint("category_id", { mode: "number" }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  note: text("note"),
+  attachmentUrl: text("attachment_url"),
+  userId: bigint("user_id", { mode: "number" }),
+  ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// unitFactor : conversion purchaseUnit vers baseUnit (kg vers g = 1000). Le cout
+// unitaire en baseUnit vaut purchasePrice / unitFactor.
+export const ktIngredients = mysqlTable("kt_ingredients", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  purchaseUnit: mysqlEnum("purchase_unit", ["kg", "L", "piece"]).default("kg").notNull(),
+  baseUnit: mysqlEnum("base_unit", ["g", "ml", "piece"]).default("g").notNull(),
+  unitFactor: decimal("unit_factor", { precision: 14, scale: 4 }).default("1.0000").notNull(),
+  purchasePrice: decimal("purchase_price", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+  currentQty: decimal("current_qty", { precision: 14, scale: 3 }).default("0.000").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Une recette par produit (cle unique). computedCost = cache du dernier calcul,
+// toujours recalculable depuis les lignes.
+export const ktRecipes = mysqlTable(
+  "kt_recipes",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    productId: bigint("product_id", { mode: "number" }).notNull(),
+    wastePct: decimal("waste_pct", { precision: 5, scale: 2 }).default("0.00").notNull(),
+    consumablePct: decimal("consumable_pct", { precision: 5, scale: 2 }).default("0.00").notNull(),
+    computedCost: decimal("computed_cost", { precision: 14, scale: 2 }),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    orgProductUnique: unique("uq_kt_recipes_org_product").on(
+      table.organizationId,
+      table.productId,
+    ),
+  }),
+);
+
+// qtyBase : quantite exprimee dans la baseUnit de lingredient (pas de conversion
+// au moment du calcul de cout).
+export const ktRecipeLines = mysqlTable("kt_recipe_lines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  recipeId: bigint("recipe_id", { mode: "number" }).notNull(),
+  ingredientId: bigint("ingredient_id", { mode: "number" }).notNull(),
+  qtyBase: decimal("qty_base", { precision: 14, scale: 4 }).default("0.0000").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// priceDelta : ecart signe applique au prix de base du produit. ktOrderLines.variantId
+// (pose en 0238) pointe ici.
+export const ktProductVariants = mysqlTable("kt_product_variants", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  priceDelta: decimal("price_delta", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  sku: varchar("sku", { length: 80 }),
+  barcode: varchar("barcode", { length: 64 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// minSelect / maxSelect encadrent le nombre doptions choisies, validation applicative.
+export const ktModifierGroups = mysqlTable("kt_modifier_groups", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  minSelect: int("min_select").default(0).notNull(),
+  maxSelect: int("max_select").default(1).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const ktModifiers = mysqlTable("kt_modifiers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  groupId: bigint("group_id", { mode: "number" }).notNull(),
+  name: varchar("name", { length: 160 }).notNull(),
+  priceDelta: decimal("price_delta", { precision: 14, scale: 2 }).default("0.00").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Table de jointure pure : ni organizationId ni soft delete, lorganisation est
+// portee par les deux cotes de la relation.
+export const ktProductModifierGroups = mysqlTable(
+  "kt_product_modifier_groups",
+  {
+    id: serial("id").primaryKey(),
+    productId: bigint("product_id", { mode: "number" }).notNull(),
+    groupId: bigint("group_id", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    productGroupUnique: unique("uq_kt_product_modifier_groups").on(
+      table.productId,
+      table.groupId,
+    ),
+  }),
+);
+
+// Prix de vente par succursale. Sans ligne, le prix du catalogue kt_products sapplique.
+export const ktProductBranchPrices = mysqlTable(
+  "kt_product_branch_prices",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    productId: bigint("product_id", { mode: "number" }).notNull(),
+    branchId: bigint("branch_id", { mode: "number" }).notNull(),
+    salePrice: decimal("sale_price", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    orgProductBranchUnique: unique("uq_kt_product_branch_prices").on(
+      table.organizationId,
+      table.productId,
+      table.branchId,
+    ),
+  }),
+);
