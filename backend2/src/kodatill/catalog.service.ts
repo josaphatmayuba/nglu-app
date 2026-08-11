@@ -298,4 +298,40 @@ export class CatalogService {
       .where(and(eq(ktProducts.id, id), eq(ktProducts.organizationId, orgId)));
     return { message: "Produit desactive." };
   }
+
+  // ─── Snapshot offline (SCRUM-304) ───────────────────────────────────────
+  // Version = max(updated_at) categories+produits actifs, en epoch ms. Simple
+  // et suffisant pour un ETag (pas besoin d'un vrai hash de contenu) : toute
+  // creation/mise a jour touche updated_at (onUpdateNow) donc la version
+  // change des qu'une donnee du snapshot change. Utilise aussi comme
+  // fallback si la table est vide (0 -> pas de cache -> version "0").
+  async getSnapshotVersion(orgId: number): Promise<string> {
+    const [catRow] = await this.db
+      .select({ max: sql<string | null>`MAX(${ktCategories.updatedAt})` })
+      .from(ktCategories)
+      .where(eq(ktCategories.organizationId, orgId));
+    const [prodRow] = await this.db
+      .select({ max: sql<string | null>`MAX(${ktProducts.updatedAt})` })
+      .from(ktProducts)
+      .where(eq(ktProducts.organizationId, orgId));
+
+    const catMs = catRow?.max ? new Date(catRow.max).getTime() : 0;
+    const prodMs = prodRow?.max ? new Date(prodRow.max).getTime() : 0;
+    return String(Math.max(catMs, prodMs));
+  }
+
+  /**
+   * Snapshot complet catalogue (toutes categories actives + tous produits
+   * disponibles actifs) pour la mise en cache offline caisse (SCRUM-304).
+   * Reutilise listCategories/listProducts (memes filtres status="true") pour
+   * ne pas dupliquer la logique de lecture.
+   */
+  async getSnapshot(orgId: number) {
+    const [version, categories, products] = await Promise.all([
+      this.getSnapshotVersion(orgId),
+      this.listCategories(orgId),
+      this.listProducts(orgId, {}),
+    ]);
+    return { version, categories, products };
+  }
 }

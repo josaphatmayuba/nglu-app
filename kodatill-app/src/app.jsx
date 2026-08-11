@@ -2,7 +2,7 @@
 // (state + window.history.pushState, pas de react-router dans ce monorepo).
 import React from "react";
 import { Sidebar, Topbar, navForActivityProfile } from "./shell.jsx";
-import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
+import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, RapportsScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
 import { PublicMenuScreen, PublicOrderTrackingScreen } from "./public-menu.jsx";
 import { SuperAdminScreen, isSuperOwner } from "./platform-admin.jsx";
 import { LoginScreen, useAuthToken } from "./auth.jsx";
@@ -17,6 +17,7 @@ const ROUTE_SLUGS = {
   ingredients: "ingredients",
   caisse: "caisse",
   depenses: "depenses",
+  rapports: "rapports",
   scan: "scan",
   parametres: "parametres",
   admin: "admin",
@@ -45,6 +46,7 @@ const ROUTE_META = {
   ingredients: { title: "Ingrédients",     subtitle: "Matières premières & coûts de recette" },
   caisse:      { title: "Caisse",          subtitle: "Point de vente" },
   depenses:    { title: "Dépenses",        subtitle: "Charges & sorties de caisse" },
+  rapports:    { title: "Rapports",        subtitle: "Exports CSV & résumé période" },
   scan:        { title: "Scanner",         subtitle: "Jumelage caisse & scan mobile" },
   parametres:  { title: "Paramètres",      subtitle: "Profil d'activité & configuration" },
   // SCRUM-303 — espace reserve super_owner, premier jalon d'une console
@@ -170,6 +172,7 @@ function App() {
       case "ingredients": return <IngredientsScreen />;
       case "caisse":      return <CaisseScreen />;
       case "depenses":    return <DepensesScreen />;
+      case "rapports":    return <RapportsScreen />;
       case "scan":        return <ScanScreen />;
       case "parametres":  return <ParametresScreen profile={profile} onSaved={loadProfile} />;
       // SCRUM-303 — la route est accessible dans le routeur (pushState direct

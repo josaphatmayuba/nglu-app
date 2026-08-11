@@ -9,10 +9,14 @@ import {
   UpdateExpenseCategoryDto,
   UpdateExpenseDto,
 } from "./dto/expenses.dto";
+import { KodatillAccountingService } from "./accounting.service";
 
 @Injectable()
 export class ExpensesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly accounting: KodatillAccountingService,
+  ) {}
 
   // ─── Categories ──────────────────────────────────────────────────────────
 
@@ -104,7 +108,7 @@ export class ExpensesService {
     return rows[0];
   }
 
-  async createExpense(input: CreateExpenseDto, orgId: number) {
+  async createExpense(input: CreateExpenseDto, orgId: number, userId?: number) {
     const [result] = await this.db.insert(ktExpenses).values({
       organizationId: orgId,
       branchId: input.branchId,
@@ -116,7 +120,17 @@ export class ExpensesService {
       note: input.note,
       attachmentUrl: input.attachmentUrl,
     });
-    return this.findExpense(Number(result.insertId), orgId);
+
+    const expenseId = Number(result.insertId);
+
+    // SCRUM-307 : effet de bord comptable. kt_expenses n'a aucun workflow de
+    // confirmation aujourd'hui (status = soft delete uniquement), donc la
+    // comptabilisation a lieu a la creation. Ne jette jamais : la depense reste
+    // enregistree si la compta echoue, et l'ecriture est rejouable (idempotence
+    // par ledgerEntryId + idempotencyKey).
+    await this.accounting.postExpense(expenseId, orgId, userId);
+
+    return this.findExpense(expenseId, orgId);
   }
 
   async updateExpense(id: number, input: UpdateExpenseDto, orgId: number) {

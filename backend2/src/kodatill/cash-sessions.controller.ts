@@ -40,8 +40,15 @@ export class CashSessionsController {
   @ApiParam({ name: "id", type: Number })
   @Permissions("kodatill_cash_close")
   @Post(":id/close")
-  close(@Param("id", ParseIntPipe) id: number, @Body() body: CloseCashSessionDto, @CurrentOrg() orgId: number) {
-    return this.cashSessions.close(id, body, orgId);
+  close(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CloseCashSessionDto,
+    @CurrentOrg() orgId: number,
+    // SCRUM-307 : tracabilite de l'ecriture comptable generee a la cloture
+    // (journal_entries.created_by). Optionnel cote service.
+    @CurrentUserId() userId: number,
+  ) {
+    return this.cashSessions.close(id, body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Liste les mouvements de caisse (in/out) d'une session, tries par date croissante" })

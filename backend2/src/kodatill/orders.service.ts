@@ -3,6 +3,8 @@ import { randomUUID } from "crypto";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  ktBranches,
+  ktBusinessProfiles,
   ktOrderCounters,
   ktOrderLines,
   ktOrderStatusHistory,
@@ -12,12 +14,14 @@ import {
   ktProducts,
   ktStockItems,
   ktStockMovements,
+  organizations,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import {
   CreateOrderDto,
   CreateOrderPaymentDto,
   OrderStatus,
+  SyncOrderDto,
   UpdateOrderLinesDto,
 } from "./dto/orders.dto";
 
@@ -269,6 +273,76 @@ export class OrdersService {
     return { ...order, payments, statusHistory };
   }
 
+  /**
+   * GET /orders/:id/receipt (SCRUM-306) : donnees structurees dediees a
+   * l'impression du ticket client, separees de findOne() (qui sert l'ecran
+   * detail back-office). Rendu (HTML/ESC-POS) explicitement hors backend —
+   * uniquement des donnees ; le client (kodatill-app) construit la mise en
+   * page @media print. receiptFooter vient de kt_business_profiles si
+   * configure (peut etre null : pas d'auto-seed, meme regle que
+   * BusinessProfileService.get()).
+   */
+  async getReceipt(id: number, orgId: number) {
+    const order = await this.findOneInternal(this.db, id, orgId);
+
+    const payments = await this.db
+      .select({
+        methodName: ktPaymentMethods.name,
+        amount: ktPayments.amount,
+      })
+      .from(ktPayments)
+      .leftJoin(ktPaymentMethods, eq(ktPayments.methodId, ktPaymentMethods.id))
+      .where(
+        and(
+          eq(ktPayments.orderId, id),
+          eq(ktPayments.organizationId, orgId),
+          eq(ktPayments.status, "true"),
+        ),
+      )
+      .orderBy(asc(ktPayments.receivedAt), asc(ktPayments.id));
+
+    const [branch] = await this.db
+      .select({ name: ktBranches.name, address: ktBranches.address })
+      .from(ktBranches)
+      .where(and(eq(ktBranches.id, order.branchId), eq(ktBranches.organizationId, orgId)))
+      .limit(1);
+
+    const [org] = await this.db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const [profile] = await this.db
+      .select({ receiptFooter: ktBusinessProfiles.receiptFooter })
+      .from(ktBusinessProfiles)
+      .where(eq(ktBusinessProfiles.organizationId, orgId))
+      .limit(1);
+
+    return {
+      orderNumber: order.orderNumber,
+      publicRef: order.publicRef,
+      createdAt: order.createdAt,
+      branch: branch ? { name: branch.name, address: branch.address ?? undefined } : undefined,
+      organization: { name: org?.name ?? "" },
+      lines: order.lines.map((l) => ({
+        name: l.name,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        note: l.note ?? undefined,
+      })),
+      subtotal: order.subtotal,
+      discountTotal: order.discountTotal,
+      taxTotal: order.taxTotal,
+      serviceTotal: order.serviceTotal,
+      total: order.total,
+      currencyCode: order.currencyCode,
+      payments: payments.map((p) => ({ methodName: p.methodName ?? "Paiement", amount: p.amount })),
+      receiptFooter: profile?.receiptFooter ?? null,
+    };
+  }
+
   /** Recalcule subtotal/discountTotal/total a partir des lignes actives. */
   private async recomputeTotals(tx: Database, orderId: number, orgId: number, currencyCode: string) {
     const lines = await tx
@@ -518,6 +592,76 @@ export class OrdersService {
         createdAt: new Date(),
       });
     }
+  }
+
+  /**
+   * Resynchronisation d'un batch de commandes creees hors-ligne (SCRUM-304).
+   * Reutilise EXACTEMENT create/addPayment/updateStatus (aucune logique
+   * dupliquee : meme idempotence via clientUuid, meme validation, meme calcul
+   * de total, meme decrement de stock). Chaque commande a sa propre
+   * transaction (via create/addPayment/updateStatus, qui ouvrent chacune la
+   * leur) : une commande en erreur n'annule pas les autres du batch, seul son
+   * resultat porte error.
+   *
+   * Stock : comportement optimiste deja en place depuis la Phase 2
+   * (decrementStockForOrder n'echoue jamais la vente, voir son commentaire) —
+   * s'applique de la meme facon ici aux ventes resynchronisees : le
+   * decrement peut echouer silencieusement (stock insuffisant/perime pendant
+   * la periode hors-ligne) sans jamais bloquer ni faire echouer la
+   * resynchronisation de la vente elle-meme.
+   */
+  async sync(input: { orders: SyncOrderDto[] }, orgId: number, userId: number) {
+    const results: Array<{
+      clientUuid: string;
+      orderId?: number;
+      orderNumber?: number;
+      publicRef?: string;
+      error?: string;
+    }> = [];
+
+    for (const orderInput of input.orders) {
+      try {
+        const { payments, ...createInput } = orderInput;
+        const order = await this.create(createInput, orgId, userId, "draft");
+
+        for (const payment of payments ?? []) {
+          await this.addPayment(
+            order.id,
+            {
+              methodId: payment.methodId,
+              amount: payment.amount,
+              currencyCode: payment.currencyCode,
+            } as CreateOrderPaymentDto,
+            orgId,
+            userId,
+          );
+        }
+
+        // Meme comportement que la caisse en ligne (PaymentPanel) : une fois
+        // entierement encaissee, la commande passe directement a "completed"
+        // (vente boutique, pas de flux preparation restaurant).
+        const finalOrder = (payments ?? []).length
+          ? await this.updateStatus(order.id, "completed", orgId, userId)
+          : order;
+
+        results.push({
+          clientUuid: orderInput.clientUuid,
+          orderId: finalOrder.id,
+          orderNumber: finalOrder.orderNumber,
+          publicRef: finalOrder.publicRef,
+        });
+      } catch (err: any) {
+        this.logger.warn(
+          `Echec resync commande offline (clientUuid=${orderInput.clientUuid}, org=${orgId}) : ${err?.message || err}`,
+        );
+        results.push({
+          clientUuid: orderInput.clientUuid,
+          error: err?.message || String(err),
+        });
+      }
+    }
+
+    return { results };
   }
 
   async addPayment(id: number, input: CreateOrderPaymentDto, orgId: number, userId: number) {

@@ -1,5 +1,19 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -13,6 +27,31 @@ import { CreateCategoryDto, CreateProductDto, UpdateCategoryDto, UpdateProductDt
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
+
+  // ─── Snapshot offline (SCRUM-304) ───────────────────────────────────────
+  // Route fixe placee AVANT les routes /categories, /products generiques par
+  // coherence avec le reste du controleur (ex: barcode avant :id), meme si
+  // ici aucun conflit de path n'existe (prefixe distinct "catalog/snapshot").
+
+  @ApiOperation({ summary: "Snapshot complet du catalogue pour le cache offline caisse (ETag/If-None-Match)" })
+  @ApiOkResponse({ description: "Snapshot catalogue {version, categories, products} ou 304 si inchange" })
+  @Permissions("kodatill_view", "kodatill_pos_operate")
+  @Get("catalog/snapshot")
+  async getSnapshot(
+    @CurrentOrg() orgId: number,
+    @Headers("if-none-match") ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const version = await this.catalog.getSnapshotVersion(orgId);
+    const etag = `"${version}"`;
+    res.setHeader("ETag", etag);
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      res.status(304);
+      return undefined;
+    }
+    const snapshot = await this.catalog.getSnapshot(orgId);
+    return snapshot;
+  }
 
   // ─── Categories ──────────────────────────────────────────────────────────
 

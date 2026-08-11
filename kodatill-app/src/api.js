@@ -114,6 +114,21 @@ export const api = {
   updateCategory: (id, body) => jsonFetch(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   removeCategory: (id) => jsonFetch(`/categories/${id}`, { method: "DELETE" }),
   listProducts: (params = {}) => jsonFetch(`/products${buildQuery(params)}`),
+  // Snapshot offline (SCRUM-304) : {version, categories, products} en un seul
+  // payload, avec support ETag (If-None-Match -> 304 si rien n'a change).
+  // Retourne null sur 304 (pas de body) pour signaler "pas de changement" a
+  // l'appelant, qui garde alors le cache IndexedDB existant.
+  getCatalogSnapshot: async (etag) => {
+    const headers = etag ? { "If-None-Match": etag } : {};
+    const res = await fetch(`${BASE}/catalog/snapshot`, { headers: { ...authHeaders(), ...headers } });
+    if (res.status === 304) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    return { ...data, etag: res.headers.get("etag") || null };
+  },
   getProduct: (id) => jsonFetch(`/products/${id}`),
   getProductByBarcode: (code) => jsonFetch(`/products/barcode/${encodeURIComponent(code)}`),
   createProduct: (body) => jsonFetch("/products", { method: "POST", body: JSON.stringify(body) }),
@@ -123,6 +138,9 @@ export const api = {
   // Commandes
   listOrders: (params = {}) => jsonFetch(`/orders${buildQuery(params)}`),
   getOrder: (id) => jsonFetch(`/orders/${id}`),
+  // Donnees structurees pour impression du ticket client (SCRUM-306) — pas de
+  // HTML/ESC-POS cote backend, seulement les donnees ; le rendu est ici.
+  getOrderReceipt: (id) => jsonFetch(`/orders/${id}/receipt`),
   createOrder: (body) => jsonFetch("/orders", { method: "POST", body: JSON.stringify(body) }),
   updateOrderLines: (id, body) => jsonFetch(`/orders/${id}/lines`, { method: "PATCH", body: JSON.stringify(body) }),
   setOrderStatus: (id, body) => jsonFetch(`/orders/${id}/status`, { method: "POST", body: JSON.stringify(body) }),

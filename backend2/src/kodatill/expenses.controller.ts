@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -97,8 +98,13 @@ export class ExpensesController {
   @ApiCreatedResponse({ description: "Depense creee" })
   @Permissions("kodatill_settings_manage")
   @Post()
-  createExpense(@Body() body: CreateExpenseDto, @CurrentOrg() orgId: number) {
-    return this.expenses.createExpense(body, orgId);
+  createExpense(
+    @Body() body: CreateExpenseDto,
+    @CurrentOrg() orgId: number,
+    // SCRUM-307 : tracabilite de l'ecriture comptable (journal_entries.created_by).
+    @CurrentUserId() userId: number,
+  ) {
+    return this.expenses.createExpense(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Modifie une depense" })

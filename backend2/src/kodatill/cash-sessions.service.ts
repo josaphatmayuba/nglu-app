@@ -4,10 +4,14 @@ import { DRIZZLE } from "../database/database.constants";
 import { ktCashMovements, ktCashSessions, ktPayments, ktPaymentMethods } from "../database/schema";
 import type { Database } from "../database/types";
 import { CloseCashSessionDto, CreateCashMovementDto, OpenCashSessionDto } from "./dto/cash-sessions.dto";
+import { KodatillAccountingService } from "./accounting.service";
 
 @Injectable()
 export class CashSessionsService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly accounting: KodatillAccountingService,
+  ) {}
 
   private round2(n: number): number {
     return Math.round(n * 100) / 100;
@@ -127,8 +131,8 @@ export class CashSessionsService {
     return { cashIn, cashOut };
   }
 
-  async close(id: number, input: CloseCashSessionDto, orgId: number) {
-    return this.db.transaction(async (tx) => {
+  async close(id: number, input: CloseCashSessionDto, orgId: number, userId?: number) {
+    const closed = await this.db.transaction(async (tx) => {
       const session = await this.findOneInternal(tx, id, orgId);
 
       if (session.cashStatus !== "open") {
@@ -154,6 +158,21 @@ export class CashSessionsService {
 
       return this.findOneInternal(tx, id, orgId);
     });
+
+    // SCRUM-307 : effet de bord comptable APRES commit de la transaction metier
+    // (le ledger a sa propre transaction et doit lire une session reellement
+    // fermee). Ne jette jamais : une caisse fermee le reste meme si la compta
+    // echoue, et l'ecriture reste rejouable (idempotence par ledgerEntryId).
+    // UNE seule ecriture agregee par session, jamais une par ticket.
+    await this.accounting.postCashSessionClosure(id, orgId, userId);
+
+    // Relit pour renvoyer ledgerEntryId a jour ; en cas d'echec de la relecture
+    // on retombe sur l'objet deja calcule (contrat de retour inchange).
+    try {
+      return await this.findOneInternal(this.db, id, orgId);
+    } catch {
+      return closed;
+    }
   }
 
   /** Liste les mouvements (in/out) d'une session, tries par date de creation croissante. */

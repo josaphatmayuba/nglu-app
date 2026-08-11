@@ -121,6 +121,57 @@ export class CreateOrderDto {
   lines?: OrderLineInputDto[];
 }
 
+/**
+ * Un paiement embarque dans une commande de resynchronisation (SCRUM-304,
+ * caisse offline). Meme forme que CreateOrderPaymentDto (methodId optionnel,
+ * amount, currencyCode) : hors-ligne, seul le paiement especes est autorise
+ * cote ecran (voir kodatill-app/src/offline-outbox.js), mais le DTO reste
+ * generique pour ne pas figer cette regle cote backend.
+ */
+export class SyncOrderPaymentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  methodId?: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @IsPositive()
+  amount!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  currencyCode?: string;
+}
+
+/**
+ * Une commande du batch de resynchronisation : memes champs que
+ * CreateOrderDto (clientUuid pour l'idempotence, lignes) plus les paiements
+ * encaisses hors-ligne (toujours especes en pratique, cf. ecran).
+ */
+export class SyncOrderDto extends CreateOrderDto {
+  @ApiPropertyOptional({ type: [SyncOrderPaymentDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SyncOrderPaymentDto)
+  payments?: SyncOrderPaymentDto[];
+}
+
+/**
+ * Batch de resynchronisation (SCRUM-304, caisse offline). Reutilise
+ * CreateOrderDto (via SyncOrderDto) pour ne pas dupliquer sa validation.
+ */
+export class SyncOrdersDto {
+  @ApiProperty({ type: [SyncOrderDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => SyncOrderDto)
+  orders!: SyncOrderDto[];
+}
+
 export class UpdateOrderLinesDto {
   @ApiProperty({ type: [OrderLineInputDto] })
   @IsArray()

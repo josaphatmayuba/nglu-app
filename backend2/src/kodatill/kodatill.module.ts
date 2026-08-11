@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { LedgerModule } from "../ledger/ledger.module";
+import { KodatillAccountingService } from "./accounting.service";
 import { BranchesController } from "./branches.controller";
 import { BranchesService } from "./branches.service";
 import { BusinessProfileController } from "./business-profile.controller";
@@ -40,7 +42,8 @@ import { VariantsController } from "./variants.controller";
 import { VariantsService } from "./variants.service";
 
 @Module({
-  imports: [DatabaseModule],
+  // LedgerModule : branchement comptable ERP/SIFA de la Phase 5 (SCRUM-307).
+  imports: [DatabaseModule, LedgerModule],
   controllers: [
     CatalogController,
     OrdersController,
@@ -63,6 +66,7 @@ import { VariantsService } from "./variants.service";
     PlatformOverviewController,
   ],
   providers: [
+    KodatillAccountingService,
     CatalogService,
     OrdersService,
     CashSessionsService,

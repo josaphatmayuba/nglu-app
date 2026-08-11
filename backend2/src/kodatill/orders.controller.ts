@@ -8,6 +8,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   CreateOrderDto,
   CreateOrderPaymentDto,
+  SyncOrdersDto,
   UpdateOrderLinesDto,
   UpdateOrderStatusDto,
 } from "./dto/orders.dto";
@@ -26,6 +27,14 @@ export class OrdersController {
   @Post()
   create(@Body() body: CreateOrderDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.orders.create(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Resynchronise un batch de commandes creees hors-ligne (SCRUM-304)" })
+  @ApiCreatedResponse({ description: "Resultat par commande : {clientUuid, orderId?, orderNumber?, publicRef?, error?}" })
+  @Permissions("kodatill_pos_operate")
+  @Post("sync")
+  sync(@Body() body: SyncOrdersDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.orders.sync(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Liste les commandes (filtre status/branchId/from/to/channel)" })
@@ -49,6 +58,14 @@ export class OrdersController {
   @Get(":id")
   findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.orders.findOne(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Donnees structurees pour l'impression du ticket client (SCRUM-306)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("kodatill_view")
+  @Get(":id/receipt")
+  getReceipt(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.orders.getReceipt(id, orgId);
   }
 
   @ApiOperation({ summary: "Ajoute/modifie/supprime des lignes (autorise seulement en draft/received)" })

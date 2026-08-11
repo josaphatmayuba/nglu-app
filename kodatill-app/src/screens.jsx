@@ -3,6 +3,10 @@
 //  - Dashboard / Produits / Commandes (back-office Phase 1) : SCRUM-283
 import React from "react";
 import { api } from "./api.js";
+import { replaceCatalogCache, readCatalogCache, getCatalogMeta } from "./offline-db.js";
+import { enqueueOfflineOrder, pendingCount as offlinePendingCount, processOutbox, startOutboxWorker } from "./offline-outbox.js";
+import { ReceiptPrintView, KitchenTicketPrintView } from "./print-templates.jsx";
+import { downloadCsv } from "./csv-utils.js";
 
 // Montants : jamais de devise en dur, toujours celle retournee par l'API
 // (product.currencyCode / order.currencyCode / session.currencyCode).
@@ -364,12 +368,17 @@ function ZReportModal({ closedSession, movements, onClose }) {
 
 // Ecran de paiement — choix methode(s), multi-paiement (ex: 30$ especes +
 // reste en carte), appelle POST /orders/:id/payments pour chaque saisie.
-function PaymentPanel({ order, onDone, onCancel, paymentMethods }) {
+function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline }) {
   const currencyCode = order.currencyCode;
   const due = Number(order.dueTotal ?? order.total);
-  const methods = paymentMethods && paymentMethods.length
+  // Hors-ligne (SCRUM-304) : seul le paiement especes est autorise (les
+  // methodes carte/mobile necessitent un aller-retour reseau/gateway), on ne
+  // propose donc que la methode de type "cash" parmi celles configurees (ou
+  // la methode "Espèces" par defaut si aucune n'est configuree).
+  const allMethods = paymentMethods && paymentMethods.length
     ? paymentMethods
     : [{ id: undefined, kind: "cash", name: PAYMENT_METHOD_KIND_LABELS.cash }];
+  const methods = offline ? allMethods.filter((m) => m.kind === "cash") : allMethods;
   const [remaining, setRemaining] = React.useState(due);
   const [payments, setPayments] = React.useState([]); // { methodId, kind, label, amount }
   const [selectedMethodId, setSelectedMethodId] = React.useState(methods[0]?.id ?? methods[0]?.kind);
@@ -414,6 +423,27 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods }) {
     setSubmitting(true);
     setError(null);
     try {
+      if (offline) {
+        // Hors-ligne : `order` est un brouillon local (jamais envoye au
+        // serveur, cf. CaisseScreen#startCheckout) — on met la commande
+        // complete (lignes + paiement especes) dans l'outbox en un seul
+        // enregistrement au lieu d'appeler addOrderPayment/setOrderStatus.
+        // Aucune verification de stock locale (comportement optimiste,
+        // meme regle qu'en ligne — voir OrdersService.decrementStockForOrder,
+        // qui s'applique de la meme facon a la resynchronisation).
+        await enqueueOfflineOrder({
+          clientUuid: order.clientUuid,
+          branchId: order.branchId,
+          registerId: order.registerId,
+          channel: order.channel,
+          currencyCode,
+          lines: order.lines,
+          payments: payments.map((p) => ({ methodId: p.methodId, amount: p.amount, currencyCode })),
+        });
+        onDone({ ...order, dueTotal: "0.00", paidTotal: order.total, orderStatus: "completed", _offlinePending: true });
+        return;
+      }
+
       for (const p of payments) {
         await api.addOrderPayment(order.id, {
           methodId: p.methodId,
@@ -466,6 +496,15 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods }) {
               <span>Total saisi</span>
               <span>{formatMoney(totalPaid, currencyCode)}</span>
             </div>
+          </div>
+        )}
+
+        {offline && (
+          <div style={{
+            fontSize: 12, color: "#7a1f2b", background: "rgba(122,31,43,0.08)",
+            borderRadius: 8, padding: "8px 12px", fontWeight: 600,
+          }}>
+            Paiement carte/mobile indisponible hors connexion — encaissement en espèces uniquement, synchronisé au retour de la connexion.
           </div>
         )}
 
@@ -537,6 +576,12 @@ export const CaisseScreen = () => {
   const [checkoutError, setCheckoutError] = React.useState(null);
   const [checkoutSubmitting, setCheckoutSubmitting] = React.useState(false);
   const [confirmation, setConfirmation] = React.useState(null);
+  // Ticket a imprimer (SCRUM-306) : recu structure charge depuis GET
+  // /orders/:id/receipt une fois la vente confirmee, sur clic explicite
+  // "Imprimer le ticket" (voir printReceipt).
+  const [receiptData, setReceiptData] = React.useState(null);
+  const [receiptLoading, setReceiptLoading] = React.useState(false);
+  const [receiptError, setReceiptError] = React.useState(null);
 
   // Modal variantes/modificateurs (SCRUM-293) : ouvert seulement si le produit
   // clique a des variantes et/ou des groupes de modificateurs. On decouvre ca
@@ -561,6 +606,46 @@ export const CaisseScreen = () => {
   const [showMovementForm, setShowMovementForm] = React.useState(false);
   const [showCloseForm, setShowCloseForm] = React.useState(false);
   const [zReport, setZReport] = React.useState(null);
+
+  // Mode offline (SCRUM-304) : catalogue depuis IndexedDB (offline-db.js),
+  // ventes especes uniquement mises en file (offline-outbox.js), rejouees des
+  // que la connexion revient. isOnline suit navigator.onLine + evenements
+  // online/offline (meme detection que le pattern deja utilise dans le repo).
+  const [isOnline, setIsOnline] = React.useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [syncStatus, setSyncStatus] = React.useState(null); // { syncing: true } | { synced, failed } | null
+  const [offlinePending, setOfflinePending] = React.useState(0);
+
+  React.useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    startOutboxWorker();
+    const refreshPending = () => offlinePendingCount().then(setOfflinePending).catch(() => {});
+    refreshPending();
+    const onOutboxChanged = () => refreshPending();
+    const onSyncStart = () => setSyncStatus({ syncing: true });
+    const onSyncSummary = (e) => {
+      setSyncStatus({ synced: e.detail?.synced ?? 0, failed: e.detail?.failed ?? 0 });
+      refreshPending();
+      setTimeout(() => setSyncStatus(null), 6000);
+    };
+    window.addEventListener("kodatill:outbox-changed", onOutboxChanged);
+    window.addEventListener("kodatill:sync-start", onSyncStart);
+    window.addEventListener("kodatill:sync-summary", onSyncSummary);
+    return () => {
+      window.removeEventListener("kodatill:outbox-changed", onOutboxChanged);
+      window.removeEventListener("kodatill:sync-start", onSyncStart);
+      window.removeEventListener("kodatill:sync-summary", onSyncSummary);
+    };
+  }, []);
 
   const loadSession = React.useCallback(async () => {
     setSessionError(null);
@@ -587,15 +672,45 @@ export const CaisseScreen = () => {
     }
   }, []);
 
+  // Catalogue via snapshot (SCRUM-304) : GET /catalog/snapshot avec ETag
+  // (If-None-Match), rafraichit le cache IndexedDB si change, retombe sur ce
+  // cache si hors-ligne ou si l'appel echoue. loadCatalog reste le seul point
+  // d'entree utilise par l'ecran (categories/produits), qu'on soit en ligne
+  // ou non.
   const loadCatalog = React.useCallback(async () => {
     setCatalogLoading(true);
     setCatalogError(null);
     try {
-      const [cats, prods] = await Promise.all([api.listCategories(), api.listProducts()]);
-      setCategories(Array.isArray(cats) ? cats : []);
-      setProducts(Array.isArray(prods) ? prods : []);
+      if (!navigator.onLine) throw new Error("offline");
+
+      const meta = await getCatalogMeta();
+      const etag = meta?.version != null ? `"${meta.version}"` : undefined;
+      const snapshot = await api.getCatalogSnapshot(etag);
+
+      if (snapshot) {
+        await replaceCatalogCache(snapshot);
+        setCategories(Array.isArray(snapshot.categories) ? snapshot.categories : []);
+        setProducts(Array.isArray(snapshot.products) ? snapshot.products : []);
+      } else {
+        // 304 Not Modified : rien n'a change, on relit simplement le cache local.
+        const cached = await readCatalogCache();
+        setCategories(cached.categories);
+        setProducts(cached.products);
+      }
     } catch (err) {
-      setCatalogError(err.message || String(err));
+      // Hors-ligne ou erreur reseau : retombe sur le cache IndexedDB existant
+      // (peut etre vide si jamais synchronise, auquel cas la caisse restera
+      // vide jusqu'au premier chargement en ligne — comportement attendu).
+      try {
+        const cached = await readCatalogCache();
+        setCategories(cached.categories);
+        setProducts(cached.products);
+        if (cached.categories.length === 0 && cached.products.length === 0 && err.message !== "offline") {
+          setCatalogError(err.message || String(err));
+        }
+      } catch (cacheErr) {
+        setCatalogError(cacheErr.message || String(cacheErr));
+      }
     } finally {
       setCatalogLoading(false);
     }
@@ -630,6 +745,16 @@ export const CaisseScreen = () => {
     loadBranches();
     loadPaymentMethods();
   }, [loadSession, loadCatalog, loadBranches, loadPaymentMethods]);
+
+  // Retour de connexion : rejoue l'outbox (deja fait par startOutboxWorker
+  // via son propre listener "online") et rafraichit le catalogue/snapshot
+  // pour repartir sur des prix/stocks a jour.
+  React.useEffect(() => {
+    if (isOnline) {
+      loadCatalog();
+      processOutbox().catch(() => {});
+    }
+  }, [isOnline, loadCatalog]);
 
   // selection = { variant, modifiers: [...] } quand le produit a des options
   // choisies via SaleOptionsModal ; undefined pour un produit simple (flux
@@ -710,8 +835,20 @@ export const CaisseScreen = () => {
   const onSearchKeyDown = async (e) => {
     if (e.key !== "Enter" || !search.trim()) return;
     setScanMessage(null);
+    const code = search.trim();
+    // Hors-ligne (SCRUM-304) : lookup code-barres en memoire sur le catalogue
+    // deja charge (issu du cache IndexedDB) au lieu d'appeler l'API.
+    if (!isOnline) {
+      const product = products.find((p) => p.barcode && p.barcode === code);
+      if (product) {
+        addToTicket(product);
+        setScanMessage(`Ajouté : ${product.name}`);
+        setSearch("");
+      }
+      return;
+    }
     try {
-      const product = await api.getProductByBarcode(search.trim());
+      const product = await api.getProductByBarcode(code);
       if (product) {
         addToTicket(product);
         setScanMessage(`Ajouté : ${product.name}`);
@@ -740,19 +877,43 @@ export const CaisseScreen = () => {
     setCheckoutSubmitting(true);
     setCheckoutError(null);
     try {
+      const lines = ticket.map((l) => ({
+        productId: l.productId,
+        variantId: l.variantId,
+        name: l.name,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+      }));
+
+      if (!isOnline) {
+        // Hors-ligne (SCRUM-304) : pas d'appel POST /orders, on construit un
+        // brouillon local (jamais persiste tel quel) qui sert uniquement a
+        // alimenter PaymentPanel (mode offline=especes uniquement) ; c'est
+        // PaymentPanel#confirm qui mettra la commande complete dans l'outbox
+        // au moment de la validation du paiement.
+        const draftOrder = {
+          id: `offline-${crypto.randomUUID()}`,
+          clientUuid: crypto.randomUUID(),
+          branchId: session.branchId ?? defaultBranchId,
+          registerId: session.registerId,
+          channel: "pos",
+          currencyCode: ticketCurrency,
+          total: subtotal.toFixed(2),
+          dueTotal: subtotal.toFixed(2),
+          paidTotal: "0.00",
+          lines,
+        };
+        setCheckoutOrder(draftOrder);
+        return;
+      }
+
       const order = await api.createOrder({
         branchId: session.branchId ?? defaultBranchId,
         registerId: session.registerId,
         channel: "pos",
         currencyCode: ticketCurrency,
         clientUuid: crypto.randomUUID(),
-        lines: ticket.map((l) => ({
-          productId: l.productId,
-          variantId: l.variantId,
-          name: l.name,
-          qty: l.qty,
-          unitPrice: l.unitPrice,
-        })),
+        lines,
       });
       setCheckoutOrder(order);
     } catch (err) {
@@ -767,6 +928,26 @@ export const CaisseScreen = () => {
     setTicket([]);
     setConfirmation(order);
     setTimeout(() => setConfirmation(null), 4000);
+  };
+
+  // Charge le recu structure puis imprime (SCRUM-306). window.print() est
+  // synchrone au clic navigateur, mais on attend le prochain repaint (le
+  // print-area doit deja etre dans le DOM avec les donnees) via un court
+  // delai — meme pattern minimal que les autres ecrans, pas de librairie
+  // supplementaire.
+  const printReceipt = async (order) => {
+    if (!order?.id) return;
+    setReceiptLoading(true);
+    setReceiptError(null);
+    try {
+      const data = await api.getOrderReceipt(order.id);
+      setReceiptData(data);
+      setTimeout(() => window.print(), 50);
+    } catch (err) {
+      setReceiptError(err.message || String(err));
+    } finally {
+      setReceiptLoading(false);
+    }
   };
 
   const onMovementAdded = (movement) => {
@@ -812,7 +993,25 @@ export const CaisseScreen = () => {
         display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10,
       }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>Session de caisse ouverte</div>
+          <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            Session de caisse ouverte
+            {!isOnline && (
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, background: "#7a1f2b", color: "#FBF8F2",
+                borderRadius: 20, padding: "2px 8px", textTransform: "uppercase",
+              }}>
+                Hors connexion{offlinePending > 0 ? ` · ${offlinePending} en attente` : ""}
+              </span>
+            )}
+            {syncStatus?.syncing && (
+              <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.85 }}>Synchronisation en cours…</span>
+            )}
+            {syncStatus && !syncStatus.syncing && (
+              <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}>
+                {syncStatus.synced} commande(s) synchronisée(s){syncStatus.failed ? ` · ${syncStatus.failed} en erreur` : ""}
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: 11.5, opacity: 0.85 }}>
             Depuis {formatTime(session.openedAt)} · Fonds {formatMoney(session.openingFloat, session.currencyCode)}
           </div>
@@ -952,6 +1151,7 @@ export const CaisseScreen = () => {
           onDone={onPaymentDone}
           onCancel={() => setCheckoutOrder(null)}
           paymentMethods={paymentMethods}
+          offline={!isOnline}
         />
       )}
 
@@ -960,8 +1160,35 @@ export const CaisseScreen = () => {
           position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
           background: "#1f6d75", color: "#FBF8F2", padding: "12px 20px", borderRadius: 10,
           fontWeight: 600, fontSize: 14, boxShadow: "0 10px 30px rgba(0,0,0,0.25)", zIndex: 60,
+          display: "flex", alignItems: "center", gap: 12,
         }}>
-          Vente encaissée — commande {confirmation.publicRef || `#${confirmation.id}`} ✓
+          <span>
+            {confirmation._offlinePending
+              ? "Vente encaissée (espèces) — en attente de synchronisation ✓"
+              : `Vente encaissée — commande ${confirmation.publicRef || `#${confirmation.id}`} ✓`}
+          </span>
+          {!confirmation._offlinePending && (
+            <button onClick={() => printReceipt(confirmation)} disabled={receiptLoading}
+              style={{
+                background: "#FBF8F2", color: "#1f6d75", border: 0, borderRadius: 8,
+                padding: "6px 12px", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
+                opacity: receiptLoading ? 0.7 : 1,
+              }}>
+              {receiptLoading ? "…" : "Imprimer le ticket"}
+            </button>
+          )}
+        </div>
+      )}
+      {/* Ticket imprimable (SCRUM-306) : hors ecran tant qu'aucun recu n'est
+          charge, visible uniquement via @media print (voir print-templates.jsx). */}
+      {receiptData && <ReceiptPrintView receipt={receiptData} />}
+      {receiptError && (
+        <div style={{
+          position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)",
+          background: "var(--oxblood-800, #7a1f2b)", color: "#fff", padding: "10px 16px",
+          borderRadius: 8, fontSize: 13, zIndex: 60,
+        }}>
+          {receiptError}
         </div>
       )}
       </div>
@@ -2307,6 +2534,10 @@ function OrderDetail({ orderId, onClose, onChanged }) {
   const [loading, setLoading] = React.useState(true);
   const [statusSubmitting, setStatusSubmitting] = React.useState(false);
   const [statusError, setStatusError] = React.useState(null);
+  // Impression du ticket depuis le detail commande (SCRUM-306).
+  const [receiptData, setReceiptData] = React.useState(null);
+  const [receiptLoading, setReceiptLoading] = React.useState(false);
+  const [receiptError, setReceiptError] = React.useState(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -2320,6 +2551,20 @@ function OrderDetail({ orderId, onClose, onChanged }) {
       setLoading(false);
     }
   }, [orderId]);
+
+  const printReceipt = async () => {
+    setReceiptLoading(true);
+    setReceiptError(null);
+    try {
+      const data = await api.getOrderReceipt(orderId);
+      setReceiptData(data);
+      setTimeout(() => window.print(), 50);
+    } catch (err) {
+      setReceiptError(err.message || String(err));
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
 
   React.useEffect(() => { load(); }, [load]);
 
@@ -2449,9 +2694,21 @@ function OrderDetail({ orderId, onClose, onChanged }) {
               </div>
             )}
 
-            <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
-              Fermer
-            </button>
+            {receiptError && <div style={{ color: "var(--oxblood-800, #7a1f2b)", fontSize: 12 }}>{receiptError}</div>}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={printReceipt} disabled={receiptLoading}
+                style={{
+                  flex: 1, background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 8,
+                  padding: "10px 14px", fontWeight: 700, cursor: "pointer", opacity: receiptLoading ? 0.7 : 1,
+                }}>
+                {receiptLoading ? "…" : "Imprimer le ticket"}
+              </button>
+              <button onClick={onClose} style={{ background: "transparent", border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "10px 14px", fontWeight: 600, cursor: "pointer" }}>
+                Fermer
+              </button>
+            </div>
+            {receiptData && <ReceiptPrintView receipt={receiptData} />}
           </>
         ) : null}
       </div>
@@ -3746,6 +4003,188 @@ export const DepensesScreen = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
+// Rapports — SCRUM-308 (dernier ticket Phase 5 de l'epic KodaTill SCRUM-278).
+// Reutilise GET /orders et GET /expenses avec les filtres from/to deja
+// supportes (voir CommandesScreen/DepensesScreen ci-dessus) : pas de nouvel
+// endpoint backend. Export CSV genere cote client (csv-utils.js) a partir des
+// donnees deja chargees pour la periode choisie.
+// ─────────────────────────────────────────────────────────────────────────
+function todayRange() {
+  const today = new Date().toISOString().slice(0, 10);
+  return { from: today, to: today };
+}
+function weekRange(date = new Date()) {
+  const day = date.getDay(); // 0=dimanche
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
+}
+
+export const RapportsScreen = () => {
+  const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [from, setFrom] = React.useState(todayIso);
+  const [to, setTo] = React.useState(todayIso);
+
+  const [orders, setOrders] = React.useState([]);
+  const [expenses, setExpenses] = React.useState([]);
+  const [expenseCategories, setExpenseCategories] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ordersList, expensesList, categoriesList] = await Promise.all([
+        api.listOrders({ from, to }),
+        api.listExpenses({ from, to }),
+        api.listExpenseCategories(),
+      ]);
+      setOrders(Array.isArray(ordersList) ? ordersList : []);
+      setExpenses(Array.isArray(expensesList) ? expensesList : []);
+      setExpenseCategories(Array.isArray(categoriesList) ? categoriesList : []);
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to]);
+
+  const expenseCategoryById = React.useMemo(() => {
+    const map = new Map();
+    expenseCategories.forEach((c) => map.set(c.id, c));
+    return map;
+  }, [expenseCategories]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const applyShortcut = (range) => {
+    setFrom(range.from);
+    setTo(range.to);
+  };
+
+  const exportOrdersCsv = () => {
+    const header = ["Numéro commande", "Date", "Canal", "Statut", "Total", "Devise"];
+    const rows = orders.map((o) => [
+      o.publicRef || `#${o.id}`,
+      formatTime(o.createdAt),
+      ORDER_CHANNEL_LABELS[o.channel] || o.channel,
+      ORDER_STATUS_LABELS[o.orderStatus] || o.orderStatus,
+      o.total,
+      o.currencyCode || "",
+    ]);
+    downloadCsv(`commandes_${from}_${to}.csv`, [header, ...rows]);
+  };
+
+  const exportExpensesCsv = () => {
+    const header = ["Date", "Catégorie", "Libellé", "Montant", "Devise"];
+    const rows = expenses.map((exp) => [
+      String(exp.expenseDate).slice(0, 10),
+      expenseCategoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`,
+      exp.label,
+      exp.amount,
+      exp.currencyCode || "",
+    ]);
+    downloadCsv(`depenses_${from}_${to}.csv`, [header, ...rows]);
+  };
+
+  // Regroupement par devise (comme DashboardScreen/DepensesScreen) : jamais
+  // un total unique en dur sans sa devise d'origine.
+  const salesByCurrency = React.useMemo(() => {
+    const totals = new Map();
+    orders.filter((o) => o.orderStatus === "completed").forEach((o) => {
+      const code = o.currencyCode || "";
+      totals.set(code, (totals.get(code) || 0) + Number(o.total || 0));
+    });
+    return totals;
+  }, [orders]);
+
+  const expensesByCurrency = React.useMemo(() => {
+    const totals = new Map();
+    expenses.forEach((exp) => {
+      const code = exp.currencyCode || "";
+      totals.set(code, (totals.get(code) || 0) + Number(exp.amount || 0));
+    });
+    return totals;
+  }, [expenses]);
+
+  const allCurrencies = React.useMemo(
+    () => Array.from(new Set([...salesByCurrency.keys(), ...expensesByCurrency.keys()])),
+    [salesByCurrency, expensesByCurrency],
+  );
+
+  return (
+    <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+      <ErrorBanner message={error} onRetry={load} />
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button onClick={() => applyShortcut(todayRange())} style={secondaryBtnStyle}>Aujourd'hui</button>
+        <button onClick={() => applyShortcut(weekRange())} style={secondaryBtnStyle}>Cette semaine</button>
+        <button onClick={() => applyShortcut(monthRange())} style={secondaryBtnStyle}>Ce mois</button>
+        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={filterInputStyle} />
+        <span style={{ color: "var(--fg-3, #6b6b6b)", fontSize: 13 }}>à</span>
+        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={filterInputStyle} />
+      </div>
+
+      {loading ? (
+        <CenteredNote>Chargement des données de la période…</CenteredNote>
+      ) : (
+        <>
+          <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--fg-1, #0E2418)" }}>Ventes / Commandes</div>
+              <button onClick={exportOrdersCsv} disabled={orders.length === 0} style={{ ...primaryBtnStyle, opacity: orders.length === 0 ? 0.5 : 1 }}>
+                Exporter CSV
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>
+              {orders.length} commande{orders.length > 1 ? "s" : ""} sur la période sélectionnée.
+            </div>
+          </div>
+
+          <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--fg-1, #0E2418)" }}>Dépenses</div>
+              <button onClick={exportExpensesCsv} disabled={expenses.length === 0} style={{ ...primaryBtnStyle, opacity: expenses.length === 0 ? 0.5 : 1 }}>
+                Exporter CSV
+              </button>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>
+              {expenses.length} dépense{expenses.length > 1 ? "s" : ""} sur la période sélectionnée.
+            </div>
+          </div>
+
+          <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--fg-1, #0E2418)" }}>Résumé</div>
+            {allCurrencies.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucune donnée sur la période sélectionnée.</div>
+            ) : (
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {allCurrencies.map((code) => {
+                  const sales = salesByCurrency.get(code) || 0;
+                  const exp = expensesByCurrency.get(code) || 0;
+                  const net = sales - exp;
+                  return (
+                    <div key={code || "sans-devise"} style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                      <KpiCard label={`Ventes (${code || "—"})`} value={formatMoney(sales, code)} />
+                      <KpiCard label={`Dépenses (${code || "—"})`} value={formatMoney(exp, code)} />
+                      <KpiCard label={`Solde net (${code || "—"})`} value={formatMoney(net, code)} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // Ecran cuisine (SCRUM-298) — affiche sur une TV/tablette fixe en cuisine,
 // donc PAS de Shell/sidebar admin (voir app.jsx : rendu hors du wrapper
 // authentifie habituel), plein ecran, police large et contrastes forts pour
@@ -3779,7 +4218,7 @@ function KitchenLineStatusBadge({ status }) {
   );
 }
 
-function KitchenOrderCard({ order, onAdvanceLine, advancingLineId }) {
+function KitchenOrderCard({ order, onAdvanceLine, advancingLineId, onPrint }) {
   return (
     <div style={{
       background: "var(--paper, #fff)", border: "2px solid var(--border-1, #E7EBF1)",
@@ -3794,6 +4233,12 @@ function KitchenOrderCard({ order, onAdvanceLine, advancingLineId }) {
           {order.tableId ? ` · Table ${order.tableId}` : ""}
         </span>
         <span style={{ fontSize: 16, fontWeight: 700, color: "var(--fg-3, #6b6b6b)" }}>{formatTime(order.createdAt)}</span>
+        <button onClick={() => onPrint(order)} style={{
+          background: "transparent", border: "2px solid #1f6d75", color: "#1f6d75", borderRadius: 10,
+          padding: "8px 14px", fontWeight: 700, fontSize: 14, cursor: "pointer",
+        }}>
+          🖨️ Bon cuisine
+        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -3835,6 +4280,14 @@ export const KitchenScreen = () => {
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [advancingLineId, setAdvancingLineId] = React.useState(null);
+  // Bon de preparation imprimable (SCRUM-306) : commande courante selectionnee
+  // pour impression (lignes + note, sans prix — voir KitchenTicketPrintView).
+  const [printOrder, setPrintOrder] = React.useState(null);
+
+  const printKitchenTicket = (order) => {
+    setPrintOrder(order);
+    setTimeout(() => window.print(), 50);
+  };
 
   const load = React.useCallback(async () => {
     try {
@@ -3893,16 +4346,18 @@ export const KitchenScreen = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#b8860b" }}>En préparation</h2>
           {preparingOrders.map((o) => (
-            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} />
+            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} onPrint={printKitchenTicket} />
           ))}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#2f7d4f" }}>Prêtes</h2>
           {readyOrders.map((o) => (
-            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} />
+            <KitchenOrderCard key={o.id} order={o} onAdvanceLine={advanceLine} advancingLineId={advancingLineId} onPrint={printKitchenTicket} />
           ))}
         </div>
       </div>
+
+      {printOrder && <KitchenTicketPrintView order={printOrder} />}
     </div>
   );
 };
