@@ -40,7 +40,7 @@ import {
 const AVAILABLE_APPS = [
   { key: "dashboard", name: "Tableau de bord", path: "/admin/dashboard", icon: LayoutDashboard, gradient: "from-brand-500 to-brand-700" },
   { key: "pos", name: "Point de Vente", path: "/admin/pos", icon: ShoppingCart, gradient: "from-orange-400 to-orange-600" },
-  { key: "kodatill", name: "KodaTill", path: "/kodatill/", icon: Store, gradient: "from-teal-600 to-teal-800", external: true },
+  { key: "kodatill", name: "KodaTill", path: "/kodatill/", icon: Store, image: "/kodatill-icon.svg", gradient: "from-teal-600 to-teal-800", external: true },
   { key: "products", name: "Produits", path: "/admin/product", icon: Package, gradient: "from-emerald-400 to-emerald-600" },
   { key: "sale", name: "Ventes", path: "/admin/sale", icon: FileText, gradient: "from-violet-400 to-violet-600" },
   { key: "customer", name: "Clients", path: "/admin/customer", icon: Users, gradient: "from-sky-400 to-sky-600" },
@@ -169,9 +169,13 @@ export default function AppSwitcher({ open, onClose }) {
                       className="group flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-ink-50 transition"
                     >
                       <div
-                        className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${app.gradient} flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}
+                        className={`w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden ${app.image ? "" : `bg-gradient-to-br ${app.gradient}`} flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}
                       >
-                        <Icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                        {app.image ? (
+                          <img src={app.image} alt={app.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                        )}
                       </div>
                       <span className="text-xs md:text-sm text-ink-700 text-center font-medium">
                         {app.name}
