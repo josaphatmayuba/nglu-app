@@ -8,6 +8,22 @@ import { enqueueOfflineOrder, pendingCount as offlinePendingCount, processOutbox
 import { ReceiptPrintView, KitchenTicketPrintView } from "./print-templates.jsx";
 import { downloadCsv } from "./csv-utils.js";
 
+// Detection d'une coupure reseau/serveur reelle (fix bug 3, SCRUM-304) :
+// navigator.onLine ne reflete que l'etat de l'interface reseau (Wi-Fi
+// connecte), pas la joignabilite du serveur (portail captif, box internet en
+// panne mais Wi-Fi local actif) — dans ce cas fetch() rejette avec un
+// TypeError ("Failed to fetch" / "NetworkError...") plutot qu'une reponse
+// HTTP normale (qui elle est deja formatee "API <status> ..." par jsonFetch).
+// On distingue ainsi une vraie coupure d'une erreur applicative (4xx/5xx)
+// sans ping serveur dedie : suffisant pour ce ticket (detection reactive sur
+// echec plutot que sondage actif).
+const isNetworkError = (err) => {
+  if (!err) return false;
+  if (err instanceof TypeError) return true;
+  const msg = String(err.message || err);
+  return /failed to fetch|networkerror|load failed/i.test(msg);
+};
+
 // Montants : jamais de devise en dur, toujours celle retournee par l'API
 // (product.currencyCode / order.currencyCode / session.currencyCode).
 const formatMoney = (amount, currencyCode) => {
@@ -368,7 +384,7 @@ function ZReportModal({ closedSession, movements, onClose }) {
 
 // Ecran de paiement — choix methode(s), multi-paiement (ex: 30$ especes +
 // reste en carte), appelle POST /orders/:id/payments pour chaque saisie.
-function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline }) {
+function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetworkError }) {
   const currencyCode = order.currencyCode;
   const due = Number(order.dueTotal ?? order.total);
   // Hors-ligne (SCRUM-304) : seul le paiement especes est autorise (les
@@ -458,7 +474,17 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline }) {
       const updated = await api.setOrderStatus(order.id, { status: "completed" });
       onDone(updated);
     } catch (err) {
-      setError(err.message || String(err));
+      // Coupure reseau/serveur reelle detectee (fix bug 3) : on ne bloque pas
+      // la vente sur une erreur affichee sans issue — on bascule le parent en
+      // mode offline pour que l'utilisateur puisse retenter via le chemin de
+      // mise en file (offline=true rouvrira ce panneau avec paiement especes
+      // uniquement, via enqueueOfflineOrder).
+      if (isNetworkError(err) && onNetworkError) {
+        onNetworkError();
+        setError("Connexion perdue — repassage en mode hors-ligne, veuillez réessayer le paiement.");
+      } else {
+        setError(err.message || String(err));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -917,6 +943,17 @@ export const CaisseScreen = () => {
       });
       setCheckoutOrder(order);
     } catch (err) {
+      // Coupure reseau/serveur reelle (fix bug 3) : navigator.onLine peut
+      // rester vrai (Wi-Fi local actif, portail captif/box en panne) alors
+      // que l'appel echoue reellement. On bascule isOnline a false pour que
+      // l'utilisateur puisse retenter directement sur le chemin offline
+      // (mise en file) au lieu de rester bloque sur une erreur sans issue.
+      if (isNetworkError(err)) {
+        setIsOnline(false);
+        setCheckoutError(null);
+        startCheckout();
+        return;
+      }
       setCheckoutError(err.message || String(err));
     } finally {
       setCheckoutSubmitting(false);
@@ -1152,6 +1189,7 @@ export const CaisseScreen = () => {
           onCancel={() => setCheckoutOrder(null)}
           paymentMethods={paymentMethods}
           offline={!isOnline}
+          onNetworkError={() => setIsOnline(false)}
         />
       )}
 

@@ -20,7 +20,34 @@ cacheDb.version(2).stores({
 
 const STATUS = { pending: "pending", syncing: "syncing", done: "done", error: "error" };
 
+// Delai au-dela duquel une entree restee en "syncing" est consideree comme
+// abandonnee (app/onglet ferme pendant l'appel reseau : tablette en veille,
+// page tuee) et requalifiee en "pending" pour repartir au prochain tick —
+// fix bug 2 (SCRUM-304) : sans ca, ces entrees ne sont plus jamais
+// selectionnees ni par le worker normal (qui ne lit que "pending") ni par
+// retryOutbox (qui ne lit que "error"), la vente est perdue silencieusement.
+// Marge large au-dela d'un timeout reseau normal pour ne pas requalifier une
+// synchronisation legitimement en cours (autre onglet/tick).
+const STUCK_SYNCING_MS = 60 * 1000;
+
 let _running = false;
+
+// Repasse en "pending" toute entree "syncing" depuis plus de STUCK_SYNCING_MS
+// (detecte via syncStartedAt, pose au moment ou l'entree passe en syncing).
+// Requalification ciblee par age, pas un reset aveugle de tout "syncing"
+// (qui casserait un sync legitimement en cours ailleurs).
+async function reclaimStuckSyncing() {
+  const cutoff = Date.now() - STUCK_SYNCING_MS;
+  const stuck = await cacheDb.outbox
+    .where("status").equals(STATUS.syncing)
+    .filter((item) => !item.syncStartedAt || item.syncStartedAt < cutoff)
+    .toArray();
+  if (!stuck.length) return;
+  await Promise.all(
+    stuck.map((item) => cacheDb.outbox.update(item.id, { status: STATUS.pending, syncStartedAt: null })),
+  );
+  window.dispatchEvent(new CustomEvent("kodatill:outbox-changed"));
+}
 
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
@@ -84,10 +111,18 @@ export async function processOutbox() {
   if (!navigator.onLine) return;
   _running = true;
   try {
+    // Recupere d'abord les entrees bloquees en "syncing" (fix bug 2) avant de
+    // selectionner les "pending" : sinon une entree abandonnee lors d'un tick
+    // precedent resterait invisible pour toujours.
+    await reclaimStuckSyncing();
+
     const pending = await cacheDb.outbox.where("status").equals(STATUS.pending).toArray();
     if (!pending.length) return;
 
-    await cacheDb.outbox.where("status").equals(STATUS.pending).modify({ status: STATUS.syncing });
+    await cacheDb.outbox.where("status").equals(STATUS.pending).modify({
+      status: STATUS.syncing,
+      syncStartedAt: Date.now(),
+    });
     window.dispatchEvent(new CustomEvent("kodatill:outbox-changed"));
     window.dispatchEvent(new CustomEvent("kodatill:sync-start", { detail: { count: pending.length } }));
 
@@ -102,6 +137,7 @@ export async function processOutbox() {
       // tout en pending pour retenter au prochain online, pas d'erreur fatale.
       await cacheDb.outbox.where("status").equals(STATUS.syncing).modify({
         status: STATUS.pending,
+        syncStartedAt: null,
         lastError: String(err.message || err),
       });
       window.dispatchEvent(new CustomEvent("kodatill:outbox-changed"));

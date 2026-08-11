@@ -1,13 +1,21 @@
 import { createHash } from "crypto";
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   ktBranches,
   ktCategories,
+  ktModifierGroups,
   ktModifiers,
   ktOrderLines,
   ktOrders,
+  ktProductModifierGroups,
   ktProducts,
   ktProductVariants,
   ktQrCodes,
@@ -149,6 +157,22 @@ export class PublicService {
    * somme des priceDelta des modificateurs choisis. Meme formule que
    * screens.jsx (client CaisseScreen), gardee ici cote serveur comme source
    * de verite pour le canal public.
+   *
+   * SCRUM-296 (durcissement) : sur ce canal anonyme, chaque identifiant reçu
+   * est traite comme hostile. Trois garde-fous :
+   *  1. Un modifierId n'est accepte que s'il appartient a un groupe
+   *     effectivement associe a CE produit via kt_product_modifier_groups
+   *     (meme chainage que VariantsService.getSaleOptions). Sans cela, un
+   *     modificateur "remise" d'un autre produit de la meme organisation
+   *     pouvait etre applique a n'importe quel article.
+   *  2. Les regles minSelect/maxSelect de chaque groupe associe sont
+   *     verifiees (un groupe obligatoire ne peut etre esquive, un groupe
+   *     mono-choix ne peut etre cumule).
+   *  3. Le prix unitaire final ne peut pas etre negatif. On rejette au lieu
+   *     de plafonner a 0 : un total negatif comme un article offert non voulu
+   *     traduisent soit une attaque, soit une erreur de configuration du
+   *     catalogue — les deux meritent d'etre signales, pas absorbes en
+   *     silence.
    */
   private async resolveLinePrice(
     productId: number,
@@ -192,22 +216,88 @@ export class PublicService {
       namePart += ` — ${variantRows[0].name}`;
     }
 
-    if (modifierIds?.length) {
-      const modifierRows = await this.db
-        .select()
-        .from(ktModifiers)
-        .where(
-          and(
-            inArray(ktModifiers.id, modifierIds),
-            eq(ktModifiers.organizationId, orgId),
-            eq(ktModifiers.status, "true"),
-          ),
+    // Groupes de modificateurs REELLEMENT associes a ce produit : c'est le
+    // seul perimetre dans lequel un modifierId envoye par le client est
+    // recevable. Charge meme si aucun modifierId n'est fourni, car il faut
+    // pouvoir detecter un groupe obligatoire (minSelect > 0) laisse vide.
+    const groupLinks = await this.db
+      .select({ groupId: ktProductModifierGroups.groupId })
+      .from(ktProductModifierGroups)
+      .where(eq(ktProductModifierGroups.productId, productId));
+
+    const allowedGroups = groupLinks.length
+      ? await this.db
+          .select()
+          .from(ktModifierGroups)
+          .where(
+            and(
+              inArray(
+                ktModifierGroups.id,
+                groupLinks.map((g) => g.groupId),
+              ),
+              eq(ktModifierGroups.organizationId, orgId),
+              eq(ktModifierGroups.status, "true"),
+            ),
+          )
+      : [];
+
+    // Modificateurs actifs de ces groupes uniquement : tout id hors de cet
+    // ensemble est rejete, jamais ignore silencieusement.
+    const allowedModifiers = allowedGroups.length
+      ? await this.db
+          .select()
+          .from(ktModifiers)
+          .where(
+            and(
+              inArray(
+                ktModifiers.groupId,
+                allowedGroups.map((g) => g.id),
+              ),
+              eq(ktModifiers.organizationId, orgId),
+              eq(ktModifiers.status, "true"),
+            ),
+          )
+      : [];
+
+    const requestedIds = [...new Set(modifierIds ?? [])];
+    const selected = requestedIds.map((id) => {
+      const modifier = allowedModifiers.find((m) => m.id === id);
+      if (!modifier) {
+        throw new BadRequestException(
+          `Le modificateur ${id} n'est pas propose pour le produit ${productId}.`,
         );
-      if (modifierRows.length !== modifierIds.length) {
-        throw new NotFoundException("Un ou plusieurs modificateurs sont introuvables.");
       }
-      unitPrice += modifierRows.reduce((s, m) => s + Number(m.priceDelta), 0);
-      namePart += ` (${modifierRows.map((m) => m.name).join(", ")})`;
+      return modifier;
+    });
+
+    // Cardinalite par groupe (minSelect/maxSelect) sur l'ensemble des groupes
+    // associes au produit, y compris ceux dont aucun modificateur n'a ete
+    // envoye (cas du groupe obligatoire esquive).
+    for (const group of allowedGroups) {
+      const count = selected.filter((m) => m.groupId === group.id).length;
+      if (count < group.minSelect) {
+        throw new BadRequestException(
+          `Le groupe "${group.name}" exige au moins ${group.minSelect} choix (${count} recu(s)).`,
+        );
+      }
+      if (count > group.maxSelect) {
+        throw new BadRequestException(
+          `Le groupe "${group.name}" autorise au plus ${group.maxSelect} choix (${count} recu(s)).`,
+        );
+      }
+    }
+
+    if (selected.length) {
+      unitPrice += selected.reduce((sum, m) => sum + Number(m.priceDelta), 0);
+      namePart += ` (${selected.map((m) => m.name).join(", ")})`;
+    }
+
+    // Plancher de securite : un prix unitaire negatif ferait baisser le total
+    // de la commande. On refuse plutot que de plafonner a 0 (cf. doc ci-dessus).
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new BadRequestException(
+        `Prix unitaire invalide pour le produit ${productId}.`,
+      );
     }
 
     return { name: namePart, unitPrice, currencyCode: product.currencyCode };

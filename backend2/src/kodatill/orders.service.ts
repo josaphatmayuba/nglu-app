@@ -609,6 +609,22 @@ export class OrdersService {
    * decrement peut echouer silencieusement (stock insuffisant/perime pendant
    * la periode hors-ligne) sans jamais bloquer ni faire echouer la
    * resynchronisation de la vente elle-meme.
+   *
+   * Idempotence des paiements (fix SCRUM-304 bug 1) : `create` est deja
+   * idempotent via clientUuid (contrainte unique en DB), mais addPayment ne
+   * porte aucune cle d'idempotence — si un replay du meme lot se produit
+   * (reponse HTTP perdue apres un sync reussi cote serveur, client qui remet
+   * tout le lot pending), rejouer addPayment dupliquerait le paiement. On
+   * choisit ici une idempotence "au niveau montant" plutot qu'un identifiant
+   * dedie sur kt_payments (pas de migration necessaire) : avant d'ajouter les
+   * paiements d'une commande, on verifie si son paidTotal courant couvre deja
+   * le montant du lot envoye pour ce clientUuid — si oui, la commande est
+   * consideree deja payee par un sync precedent et on saute l'ajout. Ce choix
+   * est acceptable ici car le flux offline de KodaTill n'envoie qu'un seul
+   * paiement especes par commande (voir PaymentPanel#confirm, mode offline) :
+   * il n'y a pas de scenario legitime ou un meme clientUuid arriverait deux
+   * fois avec des paiements differents mais un total identique par coincidence
+   * suivi d'un vrai paiement complementaire attendu.
    */
   async sync(input: { orders: SyncOrderDto[] }, orgId: number, userId: number) {
     const results: Array<{
@@ -624,25 +640,48 @@ export class OrdersService {
         const { payments, ...createInput } = orderInput;
         const order = await this.create(createInput, orgId, userId, "draft");
 
-        for (const payment of payments ?? []) {
-          await this.addPayment(
-            order.id,
-            {
-              methodId: payment.methodId,
-              amount: payment.amount,
-              currencyCode: payment.currencyCode,
-            } as CreateOrderPaymentDto,
-            orgId,
-            userId,
-          );
+        const batchPaymentsTotal = this.round2(
+          (payments ?? []).reduce((s, p) => s + Number(p.amount), 0),
+        );
+        const alreadyPaid = Number(order.paidTotal ?? 0);
+
+        // Deja couvert par un sync precedent (replay du meme lot) : on ne
+        // rejoue pas addPayment pour cette commande.
+        const paymentsAlreadyApplied = batchPaymentsTotal > 0 && alreadyPaid >= batchPaymentsTotal - 0.001;
+
+        if (!paymentsAlreadyApplied) {
+          for (const payment of payments ?? []) {
+            await this.addPayment(
+              order.id,
+              {
+                methodId: payment.methodId,
+                amount: payment.amount,
+                currencyCode: payment.currencyCode,
+              } as CreateOrderPaymentDto,
+              orgId,
+              userId,
+            );
+          }
         }
 
         // Meme comportement que la caisse en ligne (PaymentPanel) : une fois
         // entierement encaissee, la commande passe directement a "completed"
         // (vente boutique, pas de flux preparation restaurant).
-        const finalOrder = (payments ?? []).length
-          ? await this.updateStatus(order.id, "completed", orgId, userId)
-          : order;
+        let finalOrder = order;
+        if ((payments ?? []).length) {
+          const currentStatus = (await this.findOneInternal(this.db, order.id, orgId)).orderStatus as OrderStatus;
+          if (currentStatus === "completed") {
+            // Deja au statut cible (replay apres un sync precedent reussi
+            // cote serveur mais dont la reponse s'est perdue) : succes, pas
+            // une erreur — ne PAS appeler updateStatus qui rejetterait cette
+            // transition depuis un etat terminal. Comportement reserve a ce
+            // contexte de resync ; POST /orders/:id/status (caisse en ligne)
+            // continue de rejeter normalement les transitions invalides.
+            finalOrder = await this.findOneInternal(this.db, order.id, orgId);
+          } else {
+            finalOrder = await this.updateStatus(order.id, "completed", orgId, userId);
+          }
+        }
 
         results.push({
           clientUuid: orderInput.clientUuid,
