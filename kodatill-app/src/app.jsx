@@ -170,7 +170,10 @@ function App() {
       case "commandes":   return <CommandesScreen />;
       case "stock":       return <StockScreen />;
       case "ingredients": return <IngredientsScreen />;
-      case "caisse":      return <CaisseScreen />;
+      // onNav = setRoute : la bottom nav dediee de CaisseScreen (mockup
+      // surf-pos/surf-posm) reutilise le meme routeur que la Sidebar plutot
+      // que d'inventer un mecanisme de navigation separe.
+      case "caisse":      return <CaisseScreen onNav={setRoute} />;
       case "depenses":    return <DepensesScreen />;
       case "rapports":    return <RapportsScreen />;
       case "scan":        return <ScanScreen />;
@@ -188,7 +191,11 @@ function App() {
     <div style={{ height: "100vh", display: "flex", overflow: "hidden", background: "var(--bg-app, #FBF8F2)" }}>
       <Sidebar active={route} onNav={setRoute} nav={nav} />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
-        <Topbar title={meta.title} subtitle={meta.subtitle} />
+        {/* CaisseScreen a sa propre topbar dediee (mockup surf-pos/surf-posm,
+            logo+POS+service+recherche/scan/wifi/notifications/avatar) —
+            le Topbar generique ne s'affiche donc pas pour cette route, pour
+            eviter un double bandeau. */}
+        {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} />}
         <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>

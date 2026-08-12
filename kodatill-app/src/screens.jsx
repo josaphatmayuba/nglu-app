@@ -6,12 +6,18 @@ import {
   Search, X, Printer, ScanLine, Wifi, WifiOff, Package,
   // Dashboard (KPI) et Produits — cf. mockup/KodaTill/KodaTill.html
   ShoppingBag, CircleDollarSign, TrendingDown, Pencil, Plus,
+  // CaisseScreen — reconstruction fidele au mockup POS (surf-pos/surf-posm,
+  // KodaTill.html lignes 470-616 + JS lignes 890-941) : topbar dediee, tuiles
+  // categories, cartes produit, onglets Addition/Actions/Client, bottom nav.
+  ChevronDown, ChevronUp, Bell, MoreVertical, ReceiptText, Utensils,
+  ArrowLeftRight, Menu as MenuIcon, CreditCard,
 } from "lucide-react";
 import { api } from "./api.js";
 import { replaceCatalogCache, readCatalogCache, getCatalogMeta } from "./offline-db.js";
 import { enqueueOfflineOrder, pendingCount as offlinePendingCount, processOutbox, startOutboxWorker } from "./offline-outbox.js";
 import { ReceiptPrintView, KitchenTicketPrintView } from "./print-templates.jsx";
 import { downloadCsv } from "./csv-utils.js";
+import { Brand } from "./icons.jsx";
 
 // Detection d'une coupure reseau/serveur reelle (fix bug 3, SCRUM-304) :
 // navigator.onLine ne reflete que l'etat de l'interface reseau (Wi-Fi
@@ -36,6 +42,40 @@ const formatMoney = (amount, currencyCode) => {
   const value = Number.isFinite(n) ? n.toFixed(2) : "0.00";
   return `${value} ${currencyCode || ""}`.trim();
 };
+
+// Initiales utilisateur pour l'avatar de la topbar POS (mockup surf-pos ligne
+// ~487 : cercle bleu "AD"). Duplique volontairement le tres court
+// readCurrentUser() prive de shell.jsx (non exporte) plutot que d'exporter ce
+// detail interne juste pour CaisseScreen — meme source (localStorage
+// "user"/"email"), meme logique d'initiales.
+const readCurrentUserInitials = () => {
+  try {
+    const name = (localStorage.getItem("user") || "").trim();
+    const email = (localStorage.getItem("email") || "").trim();
+    const display = name || email || "";
+    if (!display) return "?";
+    return display.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?";
+  } catch {
+    return "?";
+  }
+};
+
+// Palette cyclique pour les tuiles categories de la caisse (mockup
+// KodaTill.html lignes ~891, posCats a une couleur codee en dur par categorie
+// NOMMEE — ici les categories viennent de l'API (dynamiques, organisation par
+// organisation), donc pas de mapping nom->couleur possible : on fait tourner
+// cette palette Tailwind (memes teintes que le mockup : emerald/amber/blue/
+// pink/violet/red/teal) par index d'affichage. Choix documente, pas de
+// couleur inventee hors de cette liste.
+const POS_CATEGORY_COLORS = [
+  "#10b981", // emerald-500
+  "#f59e0b", // amber-500
+  "#3b82f6", // blue-500
+  "#ec4899", // pink-500
+  "#8b5cf6", // violet-500
+  "#ef4444", // red-500
+  "#0d9488", // teal-600
+];
 
 // Libelles par defaut affiches si une methode de paiement n'a pas encore ete
 // configuree avec un nom personnalise (ex: methode "cash" sans nom saisi).
@@ -669,7 +709,12 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
   );
 }
 
-export const CaisseScreen = () => {
+// onNav optionnel : callback de navigation deja utilise par Sidebar
+// (app.jsx setRoute) pour changer d'ecran — permet a la bottom nav dediee de
+// CaisseScreen (mockup surf-pos/surf-posm) de reutiliser le meme routeur
+// plutot que d'inventer un mecanisme separe. undefined = pas de navigation
+// (ex. rendu isole/tests), les boutons bottom nav deviennent alors inactifs.
+export const CaisseScreen = ({ onNav } = {}) => {
   const [session, setSession] = React.useState(undefined); // undefined=chargement, null=aucune, objet=ouverte
   const [sessionError, setSessionError] = React.useState(null);
 
@@ -743,6 +788,26 @@ export const CaisseScreen = () => {
   // barre flottante — pattern repris de l'esprit du menu client mobile du
   // mockup (barre panier en bas -> sheet plein ecran par-dessus le contenu).
   const [showTicketSheet, setShowTicketSheet] = React.useState(false);
+
+  // Onglets du panneau commande (mockup surf-pos/surf-posm lignes ~516-520 et
+  // ~597-601 : "Addition / Actions / Client"). "Addition" = contenu metier
+  // existant (lignes ticket + totaux + paiement), inchange. "Actions"/
+  // "Client" : aucune fonctionnalite equivalente ailleurs dans CaisseScreen ou
+  // l'app (pas de remise/note de commande, pas de fiche client dans le
+  // module KodaTill) -> places en placeholder visuel uniquement, pas de
+  // logique inventee.
+  const [ticketTab, setTicketTab] = React.useState("addition");
+
+  // Message ephemere pour les actions du mockup sans equivalent fonctionnel
+  // dans l'app (selecteur de service, tri, notifications, Transactions/Plus
+  // de la bottom nav...) — meme esprit que le toast() du mockup HTML, sans
+  // inventer de comportement reel derriere.
+  const [notice, setNotice] = React.useState(null);
+  const showNotice = (msg) => {
+    setNotice(msg);
+    window.clearTimeout(showNotice._t);
+    showNotice._t = window.setTimeout(() => setNotice(null), 2500);
+  };
 
   React.useEffect(() => {
     const mql = window.matchMedia("(max-width: 900px)");
@@ -1153,60 +1218,165 @@ export const CaisseScreen = () => {
   // pas remonter/perdre l'etat de ses enfants a chaque re-render.
   const ticketPanelContent = (
     <>
-      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12, color: "var(--fg-1, #0E2418)" }}>Ticket</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 16, color: "var(--fg-1, #0E2418)" }}>Ticket</div>
+        {/* icone MoreVertical, cf. data-lucide="more-vertical" mockup ligne ~514
+            ("Options commande") : aucune option de commande equivalente
+            n'existe dans l'app (pas de menu contextuel commande) -> notice
+            seule, pas de comportement invente. */}
+        <button onClick={() => showNotice("Options de commande — fonctionnalité à venir")}
+          aria-label="Options commande"
+          style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", alignItems: "center" }}>
+          <MoreVertical size={16} />
+        </button>
+      </div>
 
-      {checkoutError && <ErrorBanner message={checkoutError} onRetry={startCheckout} />}
-
-      <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-        {ticket.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucun article. Clique sur un produit pour l'ajouter.</div>
-        ) : ticket.map((l) => (
-          <div key={l.key} style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 8, borderBottom: "1px solid var(--border-1, #E7EBF1)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 600 }}>
-              <span>{l.name}</span>
-              {/* icone X, cf. data-lucide="x" dans le mockup (fermeture/suppression) */}
-              <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)", display: "flex", alignItems: "center" }}>
-                <X size={14} />
-              </button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button onClick={() => changeQty(l.key, -1)} style={qtyBtnStyle}>−</button>
-                <span style={{ minWidth: 18, textAlign: "center" }}>{l.qty}</span>
-                <button onClick={() => changeQty(l.key, 1)} style={qtyBtnStyle}>+</button>
-              </div>
-              <span>{formatMoney(l.unitPrice, l.currencyCode)} / unité</span>
-            </div>
-            <div style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
-              {formatMoney(l.qty * l.unitPrice, l.currencyCode)}
-            </div>
-          </div>
+      {/* Onglets Addition/Actions/Client, cf. mockup lignes ~516-520 (surf-pos)
+          et ~597-601 (surf-posm). Verifie avant d'ajouter : aucune
+          fonctionnalite de remise/note de commande ni de fiche client
+          n'existe ailleurs dans CaisseScreen/l'app -> "Actions" et "Client"
+          restent des placeholders visuels, pas de logique inventee. */}
+      <div style={{ display: "flex", gap: 16, fontSize: 12.5, fontWeight: 600, borderBottom: "1px solid var(--border-1, #E7EBF1)", marginBottom: 12 }}>
+        {[["addition", "Addition"], ["actions", "Actions"], ["client", "Client"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTicketTab(id)}
+            style={{
+              background: "transparent", border: 0, cursor: "pointer", padding: "0 0 8px 0",
+              color: ticketTab === id ? "#2563eb" : "var(--fg-3, #6b6b6b)",
+              borderBottom: ticketTab === id ? "2px solid #2563eb" : "2px solid transparent",
+            }}>
+            {label}
+          </button>
         ))}
       </div>
 
-      <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", marginTop: 12, paddingTop: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginBottom: 4 }}>
-          <span>Sous-total</span>
-          <span>{formatMoney(subtotal, ticketCurrency)}</span>
+      {ticketTab !== "addition" ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontSize: 13, color: "var(--fg-3, #6b6b6b)", textAlign: "center" }}>
+          Fonctionnalité à venir
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)", marginBottom: 12 }}>
-          <span>Total</span>
-          <span>{formatMoney(subtotal, ticketCurrency)}</span>
-        </div>
-        <button onClick={() => { setShowTicketSheet(false); startCheckout(); }} disabled={!ticket.length || checkoutSubmitting}
-          style={{
-            width: "100%", background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 10,
-            padding: "14px 16px", fontWeight: 700, fontSize: 15, cursor: "pointer",
-            opacity: !ticket.length || checkoutSubmitting ? 0.5 : 1,
-          }}>
-          {checkoutSubmitting ? "Création…" : `Encaisser ${formatMoney(subtotal, ticketCurrency)}`}
-        </button>
-      </div>
+      ) : (
+        <>
+          {checkoutError && <ErrorBanner message={checkoutError} onRetry={startCheckout} />}
+
+          <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+            {ticket.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucun article. Clique sur un produit pour l'ajouter.</div>
+            ) : ticket.map((l) => (
+              <div key={l.key} style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 8, borderBottom: "1px solid var(--border-1, #E7EBF1)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 600 }}>
+                  <span>{l.name}</span>
+                  {/* icone X, cf. data-lucide="x" dans le mockup (fermeture/suppression) */}
+                  <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)", display: "flex", alignItems: "center" }}>
+                    <X size={14} />
+                  </button>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => changeQty(l.key, -1)} style={qtyBtnStyle}>−</button>
+                    <span style={{ minWidth: 18, textAlign: "center" }}>{l.qty}</span>
+                    <button onClick={() => changeQty(l.key, 1)} style={qtyBtnStyle}>+</button>
+                  </div>
+                  <span>{formatMoney(l.unitPrice, l.currencyCode)} / unité</span>
+                </div>
+                <div style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
+                  {formatMoney(l.qty * l.unitPrice, l.currencyCode)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", marginTop: 12, paddingTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginBottom: 4 }}>
+              <span>Sous-total</span>
+              <span>{formatMoney(subtotal, ticketCurrency)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)", marginBottom: 12 }}>
+              <span>Total</span>
+              <span>{formatMoney(subtotal, ticketCurrency)}</span>
+            </div>
+            {/* icone CreditCard, cf. data-lucide="credit-card" mockup lignes
+                ~527/608 (bouton "Payer $53.17") */}
+            <button onClick={() => { setShowTicketSheet(false); startCheckout(); }} disabled={!ticket.length || checkoutSubmitting}
+              style={{
+                width: "100%", background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 10,
+                padding: "14px 16px", fontWeight: 700, fontSize: 15, cursor: "pointer",
+                opacity: !ticket.length || checkoutSubmitting ? 0.5 : 1,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              }}>
+              <CreditCard size={16} />
+              {checkoutSubmitting ? "Création…" : `Encaisser ${formatMoney(subtotal, ticketCurrency)}`}
+            </button>
+          </div>
+        </>
+      )}
     </>
   );
 
   return (
     <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden", flexDirection: "column" }}>
+      {/* Topbar dediee CaisseScreen (mockup surf-pos ligne ~478-489 / surf-posm
+          ligne ~544-556), remplace le Topbar generique de shell.jsx pour cet
+          ecran (voir app.jsx : la route "caisse" masque le Topbar generique et
+          passe onNav a CaisseScreen). Recherche/scan/wifi deja presents plus
+          bas dans l'ecran, remontes ici ; notifications sans donnees reelles
+          (pas de module notifications cote app) -> icone seule sans badge
+          compteur, pas de nombre invente. */}
+      <div style={{
+        flexShrink: 0, background: "var(--paper, #fff)", borderBottom: "1px solid var(--border-1, #E7EBF1)",
+        padding: isNarrow ? "10px 14px" : "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+      }}>
+        <Brand size={32} radius={8} />
+        <span style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isNarrow ? 15 : 16, color: "var(--fg-1, #0E2418)" }}>
+          KodaTill <span style={{ color: "#2563eb", fontSize: isNarrow ? 11 : 12, fontWeight: 800, verticalAlign: "top" }}>POS</span>
+        </span>
+        {/* Selecteur "Service" (mockup : "Service midi"/"Midi") : aucune notion
+            de service (midi/soir...) n'existe cote backend/API -> bouton non
+            fonctionnel avec notice, pas d'invention de feature backend. */}
+        {!isNarrow && (
+          <button onClick={() => showNotice("Sélecteur de service — fonctionnalité à venir")}
+            style={{
+              display: "flex", alignItems: "center", gap: 4, background: "transparent",
+              border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "6px 10px",
+              fontSize: 12, fontWeight: 600, color: "var(--fg-1, #0E2418)", cursor: "pointer", marginLeft: 4,
+            }}>
+            Service midi <ChevronDown size={12} />
+          </button>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isNarrow ? 8 : 10 }}>
+          {!isNarrow && (
+            <>
+              <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Rechercher"
+                style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
+                <Search size={16} />
+              </button>
+              <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Scanner un code-barres"
+                style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
+                <ScanLine size={16} />
+              </button>
+            </>
+          )}
+          {isOnline ? <Wifi size={16} color="var(--fg-3, #6b6b6b)" /> : <WifiOff size={16} color="var(--oxblood-800, #7a1f2b)" />}
+          <button onClick={() => showNotice("Notifications — fonctionnalité à venir")} aria-label="Notifications"
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
+            <Bell size={16} />
+          </button>
+          <div style={{
+            width: 30, height: 30, borderRadius: "50%", background: "#2563eb", color: "#fff",
+            fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            {readCurrentUserInitials()}
+          </div>
+        </div>
+      </div>
+
+      {notice && (
+        <div style={{
+          flexShrink: 0, background: "#eff6ff", color: "#1d4ed8", fontSize: 12, fontWeight: 600,
+          padding: "6px 20px", borderBottom: "1px solid var(--border-1, #E7EBF1)",
+        }}>
+          {notice}
+        </div>
+      )}
+
       {/* Bandeau session — porte d'entree/sortie de la caisse, cohérent avec
           OpenSessionForm : les actions de cycle de vie de la session vivent
           dans CaisseScreen, pas dans le Dashboard (qui reste un écran de
@@ -1280,6 +1450,7 @@ export const CaisseScreen = () => {
         <div style={{ position: "relative", marginBottom: 12 }}>
           <Search size={16} color="var(--fg-3, #6b6b6b)" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
           <input
+            id="caisse-search-input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={onSearchKeyDown}
@@ -1295,27 +1466,53 @@ export const CaisseScreen = () => {
 
         {catalogError && <ErrorBanner message={catalogError} onRetry={loadCatalog} />}
 
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
+        {/* Tuiles categories (mockup lignes ~892-896/920-924, classe .cat-tile :
+            border-radius 14px, couleur pleine, icone+libelle+"N articles").
+            Les categories de l'app sont dynamiques (API), sans couleur/icone
+            Lucide dediee en base (categorie.icon = emoji libre, pas un nom
+            data-lucide) -> palette cyclique POS_CATEGORY_COLORS par index
+            (choix documente plus haut) et emoji de la categorie affiche tel
+            quel (pas d'icone Lucide inventee par categorie). "Tous" reprend le
+            meme habillage tuile pour rester coherent, en premiere position,
+            couleur neutre (ink-100 du mockup, cf. tuile "Scanner" ligne 891). */}
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
           <button onClick={() => setActiveCategoryId(null)}
             style={{
-              flexShrink: 0, padding: "8px 16px", borderRadius: 20, border: "1px solid var(--border-2, #d8c8a8)",
-              background: activeCategoryId === null ? "#1f6d75" : "transparent",
-              color: activeCategoryId === null ? "#FBF8F2" : "var(--fg-1, #0E2418)",
-              fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
+              flexShrink: 0, minWidth: isNarrow ? 86 : 104, borderRadius: 14, cursor: "pointer",
+              padding: isNarrow ? 10 : 12, textAlign: "left", border: activeCategoryId === null ? "2px solid #0f172a" : "1px solid transparent",
+              background: "#e2e8f0", color: "#1f2937",
             }}>
-            Tous
+            <div style={{ fontSize: isNarrow ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>Tous</div>
           </button>
-          {categories.map((c) => (
-            <button key={c.id} onClick={() => setActiveCategoryId(c.id)}
-              style={{
-                flexShrink: 0, padding: "8px 16px", borderRadius: 20, border: "1px solid var(--border-2, #d8c8a8)",
-                background: activeCategoryId === c.id ? "#1f6d75" : "transparent",
-                color: activeCategoryId === c.id ? "#FBF8F2" : "var(--fg-1, #0E2418)",
-                fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
-              }}>
-              {c.icon ? `${c.icon} ` : ""}{c.name}
-            </button>
-          ))}
+          {categories.map((c, idx) => {
+            const color = POS_CATEGORY_COLORS[idx % POS_CATEGORY_COLORS.length];
+            const count = products.filter((p) => p.categoryId === c.id).length;
+            return (
+              <button key={c.id} onClick={() => setActiveCategoryId(c.id)}
+                style={{
+                  flexShrink: 0, minWidth: isNarrow ? 86 : 104, borderRadius: 14, cursor: "pointer",
+                  padding: isNarrow ? 10 : 12, textAlign: "left", color: "#fff",
+                  background: color, border: activeCategoryId === c.id ? "2px solid #0f172a" : "2px solid transparent",
+                }}>
+                <div style={{ fontSize: isNarrow ? 16 : 18, marginBottom: 6, lineHeight: 1 }}>{c.icon || "🏷️"}</div>
+                <div style={{ fontSize: isNarrow ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>{c.name}</div>
+                <div style={{ fontSize: isNarrow ? 9 : 10, opacity: 0.85 }}>{count} article{count > 1 ? "s" : ""}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "4px 0 10px" }}>
+          <h3 style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isNarrow ? 14.5 : 16, margin: 0, color: "var(--fg-1, #0E2418)" }}>
+            Nos articles
+          </h3>
+          {/* Tri "Le plus populaire", cf. mockup ligne ~497 : aucun critere de
+              tri/popularite n'existe cote API (pas de compteur de ventes
+              expose sur /products) -> notice seule, pas de tri invente. */}
+          <button onClick={() => showNotice("Tri des articles — fonctionnalité à venir")}
+            style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            Trier <ChevronDown size={12} />
+          </button>
         </div>
 
         {catalogLoading ? (
@@ -1328,23 +1525,74 @@ export const CaisseScreen = () => {
               <button key={p.id} onClick={() => onProductClick(p)} disabled={saleOptionsLoading}
                 style={{
                   textAlign: "left", cursor: "pointer", border: "1px solid var(--border-1, #E7EBF1)",
-                  borderRadius: 12, padding: 14, background: "var(--paper, #fff)", display: "flex",
-                  flexDirection: "column", gap: 8, minHeight: 90, opacity: saleOptionsLoading ? 0.7 : 1,
+                  borderRadius: 14, padding: 0, background: "var(--paper, #fff)", display: "flex",
+                  flexDirection: "column", overflow: "hidden", opacity: saleOptionsLoading ? 0.7 : 1,
                 }}>
-                {/* emojiFallback = emoji choisi par l'utilisateur pour ce produit, inchange.
-                    Fallback generique -> icone Package (le mockup n'a pas de pattern dedie
-                    pour un article sans photo/emoji ; Package est l'icone la plus neutre
-                    deja utilisee dans le mockup pour "Articles", cf. data-lucide="package"
-                    ligne bottom-nav POS). */}
-                <div style={{ fontSize: 24 }}>
-                  {p.emojiFallback || <Package size={22} color="var(--fg-3, #6b6b6b)" />}
+                {/* Zone image (mockup lignes ~906/928 : degrade gris stone-200->stone-400
+                    + emoji). emojiFallback = emoji choisi par l'utilisateur pour ce
+                    produit, inchange. Fallback generique -> icone Package (pas de
+                    pattern dedie dans le mockup pour un article sans photo/emoji ;
+                    Package = icone neutre deja utilisee mockup "Articles" bottom-nav). */}
+                <div style={{
+                  position: "relative", height: isNarrow ? 76 : 96,
+                  background: "linear-gradient(135deg, #d6d3d1, #a8a29e)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: isNarrow ? 30 : 36,
+                }}>
+                  {p.emojiFallback || <Package size={26} color="#fff" />}
+                  {/* Bouton rond "+" flottant, cf. mockup lignes ~908/930 : le clic
+                      reste sur toute la carte (onProductClick), ce bouton est
+                      purement visuel/redondant avec le clic carte, comme demandé. */}
+                  <span style={{
+                    position: "absolute", bottom: 8, right: 8, width: isNarrow ? 24 : 28, height: isNarrow ? 24 : 28,
+                    borderRadius: "50%", background: "#fff", boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Plus size={isNarrow ? 13 : 15} color="#1f2937" />
+                  </span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--fg-1, #0E2418)" }}>{p.name}</div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#1f6d75" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
+                <div style={{ padding: isNarrow ? 10 : 12, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontWeight: 700, fontSize: isNarrow ? 12 : 13.5, color: "var(--fg-1, #0E2418)", lineHeight: 1.2 }}>{p.name}</div>
+                  <div style={{ fontSize: isNarrow ? 12 : 12.5, color: "var(--fg-3, #6b6b6b)" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
+                </div>
               </button>
             ))}
           </div>
         )}
+
+        {/* Bottom nav (mockup lignes ~501-507/582-587) : "Menu" = cet ecran
+            (actif par defaut, pas de navigation). "Commandes"/"Articles"
+            pointent vers les routes existantes de l'app via onNav (meme
+            routeur que la Sidebar, app.jsx setRoute) — mapping documente
+            ci-dessous. "Transactions"/"Plus" : aucun ecran equivalent dans
+            l'app -> notice seule, pas d'ecran invente. */}
+        <div style={{
+          marginTop: 16, flexShrink: 0, background: "var(--paper, #fff)",
+          border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 16,
+          padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-around", gap: 6,
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: "#2563eb", fontWeight: 700, fontSize: 11, borderBottom: "2px solid #2563eb", paddingBottom: 4 }}>
+            <Utensils size={16} /> Menu
+          </div>
+          {/* "Commandes" -> route "commandes" (CommandesScreen, historique des ventes) */}
+          <button onClick={() => (onNav ? onNav("commandes") : showNotice("Commandes — navigation indisponible"))}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+            <ReceiptText size={16} /> Commandes
+          </button>
+          <button onClick={() => showNotice("Transactions — fonctionnalité à venir")}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+            <ArrowLeftRight size={16} /> Transactions
+          </button>
+          {/* "Articles" -> route "produits" (ProduitsScreen, catalogue & prix) */}
+          <button onClick={() => (onNav ? onNav("produits") : showNotice("Articles — navigation indisponible"))}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+            <Package size={16} /> Articles
+          </button>
+          <button onClick={() => showNotice("Plus — fonctionnalité à venir")}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+            <MenuIcon size={16} /> Plus
+          </button>
+        </div>
       </div>
 
       {/* Layout large (comportement d'origine, inchange) : panneau Ticket
@@ -1359,25 +1607,38 @@ export const CaisseScreen = () => {
       )}
 
       {/* Layout etroit (tablette portrait) : le panneau Ticket n'est plus
-          affiche en continu (il ecraserait le catalogue) — inspire du menu
-          client mobile du mockup (barre panier flottante en bas -> sheet
-          plein ecran par-dessus le contenu, meme contenu que l'aside, jamais
-          duplique/reecrit). */}
+          affiche en continu (il ecraserait le catalogue) — reprend desormais
+          la structure exacte de la barre addition du mockup posm (lignes
+          ~574-579 : fond ink-900, icone receipt-text + badge count, libelle
+          + nb articles, total, chevron-up), remplace l'ancien emoji 🛒
+          generique. */}
       {isNarrow && ticket.length > 0 && !showTicketSheet && (
         <button
           onClick={() => setShowTicketSheet(true)}
           style={{
             position: "absolute", left: 12, right: 12, bottom: 12, zIndex: 40,
-            background: "linear-gradient(135deg, #1f6d75, #123F46)", color: "#FBF8F2",
-            border: 0, borderRadius: 14, padding: "14px 18px", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.25)", fontWeight: 700, fontSize: 14.5,
+            background: "#0f172a", color: "#fff",
+            border: 0, borderRadius: 16, padding: "12px 16px", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 12,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
           }}>
-          <span>🛒 {ticket.reduce((s, l) => s + l.qty, 0)} article(s)</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {formatMoney(subtotal, ticketCurrency)}
-            <span aria-hidden="true">▲</span>
+          <span style={{ position: "relative", display: "flex" }}>
+            <ReceiptText size={20} />
+            <span style={{
+              position: "absolute", top: -8, right: -8, width: 16, height: 16, borderRadius: "50%",
+              background: "#3b82f6", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {ticket.reduce((s, l) => s + l.qty, 0)}
+            </span>
           </span>
+          <span style={{ flex: 1, textAlign: "left", lineHeight: 1.3 }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Ticket en cours</div>
+            <div style={{ fontSize: 10.5, color: "#94a3b8" }}>{ticket.reduce((s, l) => s + l.qty, 0)} article(s)</div>
+          </span>
+          <span style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: 16 }}>
+            {formatMoney(subtotal, ticketCurrency)}
+          </span>
+          <ChevronUp size={16} />
         </button>
       )}
 
