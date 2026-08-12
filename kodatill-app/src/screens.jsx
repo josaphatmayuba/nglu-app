@@ -2,6 +2,7 @@
 //  - Caisse (POS complet) : SCRUM-282 (fait, voir CaisseScreen plus bas)
 //  - Dashboard / Produits / Commandes (back-office Phase 1) : SCRUM-283
 import React from "react";
+import { Search, X, Printer, ScanLine, Wifi, WifiOff, Package } from "lucide-react";
 import { api } from "./api.js";
 import { replaceCatalogCache, readCatalogCache, getCatalogMeta } from "./offline-db.js";
 import { enqueueOfflineOrder, pendingCount as offlinePendingCount, processOutbox, startOutboxWorker } from "./offline-outbox.js";
@@ -1159,7 +1160,10 @@ export const CaisseScreen = () => {
           <div key={l.key} style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 8, borderBottom: "1px solid var(--border-1, #E7EBF1)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 600 }}>
               <span>{l.name}</span>
-              <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
+              {/* icone X, cf. data-lucide="x" dans le mockup (fermeture/suppression) */}
+              <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)", display: "flex", alignItems: "center" }}>
+                <X size={14} />
+              </button>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1210,6 +1214,14 @@ export const CaisseScreen = () => {
         <div>
           <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             Session de caisse ouverte
+            {/* Wifi/WifiOff, cf. data-lucide="wifi" dans le mockup (topbar POS) : le
+                mockup n'a pas d'etat "hors connexion" dedie, WifiOff est l'icone Lucide
+                standard pour l'etat deconnecte, pertinente ici vu le badge existant. */}
+            {isOnline ? (
+              <Wifi size={13} style={{ opacity: 0.7 }} />
+            ) : (
+              <WifiOff size={13} color="#FBF8F2" />
+            )}
             {!isOnline && (
               <span style={{
                 fontSize: 10.5, fontWeight: 700, background: "#7a1f2b", color: "#FBF8F2",
@@ -1231,6 +1243,10 @@ export const CaisseScreen = () => {
             Depuis {formatTime(session.openedAt)} · Fonds {formatMoney(session.openingFloat, session.currencyCode)}
           </div>
         </div>
+        {/* Pas d'icone Lucide pour "Ajouter un mouvement"/"Clôturer la caisse" : le
+            mockup (surf-pos, surf-posm) n'a aucun bouton equivalent pour ces actions
+            de cycle de vie de session (mouvements de caisse / cloture) — texte seul
+            conserve plutot que d'inventer une correspondance. */}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setShowMovementForm(true)} style={{
             background: "transparent", border: "1px solid rgba(251,248,242,0.5)", color: "#FBF8F2",
@@ -1252,16 +1268,25 @@ export const CaisseScreen = () => {
           caisse (catalogue+ticket), pas a toute la page. */}
       <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden", position: "relative" }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 20, overflow: "auto" }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={onSearchKeyDown}
-          placeholder="Rechercher un article ou scanner un code-barres…"
-          style={{
-            width: "100%", boxSizing: "border-box", padding: "12px 14px", borderRadius: 10,
-            border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14, marginBottom: 12,
-          }}
-        />
+        {/* Icone Search + ScanLine, cf. mockup surf-pos topbar (data-lucide="search" et
+            data-lucide="scan-line") : recherche a gauche en position absolute dans le
+            champ, scan code-barres a droite (le champ sert deja de lecteur douchette via
+            onSearchKeyDown/Enter, cf. commentaire plus haut — ScanLine illustre juste
+            cet usage, aucun comportement ajoute). */}
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <Search size={16} color="var(--fg-3, #6b6b6b)" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)" }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={onSearchKeyDown}
+            placeholder="Rechercher un article ou scanner un code-barres…"
+            style={{
+              width: "100%", boxSizing: "border-box", padding: "12px 40px 12px 38px", borderRadius: 10,
+              border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14,
+            }}
+          />
+          <ScanLine size={16} color="var(--fg-3, #6b6b6b)" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)" }} />
+        </div>
         {scanMessage && <div style={{ fontSize: 12, color: "#1f6d75", marginBottom: 8 }}>{scanMessage}</div>}
 
         {catalogError && <ErrorBanner message={catalogError} onRetry={loadCatalog} />}
@@ -1302,7 +1327,14 @@ export const CaisseScreen = () => {
                   borderRadius: 12, padding: 14, background: "var(--paper, #fff)", display: "flex",
                   flexDirection: "column", gap: 8, minHeight: 90, opacity: saleOptionsLoading ? 0.7 : 1,
                 }}>
-                <div style={{ fontSize: 24 }}>{p.emojiFallback || "🛒"}</div>
+                {/* emojiFallback = emoji choisi par l'utilisateur pour ce produit, inchange.
+                    Fallback generique -> icone Package (le mockup n'a pas de pattern dedie
+                    pour un article sans photo/emoji ; Package est l'icone la plus neutre
+                    deja utilisee dans le mockup pour "Articles", cf. data-lucide="package"
+                    ligne bottom-nav POS). */}
+                <div style={{ fontSize: 24 }}>
+                  {p.emojiFallback || <Package size={22} color="var(--fg-3, #6b6b6b)" />}
+                </div>
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--fg-1, #0E2418)" }}>{p.name}</div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: "#1f6d75" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
               </button>
@@ -1360,9 +1392,11 @@ export const CaisseScreen = () => {
               display: "flex", flexDirection: "column", boxShadow: "0 -10px 30px rgba(0,0,0,0.25)",
             }}>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -6 }}>
+              {/* icone X, cf. data-lucide="x" dans le mockup (bouton fermeture de la
+                  feuille addition posm-sheet) */}
               <button onClick={() => setShowTicketSheet(false)} aria-label="Fermer"
-                style={{ background: "transparent", border: 0, cursor: "pointer", fontSize: 20, color: "var(--fg-3, #6b6b6b)" }}>
-                ✕
+                style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", alignItems: "center" }}>
+                <X size={20} />
               </button>
             </div>
             {ticketPanelContent}
@@ -1394,13 +1428,15 @@ export const CaisseScreen = () => {
               : `Vente encaissée — commande ${confirmation.publicRef || `#${confirmation.id}`} ✓`}
           </span>
           {!confirmation._offlinePending && (
+            // icone Printer, cf. data-lucide="printer" dans le mockup (boutons
+            // "Imprimer en cuisine" / "Imprimer le reçu")
             <button onClick={() => printReceipt(confirmation)} disabled={receiptLoading}
               style={{
                 background: "#FBF8F2", color: "#1f6d75", border: 0, borderRadius: 8,
                 padding: "6px 12px", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
-                opacity: receiptLoading ? 0.7 : 1,
+                opacity: receiptLoading ? 0.7 : 1, display: "flex", alignItems: "center", gap: 6,
               }}>
-              {receiptLoading ? "…" : "Imprimer le ticket"}
+              {receiptLoading ? "…" : (<><Printer size={14} />Imprimer le ticket</>)}
             </button>
           )}
         </div>
