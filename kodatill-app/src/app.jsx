@@ -162,7 +162,17 @@ function App() {
 
   const meta = ROUTE_META[route] || ROUTE_META.dashboard;
   const nav = React.useMemo(() => navForActivityProfile(profile), [profile]);
+  // Sidebar en tiroir coulissant sous <=768px sur les ecrans back-office
+  // (meme seuil "mobile" que farmos-app/src/app.jsx useLayoutMode),
+  // accessible via le hamburger du Topbar. CaisseScreen fait exception
+  // (cf. caisseSidebarHidden plus bas) : le mockup POS (surf-pos/surf-posm)
+  // est un ecran plein cadre SANS sidebar ni hamburger, jusqu'en tablette —
+  // sa propre bottom nav dediee (Menu/Commandes/Transactions/Articles/Plus)
+  // couvre deja toute la navigation necessaire sur cet ecran.
+  const isMobile = useNarrow(768);
   const caisseSidebarHidden = useNarrow(1180);
+  const [mobileNav, setMobileNav] = React.useState(false);
+  const navWithClose = React.useCallback((r) => { setRoute(r); setMobileNav(false); }, [setRoute]);
 
   const renderScreen = () => {
     switch (route) {
@@ -171,10 +181,11 @@ function App() {
       case "commandes":   return <CommandesScreen />;
       case "stock":       return <StockScreen />;
       case "ingredients": return <IngredientsScreen />;
-      // onNav = setRoute : la bottom nav dediee de CaisseScreen (mockup
+      // onNav = navWithClose : la bottom nav dediee de CaisseScreen (mockup
       // surf-pos/surf-posm) reutilise le meme routeur que la Sidebar plutot
-      // que d'inventer un mecanisme de navigation separe.
-      case "caisse":      return <CaisseScreen onNav={setRoute} />;
+      // que d'inventer un mecanisme de navigation separe ; ferme aussi le
+      // tiroir mobile s'il etait ouvert (ex: retour depuis le hamburger).
+      case "caisse":      return <CaisseScreen onNav={navWithClose} />;
       case "depenses":    return <DepensesScreen />;
       case "rapports":    return <RapportsScreen />;
       case "scan":        return <ScanScreen />;
@@ -189,20 +200,32 @@ function App() {
   };
 
   return (
-    <div style={{ height: "100vh", display: "flex", overflow: "hidden", background: "var(--bg-app, #FBF8F2)" }}>
-      {/* CaisseScreen a deja sa propre bottom nav dediee (mockup surf-pos/
-          surf-posm, Menu/Commandes/Transactions/Articles/Plus) — la sidebar
-          principale ferait doublon et mangerait de la place en mobile/
-          tablette (<=1180px, meme seuil que le layout responsive de
-          CaisseScreen) ; le mockup POS n'a d'ailleurs aucune sidebar de nav
-          generale sur cet ecran. Desktop (>1180px) inchange. */}
-      {!(route === "caisse" && caisseSidebarHidden) && <Sidebar active={route} onNav={setRoute} nav={nav} />}
+    <div style={{ height: "100vh", display: "flex", overflow: "hidden", background: "var(--bg-app, #FBF8F2)", position: "relative" }}>
+      {/* Tiroir mobile (<=768px, meme pattern que farmos-app/src/app.jsx
+          lignes 240-256) : overlay sombre qui referme le tiroir au clic,
+          rendu seulement quand le tiroir est ouvert. N'existe jamais sur
+          la route caisse (cf. caisseSidebarHidden juste en dessous). */}
+      {route !== "caisse" && isMobile && mobileNav && (
+        <div onClick={() => setMobileNav(false)} style={{ position: "absolute", inset: 0, background: "rgba(6,32,37,0.5)", zIndex: 70 }} />
+      )}
+      {/* CaisseScreen (mockup surf-pos/surf-posm) est un ecran plein cadre
+          sans sidebar de nav generale jusqu'en tablette (<=1180px, meme
+          seuil que le layout responsive interne de CaisseScreen) — sa
+          bottom nav dediee couvre deja la navigation. Sur les autres
+          ecrans, Sidebar reste visible (desktop) ou en tiroir hamburger
+          (mobile <=768px). */}
+      {!(route === "caisse" && caisseSidebarHidden) && (
+        <div style={isMobile ? { position: "absolute", top: 0, bottom: 0, left: 0, zIndex: 75 } : { flexShrink: 0 }}>
+          <Sidebar active={route} onNav={navWithClose} nav={nav} mobile={isMobile} mobileOpen={mobileNav} />
+        </div>
+      )}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         {/* CaisseScreen a sa propre topbar dediee (mockup surf-pos/surf-posm,
             logo+POS+service+recherche/scan/wifi/notifications/avatar) —
             le Topbar generique ne s'affiche donc pas pour cette route, pour
-            eviter un double bandeau. */}
-        {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} />}
+            eviter un double bandeau, et sans hamburger (pas de sidebar sur
+            cet ecran, cf. plus haut). */}
+        {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} onHamburger={isMobile ? () => setMobileNav(true) : undefined} />}
         <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>

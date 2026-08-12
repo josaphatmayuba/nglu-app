@@ -6,6 +6,7 @@ import { Brand } from "./icons.jsx";
 import {
   LayoutDashboard, ClipboardList, Package, ArchiveRestore, Carrot,
   Calculator, Wallet, ScanLine, LineChart, Settings, ShieldCheck,
+  Menu as MenuIcon,
 } from "lucide-react";
 
 // Liens toujours presents, quelle que soit l'activite.
@@ -96,20 +97,28 @@ function readCurrentUser() {
   }
 }
 
-export const Sidebar = ({ active, onNav, nav }) => {
+// mobile/mobileOpen : meme pattern que farmos-app/src/app.jsx (Sidebar en
+// tiroir coulissant sous <=768px, position absolute + transition left,
+// ouvert/ferme via le hamburger du Topbar) — remplace le rail icone-seule
+// permanent qui existait avant sous ce seuil (masquait trop de contexte,
+// pas d'equivalent dans FarmOS).
+export const Sidebar = ({ active, onNav, nav, mobile, mobileOpen }) => {
   const user = readCurrentUser();
   const superOwner = isSuperOwner();
-  const narrow = useNarrow();
+  const narrowRail = useNarrow();
   // superOwnerOnly filtre a l'affichage : le lien existe dans le tableau nav
   // (navForActivityProfile) mais n'est rendu que si le role courant est
   // super_owner. Le backend refuse de toute facon via SuperOwnerGuard.
   const NAV = (nav || navForActivityProfile(null)).filter((n) => !n.superOwnerOnly || superOwner);
-  // Tablette portrait (<=900px, meme seuil que CaisseScreen) : rail
-  // icone-seule au lieu du panneau 220px, pour laisser la place au contenu.
+  // Tablette portrait (<=900px, hors mode mobile tiroir) : rail icone-seule
+  // au lieu du panneau 220px, pour laisser la place au contenu.
+  const narrow = !mobile && narrowRail;
   return (
     <aside style={{
-      width: narrow ? 64 : 220, flexShrink: 0, height: "100%", display: "flex", flexDirection: "column",
-      background: "#062025", color: "#ECF1EC", transition: "width 0.15s ease",
+      width: mobile ? 220 : (narrow ? 64 : 220), flexShrink: mobile ? 0 : undefined,
+      height: "100%", display: "flex", flexDirection: "column",
+      background: "#062025", color: "#ECF1EC", transition: mobile ? "none" : "width 0.15s ease",
+      ...(mobile ? { position: "absolute", top: 0, bottom: 0, left: mobileOpen ? 0 : -220, zIndex: 75, transition: "left 220ms ease" } : {}),
     }}>
       <div style={{ padding: narrow ? "18px 8px" : "18px 16px", display: "flex", alignItems: "center", justifyContent: narrow ? "center" : "flex-start", gap: 10 }}>
         <Brand size={32} radius={8} />
@@ -162,9 +171,24 @@ export const Sidebar = ({ active, onNav, nav }) => {
   );
 };
 
-export const Topbar = ({ title, subtitle }) => (
-  <header style={{ padding: "16px 24px", borderBottom: "1px solid var(--border-1, #E7EBF1)", background: "var(--paper, #fff)" }}>
-    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>{title}</div>
-    {subtitle && <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginTop: 2 }}>{subtitle}</div>}
+// onHamburger : ouvre le tiroir Sidebar mobile (cf. Sidebar mobile/mobileOpen
+// ci-dessus) — meme role que le bouton hamburger du Topbar farmos-app.
+// Bouton rendu seulement si la prop est fournie (app.jsx ne la passe qu'en
+// mode mobile <=768px), pas d'icone morte en desktop/tablette.
+export const Topbar = ({ title, subtitle, onHamburger }) => (
+  <header style={{
+    padding: "16px 24px", borderBottom: "1px solid var(--border-1, #E7EBF1)", background: "var(--paper, #fff)",
+    display: "flex", alignItems: "center", gap: 12,
+  }}>
+    {onHamburger && (
+      <button onClick={onHamburger} aria-label="Ouvrir le menu"
+        style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-1, #0E2418)", display: "flex", padding: 4, flexShrink: 0 }}>
+        <MenuIcon size={20} />
+      </button>
+    )}
+    <div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginTop: 2 }}>{subtitle}</div>}
+    </div>
   </header>
 );
