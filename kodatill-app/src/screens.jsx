@@ -726,6 +726,31 @@ export const CaisseScreen = () => {
   const [syncStatus, setSyncStatus] = React.useState(null); // { syncing: true } | { synced, failed } | null
   const [offlinePending, setOfflinePending] = React.useState(0);
 
+  // Layout tablette portrait etroite : le panneau Ticket (320px fixe) ecrase
+  // le catalogue en dessous d'environ 900px de large (iPad portrait CSS =
+  // 768-834px, on garde une marge pour ne pas basculer trop tot sur les
+  // tablettes larges/paysage ou le layout actuel reste confortable). Au-dela
+  // de ce seuil, comportement inchange (aside toujours visible).
+  const [isNarrow, setIsNarrow] = React.useState(
+    () => (typeof window === "undefined" ? false : window.matchMedia("(max-width: 900px)").matches),
+  );
+  // Sheet panier (mode etroit uniquement) : repliee par defaut, ouverte via la
+  // barre flottante — pattern repris de l'esprit du menu client mobile du
+  // mockup (barre panier en bas -> sheet plein ecran par-dessus le contenu).
+  const [showTicketSheet, setShowTicketSheet] = React.useState(false);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia("(max-width: 900px)");
+    const onChange = (e) => {
+      setIsNarrow(e.matches);
+      // Repasse en layout large (rotation tablette, redimensionnement) : la
+      // sheet n'a plus de sens puisque l'aside redevient visible en continu.
+      if (!e.matches) setShowTicketSheet(false);
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
   React.useEffect(() => {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
@@ -1116,6 +1141,62 @@ export const CaisseScreen = () => {
     );
   }
 
+  // Contenu du panneau Ticket, factorise pour etre reutilise tel quel dans
+  // les deux layouts (aside toujours visible en large, sheet conditionnelle
+  // en etroit) sans dupliquer la logique/le JSX metier (lignes, +/-, total,
+  // bouton Encaisser). Simple variable JSX (pas un sous-composant) pour ne
+  // pas remonter/perdre l'etat de ses enfants a chaque re-render.
+  const ticketPanelContent = (
+    <>
+      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12, color: "var(--fg-1, #0E2418)" }}>Ticket</div>
+
+      {checkoutError && <ErrorBanner message={checkoutError} onRetry={startCheckout} />}
+
+      <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+        {ticket.length === 0 ? (
+          <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucun article. Clique sur un produit pour l'ajouter.</div>
+        ) : ticket.map((l) => (
+          <div key={l.key} style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 8, borderBottom: "1px solid var(--border-1, #E7EBF1)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 600 }}>
+              <span>{l.name}</span>
+              <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => changeQty(l.key, -1)} style={qtyBtnStyle}>−</button>
+                <span style={{ minWidth: 18, textAlign: "center" }}>{l.qty}</span>
+                <button onClick={() => changeQty(l.key, 1)} style={qtyBtnStyle}>+</button>
+              </div>
+              <span>{formatMoney(l.unitPrice, l.currencyCode)} / unité</span>
+            </div>
+            <div style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
+              {formatMoney(l.qty * l.unitPrice, l.currencyCode)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", marginTop: 12, paddingTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginBottom: 4 }}>
+          <span>Sous-total</span>
+          <span>{formatMoney(subtotal, ticketCurrency)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)", marginBottom: 12 }}>
+          <span>Total</span>
+          <span>{formatMoney(subtotal, ticketCurrency)}</span>
+        </div>
+        <button onClick={() => { setShowTicketSheet(false); startCheckout(); }} disabled={!ticket.length || checkoutSubmitting}
+          style={{
+            width: "100%", background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 10,
+            padding: "14px 16px", fontWeight: 700, fontSize: 15, cursor: "pointer",
+            opacity: !ticket.length || checkoutSubmitting ? 0.5 : 1,
+          }}>
+          {checkoutSubmitting ? "Création…" : `Encaisser ${formatMoney(subtotal, ticketCurrency)}`}
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden", flexDirection: "column" }}>
       {/* Bandeau session — porte d'entree/sortie de la caisse, cohérent avec
@@ -1166,7 +1247,10 @@ export const CaisseScreen = () => {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden" }}>
+      {/* position:relative pour que la barre panier flottante et la sheet du
+          layout etroit (position:absolute) restent cantonnees a la zone
+          caisse (catalogue+ticket), pas a toute la page. */}
+      <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden", position: "relative" }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 20, overflow: "auto" }}>
         <input
           value={search}
@@ -1227,57 +1311,64 @@ export const CaisseScreen = () => {
         )}
       </div>
 
-      <aside style={{
-        width: 320, flexShrink: 0, borderLeft: "1px solid var(--border-1, #E7EBF1)",
-        background: "var(--paper, #fff)", display: "flex", flexDirection: "column", padding: 20,
-      }}>
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12, color: "var(--fg-1, #0E2418)" }}>Ticket</div>
+      {/* Layout large (comportement d'origine, inchange) : panneau Ticket
+          toujours visible en aside a cote du catalogue. */}
+      {!isNarrow && (
+        <aside style={{
+          width: 320, flexShrink: 0, borderLeft: "1px solid var(--border-1, #E7EBF1)",
+          background: "var(--paper, #fff)", display: "flex", flexDirection: "column", padding: 20,
+        }}>
+          {ticketPanelContent}
+        </aside>
+      )}
 
-        {checkoutError && <ErrorBanner message={checkoutError} onRetry={startCheckout} />}
+      {/* Layout etroit (tablette portrait) : le panneau Ticket n'est plus
+          affiche en continu (il ecraserait le catalogue) — inspire du menu
+          client mobile du mockup (barre panier flottante en bas -> sheet
+          plein ecran par-dessus le contenu, meme contenu que l'aside, jamais
+          duplique/reecrit). */}
+      {isNarrow && ticket.length > 0 && !showTicketSheet && (
+        <button
+          onClick={() => setShowTicketSheet(true)}
+          style={{
+            position: "absolute", left: 12, right: 12, bottom: 12, zIndex: 40,
+            background: "linear-gradient(135deg, #1f6d75, #123F46)", color: "#FBF8F2",
+            border: 0, borderRadius: 14, padding: "14px 18px", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.25)", fontWeight: 700, fontSize: 14.5,
+          }}>
+          <span>🛒 {ticket.reduce((s, l) => s + l.qty, 0)} article(s)</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {formatMoney(subtotal, ticketCurrency)}
+            <span aria-hidden="true">▲</span>
+          </span>
+        </button>
+      )}
 
-        <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-          {ticket.length === 0 ? (
-            <div style={{ fontSize: 13, color: "var(--fg-3, #6b6b6b)" }}>Aucun article. Clique sur un produit pour l'ajouter.</div>
-          ) : ticket.map((l) => (
-            <div key={l.key} style={{ display: "flex", flexDirection: "column", gap: 4, paddingBottom: 8, borderBottom: "1px solid var(--border-1, #E7EBF1)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 600 }}>
-                <span>{l.name}</span>
-                <button onClick={() => removeLine(l.key)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: "var(--fg-3, #6b6b6b)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button onClick={() => changeQty(l.key, -1)} style={qtyBtnStyle}>−</button>
-                  <span style={{ minWidth: 18, textAlign: "center" }}>{l.qty}</span>
-                  <button onClick={() => changeQty(l.key, 1)} style={qtyBtnStyle}>+</button>
-                </div>
-                <span>{formatMoney(l.unitPrice, l.currencyCode)} / unité</span>
-              </div>
-              <div style={{ textAlign: "right", fontWeight: 700, fontSize: 13 }}>
-                {formatMoney(l.qty * l.unitPrice, l.currencyCode)}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ borderTop: "1px solid var(--border-1, #E7EBF1)", marginTop: 12, paddingTop: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--fg-3, #6b6b6b)", marginBottom: 4 }}>
-            <span>Sous-total</span>
-            <span>{formatMoney(subtotal, ticketCurrency)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, color: "var(--fg-1, #0E2418)", marginBottom: 12 }}>
-            <span>Total</span>
-            <span>{formatMoney(subtotal, ticketCurrency)}</span>
-          </div>
-          <button onClick={startCheckout} disabled={!ticket.length || checkoutSubmitting}
+      {isNarrow && showTicketSheet && (
+        <div
+          onClick={() => setShowTicketSheet(false)}
+          style={{
+            position: "absolute", inset: 0, background: "rgba(6,32,37,0.45)",
+            backdropFilter: "blur(2px)", zIndex: 45, display: "flex", alignItems: "flex-end",
+          }}>
+          <div
+            onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%", background: "#1f6d75", color: "#FBF8F2", border: 0, borderRadius: 10,
-              padding: "14px 16px", fontWeight: 700, fontSize: 15, cursor: "pointer",
-              opacity: !ticket.length || checkoutSubmitting ? 0.5 : 1,
+              width: "100%", maxHeight: "85%", background: "var(--paper, #fff)",
+              borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20,
+              display: "flex", flexDirection: "column", boxShadow: "0 -10px 30px rgba(0,0,0,0.25)",
             }}>
-            {checkoutSubmitting ? "Création…" : `Encaisser ${formatMoney(subtotal, ticketCurrency)}`}
-          </button>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: -6 }}>
+              <button onClick={() => setShowTicketSheet(false)} aria-label="Fermer"
+                style={{ background: "transparent", border: 0, cursor: "pointer", fontSize: 20, color: "var(--fg-3, #6b6b6b)" }}>
+                ✕
+              </button>
+            </div>
+            {ticketPanelContent}
+          </div>
         </div>
-      </aside>
+      )}
 
       {checkoutOrder && (
         <PaymentPanel
