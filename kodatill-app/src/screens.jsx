@@ -1583,35 +1583,25 @@ export const CaisseScreen = ({ onNav } = {}) => {
         border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 16,
         padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-around", gap: 6,
       }}>
-        {/* Style bouton central surelevé (meme esprit que le "+" de
-            MobileTabBar, shell.jsx/farmos-app) : "Menu" est deja l'onglet
-            actif (cet ecran), pas une action de navigation — style visuel
-            seulement, comportement inchange (aucun onClick, deja affiche). */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-            width: 44, height: 44, borderRadius: 999, background: "#2563eb", color: "#fff",
-            justifyContent: "center", marginTop: -16, boxShadow: "0 6px 18px -4px rgba(37,99,235,0.5)",
-          }}>
-            <Utensils size={16} />
-          </span>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: "#2563eb", fontWeight: 700, fontSize: 11, borderBottom: "2px solid #2563eb", paddingBottom: 4 }}>
+          <Utensils size={16} /> Menu
         </div>
         {/* "Commandes" -> route "commandes" (CommandesScreen, historique des ventes) */}
         <button onClick={() => (onNav ? onNav("commandes") : showNotice("Commandes — navigation indisponible"))}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
           <ReceiptText size={16} /> Commandes
         </button>
         <button onClick={() => showNotice("Transactions — fonctionnalité à venir")}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
           <ArrowLeftRight size={16} /> Transactions
         </button>
         {/* "Articles" -> route "produits" (ProduitsScreen, catalogue & prix) */}
         <button onClick={() => (onNav ? onNav("produits") : showNotice("Articles — navigation indisponible"))}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
           <Package size={16} /> Articles
         </button>
         <button onClick={() => showNotice("Plus — fonctionnalité à venir")}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
           <MenuIcon size={16} /> Plus
         </button>
       </div>
