@@ -28,9 +28,23 @@ import {
 /**
  * Machine a etats explicite. Transitions autorisees dans l'ordre normal,
  * plus *→cancelled depuis n'importe quel etat non terminal.
+ *
+ * draft→completed direct (bug SCRUM-304, corrige en QA dev) : PaymentPanel
+ * (caisse en ligne, screens.jsx#confirm) appelle systematiquement
+ * setOrderStatus(..., "completed") juste apres le paiement, sur une commande
+ * qui vient d'etre creee et donc encore en draft — jamais passee par
+ * received/preparing/ready/served au prealable. Sans cette transition,
+ * AUCUNE vente en caisse en ligne ne pouvait etre finalisee (400 systematique),
+ * bloquant le decrement de stock et la comptabilisation. Coherent avec
+ * orders.service.ts#sync (resync offline) qui traite deja implicitement une
+ * commande entierement payee comme terminee sans exiger le flux de
+ * preparation restaurant — c'est la meme regle metier (vente boutique/
+ * comptoir), desormais vraie aussi pour le flux en ligne. Le flux restaurant
+ * complet (received→preparing→ready→served) reste possible et utilise par
+ * l'ecran cuisine pour qui en a besoin.
  */
 const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  draft: ["received", "cancelled"],
+  draft: ["received", "completed", "cancelled"],
   received: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],
   ready: ["served", "cancelled"],
@@ -463,6 +477,18 @@ export class OrdersService {
       if (!allowed.includes(nextStatus)) {
         throw new BadRequestException(
           `Transition invalide : "${currentStatus}" → "${nextStatus}". Autorise depuis "${currentStatus}": ${allowed.length ? allowed.join(", ") : "aucune (etat terminal)"}.`,
+        );
+      }
+
+      // Garde metier (deja implicitement necessaire avant l'ouverture de
+      // draft→completed, mais absente aussi sur served→completed) : une
+      // commande ne peut etre marquee terminee que si elle est entierement
+      // payee. Sans ce controle, draft→completed permettrait de cloturer une
+      // vente jamais encaissee (le decrement de stock et l'ecriture
+      // comptable partiraient sur une vente fictive).
+      if (nextStatus === "completed" && Number(order.dueTotal) > 0.001) {
+        throw new BadRequestException(
+          `Impossible de terminer la commande : solde du de ${Number(order.dueTotal).toFixed(2)} ${order.currencyCode}.`,
         );
       }
 
