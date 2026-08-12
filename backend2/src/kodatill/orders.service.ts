@@ -182,6 +182,12 @@ export class OrdersService {
             lineDiscount: (l.lineDiscount ?? 0).toFixed(2),
             lineTotal: this.computeLineTotal(l.qty, l.unitPrice, l.lineDiscount ?? 0).toFixed(2),
             currencyCode: input.currencyCode ?? "USD",
+            // kitchenStatus initialise a "pending" (bug QA dev, KitchenService#getBoard
+            // ne filtre que pending/preparing/ready) : sans ca, aucune ligne n'est
+            // jamais eligible au board cuisine, quel que soit le canal (caisse, QR,
+            // resync offline via sync() qui reutilise create()). Aucun flag produit
+            // "necessite preparation" n'existe : toute ligne est eligible.
+            kitchenStatus: "pending" as const,
           })),
         );
       }
@@ -452,6 +458,9 @@ export class OrdersService {
             lineDiscount: (l.lineDiscount ?? 0).toFixed(2),
             lineTotal: lineTotal.toFixed(2),
             currencyCode: order.currencyCode,
+            // Voir commentaire equivalent dans create() : ligne ajoutee apres
+            // la creation de la commande (updateLines), meme regle.
+            kitchenStatus: "pending",
             note: l.note,
           });
         }
