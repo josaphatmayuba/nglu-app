@@ -3963,20 +3963,29 @@ export const ktSubscriptions = mysqlTable(
 // evolution de la regle darrondi. periodMonth au format 2026-08 se trie
 // lexicographiquement dans lordre chronologique. settledAt nul = commission
 // due et non encore reglee.
-export const ktCommissionEntries = mysqlTable("kt_commission_entries", {
-  id: serial("id").primaryKey(),
-  organizationId: bigint("organization_id", { mode: "number", unsigned: true }).notNull(),
-  orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
-  paymentId: bigint("payment_id", { mode: "number", unsigned: true }),
-  baseAmount: decimal("base_amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
-  rate: decimal("rate", { precision: 5, scale: 2 }).default("0.00").notNull(),
-  commissionAmount: decimal("commission_amount", { precision: 14, scale: 2 })
-    .default("0.00")
-    .notNull(),
-  currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
-  periodMonth: varchar("period_month", { length: 7 }).notNull(),
-  settledAt: datetime("settled_at"),
-  status: varchar("status", { length: 10 }).default("true").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
-});
+// paymentId porte un index UNIQUE (migration 0246) : garde-fou contre le double
+// calcul concurrent des commissions. La colonne reste nullable, MySQL autorisant
+// plusieurs NULL dans un index UNIQUE.
+export const ktCommissionEntries = mysqlTable(
+  "kt_commission_entries",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number", unsigned: true }).notNull(),
+    orderId: bigint("order_id", { mode: "number", unsigned: true }).notNull(),
+    paymentId: bigint("payment_id", { mode: "number", unsigned: true }),
+    baseAmount: decimal("base_amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
+    rate: decimal("rate", { precision: 5, scale: 2 }).default("0.00").notNull(),
+    commissionAmount: decimal("commission_amount", { precision: 14, scale: 2 })
+      .default("0.00")
+      .notNull(),
+    currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
+    periodMonth: varchar("period_month", { length: 7 }).notNull(),
+    settledAt: datetime("settled_at"),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+  },
+  (table) => ({
+    paymentUnique: unique("uq_kt_commission_entries_payment").on(table.paymentId),
+  }),
+);

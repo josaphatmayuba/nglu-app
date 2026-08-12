@@ -13,6 +13,20 @@ export class PlatformCommissionsService {
     return Math.round(n * 100) / 100;
   }
 
+  /**
+   * Violation de cle unique MySQL (1062). Drizzle enveloppe l erreur driver
+   * dans une DrizzleQueryError : on deballe la chaine des `cause`.
+   */
+  private isDuplicateEntryError(err: unknown): boolean {
+    let current: unknown = err;
+    for (let depth = 0; current && depth < 5; depth += 1) {
+      const e = current as { code?: string; errno?: number; cause?: unknown };
+      if (e.code === "ER_DUP_ENTRY" || e.errno === 1062) return true;
+      current = e.cause;
+    }
+    return false;
+  }
+
   /** Bornes [debut, fin) du mois calendaire "2026-08" en dates locales serveur. */
   private periodBounds(period: string): { start: Date; end: Date } {
     const [yearStr, monthStr] = period.split("-");
@@ -108,16 +122,25 @@ export class PlatformCommissionsService {
       const baseAmount = Number(payment.amount);
       const commissionAmount = this.round2((baseAmount * rate) / 100);
 
-      await this.db.insert(ktCommissionEntries).values({
-        organizationId: payment.organizationId,
-        orderId: payment.orderId,
-        paymentId: payment.id,
-        baseAmount: baseAmount.toFixed(2),
-        rate: rate.toFixed(2),
-        commissionAmount: commissionAmount.toFixed(2),
-        currencyCode: payment.currencyCode,
-        periodMonth: period,
-      });
+      // Le filtre doneSet ne protege pas de deux calculs concurrents : l index
+      // UNIQUE sur payment_id (migration 0246) tranche la course. Le perdant
+      // ignore silencieusement SON entree (le doublon existe deja, le resultat
+      // comptable est correct) sans faire echouer tout le batch.
+      try {
+        await this.db.insert(ktCommissionEntries).values({
+          organizationId: payment.organizationId,
+          orderId: payment.orderId,
+          paymentId: payment.id,
+          baseAmount: baseAmount.toFixed(2),
+          rate: rate.toFixed(2),
+          commissionAmount: commissionAmount.toFixed(2),
+          currencyCode: payment.currencyCode,
+          periodMonth: period,
+        });
+      } catch (err) {
+        if (this.isDuplicateEntryError(err)) continue;
+        throw err;
+      }
 
       summary.entriesCreated += 1;
       summary.totalCommission[payment.currencyCode] =
