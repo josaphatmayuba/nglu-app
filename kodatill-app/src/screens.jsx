@@ -2,7 +2,11 @@
 //  - Caisse (POS complet) : SCRUM-282 (fait, voir CaisseScreen plus bas)
 //  - Dashboard / Produits / Commandes (back-office Phase 1) : SCRUM-283
 import React from "react";
-import { Search, X, Printer, ScanLine, Wifi, WifiOff, Package } from "lucide-react";
+import {
+  Search, X, Printer, ScanLine, Wifi, WifiOff, Package,
+  // Dashboard (KPI) et Produits — cf. mockup/KodaTill/KodaTill.html
+  ShoppingBag, CircleDollarSign, TrendingDown, Pencil, Plus,
+} from "lucide-react";
 import { api } from "./api.js";
 import { replaceCatalogCache, readCatalogCache, getCatalogMeta } from "./offline-db.js";
 import { enqueueOfflineOrder, pendingCount as offlinePendingCount, processOutbox, startOutboxWorker } from "./offline-outbox.js";
@@ -1679,13 +1683,26 @@ function formatTime(dateLike) {
 // n'expose que list/detail). Les KPI du jour sont donc calcules ici a partir
 // de GET /orders filtre from/to=aujourd'hui.
 
-function KpiCard({ label, value, sub }) {
+// icon/iconBg/iconColor optionnels : badge d'icone pastel façon mockup (cf.
+// KodaTill.html lignes ~189-216, ex. bg-blue-50 + icone blue-500). Les appels
+// existants sans ces props (autres ecrans) restent inchanges.
+function KpiCard({ label, value, sub, icon: Icon, iconBg, iconColor }) {
   return (
     <div style={{
       background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)",
       borderRadius: 12, padding: 18, flex: 1, minWidth: 160,
     }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-3, #6b6b6b)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg-3, #6b6b6b)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+        {Icon && (
+          <span style={{
+            width: 36, height: 36, borderRadius: 10, background: iconBg || "var(--border-1, #E7EBF1)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <Icon size={18} color={iconColor || "currentColor"} />
+          </span>
+        )}
+      </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: "var(--fg-1, #0E2418)", marginTop: 6 }}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", marginTop: 4 }}>{sub}</div>}
     </div>
@@ -1772,11 +1789,20 @@ export const DashboardScreen = () => {
       ) : null}
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-        <KpiCard label="Commandes du jour" value={orderCount} />
-        <KpiCard label="Ventes du jour" value={formatMoney(totalSales, currencyCode)} />
+        {/* icone ShoppingBag, cf. data-lucide="shopping-bag" mockup ligne 189
+            (carte "Total commandes du jour", badge bg-blue-50/text-blue-500) */}
+        <KpiCard label="Commandes du jour" value={orderCount} icon={ShoppingBag} iconBg="#eff6ff" iconColor="#3b82f6" />
+        {/* icone CircleDollarSign, cf. data-lucide="circle-dollar-sign" mockup
+            ligne 194 (carte "Ventes du jour", badge bg-emerald-50/text-emerald-500) */}
+        <KpiCard label="Ventes du jour" value={formatMoney(totalSales, currencyCode)} icon={CircleDollarSign} iconBg="#ecfdf5" iconColor="#10b981" />
+        {/* "Commande moyenne" n'a pas d'equivalent direct dans les 6 KPI du
+            mockup (commandes/ventes/depenses/marge/preparation/populaire) :
+            pas d'icone inventee, carte laissee sans badge comme avant. */}
         <KpiCard label="Commande moyenne" value={formatMoney(avgOrder, currencyCode)} />
         {expensesSummary && expensesSummary.totals.length > 0 && expensesSummary.totals.map((t) => (
-          <KpiCard key={t.currencyCode} label="Dépenses du jour" value={formatMoney(t.total, t.currencyCode)} />
+          // icone TrendingDown, cf. data-lucide="trending-down" mockup ligne 199
+          // (carte "Dépenses du jour", badge bg-red-50/text-red-500)
+          <KpiCard key={t.currencyCode} label="Dépenses du jour" value={formatMoney(t.total, t.currencyCode)} icon={TrendingDown} iconBg="#fef2f2" iconColor="#ef4444" />
         ))}
       </div>
 
@@ -1788,8 +1814,12 @@ export const DashboardScreen = () => {
           <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
             {recentOrders.map((o) => (
               <div key={o.id} style={{
+                // flexWrap : reference + heure + statut + total cote a cote peuvent
+                // deborder sur tablette portrait (~768px) — meme correctif que
+                // CommandesScreen/StockScreen.
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
                 padding: "12px 16px", borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+                flexWrap: "wrap",
               }}>
                 <span style={{ fontWeight: 600, minWidth: 130 }}>{o.publicRef || `#${o.id}`}</span>
                 <span style={{ color: "var(--fg-3, #6b6b6b)", flex: 1 }}>{formatTime(o.createdAt)}</span>
@@ -2712,20 +2742,32 @@ export const ProduitsScreen = () => {
       <ErrorBanner message={error} onRetry={load} />
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher par nom, SKU ou code-barres…"
-          style={{ flex: 1, minWidth: 220, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14 }}
-        />
+        {/* icone Search, cf. data-lucide="search" mockup ligne 298 (champ
+            "Rechercher un produit…" de la carte Gestion des produits) */}
+        <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+          <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--fg-3, #6b6b6b)" }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, SKU ou code-barres…"
+            style={{ width: "100%", padding: "10px 14px 10px 34px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14, boxSizing: "border-box" }}
+          />
+        </div>
         <select value={activeCategoryId} onChange={(e) => setActiveCategoryId(e.target.value)} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-1, #E7EBF1)", fontSize: 14 }}>
           <option value="">Toutes les catégories</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+        {/* "Catégories" : pas d'equivalent direct dans le mockup (aucun
+            data-lucide associe à un bouton de gestion des categories) — texte
+            seul conserve. */}
         <button onClick={() => setShowCategories(true)} style={secondaryBtnStyle}>Catégories</button>
-        <button onClick={() => setEditingProduct({})} style={primaryBtnStyle}>+ Produit</button>
+        {/* icone Plus, cf. data-lucide="plus" mockup ligne 1143 (bouton
+            "Ajouter un produit" de l'ecran Produits) */}
+        <button onClick={() => setEditingProduct({})} style={{ ...primaryBtnStyle, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Plus size={16} /> Produit
+        </button>
       </div>
 
       {loading ? (
@@ -2738,11 +2780,15 @@ export const ProduitsScreen = () => {
             const cat = categories.find((c) => c.id === p.categoryId);
             return (
               <div key={p.id} style={{
+                // flexWrap : emoji + nom + badge indisponible + prix + 2 boutons
+                // ("Modifier"/"Désactiver") débordent sur tablette portrait (~768px)
+                // sans repli à la ligne — même correctif que StockScreen/DepensesScreen.
                 display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
                 borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+                flexWrap: "wrap",
               }}>
                 <div style={{ fontSize: 20 }}>{p.emojiFallback || "🛒"}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
                   <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{p.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
                     {cat?.name || "Sans catégorie"}{p.sku ? ` · SKU ${p.sku}` : ""}{p.barcode ? ` · ${p.barcode}` : ""}
@@ -2752,7 +2798,14 @@ export const ProduitsScreen = () => {
                   <span style={{ fontSize: 11, color: "var(--oxblood-800, #7a1f2b)", fontWeight: 600 }}>Indisponible</span>
                 )}
                 <div style={{ fontWeight: 700, minWidth: 90, textAlign: "right" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
-                <button onClick={() => setEditingProduct(p)} style={smallBtnStyle}>Modifier</button>
+                {/* icone Pencil, cf. data-lucide="pencil" mockup ligne 1370
+                    (bouton "Éditer" de la ligne produit, ecran Produits) */}
+                <button onClick={() => setEditingProduct(p)} style={{ ...smallBtnStyle, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <Pencil size={13} /> Modifier
+                </button>
+                {/* "Désactiver" (soft delete) : pas d'icone dediee dans le
+                    mockup pour cette action sur un produit (seul "pencil"
+                    existe sur la ligne produit) — texte seul conserve. */}
                 <button onClick={() => removeProduct(p)} style={{ ...smallBtnStyle, color: "var(--oxblood-800, #7a1f2b)" }}>Désactiver</button>
               </div>
             );
@@ -3033,9 +3086,13 @@ export const CommandesScreen = () => {
           {orders.map((o) => (
             <button key={o.id} onClick={() => setSelectedOrderId(o.id)}
               style={{
+                // flexWrap : reference + date + canal + statut + total cote a cote
+                // (4 minWidth fixes) peuvent deborder sur tablette portrait (~768px) —
+                // meme correctif que les listes Stock/Ingredients/Depenses.
                 display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", width: "100%",
                 borderWidth: 0, borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "var(--border-1, #E7EBF1)",
                 fontSize: 13.5, background: "transparent", cursor: "pointer", textAlign: "left",
+                flexWrap: "wrap",
               }}>
               <span style={{ fontWeight: 600, minWidth: 150 }}>{o.publicRef || `#${o.id}`}</span>
               <span style={{ color: "var(--fg-3, #6b6b6b)", minWidth: 110 }}>{formatTime(o.createdAt)}</span>
@@ -3595,11 +3652,15 @@ export const StockScreen = () => {
             const isHighlighted = highlightedItemId === it.id;
             return (
               <div key={it.id} ref={(el) => { itemRefs.current[it.id] = el; }} style={{
+                // flexWrap : sur tablette portrait (~768px), nom + badge + qty + prix +
+                // 3 boutons ("Historique"/"Ajuster"/"Réapprovisionner") côte à côte
+                // débordent sans passer à la ligne — même correctif que CaisseScreen.
                 display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
                 borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
                 background: isHighlighted ? "rgba(31,109,117,0.08)" : "transparent",
+                flexWrap: "wrap",
               }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 160 }}>
                   <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{productName(it)}</div>
                   <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
                     {branchName(it)}{it.reorderThreshold !== null && it.reorderThreshold !== undefined ? ` · Seuil ${Number(it.reorderThreshold)}` : ""}
@@ -3836,10 +3897,13 @@ export const IngredientsScreen = () => {
         <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
           {ingredients.map((ing) => (
             <div key={ing.id} style={{
+              // flexWrap : nom + prix + 2 boutons ("Modifier"/"Désactiver") côte à côte
+              // débordent sur tablette portrait (~768px) — même correctif que StockScreen.
               display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
               borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+              flexWrap: "wrap",
             }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
                 <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{ing.name}</div>
                 <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
                   {Number(ing.currentQty ?? 0)} {ing.baseUnit || ""} en stock · 1 {ing.purchaseUnit || "?"} = {Number(ing.unitFactor ?? 0)} {ing.baseUnit || ""}
@@ -4244,10 +4308,13 @@ export const DepensesScreen = () => {
         <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
           {expenses.map((exp) => (
             <div key={exp.id} style={{
+              // flexWrap : libellé + montant + 2 boutons débordent sur tablette
+              // portrait (~768px) sans repli à la ligne — même correctif que StockScreen.
               display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
               borderBottom: "1px solid var(--border-1, #E7EBF1)", fontSize: 13.5,
+              flexWrap: "wrap",
             }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
                 <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{exp.label}</div>
                 <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
                   {formatTime(String(exp.expenseDate).replace(" ", "T"))} · {categoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`}
@@ -4624,7 +4691,11 @@ export const KitchenScreen = () => {
         </CenteredNote>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, flex: 1, minHeight: 0, overflow: "auto" }}>
+      {/* auto-fit/minmax : 2 colonnes fixes ecrasent les cartes commande (contenu
+          en plusieurs lignes avec bouton "Bon cuisine") sur tablette portrait
+          (~768px) ; passe naturellement a 1 colonne des que la largeur manque,
+          sans media query JS, meme esprit que le catalogue produit de CaisseScreen. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 24, flex: 1, minHeight: 0, overflow: "auto" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "#b8860b" }}>En préparation</h2>
           {preparingOrders.map((o) => (

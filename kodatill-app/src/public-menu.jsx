@@ -6,6 +6,7 @@
 // screens.jsx (deja ~3700 lignes, ecran admin/caisse) pour garder cette
 // surface publique, plus epuree, isolee et facile a relire/auditer.
 import React from "react";
+import { ChevronUp, Package, X } from "lucide-react";
 import { publicApi } from "./api.js";
 
 // Montant toujours accompagne de la devise renvoyee par l'API (jamais en dur),
@@ -346,7 +347,10 @@ export function PublicMenuScreen({ orgSlug, qrToken, onOrderConfirmed }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
             {filteredProducts.map((p) => (
               <button key={p.id} onClick={() => addToCart(p)} style={productCardStyle}>
-                <div style={{ fontSize: 26 }}>{p.emojiFallback || "🍽️"}</div>
+                {/* emojiFallback = emoji choisi par produit, inchange. Fallback generique
+                    -> icone Package (meme choix que CaisseScreen, cf. data-lucide="package"
+                    dans le mockup, nav "Articles"). */}
+                <div style={{ fontSize: 26 }}>{p.emojiFallback || <Package size={24} color="var(--fg-3, #6b6b6b)" />}</div>
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--fg-1, #0E2418)" }}>{p.name}</div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: "#1f6d75" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
               </button>
@@ -355,11 +359,15 @@ export function PublicMenuScreen({ orgSlug, qrToken, onOrderConfirmed }) {
         )}
       </div>
 
+      {/* icone ChevronUp, cf. data-lucide="chevron-up" dans le mockup (barre panier
+          flottante .phone-screen, ligne ~371) */}
       {cartCount > 0 && !showCart && (
         <button onClick={() => setShowCart(true)} style={cartBarStyle}>
           <span>{cartCount} article{cartCount > 1 ? "s" : ""}</span>
           <span>{formatMoney(cartTotal, cartCurrency)}</span>
-          <span>Voir le panier →</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            Voir le panier <ChevronUp size={16} />
+          </span>
         </button>
       )}
 
@@ -368,7 +376,10 @@ export function PublicMenuScreen({ orgSlug, qrToken, onOrderConfirmed }) {
           <div style={cartSheetStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>Votre commande</div>
-              <button onClick={() => setShowCart(false)} style={{ background: "transparent", border: 0, fontSize: 20, cursor: "pointer" }}>✕</button>
+              {/* icone X, cf. data-lucide="x" dans le mockup (fermeture cli-sheet) */}
+              <button onClick={() => setShowCart(false)} style={{ background: "transparent", border: 0, cursor: "pointer", display: "flex", alignItems: "center" }}>
+                <X size={20} />
+              </button>
             </div>
 
             <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 10 }}>

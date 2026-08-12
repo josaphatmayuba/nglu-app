@@ -16,6 +16,9 @@
 // autorisation reste imposee par SuperOwnerGuard sur chaque route backend.
 // Aucun nouvel appel reseau necessaire, aucun nouveau mecanisme invente.
 import React from "react";
+import {
+  LayoutDashboard, Building2, BadgeCheck, Percent, Coins, ShoppingCart, Play, Pause, Plus, Pencil,
+} from "lucide-react";
 import { api } from "./api.js";
 
 export function isSuperOwner() {
@@ -73,22 +76,37 @@ const KPI_CARD_STYLE = {
   borderRadius: 12, padding: "16px 18px", minWidth: 200, flex: "1 1 200px",
 };
 
-function KpiCard({ label, children }) {
+// icon/iconBg/iconColor optionnels : badge pastel rond, cf. mockup admKpis
+// (ligne ~950 KodaTill.html) — chaque KPI y a une icone dans un badge colore.
+function KpiCard({ label, children, icon: Icon, iconBg, iconColor }) {
   return (
     <div style={KPI_CARD_STYLE}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg-3, #6b6b6b)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
-        {label}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg-3, #6b6b6b)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          {label}
+        </div>
+        {Icon && (
+          <span style={{
+            width: 32, height: 32, borderRadius: 10, background: iconBg || "rgba(31,109,117,0.1)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <Icon size={16} color={iconColor || "#1f6d75"} />
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 20, fontWeight: 700, color: "var(--fg-1, #0E2418)" }}>{children}</div>
     </div>
   );
 }
 
+// icones cf. mockup admNav (KodaTill.html ~944) : layout-dashboard, building-2,
+// badge-check (le mockup l'utilise pour "Abonnements", le plus proche de nos
+// plans d'abonnement), percent (Commissions).
 const TABS = [
-  { id: "overview", label: "Vue d'ensemble" },
-  { id: "organizations", label: "Organisations" },
-  { id: "plans", label: "Plans" },
-  { id: "commissions", label: "Commissions" },
+  { id: "overview", label: "Vue d'ensemble", icon: LayoutDashboard },
+  { id: "organizations", label: "Organisations", icon: Building2 },
+  { id: "plans", label: "Plans", icon: BadgeCheck },
+  { id: "commissions", label: "Commissions", icon: Percent },
 ];
 
 const TABLE_TH = {
@@ -140,12 +158,21 @@ function OverviewTab() {
       <ErrorBanner message={error} onRetry={load} />
       {data && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-          <KpiCard label="Organisations actives">{data.activatedOrganizations}</KpiCard>
-          <KpiCard label="Abonnements actifs/essai">{data.subscribedOrganizations}</KpiCard>
-          <KpiCard label="Ventes totales">
+          {/* icones cf. mockup admKpis (KodaTill.html ~950) : building-2/bg-kp-50
+              pour "Entreprises actives", badge-check pour les abonnements (nav
+              admin), shopping-cart/bg-blue-50 pour le volume (equivalent le
+              plus proche de "Ventes totales" ici), coins/bg-amber-50 pour les
+              commissions. */}
+          <KpiCard label="Organisations actives" icon={Building2} iconBg="#effafa" iconColor="#1f6d75">
+            {data.activatedOrganizations}
+          </KpiCard>
+          <KpiCard label="Abonnements actifs/essai" icon={BadgeCheck} iconBg="#ecfdf5" iconColor="#10b981">
+            {data.subscribedOrganizations}
+          </KpiCard>
+          <KpiCard label="Ventes totales" icon={ShoppingCart} iconBg="#eff6ff" iconColor="#3b82f6">
             <MoneyByCurrency byCurrency={data.totalSalesByCurrency} />
           </KpiCard>
-          <KpiCard label={`Commissions du mois (${data.commissionsPeriod || "—"})`}>
+          <KpiCard label={`Commissions du mois (${data.commissionsPeriod || "—"})`} icon={Coins} iconBg="#fffbeb" iconColor="#d97706">
             <MoneyByCurrency byCurrency={data.commissionsThisMonthByCurrency} />
           </KpiCard>
         </div>
@@ -258,12 +285,14 @@ function OrganizationsTab() {
                     </span>
                   </td>
                   <td style={TABLE_TD}>
+                    {/* icones Play/Pause, cf. mockup admCompanies popup actions
+                        (KodaTill.html ~2056-2057 : ic:'play' Reactiver, ic:'pause' Suspendre) */}
                     <button
                       disabled={busyOrgId === c.organizationId || !publicIdByOrgId[c.organizationId]}
                       onClick={() => toggleSuspend(c.organizationId, isSuspended)}
-                      style={isSuspended ? BTN_SECONDARY : BTN_DANGER}
+                      style={{ ...(isSuspended ? BTN_SECONDARY : BTN_DANGER), display: "flex", alignItems: "center", gap: 6 }}
                     >
-                      {busyOrgId === c.organizationId ? "…" : isSuspended ? "Réactiver" : "Suspendre"}
+                      {busyOrgId === c.organizationId ? "…" : isSuspended ? (<><Play size={13} />Réactiver</>) : (<><Pause size={13} />Suspendre</>)}
                     </button>
                   </td>
                 </tr>
@@ -400,8 +429,11 @@ function PlansTab() {
     <div>
       <ErrorBanner message={error} onRetry={load} />
       <div style={{ marginBottom: 12 }}>
+        {/* icone Plus, cf. data-lucide="plus" dans le mockup (boutons de creation) */}
         {!showCreate && (
-          <button style={BTN_PRIMARY} onClick={() => setShowCreate(true)}>+ Nouveau plan</button>
+          <button style={{ ...BTN_PRIMARY, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setShowCreate(true)}>
+            <Plus size={14} />Nouveau plan
+          </button>
         )}
       </div>
       {showCreate && (
@@ -438,8 +470,11 @@ function PlansTab() {
                   <td style={TABLE_TD}>{formatMoney(p.monthlyPrice, p.currencyCode)}</td>
                   <td style={TABLE_TD}>{Number(p.commissionRate).toFixed(2)} %</td>
                   <td style={TABLE_TD}>
+                    {/* icone Pencil, cf. data-lucide="pencil" dans le mockup (edition) */}
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button style={BTN_SECONDARY} onClick={() => setEditingId(p.id)}>Modifier</button>
+                      <button style={{ ...BTN_SECONDARY, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setEditingId(p.id)}>
+                        <Pencil size={13} />Modifier
+                      </button>
                       <button style={BTN_DANGER} onClick={() => remove(p.id)}>Désactiver</button>
                     </div>
                   </td>
@@ -583,7 +618,9 @@ export function SuperAdminScreen() {
               color: tab === t.id ? "#1f6d75" : "var(--fg-2, #333)",
               border: 0, borderRadius: "8px 8px 0 0", padding: "8px 14px",
               fontWeight: tab === t.id ? 700 : 500, fontSize: 13.5, cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 6,
             }}>
+            <t.icon size={14} />
             {t.label}
           </button>
         ))}
