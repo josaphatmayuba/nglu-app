@@ -776,14 +776,24 @@ export const CaisseScreen = ({ onNav } = {}) => {
   const [syncStatus, setSyncStatus] = React.useState(null); // { syncing: true } | { synced, failed } | null
   const [offlinePending, setOfflinePending] = React.useState(0);
 
-  // Layout tablette portrait etroite : le panneau Ticket (320px fixe) ecrase
-  // le catalogue en dessous d'environ 900px de large (iPad portrait CSS =
-  // 768-834px, on garde une marge pour ne pas basculer trop tot sur les
-  // tablettes larges/paysage ou le layout actuel reste confortable). Au-dela
-  // de ce seuil, comportement inchange (aside toujours visible).
-  const [isNarrow, setIsNarrow] = React.useState(
-    () => (typeof window === "undefined" ? false : window.matchMedia("(max-width: 900px)").matches),
-  );
+  // Layout responsive a 3 niveaux, calque sur useLayoutMode de farmos-app
+  // (farmos-app/src/app.jsx lignes 33-50) pour la coherence inter-apps :
+  // mobile <=768px, tablet <=1180px, desktop au-dela. isCompact pilote les
+  // styles reduits (police/padding header, tuiles categories, cartes
+  // produits) et s'applique en tablet ET mobile. isMobileLayout pilote
+  // UNIQUEMENT la bascule aside-vs-sheet (le panneau Commande reste toujours
+  // visible en aside en tablet, juste plus etroit/compact ; il ne bascule en
+  // sheet modale qu'en mobile).
+  const detectLayoutMode = () => {
+    if (typeof window === "undefined") return "desktop";
+    const w = window.innerWidth;
+    if (w <= 768) return "mobile";
+    if (w <= 1180) return "tablet";
+    return "desktop";
+  };
+  const [layoutMode, setLayoutMode] = React.useState(detectLayoutMode);
+  const isMobileLayout = layoutMode === "mobile";
+  const isCompact = layoutMode !== "desktop";
   // Sheet panier (mode etroit uniquement) : repliee par defaut, ouverte via la
   // barre flottante — pattern repris de l'esprit du menu client mobile du
   // mockup (barre panier en bas -> sheet plein ecran par-dessus le contenu).
@@ -810,15 +820,16 @@ export const CaisseScreen = ({ onNav } = {}) => {
   };
 
   React.useEffect(() => {
-    const mql = window.matchMedia("(max-width: 900px)");
-    const onChange = (e) => {
-      setIsNarrow(e.matches);
-      // Repasse en layout large (rotation tablette, redimensionnement) : la
-      // sheet n'a plus de sens puisque l'aside redevient visible en continu.
-      if (!e.matches) setShowTicketSheet(false);
+    const onResize = () => {
+      const next = detectLayoutMode();
+      setLayoutMode(next);
+      // Repasse en layout tablet/desktop (rotation tablette, redimensionnement) :
+      // la sheet n'a plus de sens puisque l'aside redevient visible en continu.
+      if (next !== "mobile") setShowTicketSheet(false);
     };
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   React.useEffect(() => {
@@ -1322,37 +1333,33 @@ export const CaisseScreen = ({ onNav } = {}) => {
           compteur, pas de nombre invente. */}
       <div style={{
         flexShrink: 0, background: "var(--paper, #fff)", borderBottom: "1px solid var(--border-1, #E7EBF1)",
-        padding: isNarrow ? "10px 14px" : "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+        padding: isCompact ? "10px 14px" : "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
       }}>
         <Brand size={32} radius={8} />
-        <span style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isNarrow ? 15 : 16, color: "var(--fg-1, #0E2418)" }}>
-          KodaTill <span style={{ color: "#2563eb", fontSize: isNarrow ? 11 : 12, fontWeight: 800, verticalAlign: "top" }}>POS</span>
+        <span style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isCompact ? 15 : 16, color: "var(--fg-1, #0E2418)" }}>
+          KodaTill <span style={{ color: "#2563eb", fontSize: isCompact ? 11 : 12, fontWeight: 800, verticalAlign: "top" }}>POS</span>
         </span>
         {/* Selecteur "Service" (mockup : "Service midi"/"Midi") : aucune notion
             de service (midi/soir...) n'existe cote backend/API -> bouton non
             fonctionnel avec notice, pas d'invention de feature backend. */}
-        {!isNarrow && (
-          <button onClick={() => showNotice("Sélecteur de service — fonctionnalité à venir")}
-            style={{
-              display: "flex", alignItems: "center", gap: 4, background: "transparent",
-              border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: "6px 10px",
-              fontSize: 12, fontWeight: 600, color: "var(--fg-1, #0E2418)", cursor: "pointer", marginLeft: 4,
-            }}>
-            Service midi <ChevronDown size={12} />
+        <button onClick={() => showNotice("Sélecteur de service — fonctionnalité à venir")}
+          style={{
+            display: "flex", alignItems: "center", gap: 4, background: "transparent",
+            border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8, padding: isCompact ? "5px 8px" : "6px 10px",
+            fontSize: isCompact ? 11 : 12, fontWeight: 600, color: "var(--fg-1, #0E2418)", cursor: "pointer", marginLeft: 4,
+          }}>
+          {isCompact ? "Midi" : "Service midi"} <ChevronDown size={12} />
+        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isCompact ? 8 : 10 }}>
+          <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Rechercher"
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
+            <Search size={16} />
           </button>
-        )}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: isNarrow ? 8 : 10 }}>
-          {!isNarrow && (
-            <>
-              <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Rechercher"
-                style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
-                <Search size={16} />
-              </button>
-              <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Scanner un code-barres"
-                style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
-                <ScanLine size={16} />
-              </button>
-            </>
+          {!isCompact && (
+            <button onClick={() => document.getElementById("caisse-search-input")?.focus()} aria-label="Scanner un code-barres"
+              style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3, #6b6b6b)", display: "flex", padding: 6 }}>
+              <ScanLine size={16} />
+            </button>
           )}
           {isOnline ? <Wifi size={16} color="var(--fg-3, #6b6b6b)" /> : <WifiOff size={16} color="var(--oxblood-800, #7a1f2b)" />}
           <button onClick={() => showNotice("Notifications — fonctionnalité à venir")} aria-label="Notifications"
@@ -1478,11 +1485,11 @@ export const CaisseScreen = ({ onNav } = {}) => {
         <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
           <button onClick={() => setActiveCategoryId(null)}
             style={{
-              flexShrink: 0, minWidth: isNarrow ? 86 : 104, borderRadius: 14, cursor: "pointer",
-              padding: isNarrow ? 10 : 12, textAlign: "left", border: activeCategoryId === null ? "2px solid #0f172a" : "1px solid transparent",
+              flexShrink: 0, minWidth: isCompact ? 86 : 104, borderRadius: 14, cursor: "pointer",
+              padding: isCompact ? 10 : 12, textAlign: "left", border: activeCategoryId === null ? "2px solid #0f172a" : "1px solid transparent",
               background: "#e2e8f0", color: "#1f2937",
             }}>
-            <div style={{ fontSize: isNarrow ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>Tous</div>
+            <div style={{ fontSize: isCompact ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>Tous</div>
           </button>
           {categories.map((c, idx) => {
             const color = POS_CATEGORY_COLORS[idx % POS_CATEGORY_COLORS.length];
@@ -1490,20 +1497,20 @@ export const CaisseScreen = ({ onNav } = {}) => {
             return (
               <button key={c.id} onClick={() => setActiveCategoryId(c.id)}
                 style={{
-                  flexShrink: 0, minWidth: isNarrow ? 86 : 104, borderRadius: 14, cursor: "pointer",
-                  padding: isNarrow ? 10 : 12, textAlign: "left", color: "#fff",
+                  flexShrink: 0, minWidth: isCompact ? 86 : 104, borderRadius: 14, cursor: "pointer",
+                  padding: isCompact ? 10 : 12, textAlign: "left", color: "#fff",
                   background: color, border: activeCategoryId === c.id ? "2px solid #0f172a" : "2px solid transparent",
                 }}>
-                <div style={{ fontSize: isNarrow ? 16 : 18, marginBottom: 6, lineHeight: 1 }}>{c.icon || "🏷️"}</div>
-                <div style={{ fontSize: isNarrow ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>{c.name}</div>
-                <div style={{ fontSize: isNarrow ? 9 : 10, opacity: 0.85 }}>{count} article{count > 1 ? "s" : ""}</div>
+                <div style={{ fontSize: isCompact ? 16 : 18, marginBottom: 6, lineHeight: 1 }}>{c.icon || "🏷️"}</div>
+                <div style={{ fontSize: isCompact ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>{c.name}</div>
+                <div style={{ fontSize: isCompact ? 9 : 10, opacity: 0.85 }}>{count} article{count > 1 ? "s" : ""}</div>
               </button>
             );
           })}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "4px 0 10px" }}>
-          <h3 style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isNarrow ? 14.5 : 16, margin: 0, color: "var(--fg-1, #0E2418)" }}>
+          <h3 style={{ fontFamily: "var(--font-display, inherit)", fontWeight: 700, fontSize: isCompact ? 14.5 : 16, margin: 0, color: "var(--fg-1, #0E2418)" }}>
             Nos articles
           </h3>
           {/* Tri "Le plus populaire", cf. mockup ligne ~497 : aucun critere de
@@ -1534,26 +1541,26 @@ export const CaisseScreen = ({ onNav } = {}) => {
                     pattern dedie dans le mockup pour un article sans photo/emoji ;
                     Package = icone neutre deja utilisee mockup "Articles" bottom-nav). */}
                 <div style={{
-                  position: "relative", height: isNarrow ? 76 : 96,
+                  position: "relative", height: isCompact ? 76 : 96,
                   background: "linear-gradient(135deg, #d6d3d1, #a8a29e)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: isNarrow ? 30 : 36,
+                  fontSize: isCompact ? 30 : 36,
                 }}>
                   {p.emojiFallback || <Package size={26} color="#fff" />}
                   {/* Bouton rond "+" flottant, cf. mockup lignes ~908/930 : le clic
                       reste sur toute la carte (onProductClick), ce bouton est
                       purement visuel/redondant avec le clic carte, comme demandé. */}
                   <span style={{
-                    position: "absolute", bottom: 8, right: 8, width: isNarrow ? 24 : 28, height: isNarrow ? 24 : 28,
+                    position: "absolute", bottom: 8, right: 8, width: isCompact ? 24 : 28, height: isCompact ? 24 : 28,
                     borderRadius: "50%", background: "#fff", boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    <Plus size={isNarrow ? 13 : 15} color="#1f2937" />
+                    <Plus size={isCompact ? 13 : 15} color="#1f2937" />
                   </span>
                 </div>
-                <div style={{ padding: isNarrow ? 10 : 12, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ fontWeight: 700, fontSize: isNarrow ? 12 : 13.5, color: "var(--fg-1, #0E2418)", lineHeight: 1.2 }}>{p.name}</div>
-                  <div style={{ fontSize: isNarrow ? 12 : 12.5, color: "var(--fg-3, #6b6b6b)" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
+                <div style={{ padding: isCompact ? 10 : 12, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontWeight: 700, fontSize: isCompact ? 12 : 13.5, color: "var(--fg-1, #0E2418)", lineHeight: 1.2 }}>{p.name}</div>
+                  <div style={{ fontSize: isCompact ? 12 : 12.5, color: "var(--fg-3, #6b6b6b)" }}>{formatMoney(p.salePrice, p.currencyCode)}</div>
                 </div>
               </button>
             ))}
@@ -1595,24 +1602,27 @@ export const CaisseScreen = ({ onNav } = {}) => {
         </div>
       </div>
 
-      {/* Layout large (comportement d'origine, inchange) : panneau Ticket
-          toujours visible en aside a cote du catalogue. */}
-      {!isNarrow && (
+      {/* Layout desktop et tablette : panneau Ticket toujours visible en
+          aside a cote du catalogue (tablette = version compacte, largeur
+          reduite 260px au lieu de 320px, cf. isCompact plus haut pour les
+          tailles de police/padding internes). Seul le mode mobile (<=768px)
+          bascule ce panneau en sheet modale (cf. bloc suivant). */}
+      {!isMobileLayout && (
         <aside style={{
-          width: 320, flexShrink: 0, borderLeft: "1px solid var(--border-1, #E7EBF1)",
-          background: "var(--paper, #fff)", display: "flex", flexDirection: "column", padding: 20,
+          width: isCompact ? 260 : 320, flexShrink: 0, borderLeft: "1px solid var(--border-1, #E7EBF1)",
+          background: "var(--paper, #fff)", display: "flex", flexDirection: "column", padding: isCompact ? 14 : 20,
         }}>
           {ticketPanelContent}
         </aside>
       )}
 
-      {/* Layout etroit (tablette portrait) : le panneau Ticket n'est plus
-          affiche en continu (il ecraserait le catalogue) — reprend desormais
-          la structure exacte de la barre addition du mockup posm (lignes
+      {/* Layout mobile (<=768px) : le panneau Ticket n'est plus affiche en
+          continu (il ecraserait le catalogue) — reprend desormais la
+          structure exacte de la barre addition du mockup posm (lignes
           ~574-579 : fond ink-900, icone receipt-text + badge count, libelle
           + nb articles, total, chevron-up), remplace l'ancien emoji 🛒
           generique. */}
-      {isNarrow && ticket.length > 0 && !showTicketSheet && (
+      {isMobileLayout && ticket.length > 0 && !showTicketSheet && (
         <button
           onClick={() => setShowTicketSheet(true)}
           style={{
@@ -1642,7 +1652,7 @@ export const CaisseScreen = ({ onNav } = {}) => {
         </button>
       )}
 
-      {isNarrow && showTicketSheet && (
+      {isMobileLayout && showTicketSheet && (
         <div
           onClick={() => setShowTicketSheet(false)}
           style={{

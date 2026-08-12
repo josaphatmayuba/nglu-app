@@ -68,7 +68,7 @@ export function navForActivityProfile(profile) {
 
 // Meme seuil/pattern que CaisseScreen (screens.jsx) : au-dela de l'iPad
 // portrait CSS, pour ne pas basculer trop tot sur les tablettes larges.
-function useNarrow(breakpoint = 900) {
+export function useNarrow(breakpoint = 900) {
   const [narrow, setNarrow] = React.useState(() =>
     typeof window !== "undefined" ? window.matchMedia(`(max-width: ${breakpoint}px)`).matches : false
   );

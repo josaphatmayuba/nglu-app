@@ -1,7 +1,7 @@
 // KodaTill — App root. Meme pattern de routing que farmos-app/src/app.jsx
 // (state + window.history.pushState, pas de react-router dans ce monorepo).
 import React from "react";
-import { Sidebar, Topbar, navForActivityProfile } from "./shell.jsx";
+import { Sidebar, Topbar, navForActivityProfile, useNarrow } from "./shell.jsx";
 import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, RapportsScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
 import { PublicMenuScreen, PublicOrderTrackingScreen } from "./public-menu.jsx";
 import { SuperAdminScreen, isSuperOwner } from "./platform-admin.jsx";
@@ -162,6 +162,7 @@ function App() {
 
   const meta = ROUTE_META[route] || ROUTE_META.dashboard;
   const nav = React.useMemo(() => navForActivityProfile(profile), [profile]);
+  const caisseSidebarHidden = useNarrow(1180);
 
   const renderScreen = () => {
     switch (route) {
@@ -189,7 +190,13 @@ function App() {
 
   return (
     <div style={{ height: "100vh", display: "flex", overflow: "hidden", background: "var(--bg-app, #FBF8F2)" }}>
-      <Sidebar active={route} onNav={setRoute} nav={nav} />
+      {/* CaisseScreen a deja sa propre bottom nav dediee (mockup surf-pos/
+          surf-posm, Menu/Commandes/Transactions/Articles/Plus) — la sidebar
+          principale ferait doublon et mangerait de la place en mobile/
+          tablette (<=1180px, meme seuil que le layout responsive de
+          CaisseScreen) ; le mockup POS n'a d'ailleurs aucune sidebar de nav
+          generale sur cet ecran. Desktop (>1180px) inchange. */}
+      {!(route === "caisse" && caisseSidebarHidden) && <Sidebar active={route} onNav={setRoute} nav={nav} />}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         {/* CaisseScreen a sa propre topbar dediee (mockup surf-pos/surf-posm,
             logo+POS+service+recherche/scan/wifi/notifications/avatar) —
