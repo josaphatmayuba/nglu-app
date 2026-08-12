@@ -39,6 +39,13 @@ const SUB_ACCOUNTS: Array<{ name: string; accountName: string }> = [
   // Avance fournisseur BatiPro (migration 0231) : acompte verse avant reception
   // physique du BC = creance sur le fournisseur, donc ACTIF (pas une charge).
   { name: "Supplier Advance", accountName: "Asset" },
+  // Ecart de caisse KodaTill (migration 0247, SCRUM-307) : excedent ou manquant
+  // constate au comptage a la cloture d une session de caisse. Compte UNIQUE
+  // recevant les deux sens (CREDIT si excedent, DEBIT si manquant), donc rattache
+  // a Revenue (sens naturel positif). Nom SANS accent : il doit correspondre au
+  // caractere pres a ACCOUNT_CASH_VARIANCE de kodatill/accounting.service.ts,
+  // qui resout ce compte par nom et ne le cree jamais.
+  { name: "Ecart de caisse", accountName: "Revenue" },
 ];
 
 // Regles transaction_type_rules (postByRules) liees a l avance fournisseur BatiPro

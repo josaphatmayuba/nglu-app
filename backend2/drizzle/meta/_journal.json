@@ -1555,6 +1555,13 @@
       "when": 1781060400000,
       "tag": "0246_kodatill_commission_payment_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "5",
+      "when": 1781064000000,
+      "tag": "0247_kodatill_cash_variance_account",
+      "breakpoints": true
     }
   ]
 }
