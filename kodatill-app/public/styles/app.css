@@ -1,16 +1,23 @@
-/* KodaTill — tokens de base (memes noms de variables que farmos-app pour
-   rester coherent visuellement avec le reste du projet). */
+/* KodaTill — tokens alignes sur le mockup de reference
+   (mockup/KodaTill/KodaTill.html) : palette ink/kp/acc, fond #eceae4,
+   Inter (texte) + Space Grotesk (titres, .font-display). Les NOMS de
+   variables restent inchanges (compat avec tout le code React existant,
+   qui les consomme deja massivement) — seules les VALEURS sont corrigees. */
 :root {
-  --bg-app: #FBF8F2;
-  --paper: #FFFFFF;
-  --fg-1: #0E2418;
-  --fg-2: #36425A;
-  --fg-3: #6b6b6b;
-  --border-1: #E7EBF1;
-  --border-2: #D6DCE5;
-  --oxblood-50: #FBEEF0;
-  --oxblood-800: #5E1620;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --bg-app: #eceae4;
+  --paper: #ffffff;
+  --fg-1: #0f172a;
+  --fg-2: #334155;
+  --fg-3: #64748b;
+  --border-1: #e2e8f0;
+  --border-2: #e2e8f0;
+  --oxblood-50: #fef2f2;
+  --oxblood-800: #dc2626;
+  --teal-500: #2c8a91;
+  --teal-600: #1f6d75;
+  --teal-700: #1b575f;
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
 }
 
 html { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-app); }
@@ -18,3 +25,4 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 button { font-family: inherit; }
 .input { font-family: inherit; }
+.font-display { font-family: var(--font-display); }
