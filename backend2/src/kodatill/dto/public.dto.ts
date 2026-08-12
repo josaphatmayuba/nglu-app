@@ -1,14 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -24,7 +27,9 @@ export class PublicOrderLineInputDto {
   variantId?: number;
 
   @ApiProperty()
+  @IsNumber()
   @IsPositive()
+  @Max(999)
   qty!: number;
 
   @ApiPropertyOptional({ type: [Number], description: "Ids des modificateurs choisis." })
@@ -57,6 +62,7 @@ export class CreatePublicOrderDto {
   @ApiProperty({ type: [PublicOrderLineInputDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => PublicOrderLineInputDto)
   lines!: PublicOrderLineInputDto[];

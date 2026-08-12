@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsIn,
@@ -116,6 +117,7 @@ export class CreateOrderDto {
   @ApiPropertyOptional({ type: [OrderLineInputDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(200)
   @ValidateNested({ each: true })
   @Type(() => OrderLineInputDto)
   lines?: OrderLineInputDto[];
@@ -167,6 +169,7 @@ export class SyncOrdersDto {
   @ApiProperty({ type: [SyncOrderDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(200)
   @ValidateNested({ each: true })
   @Type(() => SyncOrderDto)
   orders!: SyncOrderDto[];
