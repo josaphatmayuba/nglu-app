@@ -1448,6 +1448,7 @@ export const CaisseScreen = ({ onNav } = {}) => {
           layout etroit (position:absolute) restent cantonnees a la zone
           caisse (catalogue+ticket), pas a toute la page. */}
       <div style={{ flex: 1, display: "flex", minWidth: 0, overflow: "hidden", position: "relative" }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 20, overflow: "auto" }}>
         {/* Icone Search + ScanLine, cf. mockup surf-pos topbar (data-lucide="search" et
             data-lucide="scan-line") : recherche a gauche en position absolute dans le
@@ -1566,40 +1567,44 @@ export const CaisseScreen = ({ onNav } = {}) => {
             ))}
           </div>
         )}
+      </div>
 
-        {/* Bottom nav (mockup lignes ~501-507/582-587) : "Menu" = cet ecran
-            (actif par defaut, pas de navigation). "Commandes"/"Articles"
-            pointent vers les routes existantes de l'app via onNav (meme
-            routeur que la Sidebar, app.jsx setRoute) — mapping documente
-            ci-dessous. "Transactions"/"Plus" : aucun ecran equivalent dans
-            l'app -> notice seule, pas d'ecran invente. */}
-        <div style={{
-          marginTop: 16, flexShrink: 0, background: "var(--paper, #fff)",
-          border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 16,
-          padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-around", gap: 6,
-        }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: "#2563eb", fontWeight: 700, fontSize: 11, borderBottom: "2px solid #2563eb", paddingBottom: 4 }}>
-            <Utensils size={16} /> Menu
-          </div>
-          {/* "Commandes" -> route "commandes" (CommandesScreen, historique des ventes) */}
-          <button onClick={() => (onNav ? onNav("commandes") : showNotice("Commandes — navigation indisponible"))}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
-            <ReceiptText size={16} /> Commandes
-          </button>
-          <button onClick={() => showNotice("Transactions — fonctionnalité à venir")}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
-            <ArrowLeftRight size={16} /> Transactions
-          </button>
-          {/* "Articles" -> route "produits" (ProduitsScreen, catalogue & prix) */}
-          <button onClick={() => (onNav ? onNav("produits") : showNotice("Articles — navigation indisponible"))}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
-            <Package size={16} /> Articles
-          </button>
-          <button onClick={() => showNotice("Plus — fonctionnalité à venir")}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
-            <MenuIcon size={16} /> Plus
-          </button>
+      {/* Bottom nav (mockup lignes ~501-507/582-587) : "Menu" = cet ecran
+          (actif par defaut, pas de navigation). "Commandes"/"Articles"
+          pointent vers les routes existantes de l'app via onNav (meme
+          routeur que la Sidebar, app.jsx setRoute) — mapping documente
+          ci-dessous. "Transactions"/"Plus" : aucun ecran equivalent dans
+          l'app -> notice seule, pas d'ecran invente. Sortie du conteneur
+          scrollable et placee en pied fixe de la colonne catalogue (sinon
+          elle suivait le flux du contenu et flottait au milieu de l'ecran
+          des que la grille produits etait courte). */}
+      <div style={{
+        flexShrink: 0, margin: "0 20px 20px", background: "var(--paper, #fff)",
+        border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 16,
+        padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-around", gap: 6,
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: "#2563eb", fontWeight: 700, fontSize: 11, borderBottom: "2px solid #2563eb", paddingBottom: 4 }}>
+          <Utensils size={16} /> Menu
         </div>
+        {/* "Commandes" -> route "commandes" (CommandesScreen, historique des ventes) */}
+        <button onClick={() => (onNav ? onNav("commandes") : showNotice("Commandes — navigation indisponible"))}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          <ReceiptText size={16} /> Commandes
+        </button>
+        <button onClick={() => showNotice("Transactions — fonctionnalité à venir")}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          <ArrowLeftRight size={16} /> Transactions
+        </button>
+        {/* "Articles" -> route "produits" (ProduitsScreen, catalogue & prix) */}
+        <button onClick={() => (onNav ? onNav("produits") : showNotice("Articles — navigation indisponible"))}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          <Package size={16} /> Articles
+        </button>
+        <button onClick={() => showNotice("Plus — fonctionnalité à venir")}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: 0, color: "var(--fg-3, #6b6b6b)", fontWeight: 600, fontSize: 11, cursor: "pointer" }}>
+          <MenuIcon size={16} /> Plus
+        </button>
+      </div>
       </div>
 
       {/* Layout desktop et tablette : panneau Ticket toujours visible en
