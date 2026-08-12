@@ -396,13 +396,31 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
     : [{ id: undefined, kind: "cash", name: PAYMENT_METHOD_KIND_LABELS.cash }];
   const methods = offline ? allMethods.filter((m) => m.kind === "cash") : allMethods;
   const [remaining, setRemaining] = React.useState(due);
-  const [payments, setPayments] = React.useState([]); // { methodId, kind, label, amount }
+  const [payments, setPayments] = React.useState([]); // { methodId, kind, label, amount, tendered?, change? }
   const [selectedMethodId, setSelectedMethodId] = React.useState(methods[0]?.id ?? methods[0]?.kind);
   const [amount, setAmount] = React.useState(due > 0 ? String(due.toFixed(2)) : "");
+  // Rendu de monnaie (SCRUM-304/306) : le montant "recu" (billet tendu par le
+  // client) est une info d'ecran/ticket UNIQUEMENT, jamais envoyee au serveur
+  // — seul le montant impute (borne au solde du, cf. addPaymentLine) part
+  // dans le paiement. Uniquement pertinent pour les methodes especes (kind
+  // === "cash") : les autres methodes n'ont pas de notion de rendu.
+  const [tendered, setTendered] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState(null);
 
   const findSelectedMethod = () => methods.find((m) => (m.id ?? m.kind) === selectedMethodId);
+  const selectedMethod = findSelectedMethod();
+  const isCashSelected = selectedMethod?.kind === "cash";
+
+  // Rendu affiche des que le recu depasse le montant qui sera reellement
+  // impute au paiement (borne a `remaining`, jamais le recu brut) : saisir
+  // 5.00 sur un solde de 4.00 impute 4.00 et rend 1.00, jamais 5.00 imputes.
+  const amountValue = Number(amount);
+  const imputedAmount = Number.isFinite(amountValue) ? Math.min(amountValue, remaining) : 0;
+  const tenderedValue = Number(tendered);
+  const changeDue = isCashSelected && Number.isFinite(tenderedValue) && tenderedValue > imputedAmount
+    ? Math.round((tenderedValue - imputedAmount) * 100) / 100
+    : 0;
 
   const addPaymentLine = () => {
     const value = Number(amount);
@@ -412,10 +430,24 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
     }
     const method = findSelectedMethod();
     const label = method?.name || PAYMENT_METHOD_KIND_LABELS[method?.kind] || method?.kind || "Paiement";
-    setPayments((p) => [...p, { methodId: method?.id, kind: method?.kind, label, amount: value }]);
-    const nextRemaining = Math.max(0, Math.round((remaining - value) * 100) / 100);
+    // Montant impute au paiement : toujours borne au solde du (jamais le
+    // montant recu du client), meme regle que le garde-fou backend
+    // (OrdersService#addPayment refuse un montant > solde du).
+    const imputed = Math.min(value, remaining);
+    const tenderedForLine = method?.kind === "cash" && Number.isFinite(tenderedValue) && tenderedValue > 0
+      ? tenderedValue
+      : undefined;
+    const changeForLine = tenderedForLine && tenderedForLine > imputed
+      ? Math.round((tenderedForLine - imputed) * 100) / 100
+      : undefined;
+    setPayments((p) => [...p, {
+      methodId: method?.id, kind: method?.kind, label, amount: imputed,
+      tendered: tenderedForLine, change: changeForLine,
+    }]);
+    const nextRemaining = Math.max(0, Math.round((remaining - imputed) * 100) / 100);
     setRemaining(nextRemaining);
     setAmount(nextRemaining > 0 ? String(nextRemaining.toFixed(2)) : "");
+    setTendered("");
     setError(null);
   };
 
@@ -430,6 +462,20 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
   };
 
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
+
+  // Recap especes (recu/rendu) pour le ticket imprime immediatement apres
+  // encaissement (SCRUM-306) : le backend ne stocke ni le recu ni le rendu
+  // (pas de colonne DB), cette info ne vit donc que dans l'etat local du
+  // composant et est transmise a onDone pour affichage sur CE ticket-la
+  // uniquement — une reimpression ulterieure (relue depuis le serveur) ne
+  // l'aura pas.
+  const cashLines = payments.filter((p) => p.kind === "cash" && p.tendered);
+  const cashSummary = cashLines.length
+    ? {
+        tendered: Math.round(cashLines.reduce((s, p) => s + p.tendered, 0) * 100) / 100,
+        change: Math.round(cashLines.reduce((s, p) => s + (p.change || 0), 0) * 100) / 100,
+      }
+    : null;
 
   const confirm = async () => {
     if (remaining > 0.001) {
@@ -456,7 +502,7 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
           lines: order.lines,
           payments: payments.map((p) => ({ methodId: p.methodId, amount: p.amount, currencyCode })),
         });
-        onDone({ ...order, dueTotal: "0.00", paidTotal: order.total, orderStatus: "completed", _offlinePending: true });
+        onDone({ ...order, dueTotal: "0.00", paidTotal: order.total, orderStatus: "completed", _offlinePending: true }, cashSummary);
         return;
       }
 
@@ -472,7 +518,7 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
       // commande passe directement à "completed" une fois entièrement payée
       // (pas de flux restaurant received→preparing→ready→served ici).
       const updated = await api.setOrderStatus(order.id, { status: "completed" });
-      onDone(updated);
+      onDone(updated, cashSummary);
     } catch (err) {
       // Coupure reseau/serveur reelle detectee (fix bug 3) : on ne bloque pas
       // la vente sur une erreur affichee sans issue — on bascule le parent en
@@ -510,12 +556,20 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
         {payments.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {payments.map((p, idx) => (
-              <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, background: "var(--bg-app, #FBF8F2)", padding: "6px 10px", borderRadius: 6 }}>
-                <span>{p.label}</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {formatMoney(p.amount, currencyCode)}
-                  <button onClick={() => removePaymentLine(idx)} title="Retirer" style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
-                </span>
+              <div key={idx} style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 13, background: "var(--bg-app, #FBF8F2)", padding: "6px 10px", borderRadius: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{p.label}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {formatMoney(p.amount, currencyCode)}
+                    <button onClick={() => removePaymentLine(idx)} title="Retirer" style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
+                  </span>
+                </div>
+                {p.tendered != null && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--fg-3, #6b6b6b)" }}>
+                    <span>Reçu {formatMoney(p.tendered, currencyCode)}</span>
+                    {p.change > 0 && <span>Rendu {formatMoney(p.change, currencyCode)}</span>}
+                  </div>
+                )}
               </div>
             ))}
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--fg-3, #6b6b6b)" }}>
@@ -541,7 +595,7 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
                 const key = m.id ?? m.kind;
                 const label = m.name || PAYMENT_METHOD_KIND_LABELS[m.kind] || m.kind;
                 return (
-                  <button key={key} onClick={() => setSelectedMethodId(key)}
+                  <button key={key} onClick={() => { setSelectedMethodId(key); setTendered(""); }}
                     style={{
                       padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border-2, #d8c8a8)",
                       background: selectedMethodId === key ? "#1f6d75" : "transparent",
@@ -561,6 +615,32 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
                 Ajouter
               </button>
             </div>
+
+            {/* Rendu de monnaie (SCRUM-304/306) : uniquement pour les
+                methodes especes — carte/mobile/bon/credit n'ont pas de
+                notion de rendu, on ne montre donc rien pour elles. Le champ
+                "Reçu" est une info d'ecran/ticket : le montant impute au
+                paiement (envoye au serveur) reste borne au solde du, cf.
+                addPaymentLine. */}
+            {isCashSelected && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <label style={{ fontSize: 12.5, color: "var(--fg-3, #6b6b6b)", minWidth: 44 }}>Reçu</label>
+                  <input type="number" min="0" step="0.01" value={tendered} onChange={(e) => setTendered(e.target.value)}
+                    placeholder="Montant remis par le client"
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: 6, border: "1px solid var(--border-2, #d8c8a8)", fontSize: 14 }} />
+                </div>
+                {changeDue > 0 && (
+                  <div style={{
+                    display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 700,
+                    color: "#1f6d75", background: "rgba(31,109,117,0.08)", borderRadius: 6, padding: "8px 10px",
+                  }}>
+                    <span>Rendu de monnaie</span>
+                    <span>{formatMoney(changeDue, currencyCode)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -608,6 +688,11 @@ export const CaisseScreen = () => {
   const [receiptData, setReceiptData] = React.useState(null);
   const [receiptLoading, setReceiptLoading] = React.useState(false);
   const [receiptError, setReceiptError] = React.useState(null);
+  // Recap especes (recu/rendu) de la derniere vente encaissee (SCRUM-304) :
+  // non persiste cote serveur (pas de colonne DB), disponible uniquement le
+  // temps du ticket imprime juste apres l'encaissement — voir onPaymentDone
+  // et printReceipt.
+  const [lastCashSummary, setLastCashSummary] = React.useState(null);
 
   // Modal variantes/modificateurs (SCRUM-293) : ouvert seulement si le produit
   // clique a des variantes et/ou des groupes de modificateurs. On decouvre ca
@@ -960,10 +1045,15 @@ export const CaisseScreen = () => {
     }
   };
 
-  const onPaymentDone = (order) => {
+  // cashSummary ({tendered, change}) vient de PaymentPanel#confirm : recap
+  // especes du paiement qui vient d'etre encaisse, uniquement pour le ticket
+  // imprime tout de suite apres (le backend ne stocke ni le recu ni le
+  // rendu — voir printReceipt ci-dessous).
+  const onPaymentDone = (order, cashSummary) => {
     setCheckoutOrder(null);
     setTicket([]);
     setConfirmation(order);
+    setLastCashSummary(cashSummary || null);
     setTimeout(() => setConfirmation(null), 4000);
   };
 
@@ -978,7 +1068,14 @@ export const CaisseScreen = () => {
     setReceiptError(null);
     try {
       const data = await api.getOrderReceipt(order.id);
-      setReceiptData(data);
+      // Recu/rendu especes (SCRUM-304/306) : rattaches uniquement si ce
+      // ticket correspond bien a la vente qu'on vient d'encaisser (le
+      // recap local ne concerne que la derniere transaction — une
+      // reimpression posterieure d'une autre commande ne doit pas herriter
+      // ce recap). Non envoye/stocke cote serveur, purement pour l'affichage
+      // de CE ticket immediat.
+      const cashSummary = order.id === confirmation?.id ? lastCashSummary : null;
+      setReceiptData(cashSummary ? { ...data, _cashTendered: cashSummary.tendered, _cashChange: cashSummary.change } : data);
       setTimeout(() => window.print(), 50);
     } catch (err) {
       setReceiptError(err.message || String(err));

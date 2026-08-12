@@ -705,13 +705,25 @@ export class OrdersService {
 
   async addPayment(id: number, input: CreateOrderPaymentDto, orgId: number, userId: number) {
     return this.db.transaction(async (tx) => {
+      // Verrou ligne (FOR UPDATE) : sans lui, deux paiements concurrents
+      // (double-clic caissier, renvoi reseau/carte) liraient le meme
+      // paidTotal et pourraient tous les deux passer la verification du
+      // solde du ci-dessous, faisant depasser paidTotal au-dela du total.
       const rows = await tx
         .select()
         .from(ktOrders)
         .where(and(eq(ktOrders.id, id), eq(ktOrders.organizationId, orgId)))
+        .for("update")
         .limit(1);
       if (!rows.length) throw new NotFoundException("Commande introuvable.");
       const order = rows[0];
+
+      const dueBefore = this.round2(Number(order.total) - Number(order.paidTotal));
+      if (input.amount > dueBefore + 0.001) {
+        throw new BadRequestException(
+          `Montant superieur au solde du : reste ${dueBefore.toFixed(2)} ${order.currencyCode}, recu ${input.amount.toFixed(2)} ${order.currencyCode}.`,
+        );
+      }
 
       const currencyCode = input.currencyCode ?? order.currencyCode;
 

@@ -117,6 +117,24 @@ export function ReceiptPrintView({ receipt }) {
         </div>
       )}
 
+      {/* Recu especes / rendu de monnaie (SCRUM-304/306) : champs optionnels
+          _cashTendered/_cashChange, injectes cote client (screens.jsx#printReceipt)
+          uniquement sur le ticket imprime juste apres l'encaissement — le
+          backend (GET /orders/:id/receipt) ne stocke ni le recu ni le rendu
+          (pas de colonne DB), donc absent sur une reimpression ulterieure. */}
+      {receipt._cashTendered != null && (
+        <div style={{ borderTop: "1px dashed #000", marginTop: 6, paddingTop: 6, fontSize: 11 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>Reçu</span><span>{formatMoney(receipt._cashTendered, currency)}</span>
+          </div>
+          {Number(receipt._cashChange) > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+              <span>Rendu</span><span>{formatMoney(receipt._cashChange, currency)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {receipt.receiptFooter && (
         <div style={{ textAlign: "center", marginTop: 10, fontSize: 11, whiteSpace: "pre-wrap" }}>
           {receipt.receiptFooter}
