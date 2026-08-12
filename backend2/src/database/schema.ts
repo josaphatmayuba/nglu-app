@@ -3706,7 +3706,7 @@ export const ktExpenses = mysqlTable("kt_expenses", {
   label: varchar("label", { length: 255 }).notNull(),
   amount: decimal("amount", { precision: 14, scale: 2 }).default("0.00").notNull(),
   currencyCode: varchar("currency_code", { length: 3 }).default("USD").notNull(),
-  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  expenseDate: datetime("expense_date", { mode: "string" }).notNull(),
   note: text("note"),
   attachmentUrl: text("attachment_url"),
   userId: bigint("user_id", { mode: "number" }),

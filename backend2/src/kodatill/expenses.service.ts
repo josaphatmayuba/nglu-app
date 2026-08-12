@@ -11,6 +11,34 @@ import {
 } from "./dto/expenses.dto";
 import { KodatillAccountingService } from "./accounting.service";
 
+// kt_expenses.expense_date est un DATETIME (Drizzle mode "string") : la valeur
+// part telle quelle vers MySQL, un ISO 8601 avec T / Z ou millisecondes serait
+// rejete. Le client peut envoyer soit "YYYY-MM-DD HH:mm:ss", soit un ISO
+// complet, soit une date seule (compat) : on normalise vers le format MySQL.
+// Une date seule est completee a minuit, comme avant le passage en DATETIME.
+function toMysqlDateTime(value: string): string {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return `${trimmed} 00:00:00`;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return trimmed;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ` +
+    `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`
+  );
+}
+
+// Les bornes de filtre restent des jours (YYYY-MM-DD) cote client. Contre une
+// colonne DATETIME, une borne haute nue vaut minuit et exclurait toutes les
+// depenses du jour : on elargit a la fin de journee.
+function rangeStart(day: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day.trim()) ? `${day.trim()} 00:00:00` : day;
+}
+
+function rangeEnd(day: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day.trim()) ? `${day.trim()} 23:59:59` : day;
+}
+
 @Injectable()
 export class ExpensesService {
   constructor(
@@ -88,8 +116,8 @@ export class ExpensesService {
       if (Number.isInteger(categoryId)) conditions.push(eq(ktExpenses.categoryId, categoryId));
     }
 
-    if (filter.from) conditions.push(gte(ktExpenses.expenseDate, filter.from));
-    if (filter.to) conditions.push(lte(ktExpenses.expenseDate, filter.to));
+    if (filter.from) conditions.push(gte(ktExpenses.expenseDate, rangeStart(filter.from)));
+    if (filter.to) conditions.push(lte(ktExpenses.expenseDate, rangeEnd(filter.to)));
 
     return this.db
       .select()
@@ -116,7 +144,7 @@ export class ExpensesService {
       label: input.label,
       amount: input.amount.toFixed(2),
       currencyCode: input.currencyCode ?? "USD",
-      expenseDate: input.expenseDate,
+      expenseDate: toMysqlDateTime(input.expenseDate),
       note: input.note,
       attachmentUrl: input.attachmentUrl,
     });
@@ -144,7 +172,9 @@ export class ExpensesService {
         ...(input.label !== undefined ? { label: input.label } : {}),
         ...(input.amount !== undefined ? { amount: input.amount.toFixed(2) } : {}),
         ...(input.currencyCode !== undefined ? { currencyCode: input.currencyCode } : {}),
-        ...(input.expenseDate !== undefined ? { expenseDate: input.expenseDate } : {}),
+        ...(input.expenseDate !== undefined
+          ? { expenseDate: toMysqlDateTime(input.expenseDate) }
+          : {}),
         ...(input.note !== undefined ? { note: input.note } : {}),
         ...(input.attachmentUrl !== undefined ? { attachmentUrl: input.attachmentUrl } : {}),
       })
@@ -184,8 +214,8 @@ export class ExpensesService {
         and(
           eq(ktExpenses.organizationId, orgId),
           eq(ktExpenses.status, "true"),
-          gte(ktExpenses.expenseDate, from),
-          lte(ktExpenses.expenseDate, to),
+          gte(ktExpenses.expenseDate, rangeStart(from)),
+          lte(ktExpenses.expenseDate, rangeEnd(to)),
         ),
       )
       .groupBy(ktExpenses.categoryId, ktExpenseCategories.name, ktExpenses.currencyCode)

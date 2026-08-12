@@ -1562,6 +1562,13 @@
       "when": 1781064000000,
       "tag": "0247_kodatill_cash_variance_account",
       "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "5",
+      "when": 1781067600000,
+      "tag": "0248_kodatill_expense_datetime",
+      "breakpoints": true
     }
   ]
 }

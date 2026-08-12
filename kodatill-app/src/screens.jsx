@@ -3847,13 +3847,33 @@ function ExpenseCategoryPanel({ categories, onChanged, onClose }) {
   );
 }
 
+// kt_expenses.expense_date est un DATETIME : le formulaire saisit la date ET
+// l heure. <input type="datetime-local"> attend / produit "YYYY-MM-DDTHH:mm"
+// en heure locale. Sans valeur existante, on pre-remplit a l instant present
+// (pas minuit). Une ancienne valeur date seule est completee a minuit.
+function toLocalInputValue(dateLike) {
+  const d = dateLike ? new Date(String(dateLike).replace(" ", "T")) : new Date();
+  const base = Number.isNaN(d.getTime()) ? new Date() : d;
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}` +
+    `T${pad(base.getHours())}:${pad(base.getMinutes())}`
+  );
+}
+
+// Le backend attend le format MySQL "YYYY-MM-DD HH:mm:ss" (secondes a 00,
+// l input datetime-local ne les saisit pas).
+function toApiDateTime(inputValue) {
+  return `${inputValue.replace("T", " ")}:00`;
+}
+
 function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
   const [categoryId, setCategoryId] = React.useState(expense?.categoryId ?? (categories[0]?.id ?? ""));
   const [branchId, setBranchId] = React.useState(expense?.branchId ?? "");
   const [label, setLabel] = React.useState(expense?.label || "");
   const [amount, setAmount] = React.useState(expense?.amount ?? "");
   const [currencyCode, setCurrencyCode] = React.useState(expense?.currencyCode || "USD");
-  const [expenseDate, setExpenseDate] = React.useState(expense?.expenseDate ? String(expense.expenseDate).slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = React.useState(() => toLocalInputValue(expense?.expenseDate));
   const [note, setNote] = React.useState(expense?.note || "");
   const [error, setError] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -3885,7 +3905,7 @@ function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
         label: label.trim(),
         amount: a,
         currencyCode,
-        expenseDate,
+        expenseDate: toApiDateTime(expenseDate),
         note: note.trim() || undefined,
       };
       if (branchId) body.branchId = Number(branchId);
@@ -3950,8 +3970,8 @@ function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
         </div>
 
         <label style={fieldLabelStyle}>
-          <span style={fieldCaptionStyle}>Date *</span>
-          <input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} style={fieldInputStyle} />
+          <span style={fieldCaptionStyle}>Date et heure *</span>
+          <input type="datetime-local" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} style={fieldInputStyle} />
         </label>
 
         <label style={fieldLabelStyle}>
@@ -4103,7 +4123,7 @@ export const DepensesScreen = () => {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, color: "var(--fg-1, #0E2418)" }}>{exp.label}</div>
                 <div style={{ fontSize: 11.5, color: "var(--fg-3, #6b6b6b)" }}>
-                  {String(exp.expenseDate).slice(0, 10)} · {categoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`}
+                  {formatTime(String(exp.expenseDate).replace(" ", "T"))} · {categoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`}
                   {exp.branchId ? ` · ${branchById.get(exp.branchId)?.name || `Succursale #${exp.branchId}`}` : ""}
                   {exp.note ? ` · ${exp.note}` : ""}
                 </div>
@@ -4215,9 +4235,9 @@ export const RapportsScreen = () => {
   };
 
   const exportExpensesCsv = () => {
-    const header = ["Date", "Catégorie", "Libellé", "Montant", "Devise"];
+    const header = ["Date et heure", "Catégorie", "Libellé", "Montant", "Devise"];
     const rows = expenses.map((exp) => [
-      String(exp.expenseDate).slice(0, 10),
+      formatTime(String(exp.expenseDate).replace(" ", "T")),
       expenseCategoryById.get(exp.categoryId)?.name || `Catégorie #${exp.categoryId}`,
       exp.label,
       exp.amount,
