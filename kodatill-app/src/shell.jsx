@@ -192,3 +192,55 @@ export const Topbar = ({ title, subtitle, onHamburger }) => (
     </div>
   </header>
 );
+
+// Bottom tab bar mobile pour le back-office (<=768px), meme role/structure
+// que MobileTabBar de farmos-app/src/app.jsx (5 slots, bouton central
+// surelevé) — en COMPLEMENT du hamburger (Topbar), pas en remplacement :
+// raccourcis rapides vers les 4 ecrans les plus frequents + Caisse au
+// centre (action la plus frequente dans un commerce, equivalent du "+"
+// FarmOS qui ouvre une saisie rapide). Teinte marque KodaTill (#1f6d75),
+// pas la palette clay/forest de FarmOS. N'apparait jamais sur la route
+// caisse elle-meme (qui a deja sa propre bottom nav dediee, screens.jsx).
+export const MobileTabBar = ({ active, onNav }) => {
+  const items = [
+    { id: "dashboard", label: "Accueil",   icon: LayoutDashboard },
+    { id: "commandes", label: "Commandes", icon: ClipboardList },
+    { id: "_caisse",   label: "Caisse",    icon: Calculator },
+    { id: "produits",  label: "Produits",  icon: Package },
+    { id: "parametres", label: "Réglages", icon: Settings },
+  ];
+  return (
+    <nav style={{
+      flexShrink: 0, display: "flex", borderTop: "1px solid var(--border-1, #E7EBF1)",
+      background: "var(--paper, #fff)", padding: "6px 8px 10px", gap: 4,
+    }}>
+      {items.map((it) => {
+        const Icon = it.icon;
+        if (it.id === "_caisse") {
+          return (
+            <button key="_caisse" onClick={() => onNav("caisse")} aria-label="Caisse"
+              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", border: 0, background: "transparent", cursor: "pointer", padding: 0 }}>
+              <span style={{
+                width: 44, height: 44, borderRadius: 999, background: "#1f6d75", color: "#FBF8F2",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 6px 18px -4px rgba(31,109,117,0.5)", marginTop: -16,
+              }}>
+                <Icon size={20} />
+              </span>
+            </button>
+          );
+        }
+        const isActive = active === it.id;
+        return (
+          <button key={it.id} onClick={() => onNav(it.id)} style={{
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+            border: 0, background: "transparent", padding: "6px 0", cursor: "pointer",
+          }}>
+            <Icon size={18} color={isActive ? "#1f6d75" : "var(--fg-3, #6b6b6b)"} />
+            <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? "#1f6d75" : "var(--fg-3, #6b6b6b)" }}>{it.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+};

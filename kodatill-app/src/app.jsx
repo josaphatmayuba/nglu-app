@@ -1,7 +1,7 @@
 // KodaTill — App root. Meme pattern de routing que farmos-app/src/app.jsx
 // (state + window.history.pushState, pas de react-router dans ce monorepo).
 import React from "react";
-import { Sidebar, Topbar, navForActivityProfile, useNarrow } from "./shell.jsx";
+import { Sidebar, Topbar, MobileTabBar, navForActivityProfile, useNarrow } from "./shell.jsx";
 import { DashboardScreen, ProduitsScreen, CommandesScreen, CaisseScreen, ParametresScreen, StockScreen, IngredientsScreen, DepensesScreen, RapportsScreen, KitchenScreen, ScanScreen } from "./screens.jsx";
 import { PublicMenuScreen, PublicOrderTrackingScreen } from "./public-menu.jsx";
 import { SuperAdminScreen, isSuperOwner } from "./platform-admin.jsx";
@@ -229,6 +229,11 @@ function App() {
         <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>
+        {/* Raccourcis rapides back-office (<=768px), en COMPLEMENT du
+            hamburger — meme role que MobileTabBar de farmos-app/src/app.jsx.
+            Jamais sur la route caisse : elle a deja sa propre bottom nav
+            dediee (screens.jsx, Menu/Commandes/Transactions/Articles/Plus). */}
+        {isMobile && route !== "caisse" && <MobileTabBar active={route} onNav={navWithClose} />}
       </main>
     </div>
   );
