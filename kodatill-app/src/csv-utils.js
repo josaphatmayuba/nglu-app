@@ -5,10 +5,23 @@
 
 // Echappe une valeur pour une cellule CSV (RFC 4180 simplifie) : entoure de
 // guillemets si la valeur contient une virgule, un guillemet ou un retour a
-// la ligne ; double les guillemets internes.
+// la ligne (\n ou \r) ; double les guillemets internes.
+//
+// Neutralise aussi l'injection de formule CSV : une valeur commencant par
+// =, +, -, @, tabulation ou retour chariot peut etre interpretee comme une
+// formule/commande par Excel/LibreOffice a l'ouverture du fichier (ex:
+// =HYPERLINK(...) ou =cmd|...). Des champs texte libre saisis par
+// l'utilisateur (libelle de depense, nom de categorie) sont exportes tels
+// quels dans RapportsScreen (SCRUM-308), donc pas d'hypothese possible sur
+// leur contenu. On prefixe d'une apostrophe avant l'echappement RFC 4180
+// normal : le tableur affiche la valeur en texte brut (lisibilite preservee)
+// sans l'executer.
 function escapeCsvCell(value) {
-  const s = value == null ? "" : String(value);
-  if (/[",\n]/.test(s)) {
+  let s = value == null ? "" : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
+  if (/[",\n\r]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;

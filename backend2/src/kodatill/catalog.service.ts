@@ -300,24 +300,54 @@ export class CatalogService {
   }
 
   // ─── Snapshot offline (SCRUM-304) ───────────────────────────────────────
-  // Version = max(updated_at) categories+produits actifs, en epoch ms. Simple
-  // et suffisant pour un ETag (pas besoin d'un vrai hash de contenu) : toute
-  // creation/mise a jour touche updated_at (onUpdateNow) donc la version
-  // change des qu'une donnee du snapshot change. Utilise aussi comme
-  // fallback si la table est vide (0 -> pas de cache -> version "0").
+  // Version = max(updated_at) + count(*) sur TOUTES les lignes categories et
+  // produits (actives ET soft-deleted, aucun filtre status) — c'est voulu :
+  // filtrer sur status="true" casserait la detection des suppressions (une
+  // suppression passe status a "false" sans forcement etre le MAX(updated_at)
+  // le plus recent si une autre ligne a ete touchee la meme seconde).
+  //
+  // Pourquoi le COUNT en plus du MAX(updated_at) : `updated_at` est un
+  // TIMESTAMP MySQL sans precision decimale -> granularite 1 seconde. Deux
+  // evenements catalogue distincts dans la meme seconde (ex: suppression du
+  // produit A a 10:00:05.100 puis modification du prix du produit B a
+  // 10:00:05.800) donnent le meme MAX(updated_at) = 10:00:05 pour les deux :
+  // une caisse ayant deja mis en cache la version apres le premier evenement
+  // recevrait un 304 Not Modified pour le second et garderait indefiniment
+  // l'ancien prix de B. Le COUNT(*) detecte au moins les changements de
+  // cardinalite (ajout/suppression), qui sont le cas le plus frequent et le
+  // plus impactant.
+  //
+  // Limitation residuelle assumee pour ce ticket : deux modifications de PRIX
+  // pures (sans ajout/suppression associe) dans la meme seconde ne changent
+  // ni le MAX(updated_at) ni le COUNT(*) de facon distinguable -> non
+  // detectees par cette version. Solution complete = passer `updated_at` en
+  // TIMESTAMP(3) (migration Drizzle) pour une granularite milliseconde, mais
+  // pas fait ici : compromis MAX+COUNT juge suffisant vu l'effort/risque
+  // migration pour ce ticket. A reconsiderer si des rapports de prix
+  // obsoletes en caisse apparaissent en usage reel.
+  //
+  // Fallback si les tables sont vides (0 lignes) -> version "0:0" -> pas de
+  // cache -> snapshot complet servi.
   async getSnapshotVersion(orgId: number): Promise<string> {
     const [catRow] = await this.db
-      .select({ max: sql<string | null>`MAX(${ktCategories.updatedAt})` })
+      .select({
+        max: sql<string | null>`MAX(${ktCategories.updatedAt})`,
+        count: sql<number>`COUNT(*)`,
+      })
       .from(ktCategories)
       .where(eq(ktCategories.organizationId, orgId));
     const [prodRow] = await this.db
-      .select({ max: sql<string | null>`MAX(${ktProducts.updatedAt})` })
+      .select({
+        max: sql<string | null>`MAX(${ktProducts.updatedAt})`,
+        count: sql<number>`COUNT(*)`,
+      })
       .from(ktProducts)
       .where(eq(ktProducts.organizationId, orgId));
 
     const catMs = catRow?.max ? new Date(catRow.max).getTime() : 0;
     const prodMs = prodRow?.max ? new Date(prodRow.max).getTime() : 0;
-    return String(Math.max(catMs, prodMs));
+    const totalCount = Number(catRow?.count ?? 0) + Number(prodRow?.count ?? 0);
+    return `${Math.max(catMs, prodMs)}:${totalCount}`;
   }
 
   /**

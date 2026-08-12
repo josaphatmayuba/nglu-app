@@ -11,6 +11,15 @@
 
 import Dexie from "dexie";
 
+// IMPORTANT : toutes les declarations de version Dexie de cette base doivent
+// vivre ICI, dans ce seul fichier, meme celles utilisees uniquement par
+// d'autres modules (ex: le store "outbox" de offline-outbox.js). Une
+// declaration de version separee dans un autre fichier ne fonctionne que par
+// accident, tant que ce fichier est toujours importe en premier avec l'autre
+// dans le meme module consommateur (ordre d'import non garanti sinon) — si un
+// futur ecran importait offline-db.js sans l'autre module, Dexie ouvrirait la
+// base sur un schema incomplet et un store entier disparaitrait silencieusement
+// (perte de donnees en attente, ex: ventes offline non synchronisees).
 export const db = new Dexie("kodatill-offline");
 db.version(1).stores({
   categories: "id, sortOrder",
@@ -18,6 +27,22 @@ db.version(1).stores({
   // Cle unique "catalog" : { lastSyncedAt, etag, version }.
   meta:       "key, lastSyncedAt",
 });
+// v2 (SCRUM-304) : outbox des commandes creees hors-ligne, consommee par
+// offline-outbox.js (voir ce fichier pour le detail des statuts/usage).
+db.version(2).stores({
+  outbox: "++id, status, clientUuid, createdAt",
+});
+
+// GARDE FUTURE : si un prochain bump de version modifie la STRUCTURE du
+// catalogue mis en cache (ex: ajout d'un champ "variants" embarque dans les
+// produits), accompagner le nouveau `db.version(N).stores(...)` d'un
+// `.upgrade()` qui vide le store `meta` (db.meta.clear()). Sans ca, une caisse
+// avec un ancien cache garde son ETag/version existant en meta, envoie encore
+// un If-None-Match valide au backend, recoit un 304, et sert indefiniment un
+// cache structurellement obsolete (les nouveaux champs n'existeront jamais
+// localement). Vider meta force un re-fetch complet (pas d'ETag => 200 avec
+// le nouveau payload). Pas necessaire aujourd'hui (aucun bump prevu dans ce
+// ticket), juste documente pour eviter le piege plus tard.
 
 // Remplace entierement le miroir catalogue avec la derniere reponse
 // GET /catalog/snapshot (categories + products), et enregistre l'ETag/version

@@ -12,11 +12,10 @@
 import { db as cacheDb } from "./offline-db";
 import { getToken } from "./auth.jsx";
 
-// Meme base que offline-db.js ne supporte pas l'ajout d'une table apres coup
-// sans bumper la version -> on bumpe (identique au pattern farmos-app).
-cacheDb.version(2).stores({
-  outbox: "++id, status, clientUuid, createdAt",
-});
+// Le store "outbox" (et son bump de version Dexie) est declare dans
+// offline-db.js, pas ici — voir le commentaire "IMPORTANT" en tete de ce
+// fichier pour la raison (garantir que Dexie voit toujours le schema complet
+// des l'ouverture de la base, peu importe quel module est importe en premier).
 
 const STATUS = { pending: "pending", syncing: "syncing", done: "done", error: "error" };
 
