@@ -162,15 +162,18 @@ function App() {
 
   const meta = ROUTE_META[route] || ROUTE_META.dashboard;
   const nav = React.useMemo(() => navForActivityProfile(profile), [profile]);
-  // Sidebar en tiroir coulissant sous <=768px sur les ecrans back-office
-  // (meme seuil "mobile" que farmos-app/src/app.jsx useLayoutMode),
-  // accessible via le hamburger du Topbar. CaisseScreen fait exception
-  // (cf. caisseSidebarHidden plus bas) : le mockup POS (surf-pos/surf-posm)
-  // est un ecran plein cadre SANS sidebar ni hamburger, jusqu'en tablette —
-  // sa propre bottom nav dediee (Menu/Commandes/Transactions/Articles/Plus)
-  // couvre deja toute la navigation necessaire sur cet ecran.
-  const isMobile = useNarrow(768);
+  // Sidebar en tiroir coulissant + MobileTabBar sur les ecrans back-office,
+  // actifs sur TOUTE la plage compacte (mobile ET tablette, <=1180px, meme
+  // seuil que caisseSidebarHidden ci-dessous) — signale par le proprietaire
+  // du projet avec capture : la bottom tab bar n'apparaissait qu'en mobile
+  // stricte (<=768px), pas en tablette, laissant la nav generale incomplete
+  // sur cet ecran. CaisseScreen fait exception (cf. caisseSidebarHidden) :
+  // le mockup POS (surf-pos/surf-posm) est un ecran plein cadre SANS
+  // sidebar ni hamburger jusqu'en tablette — sa propre bottom nav dediee
+  // (Menu/Commandes/Transactions/Articles/Plus) couvre deja la navigation
+  // necessaire sur cet ecran precis.
   const caisseSidebarHidden = useNarrow(1180);
+  const isCompact = caisseSidebarHidden;
   const [mobileNav, setMobileNav] = React.useState(false);
   const navWithClose = React.useCallback((r) => { setRoute(r); setMobileNav(false); }, [setRoute]);
 
@@ -201,11 +204,11 @@ function App() {
 
   return (
     <div style={{ height: "100vh", display: "flex", overflow: "hidden", background: "var(--bg-app, #FBF8F2)", position: "relative" }}>
-      {/* Tiroir mobile (<=768px, meme pattern que farmos-app/src/app.jsx
-          lignes 240-256) : overlay sombre qui referme le tiroir au clic,
-          rendu seulement quand le tiroir est ouvert. N'existe jamais sur
-          la route caisse (cf. caisseSidebarHidden juste en dessous). */}
-      {route !== "caisse" && isMobile && mobileNav && (
+      {/* Tiroir compact (mobile+tablette <=1180px, meme pattern que
+          farmos-app/src/app.jsx lignes 240-256) : overlay sombre qui
+          referme le tiroir au clic, rendu seulement quand le tiroir est
+          ouvert. N'existe jamais sur la route caisse. */}
+      {route !== "caisse" && isCompact && mobileNav && (
         <div onClick={() => setMobileNav(false)} style={{ position: "absolute", inset: 0, background: "rgba(6,32,37,0.5)", zIndex: 70 }} />
       )}
       {/* CaisseScreen (mockup surf-pos/surf-posm) est un ecran plein cadre
@@ -213,10 +216,10 @@ function App() {
           seuil que le layout responsive interne de CaisseScreen) — sa
           bottom nav dediee couvre deja la navigation. Sur les autres
           ecrans, Sidebar reste visible (desktop) ou en tiroir hamburger
-          (mobile <=768px). */}
+          (mobile+tablette <=1180px). */}
       {!(route === "caisse" && caisseSidebarHidden) && (
-        <div style={isMobile ? { position: "absolute", top: 0, bottom: 0, left: 0, zIndex: 75 } : { flexShrink: 0 }}>
-          <Sidebar active={route} onNav={navWithClose} nav={nav} mobile={isMobile} mobileOpen={mobileNav} />
+        <div style={isCompact ? { position: "absolute", top: 0, bottom: 0, left: 0, zIndex: 75 } : { flexShrink: 0 }}>
+          <Sidebar active={route} onNav={navWithClose} nav={nav} mobile={isCompact} mobileOpen={mobileNav} />
         </div>
       )}
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
@@ -225,15 +228,16 @@ function App() {
             le Topbar generique ne s'affiche donc pas pour cette route, pour
             eviter un double bandeau, et sans hamburger (pas de sidebar sur
             cet ecran, cf. plus haut). */}
-        {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} onHamburger={isMobile ? () => setMobileNav(true) : undefined} />}
+        {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} onHamburger={isCompact ? () => setMobileNav(true) : undefined} />}
         <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>
-        {/* Raccourcis rapides back-office (<=768px), en COMPLEMENT du
-            hamburger — meme role que MobileTabBar de farmos-app/src/app.jsx.
-            Jamais sur la route caisse : elle a deja sa propre bottom nav
-            dediee (screens.jsx, Menu/Commandes/Transactions/Articles/Plus). */}
-        {isMobile && route !== "caisse" && <MobileTabBar active={route} onNav={navWithClose} />}
+        {/* Raccourcis rapides back-office (mobile+tablette <=1180px), en
+            COMPLEMENT du hamburger — meme role que MobileTabBar de
+            farmos-app/src/app.jsx. Jamais sur la route caisse : elle a deja
+            sa propre bottom nav dediee (screens.jsx, Menu/Commandes/
+            Transactions/Articles/Plus). */}
+        {isCompact && route !== "caisse" && <MobileTabBar active={route} onNav={navWithClose} />}
       </main>
     </div>
   );
