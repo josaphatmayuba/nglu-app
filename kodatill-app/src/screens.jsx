@@ -1121,6 +1121,19 @@ export const CaisseScreen = ({ onNav } = {}) => {
     return list;
   }, [products, activeCategoryId, search]);
 
+  // Comptage d'articles par categorie pour les tuiles (une seule passe sur
+  // products, au lieu d'un .filter() par categorie relance a chaque render —
+  // perf trouvee en revue de code : O(categories x produits) recalcule a
+  // chaque frappe dans le champ recherche, sensible avec un gros catalogue).
+  const productCountByCategoryId = React.useMemo(() => {
+    const counts = new Map();
+    for (const p of products) {
+      if (p.categoryId == null) continue;
+      counts.set(p.categoryId, (counts.get(p.categoryId) || 0) + 1);
+    }
+    return counts;
+  }, [products]);
+
   const subtotal = ticket.reduce((s, l) => s + l.qty * l.unitPrice, 0);
   const ticketCurrency = ticket[0]?.currencyCode || session?.currencyCode || "USD";
 
@@ -1174,10 +1187,27 @@ export const CaisseScreen = ({ onNav } = {}) => {
       // que l'appel echoue reellement. On bascule isOnline a false pour que
       // l'utilisateur puisse retenter directement sur le chemin offline
       // (mise en file) au lieu de rester bloque sur une erreur sans issue.
+      // Construit le brouillon offline directement ici (au lieu de rappeler
+      // startCheckout()) : setIsOnline est asynchrone, un rappel immediat
+      // relirait `isOnline` de la closure de CE render (encore true) et
+      // retenterait le meme appel reseau en boucle — bug trouve en revue de
+      // code, le caissier restait fige sur "Creation…" sans jamais basculer
+      // en offline.
       if (isNetworkError(err)) {
         setIsOnline(false);
         setCheckoutError(null);
-        startCheckout();
+        setCheckoutOrder({
+          id: `offline-${crypto.randomUUID()}`,
+          clientUuid: crypto.randomUUID(),
+          branchId: session.branchId ?? defaultBranchId,
+          registerId: session.registerId,
+          channel: "pos",
+          currencyCode: ticketCurrency,
+          total: subtotal.toFixed(2),
+          dueTotal: subtotal.toFixed(2),
+          paidTotal: "0.00",
+          lines,
+        });
         return;
       }
       setCheckoutError(err.message || String(err));
@@ -1539,7 +1569,7 @@ export const CaisseScreen = ({ onNav } = {}) => {
           </button>
           {categories.map((c, idx) => {
             const color = POS_CATEGORY_COLORS[idx % POS_CATEGORY_COLORS.length];
-            const count = products.filter((p) => p.categoryId === c.id).length;
+            const count = productCountByCategoryId.get(c.id) || 0;
             return (
               <button key={c.id} onClick={() => setActiveCategoryId(c.id)}
                 style={{
@@ -2041,7 +2071,7 @@ export const DashboardScreen = () => {
     setLoading(true);
     setError(null);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = toLocalDateOnly(new Date());
       const [ordersList, currentSession, todaysExpenses] = await Promise.all([
         api.listOrders({ from: today, to: today }),
         api.getCurrentCashSession().catch((err) => {
@@ -2738,8 +2768,12 @@ function ModifierGroupsPanel({ onChanged, onClose }) {
   // priceDelta n'a pas de devise propre en base (delta applique au prix du
   // produit) : ce panneau etant a portee organisation (pas un produit
   // precis), on affiche le supplement dans la devise par defaut de
-  // l'organisation, chargee depuis le profil d'activite.
-  const [defaultCurrencyCode, setDefaultCurrencyCode] = React.useState("USD");
+  // l'organisation, chargee depuis le profil d'activite. Defaut "" (pas
+  // "USD" en dur, bug trouve en revue de code : un tenant configure en CDF
+  // voyait "USD" affiche tant que le profil n'avait pas fini de charger, ou
+  // en cas d'echec silencieux de l'appel) — formatMoney("") n'affiche pas de
+  // devise plutot qu'une fausse.
+  const [defaultCurrencyCode, setDefaultCurrencyCode] = React.useState("");
 
   const [editingGroupId, setEditingGroupId] = React.useState(null);
   const [groupName, setGroupName] = React.useState("");
@@ -4445,6 +4479,19 @@ function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
       setError("La date est obligatoire.");
       return;
     }
+    // Garde-fou supplementaire au-dela du max= de l input (bug trouve en
+    // revue de code) : un input datetime-local reste modifiable au clavier,
+    // une date invalide (parse NaN) ou future passait sans erreur et rendait
+    // la depense invisible dans les filtres de periode courants.
+    const parsedDate = new Date(expenseDate);
+    if (Number.isNaN(parsedDate.getTime())) {
+      setError("Date invalide.");
+      return;
+    }
+    if (parsedDate.getTime() > Date.now() + 5 * 60 * 1000) {
+      setError("La date ne peut pas être dans le futur.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -4519,7 +4566,12 @@ function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
 
         <label style={fieldLabelStyle}>
           <span style={fieldCaptionStyle}>Date et heure *</span>
-          <input type="datetime-local" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} style={fieldInputStyle} />
+          {/* max = instant present : une depense ne peut pas etre saisie dans
+              le futur (bug trouve en revue de code : une faute de frappe sur
+              l'annee, ex. 2206 au lieu de 2026, passait sans erreur et
+              rendait la depense invisible dans tous les filtres de periode
+              courants). */}
+          <input type="datetime-local" value={expenseDate} max={toLocalInputValue()} onChange={(e) => setExpenseDate(e.target.value)} style={fieldInputStyle} />
         </label>
 
         <label style={fieldLabelStyle}>
@@ -4544,9 +4596,19 @@ function ExpenseForm({ expense, categories, branches, onSaved, onCancel }) {
   );
 }
 
+// Formate en YYYY-MM-DD a partir des champs LOCAUX (pas toISOString, qui
+// convertit en UTC et decale d'un jour selon le fuseau — bug trouve en revue
+// de code : a Kinshasa (UTC+1), new Date(2026,7,1).toISOString() donne
+// "2026-07-31", une depense du 31 juillet se retrouvait comptee dans le
+// total du mois d'aout). Meme principe que toLocalInputValue plus haut.
+function toLocalDateOnly(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function monthRange(date = new Date()) {
-  const from = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const from = toLocalDateOnly(new Date(date.getFullYear(), date.getMonth(), 1));
+  const to = toLocalDateOnly(new Date(date.getFullYear(), date.getMonth() + 1, 0));
   return { from, to };
 }
 
@@ -4716,7 +4778,7 @@ export const DepensesScreen = () => {
 // donnees deja chargees pour la periode choisie.
 // ─────────────────────────────────────────────────────────────────────────
 function todayRange() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalDateOnly(new Date());
   return { from: today, to: today };
 }
 function weekRange(date = new Date()) {
@@ -4726,11 +4788,11 @@ function weekRange(date = new Date()) {
   monday.setDate(date.getDate() + diffToMonday);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) };
+  return { from: toLocalDateOnly(monday), to: toLocalDateOnly(sunday) };
 }
 
 export const RapportsScreen = () => {
-  const todayIso = React.useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayIso = React.useMemo(() => toLocalDateOnly(new Date()), []);
   const [from, setFrom] = React.useState(todayIso);
   const [to, setTo] = React.useState(todayIso);
 
@@ -5025,10 +5087,23 @@ export const KitchenScreen = () => {
     }
   }, [load]);
 
-  const preparingOrders = orders.filter((o) =>
-    o.lines.some((l) => l.kitchenStatus === "pending" || l.kitchenStatus === "preparing"));
-  const readyOrders = orders.filter((o) =>
-    o.lines.some((l) => l.kitchenStatus === "ready") && !preparingOrders.includes(o));
+  // Partition en une seule passe (au lieu de deux .filter() + .includes(),
+  // O(n²) relance a chaque poll de 5s — perf trouvee en revue de code) et
+  // garde sur o.lines (une commande renvoyee sans ce champ par l'API
+  // plantait tout l'ecran cuisine, non supervise sur TV).
+  const { preparingOrders, readyOrders } = React.useMemo(() => {
+    const preparing = [];
+    const ready = [];
+    for (const o of orders) {
+      const lines = Array.isArray(o.lines) ? o.lines : [];
+      if (lines.some((l) => l.kitchenStatus === "pending" || l.kitchenStatus === "preparing")) {
+        preparing.push(o);
+      } else if (lines.some((l) => l.kitchenStatus === "ready")) {
+        ready.push(o);
+      }
+    }
+    return { preparingOrders: preparing, readyOrders: ready };
+  }, [orders]);
 
   return (
     <div style={{
