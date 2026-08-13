@@ -1576,9 +1576,16 @@ export const CaisseScreen = ({ onNav } = {}) => {
                   flexShrink: 0, minWidth: isCompact ? 86 : 104, borderRadius: 14, cursor: "pointer",
                   padding: isCompact ? 10 : 12, textAlign: "left", color: "#fff",
                   background: color, border: activeCategoryId === c.id ? "2px solid #0f172a" : "2px solid transparent",
+                  // display:flex column explicite (au lieu du flux block par
+                  // defaut d'un <button>) : un <button> natif applique parfois
+                  // un display/align-items par defaut du navigateur qui
+                  // ecrasait le contenu multi-lignes en hauteur (bug signale
+                  // avec capture : tuiles categories affichees vides, aucun
+                  // texte visible malgre le fond colore correct).
+                  display: "flex", flexDirection: "column", alignItems: "flex-start",
                 }}>
                 <div style={{ fontSize: isCompact ? 16 : 18, marginBottom: 6, lineHeight: 1 }}>{c.icon || "🏷️"}</div>
-                <div style={{ fontSize: isCompact ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>{c.name}</div>
+                <div style={{ fontSize: isCompact ? 11 : 12.5, fontWeight: 700, lineHeight: 1.2 }}>{c.name || "Catégorie"}</div>
                 <div style={{ fontSize: isCompact ? 9 : 10, opacity: 0.85 }}>{count} article{count > 1 ? "s" : ""}</div>
               </button>
             );

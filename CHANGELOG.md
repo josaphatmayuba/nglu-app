@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **KodaTill — tuiles catégories de `CaisseScreen` affichées vides (fond coloré visible, aucun texte), signalé avec capture.** Le `<button>` de chaque tuile (icône + nom + nombre d'articles, 3 lignes) n'avait pas de `display: flex` explicite — laissé au flux block par défaut d'un `<button>` natif, dont le rendu multi-lignes peut être écrasé selon le navigateur. Fix : `display: "flex", flexDirection: "column", alignItems: "flex-start"` posé explicitement, plus un fallback `"Catégorie"` si `c.name` est vide (aucune donnée invisible sans texte de repli). Le bouton "Tous" (une seule ligne) n'était pas affecté, inchangé. Fichier modifié : `kodatill-app/src/screens.jsx`. Vérifié : `npx esbuild --bundle` OK.
+
 - **KodaTill — les 5 findings secondaires restants de la revue de code précédente, tous corrigés.** Complète la passe précédente (7 bugs critiques encaissement/produits) avec les points restants.
   1. **Boucle infinie possible sur checkout hors-ligne** : `startCheckout` se rappelait elle-même après `setIsOnline(false)` (asynchrone), relisant `isOnline` depuis une closure périmée (toujours `true`) — nouvel appel réseau en boucle au lieu de basculer offline. Le brouillon offline est désormais construit directement dans le `catch`, sans rappel récursif. `screens.jsx` ~1171-1197.
   2. **Dates de dépenses sans validation de plage** : seule l'absence de valeur était testée. Ajout de `max={toLocalInputValue()}` sur l'input `datetime-local` + garde explicite dans `submit` (date invalide ou future rejetée avec message clair). `screens.jsx` ~4461-4477, ~4539-4546.
