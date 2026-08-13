@@ -229,7 +229,16 @@ function App() {
             eviter un double bandeau, et sans hamburger (pas de sidebar sur
             cet ecran, cf. plus haut). */}
         {route !== "caisse" && <Topbar title={meta.title} subtitle={meta.subtitle} onHamburger={isCompact ? () => setMobileNav(true) : undefined} />}
-        <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
+        {/* overflow:hidden (pas auto) : chaque ecran (CommandesScreen,
+            StockScreen, etc., screens.jsx) pose deja son propre
+            overflow:auto en racine — un double overflow:auto imbrique ici
+            + dans l'ecran cassait le scroll (barre absente/scroll au
+            mauvais niveau selon navigateur, signale avec capture sur
+            CommandesScreen). Ce wrapper ne fait que deleguer la hauteur en
+            flex, chaque ecran reste seul responsable de son scroll interne
+            (CaisseScreen gere deja overflow:hidden en interne, non
+            affecte). */}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>
         {/* Raccourcis rapides back-office (mobile+tablette <=1180px), en
