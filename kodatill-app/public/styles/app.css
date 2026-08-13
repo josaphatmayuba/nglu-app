@@ -3,6 +3,17 @@
    Inter (texte) + Space Grotesk (titres, .font-display). Les NOMS de
    variables restent inchanges (compat avec tout le code React existant,
    qui les consomme deja massivement) — seules les VALEURS sont corrigees. */
+/* Bande tuiles categories caisse : scroll horizontal tactile conserve,
+   scrollbar native masquee (fine ligne vide/grise en mobile qui donnait
+   l'impression d'une bande coupee — bug signale avec capture). */
+.kt-cat-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.kt-cat-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 :root {
   --bg-app: #eceae4;
   --paper: #ffffff;

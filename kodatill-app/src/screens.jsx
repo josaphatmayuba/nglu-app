@@ -1617,7 +1617,7 @@ export const CaisseScreen = ({ onNav } = {}) => {
             flex-column ne s'etire pas toujours sur 100% de large par
             defaut selon le contenu, notamment avec overflowX:auto qui peut
             forcer une largeur intrinseque au lieu de remplir le parent. */}
-        <div style={{ display: "flex", width: "100%", gap: 10, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
+        <div className="kt-cat-scroll" style={{ display: "flex", width: "100%", gap: 10, overflowX: "auto", marginBottom: 12 }}>
           <button onClick={() => setActiveCategoryId(null)}
             style={{
               flexShrink: 0, minWidth: isCompact ? 86 : 104, borderRadius: 14, cursor: "pointer",
@@ -3222,7 +3222,7 @@ export const ProduitsScreen = () => {
       ) : filtered.length === 0 ? (
         <CenteredNote>Aucun produit ne correspond à cette recherche.</CenteredNote>
       ) : (
-        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "auto" }}>
           {filtered.map((p) => {
             const cat = categories.find((c) => c.id === p.categoryId);
             return (
@@ -3539,7 +3539,7 @@ export const CommandesScreen = () => {
       ) : orders.length === 0 ? (
         <CenteredNote>Aucune commande ne correspond à ces filtres.</CenteredNote>
       ) : (
-        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "auto" }}>
           {orders.map((o) => (
             <button key={o.id} onClick={() => setSelectedOrderId(o.id)}
               style={{
@@ -4103,7 +4103,7 @@ export const StockScreen = () => {
       ) : filtered.length === 0 ? (
         <CenteredNote>Aucun article de stock ne correspond à cette recherche.</CenteredNote>
       ) : (
-        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "auto" }}>
           {filtered.map((it) => {
             const state = stockState(it);
             const isHighlighted = highlightedItemId === it.id;
@@ -4351,7 +4351,7 @@ export const IngredientsScreen = () => {
       ) : ingredients.length === 0 ? (
         <CenteredNote>Aucun ingrédient ne correspond à cette recherche.</CenteredNote>
       ) : (
-        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "auto" }}>
           {ingredients.map((ing) => (
             <div key={ing.id} style={{
               // flexWrap : nom + prix + 2 boutons ("Modifier"/"Désactiver") côte à côte
@@ -4790,7 +4790,7 @@ export const DepensesScreen = () => {
       ) : expenses.length === 0 ? (
         <CenteredNote>Aucune dépense ne correspond à ces filtres.</CenteredNote>
       ) : (
-        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ background: "var(--paper, #fff)", border: "1px solid var(--border-1, #E7EBF1)", borderRadius: 12, overflow: "auto" }}>
           {expenses.map((exp) => (
             <div key={exp.id} style={{
               // flexWrap : libellé + montant + 2 boutons débordent sur tablette
