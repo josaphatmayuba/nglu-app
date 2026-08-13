@@ -1558,7 +1558,14 @@ export const CaisseScreen = ({ onNav } = {}) => {
             quel (pas d'icone Lucide inventee par categorie). "Tous" reprend le
             meme habillage tuile pour rester coherent, en premiere position,
             couleur neutre (ink-100 du mockup, cf. tuile "Scanner" ligne 891). */}
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
+        {/* width:100% explicite (bug signale avec capture : la bande de
+            tuiles categories restait etroite/coupee au lieu d'occuper toute
+            la largeur disponible de la colonne catalogue, meme si le reste
+            de l'ecran etait correct) — un flex-item enfant d'un parent
+            flex-column ne s'etire pas toujours sur 100% de large par
+            defaut selon le contenu, notamment avec overflowX:auto qui peut
+            forcer une largeur intrinseque au lieu de remplir le parent. */}
+        <div style={{ display: "flex", width: "100%", gap: 10, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
           <button onClick={() => setActiveCategoryId(null)}
             style={{
               flexShrink: 0, minWidth: isCompact ? 86 : 104, borderRadius: 14, cursor: "pointer",
