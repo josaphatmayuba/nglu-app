@@ -1452,54 +1452,91 @@ export const CaisseScreen = ({ onNav } = {}) => {
       {/* Bandeau session — porte d'entree/sortie de la caisse, cohérent avec
           OpenSessionForm : les actions de cycle de vie de la session vivent
           dans CaisseScreen, pas dans le Dashboard (qui reste un écran de
-          consultation en lecture seule). */}
+          consultation en lecture seule).
+          En mobile (isCompact) : version condensee sur une seule ligne —
+          le statut reseau devient un point pulse (laiton=en ligne,
+          oxblood=hors connexion) et "Ajouter un mouvement" devient une
+          icone, cf. maquette bandeau compact validee. Le detail sync/hors
+          connexion redescend en bande secondaire au lieu de casser la
+          ligne (evite le wrap qui gonflait la hauteur du bandeau). */}
       <div style={{
-        flexShrink: 0, background: "#123F46", color: "#FBF8F2", padding: "10px 20px",
-        display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10,
+        flexShrink: 0, background: "#123F46", color: "#FBF8F2",
+        padding: isCompact ? "8px 12px" : "10px 20px",
+        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
       }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-            Session de caisse ouverte
-            {/* Wifi/WifiOff, cf. data-lucide="wifi" dans le mockup (topbar POS) : le
-                mockup n'a pas d'etat "hors connexion" dedie, WifiOff est l'icone Lucide
-                standard pour l'etat deconnecte, pertinente ici vu le badge existant. */}
-            {isOnline ? (
-              <Wifi size={13} style={{ opacity: 0.7 }} />
-            ) : (
-              <WifiOff size={13} color="#FBF8F2" />
-            )}
-            {!isOnline && (
-              <span style={{
-                fontSize: 10.5, fontWeight: 700, background: "#7a1f2b", color: "#FBF8F2",
-                borderRadius: 20, padding: "2px 8px", textTransform: "uppercase",
-              }}>
-                Hors connexion{offlinePending > 0 ? ` · ${offlinePending} en attente` : ""}
-              </span>
-            )}
-            {syncStatus?.syncing && (
-              <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.85 }}>Synchronisation en cours…</span>
-            )}
-            {syncStatus && !syncStatus.syncing && (
-              <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}>
-                {syncStatus.synced} commande(s) synchronisée(s){syncStatus.failed ? ` · ${syncStatus.failed} en erreur` : ""}
-              </span>
-            )}
+        {isCompact ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+            <span aria-hidden="true" style={{
+              width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+              background: isOnline ? "#c9a15a" : "#e8646f",
+              boxShadow: isOnline ? "0 0 0 3px rgba(201,161,90,0.25)" : "0 0 0 3px rgba(232,100,111,0.25)",
+            }} />
+            <div style={{
+              fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              display: "flex", alignItems: "baseline", gap: 6,
+            }}>
+              Session ouverte
+              <span style={{ opacity: 0.45, fontWeight: 400 }}>·</span>
+              <span style={{ color: "#c9a15a" }}>{formatMoney(session.openingFloat, session.currencyCode)}</span>
+              <span style={{ fontWeight: 500, opacity: 0.75, fontSize: 11.5 }}>{formatTime(session.openedAt)}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 11.5, opacity: 0.85 }}>
-            Depuis {formatTime(session.openedAt)} · Fonds {formatMoney(session.openingFloat, session.currencyCode)}
+        ) : (
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+              Session de caisse ouverte
+              {/* Wifi/WifiOff, cf. data-lucide="wifi" dans le mockup (topbar POS) : le
+                  mockup n'a pas d'etat "hors connexion" dedie, WifiOff est l'icone Lucide
+                  standard pour l'etat deconnecte, pertinente ici vu le badge existant. */}
+              {isOnline ? (
+                <Wifi size={13} style={{ opacity: 0.7 }} />
+              ) : (
+                <WifiOff size={13} color="#FBF8F2" />
+              )}
+              {!isOnline && (
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, background: "#7a1f2b", color: "#FBF8F2",
+                  borderRadius: 20, padding: "2px 8px", textTransform: "uppercase",
+                }}>
+                  Hors connexion{offlinePending > 0 ? ` · ${offlinePending} en attente` : ""}
+                </span>
+              )}
+              {syncStatus?.syncing && (
+                <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.85 }}>Synchronisation en cours…</span>
+              )}
+              {syncStatus && !syncStatus.syncing && (
+                <span style={{ fontSize: 10.5, fontWeight: 600, opacity: 0.9 }}>
+                  {syncStatus.synced} commande(s) synchronisée(s){syncStatus.failed ? ` · ${syncStatus.failed} en erreur` : ""}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11.5, opacity: 0.85 }}>
+              Depuis {formatTime(session.openedAt)} · Fonds {formatMoney(session.openingFloat, session.currencyCode)}
+            </div>
           </div>
-        </div>
-        {/* Pas d'icone Lucide pour "Ajouter un mouvement"/"Clôturer la caisse" : le
-            mockup (surf-pos, surf-posm) n'a aucun bouton equivalent pour ces actions
-            de cycle de vie de session (mouvements de caisse / cloture) — texte seul
-            conserve plutot que d'inventer une correspondance. */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => setShowMovementForm(true)} style={{
-            background: "transparent", border: "1px solid rgba(251,248,242,0.5)", color: "#FBF8F2",
-            borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 12.5, cursor: "pointer",
-          }}>
-            Ajouter un mouvement
-          </button>
+        )}
+        {/* Pas d'icone Lucide pour "Ajouter un mouvement"/"Clôturer la caisse" en
+            desktop : le mockup (surf-pos, surf-posm) n'a aucun bouton equivalent
+            pour ces actions de cycle de vie de session — texte seul conserve. En
+            compact, ArrowLeftRight (deja importe, mouvements de caisse) remplace
+            le libelle pour tenir sur la ligne. */}
+        <div style={{ display: "flex", alignItems: "center", gap: isCompact ? 6 : 8, flexShrink: 0 }}>
+          {isCompact ? (
+            <button onClick={() => setShowMovementForm(true)} aria-label="Ajouter un mouvement" style={{
+              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+              background: "transparent", border: "1px solid rgba(251,248,242,0.28)", color: "#FBF8F2",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}>
+              <ArrowLeftRight size={14} />
+            </button>
+          ) : (
+            <button onClick={() => setShowMovementForm(true)} style={{
+              background: "transparent", border: "1px solid rgba(251,248,242,0.5)", color: "#FBF8F2",
+              borderRadius: 8, padding: "8px 14px", fontWeight: 600, fontSize: 12.5, cursor: "pointer",
+            }}>
+              Ajouter un mouvement
+            </button>
+          )}
           {/* Garde avant cloture (bug trouve en revue de code) : une commande
               creee serveur encore en attente de paiement (checkoutOrder) ou
               des ventes offline pas encore synchronisees (offlinePending)
@@ -1511,13 +1548,28 @@ export const CaisseScreen = ({ onNav } = {}) => {
               if (offlinePending > 0) { showNotice(`${offlinePending} vente(s) hors-ligne en attente de synchronisation — reconnectez-vous avant de clôturer.`); return; }
               setShowCloseForm(true);
             }} style={{
-            background: "#7a1f2b", border: 0, color: "#FBF8F2",
-            borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
+            background: "#7a1f2b", border: 0, color: "#FBF8F2", flexShrink: 0,
+            borderRadius: 8, padding: isCompact ? "7px 11px" : "8px 14px", fontWeight: 700,
+            fontSize: isCompact ? 11.5 : 12.5, cursor: "pointer", whiteSpace: "nowrap",
           }}>
-            Clôturer la caisse
+            {isCompact ? "Clôturer" : "Clôturer la caisse"}
           </button>
         </div>
       </div>
+      {isCompact && (!isOnline || syncStatus?.syncing || (syncStatus && !syncStatus.syncing && (syncStatus.synced || syncStatus.failed))) && (
+        <div style={{
+          flexShrink: 0, fontSize: 10.5, fontWeight: 700, padding: "4px 12px",
+          textTransform: "uppercase", letterSpacing: "0.02em",
+          background: isOnline ? "#123F46" : "#5c1720", color: "#FBF8F2",
+          opacity: isOnline ? 0.85 : 1,
+        }}>
+          {!isOnline
+            ? `Hors connexion${offlinePending > 0 ? ` · ${offlinePending} en attente` : ""}`
+            : syncStatus?.syncing
+              ? "Synchronisation en cours…"
+              : `${syncStatus.synced} commande(s) synchronisée(s)${syncStatus.failed ? ` · ${syncStatus.failed} en erreur` : ""}`}
+        </div>
+      )}
 
       {/* position:relative pour que la barre panier flottante et la sheet du
           layout etroit (position:absolute) restent cantonnees a la zone
