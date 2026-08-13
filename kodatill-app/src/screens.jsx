@@ -440,8 +440,12 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
     ? paymentMethods
     : [{ id: undefined, kind: "cash", name: PAYMENT_METHOD_KIND_LABELS.cash }];
   const methods = offline ? allMethods.filter((m) => m.kind === "cash") : allMethods;
-  const [remaining, setRemaining] = React.useState(due);
-  const [payments, setPayments] = React.useState([]); // { methodId, kind, label, amount, tendered?, change? }
+  const [payments, setPayments] = React.useState([]); // { methodId, kind, label, amount, tendered?, change?, _posted? }
+  // remaining derive de payments (jamais un state parallele) : un state
+  // separe maintenu a la main via des +/- successifs se desynchronise sous
+  // double-clic rapide sur la suppression d'une ligne (deux callbacks lisent
+  // la meme valeur capturee en closure) — bug trouve en revue de code.
+  const remaining = Math.max(0, Math.round((due - payments.reduce((s, p) => s + p.amount, 0)) * 100) / 100);
   const [selectedMethodId, setSelectedMethodId] = React.useState(methods[0]?.id ?? methods[0]?.kind);
   const [amount, setAmount] = React.useState(due > 0 ? String(due.toFixed(2)) : "");
   // Rendu de monnaie (SCRUM-304/306) : le montant "recu" (billet tendu par le
@@ -490,20 +494,17 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
       tendered: tenderedForLine, change: changeForLine,
     }]);
     const nextRemaining = Math.max(0, Math.round((remaining - imputed) * 100) / 100);
-    setRemaining(nextRemaining);
     setAmount(nextRemaining > 0 ? String(nextRemaining.toFixed(2)) : "");
     setTendered("");
     setError(null);
   };
 
+  // Ne retire que des lignes pas encore postees au serveur (_posted absent) :
+  // une fois qu'une ligne a ete envoyee avec succes (cf. confirm ci-dessous),
+  // la retirer localement desynchroniserait remaining/payments de la realite
+  // serveur (le paiement existe deja cote backend).
   const removePaymentLine = (idx) => {
-    setPayments((p) => {
-      const removed = p[idx];
-      const next = p.filter((_, i) => i !== idx);
-      const nextRemaining = Math.round((remaining + removed.amount) * 100) / 100;
-      setRemaining(nextRemaining);
-      return next;
-    });
+    setPayments((p) => (p[idx]?._posted ? p : p.filter((_, i) => i !== idx)));
   };
 
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
@@ -522,11 +523,19 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
       }
     : null;
 
+  // Ref (pas state) pour un garde-fou SYNCHRONE contre le double-tap : deux
+  // clics rapproches sur "Valider" avant le re-render qui desactive le
+  // bouton (setSubmitting est asynchrone) pouvaient sinon declencher deux
+  // sequences de paiement en parallele — bug trouve en revue de code.
+  const confirmingRef = React.useRef(false);
+
   const confirm = async () => {
+    if (confirmingRef.current) return;
     if (remaining > 0.001) {
       setError("Le montant restant doit être encaissé avant de valider.");
       return;
     }
+    confirmingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -551,13 +560,22 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
         return;
       }
 
-      for (const p of payments) {
+      // Boucle non-rejouable : chaque ligne postee avec succes est marquee
+      // _posted=true immediatement — si une ligne suivante echoue (reseau,
+      // 500), un reclic sur "Valider" ne repostera QUE les lignes non
+      // encore confirmees serveur (cf. filtre ci-dessous), au lieu de
+      // rejouer toute la sequence et double-encaisser les lignes deja
+      // passees. Bug trouve en revue de code.
+      for (let i = 0; i < payments.length; i++) {
+        const p = payments[i];
+        if (p._posted) continue;
         await api.addOrderPayment(order.id, {
           methodId: p.methodId,
           amount: p.amount,
           currencyCode,
           reference: p.kind,
         });
+        setPayments((cur) => cur.map((x, idx) => (idx === i ? { ...x, _posted: true } : x)));
       }
       // Vente directe boutique/supermarché sans étape de préparation : la
       // commande passe directement à "completed" une fois entièrement payée
@@ -577,6 +595,7 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
         setError(err.message || String(err));
       }
     } finally {
+      confirmingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -606,7 +625,11 @@ function PaymentPanel({ order, onDone, onCancel, paymentMethods, offline, onNetw
                   <span>{p.label}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {formatMoney(p.amount, currencyCode)}
-                    <button onClick={() => removePaymentLine(idx)} title="Retirer" style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
+                    {/* Ligne deja postee au serveur (paiement confirme) : plus
+                        retirable localement, cf. removePaymentLine. */}
+                    {!p._posted && (
+                      <button onClick={() => removePaymentLine(idx)} title="Retirer" style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--oxblood-800, #7a1f2b)" }}>✕</button>
+                    )}
                   </span>
                 </div>
                 {p.tendered != null && (
@@ -979,6 +1002,18 @@ export const CaisseScreen = ({ onNav } = {}) => {
   // propre ligne de ticket (key dediee), pour ne pas fusionner par erreur des
   // choix differents sous un meme produit.
   const addToTicket = (product, selection) => {
+    // Garde anti melange de devises (bug trouve en revue de code) : le
+    // sous-total du ticket additionne les montants bruts de toutes ses
+    // lignes sans conversion — un ticket avec un produit en USD et un autre
+    // en CDF produirait un total incoherent, persiste tel quel en base.
+    // Aucune notion de taux de change dans l'app -> on bloque plutot que de
+    // deviner une conversion, meme regle que le garde-fou backend sur les
+    // montants imputes (PaymentPanel#addPaymentLine).
+    const existingCurrency = ticket[0]?.currencyCode;
+    if (existingCurrency && product.currencyCode && product.currencyCode !== existingCurrency) {
+      showNotice(`Impossible d'ajouter un article en ${product.currencyCode} — le ticket est déjà en ${existingCurrency}.`);
+      return;
+    }
     const variant = selection?.variant || null;
     const modifiers = selection?.modifiers || [];
 
@@ -1435,7 +1470,17 @@ export const CaisseScreen = ({ onNav } = {}) => {
           }}>
             Ajouter un mouvement
           </button>
-          <button onClick={() => setShowCloseForm(true)} style={{
+          {/* Garde avant cloture (bug trouve en revue de code) : une commande
+              creee serveur encore en attente de paiement (checkoutOrder) ou
+              des ventes offline pas encore synchronisees (offlinePending)
+              ne sont pas prises en compte par le calcul serveur du fond de
+              caisse attendu — clore dans cet etat produit un ecart de
+              caisse non explique, a tort impute au caissier. */}
+          <button onClick={() => {
+              if (checkoutOrder) { showNotice("Un paiement est en cours — encaissez ou annulez le ticket avant de clôturer."); return; }
+              if (offlinePending > 0) { showNotice(`${offlinePending} vente(s) hors-ligne en attente de synchronisation — reconnectez-vous avant de clôturer.`); return; }
+              setShowCloseForm(true);
+            }} style={{
             background: "#7a1f2b", border: 0, color: "#FBF8F2",
             borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
           }}>
@@ -2023,10 +2068,24 @@ export const DashboardScreen = () => {
     () => (orders || []).filter((o) => o.orderStatus === "completed"),
     [orders],
   );
-  const currencyCode = completedOrders[0]?.currencyCode || orders?.[0]?.currencyCode || session?.currencyCode || "";
-  const totalSales = completedOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+  // Groupe par devise (meme pattern que RapportsScreen#salesByCurrency, ligne
+  // ~4776) plutot que de sommer tous les totaux et etiqueter avec une seule
+  // devise arbitraire (bug trouve en revue de code : un jour avec des ventes
+  // en USD et en CDF affichait un total incoherent, addition brute des deux
+  // devises, etiquete avec la devise de la premiere commande seulement).
+  const salesByCurrency = React.useMemo(() => {
+    const totals = new Map();
+    completedOrders.forEach((o) => {
+      const code = o.currencyCode || "";
+      const entry = totals.get(code) || { total: 0, count: 0 };
+      entry.total += Number(o.total || 0);
+      entry.count += 1;
+      totals.set(code, entry);
+    });
+    return totals;
+  }, [completedOrders]);
+  const salesCurrencies = React.useMemo(() => Array.from(salesByCurrency.keys()), [salesByCurrency]);
   const orderCount = completedOrders.length;
-  const avgOrder = orderCount ? totalSales / orderCount : 0;
 
   const recentOrders = React.useMemo(
     () => [...(orders || [])].sort((a, b) => b.id - a.id).slice(0, 8),
@@ -2070,11 +2129,23 @@ export const DashboardScreen = () => {
         <KpiCard label="Commandes du jour" value={orderCount} icon={ShoppingBag} iconBg="#eff6ff" iconColor="#3b82f6" />
         {/* icone CircleDollarSign, cf. data-lucide="circle-dollar-sign" mockup
             ligne 194 (carte "Ventes du jour", badge bg-emerald-50/text-emerald-500) */}
-        <KpiCard label="Ventes du jour" value={formatMoney(totalSales, currencyCode)} icon={CircleDollarSign} iconBg="#ecfdf5" iconColor="#10b981" />
+        {/* Une carte par devise presente parmi les commandes du jour (meme
+            pattern que "Depenses du jour" juste en dessous) : evite de
+            sommer/etiqueter des montants de devises differentes ensemble. */}
+        {salesCurrencies.length === 0 ? (
+          <KpiCard label="Ventes du jour" value={formatMoney(0, "")} icon={CircleDollarSign} iconBg="#ecfdf5" iconColor="#10b981" />
+        ) : salesCurrencies.map((code) => (
+          <KpiCard key={code} label="Ventes du jour" value={formatMoney(salesByCurrency.get(code).total, code)} icon={CircleDollarSign} iconBg="#ecfdf5" iconColor="#10b981" />
+        ))}
         {/* "Commande moyenne" n'a pas d'equivalent direct dans les 6 KPI du
             mockup (commandes/ventes/depenses/marge/preparation/populaire) :
             pas d'icone inventee, carte laissee sans badge comme avant. */}
-        <KpiCard label="Commande moyenne" value={formatMoney(avgOrder, currencyCode)} />
+        {salesCurrencies.length === 0 ? (
+          <KpiCard label="Commande moyenne" value={formatMoney(0, "")} />
+        ) : salesCurrencies.map((code) => {
+          const entry = salesByCurrency.get(code);
+          return <KpiCard key={code} label="Commande moyenne" value={formatMoney(entry.count ? entry.total / entry.count : 0, code)} />;
+        })}
         {expensesSummary && expensesSummary.totals.length > 0 && expensesSummary.totals.map((t) => (
           // icone TrendingDown, cf. data-lucide="trending-down" mockup ligne 199
           // (carte "Dépenses du jour", badge bg-red-50/text-red-500)
@@ -3093,7 +3164,17 @@ export const ProduitsScreen = () => {
         <ProductForm
           product={editingProduct.id ? editingProduct : null}
           categories={categories}
-          onSaved={() => { setEditingProduct(null); load(); }}
+          // Creation (editingProduct.id absent) : ne pas fermer le modal au
+          // premier save — ProductForm reste ouvert sur le produit fraichement
+          // cree (son propre state savedProduct bascule vers le mode edition)
+          // pour laisser l'acces aux sections Recette/Variantes/Modificateurs,
+          // gatees par savedProduct?.id. Fermer immediatement ici les rendait
+          // inaccessibles sans rouvrir via "Modifier" — bug trouve en revue de
+          // code, contredisait le commentaire de ProductForm (permettre l'ajout
+          // de recette juste apres creation sans fermer/rouvrir).
+          // Edition (editingProduct.id present) : comportement inchange, ferme
+          // au save comme avant.
+          onSaved={(saved) => { if (editingProduct.id) { setEditingProduct(null); } load(); }}
           onCancel={() => setEditingProduct(null)}
         />
       )}
