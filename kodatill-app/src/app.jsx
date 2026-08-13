@@ -222,7 +222,7 @@ function App() {
           <Sidebar active={route} onNav={navWithClose} nav={nav} mobile={isCompact} mobileOpen={mobileNav} />
         </div>
       )}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
         {/* CaisseScreen a sa propre topbar dediee (mockup surf-pos/surf-posm,
             logo+POS+service+recherche/scan/wifi/notifications/avatar) —
             le Topbar generique ne s'affiche donc pas pour cette route, pour
@@ -238,7 +238,14 @@ function App() {
             flex, chaque ecran reste seul responsable de son scroll interne
             (CaisseScreen gere deja overflow:hidden en interne, non
             affecte). */}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        {/* minHeight:0 obligatoire ici (piege flexbox classique) : sans ca,
+            un enfant flex:1 dans une colonne flex ne se reduit jamais en
+            dessous de la hauteur de son contenu (min-height:auto par
+            defaut du navigateur) — overflow:hidden/auto ne declenche alors
+            AUCUN scroll, le contenu deborde silencieusement de l'ecran a la
+            place. Signale avec capture : liste des commandes visiblement
+            tronquee, aucune barre de scroll, meme en desktop large. */}
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {renderScreen()}
         </div>
         {/* Raccourcis rapides back-office (mobile+tablette <=1180px), en
