@@ -5,7 +5,9 @@ import {
 } from "lucide-react";
 import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
-import { outboxCount } from "./outbox.js";
+import { pendingCount } from "./offline-outbox.js";
+import { clearAllCaches } from "./offline-db.js";
+import { NetStatusPill } from "./offline-status.jsx";
 import { t, useLang } from "./i18n.js";
 import { Dashboard } from "./screens/dashboard.jsx";
 import { Activite } from "./screens/activite.jsx";
@@ -61,10 +63,35 @@ export default function App() {
     return () => stopRealtimeClient();
   }, [token]);
 
-  if (!token) return <LoginScreen />;
+  // Hors ligne au retour dans l'app : le token mémoire est vide (jamais
+  // persisté, SCRUM-119) et le refresh via cookie a échoué faute de réseau
+  // (restoreSession() jette isNetworkError, voir auth.jsx). On ne renvoie
+  // PAS vers le login dans ce cas : `isLogged` prouve qu'une session a déjà
+  // réussi sur cet appareil, donc on affiche l'app en mode dégradé (lecture
+  // cache) plutôt que de forcer une reconnexion impossible hors ligne
+  // (même fix appliqué aujourd'hui dans farmos-app/src/app.jsx).
+  const hadSession = (() => {
+    try { return localStorage.getItem("isLogged") === "true"; } catch { return false; }
+  })();
+  if (!token) {
+    if (typeof navigator !== "undefined" && navigator.onLine === false && hadSession) {
+      // fall through — rendu de l'app en mode dégradé ci-dessous
+    } else {
+      return <LoginScreen />;
+    }
+  }
 
   const go = (key) => { setView(key); setMoreOpen(false); window.scrollTo(0, 0); };
   const ScreenEl = (SCREENS[view] || SCREENS.dashboard)(go);
+
+  // Purge aussi le miroir IndexedDB (events/tasks + outbox) au logout : sur un
+  // poste partagé, les données de l'utilisateur précédent ne doivent pas
+  // rester lisibles par le suivant (même fix appliqué aujourd'hui dans
+  // farmos-app/kodatill-app).
+  const logout = () => {
+    clearAllCaches().catch(() => {});
+    clearToken();
+  };
 
   return (
     <div className="shell">
@@ -99,7 +126,7 @@ export default function App() {
             title="Langue" onClick={() => setLang(lang === "fr" ? "en" : "fr")}>
             {lang === "fr" ? "EN" : "FR"}
           </button>
-          <button className="navlink" style={{ width:"auto", padding:8 }} title={t("Se déconnecter")} onClick={clearToken}>
+          <button className="navlink" style={{ width:"auto", padding:8 }} title={t("Se déconnecter")} onClick={logout}>
             <LogOut size={16} />
           </button>
         </div>
@@ -111,6 +138,7 @@ export default function App() {
           <div className="eyebrow">{t("Journal Entreprise")}</div>
           <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
             <OutboxPill />
+            <NetStatusPill />
             <RealtimePill online={realtimeOnline} />
           </div>
         </div>
@@ -181,15 +209,12 @@ function userDisplay() {
 }
 
 function useOutboxCount() {
-  const [n, setN] = useState(() => outboxCount());
+  const [n, setN] = useState(0);
   useEffect(() => {
-    const refresh = () => setN(outboxCount());
-    window.addEventListener("journal-outbox-changed", refresh);
-    window.addEventListener("journal-outbox-synced", refresh);
-    return () => {
-      window.removeEventListener("journal-outbox-changed", refresh);
-      window.removeEventListener("journal-outbox-synced", refresh);
-    };
+    const refresh = () => pendingCount().then(setN).catch(() => {});
+    refresh();
+    window.addEventListener("journal:outbox-changed", refresh);
+    return () => window.removeEventListener("journal:outbox-changed", refresh);
   }, []);
   return n;
 }
