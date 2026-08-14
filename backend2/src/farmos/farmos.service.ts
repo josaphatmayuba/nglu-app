@@ -1,11 +1,11 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { computeLotBenchmarks } from "./farmos-benchmarks";
 import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosAnimalStatusHistory, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalHealthObservations, farmosAnimalPhotos, farmosAnimals, farmosAnimalStatusHistory, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -26,6 +26,9 @@ import type {
   CreateTreatmentDto,
   DeclareBoxDiseaseDto,
   CreateWeighingDto,
+  DeclareAnimalIllnessDto,
+  DeclareAnimalRecoveryDto,
+  CreateHealthObservationDto,
   SetFarmosStaffStatusDto,
   UpdateAnimalDto,
   UpdateFarmosStaffDto,
@@ -715,6 +718,18 @@ export class FarmosService {
         createdBy: currentUserId ?? null,
       });
       await this.publishFarmosUpdate("updateAnimalStatus", ["animals", "animalStatusHistory"], "created", id, orgId);
+
+      // Guerison via le PATCH generique (pas via declareAnimalRecovery) : fermer
+      // l'episode ouvert eventuel pour eviter un episode zombie orphelin.
+      if (String(input.status).toLowerCase() === "healthy") {
+        const openEpisode = await this.getOpenHealthEpisode(id, orgId);
+        if (openEpisode) {
+          await this.db
+            .update(farmosAnimalStatusHistory)
+            .set({ resolvedAt: new Date(), resolvedBy: currentUserId ?? null })
+            .where(eq(farmosAnimalStatusHistory.id, openEpisode.id));
+        }
+      }
     }
 
     if (fieldChanges.length > 0) {
@@ -761,6 +776,177 @@ export class FarmosService {
         eq(farmosAnimalStatusHistory.isActive, 1),
       ))
       .orderBy(desc(farmosAnimalStatusHistory.createdAt), desc(farmosAnimalStatusHistory.id));
+  }
+
+  // ─── Episode de sante (migration 0251/0252) ─────────────────────────────
+  // Episode ouvert = ligne de changement de statut global (field_name NULL)
+  // vers sick/quarantine, pas encore resolue. Un animal ne peut avoir qu'un
+  // seul episode ouvert a la fois (verifie a la declaration).
+  private composeIllnessNote(dto: DeclareAnimalIllnessDto): string | null {
+    const parts: string[] = [];
+    const severityLabels: Record<string, string> = { mild: "légère", moderate: "modérée", severe: "sévère" };
+    if (dto.severity) parts.push(`[Gravité: ${severityLabels[dto.severity] ?? dto.severity}]`);
+    if (dto.start_date) parts.push(`[Début: ${dto.start_date}]`);
+    if (dto.note) parts.push(dto.note);
+    return parts.length > 0 ? parts.join(" ") : null;
+  }
+
+  async getOpenHealthEpisode(animalId: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosAnimalStatusHistory)
+      .where(and(
+        isNull(farmosAnimalStatusHistory.fieldName),
+        inArray(farmosAnimalStatusHistory.newStatus, ["sick", "quarantine"]),
+        isNull(farmosAnimalStatusHistory.resolvedAt),
+        eq(farmosAnimalStatusHistory.isActive, 1),
+        eq(farmosAnimalStatusHistory.animalId, animalId),
+        eq(farmosAnimalStatusHistory.organizationId, orgId),
+      ))
+      .orderBy(desc(farmosAnimalStatusHistory.createdAt), desc(farmosAnimalStatusHistory.id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async getHealthEpisodeDetail(animalId: number, orgId: number) {
+    const episode = await this.getOpenHealthEpisode(animalId, orgId);
+    if (!episode) return { episode: null, observations: [] };
+    const observations = await this.listHealthObservations(animalId, orgId);
+    return {
+      episode,
+      observations: observations.filter((o) => o.statusHistoryId === episode.id),
+    };
+  }
+
+  async declareAnimalIllness(id: number, dto: DeclareAnimalIllnessDto, orgId: number, userId?: number) {
+    const current = await this.getAnimal(id, orgId);
+    this.assertAnimalWritable(current);
+
+    const existingEpisode = await this.getOpenHealthEpisode(id, orgId);
+    if (existingEpisode) {
+      throw new ConflictException("Un épisode santé est déjà ouvert pour cet animal.");
+    }
+
+    const newStatus = dto.status ?? "sick";
+    await this.db.update(farmosAnimals).set({ status: newStatus }).where(eq(farmosAnimals.id, id));
+
+    await this.db.insert(farmosAnimalStatusHistory).values({
+      organizationId: orgId,
+      animalId: id,
+      fieldName: null,
+      previousStatus: current.status ?? null,
+      newStatus,
+      cause: dto.cause,
+      diseaseId: dto.disease_id ?? null,
+      note: this.composeIllnessNote(dto),
+      createdBy: userId ?? null,
+      resolvedAt: null,
+    });
+
+    await this.publishFarmosUpdate("declareAnimalIllness", ["animals", "animalStatusHistory"], "created", id, orgId);
+    return this.getAnimal(id, orgId);
+  }
+
+  async declareAnimalRecovery(id: number, dto: DeclareAnimalRecoveryDto, orgId: number, userId?: number) {
+    const current = await this.getAnimal(id, orgId);
+    this.assertAnimalWritable(current);
+
+    const episode = await this.getOpenHealthEpisode(id, orgId);
+    if (!episode) {
+      throw new BadRequestException("Aucun épisode maladie/quarantaine ouvert pour cet animal.");
+    }
+
+    const recoveredAt = dto.recovered_at ? new Date(`${dto.recovered_at}T00:00:00Z`) : new Date();
+
+    const closingNote = [episode.note, dto.note].filter((v) => v != null && String(v).trim() !== "").join(" | ") || null;
+    await this.db
+      .update(farmosAnimalStatusHistory)
+      .set({ resolvedAt: recoveredAt, resolvedBy: userId ?? null, note: closingNote })
+      .where(eq(farmosAnimalStatusHistory.id, episode.id));
+
+    await this.db.insert(farmosAnimalStatusHistory).values({
+      organizationId: orgId,
+      animalId: id,
+      fieldName: null,
+      previousStatus: current.status ?? null,
+      newStatus: "healthy",
+      cause: episode.cause ?? null,
+      diseaseId: episode.diseaseId ?? null,
+      note: dto.note ?? null,
+      createdBy: userId ?? null,
+      resolvedAt: new Date(),
+    });
+
+    await this.db.update(farmosAnimals).set({ status: "healthy" }).where(eq(farmosAnimals.id, id));
+
+    if (dto.close_treatment_ids && dto.close_treatment_ids.length > 0) {
+      await this.db
+        .update(farmosTreatments)
+        .set({ status: "done", endDate: dto.recovered_at ?? new Date().toISOString().slice(0, 10) })
+        .where(and(
+          inArray(farmosTreatments.id, dto.close_treatment_ids),
+          eq(farmosTreatments.animalId, id),
+          eq(farmosTreatments.organizationId, orgId),
+          eq(farmosTreatments.isActive, 1),
+        ));
+    }
+
+    await this.publishFarmosUpdate("declareAnimalRecovery", ["animals", "animalStatusHistory", "treatments"], "updated", id, orgId);
+    return this.getAnimal(id, orgId);
+  }
+
+  async addHealthObservation(animalId: number, dto: CreateHealthObservationDto, orgId: number, userId?: number) {
+    const current = await this.getAnimal(animalId, orgId);
+    this.assertAnimalWritable(current);
+
+    const episode = await this.getOpenHealthEpisode(animalId, orgId);
+    if (!episode) {
+      throw new BadRequestException("Aucun épisode santé ouvert : déclarez d'abord une maladie.");
+    }
+
+    const [result] = await this.db.insert(farmosAnimalHealthObservations).values({
+      organizationId: orgId,
+      animalId,
+      statusHistoryId: episode.id,
+      observedAt: dto.observed_at ?? new Date().toISOString().slice(0, 10),
+      note: dto.note,
+      severityTrend: dto.severity_trend ?? null,
+      createdBy: userId ?? null,
+    });
+    const id = Number(result.insertId);
+
+    await this.publishFarmosUpdate("createHealthObservation", ["animalHealthObservations"], "created", id, orgId);
+
+    const [row] = await this.db
+      .select()
+      .from(farmosAnimalHealthObservations)
+      .where(eq(farmosAnimalHealthObservations.id, id))
+      .limit(1);
+    return row;
+  }
+
+  async listHealthObservations(animalId: number, orgId: number) {
+    return this.db
+      .select({
+        id: farmosAnimalHealthObservations.id,
+        animalId: farmosAnimalHealthObservations.animalId,
+        statusHistoryId: farmosAnimalHealthObservations.statusHistoryId,
+        observedAt: farmosAnimalHealthObservations.observedAt,
+        note: farmosAnimalHealthObservations.note,
+        severityTrend: farmosAnimalHealthObservations.severityTrend,
+        createdAt: farmosAnimalHealthObservations.createdAt,
+        createdBy: farmosAnimalHealthObservations.createdBy,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(farmosAnimalHealthObservations)
+      .leftJoin(users, eq(users.id, farmosAnimalHealthObservations.createdBy))
+      .where(and(
+        eq(farmosAnimalHealthObservations.animalId, animalId),
+        eq(farmosAnimalHealthObservations.organizationId, orgId),
+        eq(farmosAnimalHealthObservations.isActive, 1),
+      ))
+      .orderBy(desc(farmosAnimalHealthObservations.observedAt), desc(farmosAnimalHealthObservations.id));
   }
 
   async deleteAnimal(id: number, orgId: number) {

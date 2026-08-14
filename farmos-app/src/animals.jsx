@@ -1339,6 +1339,8 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [splittingBatch, setSplittingBatch] = React.useState(false);
   const [batchAdjustments, setBatchAdjustments] = React.useState([]);
   const [statusHistory, setStatusHistory] = React.useState([]);
+  const [healthEpisode, setHealthEpisode] = React.useState(null);
+  const [healthAction, setHealthAction] = React.useState(null); // null | "declare" | "observe" | "heal"
   const [deathEvent, setDeathEvent] = React.useState(null);
   const deceased = isDeceasedStatus(animal.status);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
@@ -1386,6 +1388,15 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   React.useEffect(() => {
     reloadStatusHistory();
   }, [reloadStatusHistory, animal.status]);
+  const reloadHealthEpisode = React.useCallback(() => {
+    if (!animal._pk) { setHealthEpisode(null); return; }
+    api.getAnimalHealthEpisode(animal._pk)
+      .then((res) => setHealthEpisode(res && res.episode ? res : null))
+      .catch(() => setHealthEpisode(null));
+  }, [animal._pk, animal.status]);
+  React.useEffect(() => {
+    reloadHealthEpisode();
+  }, [reloadHealthEpisode, animal.status]);
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
@@ -1641,7 +1652,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       {/* Body */}
       <div style={{ padding: "16px 22px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
         {!readOnly && editing && (
-          <AnimalEditCard lang={lang} animal={animal} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}/>
+          <AnimalEditCard lang={lang} animal={animal} onCancel={() => setEditing(false)}
+            onSaved={() => { setEditing(false); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
+            onGoToHealth={() => { setEditing(false); setTab("health"); }}/>
         )}
         {!editing && tab === "details" && (
           <>
@@ -1720,6 +1733,12 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               </div>
             ))}
           </>
+        )}
+        {!editing && tab === "health" && (
+          <HealthStatusPanel lang={lang} animal={animal} readOnly={readOnly}
+            episode={healthEpisode} treatments={related.treatments}
+            healthAction={healthAction} setHealthAction={setHealthAction}
+            onChanged={() => { reloadHealthEpisode(); reloadStatusHistory(); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}/>
         )}
         {!editing && !readOnly && (tab === "health" || tab === "repro" || tab === "prod") && (
           <AddForAnimalButton lang={lang} tab={tab} animal={animal}/>
@@ -1994,8 +2013,7 @@ const FIELD_HISTORY_LABELS = {
   estimated_value: { fr: "Valeur estimée", en: "Estimated value" },
 };
 
-const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
-  const initialStatus = animal.status || "healthy";
+const AnimalEditCard = ({ lang, animal, onCancel, onSaved, onGoToHealth }) => {
   const [form, setForm] = React.useState({
     name: animal.name || "",
     race: animal.race || "",
@@ -2005,24 +2023,16 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
     count: animal.count ?? "",
     lot: animal.lot || "",
     barn: animal.barn || "",
-    status: initialStatus,
     motherId: animal.motherId || "",
     fatherId: animal.fatherId || "",
     estimatedValue: animal.estimatedValue ?? "",
-    statusCause: "",
-    statusNote: "",
   });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const statusChangedToHealthConcern = form.status !== initialStatus && (form.status === "sick" || form.status === "quarantine");
   const submit = async () => {
     if (saving || !animal._pk) return;
     if (!form.dob) { setErr(lang === "fr" ? "La date de naissance est obligatoire." : "Date of birth is required."); return; }
-    if (statusChangedToHealthConcern && !form.statusCause) {
-      setErr(lang === "fr" ? "Merci d'indiquer la cause du changement de statut." : "Please provide the cause of the status change.");
-      return;
-    }
     setSaving(true);
     setErr(null);
     try {
@@ -2035,14 +2045,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         count: form.count === "" ? null : Number(form.count),
         lot: form.lot || null,
         barn: form.barn || null,
-        status: form.status || null,
         mother_id: form.motherId || null,
         father_id: form.fatherId || null,
         estimated_value: form.estimatedValue === "" ? null : Number(form.estimatedValue),
-        ...(statusChangedToHealthConcern ? {
-          status_cause: form.statusCause || null,
-          status_note: form.statusNote || null,
-        } : {}),
       });
       onSaved();
     } catch (e) {
@@ -2099,35 +2104,23 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
             placeholder={lang === "fr" ? "Choisir un bâtiment…" : "Pick a building…"}/>
           <AllBarnsDataList/>
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Statut" : "Status"}</span>
-          <select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}>
-            <option value="healthy">{lang === "fr" ? "Sain" : "Healthy"}</option>
-            <option value="sick">{lang === "fr" ? "Malade" : "Sick"}</option>
-            <option value="quarantine">{lang === "fr" ? "Quarantaine" : "Quarantine"}</option>
-            <option value="withdrawal">{lang === "fr" ? "Délai retrait" : "Withdrawal"}</option>
-          </select>
-        </label>
-        {statusChangedToHealthConcern && (
-          <>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
-                {lang === "fr" ? "Cause" : "Cause"} <span style={{ color: "var(--oxblood-700)" }}>*</span>
-              </span>
-              <select className="input" value={form.statusCause} onChange={(e) => set("statusCause", e.target.value)}>
-                <option value="">{lang === "fr" ? "Sélectionner…" : "Select…"}</option>
-                {STATUS_CAUSE_OPTIONS.map((c) => (
-                  <option key={c.value} value={c.value}>{lang === "fr" ? c.fr : c.en}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Note (optionnel)" : "Note (optional)"}</span>
-              <input className="input" value={form.statusNote} onChange={(e) => set("statusNote", e.target.value)}
-                placeholder={lang === "fr" ? "Détails observés…" : "Observed details…"}/>
-            </label>
-          </>
-        )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999,
+              background: `color-mix(in srgb, ${animalStatusColor(animal.status)} 14%, transparent)`,
+              color: animalStatusColor(animal.status), fontSize: 12, fontWeight: 700,
+            }}>
+              {animalStatusLabel(animal.status, lang)}
+            </span>
+            {onGoToHealth && (
+              <button type="button" className="btn btn-sm" onClick={onGoToHealth}>
+                {lang === "fr" ? "Gérer dans l'onglet Santé" : "Manage in Health tab"}
+              </button>
+            )}
+          </div>
+        </div>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mère (ID / nom)" : "Mother (ID / name)"}</span>
           <input className="input" value={form.motherId} onChange={(e) => set("motherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2022-0007" : "e.g. BQ-2022-0007"}/>
@@ -2210,6 +2203,369 @@ const AddForAnimalButton = ({ lang, tab, animal }) => {
       <Icon name="plus" size={13} color="#ECF1EC"/>
       {lang === "fr" ? labels[tab].fr : labels[tab].en}
     </button>
+  );
+};
+
+// Flux "état de santé" (déclaration maladie/quarantaine, guérison, suivi).
+// Règle métier stricte (déjà appliquée côté serveur) : on ne peut déclarer
+// une guérison ou ajouter une observation QUE s'il existe un épisode ouvert.
+const SEVERITY_TREND_OPTIONS = [
+  { value: "improving", fr: "Amélioration", en: "Improving", color: "var(--solidite-500)" },
+  { value: "stable", fr: "Stable", en: "Stable", color: "var(--ink-400)" },
+  { value: "worsening", fr: "Aggravation", en: "Worsening", color: "var(--oxblood-700)" },
+];
+const SEVERITY_OPTIONS = [
+  { value: "mild", fr: "Légère", en: "Mild" },
+  { value: "moderate", fr: "Modérée", en: "Moderate" },
+  { value: "severe", fr: "Sévère", en: "Severe" },
+];
+
+const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, healthAction, setHealthAction, onChanged }) => {
+  const hasOpenEpisode = !!(episode && episode.episode);
+  const ep = hasOpenEpisode ? episode.episode : null;
+  const observations = hasOpenEpisode ? (episode.observations || []) : [];
+  const deceased = isDeceasedStatus(animal.status);
+  const runningTreatments = (treatments || []).filter((t) => t.status === "running");
+  const statusColor = animalStatusColor(animal.status);
+  const statusLabel = animalStatusLabel(animal.status, lang);
+
+  const causeDef = ep ? STATUS_CAUSE_OPTIONS.find((c) => c.value === ep.cause) : null;
+  const causeLabel = ep ? (causeDef ? (lang === "fr" ? causeDef.fr : causeDef.en) : ep.cause) : null;
+  const authorName = ep ? [ep.firstName, ep.lastName].filter(Boolean).join(" ") : "";
+  const startDate = ep ? (ep.createdAt || ep.created_at) : null;
+  const daysElapsed = startDate ? Math.max(0, Math.floor((Date.now() - new Date(startDate).getTime()) / 86400000)) : null;
+
+  const close = () => setHealthAction(null);
+  const afterSubmit = () => { close(); onChanged(); };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999,
+            background: `color-mix(in srgb, ${statusColor} 14%, transparent)`, color: statusColor,
+            fontSize: 12, fontWeight: 700,
+          }}>
+            <Icon name="pulse" size={12} color={statusColor}/>
+            {statusLabel}
+          </span>
+          {hasOpenEpisode && daysElapsed != null && (
+            <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+              {lang === "fr" ? `depuis ${daysElapsed} j` : `${daysElapsed} d ago`}
+            </span>
+          )}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            {!hasOpenEpisode && !readOnly && !deceased && (
+              <button className="btn btn-sm" onClick={() => setHealthAction(healthAction === "declare" ? null : "declare")}>
+                <Icon name="plus" size={13} color="var(--ink-700)"/>
+                {lang === "fr" ? "Déclarer une maladie" : "Declare illness"}
+              </button>
+            )}
+            {hasOpenEpisode && !readOnly && (
+              <button className="btn btn-sm btn-primary" onClick={() => setHealthAction(healthAction === "heal" ? null : "heal")}>
+                <Icon name="check" size={13} color="#ECF1EC"/>
+                {lang === "fr" ? "Déclarer guéri" : "Declare recovered"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {hasOpenEpisode && (
+          <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+            {causeLabel && (
+              <div style={{ fontSize: 13, color: "var(--ink-900)" }}>
+                <span style={{ color: "var(--fg-3)" }}>{lang === "fr" ? "Cause : " : "Cause: "}</span>{causeLabel}
+              </div>
+            )}
+            {ep.diseaseId != null && (
+              <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
+                {lang === "fr" ? "Maladie liée : " : "Linked disease: "}#{ep.diseaseId}
+              </div>
+            )}
+            {ep.note && (
+              <div style={{ fontSize: 12.5, color: "var(--fg-2)", whiteSpace: "pre-wrap" }}>{ep.note}</div>
+            )}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+              {startDate && (
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                  {lang === "fr" ? "Début : " : "Start: "}{String(startDate).slice(0, 10)}
+                </span>
+              )}
+              {authorName && (
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                  {lang === "fr" ? "Par " : "By "}{authorName}
+                </span>
+              )}
+            </div>
+            {runningTreatments.length > 0 && (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10.5, color: "var(--fg-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>
+                  {lang === "fr" ? "Traitements en cours" : "Ongoing treatments"}
+                </span>
+                {runningTreatments.map((t) => (
+                  <div key={t.id} style={{ fontSize: 12.5, color: "var(--ink-900)" }}>
+                    {t.medicineName || t.medicine_name || (lang === "fr" ? "Traitement" : "Treatment")}
+                    {t.dosage ? ` · ${t.dosage}` : ""}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {healthAction === "declare" && !hasOpenEpisode && (
+          <HealthDeclareForm lang={lang} animal={animal} onCancel={close} onSaved={afterSubmit}/>
+        )}
+        {healthAction === "heal" && hasOpenEpisode && (
+          <HealthHealForm lang={lang} animal={animal} runningTreatments={runningTreatments} onCancel={close} onSaved={afterSubmit}/>
+        )}
+      </div>
+
+      {hasOpenEpisode && (
+        <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="overline" style={{ margin: 0 }}>{lang === "fr" ? "Suivi" : "Follow-up"}</div>
+            {!readOnly && (
+              <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setHealthAction(healthAction === "observe" ? null : "observe")}>
+                <Icon name="plus" size={13} color="var(--ink-700)"/>
+                {lang === "fr" ? "Ajouter une observation" : "Add observation"}
+              </button>
+            )}
+          </div>
+          {healthAction === "observe" && (
+            <HealthObservationForm lang={lang} animal={animal} minDate={startDate ? String(startDate).slice(0, 10) : null} onCancel={close} onSaved={afterSubmit}/>
+          )}
+          {observations.length === 0 ? (
+            <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune observation pour le moment." : "No observation yet."}</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {observations.map((o) => {
+                const trendDef = SEVERITY_TREND_OPTIONS.find((s) => s.value === (o.severityTrend || o.severity_trend));
+                const authorN = [o.firstName, o.lastName].filter(Boolean).join(" ");
+                return (
+                  <div key={o.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0", borderBottom: "1px dashed var(--border-1)" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: trendDef ? trendDef.color : "var(--ink-400)", marginTop: 5, flexShrink: 0 }}/>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12.5, color: "var(--ink-900)", whiteSpace: "pre-wrap" }}>{o.note}</div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+                        <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{String(o.observedAt || o.observed_at || "").slice(0, 10)}</span>
+                        {authorN && <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Par " : "By "}{authorN}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const [status, setStatus] = React.useState("sick");
+  const [cause, setCause] = React.useState("");
+  const [disease, setDisease] = React.useState("");
+  const [severity, setSeverity] = React.useState("");
+  const [startDate, setStartDate] = React.useState(today);
+  const [note, setNote] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const submit = async () => {
+    if (saving || !animal._pk) return;
+    if (!cause) { setErr(lang === "fr" ? "Merci de sélectionner une cause." : "Please select a cause."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      await api.declareAnimalIllness(animal._pk, {
+        status,
+        cause,
+        severity: severity || undefined,
+        start_date: startDate || undefined,
+        note: note || undefined,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-sunken)", borderRadius: 8, padding: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 10 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Statut" : "Status"}</span>
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="sick">{lang === "fr" ? "Malade" : "Sick"}</option>
+            <option value="quarantine">{lang === "fr" ? "Quarantaine" : "Quarantine"}</option>
+          </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
+            {lang === "fr" ? "Cause" : "Cause"} <span style={{ color: "var(--oxblood-700)" }}>*</span>
+          </span>
+          <select className="input" value={cause} onChange={(e) => setCause(e.target.value)}>
+            <option value="">{lang === "fr" ? "Sélectionner…" : "Select…"}</option>
+            {STATUS_CAUSE_OPTIONS.map((c) => (
+              <option key={c.value} value={c.value}>{lang === "fr" ? c.fr : c.en}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Maladie (optionnel)" : "Disease (optional)"}</span>
+          <input className="input" value={disease} onChange={(e) => setDisease(e.target.value)}
+            placeholder={lang === "fr" ? "Nom libre…" : "Free text…"}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Gravité (optionnel)" : "Severity (optional)"}</span>
+          <select className="input" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+            <option value="">{lang === "fr" ? "—" : "—"}</option>
+            {SEVERITY_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>{lang === "fr" ? s.fr : s.en}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Début" : "Start"}</span>
+          <input className="input" type="date" max={today} value={startDate} onChange={(e) => setStartDate(e.target.value)}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Note (optionnel)" : "Note (optional)"}</span>
+          <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder={lang === "fr" ? "Symptômes observés…" : "Observed symptoms…"}/>
+        </label>
+      </div>
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <button className="btn" onClick={onCancel} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          {saving ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Déclarer" : "Declare")}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const HealthObservationForm = ({ lang, animal, minDate, onCancel, onSaved }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const [observedAt, setObservedAt] = React.useState(today);
+  const [trend, setTrend] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const submit = async () => {
+    if (saving || !animal._pk) return;
+    if (!note.trim()) { setErr(lang === "fr" ? "La note est obligatoire." : "Note is required."); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      await api.addHealthObservation(animal._pk, {
+        note: note.trim(),
+        observed_at: observedAt || undefined,
+        severity_trend: trend || undefined,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-sunken)", borderRadius: 8, padding: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 10 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date d'observation" : "Observation date"}</span>
+          <input className="input" type="date" max={today} min={minDate || undefined} value={observedAt} onChange={(e) => setObservedAt(e.target.value)}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Évolution (optionnel)" : "Trend (optional)"}</span>
+          <select className="input" value={trend} onChange={(e) => setTrend(e.target.value)}>
+            <option value="">{lang === "fr" ? "—" : "—"}</option>
+            {SEVERITY_TREND_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>{lang === "fr" ? s.fr : s.en}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
+            {lang === "fr" ? "Note" : "Note"} <span style={{ color: "var(--oxblood-700)" }}>*</span>
+          </span>
+          <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder={lang === "fr" ? "Ce qui a été observé…" : "What was observed…"}/>
+        </label>
+      </div>
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <button className="btn" onClick={onCancel} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          {saving ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Ajouter" : "Add")}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const HealthHealForm = ({ lang, animal, runningTreatments, onCancel, onSaved }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const [recoveredAt, setRecoveredAt] = React.useState(today);
+  const [closeIds, setCloseIds] = React.useState(() => new Set());
+  const [note, setNote] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const toggle = (id) => setCloseIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const submit = async () => {
+    if (saving || !animal._pk) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      await api.declareAnimalRecovery(animal._pk, {
+        recovered_at: recoveredAt || undefined,
+        note: note || undefined,
+        close_treatment_ids: closeIds.size > 0 ? [...closeIds] : undefined,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-sunken)", borderRadius: 8, padding: 12 }}>
+      <label style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 220 }}>
+        <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date de guérison" : "Recovery date"}</span>
+        <input className="input" type="date" max={today} value={recoveredAt} onChange={(e) => setRecoveredAt(e.target.value)}/>
+      </label>
+      {runningTreatments.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Clôturer les traitements en cours" : "Close ongoing treatments"}</span>
+          {runningTreatments.map((t) => (
+            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ink-900)" }}>
+              <input type="checkbox" checked={closeIds.has(t.id)} onChange={() => toggle(t.id)}/>
+              {t.medicineName || t.medicine_name || (lang === "fr" ? "Traitement" : "Treatment")}
+              {t.dosage ? ` · ${t.dosage}` : ""}
+            </label>
+          ))}
+        </div>
+      )}
+      <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Note de sortie (optionnel)" : "Exit note (optional)"}</span>
+        <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder={lang === "fr" ? "Observations à la guérison…" : "Observations at recovery…"}/>
+      </label>
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+        <button className="btn" onClick={onCancel} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          {saving ? (lang === "fr" ? "Enregistrement…" : "Saving…") : (lang === "fr" ? "Déclarer guéri" : "Declare recovered")}
+        </button>
+      </div>
+    </div>
   );
 };
 

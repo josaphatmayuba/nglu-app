@@ -198,6 +198,59 @@ export class UpdateAnimalDto {
   @IsOptional() @IsString() status_note?: string | null;
 }
 
+// ─── Episode de sante (migration 0251/0252) ────────────────────────────────
+// Declaration maladie/quarantaine : ouvre un episode. Guerison : ne peut
+// fermer que si un episode ouvert existe (regle metier verifiee cote service).
+export class DeclareAnimalIllnessDto {
+  @ApiPropertyOptional({ enum: ["sick", "quarantine"], default: "sick" })
+  @IsOptional()
+  @IsString()
+  @IsIn(["sick", "quarantine"])
+  status?: "sick" | "quarantine";
+
+  @ApiProperty({ description: "Cause du changement de statut sante (memes valeurs que STATUS_CAUSE_OPTIONS cote frontend)." })
+  @IsString()
+  @IsNotEmpty()
+  cause: string;
+
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() disease_id?: number | null;
+
+  @ApiPropertyOptional({ enum: ["mild", "moderate", "severe"] })
+  @IsOptional()
+  @IsString()
+  @IsIn(["mild", "moderate", "severe"])
+  severity?: "mild" | "moderate" | "severe" | null;
+
+  @ApiPropertyOptional({ example: "2026-08-10" }) @IsOptional() @IsDateString() start_date?: string | null;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() note?: string | null;
+}
+
+export class DeclareAnimalRecoveryDto {
+  @ApiPropertyOptional({ example: "2026-08-14" }) @IsOptional() @IsDateString() recovered_at?: string | null;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() note?: string | null;
+
+  @ApiPropertyOptional({ type: [Number], description: "Traitements a cloturer (status=done) a la guerison." })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  close_treatment_ids?: number[];
+}
+
+export class CreateHealthObservationDto {
+  @ApiProperty() @IsString() @IsNotEmpty() note: string;
+
+  @ApiPropertyOptional({ example: "2026-08-12" }) @IsOptional() @IsDateString() observed_at?: string | null;
+
+  @ApiPropertyOptional({ enum: ["stable", "improving", "worsening"] })
+  @IsOptional()
+  @IsString()
+  @IsIn(["stable", "improving", "worsening"])
+  severity_trend?: "stable" | "improving" | "worsening" | null;
+}
+
 export class ImportAnimalsDto {
   @ApiProperty({ type: [CreateAnimalDto], description: "Lignes d'animaux à importer (issues d'un CSV mappé côté client)." })
   @IsArray()

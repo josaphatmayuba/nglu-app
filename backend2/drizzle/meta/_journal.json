@@ -1583,6 +1583,20 @@
       "when": 1781071200001,
       "tag": "0250_farmos_animal_field_history",
       "breakpoints": true
+    },
+    {
+      "idx": 226,
+      "version": "5",
+      "when": 1781071200002,
+      "tag": "0251_farmos_health_episode",
+      "breakpoints": true
+    },
+    {
+      "idx": 227,
+      "version": "5",
+      "when": 1781071200003,
+      "tag": "0252_farmos_animal_health_observations",
+      "breakpoints": true
     }
   ]
 }

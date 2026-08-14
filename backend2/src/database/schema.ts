@@ -3011,7 +3011,32 @@ export const farmosAnimalStatusHistory = mysqlTable("farmos_animal_status_histor
   previousStatus: varchar("previous_status", { length: 255 }),
   newStatus: varchar("new_status", { length: 255 }),
   cause: varchar("cause", { length: 255 }),
+  // Episode de sante (migration 0251) : maladie liee (FK logique vers
+  // farmos_diseases), date de resolution (NULL = episode encore ouvert) et
+  // auteur de la cloture. Renseignes uniquement pour field_name NULL et
+  // new_status sick/quarantine.
+  diseaseId: bigint("disease_id", { mode: "number" }),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: bigint("resolved_by", { mode: "number" }),
   note: text("note"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// Observations de suivi rattachees a un episode de sante ouvert (migration 0252).
+// statusHistoryId = FK logique vers la ligne d ouverture de l episode dans
+// farmos_animal_status_history. severityTrend : stable / improving / worsening,
+// valide cote DTO et non en base.
+export const farmosAnimalHealthObservations = mysqlTable("farmos_animal_health_observations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  statusHistoryId: bigint("status_history_id", { mode: "number" }).notNull(),
+  observedAt: date("observed_at", { mode: "string" }).notNull(),
+  note: text("note").notNull(),
+  severityTrend: varchar("severity_trend", { length: 20 }),
   createdBy: bigint("created_by", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

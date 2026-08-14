@@ -24,6 +24,9 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   ConsumeMedicineDto,
   CreateAnimalDto,
+  DeclareAnimalIllnessDto,
+  DeclareAnimalRecoveryDto,
+  CreateHealthObservationDto,
   ImportAnimalsDto,
   CreateFarmosStaffDto,
   CreateDiseaseDto,
@@ -232,6 +235,56 @@ export class FarmosController {
   @Get("animals/:id/status-history")
   listAnimalStatusHistory(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.listAnimalStatusHistory(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Declarer une maladie/quarantaine sur un animal (ouvre un episode sante)." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-declare")
+  declareAnimalIllness(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareAnimalIllnessDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.declareAnimalIllness(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Declarer la guerison d'un animal (ferme l'episode sante ouvert)." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-heal")
+  declareAnimalRecovery(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareAnimalRecoveryDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.declareAnimalRecovery(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Episode sante ouvert d'un animal (avec ses observations de suivi)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/health-episode")
+  getHealthEpisode(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getHealthEpisodeDetail(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajouter une observation de suivi sur l'episode sante ouvert d'un animal." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-observations")
+  addHealthObservation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateHealthObservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.addHealthObservation(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Lister les observations de suivi sante d'un animal." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/health-observations")
+  listHealthObservations(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listHealthObservations(id, orgId);
   }
 
   @ApiOperation({ summary: "Remove an animal from POS sale listing when no sale exists." })

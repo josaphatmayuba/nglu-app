@@ -203,6 +203,9 @@ const KIND_INVALIDATES = {
   createDisease:          ["diseases"],
   updateDisease:          ["diseases"],
   deleteDisease:          ["diseases"],
+  declareAnimalIllness:   ["animals", "animalStatusHistory"],
+  declareAnimalRecovery:  ["animals", "animalStatusHistory", "treatments"],
+  addHealthObservation:   ["animals", "healthObservations"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -374,6 +377,12 @@ export const api = {
   createBatchAdjustment: (body) => mutate({ kind: "createBatchAdjustment", method: "POST", path: "/batch-adjustments", body }),
   listBatchAdjustments: (animalId) => jsonFetch(`/animals/${animalId}/batch-adjustments`),
   listAnimalStatusHistory: (animalId) => jsonFetch(`/animals/${animalId}/status-history`),
+  // Episode santé (SCRUM) : déclaration maladie/quarantaine, guérison, suivi.
+  getAnimalHealthEpisode: (animalId) => jsonFetch(`/animals/${animalId}/health-episode`),
+  declareAnimalIllness: (animalId, body) => mutate({ kind: "declareAnimalIllness", method: "POST", path: `/animals/${animalId}/health-declare`, body }),
+  declareAnimalRecovery: (animalId, body) => mutate({ kind: "declareAnimalRecovery", method: "POST", path: `/animals/${animalId}/health-heal`, body }),
+  addHealthObservation: (animalId, body) => mutate({ kind: "addHealthObservation", method: "POST", path: `/animals/${animalId}/health-observations`, body }),
+  listHealthObservations: (animalId) => jsonFetch(`/animals/${animalId}/health-observations`),
   createBatchTransfer: (body) => mutate({ kind: "createBatchTransfer", method: "POST", path: "/batch-transfers", body }),
   createBatchSplit: (body) => mutate({ kind: "createBatchSplit", method: "POST", path: "/batch-splits", body }),
   listWeighings: (animalId) => jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`),
