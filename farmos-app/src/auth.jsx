@@ -27,9 +27,20 @@ function setToken(t) {
 }
 
 // Restaure une session via le cookie refresh httpOnly. Renvoie le token ou null.
+// SCRUM-119 — si le fetch échoue faute de réseau (pas de réponse serveur), on ne
+// doit PAS traiter ça comme une session invalide : on jette une erreur taguée
+// `.isNetworkError` pour que l'appelant (api.js) garde la session et réessaie
+// plus tard, au lieu de déconnecter l'utilisateur juste parce qu'il est hors ligne.
 export async function restoreSession() {
+  let res;
   try {
-    const res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });
+    res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });
+  } catch (err) {
+    const netErr = new Error("network unavailable during refresh");
+    netErr.isNetworkError = true;
+    throw netErr;
+  }
+  try {
     if (!res.ok) return null;
     const data = await res.json();
     if (data?.token) {
@@ -67,7 +78,12 @@ export async function bootstrapAuth() {
       }
     }
   } catch {}
-  if (!accessToken) await restoreSession();
+  // Hors ligne au boot : restoreSession() jette (isNetworkError). On garde
+  // simplement l'utilisateur non connecté pour l'instant, sans le traiter
+  // comme une session invalide — il retentera dès que le réseau revient.
+  if (!accessToken) {
+    try { await restoreSession(); } catch {}
+  }
 }
 
 export function clearAuth() {

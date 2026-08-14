@@ -96,7 +96,19 @@ function AppShell() {
     try { return localStorage.getItem("farmos-lang") || "fr"; } catch { return "fr"; }
   });
   const token = useAuthToken();
-  if (!token) return <LoginScreen lang={lang}/>;
+  // Hors ligne au retour dans l'app : le token mémoire est vide (jamais
+  // persisté, SCRUM-119) et le refresh via cookie a échoué faute de réseau
+  // (restoreSession() jette isNetworkError, voir auth.jsx/api.js). On ne
+  // renvoie PAS vers le login dans ce cas : `isLogged` prouve qu'une session
+  // a déjà réussi sur cet appareil, donc on affiche l'app en mode dégradé
+  // (lecture cache) plutôt que de forcer une reconnexion impossible hors ligne.
+  const hadSession = (() => {
+    try { return localStorage.getItem("isLogged") === "true"; } catch { return false; }
+  })();
+  if (!token) {
+    if (typeof navigator !== "undefined" && navigator.onLine === false && hadSession) return <App/>;
+    return <LoginScreen lang={lang}/>;
+  }
   return <App/>;
 }
 

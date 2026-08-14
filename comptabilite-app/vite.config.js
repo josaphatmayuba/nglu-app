@@ -37,7 +37,23 @@ export default defineConfig(({ mode }) => {
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         navigateFallback: BASE + "index.html",
-        navigateFallbackDenylist: [/^\/api\//]
+        navigateFallbackDenylist: [/^\/api\//],
+        // Lecture hors ligne : on garde la derniere reponse connue des GET API.
+        // NetworkFirst = reseau d'abord (donnees fraiches), sinon cache (offline).
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, request }) => request.method === "GET"
+              && url.pathname.startsWith("/api/")
+              && !url.pathname.startsWith("/api/events"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "comptabilite-api-cache",
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ]
       },
       devOptions: { enabled: false }
     })

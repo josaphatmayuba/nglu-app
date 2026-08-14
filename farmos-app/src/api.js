@@ -47,8 +47,15 @@ async function doJsonFetch(path, init = {}, retried = false) {
     // sur l'écran de login (useAuthToken réagit à 'farmos:auth-changed').
     if (res.status === 401 && typeof window !== "undefined") {
       if (!retried) {
-        const token = await restoreSession();
-        if (token) return doJsonFetch(path, init, true);
+        try {
+          const token = await restoreSession();
+          if (token) return doJsonFetch(path, init, true);
+        } catch (err) {
+          // Hors ligne : le 401 vient probablement d'un token expiré qu'on ne
+          // peut pas rafraîchir sans réseau. On NE déconnecte PAS — on laisse
+          // remonter l'erreur pour que l'appelant retombe sur le cache/l'outbox.
+          if (err?.isNetworkError) throw err;
+        }
       }
       clearAuth();
       window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
@@ -75,8 +82,13 @@ async function doGlobalJsonFetch(path, init = {}, retried = false) {
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined") {
       if (!retried) {
-        const token = await restoreSession();
-        if (token) return doGlobalJsonFetch(path, init, true);
+        try {
+          const token = await restoreSession();
+          if (token) return doGlobalJsonFetch(path, init, true);
+        } catch (err) {
+          // Hors ligne : ne pas déconnecter, laisser remonter l'erreur réseau.
+          if (err?.isNetworkError) throw err;
+        }
       }
       clearAuth();
       window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
