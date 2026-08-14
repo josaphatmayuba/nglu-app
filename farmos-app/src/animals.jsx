@@ -1731,7 +1731,16 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <RelatedList lang={lang} loading={related.loading} items={related.repro} kind="repro" emptyFr="Aucun événement de reproduction." emptyEn="No reproduction event."/>
         )}
         {!editing && tab === "prod" && (
-          <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
+          <>
+            {speciesById(animal.species)?.productPrimary === "growth" && (
+              <div style={{ fontSize: 12, color: "var(--fg-3)", background: "var(--bg-sunken)", borderRadius: 8, padding: "8px 12px" }}>
+                {lang === "fr"
+                  ? "Le poids de cet animal se saisit désormais depuis l'onglet « Poids » (historique unique de pesées)."
+                  : "This animal's weight is now recorded from the “Weight” tab (single weighing history)."}
+              </div>
+            )}
+            <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
+          </>
         )}
         {!editing && tab === "weight" && (
           <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading} readOnly={readOnly}
@@ -2324,8 +2333,8 @@ const WithdrawalChip = ({ lang, w }) => (
       </div>
       <div style={{ fontSize: 11, color: "#F0D6CB", marginTop: 1 }}>
         {lang === "fr"
-          ? `${w.kind === "milk" ? "Lait" : w.kind === "meat" ? "Viande" : "Œufs"} bloqué jusqu'au `
-          : `${w.kind === "milk" ? "Milk" : w.kind === "meat" ? "Meat" : "Eggs"} blocked until `}
+          ? `${w.kind === "milk" ? "Lait" : w.kind === "meat" ? "Viande" : w.kind === "eggs" ? "Œufs" : "Vente"} bloqué${w.kind === "eggs" || w.kind === "meat" || w.kind === "milk" ? "" : "e"} jusqu'au `
+          : `${w.kind === "milk" ? "Milk" : w.kind === "meat" ? "Meat" : w.kind === "eggs" ? "Eggs" : "Sale"} blocked until `}
         <span className="mono">{w.until}</span>
       </div>
     </div>

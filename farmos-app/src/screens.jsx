@@ -1381,10 +1381,11 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 // ─── PRODUCTION ──────────────────────────────────────────────────────────
 const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const [logs, setLogs] = React.useState([]);
+  const [weighings, setWeighings] = React.useState([]);
   const [live, setLive] = React.useState({ animals: [], treatments: [], sales: [], expenses: [] });
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("7d"));
-  const refresh = useDataRefresh(["animals", "productionLogs", "sales", "expenses", "treatments"]);
+  const refresh = useDataRefresh(["animals", "productionLogs", "weighings", "sales", "expenses", "treatments"]);
 
   // ── Egg section state ──
   const [eggStock, setEggStock] = React.useState({ produced: 0, sold: 0, available: 0 });
@@ -1397,10 +1398,11 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
 
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listProductionLogs(), api.getDashboardSnapshot(), api.getEggStock(), api.listBuildings("chicken")])
-      .then(([rows, snapshot, stock, bldgs]) => {
+    Promise.all([api.listProductionLogs(), api.getDashboardSnapshot(), api.getEggStock(), api.listBuildings("chicken"), api.listWeighings()])
+      .then(([rows, snapshot, stock, bldgs, weighingRows]) => {
         if (cancel) return;
         setLogs(Array.isArray(rows) ? rows : []);
+        setWeighings(Array.isArray(weighingRows) ? weighingRows : []);
         setLive({
           animals: Array.isArray(snapshot?.animals) ? snapshot.animals : [],
           treatments: Array.isArray(snapshot?.treatments) ? snapshot.treatments : [],
@@ -1416,7 +1418,11 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:production-created", onCreated);
-    return () => window.removeEventListener("farmos:production-created", onCreated);
+    window.addEventListener("farmos:animal-created", onCreated);
+    return () => {
+      window.removeEventListener("farmos:production-created", onCreated);
+      window.removeEventListener("farmos:animal-created", onCreated);
+    };
   }, []);
   const productTypeOf = (l) => l.productType || l.product_type || "";
   const logDateOf = (l) => l.logDate || l.log_date || "";
@@ -1424,23 +1430,55 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(logDateOf(l), dateRange));
   const filteredLogs = periodLogs.slice(0, 12);
   const visibleSpecies = enabledSpecies && enabledSpecies.length ? SPECIES.filter((s) => enabledSpecies.includes(s.id)) : SPECIES;
+  const weighingsInRange = weighings.filter((w) => inDateRange(w.weighDate || w.weigh_date, dateRange));
   const productTypesForSpecies = (s) => {
     if (s.productPrimary === "growth") return s.id === "fish" ? ["biomass", "fish", "growth", "weight"] : ["growth", "weight"];
     return [s.productPrimary];
   };
+  // Espèces "growth" (porc, poisson, lapin, dinde…) : la source d'écriture des
+  // pesées est désormais farmos_weighings (unification avec l'onglet Poids).
+  // On agrège donc les pesées des animaux de l'espèce, avec repli sur les
+  // anciens logs production_logs growth/weight pour l'historique pré-migration.
+  const weighingsBySpeciesId = (speciesId) => {
+    const ids = new Set(live.animals.filter((a) => a.species === speciesId).map((a) => String(a.id ?? a._pk)));
+    return weighingsInRange.filter((w) => ids.has(String(w.animalId ?? w.animal_id ?? "")));
+  };
   const deriveSpeciesProduction = (s) => {
-    const wanted = productTypesForSpecies(s);
-    const rows = periodLogs.filter((l) => l.species === s.id && wanted.includes(productTypeOf(l)));
-    const sourceRows = rows.length ? rows : periodLogs.filter((l) => l.species === s.id);
+    let sourceRows;
+    let quantityOf;
+    let dateOf;
+    let usingWeighings = false;
+    if (s.productPrimary === "growth") {
+      const wRows = weighingsBySpeciesId(s.id);
+      if (wRows.length) {
+        sourceRows = wRows;
+        quantityOf = (w) => Number(w.weight || 0);
+        dateOf = (w) => w.weighDate || w.weigh_date;
+        usingWeighings = true;
+      } else {
+        const wanted = productTypesForSpecies(s);
+        sourceRows = periodLogs.filter((l) => l.species === s.id && wanted.includes(productTypeOf(l)));
+        quantityOf = (l) => Number(l.quantity || 0);
+        dateOf = logDateOf;
+      }
+    } else {
+      const wanted = productTypesForSpecies(s);
+      const rows = periodLogs.filter((l) => l.species === s.id && wanted.includes(productTypeOf(l)));
+      sourceRows = rows.length ? rows : periodLogs.filter((l) => l.species === s.id);
+      quantityOf = (l) => Number(l.quantity || 0);
+      dateOf = logDateOf;
+    }
     const byDate = new Map();
     sourceRows.forEach((l) => {
-      const d = String(logDateOf(l) || "").slice(0, 10) || "—";
-      byDate.set(d, (byDate.get(d) || 0) + Number(l.quantity || 0));
+      const d = String(dateOf(l) || "").slice(0, 10) || "—";
+      byDate.set(d, (byDate.get(d) || 0) + quantityOf(l));
     });
     const values = Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-12);
     const trend = values.length ? values : [0, 0, 0, 0, 0, 0];
-    const total = sourceRows.reduce((sum, l) => sum + Number(l.quantity || 0), 0);
-    const lastUnit = [...sourceRows].reverse().find((l) => l.unit)?.unit || "";
+    const total = sourceRows.reduce((sum, l) => sum + quantityOf(l), 0);
+    const lastUnit = usingWeighings && sourceRows.length
+      ? (sourceRows[0].weightUnit || sourceRows[0].weight_unit || "kg")
+      : [...sourceRows].reverse().find((l) => l.unit)?.unit || "";
     return {
       total,
       unit: lastUnit,
@@ -1472,9 +1510,38 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   const milkToday = sumProduct("milk", "cow");
   // Œufs idem
   const eggsToday = sumProduct("eggs", "chicken");
-  // GMQ porcs (g/j): moyenne des derniers logs growth/weight pour porc.
+  // GMQ porcs (g/j): dérivé des pesées (farmos_weighings), pas des anciens
+  // logs production "growth" (source unifiée depuis COMP — un seul historique
+  // de poids par animal). Pour chaque animal porc, delta poids / delta jours
+  // entre les deux dernières pesées de la période, puis moyenne des GMQ.
+  const pigAnimalIds = new Set(live.animals.filter((a) => a.species === "pig").map((a) => String(a.id ?? a._pk)));
+  const pigWeighingsByAnimal = new Map();
+  weighingsInRange.forEach((w) => {
+    const key = String(w.animalId ?? w.animal_id ?? "");
+    if (!pigAnimalIds.has(key)) return;
+    if (!pigWeighingsByAnimal.has(key)) pigWeighingsByAnimal.set(key, []);
+    pigWeighingsByAnimal.get(key).push(w);
+  });
+  const adgFromWeighings = [];
+  pigWeighingsByAnimal.forEach((rows) => {
+    const sorted = rows.slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
+    for (let i = 1; i < sorted.length; i++) {
+      const d0 = new Date(sorted[i - 1].weighDate || sorted[i - 1].weigh_date);
+      const d1 = new Date(sorted[i].weighDate || sorted[i].weigh_date);
+      const days = (d1 - d0) / 86400000;
+      if (days <= 0) continue;
+      const w0 = Number(sorted[i - 1].weight);
+      const w1 = Number(sorted[i].weight);
+      if (Number.isNaN(w0) || Number.isNaN(w1)) continue;
+      adgFromWeighings.push(((w1 - w0) * 1000) / days); // kg -> g/j
+    }
+  });
+  // Repli sur les anciens logs production_logs "growth"/"weight" (historique
+  // saisi avant l'unification) si aucune pesée exploitable n'existe encore.
   const growthLogs = periodLogs.filter((l) => ["growth", "weight"].includes(productTypeOf(l)) && l.species === "pig").slice(0, 20);
-  const gmqAvg = growthLogs.length
+  const gmqAvg = adgFromWeighings.length
+    ? Math.round(adgFromWeighings.reduce((s, v) => s + v, 0) / adgFromWeighings.length)
+    : growthLogs.length
     ? Math.round(growthLogs.reduce((s, l) => s + Number(l.quantity || 0), 0) / growthLogs.length)
     : 0;
   // Biomasse poisson: dernière valeur connue par bassin sommée

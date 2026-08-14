@@ -827,10 +827,33 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
       ? { broken: form.broken ? Number(form.broken) : null, size: form.size ? Number(form.size) : null, lay_rate: autoLayRate != null ? Number(autoLayRate.toFixed(2)) : null }
       : null;
     setSaving(true);
+    // "growth" (poids/croissance : porc, poisson, poulet secondaire…) est
+    // désormais unifié avec l'onglet Poids : une seule table d'historique
+    // (farmos_weighings) au lieu de dupliquer dans production_logs.
+    if (productKind === "growth") {
+      const animalId = toNumericId(selectedAnimal);
+      if (!animalId) {
+        setSaving(false);
+        onSaved && onSaved({ kind: "production", severity: "error", message: lang === "fr" ? "Sélectionnez un animal pour enregistrer une pesée." : "Select an animal to record a weighing." });
+        return;
+      }
+      try {
+        await api.createWeighing({ animal_id: animalId, weigh_date: form.date, weight: Number(form.value), weight_unit: "kg", notes: form.notes || null });
+        window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan pesée" : "Weighing scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${species} · poids · ${form.value} kg`);
+        onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Pesée enregistrée — ${form.value} kg` : `Weighing saved — ${form.value} kg` });
+        onClose();
+      } catch (err) {
+        onSaved && onSaved({ kind: "production", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const payload = {
       animal_id: toNumericId(selectedAnimal),
       species,
-      product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : productKind === "wool" ? "wool" : "growth",
+      product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : "wool",
       log_date: form.date,
       period: form.period || "AM",
       quantity: Number(form.value),
@@ -842,7 +865,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
       await api.createProductionLog(payload);
       window.dispatchEvent(new CustomEvent("farmos:production-created"));
       await submitScanDocument(scan, `${lang === "fr" ? "Scan production" : "Production scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${species} · ${productKind} · ${form.value} ${unit}`);
-      onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Production ${productKind === "milk" ? "lait" : productKind === "eggs" ? "œufs" : "poids"} enregistrée — ${form.value} ${unit}` : `Production saved — ${form.value} ${unit}` });
+      onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Production ${productKind === "milk" ? "lait" : "œufs"} enregistrée — ${form.value} ${unit}` : `Production saved — ${form.value} ${unit}` });
       onClose();
     } catch (err) {
       onSaved && onSaved({ kind: "production", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -866,23 +889,25 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
         </div>
       </FormSection>
 
-      <FormSection label={lang === "fr" ? `Production ${productKind === "milk" ? "laitière" : productKind === "eggs" ? "d'œufs" : productKind === "wool" ? "laine" : "et croissance"}` : `Production`}>
+      <FormSection label={lang === "fr" ? `Production ${productKind === "milk" ? "laitière" : productKind === "eggs" ? "d'œufs" : productKind === "wool" ? "laine" : "— pesée"}` : `Production${productKind === "growth" ? " — weighing" : ""}`}>
         <FormGrid cols={2}>
           <FormField label={lang === "fr" ? "Date" : "Date"} required>
             <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
           </FormField>
-          <FormField label={lang === "fr" ? "Période" : "Period"}>
-            <Autocomplete
-              value={form.period || "AM"}
-              onChange={(v) => set("period", v || "AM")}
-              allowClear={false}
-              options={[
-                { value: "AM", label: lang === "fr" ? "Traite matin" : "Morning" },
-                { value: "PM", label: lang === "fr" ? "Traite après-midi" : "Afternoon" },
-                { value: "day", label: lang === "fr" ? "Total jour" : "Daily total" },
-              ]}
-            />
-          </FormField>
+          {productKind !== "growth" && (
+            <FormField label={lang === "fr" ? "Période" : "Period"}>
+              <Autocomplete
+                value={form.period || "AM"}
+                onChange={(v) => set("period", v || "AM")}
+                allowClear={false}
+                options={[
+                  { value: "AM", label: lang === "fr" ? "Traite matin" : "Morning" },
+                  { value: "PM", label: lang === "fr" ? "Traite après-midi" : "Afternoon" },
+                  { value: "day", label: lang === "fr" ? "Total jour" : "Daily total" },
+                ]}
+              />
+            </FormField>
+          )}
         </FormGrid>
         <FormGrid cols={2}>
           <FormField label={lang === "fr" ? "Animal / Lot" : "Animal / Batch"}>
