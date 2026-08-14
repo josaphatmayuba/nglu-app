@@ -1,6 +1,7 @@
 // Shell KodaTill — sidebar minimale + topbar, meme pattern que farmos-app/src/shell.jsx.
 import React from "react";
 import { clearAuth } from "./auth.jsx";
+import { clearAllCaches } from "./offline-db";
 import { isSuperOwner } from "./platform-admin.jsx";
 import { Brand } from "./icons.jsx";
 import {
@@ -113,6 +114,14 @@ export const Sidebar = ({ active, onNav, nav, mobile, mobileOpen }) => {
   // Tablette portrait (<=900px, hors mode mobile tiroir) : rail icone-seule
   // au lieu du panneau 220px, pour laisser la place au contenu.
   const narrow = !mobile && narrowRail;
+  const logout = () => {
+    clearAuth();
+    // Purge aussi le miroir IndexedDB (catalogue + outbox) : sur une caisse
+    // partagee, les donnees de l'utilisateur precedent ne doivent pas rester
+    // lisibles par le suivant.
+    clearAllCaches().catch(() => {});
+    window.dispatchEvent(new CustomEvent("kodatill:auth-changed"));
+  };
   return (
     <aside style={{
       width: mobile ? 220 : (narrow ? 64 : 220), flexShrink: mobile ? 0 : undefined,
@@ -146,7 +155,7 @@ export const Sidebar = ({ active, onNav, nav, mobile, mobileOpen }) => {
       </nav>
       <div style={{ padding: narrow ? "12px 8px" : 12, borderTop: "1px solid #123F46", display: "flex", alignItems: "center", justifyContent: narrow ? "center" : "flex-start", gap: 10 }}>
         <button
-          onClick={narrow ? () => { clearAuth(); window.dispatchEvent(new CustomEvent("kodatill:auth-changed")); } : undefined}
+          onClick={narrow ? logout : undefined}
           title={narrow ? `${user ? user.display : "Non connecté"} — Déconnexion` : undefined}
           style={{
             width: 32, height: 32, borderRadius: 8, background: "#123F46", color: "rgba(236,241,236,0.85)",
@@ -160,7 +169,7 @@ export const Sidebar = ({ active, onNav, nav, mobile, mobileOpen }) => {
             <div style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(236,241,236,0.9)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user ? user.display : "Non connecté"}
             </div>
-            <button onClick={() => { clearAuth(); window.dispatchEvent(new CustomEvent("kodatill:auth-changed")); }}
+            <button onClick={logout}
               style={{ background: "transparent", border: 0, color: "rgba(236,241,236,0.55)", fontSize: 11, cursor: "pointer", padding: 0 }}>
               Déconnexion
             </button>

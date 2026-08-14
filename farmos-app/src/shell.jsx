@@ -5,6 +5,7 @@ import { Icon, AnimalGlyph, Brand } from "./icons";
 import { SPECIES, t } from "./data";
 import { api, adaptAnimal } from "./api";
 import { clearAuth } from "./auth.jsx";
+import { clearAllCaches } from "./offline-db";
 import { NetStatusPill } from "./offline-status";
 import { animalQty, isActiveLivestock } from "./animal-category";
 
@@ -129,6 +130,9 @@ const UserChip = ({ showLabels, lang }) => {
   }
   const logout = () => {
     clearAuth(); // SCRUM-119 — purge le token mémoire + les métadonnées localStorage
+    // Purge aussi le miroir IndexedDB : sur un appareil partagé, les données
+    // de l'utilisateur précédent ne doivent pas rester lisibles par le suivant.
+    clearAllCaches().catch(() => {});
     window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
   };
   return (

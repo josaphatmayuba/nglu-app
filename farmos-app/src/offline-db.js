@@ -9,6 +9,14 @@
 
 import Dexie from "dexie";
 
+// IMPORTANT : toutes les declarations de version Dexie de cette base doivent
+// vivre ICI, dans ce seul fichier, meme celles utilisees uniquement par
+// d'autres modules (ex: le store "outbox" de offline-outbox.js, SCRUM-240).
+// Une declaration de version separee dans un autre fichier ne fonctionne que
+// par accident, tant que ce fichier est toujours importe en meme temps que
+// l'autre — si un futur ecran importait offline-db.js sans offline-outbox.js,
+// Dexie ouvrirait la base sur un schema incomplet et le store "outbox"
+// disparaitrait silencieusement (perte des mutations offline en attente).
 export const db = new Dexie("farmos-offline");
 db.version(1).stores({
   // Pour chaque table : primary key id, index utiles pour les écrans.
@@ -30,6 +38,9 @@ db.version(1).stores({
 });
 db.version(2).stores({
   feedForecasts:   "id, species, urgent",
+  // Outbox des mutations offline (SCRUM-240) — deplace ici depuis
+  // offline-outbox.js pour garder une seule source de verite du schema.
+  outbox:          "++id, status, kind, createdAt",
 });
 db.version(3).stores({
   vetExams:        "id, examDate, animalId",
