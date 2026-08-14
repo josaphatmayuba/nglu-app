@@ -5,7 +5,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosAnimalStatusHistory, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -650,7 +650,26 @@ export class FarmosService {
     return { dryRun: false, total: rows.length, inserted, duplicates, errors };
   }
 
-  async updateAnimal(id: number, input: UpdateAnimalDto, orgId: number) {
+  // Champs traces dans farmos_animal_status_history quand ils changent (hors
+  // statut, trace a part avec cause/note). last_event et external_id exclus :
+  // ce sont deja des journaux/identifiants techniques, pas des faits a auditer.
+  private static readonly TRACKED_ANIMAL_FIELDS: Array<{ patchKey: string; dbKey: keyof typeof farmosAnimals.$inferSelect; fieldName: string; labelFr: string; labelEn: string }> = [
+    { patchKey: "name", dbKey: "name", fieldName: "name", labelFr: "Nom", labelEn: "Name" },
+    { patchKey: "race", dbKey: "race", fieldName: "race", labelFr: "Race", labelEn: "Breed" },
+    { patchKey: "sex", dbKey: "sex", fieldName: "sex", labelFr: "Sexe", labelEn: "Sex" },
+    { patchKey: "dateOfBirth", dbKey: "dateOfBirth", fieldName: "date_of_birth", labelFr: "Date de naissance", labelEn: "Date of birth" },
+    { patchKey: "weight", dbKey: "weight", fieldName: "weight", labelFr: "Poids", labelEn: "Weight" },
+    { patchKey: "count", dbKey: "count", fieldName: "count", labelFr: "Effectif", labelEn: "Count" },
+    { patchKey: "lot", dbKey: "lot", fieldName: "lot", labelFr: "Lot", labelEn: "Lot" },
+    { patchKey: "barn", dbKey: "barn", fieldName: "barn", labelFr: "Bâtiment", labelEn: "Barn" },
+    { patchKey: "room", dbKey: "room", fieldName: "room", labelFr: "Salle", labelEn: "Room" },
+    { patchKey: "type", dbKey: "type", fieldName: "type", labelFr: "Type", labelEn: "Type" },
+    { patchKey: "motherId", dbKey: "motherId", fieldName: "mother_id", labelFr: "Mère", labelEn: "Mother" },
+    { patchKey: "fatherId", dbKey: "fatherId", fieldName: "father_id", labelFr: "Père", labelEn: "Father" },
+    { patchKey: "estimatedValue", dbKey: "estimatedValue", fieldName: "estimated_value", labelFr: "Valeur estimée", labelEn: "Estimated value" },
+  ];
+
+  async updateAnimal(id: number, input: UpdateAnimalDto, orgId: number, currentUserId?: number) {
     const current = await this.getAnimal(id, orgId);
     this.assertAnimalWritable(current);
     const patch: Record<string, unknown> = {};
@@ -673,9 +692,75 @@ export class FarmosService {
     if (input.estimated_value !== undefined) patch.estimatedValue = input.estimated_value != null ? String(input.estimated_value) : null;
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
+
+    const statusChanged = input.status !== undefined && input.status !== current.status;
+    const fieldChanges = FarmosService.TRACKED_ANIMAL_FIELDS
+      .filter((f) => f.patchKey in patch && String(patch[f.patchKey] ?? "") !== String((current as Record<string, unknown>)[f.dbKey] ?? ""))
+      .map((f) => ({
+        fieldName: f.fieldName,
+        previousValue: (current as Record<string, unknown>)[f.dbKey],
+        newValue: patch[f.patchKey],
+      }));
+
     await this.db.update(farmosAnimals).set(patch).where(eq(farmosAnimals.id, id));
+
+    if (statusChanged) {
+      await this.db.insert(farmosAnimalStatusHistory).values({
+        organizationId: orgId,
+        animalId: id,
+        previousStatus: current.status ?? null,
+        newStatus: input.status as string,
+        cause: input.status_cause ?? null,
+        note: input.status_note ?? null,
+        createdBy: currentUserId ?? null,
+      });
+      await this.publishFarmosUpdate("updateAnimalStatus", ["animals", "animalStatusHistory"], "created", id, orgId);
+    }
+
+    if (fieldChanges.length > 0) {
+      await this.db.insert(farmosAnimalStatusHistory).values(
+        fieldChanges.map((c) => ({
+          organizationId: orgId,
+          animalId: id,
+          fieldName: c.fieldName,
+          previousStatus: c.previousValue != null ? String(c.previousValue) : null,
+          newStatus: c.newValue != null ? String(c.newValue) : null,
+          createdBy: currentUserId ?? null,
+        })),
+      );
+      await this.publishFarmosUpdate("updateAnimalField", ["animals", "animalStatusHistory"], "created", id, orgId);
+    }
+
     await this.publishFarmosUpdate("updateAnimal", ["animals"], "updated", id, orgId);
     return this.getAnimal(id, orgId);
+  }
+
+  // Historique des changements de statut sante d un animal (sain/malade/
+  // quarantaine...), avec cause/note et auteur. Complete
+  // farmos_batch_adjustments (mouvements de count) sans le remplacer.
+  async listAnimalStatusHistory(animalId: number, orgId: number) {
+    return this.db
+      .select({
+        id: farmosAnimalStatusHistory.id,
+        animalId: farmosAnimalStatusHistory.animalId,
+        fieldName: farmosAnimalStatusHistory.fieldName,
+        previousStatus: farmosAnimalStatusHistory.previousStatus,
+        newStatus: farmosAnimalStatusHistory.newStatus,
+        cause: farmosAnimalStatusHistory.cause,
+        note: farmosAnimalStatusHistory.note,
+        createdAt: farmosAnimalStatusHistory.createdAt,
+        createdBy: farmosAnimalStatusHistory.createdBy,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(farmosAnimalStatusHistory)
+      .leftJoin(users, eq(users.id, farmosAnimalStatusHistory.createdBy))
+      .where(and(
+        eq(farmosAnimalStatusHistory.animalId, animalId),
+        eq(farmosAnimalStatusHistory.organizationId, orgId),
+        eq(farmosAnimalStatusHistory.isActive, 1),
+      ))
+      .orderBy(desc(farmosAnimalStatusHistory.createdAt), desc(farmosAnimalStatusHistory.id));
   }
 
   async deleteAnimal(id: number, orgId: number) {

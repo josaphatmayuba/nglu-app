@@ -1569,6 +1569,20 @@
       "when": 1781067600000,
       "tag": "0248_kodatill_expense_datetime",
       "breakpoints": true
+    },
+    {
+      "idx": 224,
+      "version": "5",
+      "when": 1781071200000,
+      "tag": "0249_farmos_animal_status_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "5",
+      "when": 1781071200001,
+      "tag": "0250_farmos_animal_field_history",
+      "breakpoints": true
     }
   ]
 }

@@ -192,6 +192,10 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() father_id?: string | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimated_value?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() last_event?: string | null;
+  @ApiPropertyOptional({ description: "Cause du changement de statut sante (sick/quarantine). Trace dans farmos_animal_status_history." })
+  @IsOptional() @IsString() status_cause?: string | null;
+  @ApiPropertyOptional({ description: "Note libre associee au changement de statut sante. Trace dans farmos_animal_status_history." })
+  @IsOptional() @IsString() status_note?: string | null;
 }
 
 export class ImportAnimalsDto {

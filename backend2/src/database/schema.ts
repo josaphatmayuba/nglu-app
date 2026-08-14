@@ -2996,6 +2996,28 @@ export const farmosBatchAdjustments = mysqlTable("farmos_batch_adjustments", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Historique des changements de statut sante individuel d un animal (sain /
+// malade / quarantaine / etc.). Distinct de farmosBatchAdjustments (mouvements
+// de COUNT sur un lot) : ici on trace le STATUT sante, avec cause/note
+// optionnels a la saisie (utilises notamment pour sick/quarantine).
+export const farmosAnimalStatusHistory = mysqlTable("farmos_animal_status_history", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  // NULL = changement de statut sante (comportement historique, previous/newStatus
+  // portent le statut). Renseigne = changement d'un autre champ (nom, race, lot,
+  // batiment, valeur estimee...), previous/newStatus reutilisees comme valeur texte libre.
+  fieldName: varchar("field_name", { length: 40 }),
+  previousStatus: varchar("previous_status", { length: 255 }),
+  newStatus: varchar("new_status", { length: 255 }),
+  cause: varchar("cause", { length: 255 }),
+  note: text("note"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosAiInsights = mysqlTable("farmos_ai_insights", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

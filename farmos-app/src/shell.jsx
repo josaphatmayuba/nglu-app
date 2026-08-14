@@ -625,7 +625,7 @@ const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter,
 
     {right || (
       <>
-        {!compact && <NetStatusPill lang={lang}/>}
+        <NetStatusPill lang={lang} compact={compact}/>
         {!compact && (
           <button className="btn btn-ghost" style={{ height: 32, width: 32, padding: 0, justifyContent: "center", position: "relative", flexShrink: 0 }}>
             <Icon name="bell" size={16} color="var(--ink-700)"/>

@@ -1338,6 +1338,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [transferringBatch, setTransferringBatch] = React.useState(false);
   const [splittingBatch, setSplittingBatch] = React.useState(false);
   const [batchAdjustments, setBatchAdjustments] = React.useState([]);
+  const [statusHistory, setStatusHistory] = React.useState([]);
   const [deathEvent, setDeathEvent] = React.useState(null);
   const deceased = isDeceasedStatus(animal.status);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
@@ -1378,6 +1379,13 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   React.useEffect(() => {
     reloadBatchAdjustments();
   }, [reloadBatchAdjustments]);
+  const reloadStatusHistory = React.useCallback(() => {
+    if (!animal._pk) { setStatusHistory([]); return; }
+    api.listAnimalStatusHistory(animal._pk).then((rows) => setStatusHistory(Array.isArray(rows) ? rows : [])).catch(() => {});
+  }, [animal._pk]);
+  React.useEffect(() => {
+    reloadStatusHistory();
+  }, [reloadStatusHistory, animal.status]);
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
@@ -1608,7 +1616,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             { id: "weight",   fr: "Poids",         en: "Weight",      count: related.weighings.length },
             { id: "finance",  fr: "Finances",      en: "Finance",     count: null },
             { id: "documents", fr: "Documents",    en: "Documents",   count: related.documents.length },
-            { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length },
+            { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length + related.weighings.length + statusHistory.length },
             { id: "alerts",   fr: "Alertes",       en: "Alerts",      count: related.alerts.length },
           ].map((tb) => {
             const active = tab === tb.id;
@@ -1806,6 +1814,32 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             ...related.treatments.map((t) => ({ kind: "health", date: t.startDate || t.start_date, label: `${lang === "fr" ? "Traitement" : "Treatment"} · ${t.medicineName || t.medicine_name || "—"}`, sub: t.status })),
             ...related.repro.map((r) => ({ kind: "repro", date: r.eventDate || r.event_date, label: `${lang === "fr" ? "Repro" : "Repro"} · ${r.eventType || r.event_type}`, sub: r.outcome })),
             ...related.production.map((p) => ({ kind: "prod", date: p.logDate || p.log_date, label: `${lang === "fr" ? "Production" : "Production"} · ${p.quantity} ${p.unit || ""}`, sub: p.productType || p.product_type })),
+            ...related.weighings.map((w) => ({ kind: "weight", date: w.weighDate || w.weigh_date, label: `${lang === "fr" ? "Pesée" : "Weighing"} · ${w.weight} ${w.weightUnit || w.weight_unit || "kg"}`, sub: null })),
+            ...statusHistory.map((h) => {
+              const authorName = [h.firstName, h.lastName].filter(Boolean).join(" ");
+              const byLabel = authorName ? `${lang === "fr" ? "Par" : "By"} ${authorName}` : null;
+              if (!h.fieldName) {
+                const causeDef = STATUS_CAUSE_OPTIONS.find((c) => c.value === h.cause);
+                const causeLabel = causeDef ? (lang === "fr" ? causeDef.fr : causeDef.en) : h.cause;
+                const sub = [causeLabel, h.note, byLabel].filter(Boolean).join(" · ");
+                return {
+                  kind: "status",
+                  date: h.createdAt,
+                  label: `${lang === "fr" ? "Statut" : "Status"} · ${h.previousStatus ? `${animalStatusLabel(h.previousStatus, lang)} → ` : ""}${animalStatusLabel(h.newStatus, lang)}`,
+                  sub,
+                };
+              }
+              const fieldDef = FIELD_HISTORY_LABELS[h.fieldName];
+              const fieldLabel = fieldDef ? (lang === "fr" ? fieldDef.fr : fieldDef.en) : h.fieldName;
+              const prev = h.previousStatus ?? (lang === "fr" ? "—" : "—");
+              const next = h.newStatus ?? (lang === "fr" ? "—" : "—");
+              return {
+                kind: "field",
+                date: h.createdAt,
+                label: `${fieldLabel} · ${prev} → ${next}`,
+                sub: byLabel,
+              };
+            }),
           ].filter((e) => e.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
           if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
           if (events.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun historique." : "No history."}</div>;
@@ -1813,7 +1847,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {events.map((e, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < events.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
-                  <Icon name={e.kind === "health" ? "pill" : e.kind === "repro" ? "fingerprint" : "chart"} size={14} color="var(--ink-700)"/>
+                  <Icon name={e.kind === "health" ? "pill" : e.kind === "repro" ? "fingerprint" : e.kind === "status" ? "pulse" : e.kind === "weight" ? "weight" : e.kind === "field" ? "edit" : "chart"} size={14} color="var(--ink-700)"/>
                   <div>
                     <div style={{ fontSize: 13, color: "var(--ink-900)" }}>{e.label}</div>
                     {e.sub && <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{e.sub}</div>}
@@ -1917,7 +1951,42 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
 
 // Inline edit card — patch only the fields editable from FarmOS (the rest
 // lives in CRM screens). Sends PATCH /api/farmos/animals/:id.
+// Causes usuelles proposées quand le statut passe à "Malade" ou "Quarantaine".
+// Choix de conception : liste courte pré-remplie + option "Autre" en texte
+// libre (pas de table lookup dédiée pour rester simple ; alignable plus tard
+// sur farmos_diseases si besoin de statistiques par pathologie).
+const STATUS_CAUSE_OPTIONS = [
+  { value: "respiratory", fr: "Symptômes respiratoires", en: "Respiratory symptoms" },
+  { value: "digestive", fr: "Troubles digestifs", en: "Digestive issues" },
+  { value: "fever", fr: "Fièvre", en: "Fever" },
+  { value: "wound_injury", fr: "Blessure / plaie", en: "Wound / injury" },
+  { value: "lameness", fr: "Boiterie", en: "Lameness" },
+  { value: "suspected_disease", fr: "Suspicion de maladie contagieuse", en: "Suspected contagious disease" },
+  { value: "new_arrival", fr: "Nouvel arrivant (quarantaine préventive)", en: "New arrival (preventive quarantine)" },
+  { value: "post_treatment", fr: "Suivi post-traitement", en: "Post-treatment follow-up" },
+  { value: "other", fr: "Autre", en: "Other" },
+];
+
+// Labels des champs traces dans farmos_animal_status_history (field_name !=
+// null) -- doit rester aligne avec FarmosService.TRACKED_ANIMAL_FIELDS cote backend.
+const FIELD_HISTORY_LABELS = {
+  name: { fr: "Nom", en: "Name" },
+  race: { fr: "Race", en: "Breed" },
+  sex: { fr: "Sexe", en: "Sex" },
+  date_of_birth: { fr: "Date de naissance", en: "Date of birth" },
+  weight: { fr: "Poids", en: "Weight" },
+  count: { fr: "Effectif", en: "Count" },
+  lot: { fr: "Lot", en: "Lot" },
+  barn: { fr: "Bâtiment", en: "Barn" },
+  room: { fr: "Salle", en: "Room" },
+  type: { fr: "Type", en: "Type" },
+  mother_id: { fr: "Mère", en: "Mother" },
+  father_id: { fr: "Père", en: "Father" },
+  estimated_value: { fr: "Valeur estimée", en: "Estimated value" },
+};
+
 const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
+  const initialStatus = animal.status || "healthy";
   const [form, setForm] = React.useState({
     name: animal.name || "",
     race: animal.race || "",
@@ -1927,17 +1996,24 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
     count: animal.count ?? "",
     lot: animal.lot || "",
     barn: animal.barn || "",
-    status: animal.status || "healthy",
+    status: initialStatus,
     motherId: animal.motherId || "",
     fatherId: animal.fatherId || "",
     estimatedValue: animal.estimatedValue ?? "",
+    statusCause: "",
+    statusNote: "",
   });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const statusChangedToHealthConcern = form.status !== initialStatus && (form.status === "sick" || form.status === "quarantine");
   const submit = async () => {
     if (saving || !animal._pk) return;
     if (!form.dob) { setErr(lang === "fr" ? "La date de naissance est obligatoire." : "Date of birth is required."); return; }
+    if (statusChangedToHealthConcern && !form.statusCause) {
+      setErr(lang === "fr" ? "Merci d'indiquer la cause du changement de statut." : "Please provide the cause of the status change.");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
@@ -1954,6 +2030,10 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         mother_id: form.motherId || null,
         father_id: form.fatherId || null,
         estimated_value: form.estimatedValue === "" ? null : Number(form.estimatedValue),
+        ...(statusChangedToHealthConcern ? {
+          status_cause: form.statusCause || null,
+          status_note: form.statusNote || null,
+        } : {}),
       });
       onSaved();
     } catch (e) {
@@ -2019,6 +2099,26 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
             <option value="withdrawal">{lang === "fr" ? "Délai retrait" : "Withdrawal"}</option>
           </select>
         </label>
+        {statusChangedToHealthConcern && (
+          <>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                {lang === "fr" ? "Cause" : "Cause"} <span style={{ color: "var(--oxblood-700)" }}>*</span>
+              </span>
+              <select className="input" value={form.statusCause} onChange={(e) => set("statusCause", e.target.value)}>
+                <option value="">{lang === "fr" ? "Sélectionner…" : "Select…"}</option>
+                {STATUS_CAUSE_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>{lang === "fr" ? c.fr : c.en}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Note (optionnel)" : "Note (optional)"}</span>
+              <input className="input" value={form.statusNote} onChange={(e) => set("statusNote", e.target.value)}
+                placeholder={lang === "fr" ? "Détails observés…" : "Observed details…"}/>
+            </label>
+          </>
+        )}
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mère (ID / nom)" : "Mother (ID / name)"}</span>
           <input className="input" value={form.motherId} onChange={(e) => set("motherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2022-0007" : "e.g. BQ-2022-0007"}/>

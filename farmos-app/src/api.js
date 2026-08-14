@@ -373,6 +373,7 @@ export const api = {
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
   createBatchAdjustment: (body) => mutate({ kind: "createBatchAdjustment", method: "POST", path: "/batch-adjustments", body }),
   listBatchAdjustments: (animalId) => jsonFetch(`/animals/${animalId}/batch-adjustments`),
+  listAnimalStatusHistory: (animalId) => jsonFetch(`/animals/${animalId}/status-history`),
   createBatchTransfer: (body) => mutate({ kind: "createBatchTransfer", method: "POST", path: "/batch-transfers", body }),
   createBatchSplit: (body) => mutate({ kind: "createBatchSplit", method: "POST", path: "/batch-splits", body }),
   listWeighings: (animalId) => jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`),

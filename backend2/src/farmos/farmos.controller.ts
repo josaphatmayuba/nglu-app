@@ -211,8 +211,9 @@ export class FarmosController {
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateAnimalDto,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
   ) {
-    return this.farmos.updateAnimal(id, body, orgId);
+    return this.farmos.updateAnimal(id, body, orgId, userId);
   }
 
   @Permissions("update-farmos")
@@ -221,8 +222,16 @@ export class FarmosController {
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateAnimalDto,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
   ) {
-    return this.farmos.updateAnimal(id, body, orgId);
+    return this.farmos.updateAnimal(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Historique des changements de statut sante d'un animal (sain/malade/quarantaine, cause, note, auteur)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/status-history")
+  listAnimalStatusHistory(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listAnimalStatusHistory(id, orgId);
   }
 
   @ApiOperation({ summary: "Remove an animal from POS sale listing when no sale exists." })

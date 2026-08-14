@@ -20,7 +20,7 @@ export function useOnline() {
   return online;
 }
 
-export function NetStatusPill({ lang = "fr" }) {
+export function NetStatusPill({ lang = "fr", compact = false }) {
   const online = useOnline();
   const [lastSync, setLastSync] = React.useState(null);
   const [pending, setPending] = React.useState(0);
@@ -53,18 +53,20 @@ export function NetStatusPill({ lang = "fr" }) {
       <button onClick={() => setPanelOpen(true)}
         title={(lang === "fr" ? "Dernière sync : " : "Last sync: ") + ago + (pending ? ` · ${pending} en attente` : "")}
         style={{
-          display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: compact ? 0 : 6, cursor: "pointer",
           background: !online ? "var(--oxblood-50, #f5e3e3)" : pending ? "var(--autorite-50, #f5edd2)" : "var(--solidite-50, #e7f0e3)",
           color: !online ? "var(--oxblood-800, #7a1f2b)" : pending ? "var(--autorite-900, #6a4a0a)" : "var(--solidite-800, #2a5e2a)",
-          borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 600,
-          border: "1px solid currentColor", whiteSpace: "nowrap",
+          borderRadius: 999, padding: compact ? 0 : "4px 10px", width: compact ? 32 : undefined, height: compact ? 32 : undefined,
+          justifyContent: compact ? "center" : undefined,
+          fontSize: 11.5, fontWeight: 600,
+          border: "1px solid currentColor", whiteSpace: "nowrap", flexShrink: 0,
         }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: "currentColor" }}/>
-        {!online
+        <span style={{ width: 7, height: 7, borderRadius: 999, background: "currentColor", flexShrink: 0 }}/>
+        {!compact && (!online
           ? (lang === "fr" ? "Hors-ligne" : "Offline")
           : pending > 0
             ? (lang === "fr" ? `${pending} en attente` : `${pending} pending`)
-            : (lang === "fr" ? `Sync · ${ago}` : `Sync · ${ago}`)}
+            : (lang === "fr" ? `Sync · ${ago}` : `Sync · ${ago}`))}
       </button>
       <OutboxPanel lang={lang} open={panelOpen} onClose={() => setPanelOpen(false)}/>
     </>
