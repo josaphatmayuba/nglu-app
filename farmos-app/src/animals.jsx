@@ -2231,6 +2231,14 @@ const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, health
   const runningTreatments = (treatments || []).filter((t) => t.status === "running");
   const statusColor = animalStatusColor(animal.status);
   const statusLabel = animalStatusLabel(animal.status, lang);
+  const [diseases, setDiseases] = React.useState([]);
+  React.useEffect(() => {
+    if (!ep || ep.diseaseId == null) return;
+    api.listDiseases(animal.species).then((d) => setDiseases(Array.isArray(d) ? d : [])).catch(() => setDiseases([]));
+  }, [ep && ep.diseaseId, animal.species]);
+  const diseaseName = ep && ep.diseaseId != null
+    ? (diseases.find((d) => Number(d.id) === Number(ep.diseaseId))?.name || `#${ep.diseaseId}`)
+    : null;
 
   const causeDef = ep ? STATUS_CAUSE_OPTIONS.find((c) => c.value === ep.cause) : null;
   const causeLabel = ep ? (causeDef ? (lang === "fr" ? causeDef.fr : causeDef.en) : ep.cause) : null;
@@ -2281,9 +2289,9 @@ const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, health
                 <span style={{ color: "var(--fg-3)" }}>{lang === "fr" ? "Cause : " : "Cause: "}</span>{causeLabel}
               </div>
             )}
-            {ep.diseaseId != null && (
+            {diseaseName && (
               <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
-                {lang === "fr" ? "Maladie liée : " : "Linked disease: "}#{ep.diseaseId}
+                {lang === "fr" ? "Maladie liée : " : "Linked disease: "}{diseaseName}
               </div>
             )}
             {ep.note && (
@@ -2371,12 +2379,16 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [status, setStatus] = React.useState("sick");
   const [cause, setCause] = React.useState("");
-  const [disease, setDisease] = React.useState("");
+  const [diseaseId, setDiseaseId] = React.useState("");
+  const [diseases, setDiseases] = React.useState([]);
   const [severity, setSeverity] = React.useState("");
   const [startDate, setStartDate] = React.useState(today);
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  React.useEffect(() => {
+    api.listDiseases(animal.species).then((d) => setDiseases(Array.isArray(d) ? d : [])).catch(() => setDiseases([]));
+  }, [animal.species]);
   const submit = async () => {
     if (saving || !animal._pk) return;
     if (!cause) { setErr(lang === "fr" ? "Merci de sélectionner une cause." : "Please select a cause."); return; }
@@ -2386,6 +2398,7 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
       await api.declareAnimalIllness(animal._pk, {
         status,
         cause,
+        disease_id: diseaseId ? Number(diseaseId) : undefined,
         severity: severity || undefined,
         start_date: startDate || undefined,
         note: note || undefined,
@@ -2420,8 +2433,12 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Maladie (optionnel)" : "Disease (optional)"}</span>
-          <input className="input" value={disease} onChange={(e) => setDisease(e.target.value)}
-            placeholder={lang === "fr" ? "Nom libre…" : "Free text…"}/>
+          <select className="input" value={diseaseId} onChange={(e) => setDiseaseId(e.target.value)}>
+            <option value="">{lang === "fr" ? "—" : "—"}</option>
+            {diseases.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Gravité (optionnel)" : "Severity (optional)"}</span>
