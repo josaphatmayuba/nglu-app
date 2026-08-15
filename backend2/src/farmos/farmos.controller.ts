@@ -31,6 +31,7 @@ import {
   CreateFarmosStaffDto,
   CreateDiseaseDto,
   SuggestDiseaseDto,
+  LinkDiseaseMedicineDto,
   CreateExpenseDto,
   CreateBatchAdjustmentDto,
   CreateBatchTransferDto,
@@ -454,6 +455,30 @@ export class FarmosController {
   @Post("diseases/suggest")
   suggestDisease(@Body() body: SuggestDiseaseDto, @CurrentOrg() orgId: number) {
     return this.farmos.suggestDisease(body.species, body.description, orgId);
+  }
+
+  @ApiOperation({ summary: "List medicines/vaccines in stock linked to a disease." })
+  @Permissions("readAll-farmos")
+  @Get("diseases/:id/medicines")
+  listDiseaseMedicines(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listDiseaseMedicines(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Link a medicine/vaccine from stock to a disease." })
+  @Permissions("update-farmos")
+  @Post("diseases/:id/medicines")
+  linkDiseaseMedicine(@Param("id", ParseIntPipe) id: number, @Body() body: LinkDiseaseMedicineDto, @CurrentOrg() orgId: number) {
+    return this.farmos.linkDiseaseMedicine(id, body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Delete("diseases/:id/medicines/:medicineId")
+  unlinkDiseaseMedicine(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("medicineId", ParseIntPipe) medicineId: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.unlinkDiseaseMedicine(id, medicineId, orgId);
   }
 
   // ─── Reproduction events ─────────────────────────────────────────────────

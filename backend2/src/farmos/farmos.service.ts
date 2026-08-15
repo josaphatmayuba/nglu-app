@@ -6,7 +6,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalHealthObservations, farmosAnimalPhotos, farmosAnimals, farmosAnimalStatusHistory, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalHealthObservations, farmosAnimalPhotos, farmosAnimals, farmosAnimalStatusHistory, farmosBatchAdjustments, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosDiseaseMedicines, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -1279,6 +1279,66 @@ export class FarmosService {
     await this.db.update(farmosDiseases).set({ isActive: 0 }).where(eq(farmosDiseases.id, id));
     await this.publishFarmosUpdate("deleteDisease", ["diseases"], "deleted", id, orgId);
     return { message: "Maladie supprimée." };
+  }
+
+  // Médicaments/vaccins du stock de l'organisation associés à une maladie
+  // (ce que la ferme a réellement sous la main pour traiter/prévenir ce cas).
+  async listDiseaseMedicines(diseaseId: number, orgId: number) {
+    await this.getDisease(diseaseId, orgId); // 404 si la maladie n'est pas visible pour cette org
+    return this.db
+      .select({
+        linkId: farmosDiseaseMedicines.id,
+        role: farmosDiseaseMedicines.role,
+        notes: farmosDiseaseMedicines.notes,
+        medicineId: farmosMedicines.id,
+        name: farmosMedicines.name,
+        kind: farmosMedicines.kind,
+        quantity: farmosMedicines.quantity,
+        unit: farmosMedicines.unit,
+        isActive: farmosMedicines.isActive,
+      })
+      .from(farmosDiseaseMedicines)
+      .innerJoin(farmosMedicines, eq(farmosMedicines.id, farmosDiseaseMedicines.medicineId))
+      .where(and(eq(farmosDiseaseMedicines.diseaseId, diseaseId), eq(farmosDiseaseMedicines.organizationId, orgId)))
+      .orderBy(farmosDiseaseMedicines.role, farmosMedicines.name);
+  }
+
+  async linkDiseaseMedicine(diseaseId: number, input: { medicine_id: number; role?: string; notes?: string | null }, orgId: number) {
+    await this.getDisease(diseaseId, orgId);
+    const [medicine] = await this.db
+      .select()
+      .from(farmosMedicines)
+      .where(and(eq(farmosMedicines.id, input.medicine_id), eq(farmosMedicines.organizationId, orgId)))
+      .limit(1);
+    if (!medicine) throw new NotFoundException("Médicament introuvable pour cette organisation.");
+
+    await this.db
+      .insert(farmosDiseaseMedicines)
+      .values({
+        organizationId: orgId,
+        diseaseId,
+        medicineId: input.medicine_id,
+        role: input.role || "treatment",
+        notes: input.notes ?? null,
+      })
+      .onDuplicateKeyUpdate({ set: { role: input.role || "treatment", notes: input.notes ?? null } });
+
+    await this.publishFarmosUpdate("linkDiseaseMedicine", ["diseases", "medicines"], "updated", diseaseId, orgId);
+    return { message: "Médicament associé à la maladie." };
+  }
+
+  async unlinkDiseaseMedicine(diseaseId: number, medicineId: number, orgId: number) {
+    await this.db
+      .delete(farmosDiseaseMedicines)
+      .where(
+        and(
+          eq(farmosDiseaseMedicines.diseaseId, diseaseId),
+          eq(farmosDiseaseMedicines.medicineId, medicineId),
+          eq(farmosDiseaseMedicines.organizationId, orgId),
+        ),
+      );
+    await this.publishFarmosUpdate("unlinkDiseaseMedicine", ["diseases", "medicines"], "updated", diseaseId, orgId);
+    return { message: "Association retirée." };
   }
 
   // Appel HTTP direct à l'API Anthropic (même pattern que HrService.callAnthropic).

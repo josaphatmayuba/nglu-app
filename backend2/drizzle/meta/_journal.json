@@ -1611,6 +1611,13 @@
       "when": 1781071200005,
       "tag": "0254_farmos_diseases_protocols",
       "breakpoints": true
+    },
+    {
+      "idx": 230,
+      "version": "5",
+      "when": 1781071200006,
+      "tag": "0255_farmos_disease_medicines",
+      "breakpoints": true
     }
   ]
 }

@@ -591,6 +591,21 @@ export class UpdateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class LinkDiseaseMedicineDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  medicine_id: number;
+
+  @ApiPropertyOptional({ example: "treatment", enum: ["treatment", "vaccine"], default: "treatment" })
+  @IsOptional()
+  @IsString()
+  @IsIn(["treatment", "vaccine"])
+  role?: "treatment" | "vaccine";
+
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class SuggestDiseaseDto {
   @ApiProperty({ example: "cow", enum: FARMOS_SPECIES })
   @IsString()

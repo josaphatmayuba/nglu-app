@@ -947,6 +947,87 @@ const MORTALITY_OPTS = [
   { id: "high", fr: "Élevé", en: "High" },
 ];
 
+function DiseaseMedicinesSection({ lang, disease }) {
+  const [links, setLinks] = React.useState([]);
+  const [stock, setStock] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [pickMedicineId, setPickMedicineId] = React.useState("");
+  const [pickRole, setPickRole] = React.useState("treatment");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  const load = React.useCallback(() => {
+    api.listDiseaseMedicines(disease.id).then((rows) => setLinks(Array.isArray(rows) ? rows : [])).catch(() => setLinks([]));
+  }, [disease.id]);
+  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    api.listMedicines().then((rows) => setStock(Array.isArray(rows) ? rows : [])).catch(() => setStock([]));
+  }, []);
+
+  const linkedIds = new Set(links.map((l) => String(l.medicineId ?? l.medicine_id)));
+  const availableStock = stock.filter((m) => {
+    const species = m.species;
+    const matchesSpecies = !species || !species.length || species.includes(disease.species);
+    return matchesSpecies && !linkedIds.has(String(m._pk));
+  });
+
+  const handleAdd = async () => {
+    if (!pickMedicineId) return;
+    setBusy(true); setErr(null);
+    try {
+      await api.linkDiseaseMedicine(disease.id, { medicine_id: Number(pickMedicineId), role: pickRole });
+      setPickMedicineId(""); setAdding(false); load();
+    } catch (e) { setErr(e.message || "Erreur"); } finally { setBusy(false); }
+  };
+  const handleRemove = async (medicineId) => {
+    setBusy(true); setErr(null);
+    try { await api.unlinkDiseaseMedicine(disease.id, medicineId); load(); }
+    catch (e) { setErr(e.message || "Erreur"); } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Médicaments / vaccins en stock" : "Medicines / vaccines in stock"}</div>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => setAdding((v) => !v)}>{lang === "fr" ? "+ Associer" : "+ Link"}</button>
+      </div>
+      {links.length === 0 && !adding && (
+        <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun médicament du stock associé à cette maladie." : "No stock medicine linked to this disease."}</div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {links.map((l) => (
+          <div key={l.linkId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid var(--border-1)", borderRadius: 6, padding: "6px 8px" }}>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ fontSize: 12.5, color: "var(--ink-900)" }}>{l.name}</span>
+              <span className="tag" style={{ marginLeft: 6, fontSize: 10, background: "var(--bg-sunken)", color: "var(--ink-700)" }}>
+                {l.role === "vaccine" ? (lang === "fr" ? "vaccin" : "vaccine") : (lang === "fr" ? "traitement" : "treatment")}
+              </span>
+              <span className="mono" style={{ marginLeft: 6, fontSize: 10.5, color: "var(--fg-3)" }}>{l.quantity} {l.unit || ""}</span>
+            </div>
+            <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => handleRemove(l.medicineId ?? l.medicine_id)} title={lang === "fr" ? "Retirer" : "Remove"}>
+              <Icon name="trash" size={12} color="var(--oxblood-700)"/>
+            </button>
+          </div>
+        ))}
+      </div>
+      {adding && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          <select className="input" style={{ flex: "1 1 180px" }} value={pickMedicineId} onChange={(e) => setPickMedicineId(e.target.value)}>
+            <option value="">{lang === "fr" ? "Choisir dans le stock…" : "Choose from stock…"}</option>
+            {availableStock.map((m) => <option key={m._pk} value={m._pk}>{m.name} ({m.kind === "vaccine" ? (lang === "fr" ? "vaccin" : "vaccine") : (lang === "fr" ? "médicament" : "medicine")})</option>)}
+          </select>
+          <select className="input" style={{ flex: "0 0 130px" }} value={pickRole} onChange={(e) => setPickRole(e.target.value)}>
+            <option value="treatment">{lang === "fr" ? "Traitement" : "Treatment"}</option>
+            <option value="vaccine">{lang === "fr" ? "Vaccin" : "Vaccine"}</option>
+          </select>
+          <button type="button" className="btn btn-sm btn-primary" disabled={!pickMedicineId || busy} onClick={handleAdd}>{lang === "fr" ? "Associer" : "Link"}</button>
+        </div>
+      )}
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 4 }}>{err}</div>}
+    </div>
+  );
+}
+
 function DiseaseViewModal({ lang, disease, onClose, onEdit }) {
   const d = disease;
   const urg = (d.urgencyLevel || d.urgency_level || "").toLowerCase();
@@ -985,6 +1066,7 @@ function DiseaseViewModal({ lang, disease, onClose, onEdit }) {
           <Field label={lang === "fr" ? "Examens recommandés" : "Recommended exams"} value={d.recommendedExams || d.recommended_exams} />
           <Field label={lang === "fr" ? "Prévention" : "Prevention"} value={d.prevention} />
           <Field label={lang === "fr" ? "Protocole recommandé" : "Recommended protocol"} value={d.recommendedProtocol || d.recommended_protocol} />
+          <DiseaseMedicinesSection lang={lang} disease={d} />
           <Field label={lang === "fr" ? "Notes" : "Notes"} value={d.notes} />
           {!d.symptoms && !d.prevention && !(d.recommendedProtocol || d.recommended_protocol) && (
             <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune information détaillée renseignée pour cette maladie." : "No detailed information filled in for this disease."}</div>

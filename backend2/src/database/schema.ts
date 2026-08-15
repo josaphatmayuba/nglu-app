@@ -2741,6 +2741,16 @@ export const farmosDiseases = mysqlTable("farmos_diseases", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+export const farmosDiseaseMedicines = mysqlTable("farmos_disease_medicines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull(),
+  diseaseId: bigint("disease_id", { mode: "number" }).notNull(),
+  medicineId: bigint("medicine_id", { mode: "number" }).notNull(),
+  role: varchar("role", { length: 20 }).default("treatment").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const farmosTreatments = mysqlTable("farmos_treatments", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
