@@ -315,8 +315,15 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
 
         {!signed && (
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn" onClick={() => save(false)} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>
-              {lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+            <button
+              className="btn"
+              onClick={() => save(false)}
+              disabled={saving}
+              title={lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+              aria-label={lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+              style={{ flex: "0 0 auto", justifyContent: "center", padding: "10px 14px" }}
+            >
+              <Icon name="save" size={15} color="var(--ink-700)"/>
             </button>
             <button className="btn btn-primary" onClick={() => save(true)} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>
               <Icon name="check" size={13} color="#FBF8F2"/>{lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
