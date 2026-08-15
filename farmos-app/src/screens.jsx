@@ -1066,6 +1066,12 @@ function DiseaseViewModal({ lang, disease, onClose, onEdit }) {
           <Field label={lang === "fr" ? "Examens recommandés" : "Recommended exams"} value={d.recommendedExams || d.recommended_exams} />
           <Field label={lang === "fr" ? "Prévention" : "Prevention"} value={d.prevention} />
           <Field label={lang === "fr" ? "Protocole recommandé" : "Recommended protocol"} value={d.recommendedProtocol || d.recommended_protocol} />
+          <Field label={lang === "fr" ? "Molécules / classes de produits usuelles (indicatif)" : "Usual molecules / product classes (indicative)"} value={d.recommendedProducts || d.recommended_products} />
+          {(d.recommendedProductsSourceUrl || d.recommended_products_source_url) && (
+            <a href={d.recommendedProductsSourceUrl || d.recommended_products_source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: "var(--autorite-700)", marginTop: -8 }}>
+              {lang === "fr" ? "Voir la source ↗" : "View source ↗"}
+            </a>
+          )}
           <DiseaseMedicinesSection lang={lang} disease={d} />
           <Field label={lang === "fr" ? "Notes" : "Notes"} value={d.notes} />
           {!d.symptoms && !d.prevention && !(d.recommendedProtocol || d.recommended_protocol) && (
@@ -1094,6 +1100,8 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
   const [vaccine, setVaccine] = React.useState(!!(disease?.vaccineAvailable ?? disease?.vaccine_available));
   const [mortality, setMortality] = React.useState(disease?.mortalityRisk || disease?.mortality_risk || "");
   const [protocol, setProtocol] = React.useState(disease?.recommendedProtocol || disease?.recommended_protocol || "");
+  const [products, setProducts] = React.useState(disease?.recommendedProducts || disease?.recommended_products || "");
+  const [productsSourceUrl, setProductsSourceUrl] = React.useState(disease?.recommendedProductsSourceUrl || disease?.recommended_products_source_url || "");
   const [causes, setCauses] = React.useState(disease?.possibleCauses || disease?.possible_causes || "");
   const [exams, setExams] = React.useState(disease?.recommendedExams || disease?.recommended_exams || "");
   const [notes, setNotes] = React.useState(disease?.notes || "");
@@ -1117,6 +1125,8 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
       vaccine_available: vaccine ? 1 : 0,
       mortality_risk: mortality || null,
       recommended_protocol: protocol.trim() || null,
+      recommended_products: products.trim() || null,
+      recommended_products_source_url: productsSourceUrl.trim() || null,
       possible_causes: causes.trim() || null,
       recommended_exams: exams.trim() || null,
       notes: notes.trim() || null,
@@ -1194,6 +1204,9 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
           </label>
           <label style={lbl}>{lang === "fr" ? "Protocole recommandé" : "Recommended protocol"}
             <textarea value={protocol} onChange={(e) => setProtocol(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Classes de produits usuelles (indicatif, pas de posologie)" : "Usual product classes (indicative, no dosage)"}
+            <textarea value={products} onChange={(e) => setProducts(e.target.value)} className="input" rows={2} style={inputStyle}/>
           </label>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             <label style={{ ...lbl, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>

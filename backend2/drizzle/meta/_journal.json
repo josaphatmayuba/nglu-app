@@ -1618,6 +1618,27 @@
       "when": 1781071200006,
       "tag": "0255_farmos_disease_medicines",
       "breakpoints": true
+    },
+    {
+      "idx": 231,
+      "version": "5",
+      "when": 1781071200007,
+      "tag": "0256_farmos_diseases_recommended_products",
+      "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "5",
+      "when": 1781071200008,
+      "tag": "0257_farmos_diseases_products_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "5",
+      "when": 1781071200009,
+      "tag": "0258_farmos_diseases_products",
+      "breakpoints": true
     }
   ]
 }

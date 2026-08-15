@@ -2733,6 +2733,8 @@ export const farmosDiseases = mysqlTable("farmos_diseases", {
   vaccineAvailable: tinyint("vaccine_available").default(0).notNull(),
   mortalityRisk: varchar("mortality_risk", { length: 20 }),
   recommendedProtocol: text("recommended_protocol"),
+  recommendedProducts: text("recommended_products"),
+  recommendedProductsSourceUrl: varchar("recommended_products_source_url", { length: 500 }),
   possibleCauses: text("possible_causes"),
   recommendedExams: text("recommended_exams"),
   notes: text("notes"),

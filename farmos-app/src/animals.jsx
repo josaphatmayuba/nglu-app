@@ -2455,6 +2455,12 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
   }, [diseases, checkedSymptoms]);
+  const selectedDisease = diseaseId ? diseases.find((d) => String(d.id) === diseaseId) : null;
+  const [stockLinks, setStockLinks] = React.useState([]);
+  React.useEffect(() => {
+    if (!diseaseId) { setStockLinks([]); return; }
+    api.listDiseaseMedicines(Number(diseaseId)).then((rows) => setStockLinks(Array.isArray(rows) ? rows : [])).catch(() => setStockLinks([]));
+  }, [diseaseId]);
   const submit = async () => {
     if (saving || !animal._pk) return;
     if (!cause) { setErr(lang === "fr" ? "Merci de sélectionner une cause." : "Please select a cause."); return; }
@@ -2538,6 +2544,40 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
             placeholder={lang === "fr" ? "Rechercher une maladie…" : "Search a disease…"}
           />
         </label>
+        {selectedDisease && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, gridColumn: "1 / -1", background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-900)" }}>
+              {lang === "fr" ? "Recommandation pour" : "Recommendation for"} {selectedDisease.nameFr || selectedDisease.name_fr}
+            </div>
+            {(selectedDisease.recommendedProtocol || selectedDisease.recommended_protocol) && (
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginBottom: 2 }}>{lang === "fr" ? "Protocole recommandé" : "Recommended protocol"}</div>
+                <div style={{ fontSize: 12, color: "var(--ink-900)", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{selectedDisease.recommendedProtocol || selectedDisease.recommended_protocol}</div>
+              </div>
+            )}
+            {(selectedDisease.recommendedProducts || selectedDisease.recommended_products) && (
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginBottom: 2 }}>{lang === "fr" ? "Classes de produits usuelles (indicatif)" : "Usual product classes (indicative)"}</div>
+                <div style={{ fontSize: 12, color: "var(--ink-900)", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{selectedDisease.recommendedProducts || selectedDisease.recommended_products}</div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginBottom: 2 }}>{lang === "fr" ? "Dans votre stock" : "In your stock"}</div>
+              {stockLinks.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun médicament/vaccin du stock associé à cette maladie pour l'instant (à gérer depuis la bibliothèque maladies)." : "No stock medicine/vaccine linked to this disease yet (manage from the disease library)."}</div>
+              ) : (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {stockLinks.map((l) => (
+                    <span key={l.linkId} className="tag" style={{ background: "var(--autorite-50)", color: "var(--autorite-900)" }}>
+                      {l.name} · {l.role === "vaccine" ? (lang === "fr" ? "vaccin" : "vaccine") : (lang === "fr" ? "traitement" : "treatment")} · {l.quantity} {l.unit || ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Recommandation indicative — confirmer avec un vétérinaire avant traitement, surtout pour les cas graves ou contagieux." : "Indicative recommendation — confirm with a veterinarian before treatment, especially for severe or contagious cases."}</div>
+          </div>
+        )}
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Gravité (optionnel)" : "Severity (optional)"}</span>
           <select className="input" value={severity} onChange={(e) => setSeverity(e.target.value)}>

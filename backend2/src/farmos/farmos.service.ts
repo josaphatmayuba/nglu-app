@@ -1235,6 +1235,8 @@ export class FarmosService {
       vaccineAvailable: input.vaccine_available ? 1 : 0,
       mortalityRisk: input.mortality_risk ?? null,
       recommendedProtocol: input.recommended_protocol ?? null,
+      recommendedProducts: input.recommended_products ?? null,
+      recommendedProductsSourceUrl: input.recommended_products_source_url ?? null,
       possibleCauses: input.possible_causes ?? null,
       recommendedExams: input.recommended_exams ?? null,
       notes: input.notes ?? null,
@@ -1262,6 +1264,8 @@ export class FarmosService {
     if (input.vaccine_available !== undefined) patch.vaccineAvailable = input.vaccine_available ? 1 : 0;
     if (input.mortality_risk !== undefined) patch.mortalityRisk = input.mortality_risk;
     if (input.recommended_protocol !== undefined) patch.recommendedProtocol = input.recommended_protocol;
+    if (input.recommended_products !== undefined) patch.recommendedProducts = input.recommended_products;
+    if (input.recommended_products_source_url !== undefined) patch.recommendedProductsSourceUrl = input.recommended_products_source_url;
     if (input.possible_causes !== undefined) patch.possibleCauses = input.possible_causes;
     if (input.recommended_exams !== undefined) patch.recommendedExams = input.recommended_exams;
     if (input.notes !== undefined) patch.notes = input.notes;
