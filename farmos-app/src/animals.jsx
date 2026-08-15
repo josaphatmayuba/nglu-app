@@ -2424,21 +2424,21 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
             {lang === "fr" ? "Cause" : "Cause"} <span style={{ color: "var(--oxblood-700)" }}>*</span>
           </span>
-          <select className="input" value={cause} onChange={(e) => setCause(e.target.value)}>
-            <option value="">{lang === "fr" ? "Sélectionner…" : "Select…"}</option>
-            {STATUS_CAUSE_OPTIONS.map((c) => (
-              <option key={c.value} value={c.value}>{lang === "fr" ? c.fr : c.en}</option>
-            ))}
-          </select>
+          <Autocomplete
+            value={cause}
+            onChange={setCause}
+            options={STATUS_CAUSE_OPTIONS.map((c) => ({ value: c.value, label: lang === "fr" ? c.fr : c.en }))}
+            placeholder={lang === "fr" ? "Rechercher une cause…" : "Search a cause…"}
+          />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Maladie (optionnel)" : "Disease (optional)"}</span>
-          <select className="input" value={diseaseId} onChange={(e) => setDiseaseId(e.target.value)}>
-            <option value="">{lang === "fr" ? "—" : "—"}</option>
-            {diseases.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          <Autocomplete
+            value={diseaseId}
+            onChange={setDiseaseId}
+            options={diseases.map((d) => ({ value: String(d.id), label: d.name }))}
+            placeholder={lang === "fr" ? "Rechercher une maladie…" : "Search a disease…"}
+          />
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Gravité (optionnel)" : "Severity (optional)"}</span>
