@@ -325,8 +325,15 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
             >
               <Icon name="save" size={15} color="var(--ink-700)"/>
             </button>
-            <button className="btn btn-primary" onClick={() => save(true)} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>
-              <Icon name="check" size={13} color="#FBF8F2"/>{lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+            <button
+              className="btn btn-primary"
+              onClick={() => save(true)}
+              disabled={saving}
+              title={lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+              aria-label={lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+              style={{ flex: 1, justifyContent: "center", padding: "10px 14px" }}
+            >
+              <Icon name="check" size={15} color="#FBF8F2"/>
             </button>
           </div>
         )}
