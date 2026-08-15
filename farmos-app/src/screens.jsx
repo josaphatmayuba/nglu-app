@@ -57,6 +57,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allDiseases, setAllDiseases] = React.useState([]);
   const [vets, setVets] = React.useState([]);
   const [editingDisease, setEditingDisease] = React.useState(null); // null=fermé, {}=nouveau, row=édition
+  const [viewingDisease, setViewingDisease] = React.useState(null); // null=fermé, row=vue lecture seule
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const currencyMeta = useCurrencyCatalog();
@@ -271,7 +272,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   const urg = (d.urgencyLevel || d.urgency_level || "").toLowerCase();
                   const urgColor = urg === "critical" ? "var(--oxblood-700)" : urg === "high" ? "var(--rust-700)" : urg === "medium" ? "var(--clay-700)" : "var(--ink-500)";
                   return (
-                    <button key={d.id} onClick={() => setEditingDisease(d)}
+                    <button key={d.id} onClick={() => setViewingDisease(d)}
                       style={{ textAlign: "left", border: "1px solid var(--border-1)", background: "var(--paper)", borderRadius: 8, padding: "8px 10px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "fr" ? (d.nameFr || d.name_fr) : (d.nameEn || d.name_en || d.nameFr || d.name_fr)}</div>
@@ -329,6 +330,15 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       <MortalityStatsSection lang={lang} speciesFilter={speciesFilter}/>
 
       <FarmosDocumentsSection lang={lang} animals={animalsFiltered}/>
+
+      {viewingDisease && (
+        <DiseaseViewModal
+          lang={lang}
+          disease={viewingDisease}
+          onClose={() => setViewingDisease(null)}
+          onEdit={() => { setEditingDisease(viewingDisease); setViewingDisease(null); }}
+        />
+      )}
 
       {editingDisease && (
         <DiseaseFormModal
@@ -936,6 +946,57 @@ const MORTALITY_OPTS = [
   { id: "medium", fr: "Moyen", en: "Medium" },
   { id: "high", fr: "Élevé", en: "High" },
 ];
+
+function DiseaseViewModal({ lang, disease, onClose, onEdit }) {
+  const d = disease;
+  const urg = (d.urgencyLevel || d.urgency_level || "").toLowerCase();
+  const mort = (d.mortalityRisk || d.mortality_risk || "").toLowerCase();
+  const urgColor = urg === "critical" ? "var(--oxblood-700)" : urg === "high" ? "var(--rust-700)" : urg === "medium" ? "var(--clay-700)" : "var(--ink-500)";
+  const mortColor = mort === "critical" ? "var(--oxblood-700)" : mort === "high" ? "var(--rust-700)" : mort === "medium" ? "var(--clay-700)" : "var(--ink-500)";
+  const urgLbl = URGENCY_OPTS.find((o) => o.id === urg);
+  const mortLbl = MORTALITY_OPTS.find((o) => o.id === mort);
+  const Field = ({ label, value }) => !value ? null : (
+    <div>
+      <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: "var(--ink-900)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{value}</div>
+    </div>
+  );
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 560, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+          <div>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20 }}>{lang === "fr" ? (d.nameFr || d.name_fr) : (d.nameEn || d.name_en || d.nameFr || d.name_fr)}</h3>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {d.contagious ? <span className="tag" style={{ background: "var(--bg-sunken)", color: "var(--ink-700)" }}>{lang === "fr" ? "Contagieuse" : "Contagious"}</span> : null}
+              {urg && <span className="tag" style={{ background: "var(--bg-sunken)", color: urgColor }}>{lang === "fr" ? "Urgence" : "Urgency"}: {urgLbl ? (lang === "fr" ? urgLbl.fr : urgLbl.en) : urg}</span>}
+              {mort && <span className="tag" style={{ background: "var(--bg-sunken)", color: mortColor }}>{lang === "fr" ? "Mortalité" : "Mortality"}: {mortLbl ? (lang === "fr" ? mortLbl.fr : mortLbl.en) : mort}</span>}
+              <span className="tag" style={{ background: "var(--bg-sunken)", color: "var(--ink-700)" }}>{(d.vaccineAvailable ?? d.vaccine_available) ? (lang === "fr" ? "Vaccin dispo" : "Vaccine available") : (lang === "fr" ? "Pas de vaccin" : "No vaccine")}</span>
+            </div>
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={onEdit} style={{ flexShrink: 0 }}>{lang === "fr" ? "Modifier" : "Edit"}</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Field label={lang === "fr" ? "Espèce" : "Species"} value={(SPECIES.find((s) => s.id === d.species) || {})[lang === "fr" ? "fr" : "en"] || d.species} />
+          <Field label={lang === "fr" ? "Voie de transmission courante" : "Common route"} value={d.commonRoute || d.common_route} />
+          <Field label={lang === "fr" ? "Sévérité par défaut" : "Default severity"} value={d.severityDefault || d.severity_default} />
+          <Field label={lang === "fr" ? "Symptômes" : "Symptoms"} value={d.symptoms} />
+          <Field label={lang === "fr" ? "Causes possibles" : "Possible causes"} value={d.possibleCauses || d.possible_causes} />
+          <Field label={lang === "fr" ? "Examens recommandés" : "Recommended exams"} value={d.recommendedExams || d.recommended_exams} />
+          <Field label={lang === "fr" ? "Prévention" : "Prevention"} value={d.prevention} />
+          <Field label={lang === "fr" ? "Protocole recommandé" : "Recommended protocol"} value={d.recommendedProtocol || d.recommended_protocol} />
+          <Field label={lang === "fr" ? "Notes" : "Notes"} value={d.notes} />
+          {!d.symptoms && !d.prevention && !(d.recommendedProtocol || d.recommended_protocol) && (
+            <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune information détaillée renseignée pour cette maladie." : "No detailed information filled in for this disease."}</div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
+          <button className="btn" onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
   const isEdit = !!disease;

@@ -448,6 +448,7 @@ export const api = {
   createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
   updateDisease: (id, body) => jsonMutate("updateDisease", `/diseases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteDisease: (id) => jsonMutate("deleteDisease", `/diseases/${id}`, { method: "DELETE" }),
+  suggestDisease: (species, description) => jsonFetch("/diseases/suggest", { method: "POST", body: JSON.stringify({ species, description }) }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
   listAssignableRoles: () => jsonFetch("/staff/roles"),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),

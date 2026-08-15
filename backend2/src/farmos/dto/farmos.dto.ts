@@ -591,6 +591,18 @@ export class UpdateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class SuggestDiseaseDto {
+  @ApiProperty({ example: "cow", enum: FARMOS_SPECIES })
+  @IsString()
+  @IsIn(FARMOS_SPECIES as unknown as string[])
+  species: FarmosSpecies;
+
+  @ApiProperty({ example: "L'animal tousse depuis 2 jours, refuse de manger, écoulement nasal." })
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+}
+
 export class CreateTreatmentDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)

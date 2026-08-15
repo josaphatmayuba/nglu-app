@@ -1986,6 +1986,47 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
 // Choix de conception : liste courte pré-remplie + option "Autre" en texte
 // libre (pas de table lookup dédiée pour rester simple ; alignable plus tard
 // sur farmos_diseases si besoin de statistiques par pathologie).
+// Symptômes cochables pour l'aide au diagnostic (phase 1 : matching par
+// mots-clés contre farmos_diseases.symptoms). Vocabulaire volontairement
+// large / multi-espèces plutôt qu'une taxonomie médicale stricte.
+const SYMPTOM_OPTIONS = [
+  { value: "fievre", fr: "Fièvre", en: "Fever" },
+  { value: "toux", fr: "Toux", en: "Cough" },
+  { value: "respiration", fr: "Difficulté respiratoire", en: "Breathing difficulty" },
+  { value: "ecoulement_nasal", fr: "Écoulement nasal / oculaire", en: "Nasal / eye discharge" },
+  { value: "diarrhee", fr: "Diarrhée", en: "Diarrhea" },
+  { value: "vomissement", fr: "Vomissement", en: "Vomiting" },
+  { value: "perte_appetit", fr: "Perte d'appétit", en: "Loss of appetite" },
+  { value: "amaigrissement", fr: "Amaigrissement", en: "Weight loss" },
+  { value: "boiterie", fr: "Boiterie", en: "Lameness" },
+  { value: "gonflement", fr: "Gonflement / œdème", en: "Swelling / edema" },
+  { value: "plaie_peau", fr: "Plaie / lésion cutanée", en: "Wound / skin lesion" },
+  { value: "demangeaison", fr: "Démangeaison / grattage", en: "Itching / scratching" },
+  { value: "abattement", fr: "Abattement / prostration", en: "Lethargy / depression" },
+  { value: "convulsion", fr: "Convulsion / troubles nerveux", en: "Convulsion / neurological signs" },
+  { value: "mortalite_subite", fr: "Mortalité subite", en: "Sudden death" },
+  { value: "baisse_production", fr: "Baisse de production (lait/œufs)", en: "Drop in production (milk/eggs)" },
+  { value: "avortement", fr: "Avortement / trouble reproducteur", en: "Abortion / reproductive issue" },
+  { value: "picage", fr: "Picage / automutilation", en: "Feather pecking / self-injury" },
+];
+
+// Score une maladie contre les symptômes cochés en comparant les libellés FR
+// des symptômes aux mots du texte libre farmos_diseases.symptoms (+ nom de
+// la maladie en repli). Heuristique simple par intersection de mots, pas de
+// NLP — suffisant pour trier une courte liste, pas pour un diagnostic ferme.
+function scoreDiseaseAgainstSymptoms(disease, checkedSymptomValues) {
+  if (!checkedSymptomValues.length) return 0;
+  const haystack = `${disease.symptoms || ""} ${disease.nameFr || disease.name_fr || ""}`.toLowerCase();
+  let score = 0;
+  for (const val of checkedSymptomValues) {
+    const opt = SYMPTOM_OPTIONS.find((s) => s.value === val);
+    if (!opt) continue;
+    const keywords = opt.fr.toLowerCase().split(/[^a-zàâäéèêëïîôöùûüç]+/).filter((w) => w.length > 3);
+    if (keywords.some((kw) => haystack.includes(kw))) score += 1;
+  }
+  return score;
+}
+
 const STATUS_CAUSE_OPTIONS = [
   { value: "respiratory", fr: "Symptômes respiratoires", en: "Respiratory symptoms" },
   { value: "digestive", fr: "Troubles digestifs", en: "Digestive issues" },
@@ -2381,14 +2422,39 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
   const [cause, setCause] = React.useState("");
   const [diseaseId, setDiseaseId] = React.useState("");
   const [diseases, setDiseases] = React.useState([]);
+  const [checkedSymptoms, setCheckedSymptoms] = React.useState([]);
   const [severity, setSeverity] = React.useState("");
   const [startDate, setStartDate] = React.useState(today);
   const [note, setNote] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  const [aiSuggesting, setAiSuggesting] = React.useState(false);
+  const [aiReply, setAiReply] = React.useState("");
+  const [aiErr, setAiErr] = React.useState(null);
   React.useEffect(() => {
     api.listDiseases(animal.species).then((d) => setDiseases(Array.isArray(d) ? d : [])).catch(() => setDiseases([]));
   }, [animal.species]);
+  const toggleSymptom = (val) => setCheckedSymptoms((cur) => cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val]);
+  const askAiSuggestion = async () => {
+    if (!note.trim()) { setAiErr(lang === "fr" ? "Décris les symptômes observés dans la note ci-dessus d'abord." : "Describe observed symptoms in the note above first."); return; }
+    setAiSuggesting(true); setAiErr(null); setAiReply("");
+    try {
+      const res = await api.suggestDisease(animal.species, note.trim());
+      setAiReply(res.reply || "");
+    } catch (e) {
+      setAiErr(e.message || (lang === "fr" ? "Échec de la suggestion IA." : "AI suggestion failed."));
+    } finally {
+      setAiSuggesting(false);
+    }
+  };
+  const suggestedDiseases = React.useMemo(() => {
+    if (!checkedSymptoms.length) return [];
+    return diseases
+      .map((d) => ({ d, score: scoreDiseaseAgainstSymptoms(d, checkedSymptoms) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [diseases, checkedSymptoms]);
   const submit = async () => {
     if (saving || !animal._pk) return;
     if (!cause) { setErr(lang === "fr" ? "Merci de sélectionner une cause." : "Please select a cause."); return; }
@@ -2431,12 +2497,44 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
             placeholder={lang === "fr" ? "Rechercher une cause…" : "Search a cause…"}
           />
         </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Symptômes observés (aide au diagnostic)" : "Observed symptoms (diagnostic aid)"}</span>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {SYMPTOM_OPTIONS.map((s) => {
+              const checked = checkedSymptoms.includes(s.value);
+              return (
+                <button type="button" key={s.value} onClick={() => toggleSymptom(s.value)}
+                  className="tag" style={{ cursor: "pointer", border: "1px solid var(--border-1)", background: checked ? "var(--autorite-700)" : "var(--paper)", color: checked ? "var(--paper)" : "var(--ink-700)" }}>
+                  {lang === "fr" ? s.fr : s.en}
+                </button>
+              );
+            })}
+          </div>
+        </label>
+        {suggestedDiseases.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+            <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Maladies suggérées par les symptômes" : "Diseases suggested by symptoms"}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {suggestedDiseases.map(({ d, score }) => {
+                const name = d.nameFr || d.name_fr;
+                const active = String(d.id) === diseaseId;
+                return (
+                  <button type="button" key={d.id} onClick={() => setDiseaseId(String(d.id))}
+                    style={{ textAlign: "left", border: active ? "1px solid var(--autorite-700)" : "1px solid var(--border-1)", background: active ? "var(--autorite-50)" : "var(--paper)", borderRadius: 6, padding: "6px 8px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12.5, color: "var(--ink-900)" }}>{name}</span>
+                    <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{score}/{checkedSymptoms.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Maladie (optionnel)" : "Disease (optional)"}</span>
           <Autocomplete
             value={diseaseId}
             onChange={setDiseaseId}
-            options={diseases.map((d) => ({ value: String(d.id), label: d.name }))}
+            options={diseases.map((d) => ({ value: String(d.id), label: d.nameFr || d.name_fr || "" }))}
             placeholder={lang === "fr" ? "Rechercher une maladie…" : "Search a disease…"}
           />
         </label>
@@ -2458,6 +2556,18 @@ const HealthDeclareForm = ({ lang, animal, onCancel, onSaved }) => {
           <textarea className="input" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
             placeholder={lang === "fr" ? "Symptômes observés…" : "Observed symptoms…"}/>
         </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
+          <button type="button" className="btn btn-sm" onClick={askAiSuggestion} disabled={aiSuggesting} style={{ alignSelf: "flex-start" }}>
+            {aiSuggesting ? (lang === "fr" ? "Analyse en cours…" : "Analyzing…") : (lang === "fr" ? "🔎 Suggestion IA à partir de la note" : "🔎 AI suggestion from the note")}
+          </button>
+          {aiErr && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{aiErr}</div>}
+          {aiReply && (
+            <div style={{ fontSize: 12.5, color: "var(--ink-900)", whiteSpace: "pre-wrap", background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 10, lineHeight: 1.5 }}>
+              {aiReply}
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 6 }}>{lang === "fr" ? "Suggestion générée par IA, à confirmer par un vétérinaire — ne remplace pas un diagnostic professionnel." : "AI-generated suggestion, to be confirmed by a veterinarian — not a substitute for professional diagnosis."}</div>
+            </div>
+          )}
+        </div>
       </div>
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>

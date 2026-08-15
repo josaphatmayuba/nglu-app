@@ -30,6 +30,7 @@ import {
   ImportAnimalsDto,
   CreateFarmosStaffDto,
   CreateDiseaseDto,
+  SuggestDiseaseDto,
   CreateExpenseDto,
   CreateBatchAdjustmentDto,
   CreateBatchTransferDto,
@@ -446,6 +447,13 @@ export class FarmosController {
   @Delete("diseases/:id")
   deleteDisease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteDisease(id, orgId);
+  }
+
+  @ApiOperation({ summary: "AI-assisted disease suggestion from a free-text description of observed signs." })
+  @Permissions("readAll-farmos")
+  @Post("diseases/suggest")
+  suggestDisease(@Body() body: SuggestDiseaseDto, @CurrentOrg() orgId: number) {
+    return this.farmos.suggestDisease(body.species, body.description, orgId);
   }
 
   // ─── Reproduction events ─────────────────────────────────────────────────

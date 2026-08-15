@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { env } from "../config/env";
 import { randomUUID } from "crypto";
 import { computeLotBenchmarks } from "./farmos-benchmarks";
 import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
@@ -53,6 +54,8 @@ export class FarmosService {
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
   ) {}
+
+  private readonly logger = new Logger(FarmosService.name);
 
   private isDeceasedStatus(status: unknown) {
     return DECEASED_ANIMAL_STATUSES.includes(String(status || "").trim().toLowerCase());
@@ -1276,6 +1279,82 @@ export class FarmosService {
     await this.db.update(farmosDiseases).set({ isActive: 0 }).where(eq(farmosDiseases.id, id));
     await this.publishFarmosUpdate("deleteDisease", ["diseases"], "deleted", id, orgId);
     return { message: "Maladie supprimée." };
+  }
+
+  // Appel HTTP direct à l'API Anthropic (même pattern que HrService.callAnthropic).
+  private async callAnthropicFarmos(payload: Record<string, any>): Promise<any> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": env.anthropic.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        this.logger.error(`Anthropic API error ${res.status}: ${detail.slice(0, 500)}`);
+        throw new BadRequestException("L'assistant IA est momentanément indisponible.");
+      }
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  // Suggestion de diagnostic (phase 2, texte libre) : décrit les signes observés
+  // sur un animal, le LLM croise avec le catalogue de maladies de l'espèce
+  // (global + organisation) et suggère les pistes les plus probables. Ne pose
+  // jamais de diagnostic ferme ; recommande toujours un vétérinaire pour confirmer.
+  async suggestDisease(species: FarmosSpecies, description: string, orgId: number) {
+    const trimmed = String(description || "").trim();
+    if (!trimmed) throw new BadRequestException("Description requise.");
+    if (!env.anthropic.apiKey) {
+      throw new BadRequestException("L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante).");
+    }
+
+    const catalogue = await this.listDiseases(orgId, species);
+    const catalogueForPrompt = catalogue.map((d) => ({
+      id: d.id,
+      nom: d.nameFr,
+      contagieuse: !!d.contagious,
+      symptomes: d.symptoms || null,
+      urgence: d.urgencyLevel || null,
+      mortalite: d.mortalityRisk || null,
+    }));
+
+    const systemPrompt = [
+      "Tu es un assistant d'aide au diagnostic vétérinaire pour des éleveurs, dans l'application FarmOS de NgoluApp.",
+      "Réponds en français, de façon concise et actionnable.",
+      "Tu t'appuies UNIQUEMENT sur le catalogue de maladies fourni ci-dessous (JSON) pour cette espèce ; ne propose jamais une maladie absente du catalogue.",
+      "Pour chaque maladie plausible, cite son id du catalogue, ton estimation du niveau de confiance (faible/moyen/élevé), et pourquoi (quels signes décrits correspondent).",
+      "Classe les suggestions de la plus probable à la moins probable, 3 maximum.",
+      "Tu ne poses JAMAIS de diagnostic ferme : rappelle systématiquement qu'une confirmation par un vétérinaire est nécessaire, surtout si les signes sont sévères, si l'animal est en danger vital, ou si la maladie suggérée est contagieuse ou à risque de mortalité élevé.",
+      "Si aucune maladie du catalogue ne correspond raisonnablement, dis-le clairement plutôt que de forcer une suggestion.",
+      `Catalogue des maladies (espèce ${species}) :`,
+      JSON.stringify(catalogueForPrompt),
+    ].join("\n");
+
+    try {
+      const data = await this.callAnthropicFarmos({
+        model: env.anthropic.model,
+        max_tokens: env.anthropic.maxTokens,
+        system: systemPrompt,
+        messages: [{ role: "user", content: trimmed }],
+      });
+      const reply = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text || "").join("\n").trim();
+      return { reply: reply || "(réponse vide)", model: env.anthropic.model };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      const msg = error instanceof Error && error.name === "AbortError" ? "Délai d'attente dépassé." : "Échec de l'appel à l'assistant IA.";
+      this.logger.error(`suggestDisease failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new BadRequestException(msg);
+    }
   }
 
   // ─── Reproduction events ───────────────────────────────────────────────
