@@ -1400,7 +1400,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
-    Promise.all([
+    const load = () => Promise.all([
       api.listTreatments(),
       api.listReproductionEvents(),
       api.listProductionLogs(),
@@ -1438,7 +1438,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         });
       })
       .catch(() => setRelated((s) => ({ ...s, loading: false })));
-    return () => { cancel = true; };
+    load();
+    const onCreated = () => load();
+    window.addEventListener("farmos:animal-created", onCreated);
+    return () => { cancel = true; window.removeEventListener("farmos:animal-created", onCreated); };
   }, [animal._pk, lang]);
   const onDelete = async () => {
     if (!animal._pk) return;
