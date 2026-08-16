@@ -39,6 +39,14 @@ export class FarmosOperationsService {
     private readonly farmos: FarmosService,
   ) {}
 
+  // Normalise une date/datetime ISO validee par @IsDateString (ex: "2026-08-16"
+  // ou "2026-08-16T00:00:00.000Z") vers le format court YYYY-MM-DD attendu par
+  // la colonne MySQL date() de farmos_animal_operations. Sans ca, un datetime
+  // complet fait planter l'insertion Drizzle en 500.
+  private toDateOnly(value: string): string {
+    return value.length > 10 ? value.slice(0, 10) : value;
+  }
+
   // ─── Catalogue des types d'operation ────────────────────────────────────
 
   async listOperationTypes(orgId: number, species?: string | null) {
@@ -236,6 +244,7 @@ export class FarmosOperationsService {
     const species = input.species ?? animal?.species ?? null;
     const operationType = await this.resolveOperationType(input.operation_code, orgId);
     this.assertSpeciesAllowed(operationType, species);
+    const operationDate = this.toDateOnly(input.operation_date);
 
     const [res] = await this.db.insert(farmosAnimalOperations).values({
       organizationId: orgId,
@@ -247,7 +256,7 @@ export class FarmosOperationsService {
       boxId: input.box_id ?? null,
       species: species ?? null,
       animalCount: input.animal_count ?? 1,
-      operationDate: input.operation_date,
+      operationDate,
       performedBy: input.performed_by ?? null,
       performedByName: input.performed_by_name ?? null,
       result: input.result ?? null,
@@ -268,7 +277,7 @@ export class FarmosOperationsService {
       quantity: input.quantity ?? null,
       unit: input.unit ?? operationType?.defaultUnit ?? null,
       buildingId: input.building_id ?? null,
-      operationDate: input.operation_date,
+      operationDate,
     }, orgId);
     if (expenseId != null) {
       await this.db.update(farmosAnimalOperations).set({ expenseId }).where(and(eq(farmosAnimalOperations.id, res.id), eq(farmosAnimalOperations.organizationId, orgId)));
@@ -300,6 +309,7 @@ export class FarmosOperationsService {
     }
 
     const perAnimalCost = input.cost != null && Number(input.cost) > 0 ? Number(input.cost) / input.animal_ids.length : null;
+    const operationDate = this.toDateOnly(input.operation_date);
     const created: number[] = [];
     for (const id of input.animal_ids) {
       const a = found.get(Number(id))!;
@@ -313,7 +323,7 @@ export class FarmosOperationsService {
         boxId: input.box_id ?? null,
         species: a.species ?? null,
         animalCount: 1,
-        operationDate: input.operation_date,
+        operationDate,
         performedBy: input.performed_by ?? null,
         performedByName: input.performed_by_name ?? null,
         result: input.result ?? null,
@@ -334,7 +344,7 @@ export class FarmosOperationsService {
         quantity: input.quantity ?? null,
         unit: input.unit ?? operationType?.defaultUnit ?? null,
         buildingId: input.building_id ?? null,
-        operationDate: input.operation_date,
+        operationDate,
       }, orgId);
       if (expenseId != null) {
         await this.db.update(farmosAnimalOperations).set({ expenseId }).where(and(eq(farmosAnimalOperations.id, res.id), eq(farmosAnimalOperations.organizationId, orgId)));
@@ -366,7 +376,7 @@ export class FarmosOperationsService {
     if (input.building_id !== undefined) patch.buildingId = input.building_id;
     if (input.box_id !== undefined) patch.boxId = input.box_id;
     if (input.animal_count !== undefined) patch.animalCount = input.animal_count;
-    if (input.operation_date !== undefined) patch.operationDate = input.operation_date;
+    if (input.operation_date !== undefined) patch.operationDate = this.toDateOnly(input.operation_date);
     if (input.performed_by !== undefined) patch.performedBy = input.performed_by;
     if (input.performed_by_name !== undefined) patch.performedByName = input.performed_by_name;
     if (input.result !== undefined) patch.result = input.result;

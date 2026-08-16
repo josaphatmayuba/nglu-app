@@ -114,10 +114,14 @@ export class FarmosProfitabilityService {
   }
 
   // ── Coûts directs (farmos_expenses.related_animal_id) ─────────────────
-  private async directExpensesByAnimal(orgId: number, from?: string, to?: string) {
+  // RBAC : farmos_expenses n'a pas de colonne species propre -> jointure vers
+  // farmos_animals (relatedAnimalId) pour filtrer sur l'espèce de l'animal lié.
+  private async directExpensesByAnimal(orgId: number, from?: string, to?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), sql`${farmosExpenses.relatedAnimalId} IS NOT NULL`];
     if (from) clauses.push(gte(farmosExpenses.expenseDate, from));
     if (to) clauses.push(lte(farmosExpenses.expenseDate, to));
+    const scopeFilter = this.speciesFilter(farmosAnimals.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     return this.db
       .select({
         animalId: farmosExpenses.relatedAnimalId,
@@ -126,6 +130,7 @@ export class FarmosProfitabilityService {
         total: sql<number>`COALESCE(SUM(${farmosExpenses.amount}), 0)`,
       })
       .from(farmosExpenses)
+      .innerJoin(farmosAnimals, and(eq(farmosAnimals.id, farmosExpenses.relatedAnimalId), eq(farmosAnimals.organizationId, orgId)))
       .where(and(...clauses))
       .groupBy(farmosExpenses.relatedAnimalId, farmosExpenses.currencyId, farmosExpenses.category);
   }
@@ -135,6 +140,14 @@ export class FarmosProfitabilityService {
   // d'animaux vivants (isActive=1) de l'espèce sur la période, faute de
   // dates d'entrée/sortie exploitables pour chaque tête. Poids = 1 par
   // fiche animal (une fiche = 1 tête ou 1 lot ; count reflète le lot).
+  //
+  // RBAC : pas de colonne species sur farmos_expenses (dépense de ferme non
+  // rattachée à un animal). Le filtre ne s'applique PAS sur la dépense (elle
+  // reste indivisible) mais sur la BASE DE PRORATA : un gestionnaire scopé
+  // "pig" ne doit voir que la part de la dépense correspondant au poids de
+  // l'effectif porcin dans l'effectif total (cf. speciesFilter appliqué au
+  // numérateur via livestockWeightBySpecies(speciesScope), le dénominateur
+  // restant l'effectif total non scopé).
   private async unallocatedFarmExpenses(orgId: number, from?: string, to?: string) {
     const clauses = [eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), isNull(farmosExpenses.relatedAnimalId)];
     if (from) clauses.push(gte(farmosExpenses.expenseDate, from));
@@ -160,6 +173,21 @@ export class FarmosProfitabilityService {
       .where(and(...clauses))
       .groupBy(farmosAnimals.species);
     return new Map(rows.map((r) => [r.species, Number(r.count) || 1]));
+  }
+
+  // Ratio (0..1] de prorata RBAC pour les coûts de ferme non rattachés à un
+  // animal : part de l'effectif VISIBLE par le scope dans l'effectif TOTAL
+  // de l'organisation. speciesScope="all" -> ratio 1 (aucune restriction).
+  private async unallocatedExpenseAllocationRatio(orgId: number, speciesScope: FarmosSpeciesScope) {
+    if (speciesScope === "all") return 1;
+    const [scopedWeights, totalWeights] = await Promise.all([
+      this.livestockWeightBySpecies(orgId, speciesScope),
+      this.livestockWeightBySpecies(orgId, "all"),
+    ]);
+    const scopedTotal = Array.from(scopedWeights.values()).reduce((a, b) => a + b, 0);
+    const grandTotal = Array.from(totalWeights.values()).reduce((a, b) => a + b, 0);
+    if (grandTotal <= 0) return 0;
+    return scopedTotal / grandTotal;
   }
 
   // ── Aliment (farmos_feed_movements.total_cost, phase 1) ───────────────
@@ -189,10 +217,14 @@ export class FarmosProfitabilityService {
   // consommée (elle transite en DTO au moment de createTreatment sans être
   // persistée). Approximation : 1 dose = 1 unité de unit_price. Labellisé
   // "estimated" dans le breakdown, jamais confondu avec un coût facturé.
-  private async treatmentCostByAnimal(orgId: number, from?: string, to?: string) {
+  // RBAC : farmos_treatments n'a pas de colonne species propre -> jointure
+  // vers farmos_animals (animalId, notNull) pour filtrer sur l'espèce traitée.
+  private async treatmentCostByAnimal(orgId: number, from?: string, to?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1), sql`${farmosTreatments.medicineId} IS NOT NULL`];
     if (from) clauses.push(gte(farmosTreatments.startDate, from));
     if (to) clauses.push(lte(farmosTreatments.startDate, to));
+    const scopeFilter = this.speciesFilter(farmosAnimals.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     const rows = await this.db
       .select({
         animalId: farmosTreatments.animalId,
@@ -201,6 +233,7 @@ export class FarmosProfitabilityService {
       })
       .from(farmosTreatments)
       .innerJoin(farmosMedicines, eq(farmosMedicines.id, farmosTreatments.medicineId))
+      .innerJoin(farmosAnimals, and(eq(farmosAnimals.id, farmosTreatments.animalId), eq(farmosAnimals.organizationId, orgId)))
       .where(and(...clauses, eq(farmosMedicines.organizationId, orgId)))
       .groupBy(farmosTreatments.animalId, farmosMedicines.currencyId);
     return rows;
@@ -209,10 +242,12 @@ export class FarmosProfitabilityService {
   // ── Vaccinations (espèce/lot × animal_count) ───────────────────────────
   // Pas de FK vers farmos_medicines : jointure best-effort par nom (vaccine
   // = medicines.name), collation explicite requise (piège collation MySQL 8).
-  private async vaccinationCostBySpecies(orgId: number, from?: string, to?: string) {
+  private async vaccinationCostBySpecies(orgId: number, from?: string, to?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosVaccinations.organizationId, orgId), eq(farmosVaccinations.isActive, 1)];
     if (from) clauses.push(gte(farmosVaccinations.dueDate, from));
     if (to) clauses.push(lte(farmosVaccinations.dueDate, to));
+    const scopeFilter = this.speciesFilter(farmosVaccinations.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     const rows = await this.db
       .select({
         species: farmosVaccinations.species,
@@ -253,10 +288,12 @@ export class FarmosProfitabilityService {
   }
 
   // ── Mortalité (imputée au LOT, jamais à l'animal mort) ─────────────────
-  private async mortalityLossByLot(orgId: number, from?: string, to?: string) {
+  private async mortalityLossByLot(orgId: number, from?: string, to?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1), sql`${farmosMortalityEvents.estimatedLoss} IS NOT NULL`];
     if (from) clauses.push(gte(farmosMortalityEvents.eventDate, from));
     if (to) clauses.push(lte(farmosMortalityEvents.eventDate, to));
+    const scopeFilter = this.speciesFilter(farmosMortalityEvents.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     return this.db
       .select({
         lot: farmosMortalityEvents.lot,
@@ -269,11 +306,13 @@ export class FarmosProfitabilityService {
   }
 
   // ── Production valorisée (théorique, séparée du réalisé) ──────────────
-  private async valuedProduction(orgId: number, from?: string, to?: string, species?: string) {
+  private async valuedProduction(orgId: number, from?: string, to?: string, species?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosProductionLogs.organizationId, orgId), eq(farmosProductionLogs.isActive, 1)];
     if (from) clauses.push(gte(farmosProductionLogs.logDate, from));
     if (to) clauses.push(lte(farmosProductionLogs.logDate, to));
     if (species) clauses.push(eq(farmosProductionLogs.species, species));
+    const scopeFilter = this.speciesFilter(farmosProductionLogs.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     const rows = await this.db
       .select({
         animalId: farmosProductionLogs.animalId,
@@ -300,9 +339,11 @@ export class FarmosProfitabilityService {
   }
 
   // ── Plus-value latente du cheptel vivant (jamais mêlée au profit) ─────
-  private async latentHerdValue(orgId: number, species?: string) {
+  private async latentHerdValue(orgId: number, species?: string, speciesScope: FarmosSpeciesScope = "all") {
     const clauses = [eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1), sql`${farmosAnimals.estimatedValue} IS NOT NULL`];
     if (species) clauses.push(eq(farmosAnimals.species, species));
+    const scopeFilter = this.speciesFilter(farmosAnimals.species, speciesScope);
+    if (scopeFilter) clauses.push(scopeFilter);
     const rows = await this.db
       .select({
         species: farmosAnimals.species,
@@ -318,17 +359,18 @@ export class FarmosProfitabilityService {
 
   // ── Résumé KPI (payload minuscule → écran mobile) ──────────────────────
   async getSummary(orgId: number, from?: string, to?: string, species?: string, currencyId?: number, speciesScope: FarmosSpeciesScope = "all") {
-    const [revenueRows, directExpRows, unallocExpRows, feedRows, treatRows, vaxRows, opRows, mortRows, prodRows, latentRows, livestockWeights] = await Promise.all([
+    const [revenueRows, directExpRows, unallocExpRows, allocationRatio, feedRows, treatRows, vaxRows, opRows, mortRows, prodRows, latentRows, livestockWeights] = await Promise.all([
       this.revenueByAnimal(orgId, from, to, species, speciesScope),
-      this.directExpensesByAnimal(orgId, from, to),
+      this.directExpensesByAnimal(orgId, from, to, speciesScope),
       this.unallocatedFarmExpenses(orgId, from, to),
+      this.unallocatedExpenseAllocationRatio(orgId, speciesScope),
       this.feedCost(orgId, from, to, speciesScope),
-      this.treatmentCostByAnimal(orgId, from, to),
-      this.vaccinationCostBySpecies(orgId, from, to),
+      this.treatmentCostByAnimal(orgId, from, to, speciesScope),
+      this.vaccinationCostBySpecies(orgId, from, to, speciesScope),
       this.operationCost(orgId, from, to, speciesScope),
-      this.mortalityLossByLot(orgId, from, to),
-      this.valuedProduction(orgId, from, to, species),
-      this.latentHerdValue(orgId, species),
+      this.mortalityLossByLot(orgId, from, to, speciesScope),
+      this.valuedProduction(orgId, from, to, species, speciesScope),
+      this.latentHerdValue(orgId, species, speciesScope),
       this.livestockWeightBySpecies(orgId, speciesScope),
     ]);
 
@@ -341,7 +383,10 @@ export class FarmosProfitabilityService {
 
     for (const r of revenueRows) bucket(r.currencyId).revenue += Number(r.total ?? 0);
     for (const r of directExpRows) bucket(r.currencyId).cost += Number(r.total ?? 0);
-    for (const r of unallocExpRows) bucket(r.currencyId).cost += Number(r.total ?? 0);
+    // Prorata RBAC : un scope restreint (ex. "pig") ne voit que la part de la
+    // dépense de ferme non rattachée à un animal correspondant au poids de son
+    // effectif dans l'effectif total (voir unallocatedExpenseAllocationRatio).
+    for (const r of unallocExpRows) bucket(r.currencyId).cost += Number(r.total ?? 0) * allocationRatio;
     for (const r of feedRows) bucket(r.currencyId).cost += Number(r.total ?? 0);
     for (const r of treatRows) bucket(r.currencyId).cost += Number(r.total ?? 0);
     for (const r of vaxRows) bucket(r.currencyId).cost += Number(r.total ?? 0);
@@ -387,7 +432,7 @@ export class FarmosProfitabilityService {
         .groupBy(farmosAnimals.lot, farmosAnimals.species, farmosSales.currencyId),
       this.feedCost(orgId, from, to, speciesScope),
       this.operationCost(orgId, from, to, speciesScope),
-      this.mortalityLossByLot(orgId, from, to),
+      this.mortalityLossByLot(orgId, from, to, speciesScope),
       this.db
         .select({ lot: farmosAnimals.lot, species: farmosAnimals.species, count: sql<number>`COALESCE(SUM(GREATEST(${farmosAnimals.count}, 1)), 0)` })
         .from(farmosAnimals)
@@ -450,7 +495,16 @@ export class FarmosProfitabilityService {
         .from(farmosFeedMovements)
         .where(and(eq(farmosFeedMovements.organizationId, orgId), eq(farmosFeedMovements.isActive, 1), eq(farmosFeedMovements.movementType, "out"), inArray(farmosFeedMovements.animalId, animalIds), ...(from ? [gte(farmosFeedMovements.movementDate, from)] : []), ...(to ? [lte(farmosFeedMovements.movementDate, to)] : [])))
         .groupBy(farmosFeedMovements.animalId, farmosFeedMovements.currencyId),
-      this.treatmentCostByAnimal(orgId, from, to),
+      // NB: pas de speciesScope passé ici volontairement — les animalIds sont
+      // déjà restreints par animalClauses (scope-filtré ci-dessus), donc un
+      // filtre supplémentaire par jointure serait redondant ; on restreint
+      // directement par inArray pour rester cohérent avec les autres sources.
+      this.db
+        .select({ animalId: farmosTreatments.animalId, currencyId: farmosMedicines.currencyId, total: sql<number>`COALESCE(SUM(COALESCE(${farmosMedicines.unitPrice}, 0)), 0)` })
+        .from(farmosTreatments)
+        .innerJoin(farmosMedicines, eq(farmosMedicines.id, farmosTreatments.medicineId))
+        .where(and(eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1), eq(farmosMedicines.organizationId, orgId), sql`${farmosTreatments.medicineId} IS NOT NULL`, inArray(farmosTreatments.animalId, animalIds), ...(from ? [gte(farmosTreatments.startDate, from)] : []), ...(to ? [lte(farmosTreatments.startDate, to)] : [])))
+        .groupBy(farmosTreatments.animalId, farmosMedicines.currencyId),
       this.db
         .select({ animalId: farmosAnimalOperations.animalId, currencyId: farmosAnimalOperations.currencyId, total: sql<number>`COALESCE(SUM(${farmosAnimalOperations.cost}), 0)` })
         .from(farmosAnimalOperations)
@@ -535,18 +589,38 @@ export class FarmosProfitabilityService {
   }
 
   // ── Top postes de coût (tous animaux/lots confondus, sur la période) ──
+  // RBAC : farmos_expenses.category mélange dépenses liées à un animal
+  // (related_animal_id) et dépenses de ferme (NULL) -> même split que
+  // getSummary : jointure+filtre pour le direct, prorata pour l'indirect.
   async getCostDrivers(orgId: number, from?: string, to?: string, speciesScope: FarmosSpeciesScope = "all") {
-    const [expRows, feedTotal, treatTotal, vaxRows, opTotal, mortTotal] = await Promise.all([
+    const directExpClauses = [eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), sql`${farmosExpenses.relatedAnimalId} IS NOT NULL`];
+    if (from) directExpClauses.push(gte(farmosExpenses.expenseDate, from));
+    if (to) directExpClauses.push(lte(farmosExpenses.expenseDate, to));
+    const directExpScopeFilter = this.speciesFilter(farmosAnimals.species, speciesScope);
+    if (directExpScopeFilter) directExpClauses.push(directExpScopeFilter);
+
+    const unallocExpClauses = [eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), isNull(farmosExpenses.relatedAnimalId)];
+    if (from) unallocExpClauses.push(gte(farmosExpenses.expenseDate, from));
+    if (to) unallocExpClauses.push(lte(farmosExpenses.expenseDate, to));
+
+    const [directExpRows, unallocExpRows, allocationRatio, feedTotal, treatTotal, vaxRows, opTotal, mortTotal] = await Promise.all([
       this.db
         .select({ category: farmosExpenses.category, currencyId: farmosExpenses.currencyId, total: sql<number>`COALESCE(SUM(${farmosExpenses.amount}), 0)` })
         .from(farmosExpenses)
-        .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), ...(from ? [gte(farmosExpenses.expenseDate, from)] : []), ...(to ? [lte(farmosExpenses.expenseDate, to)] : [])))
+        .innerJoin(farmosAnimals, and(eq(farmosAnimals.id, farmosExpenses.relatedAnimalId), eq(farmosAnimals.organizationId, orgId)))
+        .where(and(...directExpClauses))
         .groupBy(farmosExpenses.category, farmosExpenses.currencyId),
+      this.db
+        .select({ category: farmosExpenses.category, currencyId: farmosExpenses.currencyId, total: sql<number>`COALESCE(SUM(${farmosExpenses.amount}), 0)` })
+        .from(farmosExpenses)
+        .where(and(...unallocExpClauses))
+        .groupBy(farmosExpenses.category, farmosExpenses.currencyId),
+      this.unallocatedExpenseAllocationRatio(orgId, speciesScope),
       this.feedCost(orgId, from, to, speciesScope),
-      this.treatmentCostByAnimal(orgId, from, to),
-      this.vaccinationCostBySpecies(orgId, from, to),
+      this.treatmentCostByAnimal(orgId, from, to, speciesScope),
+      this.vaccinationCostBySpecies(orgId, from, to, speciesScope),
       this.operationCost(orgId, from, to, speciesScope),
-      this.mortalityLossByLot(orgId, from, to),
+      this.mortalityLossByLot(orgId, from, to, speciesScope),
     ]);
 
     const driverMap = new Map<string, { label: string; currencyId: number | null; total: number }>();
@@ -556,7 +630,8 @@ export class FarmosProfitabilityService {
       cur.total += amount;
       driverMap.set(k, cur);
     };
-    for (const r of expRows) add(`expense:${r.category}`, r.currencyId ?? null, Number(r.total ?? 0));
+    for (const r of directExpRows) add(`expense:${r.category}`, r.currencyId ?? null, Number(r.total ?? 0));
+    for (const r of unallocExpRows) add(`expense:${r.category}`, r.currencyId ?? null, Number(r.total ?? 0) * allocationRatio);
     for (const r of feedTotal) add("feed", r.currencyId ?? null, Number(r.total ?? 0));
     for (const r of treatTotal) add("treatment", r.currencyId ?? null, Number(r.total ?? 0));
     for (const r of vaxRows) add("vaccination", r.currencyId ?? null, Number(r.total ?? 0));
