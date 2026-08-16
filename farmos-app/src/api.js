@@ -387,8 +387,35 @@ export const api = {
   listHealthObservations: (animalId) => jsonFetch(`/animals/${animalId}/health-observations`),
   createBatchTransfer: (body) => mutate({ kind: "createBatchTransfer", method: "POST", path: "/batch-transfers", body }),
   createBatchSplit: (body) => mutate({ kind: "createBatchSplit", method: "POST", path: "/batch-splits", body }),
-  listWeighings: (animalId) => jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`),
-  createWeighing: (body) => mutate({ kind: "createWeighing", method: "POST", path: "/weighings", body }),
+  // Pesées : fetch réseau direct (le filtre animal_id est côté serveur), mais
+  // on fusionne avec le miroir local (pesées en attente dans l'outbox) pour
+  // qu'une pesée saisie hors-ligne / avec un raté réseau reste visible au
+  // lieu de disparaître tant que la sync n'est pas passée.
+  listWeighings: async (animalId) => {
+    let fresh = [];
+    try {
+      fresh = await jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`);
+    } catch (e) {
+      if (!navigator.onLine) fresh = null; else throw e;
+    }
+    let local = [];
+    try { local = await readCache("weighings"); } catch { local = []; }
+    if (Array.isArray(fresh)) {
+      // Ne remplace que les lignes de cet animal (ou tout, si liste globale) —
+      // ne pas écraser le miroir d'autres animaux avec une réponse filtrée.
+      const keep = local.filter((w) => w._pending || (animalId && Number(w.animalId ?? w.animal_id) !== Number(animalId)));
+      await replaceCache("weighings", [...keep, ...fresh]);
+      local = [...keep, ...fresh];
+    }
+    const pending = (local || []).filter((w) => w._pending && (!animalId || Number(w.animalId ?? w.animal_id) === Number(animalId)));
+    if (fresh == null) {
+      // Hors-ligne sans réseau du tout : sert uniquement le miroir local.
+      return animalId ? local.filter((w) => Number(w.animalId ?? w.animal_id) === Number(animalId)) : local;
+    }
+    return [...fresh, ...pending];
+  },
+  createWeighing: (body) => mutate({ kind: "createWeighing", method: "POST", path: "/weighings", body,
+                       optimistic: { table: "weighings", row: { id: tempId("w"), animalId: body.animal_id, weighDate: body.weigh_date, weight: body.weight, weightUnit: body.weight_unit || "kg", ...body } } }),
   deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),

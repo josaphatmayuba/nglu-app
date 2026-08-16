@@ -46,6 +46,12 @@ db.version(3).stores({
   vetExams:        "id, examDate, animalId",
   mortalityEvents: "id, eventDate, species, animalId",
 });
+db.version(4).stores({
+  // Pesées : absentes des versions precedentes, une pesee saisie hors-ligne
+  // (ou pendant un raté réseau silencieusement mis en file) n'avait donc
+  // aucun miroir local pour la faire réapparaître dans l'onglet Poids.
+  weighings:       "id, animalId, weighDate",
+});
 
 // Met à jour la table miroir avec la dernière réponse API.
 export async function replaceCache(tableName, rows) {
