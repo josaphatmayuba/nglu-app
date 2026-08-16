@@ -33,6 +33,7 @@ import {
   SuggestDiseaseDto,
   LinkDiseaseMedicineDto,
   CreateExpenseDto,
+  CreateProfitabilitySnapshotDto,
   CreateBatchAdjustmentDto,
   CreateBatchTransferDto,
   CreateBatchSplitDto,
@@ -65,8 +66,19 @@ import {
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
   UpsertFarmosPriceDto,
+  CreateFeedLotDto,
+  CreateFeedMovementDto,
+  BulkFeedMovementDto,
+  BulkCreateAnimalOperationsDto,
+  CreateAnimalOperationDto,
+  CreateOperationTypeDto,
+  UpdateAnimalOperationDto,
+  UpdateOperationTypeDto,
 } from "./dto/farmos.dto";
 import { FarmosService } from "./farmos.service";
+import { FarmosFeedService } from "./farmos-feed.service";
+import { FarmosOperationsService } from "./farmos-operations.service";
+import { FarmosProfitabilityService } from "./farmos-profitability.service";
 
 const FARMOS_REALTIME_TABLES = [
   "animals",
@@ -91,7 +103,12 @@ const FARMOS_REALTIME_TABLES = [
 @UseGuards(JwtAuthGuard, PermissionsGuard, FarmosSpeciesGuard)
 @Controller("farmos")
 export class FarmosController {
-  constructor(private readonly farmos: FarmosService) {}
+  constructor(
+    private readonly farmos: FarmosService,
+    private readonly farmosFeed: FarmosFeedService,
+    private readonly farmosOperations: FarmosOperationsService,
+    private readonly farmosProfitability: FarmosProfitabilityService,
+  ) {}
 
   @ApiOperation({ summary: "FarmOS dashboard snapshot grouped in one request" })
   @Permissions("readAll-farmos")
@@ -964,6 +981,114 @@ export class FarmosController {
     return this.farmos.getProfitability(orgId);
   }
 
+  // ─── Rentabilité (P&L) par animal / lot — Phase 3 (calcul SQL à la volée) ──
+  @ApiOperation({ summary: "P&L KPI summary, grouped by currency (realized / valued production / latent herd value)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/summary")
+  getProfitabilitySummary(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+    @Query("currencyId") currencyId?: string,
+  ) {
+    return this.farmosProfitability.getSummary(orgId, from, to, species, currencyId ? Number(currencyId) : undefined, speciesScope);
+  }
+
+  @ApiOperation({ summary: "P&L aggregated by lot." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/by-lot")
+  getProfitabilityByLot(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+  ) {
+    return this.farmosProfitability.getByLot(orgId, from, to, species, speciesScope);
+  }
+
+  @ApiOperation({ summary: "P&L aggregated by animal, paginated." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/by-animal")
+  getProfitabilityByAnimal(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+    @Query("lot") lot?: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+    @Query("sort") sort?: string,
+  ) {
+    return this.farmosProfitability.getByAnimal(orgId, {
+      from, to, species, lot,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      sort,
+    }, speciesScope);
+  }
+
+  @ApiOperation({ summary: "Cost drivers ranking (top expense/feed/treatment/vaccination/operation/mortality postes)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/cost-drivers")
+  getProfitabilityCostDrivers(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.farmosProfitability.getCostDrivers(orgId, from, to, speciesScope);
+  }
+
+  @ApiOperation({ summary: "CSV export of the per-animal P&L (blob download, never <a href>)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/export")
+  async exportProfitabilityCsv(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Res() res: Response,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+  ) {
+    const csv = await this.farmosProfitability.exportCsv(orgId, from, to, species, speciesScope);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentabilite-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  }
+
+  @ApiOperation({ summary: "Figer un snapshot de rentabilité pour une période (clôture explicite)." })
+  @Permissions("update-farmos")
+  @Post("profitability/snapshot")
+  createProfitabilitySnapshot(
+    @Body() body: CreateProfitabilitySnapshotDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmosProfitability.createSnapshot(orgId, body, userId);
+  }
+
+  @ApiOperation({ summary: "Liste des snapshots de rentabilité figés." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/snapshots")
+  listProfitabilitySnapshots(@CurrentOrg() orgId: number, @Query("scope") scope?: string, @Query("scopeKey") scopeKey?: string) {
+    return this.farmosProfitability.listSnapshots(orgId, scope, scopeKey);
+  }
+
+  @ApiOperation({ summary: "Timeline détaillée coûts/revenus pour un animal (drill-down)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/animal/:id")
+  getProfitabilityAnimalTimeline(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+  ) {
+    return this.farmosProfitability.getAnimalTimeline(orgId, id, speciesScope);
+  }
+
   @ApiOperation({ summary: "Intra-org benchmarks: compare this org's lots (internal quartiles)." })
   @Permissions("readAll-farmos")
   @Get("benchmarks")
@@ -1223,5 +1348,214 @@ export class FarmosController {
   @Delete("animals/photos/:id")
   deleteAnimalPhoto(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
     return this.farmos.deleteAnimalPhoto(id, orgId);
+  }
+
+  // ─── Stock aliment (Phase 1) ─────────────────────────────────────────────
+
+  @ApiOperation({ summary: "Référentiel des aliments (farmos_medicines kind=feed)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/references")
+  listFeedReferences(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.listFeedReferences(orgId);
+  }
+
+  @ApiOperation({ summary: "Lots d'aliment reçus (?medicineId=)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/lots")
+  listFeedLots(@CurrentOrg() orgId: number, @Query("medicineId") medicineId?: string) {
+    return this.farmosFeed.listFeedLots(orgId, medicineId ? Number(medicineId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Réception d'un lot d'aliment (crée lot + mouvement in + dépense feed)." })
+  @Permissions("create-farmos")
+  @Post("feed/lots")
+  createFeedLot(@Body() body: CreateFeedLotDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedLot(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Suppression (soft) d'un lot d'aliment + contre-mouvement." })
+  @Permissions("delete-farmos")
+  @Delete("feed/lots/:id")
+  deleteFeedLot(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosFeed.deleteFeedLot(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Journal des mouvements de stock aliment (?from&to&medicineId&buildingId&lot&species)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/movements")
+  listFeedMovements(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() species: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("medicineId") medicineId?: string,
+    @Query("buildingId") buildingId?: string,
+    @Query("lot") lot?: string,
+    @Query("species") speciesFilter?: string,
+  ) {
+    return this.farmosFeed.listFeedMovements(
+      orgId,
+      {
+        from,
+        to,
+        medicineId: medicineId ? Number(medicineId) : undefined,
+        buildingId: buildingId ? Number(buildingId) : undefined,
+        lot,
+        species: speciesFilter,
+      },
+      species,
+    );
+  }
+
+  @ApiOperation({ summary: "Distribution d'aliment (sortie FIFO, décrément via consumeMedicine)." })
+  @Permissions("create-farmos")
+  @Post("feed/movements")
+  createFeedMovement(@Body() body: CreateFeedMovementDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedMovement(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Saisie journalière multi-bâtiments en une transaction." })
+  @Permissions("create-farmos")
+  @Post("feed/movements/bulk")
+  createFeedMovementsBulk(@Body() body: BulkFeedMovementDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedMovementsBulk(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Suppression (soft) d'un mouvement + réincrément du stock." })
+  @Permissions("delete-farmos")
+  @Delete("feed/movements/:id")
+  deleteFeedMovement(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosFeed.deleteFeedMovement(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Niveau de stock courant + couverture en jours + statut." })
+  @Permissions("readAll-farmos")
+  @Get("feed/stock")
+  getFeedStock(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.getFeedStock(orgId);
+  }
+
+  @ApiOperation({ summary: "Alertes stock aliment (seuil bas / péremption < 30j)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/alerts")
+  getFeedAlerts(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.getFeedAlerts(orgId);
+  }
+
+  @ApiOperation({ summary: "Réconcilie farmos_medicines.quantity sur la somme des mouvements aliment." })
+  @Permissions("update-farmos")
+  @Post("feed/recompute")
+  recomputeFeedStock(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.recomputeFeedStock(orgId);
+  }
+
+  // ─── Opérations zootechniques (Phase 2) ─────────────────────────────────
+
+  @ApiOperation({ summary: "Catalogue des types d'opération (castration, tonte, écornage…)." })
+  @Permissions("readAll-farmos")
+  @Get("operation-types")
+  listOperationTypes(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmosOperations.listOperationTypes(orgId, species ?? null);
+  }
+
+  @ApiOperation({ summary: "Crée un type d'opération dans le catalogue." })
+  @Permissions("create-farmos")
+  @Post("operation-types")
+  createOperationType(@Body() body: CreateOperationTypeDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.createOperationType(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Met à jour un type d'opération." })
+  @Permissions("update-farmos")
+  @Patch("operation-types/:id")
+  updateOperationType(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateOperationTypeDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmosOperations.updateOperationType(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft) un type d'opération." })
+  @Permissions("delete-farmos")
+  @Delete("operation-types/:id")
+  deleteOperationType(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.deleteOperationType(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Initialise le catalogue standard (castration, tonte, écornage, boucle, onglons, dents, caudectomie, ébecquage). Idempotent." })
+  @Permissions("update-farmos")
+  @Post("operation-types/bootstrap")
+  bootstrapOperationTypes(@CurrentOrg() orgId: number) {
+    return this.farmosOperations.bootstrapOperationTypes(orgId);
+  }
+
+  @ApiOperation({ summary: "Liste des opérations zootechniques réalisées." })
+  @Permissions("readAll-farmos")
+  @Get("operations")
+  listOperations(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() species: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("code") code?: string,
+    @Query("animalId") animalId?: string,
+    @Query("lot") lot?: string,
+    @Query("species") speciesFilter?: string,
+  ) {
+    return this.farmosOperations.listOperations(orgId, species, {
+      from,
+      to,
+      code,
+      animalId: animalId ? Number(animalId) : undefined,
+      lot,
+      species: speciesFilter,
+    });
+  }
+
+  @ApiOperation({ summary: "Détail d'une opération." })
+  @Permissions("readAll-farmos")
+  @Get("operations/:id")
+  getOperation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.getOperation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Enregistre une opération zootechnique (crée la dépense liée si cost > 0)." })
+  @Permissions("create-farmos")
+  @Post("operations")
+  createOperation(@Body() body: CreateAnimalOperationDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.createOperation(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Acte de lot : applique une opération à N animaux sélectionnés en une transaction." })
+  @Permissions("create-farmos")
+  @Post("operations/bulk")
+  bulkCreateOperations(@Body() body: BulkCreateAnimalOperationsDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.bulkCreateOperations(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Met à jour une opération." })
+  @Permissions("update-farmos")
+  @Patch("operations/:id")
+  updateOperation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateAnimalOperationDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmosOperations.updateOperation(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft) une opération + soft delete de la dépense liée." })
+  @Permissions("delete-farmos")
+  @Delete("operations/:id")
+  deleteOperation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.deleteOperation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Timeline des opérations zootechniques d'un animal (dossier animal)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/operations")
+  listAnimalOperations(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.listAnimalOperations(id, orgId);
   }
 }

@@ -58,6 +58,8 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     rotate:    <><path d="M3 8a8 8 0 0 1 13.85-2.5L21 9"/><path d="M21 4v5h-5"/><path d="M21 16a8 8 0 0 1-13.85 2.5L3 15"/><path d="M3 20v-5h5"/></>,
     mic:       <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></>,
     gallery:   <><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="1.5"/><path d="m21 16-5-5-9 9"/></>,
+    // Opérations zootechniques (Phase 2)
+    scissors:  <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></>,
     nfc:       <><path d="M6 10a6 6 0 0 1 12 0v4a6 6 0 0 1-12 0z"/><path d="M3 8a9 9 0 0 1 18 0v8a9 9 0 0 1-18 0z"/></>,
     location:  <><path d="M12 22s-7-7-7-12a7 7 0 1 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="10" r="3"/></>,
     cpu:       <><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></>,

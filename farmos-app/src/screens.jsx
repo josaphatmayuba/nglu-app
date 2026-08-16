@@ -2137,6 +2137,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
 function alertTargetRoute(alert) {
   if (alert?.targetRoute) return alert.targetRoute;
   if (alert?.kind === "stock") return "stock";
+  if (alert?.kind === "feed") return "feed";
   if (alert?.kind === "withdrawal") return "health";
   if (alert?.kind === "repro") return "repro";
   if (alert?.kind === "slaughter") return "sales-management";
@@ -2159,7 +2160,31 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
       .catch(() => {});
     return () => { cancel = true; };
   }, [lang]);
-  const source = liveAlerts || [];
+  // Alertes stock aliment (seuil bas + péremption < 30j) — source dédiée
+  // /feed/alerts (calcul couverture/statut serveur), en plus du low-stock
+  // générique déjà couvert par deriveAlerts (minQuantity côté médicaments).
+  const [feedAlerts, setFeedAlerts] = React.useState([]);
+  React.useEffect(() => {
+    let cancel = false;
+    api.feedAlerts()
+      .then((rows) => {
+        if (cancel || !Array.isArray(rows)) return;
+        setFeedAlerts(rows.map((r) => ({
+          id: `feed-${r.id}`, kind: "feed", severity: r.status === "expired" ? "critical" : r.status === "critical" ? "critical" : "medium",
+          animal: r.name, animalId: lang === "fr" ? "Aliment" : "Feed", species: null,
+          title: r.status === "expired"
+            ? (lang === "fr" ? `Aliment périmé · ${r.name}` : `Expired feed · ${r.name}`)
+            : (lang === "fr" ? `Stock aliment bas · ${r.name}` : `Low feed stock · ${r.name}`),
+          subtitle: r.status === "expired"
+            ? (lang === "fr" ? `Périmé depuis ${Math.abs(r.daysToExpiry)} j` : `Expired ${Math.abs(r.daysToExpiry)} d ago`)
+            : (lang === "fr" ? `${Number(r.quantity).toLocaleString("fr-CA")} ${r.unit || ""} · couverture ${r.coverageDays ?? "—"} j` : `${Number(r.quantity).toLocaleString("en-CA")} ${r.unit || ""} · ${r.coverageDays ?? "—"} d coverage`),
+          date: r.expiryDate ? String(r.expiryDate).slice(0, 10) : "—", icon: "wheat", targetRoute: "feed",
+        })));
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [lang]);
+  const source = [...(liveAlerts || []), ...feedAlerts];
   const [tab, setTab] = React.useState("all");
   const speciesFiltered = source.filter(a => !speciesFilter || a.species === speciesFilter);
   const filtered = speciesFiltered.filter(a => tab === "all" ? true : tab === "withdrawal" ? a.kind === "withdrawal" : a.severity === tab);
@@ -3539,7 +3564,7 @@ function buildFinanceSummaryByCurrency(sales, expenses) {
   };
 }
 
-const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
+const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const [summary, setSummary] = React.useState({ months: [], revenue: [], expense: [], byCategory: [] });
   const totalRev = summary.byCategory.reduce((a,b)=>a+b.amount,0);
   const [profitability, setProfitability] = React.useState({ byAnimal: [], byLot: [], totals: { revenue: 0, cost: 0, profit: 0 } });
@@ -3654,6 +3679,18 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       {(profitability.byAnimal.length > 0 || profitability.byLot.length > 0) && (
         <ProfitabilitySection lang={lang} data={profitability} currencySymbol={moneyUnit}/>
       )}
+
+      {/* Phase 3 : écran dédié rentabilité (KPI complets, coûts aliment/vét/
+          opérations/mortalité/achat, valeur latente, export CSV). */}
+      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, marginBottom: 4 }}>{lang === "fr" ? "Rentabilité détaillée" : "Detailed profitability"}</h3>
+          <p style={{ fontSize: 12.5, color: "var(--fg-3)", margin: 0 }}>{lang === "fr" ? "Profit réalisé, marge avec production valorisée, valeur latente du cheptel — par animal ou par lot." : "Realized profit, margin with valued production, latent herd value — per animal or per lot."}</p>
+        </div>
+        <button className="btn btn-sm" onClick={() => onNav && onNav("profitability")}>
+          <Icon name="chart" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Ouvrir la rentabilité" : "Open profitability"}
+        </button>
+      </div>
 
       {/* Recent transactions */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -5812,10 +5849,124 @@ const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesF
           </button>
         </div>
       </section>
+      <OperationTypesCatalogCard lang={lang}/>
       {tweaks && setTweak && <AppearanceCard lang={lang} tweaks={tweaks} setTweak={setTweak}/>}
       <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
       <AboutCard lang={lang}/>
     </div>
+  );
+};
+
+// Catalogue des types d'opérations zootechniques (Phase 2) : CRUD + bootstrap.
+const OperationTypesCatalogCard = ({ lang }) => {
+  const [types, setTypes] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState(null);
+  const [form, setForm] = React.useState({ code: "", label_fr: "", label_en: "", default_unit: "", species: [] });
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.listOperationTypes().then((rows) => setTypes(Array.isArray(rows) ? rows : [])).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const bootstrap = async () => {
+    setBusy(true); setMessage(null);
+    try {
+      const res = await api.bootstrapOperationTypes();
+      load();
+      setMessage({ type: "ok", text: lang === "fr" ? `${res.inserted} type(s) ajouté(s), ${res.skipped} déjà présent(s).` : `${res.inserted} type(s) added, ${res.skipped} already present.` });
+    } catch (e) {
+      setMessage({ type: "err", text: e.message });
+    } finally { setBusy(false); }
+  };
+
+  const addCustom = async () => {
+    if (!form.code.trim()) { setMessage({ type: "err", text: lang === "fr" ? "Code requis." : "Code required." }); return; }
+    setBusy(true); setMessage(null);
+    try {
+      await api.createOperationType({
+        code: form.code.trim(),
+        label_fr: form.label_fr || null,
+        label_en: form.label_en || null,
+        default_unit: form.default_unit || null,
+        species: form.species.length ? form.species : null,
+      });
+      setForm({ code: "", label_fr: "", label_en: "", default_unit: "", species: [] });
+      load();
+    } catch (e) {
+      setMessage({ type: "err", text: e.message });
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm(lang === "fr" ? "Supprimer ce type d'opération ?" : "Delete this operation type?")) return;
+    try { await api.deleteOperationType(id); load(); } catch (e) { window.alert(e.message); }
+  };
+
+  const toggleSpecies = (id) => {
+    setForm((f) => ({ ...f, species: f.species.includes(id) ? f.species.filter((x) => x !== id) : [...f.species, id] }));
+  };
+
+  return (
+    <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline">{lang === "fr" ? "Types d'intervention" : "Operation types"}</div>
+          <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
+            {lang === "fr" ? "Catalogue utilisé par l'écran Interventions (castration, tonte, écornage…)." : "Catalogue used by the Operations screen (castration, shearing, dehorning…)."}
+          </div>
+        </div>
+        <button type="button" className="btn btn-sm" onClick={bootstrap} disabled={busy}>
+          <Icon name="sparkle" size={13} color="currentColor"/>
+          {lang === "fr" ? "Initialiser les types standards" : "Initialize standard types"}
+        </button>
+      </div>
+
+      {loading && <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {!loading && types.length === 0 && <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun type configuré." : "No type configured."}</div>}
+      {!loading && types.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {types.map((tp, i) => (
+            <div key={tp.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, padding: "8px 0", borderBottom: i < types.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{(lang === "fr" ? tp.labelFr : tp.labelEn) || tp.code}</div>
+                <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+                  {tp.code}{tp.species ? ` · ${tp.species.join(", ")}` : ` · ${lang === "fr" ? "toutes espèces" : "all species"}`}
+                </div>
+              </div>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{tp.defaultUnit || ""}</span>
+              <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => remove(tp.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ borderTop: "1px solid var(--border-1)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="overline">{lang === "fr" ? "Ajouter un type personnalisé" : "Add a custom type"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          <input className="input" placeholder="code (ex: hoof_trimming)" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}/>
+          <input className="input" placeholder={lang === "fr" ? "Libellé FR" : "Label FR"} value={form.label_fr} onChange={(e) => setForm((f) => ({ ...f, label_fr: e.target.value }))}/>
+          <input className="input" placeholder={lang === "fr" ? "Libellé EN" : "Label EN"} value={form.label_en} onChange={(e) => setForm((f) => ({ ...f, label_en: e.target.value }))}/>
+          <input className="input" placeholder={lang === "fr" ? "Unité (kg, ...)" : "Unit (kg, ...)"} value={form.default_unit} onChange={(e) => setForm((f) => ({ ...f, default_unit: e.target.value }))}/>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {SPECIES.map((s) => (
+            <button key={s.id} type="button" onClick={() => toggleSpecies(s.id)}
+              className={`species-pill ${form.species.includes(s.id) ? "active" : ""}`} style={{ height: 28, fontSize: 11.5 }}>
+              {lang === "fr" ? s.fr : s.en}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {message && <div style={{ fontSize: 12, color: message.type === "err" ? "var(--rust-700)" : "var(--fg-2)", alignSelf: "center", marginRight: "auto" }}>{message.text}</div>}
+          <button type="button" className="btn btn-primary btn-sm" onClick={addCustom} disabled={busy}>
+            <Icon name="plus" size={13} color="currentColor"/>{lang === "fr" ? "Ajouter" : "Add"}
+          </button>
+        </div>
+      </div>
+    </section>
   );
 };
 

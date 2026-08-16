@@ -441,6 +441,7 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
     { id: "health",     icon: "syringe",   fr: "Soin / vaccin",   en: "Care / vaccine" },
     { id: "stock",      icon: "package",   fr: "Stock",           en: "Stock" },
     { id: "repro",      icon: "fingerprint", fr: "Reproduction",  en: "Reproduction" },
+    { id: "operation",  icon: "scissors",  fr: "Intervention",    en: "Operation" },
     { id: "death",      icon: "alert",     fr: "Mortalité",       en: "Mortality" },
   ];
 
@@ -499,6 +500,7 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
           {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "stock"      && <StockForm      lang={lang} onSaved={onSaved} onClose={onClose}/>}
           {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "operation"  && <OperationForm  lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "death"      && <DeathForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} onSaved={onSaved} onClose={onClose}/>}
         </div>
       </aside>
@@ -1472,6 +1474,120 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       )}
 
       <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
+      <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
+    </div>
+  );
+};
+
+// ─── Intervention zootechnique (Phase 2) — saisie rapide, animal unique ──
+const OperationForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
+  const [form, setForm] = React.useState({
+    date: new Date().toISOString().slice(0, 10),
+    species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
+    code: "",
+    animal: context?.animalId != null ? String(context.animalId) : "",
+    lot: context?.lot || "",
+    quantity: "",
+    unit: "",
+    notes: "",
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [types, setTypes] = React.useState([]);
+  const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    api.listOperationTypes().then((rows) => setTypes(Array.isArray(rows) ? rows : [])).catch(() => {});
+    api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
+  }, []);
+
+  const typesForSpecies = types.filter((t) => !t.species || t.species.includes(form.species));
+  React.useEffect(() => {
+    if (!form.code && typesForSpecies.length) set("code", typesForSpecies[0].code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.species, types.length]);
+  const selectedType = types.find((t) => t.code === form.code) || null;
+  const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species).filter((a) => !isSaleLockedAnimal(a));
+
+  const submit = async () => {
+    if (saving) return;
+    if (!form.code) {
+      onSaved && onSaved({ kind: "operation", severity: "error", message: lang === "fr" ? "Type d'intervention requis." : "Operation type required." });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.createOperation({
+        operation_code: form.code,
+        animal_id: form.animal ? Number(form.animal) : null,
+        lot: !form.animal ? (form.lot || null) : null,
+        species: form.species,
+        operation_date: form.date,
+        quantity: form.quantity !== "" ? Number(form.quantity) : null,
+        unit: form.unit || selectedType?.defaultUnit || null,
+        notes: form.notes || null,
+      });
+      onSaved && onSaved({ kind: "operation", severity: "success", message: lang === "fr" ? "Intervention enregistrée." : "Operation recorded." });
+      onClose();
+    } catch (err) {
+      onSaved && onSaved({ kind: "operation", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <FormSection label={lang === "fr" ? "Espèce" : "Species"}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {availableSpecies.map((s) => (
+            <button key={s.id} type="button" onClick={() => set("species", s.id)}
+              className={`species-pill ${form.species === s.id ? "active" : ""}`}
+              style={{ height: 32, fontSize: 12 }}>
+              <AnimalGlyph kind={s.glyph} size={14} color={form.species === s.id ? "var(--bone-50)" : "var(--forest-700)"}/>
+              {lang === "fr" ? s.fr : s.en}
+            </button>
+          ))}
+        </div>
+      </FormSection>
+      <FormSection label={lang === "fr" ? "Intervention" : "Operation"}>
+        <FormField label={lang === "fr" ? "Type" : "Type"} required>
+          <select className="input" value={form.code} onChange={(e) => set("code", e.target.value)}>
+            {typesForSpecies.length === 0 && <option value="">{lang === "fr" ? "Aucun type — voir Paramètres" : "No type — see Settings"}</option>}
+            {typesForSpecies.map((t) => <option key={t.id} value={t.code}>{(lang === "fr" ? t.labelFr : t.labelEn) || t.code}</option>)}
+          </select>
+        </FormField>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Date" : "Date"} required>
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Animal (optionnel)" : "Animal (optional)"}>
+            <select className="input" value={form.animal} onChange={(e) => set("animal", e.target.value)}>
+              <option value="">{lang === "fr" ? "— ou lot ci-dessous —" : "— or batch below —"}</option>
+              {animalsForSpecies.map((a) => <option key={a.id} value={a._pk ?? a.id}>{a.name || a.externalId || a.id}</option>)}
+            </select>
+          </FormField>
+        </FormGrid>
+        {!form.animal && (
+          <FormField label={lang === "fr" ? "Lot" : "Batch"}>
+            <input className="input" value={form.lot} onChange={(e) => set("lot", e.target.value)}/>
+          </FormField>
+        )}
+        {selectedType?.defaultUnit && (
+          <FormGrid cols={2}>
+            <FormField label={lang === "fr" ? "Quantité" : "Quantity"}>
+              <input className="input mono" type="number" step="0.01" min="0" value={form.quantity} onChange={(e) => set("quantity", e.target.value)}/>
+            </FormField>
+            <FormField label={lang === "fr" ? "Unité" : "Unit"}>
+              <input className="input" value={form.unit || selectedType.defaultUnit} onChange={(e) => set("unit", e.target.value)}/>
+            </FormField>
+          </FormGrid>
+        )}
+        <FormField label={lang === "fr" ? "Notes" : "Notes"}>
+          <textarea className="input" style={{ height: 60, padding: 10 }} value={form.notes} onChange={(e) => set("notes", e.target.value)}/>
+        </FormField>
+      </FormSection>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );

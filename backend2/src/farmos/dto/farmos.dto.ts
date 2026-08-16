@@ -850,6 +850,86 @@ export class CreateFieldNoteDto {
   @ApiPropertyOptional({ description: "Photo (data URL ou URL)." }) @IsOptional() @IsString() photo_url?: string | null;
 }
 
+// ─── Operations zootechniques (Phase 2) ─────────────────────────────────
+export class CreateOperationTypeDto {
+  @ApiProperty({ example: "castration" }) @IsString() @IsNotEmpty() code: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() label_fr?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() label_en?: string | null;
+  @ApiPropertyOptional({ type: [String], description: "NULL/omis = toutes especes." })
+    @IsOptional() @IsArray() @IsString({ each: true }) species?: string[] | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() default_unit?: string | null;
+  @ApiPropertyOptional({ default: false }) @IsOptional() requires_withdrawal?: boolean;
+}
+
+export class UpdateOperationTypeDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() label_fr?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() label_en?: string | null;
+  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) species?: string[] | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() default_unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() requires_withdrawal?: boolean;
+}
+
+export class CreateAnimalOperationDto {
+  @ApiProperty({ example: "castration" }) @IsString() @IsNotEmpty() operation_code: string;
+  @ApiPropertyOptional({ description: "NULL = acte de lot (utiliser lot/animal_count)." })
+    @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() box_id?: number | null;
+  @ApiPropertyOptional({ enum: FARMOS_SPECIES }) @IsOptional() @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species?: string | null;
+  @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) animal_count?: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() operation_date: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() performed_by?: number | null;
+  @ApiPropertyOptional({ description: "Prestataire externe (ex: tondeur)." }) @IsOptional() @IsString() performed_by_name?: string | null;
+  @ApiPropertyOptional({ enum: ["success", "partial", "complication"] })
+    @IsOptional() @IsString() @IsIn(["success", "partial", "complication"]) result?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) cost?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional({ description: "Champs specifiques au type (JSON libre)." }) @IsOptional() details?: Record<string, unknown> | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class UpdateAnimalOperationDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() box_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() @Min(1) animal_count?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() operation_date?: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() performed_by?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() performed_by_name?: string | null;
+  @ApiPropertyOptional({ enum: ["success", "partial", "complication"] })
+    @IsOptional() @IsString() @IsIn(["success", "partial", "complication"]) result?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) cost?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() details?: Record<string, unknown> | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class BulkCreateAnimalOperationsDto {
+  @ApiProperty({ type: [Number], description: "Animaux cibles de l'acte de lot." })
+    @IsArray() @Type(() => Number) @IsInt({ each: true }) animal_ids: number[];
+  @ApiProperty({ example: "castration" }) @IsString() @IsNotEmpty() operation_code: string;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() operation_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() box_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() performed_by?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() performed_by_name?: string | null;
+  @ApiPropertyOptional({ enum: ["success", "partial", "complication"] })
+    @IsOptional() @IsString() @IsIn(["success", "partial", "complication"]) result?: string | null;
+  @ApiPropertyOptional({ description: "Quantite PAR animal (ex: laine kg/tete)." }) @IsOptional() @Type(() => Number) @IsNumber() @Min(0) quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional({ description: "Cout TOTAL du lot (reparti proportionnellement dans les depenses)." }) @IsOptional() @Type(() => Number) @IsNumber() @Min(0) cost?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() details?: Record<string, unknown> | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class UpdateTaskDto {
   @ApiPropertyOptional() @IsOptional() @IsString() title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;
@@ -864,4 +944,56 @@ export class UpdateTaskDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() zone_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() photo_url?: string | null;
+}
+
+// ─── Stock aliment (Phase 1) ─────────────────────────────────────────────
+export class CreateFeedLotDto {
+  @ApiProperty({ description: "farmos_medicines.id (kind=feed)." }) @Type(() => Number) @IsInt() medicine_id: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot_code?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() supplier?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() supplier_id?: number | null;
+  @ApiProperty() @IsDateString() received_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() expiry_date?: string | null;
+  @ApiProperty() @Type(() => Number) @IsNumber() @Min(0.001) quantity_in: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional({ description: "Coût unitaire à l'entrée." }) @IsOptional() @Type(() => Number) @IsNumber() @Min(0) unit_cost?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateFeedMovementDto {
+  @ApiProperty({ description: "farmos_medicines.id (kind=feed)." }) @Type(() => Number) @IsInt() medicine_id: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() feed_lot_id?: number | null;
+  @ApiPropertyOptional({ enum: ["in", "out", "adjust", "loss"], default: "out" })
+    @IsOptional() @IsString() @IsIn(["in", "out", "adjust", "loss"]) movement_type?: string;
+  @ApiProperty() @IsDateString() movement_date: string;
+  @ApiProperty() @Type(() => Number) @IsNumber() @Min(0.001) quantity: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() box_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional({ enum: FARMOS_SPECIES }) @IsOptional() @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_count?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) ration_per_animal?: number | null;
+  @ApiPropertyOptional({ enum: ["increase", "decrease"], description: "Direction pour movement_type=adjust." })
+    @IsOptional() @IsString() @IsIn(["increase", "decrease"]) adjust_direction?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class BulkFeedMovementDto {
+  @ApiProperty({ type: [CreateFeedMovementDto] })
+    @IsArray() @ValidateNested({ each: true }) @Type(() => CreateFeedMovementDto) movements: CreateFeedMovementDto[];
+}
+
+// ─── Rentabilité (P&L) — Phase 3 ───────────────────────────────────────────
+export class CreateProfitabilitySnapshotDto {
+  @ApiProperty({ enum: ["animal", "lot", "species", "farm"] })
+    @IsIn(["animal", "lot", "species", "farm"]) scope: string;
+  @ApiProperty({ description: "Identifiant du périmètre : animal_id, nom de lot, code espèce, ou 'farm'." })
+    @IsString() scope_key: string;
+  @ApiProperty() @IsDateString() period_start: string;
+  @ApiProperty() @IsDateString() period_end: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
 }

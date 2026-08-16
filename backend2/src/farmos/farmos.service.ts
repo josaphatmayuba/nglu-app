@@ -11,6 +11,7 @@ import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
+import { FarmosProfitabilityService } from "./farmos-profitability.service";
 import type {
   CreateAnimalDto,
   ImportAnimalsDto,
@@ -53,6 +54,7 @@ export class FarmosService {
     private readonly realtime: RealtimeDataPublisher,
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
+    private readonly profitability: FarmosProfitabilityService,
   ) {}
 
   private readonly logger = new Logger(FarmosService.name);
@@ -93,6 +95,12 @@ export class FarmosService {
     const animal = await this.getAnimal(Number(animalId), orgId);
     this.assertAnimalWritable(animal);
     return animal;
+  }
+
+  // Wrapper public : reutilise par FarmosOperationsService (Phase 2) sans dupliquer
+  // la regle de verrouillage animal (vendu/decede) ni changer la visibilite existante.
+  async assertAnimalWritableByIdPublic(animalId: number | null | undefined, orgId: number) {
+    return this.assertAnimalWritableById(animalId, orgId);
   }
 
   async getDashboardSnapshot(orgId: number) {
@@ -2123,6 +2131,18 @@ export class FarmosService {
     }
   }
 
+  // Wrapper public : reutilise par FarmosOperationsService (Phase 2) sans dupliquer
+  // la logique de publication temps reel.
+  async publishFarmosUpdatePublic(
+    kind: string,
+    tables: string[],
+    action: "created" | "updated" | "deleted",
+    entityId: number | string,
+    orgId: number,
+  ) {
+    return this.publishFarmosUpdate(kind, tables, action, entityId, orgId);
+  }
+
   private async findTransactionType(name: string) {
     const [t] = await this.db
       .select()
@@ -4098,7 +4118,20 @@ export class FarmosService {
       { revenue: 0, cost: 0, profit: 0 },
     );
 
-    return { byAnimal, byLot, byBuilding, totals };
+    // Phase 3 (SCRUM) : champs additifs uniquement — ne renomme jamais
+    // revenue/cost/profit/costByCategory ci-dessus (getBenchmarks + rapport
+    // HTML finance en dépendent). summaryByCurrency = vue complète du P&L
+    // (aliment, traitements, vaccins, opérations, mortalité, achat, dévises
+    // séparées) calculée en SQL par FarmosProfitabilityService ; résiliente
+    // (n'écrase jamais la façade existante en cas d'erreur).
+    let summaryByCurrency: unknown[] = [];
+    try {
+      summaryByCurrency = await this.profitability.getSummary(orgId);
+    } catch (e) {
+      this.logger.warn(`getProfitability: summaryByCurrency failed: ${(e as Error).message}`);
+    }
+
+    return { byAnimal, byLot, byBuilding, totals, summaryByCurrency };
   }
 
   // Benchmarks INTRA-organisation (COMP-P2-016) : compare les lots de l'org

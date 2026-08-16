@@ -1398,7 +1398,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     reloadHealthEpisode();
   }, [reloadHealthEpisode, animal.status]);
   React.useEffect(() => {
-    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
+    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], operations: [], finance: null, loading: false }); return; }
     let cancel = false;
     const load = () => Promise.all([
       api.listTreatments(),
@@ -1407,8 +1407,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       api.listDocuments(animal._pk).catch(() => []),
       api.getProfitability().catch(() => null),
       api.listWeighings(animal._pk).catch(() => []),
+      api.listAnimalOperations(animal._pk).catch(() => []),
     ])
-      .then(([t, r, p, docs, prof, weighings]) => {
+      .then(([t, r, p, docs, prof, weighings, operations]) => {
         if (cancel) return;
         const matchAnimal = (row) => (row.animalId ?? row.animal_id) === animal._pk;
         const finance = prof && Array.isArray(prof.byAnimal)
@@ -1433,6 +1434,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           documents:  (Array.isArray(docs) ? docs : []),
           alerts,
           weighings:  (Array.isArray(weighings) ? weighings : []),
+          operations: (Array.isArray(operations) ? operations : []),
           finance,
           loading: false,
         });
@@ -1628,9 +1630,11 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             { id: "repro",    fr: "Reproduction",  en: "Reproduction", count: related.repro.length },
             { id: "prod",     fr: "Production",    en: "Production",  count: related.production.length },
             { id: "weight",   fr: "Poids",         en: "Weight",      count: related.weighings.length },
+            { id: "operations", fr: "Interventions", en: "Operations", count: related.operations.length },
             { id: "finance",  fr: "Finances",      en: "Finance",     count: null },
+            { id: "rentabilite", fr: "Rentabilité", en: "Profitability", count: null },
             { id: "documents", fr: "Documents",    en: "Documents",   count: related.documents.length },
-            { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length + related.weighings.length + statusHistory.length },
+            { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length + related.weighings.length + related.operations.length + statusHistory.length },
             { id: "alerts",   fr: "Alertes",       en: "Alerts",      count: related.alerts.length },
           ].map((tb) => {
             const active = tab === tb.id;
@@ -1768,6 +1772,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading} readOnly={readOnly}
             onChanged={() => window.dispatchEvent(new CustomEvent("farmos:animal-created"))}/>
         )}
+        {!editing && tab === "operations" && (
+          <RelatedList lang={lang} loading={related.loading} items={related.operations} kind="operations"
+            emptyFr="Aucune intervention enregistrée pour cet animal." emptyEn="No operation recorded for this animal."/>
+        )}
         {!editing && tab === "finance" && (() => {
           if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
           const f = related.finance;
@@ -1804,6 +1812,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             </div>
           );
         })()}
+        {!editing && tab === "rentabilite" && (
+          <AnimalProfitabilityTab lang={lang} animalId={animal._pk}/>
+        )}
         {!editing && tab === "documents" && (() => {
           if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
           if (related.documents.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun document pour cet animal." : "No document for this animal."}</div>;
@@ -1846,6 +1857,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             ...related.repro.map((r) => ({ kind: "repro", date: r.eventDate || r.event_date, label: `${lang === "fr" ? "Repro" : "Repro"} · ${r.eventType || r.event_type}`, sub: r.outcome })),
             ...related.production.map((p) => ({ kind: "prod", date: p.logDate || p.log_date, label: `${lang === "fr" ? "Production" : "Production"} · ${p.quantity} ${p.unit || ""}`, sub: p.productType || p.product_type })),
             ...related.weighings.map((w) => ({ kind: "weight", date: w.weighDate || w.weigh_date, label: `${lang === "fr" ? "Pesée" : "Weighing"} · ${w.weight} ${w.weightUnit || w.weight_unit || "kg"}`, sub: null })),
+            ...related.operations.map((o) => ({ kind: "operations", date: o.operationDate || o.operation_date, label: `${lang === "fr" ? "Intervention" : "Operation"} · ${o.operationCode || o.operation_code}`, sub: o.result || null })),
             ...statusHistory.map((h) => {
               const authorName = [h.firstName, h.lastName].filter(Boolean).join(" ");
               const byLabel = authorName ? `${lang === "fr" ? "Par" : "By"} ${authorName}` : null;
@@ -1878,7 +1890,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {events.map((e, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < events.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
-                  <Icon name={e.kind === "health" ? "pill" : e.kind === "repro" ? "fingerprint" : e.kind === "status" ? "pulse" : e.kind === "weight" ? "weight" : e.kind === "field" ? "edit" : "chart"} size={14} color="var(--ink-700)"/>
+                  <Icon name={e.kind === "health" ? "pill" : e.kind === "repro" ? "fingerprint" : e.kind === "status" ? "pulse" : e.kind === "weight" ? "weight" : e.kind === "operations" ? "scissors" : e.kind === "field" ? "edit" : "chart"} size={14} color="var(--ink-700)"/>
                   <div>
                     <div style={{ fontSize: 13, color: "var(--ink-900)" }}>{e.label}</div>
                     {e.sub && <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{e.sub}</div>}
@@ -1891,6 +1903,73 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         })()}
       </div>
     </aside>
+  );
+};
+
+// Onglet Rentabilité (P&L) — Phase 3 : timeline détaillée coûts/revenus pour
+// cet animal, calculée à la volée côté backend (GET /profitability/animal/:id).
+// Additif à l'onglet "Finances" existant (qui reste inchangé).
+const AnimalProfitabilityTab = ({ lang, animalId }) => {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    if (!animalId) { setData(null); setLoading(false); return; }
+    let cancel = false;
+    setLoading(true);
+    api.getProfitabilityAnimalTimeline(animalId)
+      .then((d) => { if (!cancel) setData(d); })
+      .catch(() => { if (!cancel) setData(null); })
+      .finally(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [animalId]);
+
+  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (!data) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée de rentabilité pour cet animal." : "No profitability data for this animal."}</div>;
+
+  const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+          <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{lang === "fr" ? "Revenu réalisé" : "Realized revenue"}</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--money-500)" }}>{money(data.revenue)}</div>
+        </div>
+        <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+          <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{lang === "fr" ? "Coût réalisé" : "Realized cost"}</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "var(--rust-700)" }}>{money(data.cost)}</div>
+        </div>
+        <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+          <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{lang === "fr" ? "Profit réalisé" : "Realized profit"}</div>
+          <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: data.profit >= 0 ? "var(--health-700)" : "var(--oxblood-700)" }}>{money(data.profit)}</div>
+        </div>
+      </div>
+      {data.latentValue != null && (
+        <div style={{ fontSize: 11.5, color: "var(--fg-3)", background: "var(--bg-sunken)", borderRadius: 8, padding: "8px 12px" }}>
+          {lang === "fr" ? "Valeur latente (non vendu, jamais mêlée au profit ci-dessus) : " : "Latent value (unsold, never mixed with the profit above): "}
+          <strong>{money(data.latentValue)}</strong>
+        </div>
+      )}
+      <div>
+        <div className="overline" style={{ marginBottom: 8 }}>{lang === "fr" ? "Chronologie" : "Timeline"}</div>
+        {(data.events || []).length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun événement financier." : "No financial event."}</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {data.events.map((e, i, arr) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "var(--ink-900)" }}>{e.category}{e.estimated ? <span style={{ fontSize: 10, color: "var(--fg-3)" }}> · {lang === "fr" ? "estimé" : "estimated"}</span> : null}</div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(e.date || "").slice(0, 10)}</div>
+                </div>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: e.kind === "revenue" ? "var(--health-700)" : "var(--oxblood-700)", whiteSpace: "nowrap" }}>
+                  {e.kind === "revenue" ? "+" : "-"}{money(e.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -2857,6 +2936,27 @@ const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
               <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>
                 {date ? String(date).slice(0, 10) : "—"}{due ? ` · ${lang === "fr" ? "prévu" : "due"} ${String(due).slice(0, 10)}` : ""}
               </div>
+              {it.notes && <div style={{ fontSize: 11, color: "var(--ink-700)", marginTop: 2 }}>{it.notes}</div>}
+            </div>
+          );
+        }
+        if (kind === "operations") {
+          const date = it.operationDate || it.operation_date;
+          const performer = it.performedByName || it.performed_by_name;
+          return (
+            <div key={it.id} className="card" style={{ padding: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{it.operationCode || it.operation_code}</span>
+                {it.result && <span className="mono" style={{ fontSize: 11, color: it.result === "complication" ? "var(--oxblood-700)" : "var(--fg-3)" }}>{it.result}</span>}
+              </div>
+              {(it.quantity != null || performer) && (
+                <div style={{ fontSize: 11, color: "var(--fg-2)" }}>
+                  {it.quantity != null ? `${Number(it.quantity).toLocaleString("fr-CA")} ${it.unit || ""}` : ""}
+                  {it.quantity != null && performer ? " · " : ""}
+                  {performer || ""}
+                </div>
+              )}
+              <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{date ? String(date).slice(0, 10) : "—"}</div>
               {it.notes && <div style={{ fontSize: 11, color: "var(--ink-700)", marginTop: 2 }}>{it.notes}</div>}
             </div>
           );

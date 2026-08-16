@@ -14,7 +14,10 @@ import {
   AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, FieldNotesScreen, EmployeesScreen, SettingsScreen, ForecastScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
+import { FeedStockScreen } from "./feed.jsx";
 import { SimulatorScreen } from "./simulator";
+import { OperationsScreen } from "./operations.jsx";
+import { ProfitabilityScreen } from "./profitability.jsx";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
@@ -63,10 +66,12 @@ const ROUTE_SLUGS = {
   repro: "reproduction",
   "semen-bank": "banque-semence",
   production: "production",
+  operations: "interventions",
   alerts: "alertes",
   pos: "pos",
   "sales-management": "gestion-vente",
   finances: "finances",
+  profitability: "rentabilite",
   reports: "rapports",
   employees: "employes",
   settings: "parametres",
@@ -195,10 +200,12 @@ function App() {
     repro:      { title: t(lang, "repro"),      subtitle: lang === "fr" ? "Chaleurs, gestations, mises bas" : "Heats, gestations, births", breadcrumb: lang === "fr" ? "FERME · REPRODUCTION" : "FARM · REPRODUCTION" },
     "semen-bank": { title: lang === "fr" ? "Banque de semence" : "Semen bank", subtitle: lang === "fr" ? "Paillettes IA & historique" : "AI straws & history",       breadcrumb: lang === "fr" ? "FERME · BANQUE SEMENCE" : "FARM · SEMEN BANK" },
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
+    operations: { title: lang === "fr" ? "Interventions" : "Operations", subtitle: lang === "fr" ? "Castration, tonte, écornage, boucle…" : "Castration, shearing, dehorning, tagging…", breadcrumb: lang === "fr" ? "FERME · INTERVENTIONS" : "FARM · OPERATIONS" },
     alerts:     { title: t(lang, "alerts"),     subtitle: lang === "fr" ? "Alertes intelligentes" : "Smart alerts",            breadcrumb: lang === "fr" ? "FERME · ALERTES" : "FARM · ALERTS" },
     pos:        { title: t(lang, "pos"),        subtitle: lang === "fr" ? "Ventes FarmOS" : "FarmOS sales",                    breadcrumb: lang === "fr" ? "FERME · POS" : "FARM · POS" },
     "sales-management": { title: t(lang, "salesManagement"), subtitle: lang === "fr" ? "Produits vendables et prix POS" : "Sellable products and POS prices", breadcrumb: lang === "fr" ? "FERME · GESTION DE VENTE" : "FARM · SALES MANAGEMENT" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
+    profitability: { title: t(lang, "profitability"), subtitle: lang === "fr" ? "Rentabilité par animal & par lot" : "Profitability per animal & per lot", breadcrumb: lang === "fr" ? "FERME · RENTABILITÉ" : "FARM · PROFITABILITY" },
     forecast:   { title: t(lang, "forecast"),   subtitle: lang === "fr" ? "Ventes élevage & production projetées" : "Projected livestock sales & production", breadcrumb: lang === "fr" ? "FERME · PRÉVISIONNEL" : "FARM · FORECAST" },
     simulator:  { title: t(lang, "simulator"),  subtitle: lang === "fr" ? "Simulation business & projection cheptel" : "Business simulation & herd projection", breadcrumb: lang === "fr" ? "FERME · SIMULATEUR" : "FARM · SIMULATOR" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
@@ -219,15 +226,17 @@ function App() {
       case "health":     return <HealthScreen {...props}/>;
       case "calendar":   return <CalendarScreen {...props}/>;
       case "stock":      return <StockScreen {...props}/>;
-      case "feed":       return <StockScreen {...props} kindFilter="feed"/>;
+      case "feed":       return <FeedStockScreen {...props}/>;
       case "medicines":  return <StockScreen {...props} kindFilter="med"/>;
       case "repro":      return <ReproScreen {...props}/>;
       case "semen-bank": return <SemenBankScreen {...props}/>;
       case "production": return <ProductionScreen {...props}/>;
+      case "operations": return <OperationsScreen {...props}/>;
       case "alerts":     return <AlertsScreen {...props}/>;
       case "pos":        return <PosScreen {...props}/>;
       case "sales-management": return <SalesManagementScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
+      case "profitability": return <ProfitabilityScreen {...props}/>;
       case "forecast":   return <ForecastScreen {...props}/>;
       case "simulator":  return <SimulatorScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;

@@ -15,6 +15,7 @@ const NAV = [
   { id: "animals",   icon: "layers",    labelKey: "animals" },
   { id: "buildings", icon: "grid",      labelKey: "buildings" },
   { id: "health",    icon: "pulse",     labelKey: "health" },
+  { id: "operations",icon: "scissors",  labelKey: "operations" },
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
   { id: "feed",      icon: "wheat",     labelKey: "feed" },
   { id: "medicines", icon: "pill",      labelKey: "medicines" },
@@ -25,6 +26,7 @@ const NAV = [
   { id: "pos",       icon: "cart",      labelKey: "pos" },
   { id: "sales-management", icon: "settings", labelKey: "salesManagement" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
+  { id: "profitability", icon: "chart", labelKey: "profitability" },
   { id: "forecast",  icon: "activity",  labelKey: "forecast" },
   { id: "simulator", icon: "chart",     labelKey: "simulator" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
@@ -52,7 +54,7 @@ const FARMOS_MODES = {
   },
   manager: {
     fr: "Gestionnaire", en: "Manager", icon: "coins",
-    nav: ["dashboard", "animals", "buildings", "production", "pos", "sales-management", "finances", "forecast", "simulator", "reports", "alerts"],
+    nav: ["dashboard", "animals", "buildings", "production", "pos", "sales-management", "finances", "profitability", "forecast", "simulator", "reports", "alerts"],
   },
 };
 const FARMOS_MODE_ORDER = ["all", "breeder", "vet", "manager"];

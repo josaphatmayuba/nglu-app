@@ -33,7 +33,7 @@ function makeDbMock(existing: ExistingRow[]) {
 function makeService(existing: ExistingRow[]) {
   const { db, inserted } = makeDbMock(existing);
   const realtime: any = { publishDataUpdated: jest.fn().mockResolvedValue(undefined) };
-  const service = new FarmosService(db, {} as any, realtime, {} as any, {} as any);
+  const service = new FarmosService(db, {} as any, realtime, {} as any, {} as any, {} as any);
   return { service, inserted };
 }
 

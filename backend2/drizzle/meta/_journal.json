@@ -1639,6 +1639,48 @@
       "when": 1781071200009,
       "tag": "0258_farmos_diseases_products",
       "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "5",
+      "when": 1781071200010,
+      "tag": "0259_farmos_feed_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "5",
+      "when": 1781071200011,
+      "tag": "0260_farmos_feed_lots",
+      "breakpoints": true
+    },
+    {
+      "idx": 236,
+      "version": "5",
+      "when": 1781071200012,
+      "tag": "0261_farmos_feed_movements",
+      "breakpoints": true
+    },
+    {
+      "idx": 237,
+      "version": "5",
+      "when": 1781071200013,
+      "tag": "0262_farmos_operation_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 238,
+      "version": "5",
+      "when": 1781071200014,
+      "tag": "0263_farmos_animal_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "5",
+      "when": 1781071200015,
+      "tag": "0264_farmos_profitability_snapshots",
+      "breakpoints": true
     }
   ]
 }

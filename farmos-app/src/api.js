@@ -208,6 +208,16 @@ const KIND_INVALIDATES = {
   declareAnimalIllness:   ["animals", "animalStatusHistory"],
   declareAnimalRecovery:  ["animals", "animalStatusHistory", "treatments"],
   addHealthObservation:   ["animals", "healthObservations"],
+  createOperation:        ["operations", "expenses", "animals"],
+  bulkCreateOperations:   ["operations", "expenses", "animals"],
+  updateOperation:        ["operations", "animals"],
+  deleteOperation:        ["operations", "expenses"],
+  createFeedLot:          ["feedMovements", "feedLots", "medicines", "expenses"],
+  deleteFeedLot:          ["feedMovements", "feedLots", "medicines"],
+  createFeedMovement:     ["feedMovements", "medicines", "expenses"],
+  createFeedMovementsBulk:["feedMovements", "medicines", "expenses"],
+  deleteFeedMovement:     ["feedMovements", "medicines"],
+  recomputeFeedStock:     ["medicines"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -420,6 +430,17 @@ export const api = {
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
   getBenchmarks: () => jsonFetch("/benchmarks"),
+  // Rentabilité (P&L) par animal / lot — Phase 3. Calcul SQL à la volée
+  // (jamais depuis un snapshot pour l'affichage temps réel).
+  getProfitabilitySummary: (params = {}) => jsonFetch(`/profitability/summary${buildQuery(params)}`),
+  getProfitabilityByLot: (params = {}) => jsonFetch(`/profitability/by-lot${buildQuery(params)}`),
+  getProfitabilityByAnimal: (params = {}) => jsonFetch(`/profitability/by-animal${buildQuery(params)}`),
+  getProfitabilityAnimalTimeline: (animalId) => jsonFetch(`/profitability/animal/${animalId}`),
+  getProfitabilityCostDrivers: (params = {}) => jsonFetch(`/profitability/cost-drivers${buildQuery(params)}`),
+  createProfitabilitySnapshot: (body) => jsonFetch("/profitability/snapshot", { method: "POST", body: JSON.stringify(body) }),
+  listProfitabilitySnapshots: (params = {}) => jsonFetch(`/profitability/snapshots${buildQuery(params)}`),
+  // CSV via blob (token en header) — jamais un <a href>, qui renverrait 401.
+  exportProfitabilityCsv: (params = {}) => downloadBlob(`/profitability/export${buildQuery(params)}`, `rentabilite-${new Date().toISOString().slice(0, 10)}.csv`),
   // Fermes
   listFarms: () => jsonFetch("/farms"),
   createFarm: (body) => jsonFetch("/farms", { method: "POST", body: JSON.stringify(body) }),
@@ -500,6 +521,58 @@ export const api = {
   listBreedingMales: (species) => jsonFetch(`/breeding-males${species ? `?species=${encodeURIComponent(species)}` : ""}`),
   // Suggestion pour pré-remplir le formulaire d'IA
   suggestBreeding: (animalId, mode) => jsonFetch(`/breeding-suggestion/${animalId}${mode ? `?mode=${mode}` : ""}`),
+  // Opérations zootechniques (Phase 2) : catalogue + journal + saisie terrain optimiste.
+  listOperationTypes: (species) => jsonFetch(`/operation-types${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  createOperationType: (body) => jsonMutate("createOperationType", "/operation-types", { method: "POST", body: JSON.stringify(body) }),
+  updateOperationType: (id, body) => jsonMutate("updateOperationType", `/operation-types/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteOperationType: (id) => jsonMutate("deleteOperationType", `/operation-types/${id}`, { method: "DELETE" }),
+  bootstrapOperationTypes: () => jsonMutate("bootstrapOperationTypes", "/operation-types/bootstrap", { method: "POST" }),
+  listOperations: cachedList("operations", "/operations"),
+  getOperation: (id) => jsonFetch(`/operations/${id}`),
+  createOperation: (body) => mutate({ kind: "createOperation", method: "POST", path: "/operations", body,
+                       optimistic: { table: "operations", row: { id: tempId("op"), animalId: body.animal_id, operationCode: body.operation_code, operationDate: body.operation_date, ...body, _pending: true } } }),
+  bulkCreateOperations: (body) => mutate({ kind: "bulkCreateOperations", method: "POST", path: "/operations/bulk", body }),
+  updateOperation: (id, body) => mutate({ kind: "updateOperation", method: "PATCH", path: `/operations/${id}`, body }),
+  deleteOperation: (id) => mutate({ kind: "deleteOperation", method: "DELETE", path: `/operations/${id}` }),
+  listAnimalOperations: (animalId) => jsonFetch(`/animals/${animalId}/operations`),
+  // ─── Stock aliment (Phase 1) ─────────────────────────────────────────
+  listFeedReferences: cachedList("medicines", "/feed/references"),
+  listFeedLots: (medicineId) => jsonFetch(`/feed/lots${medicineId ? `?medicineId=${medicineId}` : ""}`),
+  createFeedLot: (body) => mutate({ kind: "createFeedLot", method: "POST", path: "/feed/lots", body,
+                       optimistic: { table: "feedLots", row: { id: tempId("fl"), medicineId: body.medicine_id, receivedDate: body.received_date, quantityIn: body.quantity_in, quantityRemaining: body.quantity_in, ...body, _pending: true } } }),
+  deleteFeedLot: (id) => mutate({ kind: "deleteFeedLot", method: "DELETE", path: `/feed/lots/${id}` }),
+  // Mouvements : fetch réseau direct + fusion avec le miroir local (mouvements
+  // en attente dans l'outbox), même pattern que listWeighings (commit b91ed4d3)
+  // pour qu'une distribution saisie hors-ligne / avec un raté réseau reste
+  // visible au lieu de disparaître tant que la sync n'est pas passée.
+  listFeedMovements: async (filters = {}) => {
+    const query = buildQuery(filters);
+    let fresh = [];
+    try {
+      fresh = await jsonFetch(`/feed/movements${query}`);
+    } catch (e) {
+      if (!navigator.onLine) fresh = null; else throw e;
+    }
+    let local = [];
+    try { local = await readCache("feedMovements"); } catch { local = []; }
+    if (Array.isArray(fresh)) {
+      const keep = local.filter((m) => m._pending);
+      await replaceCache("feedMovements", [...keep, ...fresh]);
+      local = [...keep, ...fresh];
+    }
+    const pending = (local || []).filter((m) => m._pending);
+    if (fresh == null) {
+      return local;
+    }
+    return [...fresh, ...pending];
+  },
+  createFeedMovement: (body) => mutate({ kind: "createFeedMovement", method: "POST", path: "/feed/movements", body,
+                       optimistic: { table: "feedMovements", row: { id: tempId("fm"), medicineId: body.medicine_id, movementType: body.movement_type || "out", movementDate: body.movement_date, quantity: body.quantity, buildingId: body.building_id ?? null, ...body, _pending: true } } }),
+  createFeedMovementsBulk: (movements) => mutate({ kind: "createFeedMovementsBulk", method: "POST", path: "/feed/movements/bulk", body: { movements } }),
+  deleteFeedMovement: (id) => mutate({ kind: "deleteFeedMovement", method: "DELETE", path: `/feed/movements/${id}` }),
+  feedStock: () => jsonFetch("/feed/stock"),
+  feedAlerts: () => jsonFetch("/feed/alerts"),
+  recomputeFeedStock: () => mutate({ kind: "recomputeFeedStock", method: "POST", path: "/feed/recompute" }),
 };
 
 export function fileToDataUrl(file) {
