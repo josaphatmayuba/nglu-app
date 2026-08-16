@@ -191,6 +191,7 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
   const [performedByName, setPerformedByName] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [animalQuery, setAnimalQuery] = React.useState("");
+  const [bulkSpecies, setBulkSpecies] = React.useState("");
   const [animalDropdownOpen, setAnimalDropdownOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
@@ -203,7 +204,9 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
 
   const allowedSpecies = selectedType?.species || null; // null = toutes espèces
   const animalOptions = animals.filter((a) => !allowedSpecies || allowedSpecies.includes(a.species));
+  const bulkSpeciesOptions = [...new Set(animalOptions.map((a) => a.species))];
   const filteredForPicker = animalOptions.filter((a) => {
+    if (bulkSpecies && a.species !== bulkSpecies) return false;
     if (!animalQuery) return true;
     const q = animalQuery.toLowerCase();
     return String(a.name || "").toLowerCase().includes(q) || String(a.id || "").toLowerCase().includes(q);
@@ -211,6 +214,14 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
 
   const toggleSelect = (id) => {
     setSelectedIds((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+  };
+  const allFilteredSelected = filteredForPicker.length > 0 && filteredForPicker.every((a) => selectedIds.includes(a._pk));
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds((ids) => {
+      const filteredIds = filteredForPicker.map((a) => a._pk);
+      if (allFilteredSelected) return ids.filter((id) => !filteredIds.includes(id));
+      return [...new Set([...ids, ...filteredIds])];
+    });
   };
 
   const submit = async () => {
@@ -331,6 +342,22 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
               <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Animaux sélectionnés" : "Selected animals"} ({selectedIds.length})</span>
               <input className="input" style={{ maxWidth: 180 }} placeholder={lang === "fr" ? "Rechercher…" : "Search…"} value={animalQuery} onChange={(e) => setAnimalQuery(e.target.value)}/>
             </div>
+            {bulkSpeciesOptions.length > 1 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button type="button" className={`btn btn-sm ${bulkSpecies === "" ? "btn-primary" : ""}`} onClick={() => setBulkSpecies("")}>
+                  {lang === "fr" ? "Toutes espèces" : "All species"}
+                </button>
+                {bulkSpeciesOptions.map((sp) => (
+                  <button key={sp} type="button" className={`btn btn-sm ${bulkSpecies === sp ? "btn-primary" : ""}`} onClick={() => setBulkSpecies(sp)}>
+                    <AnimalGlyph kind={sp} size={13}/>{lang === "fr" ? speciesById(sp)?.fr : speciesById(sp)?.en}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--fg-3)" }}>
+              <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAllFiltered}/>
+              {lang === "fr" ? `Tout sélectionner (${filteredForPicker.length})` : `Select all (${filteredForPicker.length})`}
+            </label>
             <div style={{ maxHeight: 180, overflow: "auto", border: "1px solid var(--border-1)", borderRadius: 8 }}>
               {filteredForPicker.map((a) => (
                 <label key={a._pk} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderBottom: "1px solid var(--border-1)", fontSize: 12.5 }}>

@@ -6650,15 +6650,15 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                             </div>
                           )}
                           <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 5 }}>{L("Ajouter un animal :", "Add an animal:")}</div>
-                          <select className="input" disabled={busy} defaultValue=""
-                            onChange={(e) => { if (e.target.value) { assign([Number(e.target.value)]); e.target.value = ""; } }}>
-                            <option value="">{L("— choisir —", "— choose —")}</option>
-                            {candidates.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {(a.name || a.id)}{a.lot ? ` (lot ${a.lot})` : ""}{a.count > 1 ? ` ×${a.count}` : ""}
-                              </option>
-                            ))}
-                          </select>
+                          <Autocomplete
+                            value=""
+                            onChange={(v) => { if (v) assign([Number(v)]); }}
+                            placeholder={L("— choisir —", "— choose —")}
+                            options={candidates.map((a) => ({
+                              value: a.id,
+                              label: `${a.name || a.id}${a.lot ? ` (lot ${a.lot})` : ""}${a.count > 1 ? ` ×${a.count}` : ""}`,
+                            }))}
+                          />
                         </>}
                   </div>
                 </div>
@@ -6755,16 +6755,24 @@ const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, o
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: "var(--ink-950)" }}>{L("Déclarer une maladie sur le box", "Declare a disease on the box")}</div>
 
         <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Maladie", "Disease")}</label>
-        <select className="input" value={diseaseId} onChange={(e) => setDiseaseId(e.target.value)} style={{ marginBottom: 10 }}>
-          <option value="">{L("— choisir —", "— choose —")}</option>
-          {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
+        <div style={{ marginBottom: 10 }}>
+          <Autocomplete
+            value={diseaseId}
+            onChange={(v) => setDiseaseId(v)}
+            placeholder={L("— choisir —", "— choose —")}
+            options={diseases.map((d) => ({ value: d.id, label: d.nameFr || d.name_fr || "" }))}
+          />
+        </div>
 
         <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Médicament (optionnel)", "Medicine (optional)")}</label>
-        <select className="input" value={medicineId} onChange={(e) => setMedicineId(e.target.value)} style={{ marginBottom: 10 }}>
-          <option value="">{L("— aucun —", "— none —")}</option>
-          {medicines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        <div style={{ marginBottom: 10 }}>
+          <Autocomplete
+            value={medicineId}
+            onChange={(v) => setMedicineId(v)}
+            placeholder={L("— aucun —", "— none —")}
+            options={medicines.map((m) => ({ value: m.id, label: m.name }))}
+          />
+        </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <div style={{ flex: 1 }}>
