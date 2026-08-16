@@ -389,7 +389,14 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
             onChange={(v) => {
               set("sire_animal_id", v || null);
               const picked = sires.find((a) => String(a.id) === String(v));
-              if (picked) set("sire_name", picked.name || picked.externalId || form.sire_name);
+              if (picked) {
+                setForm((f) => ({
+                  ...f,
+                  sire_animal_id: v || null,
+                  sire_name: picked.name || picked.externalId || f.sire_name,
+                  breed: picked.race || f.breed,
+                }));
+              }
             }}
             placeholder={lang === "fr" ? "— saisie libre ci-dessous —" : "— free text below —"}
             options={sires.map((a) => ({ value: a.id, label: a.name || a.externalId || `#${a.id}` }))}
