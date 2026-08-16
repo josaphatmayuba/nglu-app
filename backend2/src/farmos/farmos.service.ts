@@ -1886,6 +1886,8 @@ export class FarmosService {
         code: farmosSemenStraws.code,
         sireName: farmosSemenStraws.sireName,
         sireRegistration: farmosSemenStraws.sireRegistration,
+        sireAnimalId: farmosSemenStraws.sireAnimalId,
+        sireAnimalName: farmosAnimals.name,
         species: farmosSemenStraws.species,
         breed: farmosSemenStraws.breed,
         country: farmosSemenStraws.country,
@@ -1909,6 +1911,7 @@ export class FarmosService {
       })
       .from(farmosSemenStraws)
       .leftJoin(suppliers, eq(farmosSemenStraws.supplierId, suppliers.id))
+      .leftJoin(farmosAnimals, eq(farmosSemenStraws.sireAnimalId, farmosAnimals.id))
       .where(and(...conds))
       .orderBy(farmosSemenStraws.sireName);
   }
@@ -1934,6 +1937,7 @@ export class FarmosService {
       code: input.code,
       sireName: input.sire_name,
       sireRegistration: input.sire_registration ?? null,
+      sireAnimalId: input.sire_animal_id ?? null,
       species: input.species,
       breed: input.breed ?? null,
       country: input.country ?? null,
@@ -1964,6 +1968,7 @@ export class FarmosService {
     const patch: Record<string, unknown> = {};
     if (input.sire_name !== undefined) patch.sireName = input.sire_name;
     if (input.sire_registration !== undefined) patch.sireRegistration = input.sire_registration;
+    if (input.sire_animal_id !== undefined) patch.sireAnimalId = input.sire_animal_id;
     if (input.breed !== undefined) patch.breed = input.breed;
     if (input.country !== undefined) patch.country = input.country;
     if (input.region !== undefined) patch.region = input.region;

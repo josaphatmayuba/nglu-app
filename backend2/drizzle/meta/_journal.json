@@ -1681,6 +1681,13 @@
       "when": 1781071200015,
       "tag": "0264_farmos_profitability_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "5",
+      "when": 1781071200016,
+      "tag": "0265_farmos_semen_straw_sire_animal",
+      "breakpoints": true
     }
   ]
 }

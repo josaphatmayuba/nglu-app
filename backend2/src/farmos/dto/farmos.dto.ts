@@ -761,6 +761,8 @@ export class CreateSemenStrawDto {
   @ApiProperty({ example: "CIAQ-HOLM-1H10567" }) @IsString() code: string;
   @ApiProperty() @IsString() sire_name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sire_registration?: string | null;
+  @ApiPropertyOptional({ description: "Animal male existant du cheptel lie a cette paillette (optionnel)." })
+    @IsOptional() @Type(() => Number) @IsInt() sire_animal_id?: number | null;
   @ApiProperty({ enum: FARMOS_SPECIES }) @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species: string;
   @ApiPropertyOptional() @IsOptional() @IsString() breed?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() country?: string | null;
@@ -786,6 +788,8 @@ export class CreateSemenStrawDto {
 export class UpdateSemenStrawDto {
   @ApiPropertyOptional() @IsOptional() @IsString() sire_name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sire_registration?: string | null;
+  @ApiPropertyOptional({ description: "Animal male existant du cheptel lie a cette paillette (optionnel)." })
+    @IsOptional() @Type(() => Number) @IsInt() sire_animal_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() breed?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() country?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() region?: string | null;

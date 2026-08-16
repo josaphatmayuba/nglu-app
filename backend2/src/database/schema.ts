@@ -3265,6 +3265,9 @@ export const farmosSemenStraws = mysqlTable("farmos_semen_straws", {
   code: varchar("code", { length: 100 }).notNull(),
   sireName: varchar("sire_name", { length: 255 }).notNull(),
   sireRegistration: varchar("sire_registration", { length: 100 }),
+  // Lien optionnel vers un animal male existant du cheptel (fiche reelle) ;
+  // sireName reste la source de verite affichee/editable meme sans lien.
+  sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
   species: varchar("species", { length: 50 }).notNull(), // cow | pig | goat | sheep
 
   // Origine
