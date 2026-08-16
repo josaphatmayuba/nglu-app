@@ -5287,6 +5287,11 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   const [prices, setPrices] = React.useState([]);
   const [query, setQuery] = React.useState("");
   const [sourceFilter, setSourceFilter] = React.useState("all");
+  const [posQuery, setPosQuery] = React.useState("");
+  const [posSpecies, setPosSpecies] = React.useState("");
+  const [candidateQuery, setCandidateQuery] = React.useState("");
+  const [candidateSpecies, setCandidateSpecies] = React.useState("");
+  const [candidateStatus, setCandidateStatus] = React.useState("");
   const [availableLimit, setAvailableLimit] = React.useState(24);
   const [candidateLimit, setCandidateLimit] = React.useState(24);
   const [listingAnimal, setListingAnimal] = React.useState(null);
@@ -5312,7 +5317,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   React.useEffect(() => {
     setAvailableLimit(24);
     setCandidateLimit(24);
-  }, [query, sourceFilter, speciesFilter]);
+  }, [query, sourceFilter, speciesFilter, posQuery, posSpecies, candidateQuery, candidateSpecies, candidateStatus]);
 
   React.useEffect(() => {
     const reload = () => setReloadKey((k) => k + 1);
@@ -5331,16 +5336,31 @@ function SaleInventorySettings({ lang, speciesFilter }) {
     if (sourceFilter === "animal") return item.source === "animal";
     if (sourceFilter === "production") return item.source !== "animal";
     return true;
-  }).filter((item) => matchesSaleQuery(item, query));
+  })
+    .filter((item) => matchesSaleQuery(item, query))
+    .filter((item) => matchesSaleQuery(item, posQuery))
+    .filter((item) => !posSpecies || item.species === posSpecies);
   const visibleAvailableRows = availableRowsAll.slice(0, availableLimit);
 
+  const matchesAnimalText = (a, text) => {
+    const q = String(text || "").trim().toLowerCase();
+    if (!q) return true;
+    return [a.name, a.externalId, a.external_id, a.lot, a.species, a.status, a.race, a.barn].filter(Boolean).join(" ").toLowerCase().includes(q);
+  };
   const candidates = animals.filter((a) => {
     if (isSaleLockedAnimal(a)) return false;
     if (speciesFilter && a.species !== speciesFilter) return false;
-    if (!query.trim()) return true;
-    return [a.name, a.externalId, a.external_id, a.lot, a.species, a.status, a.race, a.barn].filter(Boolean).join(" ").toLowerCase().includes(query.trim().toLowerCase());
+    if (candidateSpecies && a.species !== candidateSpecies) return false;
+    if (candidateStatus && (a.status || "") !== candidateStatus) return false;
+    return matchesAnimalText(a, query) && matchesAnimalText(a, candidateQuery);
   });
   const visibleCandidates = candidates.slice(0, candidateLimit);
+
+  const posSpeciesOptions = [...new Set(allItems.map((i) => i.species).filter(Boolean))].sort();
+  const candidateAnimals = animals.filter((a) => !isSaleLockedAnimal(a) && (!speciesFilter || a.species === speciesFilter));
+  const candidateSpeciesOptions = [...new Set(candidateAnimals.map((a) => a.species).filter(Boolean))].sort();
+  const candidateStatusOptions = [...new Set(candidateAnimals.map((a) => a.status).filter(Boolean))].sort();
+  const speciesOptionLabel = (id) => speciesById(id)?.[lang === "fr" ? "fr" : "en"] || id;
 
   const handleListingSaved = (savedPrice) => {
     if (listingAnimal?.id) {
@@ -5453,9 +5473,25 @@ function SaleInventorySettings({ lang, speciesFilter }) {
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Au POS maintenant" : "Currently in POS"}</h3>
             <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{availableRowsAll.length}</span>
           </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="input" value={posQuery} onChange={(e) => setPosQuery(e.target.value)}
+              placeholder={lang === "fr" ? "Filtrer cette liste..." : "Filter this list..."}
+              style={{ flex: 1, minWidth: 140 }}/>
+            <select className="input" value={posSpecies} onChange={(e) => setPosSpecies(e.target.value)} style={{ width: 130 }}>
+              <option value="">{lang === "fr" ? "Toutes especes" : "All species"}</option>
+              {posSpeciesOptions.map((id) => <option key={id} value={id}>{speciesOptionLabel(id)}</option>)}
+            </select>
+            {(posQuery || posSpecies) && (
+              <button className="btn btn-sm" onClick={() => { setPosQuery(""); setPosSpecies(""); }}>
+                {lang === "fr" ? "Effacer" : "Clear"}
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 460, overflowY: "auto" }}>
           {availableRowsAll.length === 0 ? (
             <EmptyState icon="cart" title={lang === "fr" ? "Rien a vendre" : "Nothing to sell"} hint={lang === "fr" ? "Marque un animal a vendre, ou enregistre une recolte dans l'onglet Production (oeufs, lait...)." : "Mark an animal for sale, or record a harvest in the Production tab (eggs, milk...)."}/>
           ) : visibleAvailableRows.map(renderManagedItem)}
+          </div>
           {availableRowsAll.length > visibleAvailableRows.length && (
             <button className="btn" onClick={() => setAvailableLimit((n) => n + 24)}>
               {lang === "fr" ? `Afficher plus (${availableRowsAll.length - visibleAvailableRows.length})` : `Show more (${availableRowsAll.length - visibleAvailableRows.length})`}
@@ -5468,6 +5504,25 @@ function SaleInventorySettings({ lang, speciesFilter }) {
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Marquer a vendre" : "Mark for sale"}</h3>
             <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{candidates.length}</span>
           </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="input" value={candidateQuery} onChange={(e) => setCandidateQuery(e.target.value)}
+              placeholder={lang === "fr" ? "Nom, lot, race..." : "Name, batch, breed..."}
+              style={{ flex: 1, minWidth: 130 }}/>
+            <select className="input" value={candidateSpecies} onChange={(e) => setCandidateSpecies(e.target.value)} style={{ width: 120 }}>
+              <option value="">{lang === "fr" ? "Toutes especes" : "All species"}</option>
+              {candidateSpeciesOptions.map((id) => <option key={id} value={id}>{speciesOptionLabel(id)}</option>)}
+            </select>
+            <select className="input" value={candidateStatus} onChange={(e) => setCandidateStatus(e.target.value)} style={{ width: 120 }}>
+              <option value="">{lang === "fr" ? "Tous statuts" : "All statuses"}</option>
+              {candidateStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {(candidateQuery || candidateSpecies || candidateStatus) && (
+              <button className="btn btn-sm" onClick={() => { setCandidateQuery(""); setCandidateSpecies(""); setCandidateStatus(""); }}>
+                {lang === "fr" ? "Effacer" : "Clear"}
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 460, overflowY: "auto" }}>
           {candidates.length === 0 ? (
             <EmptyState icon="layers" title={lang === "fr" ? "Aucun animal a preparer" : "No animal to prepare"} hint={lang === "fr" ? "Les animaux deja vendus ou deja a vendre sont exclus." : "Already sold or for-sale animals are hidden."}/>
           ) : visibleCandidates.map((a) => {
@@ -5489,6 +5544,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
               </div>
             );
           })}
+          </div>
           {candidates.length > visibleCandidates.length && (
             <button className="btn" onClick={() => setCandidateLimit((n) => n + 24)}>
               {lang === "fr" ? `Afficher plus (${candidates.length - visibleCandidates.length})` : `Show more (${candidates.length - visibleCandidates.length})`}
