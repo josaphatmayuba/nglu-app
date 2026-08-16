@@ -439,25 +439,56 @@ export class FarmosFeedService {
     return stock.filter((s) => s.alertEnabled && (s.status === "low" || s.status === "critical" || s.status === "expired"));
   }
 
-  // Réconciliation : recalcule farmos_medicines.quantity comme la somme des
-  // mouvements actifs (in - out - loss +/- adjust) plutôt que de faire
-  // confiance aux incréments successifs (dérive possible en cas de bug/replay).
+  // Réconciliation : recalcule farmos_medicines.quantity comme (somme des
+  // quantity_in des lots actifs) + (delta net des mouvements out/loss/adjust
+  // tracés), PAS un SUM(quantityIn) partant de zéro.
+  //
+  // GARDE-FOU CRITIQUE (incident dev du 16/08/2026, org 1, ids 11/13/15 mis à
+  // 0 et id 12 amputé de son stock historique) :
+  // Beaucoup d'aliments ont du stock "hérité" — une `quantity` posée avant
+  // l'introduction du système de lots/mouvements — et n'ont donc NI lot NI
+  // mouvement en base. Pour ces aliments, `SUM(quantityIn lots actifs)` vaut
+  // 0 alors que le vrai stock ne l'est pas : recalculer les écraserait à 0.
+  // On ne peut reconstituer un solde d'ouverture fiable pour ces aliments sans
+  // information supplémentaire (pas de colonne "solde d'ouverture" en base) :
+  // on choisit donc explicitement de NE PAS RECALCULER plutôt que d'écraser.
+  //
+  // Règle : si un aliment n'a AUCUN mouvement actif dans farmos_feed_movements,
+  // recompute() SKIP cet aliment (quantity inchangée). Seuls les aliments qui
+  // ont au moins un mouvement tracé (donc au moins un lot créé via
+  // createFeedLot, qui insère systématiquement un mouvement 'in' d'audit)
+  // sont recalculés, et uniquement à partir de SUM(quantityIn) des lots actifs
+  // de CET aliment + delta net des mouvements out/loss/adjust (les 'in' sont
+  // de l'audit pur, déjà comptés dans quantityIn des lots, cf. createFeedLot).
   async recomputeFeedStock(orgId: number) {
     const items = await this.listFeedReferences(orgId);
     const updated: { id: number; previousQuantity: number; newQuantity: number }[] = [];
+    const skipped: { id: number; reason: string }[] = [];
     for (const item of items) {
       const movements = await this.db
         .select({ movementType: farmosFeedMovements.movementType, quantity: farmosFeedMovements.quantity })
         .from(farmosFeedMovements)
         .where(and(eq(farmosFeedMovements.medicineId, item.id), eq(farmosFeedMovements.organizationId, orgId), eq(farmosFeedMovements.isActive, 1)));
+
+      if (movements.length === 0) {
+        // Aucun mouvement tracé pour cet aliment => impossible de distinguer
+        // "jamais eu de stock" de "stock hérité pré-lots". On NE TOUCHE PAS
+        // quantity. C'est le garde-fou qui aurait évité l'incident du
+        // 16/08/2026 (ids 11/13/15 écrasés à 0).
+        skipped.push({ id: item.id, reason: "no_movements" });
+        continue;
+      }
+
       let total = 0;
       for (const m of movements) {
         const q = Number(m.quantity || 0);
-        if (m.movementType === "in") continue; // audit only, ne participe pas au calcul (déjà compté via expenses)
+        if (m.movementType === "in") continue; // audit only, déjà compté via quantity_in du lot / createExpense
         if (m.movementType === "out" || m.movementType === "loss") total -= q;
         else if (m.movementType === "adjust") total += q;
       }
-      // Base = somme quantity_in des lots actifs (source réelle de l'entrée en stock)
+      // Base = somme quantity_in des lots actifs de cet aliment (seulement
+      // pertinent ici car on sait déjà, via la présence de mouvements, que cet
+      // aliment est bien entré dans le système de lots).
       const lots = await this.db
         .select({ quantityIn: farmosFeedLots.quantityIn })
         .from(farmosFeedLots)
@@ -471,6 +502,6 @@ export class FarmosFeedService {
       }
     }
     if (updated.length) await this.publish("recomputeFeed", ["medicines"], "updated", 0, orgId);
-    return { checked: items.length, updated: updated.length, details: updated };
+    return { checked: items.length, updated: updated.length, skipped: skipped.length, details: updated };
   }
 }
