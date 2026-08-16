@@ -1918,10 +1918,60 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
     if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
     try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
   };
-  // Courbe SVG : axe X proportionnel au temps réel (pas au rang du point),
-  // grille Y à intervalles ronds, survol avec ligne + infobulle, repères
-  // début/fin étiquetés directement sur le tracé.
-  const GrowthCurve = ({ points, lang }) => {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Saisie rapide */}
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date" : "Date"}</span>
+          <input className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 100px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Poids (kg)" : "Weight (kg)"}</span>
+          <input className="input mono" type="number" step="0.1" min="0" value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}/>
+        </label>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          <Icon name="plus" size={13} color="#ECF1EC"/>{saving ? "…" : (lang === "fr" ? "Pesée" : "Weigh-in")}
+        </button>
+        </div>
+      )}
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+
+      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
+      {!loading && rows.length > 0 && (
+        <>
+          {curvePoints.length >= 2 && (
+            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{lang === "fr" ? "Courbe de croissance" : "Growth curve"}</div>
+              <GrowthCurve points={curvePoints} lang={lang}/>
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {rows.slice().reverse().map((w, i, arr) => (
+              <div key={w.id} style={{ display: "grid", gridTemplateColumns: readOnly ? "auto 1fr auto" : "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
+                <Icon name="weight" size={14} color="var(--ink-700)"/>
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(w.weighDate || w.weigh_date).slice(0, 10)}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{Number(w.weight)} {w.weightUnit || w.weight_unit || "kg"}</span>
+                {!readOnly && <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// Courbe SVG (croissance) : axe X proportionnel au temps réel (pas au rang du
+// point), grille Y à intervalles ronds, survol avec ligne + infobulle,
+// repères début/fin étiquetés directement sur le tracé.
+// Composant top-level (pas défini dans WeightTab) : redéfinir un composant
+// à chaque render de son parent force React à le démonter/remonter à
+// chaque frappe dans le formulaire de saisie, ce qui faisait clignoter/
+// disparaître la courbe pendant la saisie d'une pesée.
+const GrowthCurve = ({ points, lang }) => {
     const [hoverIdx, setHoverIdx] = React.useState(null);
     const svgRef = React.useRef(null);
     if (points.length < 2) return null;
@@ -2012,51 +2062,6 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
         )}
       </div>
     );
-  };
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Saisie rapide */}
-      {!readOnly && (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" }}>
-          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date" : "Date"}</span>
-          <input className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}/>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 100px" }}>
-          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Poids (kg)" : "Weight (kg)"}</span>
-          <input className="input mono" type="number" step="0.1" min="0" value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}/>
-        </label>
-        <button className="btn btn-primary" onClick={submit} disabled={saving}>
-          <Icon name="plus" size={13} color="#ECF1EC"/>{saving ? "…" : (lang === "fr" ? "Pesée" : "Weigh-in")}
-        </button>
-        </div>
-      )}
-      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
-
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
-      {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
-      {!loading && rows.length > 0 && (
-        <>
-          {curvePoints.length >= 2 && (
-            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{lang === "fr" ? "Courbe de croissance" : "Growth curve"}</div>
-              <GrowthCurve points={curvePoints} lang={lang}/>
-            </div>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {rows.slice().reverse().map((w, i, arr) => (
-              <div key={w.id} style={{ display: "grid", gridTemplateColumns: readOnly ? "auto 1fr auto" : "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
-                <Icon name="weight" size={14} color="var(--ink-700)"/>
-                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(w.weighDate || w.weigh_date).slice(0, 10)}</span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{Number(w.weight)} {w.weightUnit || w.weight_unit || "kg"}</span>
-                {!readOnly && <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
 };
 
 // Inline edit card — patch only the fields editable from FarmOS (the rest
