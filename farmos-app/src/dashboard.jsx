@@ -272,7 +272,7 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   const runningTreatments = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId)).length;
   const todayISO = new Date().toISOString().slice(0, 10);
   const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId) && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
-  const activeRepro = d.repro.filter((e) => keepActiveAnimalId(e.animalId) && (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
+  const activeRepro = d.repro.filter((e) => keepActiveAnimalId(e.animalId) && e.eventType === "insemination" && e.outcome !== "success" && e.outcome !== "failed").length;
   const previousRange = previousComparableRange(dateRange);
   const previousRemoved = previousRange ? removedHeadsByAnimalAfter(d.sales, d.mortalityEvents, previousRange.to) : new Map();
   const speciesPredicate = (a) => !speciesFilter || a?.species === speciesFilter;

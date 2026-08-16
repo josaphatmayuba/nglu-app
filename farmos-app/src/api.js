@@ -174,6 +174,7 @@ const KIND_INVALIDATES = {
   createSale:             ["sales"],
   deleteSale:             ["sales"],
   createReproductionEvent:["reproductionEvents", "semenStraws", "animals"],
+  updateReproductionEvent:["reproductionEvents"],
   deleteReproductionEvent:["reproductionEvents"],
   createProductionLog:    ["productionLogs"],
   deleteProductionLog:    ["productionLogs"],
@@ -348,6 +349,7 @@ export const api = {
                        optimistic: { table: "expenses", row: { id: tempId("e"), ...body, _pending: true } } }),
   createReproductionEvent: (body) => mutate({ kind: "createReproductionEvent", method: "POST", path: "/reproduction-events", body,
                        optimistic: { table: "reproductionEvents", row: { id: tempId("r"), ...body, _pending: true } } }),
+  updateReproductionEvent: (id, body) => mutate({ kind: "updateReproductionEvent", method: "PATCH", path: `/reproduction-events/${id}`, body }),
   listProductionLogs: cachedList("productionLogs", "/production-logs"),
   getEggStock: () => jsonFetch("/egg-stock"),
   listVaccinations: cachedList("vaccinations", "/vaccinations"),
@@ -639,7 +641,7 @@ export function adaptExpenseAsTransaction(row, lang = "fr") {
 }
 
 // Reproduction event row → mockup gestation shape used by ReproScreen.
-const GESTATION_DAYS_BY_SPECIES = { cow: 283, pig: 114, goat: 152, sheep: 152, rabbit: 31, chicken: 21, duck: 28, turkey: 28, fish: 30 };
+export const GESTATION_DAYS_BY_SPECIES = { cow: 283, pig: 114, goat: 152, sheep: 152, rabbit: 31, chicken: 21, duck: 28, turkey: 28, fish: 30 };
 
 export function adaptReproEvent(row, animalById) {
   const evDate = row.eventDate || row.event_date;

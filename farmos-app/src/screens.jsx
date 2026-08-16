@@ -555,14 +555,17 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {dayVacc.slice(0, 2).map((v) => {
                       const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
+                      const isUpcomingRepro = v.kind === "repro" && v.status === "scheduled";
                       return (
                         <div key={v.id} style={{
                           fontSize: 10.5, padding: "2px 5px", borderRadius: 4,
                           background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", gap: 3,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          border: isUpcomingRepro ? "1px dashed var(--pertinence-700)" : "none",
                         }}>
                           <AnimalGlyph kind={sp.glyph} size={10} color="currentColor"/>
                           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{v.vaccine}</span>
+                          {isUpcomingRepro && <span style={{ fontSize: 9, fontWeight: 600, color: "var(--pertinence-700)" }}>{lang === "fr" ? "prév." : "fcst"}</span>}
                         </div>
                       );
                     })}
@@ -590,6 +593,27 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                         <AnimalGlyph kind={sp.glyph} size={12} color="var(--ink-500)"/>
                         <span style={{ flex: 1, fontSize: 12.5, color: "var(--ink-800)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vaccine}</span>
                         <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{v.target}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {(() => {
+            const upcomingRepro = allEvents.filter(v => v.kind === "repro" && v.status === "scheduled").sort((a, b) => a.due.localeCompare(b.due));
+            if (upcomingRepro.length === 0) return null;
+            return (
+              <div className="card">
+                <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "À venir · prévisions" : "Upcoming · forecast"}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {upcomingRepro.slice(0, 5).map((v) => {
+                    const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
+                    return (
+                      <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px dashed var(--border-1)" }}>
+                        <AnimalGlyph kind={sp.glyph} size={12} color="var(--ink-500)"/>
+                        <span style={{ flex: 1, fontSize: 12.5, color: "var(--ink-800)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vaccine}</span>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--pertinence-700)" }}>{v.due}</span>
                       </div>
                     );
                   })}
@@ -1314,7 +1338,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   }, []);
   const gestations = allGestations.filter(g => (!speciesFilter || g.species === speciesFilter) && inDateRange(g.start, dateRange));
   const activeGestations = gestations
-    .filter((g) => !g.complete)
+    .filter((g) => !g.complete && g.eventType === "insemination" && g.outcome !== "failed")
     .sort((a, b) => {
       const aDue = /^\d{4}-\d{2}-\d{2}/.test(String(a.due || "")) ? String(a.due) : "9999-12-31";
       const bDue = /^\d{4}-\d{2}-\d{2}/.test(String(b.due || "")) ? String(b.due) : "9999-12-31";
@@ -1414,8 +1438,9 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             const pct = g.total > 0 ? Math.max(0, Math.min(100, (g.day / g.total) * 100)) : 0;
             const remainingDays = g.total > 0 ? Math.max(0, Math.round(g.total - g.day)) : null;
             const locked = isSaleLockedStatus(g.animalStatus);
+            const confirmed = g.outcome === "confirmed";
             return (
-              <div key={g.id} style={{ display: "grid", gridTemplateColumns: "32px 160px 1fr 120px 32px", gap: 14, alignItems: "center" }}>
+              <div key={g.id} style={{ display: "grid", gridTemplateColumns: "32px 160px 1fr 120px auto", gap: 14, alignItems: "center" }}>
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <AnimalGlyph kind={sp.glyph} size={16} color="currentColor"/>
                 </div>
@@ -1446,16 +1471,40 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                       <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{g.due}</div>
                     </>
                   )}
+                  {confirmed && (
+                    <div className="tag" style={{ marginTop: 4, background: "var(--pertinence-50)", color: "var(--pertinence-700)", fontSize: 10 }}>
+                      {lang === "fr" ? "Confirmée" : "Confirmed"}
+                    </div>
+                  )}
                 </div>
-                {g._pk && !locked ? (
-                  <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Supprimer" : "Delete"}
-                    onClick={async () => {
-                      if (!window.confirm(lang === "fr" ? `Supprimer l'événement ${g.animal} ?` : `Delete event ${g.animal}?`)) return;
-                      try { await api.deleteReproductionEvent(g._pk); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
-                    }}>
-                    <Icon name="trash" size={13} color="var(--oxblood-700)"/>
-                  </button>
-                ) : <span/>}
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  {g._pk && !locked && !confirmed && (
+                    <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Confirmer la gestation" : "Confirm gestation"}
+                      onClick={async () => {
+                        try { await api.updateReproductionEvent(g._pk, { outcome: "confirmed" }); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
+                      }}>
+                      <Icon name="check" size={13} color="var(--solidite-700)"/>
+                    </button>
+                  )}
+                  {g._pk && !locked && (
+                    <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Marquer échec de gestation" : "Mark gestation failure"}
+                      onClick={async () => {
+                        if (!window.confirm(lang === "fr" ? `Marquer la gestation de ${g.animal} en échec ?` : `Mark ${g.animal}'s gestation as failed?`)) return;
+                        try { await api.updateReproductionEvent(g._pk, { outcome: "failed" }); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
+                      }}>
+                      <Icon name="x" size={13} color="var(--rust-700)"/>
+                    </button>
+                  )}
+                  {g._pk && !locked ? (
+                    <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Supprimer" : "Delete"}
+                      onClick={async () => {
+                        if (!window.confirm(lang === "fr" ? `Supprimer l'événement ${g.animal} ?` : `Delete event ${g.animal}?`)) return;
+                        try { await api.deleteReproductionEvent(g._pk); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
+                      }}>
+                      <Icon name="trash" size={13} color="var(--oxblood-700)"/>
+                    </button>
+                  ) : <span/>}
+                </div>
               </div>
             );
           })}

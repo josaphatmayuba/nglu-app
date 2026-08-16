@@ -2,7 +2,7 @@
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
-import { api } from "./api";
+import { api, GESTATION_DAYS_BY_SPECIES } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
 import { defaultCurrencyId, defaultSymbol } from "./currency";
 import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
@@ -1905,10 +1905,22 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     }
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";
+    // Prevision de mise bas : IA/saillie sur une femelle => on peut deja
+    // calculer la date prevue a partir de la duree de gestation de l'espece.
+    let expectedDueDate = null;
+    if (kind === "ai" && form.date) {
+      const days = GESTATION_DAYS_BY_SPECIES[form.species];
+      if (days) {
+        const due = new Date(form.date);
+        due.setDate(due.getDate() + days);
+        expectedDueDate = due.toISOString().slice(0, 10);
+      }
+    }
     const payload = {
       animal_id: toNumericId(selected),
       event_type: eventType,
       event_date: form.date,
+      expected_due_date: expectedDueDate,
       offspring_count: kind === "birth" ? (form.live ? Number(form.live) : null) : null,
       // Indicateurs de portee (COMP-P2-007) — surtout porc, valables toutes especes.
       stillborn_count: kind === "birth" && form.dead ? Number(form.dead) : null,

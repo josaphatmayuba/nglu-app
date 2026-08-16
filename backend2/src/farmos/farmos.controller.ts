@@ -55,6 +55,7 @@ import {
   SaveReportDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
+  UpdateReproductionEventDto,
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
@@ -569,6 +570,17 @@ export class FarmosController {
   @Post("reproduction-events")
   createReproductionEvent(@Body() body: CreateReproductionEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createReproductionEvent(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Confirmer ou infirmer une gestation en cours (outcome)." })
+  @Permissions("update-farmos")
+  @Patch("reproduction-events/:id")
+  updateReproductionEvent(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateReproductionEventDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.updateReproductionEvent(id, body, orgId);
   }
 
   @Permissions("delete-farmos")

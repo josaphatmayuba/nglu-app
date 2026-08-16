@@ -747,6 +747,15 @@ export class CreateReproductionEventDto {
   @ApiPropertyOptional({ description: "Nées vivantes femelles (si connu à la mise bas)." }) @IsOptional() @Type(() => Number) @IsInt() born_female_count?: number | null;
 }
 
+// Confirmation/infirmation d'une gestation en cours (IA/saillie en attente).
+// outcome: "confirmed" (gestation confirmée, reste active jusqu'à la mise bas)
+// ou "failed" (retour en chaleur, échographie négative...).
+export class UpdateReproductionEventDto {
+  @ApiPropertyOptional({ enum: ["pending", "confirmed", "success", "failed"] })
+    @IsOptional() @IsString() @IsIn(["pending", "confirmed", "success", "failed"]) outcome?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 // ─── Semen straws (banque de semence pour IA) ───────────────────────────
 export class CreateSemenStrawDto {
   @ApiProperty({ example: "CIAQ-HOLM-1H10567" }) @IsString() code: string;

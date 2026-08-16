@@ -2902,6 +2902,14 @@ const HealthHealForm = ({ lang, animal, runningTreatments, onCancel, onSaved }) 
   );
 };
 
+// Badge "à venir / prévision" pour toute date de fiche saisie dans le futur.
+const UpcomingBadge = ({ lang }) => (
+  <span className="mono" style={{ fontSize: 10, color: "var(--pertinence-700)", background: "var(--pertinence-100, #eef6ee)", borderRadius: 999, padding: "2px 8px", fontWeight: 600, whiteSpace: "nowrap" }}>
+    {lang === "fr" ? "À venir · prévision" : "Upcoming · forecast"}
+  </span>
+);
+const isFutureDate = (d) => !!d && String(d).slice(0, 10) > new Date().toISOString().slice(0, 10);
+
 const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
   if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
   if (!items || items.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? emptyFr : emptyEn}</div>;
@@ -2911,11 +2919,15 @@ const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
         if (kind === "health") {
           const start = it.startDate || it.start_date;
           const end = it.endDate || it.end_date;
+          const upcoming = isFutureDate(start) && it.status !== "completed" && it.status !== "cancelled";
           return (
             <div key={it.id} className="card" style={{ padding: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{it.medicineName || it.medicine_name || (lang === "fr" ? "Traitement" : "Treatment")}</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{it.status}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {upcoming && <UpcomingBadge lang={lang}/>}
+                  <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{it.status}</span>
+                </span>
               </div>
               <div style={{ fontSize: 11, color: "var(--fg-2)" }}>{(it.dosage || "") + (it.route ? " · " + it.route : "")}</div>
               <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>
@@ -2927,11 +2939,20 @@ const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
         if (kind === "repro") {
           const date = it.eventDate || it.event_date;
           const due = it.expectedDueDate || it.expected_due_date;
+          const eventType = it.eventType || it.event_type;
+          const outcome = it.outcome;
+          const isFinal = outcome === "success" || outcome === "failed" || eventType === "birthing";
+          // Prevision : date de l'evenement future (ex. chaleur/saillie planifiee)
+          // ou date prevue de mise bas pas encore atteinte et issue pas encore connue.
+          const isUpcoming = !isFinal && (isFutureDate(date) || isFutureDate(due));
           return (
             <div key={it.id} className="card" style={{ padding: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{it.eventType || it.event_type}</span>
-                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{it.outcome}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{eventType}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {isUpcoming && <UpcomingBadge lang={lang}/>}
+                  <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{outcome}</span>
+                </span>
               </div>
               <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>
                 {date ? String(date).slice(0, 10) : "—"}{due ? ` · ${lang === "fr" ? "prévu" : "due"} ${String(due).slice(0, 10)}` : ""}
@@ -2943,11 +2964,15 @@ const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
         if (kind === "operations") {
           const date = it.operationDate || it.operation_date;
           const performer = it.performedByName || it.performed_by_name;
+          const upcoming = isFutureDate(date) && !it.result;
           return (
             <div key={it.id} className="card" style={{ padding: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{it.operationCode || it.operation_code}</span>
-                {it.result && <span className="mono" style={{ fontSize: 11, color: it.result === "complication" ? "var(--oxblood-700)" : "var(--fg-3)" }}>{it.result}</span>}
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {upcoming && <UpcomingBadge lang={lang}/>}
+                  {it.result && <span className="mono" style={{ fontSize: 11, color: it.result === "complication" ? "var(--oxblood-700)" : "var(--fg-3)" }}>{it.result}</span>}
+                </span>
               </div>
               {(it.quantity != null || performer) && (
                 <div style={{ fontSize: 11, color: "var(--fg-2)" }}>
@@ -2963,11 +2988,15 @@ const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
         }
         // prod
         const date = it.logDate || it.log_date;
+        const upcoming = isFutureDate(date);
         return (
           <div key={it.id} className="card" style={{ padding: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{it.productType || it.product_type}</span>
-              <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{Number(it.quantity).toLocaleString("fr-CA")} {it.unit || ""}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {upcoming && <UpcomingBadge lang={lang}/>}
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{Number(it.quantity).toLocaleString("fr-CA")} {it.unit || ""}</span>
+              </span>
             </div>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{date ? String(date).slice(0, 10) : "—"}{it.period ? ` · ${it.period}` : ""}</div>
           </div>

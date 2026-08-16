@@ -23,6 +23,7 @@ import type {
   CreateMedicineDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
+  UpdateReproductionEventDto,
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
@@ -1840,6 +1841,29 @@ export class FarmosService {
       ids.push(row.id);
     }
     return ids;
+  }
+
+  // Confirme ou infirme une gestation en cours (IA/saillie "pending").
+  // "confirmed" laisse l'événement visible comme gestation active jusqu'à
+  // la mise bas réelle (qui reste le seul événement clôturant, outcome="success"
+  // automatique). "failed" sort l'événement de la liste des gestations actives.
+  async updateReproductionEvent(id: number, input: UpdateReproductionEventDto, orgId: number) {
+    const [previous] = await this.db.select().from(farmosReproductionEvents)
+      .where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId))).limit(1);
+    if (!previous) throw new NotFoundException("Reproduction event not found.");
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
+
+    const patch: Record<string, unknown> = {};
+    if (input.outcome !== undefined) patch.outcome = input.outcome;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(farmosReproductionEvents).set(patch)
+        .where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId)));
+    }
+    await this.publishFarmosUpdate("updateReproductionEvent", ["reproductionEvents"], "updated", id, orgId);
+    const [updated] = await this.db.select().from(farmosReproductionEvents)
+      .where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId))).limit(1);
+    return updated;
   }
 
   async deleteReproductionEvent(id: number, orgId: number) {
