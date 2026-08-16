@@ -1343,7 +1343,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [healthAction, setHealthAction] = React.useState(null); // null | "declare" | "observe" | "heal"
   const [deathEvent, setDeathEvent] = React.useState(null);
   const deceased = isDeceasedStatus(animal.status);
-  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
+  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], operations: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
   React.useEffect(() => {
     if (readOnly && editing) setEditing(false);
