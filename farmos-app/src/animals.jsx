@@ -1900,7 +1900,9 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const rows = (weighings || []).slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
-  const points = rows.map((w) => Number(w.weight)).filter((n) => !Number.isNaN(n));
+  const curvePoints = rows
+    .map((w) => ({ date: String(w.weighDate || w.weigh_date).slice(0, 10), weight: Number(w.weight) }))
+    .filter((p) => p.date && !Number.isNaN(p.weight));
   const submit = async () => {
     if (readOnly || saving || !animal._pk) return;
     if (form.weight === "" || Number(form.weight) <= 0) { setErr(lang === "fr" ? "Poids requis." : "Weight required."); return; }
@@ -1916,18 +1918,99 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
     if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
     try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
   };
-  // Mini-courbe SVG.
-  const Curve = () => {
+  // Courbe SVG : axe X proportionnel au temps réel (pas au rang du point),
+  // grille Y à intervalles ronds, survol avec ligne + infobulle, repères
+  // début/fin étiquetés directement sur le tracé.
+  const GrowthCurve = ({ points, lang }) => {
+    const [hoverIdx, setHoverIdx] = React.useState(null);
+    const svgRef = React.useRef(null);
     if (points.length < 2) return null;
-    const w = 280, h = 70, pad = 4;
-    const min = Math.min(...points), max = Math.max(...points);
-    const span = max - min || 1;
-    const dx = (w - pad * 2) / (points.length - 1);
-    const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * dx} ${h - pad - ((p - min) / span) * (h - pad * 2)}`).join(" ");
+
+    const W = 560, H = 180, padL = 34, padR = 12, padT = 14, padB = 22;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+
+    const times = points.map((p) => new Date(`${p.date}T00:00:00`).getTime());
+    const t0 = times[0], t1 = times[times.length - 1];
+    const tSpan = (t1 - t0) || 1;
+
+    const weights = points.map((p) => p.weight);
+    const rawMin = Math.min(...weights), rawMax = Math.max(...weights);
+    const niceStep = (() => {
+      const span = rawMax - rawMin || 1;
+      const raw = span / 4;
+      const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+      const norm = raw / mag;
+      const step = norm >= 5 ? 10 : norm >= 2 ? 5 : norm >= 1 ? 2 : 1;
+      return step * mag;
+    })();
+    const yMin = Math.max(0, Math.floor(rawMin / niceStep) * niceStep - (rawMin === rawMax ? niceStep : 0));
+    const yMax = Math.ceil(rawMax / niceStep) * niceStep + (rawMin === rawMax ? niceStep : 0);
+    const ySpan = yMax - yMin || 1;
+    const yTicks = [];
+    for (let v = yMin; v <= yMax + 0.0001; v += niceStep) yTicks.push(Math.round(v * 100) / 100);
+
+    const xFor = (t) => padL + ((t - t0) / tSpan) * plotW;
+    const yFor = (w) => padT + plotH - ((w - yMin) / ySpan) * plotH;
+    const pts = points.map((p, i) => ({ ...p, x: xFor(times[i]), y: yFor(p.weight) }));
+    const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+    const fmtDate = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { day: "2-digit", month: "short" });
+    const fmtDateFull = (d) => new Date(`${d}T00:00:00`).toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { day: "2-digit", month: "long", year: "numeric" });
+
+    const nearestIdx = (clientX) => {
+      const rect = svgRef.current.getBoundingClientRect();
+      const mouseX = ((clientX - rect.left) / rect.width) * W;
+      let best = 0, bestD = Infinity;
+      pts.forEach((p, i) => { const d = Math.abs(p.x - mouseX); if (d < bestD) { bestD = d; best = i; } });
+      return best;
+    };
+
+    const hovered = hoverIdx != null ? pts[hoverIdx] : null;
+    const prevHovered = hoverIdx != null && hoverIdx > 0 ? pts[hoverIdx - 1] : null;
+
     return (
-      <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} preserveAspectRatio="none">
-        <path d={path} fill="none" stroke="var(--forest-700)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
+      <div style={{ position: "relative" }}>
+        <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}
+          onPointerMove={(e) => setHoverIdx(nearestIdx(e.clientX))}
+          onPointerLeave={() => setHoverIdx(null)}>
+          {yTicks.map((v) => (
+            <React.Fragment key={v}>
+              <line x1={padL} x2={W - padR} y1={yFor(v)} y2={yFor(v)} stroke={v === yTicks[0] ? "var(--border-2)" : "var(--border-1)"} strokeWidth="1"/>
+              <text x={padL - 6} y={yFor(v) + 3} fontSize="9.5" fill="var(--fg-3)" textAnchor="end" className="mono">{v}</text>
+            </React.Fragment>
+          ))}
+          <text x={pts[0].x} y={H - 6} fontSize="9.5" fill="var(--fg-3)" textAnchor="start" className="mono">{fmtDate(pts[0].date)}</text>
+          <text x={pts[pts.length - 1].x} y={H - 6} fontSize="9.5" fill="var(--fg-3)" textAnchor="end" className="mono">{fmtDate(pts[pts.length - 1].date)}</text>
+          <path d={path} fill="none" stroke="var(--forest-700)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          {hovered && <line x1={hovered.x} x2={hovered.x} y1={padT} y2={H - padB} stroke="var(--clay-700)" strokeWidth="1" strokeDasharray="3 3"/>}
+          {pts.map((p, i) => {
+            const isEnd = i === 0 || i === pts.length - 1;
+            const r = isEnd ? 4 : 3;
+            return <circle key={i} cx={p.x} cy={p.y} r={r} fill={isEnd ? "var(--paper)" : "var(--forest-500)"} stroke={isEnd ? "var(--forest-700)" : "none"} strokeWidth={isEnd ? 2 : 0}/>;
+          })}
+          {hovered && <circle cx={hovered.x} cy={hovered.y} r="5" fill="var(--paper)" stroke="var(--forest-700)" strokeWidth="2"/>}
+          <text x={pts[0].x} y={pts[0].y + 16} fontSize="10" fontWeight="700" fill="var(--forest-700)" textAnchor="middle" className="mono">{pts[0].weight.toFixed(1)}</text>
+          <text x={pts[pts.length - 1].x} y={pts[pts.length - 1].y - 10} fontSize="10" fontWeight="700" fill="var(--forest-700)" textAnchor="middle" className="mono">{pts[pts.length - 1].weight.toFixed(1)}</text>
+          <rect x={padL} y={padT} width={plotW} height={plotH} fill="transparent" style={{ cursor: "crosshair" }}/>
+        </svg>
+        {hovered && (
+          <div style={{
+            position: "absolute", pointerEvents: "none", left: `${(hovered.x / W) * 100}%`, top: `${(hovered.y / H) * 100}%`,
+            transform: hovered.x > W * 0.7 ? "translate(-108%, -60%)" : "translate(12%, -60%)",
+            background: "var(--ink-900)", color: "var(--bone-50)", borderRadius: 6, padding: "6px 9px", fontSize: 11.5, whiteSpace: "nowrap", boxShadow: "var(--shadow-2)", zIndex: 2,
+          }}>
+            <div style={{ fontSize: 10, color: "var(--ink-300)" }}>{fmtDateFull(hovered.date)}</div>
+            <div className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{hovered.weight.toFixed(1)} kg</div>
+            {prevHovered ? (
+              <div style={{ fontSize: 10.5, color: hovered.weight - prevHovered.weight >= 0 ? "var(--solidite-300, #92B69E)" : "var(--rust-300)" }}>
+                {hovered.weight - prevHovered.weight >= 0 ? "+" : ""}{(hovered.weight - prevHovered.weight).toFixed(1)} kg {lang === "fr" ? "vs pesée préc." : "vs prev. weigh-in"}
+              </div>
+            ) : (
+              <div style={{ fontSize: 10.5, color: "var(--ink-300)" }}>{lang === "fr" ? "Première pesée" : "First weigh-in"}</div>
+            )}
+          </div>
+        )}
+      </div>
     );
   };
   return (
@@ -1954,14 +2037,10 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
       {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
       {!loading && rows.length > 0 && (
         <>
-          {points.length >= 2 && (
+          {curvePoints.length >= 2 && (
             <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{lang === "fr" ? "Courbe de croissance" : "Growth curve"}</div>
-              <Curve/>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
-                <span className="mono">{Math.min(...points)} kg</span>
-                <span className="mono">{Math.max(...points)} kg</span>
-              </div>
+              <GrowthCurve points={curvePoints} lang={lang}/>
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
