@@ -191,6 +191,7 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
   const [performedByName, setPerformedByName] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [animalQuery, setAnimalQuery] = React.useState("");
+  const [animalDropdownOpen, setAnimalDropdownOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
 
@@ -281,13 +282,32 @@ function OperationFormModal({ lang, types, animals, currencies, defaultCurrencyI
 
         {mode === "single" ? (
           <>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, position: "relative" }}>
               <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Animal" : "Animal"}</span>
-              <input className="input" placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"} value={animalQuery} onChange={(e) => setAnimalQuery(e.target.value)}/>
-              <select className="input" size={Math.min(6, Math.max(3, filteredForPicker.length))} value={animalId} onChange={(e) => setAnimalId(e.target.value)}>
-                <option value="">{lang === "fr" ? "— ou saisir un lot ci-dessous —" : "— or enter a batch below —"}</option>
-                {filteredForPicker.map((a) => <option key={a._pk} value={a._pk}>{a.name || a.id} ({a.species})</option>)}
-              </select>
+              <input
+                className="input"
+                placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
+                value={animalQuery}
+                onChange={(e) => { setAnimalQuery(e.target.value); setAnimalId(""); setAnimalDropdownOpen(true); }}
+                onFocus={() => setAnimalDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setAnimalDropdownOpen(false), 150)}
+              />
+              {animalDropdownOpen && (
+                <div className="card" style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 2, maxHeight: 200, overflow: "auto", padding: 0, zIndex: 10, border: "1px solid var(--border-1)" }}>
+                  {filteredForPicker.length === 0 && (
+                    <div style={{ padding: 10, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun animal." : "No animal."}</div>
+                  )}
+                  {filteredForPicker.map((a) => (
+                    <div
+                      key={a._pk}
+                      onMouseDown={(e) => { e.preventDefault(); setAnimalId(String(a._pk)); setAnimalQuery(a.name || a.id); setAnimalDropdownOpen(false); }}
+                      style={{ padding: "6px 10px", fontSize: 12.5, cursor: "pointer", borderBottom: "1px solid var(--border-1)" }}
+                    >
+                      {a.name || a.id} ({a.species})
+                    </div>
+                  ))}
+                </div>
+              )}
             </label>
             {!animalId && (
               <div style={{ display: "flex", gap: 8 }}>
