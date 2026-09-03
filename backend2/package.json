@@ -67,7 +67,6 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/mailparser": "^3.4.6",
     "@types/nodemailer": "^8.0.0",
-    "baileys": "^6.7.24",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",

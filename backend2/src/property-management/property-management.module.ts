@@ -19,6 +19,7 @@ import { TenantOnboardingPublicController } from "./tenant-onboarding-public.con
 import { TenantPrescreeningController } from "./prescreening/tenant-prescreening.controller";
 import { TenantPrescreeningPublicController } from "./prescreening/tenant-prescreening-public.controller";
 import { TenantPrescreeningService } from "./prescreening/tenant-prescreening.service";
+import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.service";
 
 @Module({
   imports: [DatabaseModule, SystemEmailModule, CompatModule, LedgerModule, WorkflowModule, ProjectsModule],
@@ -39,6 +40,7 @@ import { TenantPrescreeningService } from "./prescreening/tenant-prescreening.se
     RentReminderService,
     DomusPropertyGuard,
     TenantPrescreeningService,
+    WhatsappClientService,
   ],
 })
 export class PropertyManagementModule {}

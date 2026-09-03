@@ -11,6 +11,10 @@ import * as QRCode from "qrcode";
 // SCRUM: bot WhatsApp maison (Baileys, gratuit, session non-officielle) pour
 // relayer des annonces vers des groupes WhatsApp. Session persistee sur disque
 // (volume Docker) pour survivre aux redemarrages du conteneur sans rescan QR.
+// Isole dans son propre microservice (hors backend2) car la session Baileys
+// est longue-duree/fragile : un redemarrage de backend2 (frequent, a chaque
+// deploiement) ne doit pas tuer la session, et un souci Baileys ne doit pas
+// faire tomber l'API principale.
 const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || path.join(process.cwd(), "storage", "whatsapp-auth");
 
 export type WhatsappStatus = "disconnected" | "connecting" | "qr_pending" | "connected";
@@ -49,7 +53,7 @@ export class WhatsappService implements OnModuleInit {
       if (qr) {
         this.lastQr = qr;
         this.status = "qr_pending";
-        this.logger.log("QR WhatsApp genere — recuperer via GET /whatsapp/qr pour scanner.");
+        this.logger.log("QR WhatsApp genere — recuperer via GET /qr pour scanner.");
       }
 
       if (connection === "open") {
