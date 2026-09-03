@@ -132,6 +132,11 @@ services:
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-nglu-files}
       OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
       OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_AUTH_DIR: /app/storage/whatsapp-auth
+      WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID: ${WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID:-}
+    volumes:
+      - nglu_dev_whatsapp_auth:/app/storage/whatsapp-auth
     depends_on:
       mysql:
         condition: service_healthy
@@ -165,6 +170,8 @@ volumes:
     name: nglu_dev_mysql_data
   nglu_dev_minio_data:
     name: nglu_dev_minio_data
+  nglu_dev_whatsapp_auth:
+    name: nglu_dev_whatsapp_auth
 
 networks:
   nglu_dev_network:

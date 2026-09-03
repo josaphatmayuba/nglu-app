@@ -1723,6 +1723,13 @@
       "when": 1781071200021,
       "tag": "0270_domus_prescreening_consent_texts",
       "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "5",
+      "when": 1781071200022,
+      "tag": "0271_domus_maintenance_photos",
+      "breakpoints": true
     }
   ]
 }

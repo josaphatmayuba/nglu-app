@@ -968,6 +968,23 @@ export const realEstatePropertyPhotos = mysqlTable("real_estate_property_photos"
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const realEstateMaintenancePhotos = mysqlTable("real_estate_maintenance_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  ticketId: bigint("ticket_id", { mode: "number" }).notNull(),
+  photoType: varchar("photo_type", { length: 20 }).default("before").notNull(),
+  bucket: varchar("bucket", { length: 255 }).notNull(),
+  objectKey: varchar("object_key", { length: 512 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).default(0).notNull(),
+  isPrimary: tinyint("is_primary").default(0).notNull(),
+  sortOrder: int("sort_order").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export const realEstateUnits = mysqlTable("real_estate_units", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

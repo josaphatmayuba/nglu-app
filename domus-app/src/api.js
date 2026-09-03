@@ -208,6 +208,15 @@ export const api = {
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
+  maintenancePhotos: (id) => get(`/maintenance/${id}/photos`),
+  uploadMaintenancePhoto: (id, file, photoType = "before") => {
+    const form = new FormData();
+    form.append("photo", file);
+    if (photoType) form.append("photoType", photoType);
+    return multipartFetch(`/maintenance/${id}/photos`, form);
+  },
+  deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
+  maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
 
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),

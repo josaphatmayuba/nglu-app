@@ -16,6 +16,7 @@ import {
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateMaintenanceCosts,
+  realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
   realEstateProperties,
   realEstatePropertyPhotos,
@@ -39,6 +40,7 @@ import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
+import { WhatsappService } from "../whatsapp/whatsapp.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -93,6 +95,7 @@ export class PropertyManagementService {
     private readonly workflow: WorkflowService,
     private readonly projects: ProjectsService,
     private readonly objectStorage: ObjectStorageService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -2807,11 +2810,16 @@ export class PropertyManagementService {
     } catch (err) {
       this.logger.warn(`createMaintenance: liaison projet ignoree: ${(err as Error).message}`);
     }
-    return this.findMaintenance(ticketId);
+    const created = await this.findMaintenance(ticketId);
+    this.notifyMaintenanceStatus(created, created.status).catch((err) =>
+      this.logger.warn(`notifyMaintenanceStatus: envoi WhatsApp ignore: ${(err as Error).message}`),
+    );
+    return created;
   }
 
   async updateMaintenance(id: number, input: UpdateMaintenanceDto, orgId: number) {
     await this.ensureOrgOwned(realEstateMaintenanceRequests, id, orgId, "Maintenance request not found.");
+    const previousStatus = input.status !== undefined ? (await this.findMaintenance(id, orgId)).status : undefined;
     if (input.propertyId !== undefined) {
       await this.ensureActiveProperty(input.propertyId, orgId);
     }
@@ -2827,7 +2835,54 @@ export class PropertyManagementService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId)));
-    return this.findMaintenance(id);
+    const updated = await this.findMaintenance(id);
+    if (input.status !== undefined && input.status !== previousStatus) {
+      this.notifyMaintenanceStatus(updated, input.status).catch((err) =>
+        this.logger.warn(`notifyMaintenanceStatus: envoi WhatsApp ignore: ${(err as Error).message}`),
+      );
+    }
+    return updated;
+  }
+
+  /** SCRUM: notifie un groupe WhatsApp a chaque etape du cycle de vie d'un ticket de maintenance Domus. */
+  private async notifyMaintenanceStatus(ticket: any, status: string) {
+    const groupJid = process.env.WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID;
+    if (!groupJid) return;
+    if (this.whatsapp.getStatus() !== "connected") return;
+    const label =
+      status === "done" ? "Maintenance terminee"
+      : status === "in_progress" ? "Maintenance en cours"
+      : status === "open" ? "Nouveau ticket de maintenance"
+      : `Maintenance - statut: ${status}`;
+    const lines = [
+      label,
+      `Ticket: ${ticket.title || `#${ticket.id}`}`,
+      ticket.propertyName ? `Propriete: ${ticket.propertyName}` : null,
+      ticket.unitName ? `Unite: ${ticket.unitName}` : null,
+    ].filter(Boolean);
+    const caption = lines.join("\n");
+
+    // A la resolution, joindre la photo "apres travaux" la plus recente du ticket
+    // (repli sur la derniere photo dispo tous types confondus) ; sinon comportement
+    // texte inchange.
+    if (status === "done") {
+      const photo = await this.latestMaintenancePhoto(ticket.id, ticket.organizationId).catch(() => null);
+      if (photo) {
+        try {
+          const object = await this.objectStorage.getObject(photo.objectKey);
+          const chunks: Buffer[] = [];
+          for await (const chunk of object.body) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          await this.whatsapp.sendImage(groupJid, Buffer.concat(chunks), caption);
+          return;
+        } catch (err) {
+          this.logger.warn(`notifyMaintenanceStatus: envoi image ignore, repli texte: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    await this.whatsapp.sendMessage(groupJid, caption);
   }
 
   async deleteMaintenance(id: number, orgId: number) {
@@ -3293,6 +3348,207 @@ export class PropertyManagementService {
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────
+
+  private static readonly MAINTENANCE_PHOTO_TYPES = ["before", "after", "invoice"] as const;
+
+  private normalizeMaintenancePhotoType(value: unknown): "before" | "after" | "invoice" {
+    const v = String(value ?? "").trim().toLowerCase();
+    return (PropertyManagementService.MAINTENANCE_PHOTO_TYPES as readonly string[]).includes(v)
+      ? (v as "before" | "after" | "invoice")
+      : "before";
+  }
+
+  async maintenancePhotos(ticketId: number, orgId: number) {
+    await this.findMaintenance(ticketId, orgId);
+    const rows = await this.db
+      .select({
+        id: realEstateMaintenancePhotos.id,
+        organizationId: realEstateMaintenancePhotos.organizationId,
+        ticketId: realEstateMaintenancePhotos.ticketId,
+        photoType: realEstateMaintenancePhotos.photoType,
+        bucket: realEstateMaintenancePhotos.bucket,
+        objectKey: realEstateMaintenancePhotos.objectKey,
+        originalName: realEstateMaintenancePhotos.originalName,
+        mimeType: realEstateMaintenancePhotos.mimeType,
+        sizeBytes: realEstateMaintenancePhotos.sizeBytes,
+        isPrimary: realEstateMaintenancePhotos.isPrimary,
+        sortOrder: realEstateMaintenancePhotos.sortOrder,
+        createdAt: realEstateMaintenancePhotos.createdAt,
+      })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), realEstateMaintenancePhotos.sortOrder, desc(realEstateMaintenancePhotos.id));
+
+    return rows.map((row) => this.maintenancePhotoResponse(row));
+  }
+
+  async uploadMaintenancePhoto(ticketId: number, file: any, orgId: number, photoType?: string) {
+    await this.findMaintenance(ticketId, orgId);
+    const type = this.normalizeMaintenancePhotoType(photoType);
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ));
+    const count = Number(countRow?.count || 0);
+    const stored = await this.objectStorage.putImage(file, `domus/maintenance/${orgId}/${ticketId}`);
+    const [result] = await this.db.insert(realEstateMaintenancePhotos).values({
+      organizationId: orgId,
+      ticketId,
+      photoType: type,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      isPrimary: count === 0 ? 1 : 0,
+      sortOrder: count,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const photo = await this.findMaintenancePhoto(Number(result.insertId), orgId);
+    return this.maintenancePhotoResponse(photo);
+  }
+
+  async deleteMaintenancePhoto(photoId: number, orgId: number) {
+    const photo = await this.findMaintenancePhoto(photoId, orgId);
+    await this.objectStorage.deleteObject(photo.objectKey);
+    await this.db
+      .update(realEstateMaintenancePhotos)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMaintenancePhotos.id, photoId), eq(realEstateMaintenancePhotos.organizationId, orgId)));
+
+    if (Number(photo.isPrimary) === 1) {
+      const [next] = await this.db
+        .select({ id: realEstateMaintenancePhotos.id })
+        .from(realEstateMaintenancePhotos)
+        .where(and(
+          eq(realEstateMaintenancePhotos.organizationId, orgId),
+          eq(realEstateMaintenancePhotos.ticketId, photo.ticketId),
+          eq(realEstateMaintenancePhotos.isActive, 1),
+        ))
+        .orderBy(realEstateMaintenancePhotos.sortOrder, desc(realEstateMaintenancePhotos.id))
+        .limit(1);
+      if (next) {
+        await this.db
+          .update(realEstateMaintenancePhotos)
+          .set({ isPrimary: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateMaintenancePhotos.id, next.id));
+      }
+    }
+
+    return { message: "Photo supprimee." };
+  }
+
+  async maintenancePhotoFile(photoId: number, orgId: number) {
+    const photo = await this.findMaintenancePhoto(photoId, orgId);
+    const object = await this.objectStorage.getObject(photo.objectKey);
+    return {
+      ...object,
+      originalName: photo.originalName || `maintenance-photo-${photo.id}`,
+      mimeType: photo.mimeType,
+    };
+  }
+
+  private async findMaintenancePhoto(photoId: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        id: realEstateMaintenancePhotos.id,
+        organizationId: realEstateMaintenancePhotos.organizationId,
+        ticketId: realEstateMaintenancePhotos.ticketId,
+        photoType: realEstateMaintenancePhotos.photoType,
+        bucket: realEstateMaintenancePhotos.bucket,
+        objectKey: realEstateMaintenancePhotos.objectKey,
+        originalName: realEstateMaintenancePhotos.originalName,
+        mimeType: realEstateMaintenancePhotos.mimeType,
+        sizeBytes: realEstateMaintenancePhotos.sizeBytes,
+        isPrimary: realEstateMaintenancePhotos.isPrimary,
+        sortOrder: realEstateMaintenancePhotos.sortOrder,
+        createdAt: realEstateMaintenancePhotos.createdAt,
+      })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.id, photoId),
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Photo introuvable.");
+    return rows[0];
+  }
+
+  private maintenancePhotoResponse(row: {
+    id: number;
+    ticketId: number;
+    photoType?: string | null;
+    originalName?: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    isPrimary: number;
+    sortOrder: number;
+    createdAt?: Date | string | null;
+  }) {
+    return {
+      id: row.id,
+      ticketId: row.ticketId,
+      photoType: row.photoType || "before",
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      sizeBytes: Number(row.sizeBytes || 0),
+      isPrimary: Number(row.isPrimary) === 1,
+      sortOrder: Number(row.sortOrder || 0),
+      createdAt: row.createdAt,
+    };
+  }
+
+  /**
+   * Photo pour l'envoi WhatsApp a la resolution du ticket : priorite a la photo
+   * "after" (etat apres travaux) la plus recente, sinon repli sur la derniere
+   * photo disponible tous types confondus (comportement historique).
+   */
+  private async latestMaintenancePhoto(ticketId: number, orgId: number) {
+    const base = () =>
+      this.db
+        .select({
+          id: realEstateMaintenancePhotos.id,
+          objectKey: realEstateMaintenancePhotos.objectKey,
+          mimeType: realEstateMaintenancePhotos.mimeType,
+        })
+        .from(realEstateMaintenancePhotos);
+
+    const [afterRow] = await base()
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+        eq(realEstateMaintenancePhotos.photoType, "after"),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), desc(realEstateMaintenancePhotos.id))
+      .limit(1);
+    if (afterRow) return afterRow;
+
+    const [anyRow] = await base()
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), desc(realEstateMaintenancePhotos.id))
+      .limit(1);
+    return anyRow ?? null;
   }
 
   private async findTenant(id: number, orgId: number) {

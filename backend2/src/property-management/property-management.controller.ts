@@ -839,6 +839,63 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteMaintenanceCost(costId, orgId);
   }
 
+  // ── Maintenance Photos ──────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List photos for one maintenance ticket" })
+  @Permissions("readAll-maintenance")
+  @Get("maintenance/:ticketId/photos")
+  maintenancePhotos(@Param("ticketId", ParseIntPipe) ticketId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.maintenancePhotos(ticketId, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload a maintenance ticket photo to object storage" })
+  @Permissions("update-maintenance")
+  @UseInterceptors(FileInterceptor("photo", {
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP."), false);
+      }
+    },
+  }))
+  @Post("maintenance/:ticketId/photos")
+  uploadMaintenancePhoto(
+    @Param("ticketId", ParseIntPipe) ticketId: number,
+    @Body() body: { photoType?: string },
+    @UploadedFile() photo: any,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadMaintenancePhoto(ticketId, photo, orgId, body?.photoType);
+  }
+
+  @ApiOperation({ summary: "Delete a maintenance ticket photo" })
+  @Permissions("update-maintenance")
+  @Delete("maintenance/photos/:photoId")
+  @HttpCode(200)
+  deleteMaintenancePhoto(@Param("photoId", ParseIntPipe) photoId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMaintenancePhoto(photoId, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream a maintenance ticket photo from object storage" })
+  @Permissions("readAll-maintenance")
+  @Get("maintenance/photos/:photoId/file")
+  async maintenancePhotoFile(
+    @Param("photoId", ParseIntPipe) photoId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.maintenancePhotoFile(photoId, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
   // ── Contracts ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List all contracts" })

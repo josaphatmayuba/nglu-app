@@ -58,6 +58,7 @@ import { SignaturesModule } from "./signatures/signatures.module";
 import { VaccineRegistryModule } from "./vaccine-registry/vaccine-registry.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
+import { WhatsappModule } from "./whatsapp/whatsapp.module";
 
 @Module({
   imports: [
@@ -119,6 +120,7 @@ import { UsersModule } from "./users/users.module";
     TransactionTypesModule,
     UomModule,
     UsersModule,
+    WhatsappModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

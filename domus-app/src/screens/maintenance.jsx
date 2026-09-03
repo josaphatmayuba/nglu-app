@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Camera,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   Columns3,
   Eye,
   FolderKanban,
+  Images,
   List,
   MoreHorizontal,
   Pencil,
@@ -126,6 +128,7 @@ export function Maintenance() {
   });
   const [ticketModal, setTicketModal] = useState(null);
   const [costModal, setCostModal] = useState(null);
+  const [photosModal, setPhotosModal] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -384,6 +387,7 @@ export function Maintenance() {
           onEdit={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
+          onPhotos={(ticket) => setPhotosModal({ ticket })}
         />
       )}
       {view === "list" && (
@@ -401,6 +405,7 @@ export function Maintenance() {
               onEdit={() => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
               onDelete={() => deleteTicket(ticket)}
               onCost={(mode) => setCostModal({ ticket, mode })}
+              onPhotos={() => setPhotosModal({ ticket })}
             />
           ))}
           {filtered.length === 0 && <EmptyMaintenance />}
@@ -414,6 +419,7 @@ export function Maintenance() {
           onEdit={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
+          onPhotos={(ticket) => setPhotosModal({ ticket })}
         />
       )}
       {view === "calendar" && <CalendarView tickets={filtered} onOpen={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))} />}
@@ -464,6 +470,13 @@ export function Maintenance() {
           onSave={saveCost}
         />
       )}
+
+      {photosModal && (
+        <PhotosModal
+          ticket={photosModal.ticket}
+          onClose={() => setPhotosModal(null)}
+        />
+      )}
     </>
   );
 }
@@ -478,7 +491,7 @@ function Metric({ icon, tone, label, value, danger, success }) {
   );
 }
 
-function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost }) {
+function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost, onPhotos }) {
   return (
     <div className="maintenance-kanban">
       {COLUMNS.map((column) => {
@@ -504,6 +517,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
                   onDelete={() => onDelete(ticket)}
                   onCost={(mode) => onCost(ticket, mode)}
                   onMove={(status) => onStatusChange(ticket, status)}
+                  onPhotos={() => onPhotos(ticket)}
                 />
               ))}
               {items.length === 0 && <div className="maintenance-empty-col">{t("Aucun ticket")}</div>}
@@ -515,7 +529,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
   );
 }
 
-function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove }) {
+function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove, onPhotos }) {
   const urgent = isUrgent(ticket);
   const done = isDone(ticket);
   const assignee = assigneeName(ticket);
@@ -537,6 +551,7 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
             onDelete={onDelete}
             onCost={onCost}
             onMove={onMove}
+            onPhotos={onPhotos}
           />
         </div>
       </div>
@@ -560,7 +575,7 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   );
 }
 
-function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove }) {
+function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove, onPhotos }) {
   return (
     <span className="maintenance-menu">
       <button type="button" className="maintenance-menu-btn" onClick={(e) => { e.stopPropagation(); onToggle?.(); }} aria-label={t("Actions du ticket")}>
@@ -568,6 +583,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove }) {
       </button>
       {open && (
         <div className="maintenance-menu-pop">
+          <button type="button" onClick={onPhotos}><Images size={14} /> {t("Photos")}</button>
           <button type="button" onClick={() => onCost?.("view")}><Eye size={14} /> {t("Voir les couts")}</button>
           <button type="button" onClick={() => onCost?.("add")}><CircleDollarSign size={14} /> {t("Enregistrer un cout")}</button>
           <button type="button" onClick={onEdit}><Pencil size={14} /> {t("Modifier")}</button>
@@ -581,7 +597,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove }) {
   );
 }
 
-function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost }) {
+function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost, onPhotos }) {
   if (!tickets.length) return <EmptyMaintenance />;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
@@ -747,6 +763,124 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
       ) : (
         <ModalActions busy={busy} disabled={!form.description || !form.amount} onClose={onClose} onSave={() => onSave(ticket, form)} />
       )}
+    </Modal>
+  );
+}
+
+const PHOTO_TYPES = [
+  { key: "before", label: t("Avant") },
+  { key: "after", label: t("Apres") },
+  { key: "invoice", label: t("Facture/recu") },
+];
+
+function PhotosModal({ ticket, onClose }) {
+  const photosApi = useApi(() => api.maintenancePhotos(ticket.id), [ticket.id]);
+  const confirm = useConfirm();
+  const [uploadType, setUploadType] = useState(isDone(ticket) ? "after" : "before");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const photos = Array.isArray(photosApi.data) ? photosApi.data : photosApi.data?.data || [];
+  const grouped = PHOTO_TYPES.map((type) => ({
+    ...type,
+    items: photos.filter((photo) => (photo.photoType || "before") === type.key),
+  }));
+
+  async function handleUpload(file) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.uploadMaintenancePhoto(ticket.id, file, uploadType);
+      await photosApi.reload();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(photoId) {
+    if (!(await confirm({
+      title: t("Supprimer la photo"),
+      message: t("Supprimer cette photo ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.deleteMaintenancePhoto(photoId);
+      await photosApi.reload();
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={tf(t("Photos - {title}"), { title: ticket.title })}
+      subtitle={ticket.propertyName || ""}
+      icon={<Images size={20} />}
+      className="domus-property-modal"
+      onClose={onClose}
+    >
+      <div className="domus-property-form">
+        <FormSection icon={<Camera size={14} />} title={t("Type de photo")}>
+          <div className="immo-filter-group">
+            {PHOTO_TYPES.map((type) => (
+              <button
+                key={type.key}
+                type="button"
+                className={uploadType === type.key ? "active" : ""}
+                onClick={() => setUploadType(type.key)}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+        </FormSection>
+
+        {photosApi.loading ? <p className="muted">{t("Chargement...")}</p> : (
+          grouped.map((group) => (
+            <FormSection key={group.key} icon={<Images size={14} />} title={group.label}>
+              <div className="domus-photo-strip">
+                {group.items.map((photo) => (
+                  <div className="domus-photo-thumb" key={photo.id}>
+                    <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || group.label} />
+                    <button type="button" onClick={() => handleDelete(photo.id)} disabled={busy} title={t("Supprimer la photo")}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+                {group.key === uploadType && (
+                  <label className="domus-photo-add">
+                    <Camera size={16} />
+                    <span>{t("Ajouter")}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="environment"
+                      disabled={busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) handleUpload(file);
+                      }}
+                    />
+                  </label>
+                )}
+                {group.items.length === 0 && group.key !== uploadType && <p className="muted">{t("Aucune photo.")}</p>}
+              </div>
+            </FormSection>
+          ))
+        )}
+
+        {error && <div className="api-error">{error}</div>}
+      </div>
+      <div className="modal-actions"><button className="btn" onClick={onClose}>{t("Fermer")}</button></div>
     </Modal>
   );
 }

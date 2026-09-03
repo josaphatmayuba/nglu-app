@@ -100,6 +100,11 @@ services:
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-nglu-files}
       OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
       OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_AUTH_DIR: /app/storage/whatsapp-auth
+      WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID: ${WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID:-}
+    volumes:
+      - nglu_prod_whatsapp_auth:/app/storage/whatsapp-auth
     networks:
       - nglu_prod_network
     mem_limit: 180m
@@ -172,6 +177,8 @@ services:
 volumes:
   nglu_prod_minio_data:
     name: nglu_prod_minio_data
+  nglu_prod_whatsapp_auth:
+    name: nglu_prod_whatsapp_auth
 
 networks:
   nglu_prod_network:
