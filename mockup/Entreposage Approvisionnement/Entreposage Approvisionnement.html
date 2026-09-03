@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockFlow — Entreposage &amp; Approvisionnement · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        em:{50:'#ecfdf5',100:'#d1fae5',200:'#a7f3d0',300:'#6ee7b7',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857',800:'#065f46'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e8eeec;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-em{background:linear-gradient(135deg,#34d399 0%,#10b981 55%,#047857 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#0d2b22 0%,#0a201a 55%,#040f0c 100%);}
+    .text-grad{background:linear-gradient(135deg,#10b981,#047857);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #dfe9e5;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;animation:fadein .25s ease;}
+    @keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+    .navlink{cursor:pointer;}
+    .nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}
+    .nav-active [data-lucide]{color:#34d399!important;}
+    .tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:600;text-align:left;padding:10px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;}
+    .tbl td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    .tbl tr:hover td{background:#f8fdfb;}
+    .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid transparent;transition:.15s;}
+    .btn-em{background:#059669;color:#fff;}.btn-em:hover{background:#047857;}
+    .btn-ghost{border-color:#d6e3de;background:#fff;color:#334155;}.btn-ghost:hover{background:#f1f5f9;}
+    .btn-danger{background:#fee2e2;color:#b91c1c;}.btn-danger:hover{background:#fecaca;}
+    .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:8px;}
+    .field{width:100%;border:1px solid #d6e3de;border-radius:10px;padding:9px 12px;font-size:13px;background:#fff;outline:none;}
+    .field:focus{border-color:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.12);}
+    .lbl{font-size:11.5px;font-weight:600;color:#475569;display:block;margin-bottom:5px;}
+    .tabbtn{padding:8px 14px;font-size:12.5px;font-weight:600;border-radius:10px;cursor:pointer;color:#64748b;}
+    .tab-active{background:#0f172a;color:#fff;}
+    .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    /* modal */
+    #overlay{position:fixed;inset:0;background:rgba(4,15,12,.55);backdrop-filter:blur(3px);z-index:60;display:none;align-items:flex-end;justify-content:center;padding:0;}
+    #overlay.open{display:flex;}
+    #modal{background:#fff;width:100%;max-width:560px;border-radius:22px 22px 0 0;max-height:88vh;overflow-y:auto;animation:slideup .25s ease;}
+    @media(min-width:640px){#overlay{align-items:center;padding:24px;}#modal{border-radius:22px;}}
+    @keyframes slideup{from{transform:translateY(30px);opacity:0;}to{transform:none;opacity:1;}}
+    /* toast */
+    #toasts{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;width:max-content;max-width:92vw;}
+    @media(min-width:1024px){#toasts{bottom:24px;}}
+    .toast{background:#0f172a;color:#fff;font-size:13px;font-weight:500;padding:10px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,.35);display:flex;align-items:center;gap:8px;animation:fadein .2s ease;}
+    /* layout responsive */
+    #sidebar{display:none;}
+    @media(min-width:1024px){
+      #sidebar{display:flex;position:fixed;top:0;left:0;bottom:0;width:236px;flex-direction:column;z-index:40;}
+      #main{margin-left:236px;}
+      #bottomnav{display:none;}
+      #topbar-mobile{display:none;}
+    }
+    #bottomnav{position:fixed;bottom:0;left:0;right:0;z-index:50;background:#fff;border-top:1px solid #e2e8f0;display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+    .bn{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:600;color:#64748b;cursor:pointer;padding:4px 8px;border-radius:10px;min-width:56px;}
+    .bn.bn-active{color:#047857;background:#ecfdf5;}
+    #drawer{position:fixed;inset:0;z-index:55;display:none;}
+    #drawer.open{display:block;}
+    #drawer .bg{position:absolute;inset:0;background:rgba(4,15,12,.5);}
+    #drawer .panel{position:absolute;top:0;left:0;bottom:0;width:260px;animation:slidein .2s ease;}
+    @keyframes slidein{from{transform:translateX(-30px);opacity:0;}to{transform:none;opacity:1;}}
+  </style>
+</head>
+<body>
+
+<!-- ===================== SIDEBAR (desktop) ===================== -->
+<aside id="sidebar" class="grad-dark text-ink-300">
+  <div class="flex items-center gap-3 px-5 py-5">
+    <div class="grad-em w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-em-900/40">
+      <i data-lucide="warehouse" class="w-5 h-5 text-white"></i>
+    </div>
+    <div>
+      <div class="font-display font-bold text-white text-[15px] leading-tight">StockFlow</div>
+      <div class="text-[10.5px] text-ink-400">Entreposage &amp; Appro</div>
+    </div>
+  </div>
+  <nav class="flex-1 px-3 space-y-0.5 mt-2" id="navlist"></nav>
+  <div class="px-4 py-4 border-t border-white/10">
+    <div class="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-xl p-2" onclick="toast('Profil utilisateur (mockup)')">
+      <div class="w-9 h-9 rounded-full grad-em flex items-center justify-center text-white text-xs font-bold">JM</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[12.5px] font-semibold text-white truncate">Josaphat M.</div>
+        <div class="text-[10.5px] text-ink-400">Resp. logistique</div>
+      </div>
+      <i data-lucide="log-out" class="w-4 h-4 text-ink-400" onclick="event.stopPropagation();toast('Déconnexion (mockup)')"></i>
+    </div>
+  </div>
+</aside>
+
+<!-- ===================== TOPBAR (mobile) ===================== -->
+<header id="topbar-mobile" class="sticky top-0 z-40 grad-dark text-white px-4 py-3 flex items-center gap-3">
+  <button onclick="openDrawer()" class="p-1.5 rounded-lg bg-white/10"><i data-lucide="menu" class="w-5 h-5"></i></button>
+  <div class="grad-em w-8 h-8 rounded-lg flex items-center justify-center"><i data-lucide="warehouse" class="w-4 h-4 text-white"></i></div>
+  <div class="flex-1">
+    <div class="font-display font-bold text-[14px] leading-tight">StockFlow</div>
+    <div class="text-[10px] text-ink-400" id="mob-viewname">Tableau de bord</div>
+  </div>
+  <button onclick="toast('3 notifications non lues (mockup)')" class="relative p-1.5 rounded-lg bg-white/10">
+    <i data-lucide="bell" class="w-5 h-5"></i>
+    <span class="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-em-400 text-[9px] font-bold text-ink-950 flex items-center justify-center">3</span>
+  </button>
+</header>
+
+<!-- ===================== DRAWER (mobile) ===================== -->
+<div id="drawer">
+  <div class="bg" onclick="closeDrawer()"></div>
+  <div class="panel grad-dark text-ink-300 flex flex-col">
+    <div class="flex items-center gap-3 px-5 py-5">
+      <div class="grad-em w-9 h-9 rounded-xl flex items-center justify-center"><i data-lucide="warehouse" class="w-4 h-4 text-white"></i></div>
+      <div class="font-display font-bold text-white text-[15px]">StockFlow</div>
+      <button class="ml-auto p-1 rounded-lg bg-white/10" onclick="closeDrawer()"><i data-lucide="x" class="w-4 h-4 text-white"></i></button>
+    </div>
+    <nav class="flex-1 px-3 space-y-0.5" id="navlist-mobile"></nav>
+  </div>
+</div>
+
+<!-- ===================== MAIN ===================== -->
+<div id="main" class="min-h-screen pb-24 lg:pb-8">
+<div class="max-w-[1180px] mx-auto px-4 lg:px-8 pt-5 lg:pt-7">
+
+  <!-- Desktop header -->
+  <div class="hidden lg:flex items-center justify-between mb-6">
+    <div>
+      <h1 class="font-display font-bold text-[22px]" id="viewname">Tableau de bord</h1>
+      <p class="text-[12.5px] text-ink-500">Mercredi 2 juillet 2026 · Entrepôts Kinshasa</p>
+    </div>
+    <div class="flex items-center gap-2.5">
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"></i>
+        <input class="field !pl-9 !w-[230px]" placeholder="Rechercher article, commande…" onkeydown="if(event.key==='Enter')toast('Recherche : «'+this.value+'» (mockup)')" />
+      </div>
+      <button class="btn btn-ghost relative" onclick="toast('3 notifications non lues (mockup)')">
+        <i data-lucide="bell" class="w-4 h-4"></i>
+        <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-em-500 text-[9px] font-bold text-white flex items-center justify-center">3</span>
+      </button>
+      <button class="btn btn-em" onclick="openModal('mvt')"><i data-lucide="plus" class="w-4 h-4"></i>Mouvement</button>
+    </div>
+  </div>
+
+  <!-- ============ VUE : DASHBOARD ============ -->
+  <section class="view active" id="view-dashboard">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-5">
+      <div class="card p-4 cursor-pointer hover:shadow-md transition" onclick="go('stock')">
+        <div class="flex items-center justify-between mb-2"><span class="text-[11.5px] font-semibold text-ink-500">Valeur du stock</span><i data-lucide="package" class="w-4 h-4 text-em-600"></i></div>
+        <div class="font-display font-bold text-[20px] lg:text-[24px]">184 250 <span class="text-[13px] text-ink-400 font-semibold">USD</span></div>
+        <div class="chip bg-em-50 text-em-700 mt-2"><i data-lucide="trending-up" class="w-3 h-3"></i>+4,2% ce mois</div>
+      </div>
+      <div class="card p-4 cursor-pointer hover:shadow-md transition" onclick="go('stock')">
+        <div class="flex items-center justify-between mb-2"><span class="text-[11.5px] font-semibold text-ink-500">Articles référencés</span><i data-lucide="boxes" class="w-4 h-4 text-em-600"></i></div>
+        <div class="font-display font-bold text-[20px] lg:text-[24px]">1 248</div>
+        <div class="chip bg-ink-100 text-ink-600 mt-2">4 entrepôts</div>
+      </div>
+      <div class="card p-4 cursor-pointer hover:shadow-md transition" onclick="go('stock');toast('Filtre : articles sous le seuil')" >
+        <div class="flex items-center justify-between mb-2"><span class="text-[11.5px] font-semibold text-ink-500">Stock bas</span><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i></div>
+        <div class="font-display font-bold text-[20px] lg:text-[24px] text-amber-600">17</div>
+        <div class="chip bg-amber-50 text-amber-700 mt-2">dont 5 en rupture</div>
+      </div>
+      <div class="card p-4 cursor-pointer hover:shadow-md transition" onclick="go('appro')">
+        <div class="flex items-center justify-between mb-2"><span class="text-[11.5px] font-semibold text-ink-500">Commandes en cours</span><i data-lucide="shopping-cart" class="w-4 h-4 text-em-600"></i></div>
+        <div class="font-display font-bold text-[20px] lg:text-[24px]">8</div>
+        <div class="chip bg-em-50 text-em-700 mt-2">3 à réceptionner</div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-4 mb-5">
+      <!-- occupation entrepôts -->
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-display font-bold text-[15px]">Occupation des entrepôts</h3>
+          <button class="btn btn-ghost btn-xs" onclick="go('entrepots')">Tout voir<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
+        </div>
+        <div class="space-y-4" id="dash-wh"></div>
+      </div>
+      <!-- alertes -->
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-display font-bold text-[15px]">Alertes stock</h3>
+          <span class="chip bg-red-50 text-red-600">5 ruptures</span>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-start gap-3 p-2.5 rounded-xl bg-red-50/60 cursor-pointer hover:bg-red-50" onclick="openModal('reappro','Ciment gris 50kg')">
+            <i data-lucide="octagon-alert" class="w-4 h-4 text-red-500 mt-0.5"></i>
+            <div class="flex-1 min-w-0"><div class="text-[12.5px] font-semibold">Ciment gris 50kg</div><div class="text-[11px] text-ink-500">Rupture · Entrepôt Limete</div></div>
+            <button class="btn btn-em btn-xs" onclick="event.stopPropagation();openModal('reappro','Ciment gris 50kg')">Commander</button>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-xl bg-amber-50/60 cursor-pointer hover:bg-amber-50" onclick="openModal('reappro','Aliment porc croissance')">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5"></i>
+            <div class="flex-1 min-w-0"><div class="text-[12.5px] font-semibold">Aliment porc croissance</div><div class="text-[11px] text-ink-500">Reste 12 sacs · seuil 50 · Ferme Menkao</div></div>
+            <button class="btn btn-em btn-xs" onclick="event.stopPropagation();openModal('reappro','Aliment porc croissance')">Commander</button>
+          </div>
+          <div class="flex items-start gap-3 p-2.5 rounded-xl bg-amber-50/60 cursor-pointer hover:bg-amber-50" onclick="openModal('reappro','Fer à béton Ø12')">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 mt-0.5"></i>
+            <div class="flex-1 min-w-0"><div class="text-[12.5px] font-semibold">Fer à béton Ø12</div><div class="text-[11px] text-ink-500">Reste 40 barres · seuil 100 · Limete</div></div>
+            <button class="btn btn-em btn-xs" onclick="event.stopPropagation();openModal('reappro','Fer à béton Ø12')">Commander</button>
+          </div>
+          <button class="btn btn-ghost w-full justify-center" onclick="go('stock');toast('Filtre : articles sous le seuil')">Voir les 17 alertes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- derniers mouvements -->
+    <div class="card">
+      <div class="flex items-center justify-between p-5 pb-3">
+        <h3 class="font-display font-bold text-[15px]">Derniers mouvements</h3>
+        <button class="btn btn-ghost btn-xs" onclick="go('mouvements')">Historique complet<i data-lucide="arrow-right" class="w-3.5 h-3.5"></i></button>
+      </div>
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Type</th><th>Article</th><th>Qté</th><th>Entrepôt</th><th>Réf.</th><th>Date</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="chip bg-em-50 text-em-700"><i data-lucide="arrow-down-left" class="w-3 h-3"></i>Entrée</span></td><td class="font-semibold">Ciment gris 50kg</td><td>+200 sacs</td><td>Limete</td><td class="text-ink-500">BR-2026-0142</td><td class="text-ink-500">02/07 09:14</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BR-2026-0142')">Détail</button></td></tr>
+          <tr><td><span class="chip bg-red-50 text-red-600"><i data-lucide="arrow-up-right" class="w-3 h-3"></i>Sortie</span></td><td class="font-semibold">Fer à béton Ø12</td><td>−60 barres</td><td>Limete</td><td class="text-ink-500">BS-2026-0311</td><td class="text-ink-500">01/07 16:40</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BS-2026-0311')">Détail</button></td></tr>
+          <tr><td><span class="chip bg-indigo-50 text-indigo-600"><i data-lucide="arrow-left-right" class="w-3 h-3"></i>Transfert</span></td><td class="font-semibold">Aliment porc croissance</td><td>30 sacs</td><td>Gombe → Menkao</td><td class="text-ink-500">TR-2026-0088</td><td class="text-ink-500">01/07 11:05</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','TR-2026-0088')">Détail</button></td></tr>
+          <tr><td><span class="chip bg-em-50 text-em-700"><i data-lucide="arrow-down-left" class="w-3 h-3"></i>Entrée</span></td><td class="font-semibold">Peinture blanche 20L</td><td>+45 bidons</td><td>Gombe</td><td class="text-ink-500">BR-2026-0141</td><td class="text-ink-500">30/06 14:22</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BR-2026-0141')">Détail</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : ENTREPOTS ============ -->
+  <section class="view" id="view-entrepots">
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[13px] text-ink-500">4 entrepôts actifs · capacité globale utilisée à 68%</p>
+      <button class="btn btn-em" onclick="openModal('entrepot')"><i data-lucide="plus" class="w-4 h-4"></i>Nouvel entrepôt</button>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-4" id="wh-cards"></div>
+  </section>
+
+  <!-- ============ VUE : PLAN ENTREPOT ============ -->
+  <section class="view" id="view-plan">
+    <div class="flex flex-wrap items-center gap-2.5 mb-4">
+      <select class="field !w-auto" id="plan-wh" onchange="renderPlan();toast('Plan : '+this.value)">
+        <option>Entrepôt Limete</option><option>Entrepôt Gombe</option><option>Ferme Menkao</option><option>Dépôt Matadi</option>
+      </select>
+      <div class="relative flex-1 min-w-[200px]">
+        <i data-lucide="crosshair" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"></i>
+        <input class="field !pl-9" id="plan-search" list="plan-articles" placeholder="Localiser un article… (Entrée)"
+          onkeydown="if(event.key==='Enter')locate(this.value)" />
+        <datalist id="plan-articles"></datalist>
+      </div>
+      <button class="btn btn-em" onclick="locate(document.getElementById('plan-search').value)"><i data-lucide="locate-fixed" class="w-4 h-4"></i>Localiser</button>
+      <button class="btn btn-ghost" onclick="toast('Plan PDF imprimé (mockup)')"><i data-lucide="printer" class="w-4 h-4"></i>Imprimer</button>
+      <button class="btn btn-ghost" onclick="toast('Édition du plan : glisser-déposer des zones (mockup)')"><i data-lucide="pencil-ruler" class="w-4 h-4"></i>Modifier le plan</button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-4 mb-3 text-[11.5px] font-semibold text-ink-600">
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-em-400"></span>&lt; 60% occupé</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400"></span>60–85%</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-red-400"></span>&gt; 85%</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-ink-200"></span>Vide</span>
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded ring-2 ring-em-600 ring-offset-1 bg-white"></span>Article localisé</span>
+      <span class="ml-auto text-ink-400 font-normal">Cliquer un emplacement pour voir son contenu</span>
+    </div>
+
+    <div class="card p-4 lg:p-6">
+      <div class="scrollx"><div id="plan-grid" class="min-w-[640px]"></div></div>
+    </div>
+
+    <div class="card p-5 mt-4" id="plan-result" style="display:none">
+      <div class="flex items-center gap-2 mb-2"><i data-lucide="map-pin" class="w-4 h-4 text-em-600"></i><h3 class="font-display font-bold text-[15px]" id="plan-result-title"></h3></div>
+      <div class="text-[13px] text-ink-600" id="plan-result-body"></div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : STOCK / ARTICLES ============ -->
+  <section class="view" id="view-stock">
+    <div class="flex flex-wrap items-center gap-2.5 mb-4">
+      <div class="relative flex-1 min-w-[180px]">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-400"></i>
+        <input class="field !pl-9" placeholder="Rechercher un article…" onkeydown="if(event.key==='Enter')toast('Recherche : «'+this.value+'» (mockup)')" />
+      </div>
+      <select class="field !w-auto" onchange="toast('Filtre entrepôt : '+this.value)"><option>Tous les entrepôts</option><option>Limete</option><option>Gombe</option><option>Ferme Menkao</option><option>Matadi</option></select>
+      <select class="field !w-auto" onchange="toast('Filtre catégorie : '+this.value)"><option>Toutes catégories</option><option>Matériaux BTP</option><option>Intrants agricoles</option><option>Fournitures bureau</option><option>Pièces &amp; outillage</option></select>
+      <button class="btn btn-ghost" onclick="toast('Export Excel généré (mockup)')"><i data-lucide="download" class="w-4 h-4"></i>Exporter</button>
+      <button class="btn btn-em" onclick="openModal('article')"><i data-lucide="plus" class="w-4 h-4"></i>Article</button>
+    </div>
+    <div class="card">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Article</th><th>Catégorie</th><th>Stock</th><th>Seuil</th><th>Entrepôt</th><th>Valeur unit.</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="stock-rows"></tbody>
+      </table></div>
+      <div class="flex items-center justify-between px-4 py-3">
+        <span class="text-[12px] text-ink-500">1–8 sur 1 248 articles</span>
+        <div class="flex gap-1.5">
+          <button class="btn btn-ghost btn-xs" onclick="toast('Page précédente (mockup)')"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+          <button class="btn btn-ghost btn-xs" onclick="toast('Page suivante (mockup)')"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : MOUVEMENTS ============ -->
+  <section class="view" id="view-mouvements">
+    <div class="flex flex-wrap items-center gap-2.5 mb-4">
+      <div class="flex bg-white border border-ink-200 rounded-xl p-1 gap-1" id="mvt-tabs">
+        <button class="tabbtn tab-active" onclick="mvtTab(this,'Tous')">Tous</button>
+        <button class="tabbtn" onclick="mvtTab(this,'Entrées')">Entrées</button>
+        <button class="tabbtn" onclick="mvtTab(this,'Sorties')">Sorties</button>
+        <button class="tabbtn" onclick="mvtTab(this,'Transferts')">Transferts</button>
+      </div>
+      <div class="flex-1"></div>
+      <button class="btn btn-ghost" onclick="toast('Export PDF du journal (mockup)')"><i data-lucide="file-text" class="w-4 h-4"></i>PDF</button>
+      <button class="btn btn-em" onclick="openModal('mvt')"><i data-lucide="plus" class="w-4 h-4"></i>Nouveau mouvement</button>
+    </div>
+    <div class="card">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Réf.</th><th>Type</th><th>Article</th><th>Qté</th><th>Origine</th><th>Destination</th><th>Par</th><th>Date</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="font-semibold">BR-2026-0142</td><td><span class="chip bg-em-50 text-em-700">Entrée</span></td><td>Ciment gris 50kg</td><td>+200</td><td>Kin Matériaux SARL</td><td>Limete</td><td>P. Ngoy</td><td class="text-ink-500">02/07 09:14</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BR-2026-0142')">Détail</button></td></tr>
+          <tr><td class="font-semibold">BS-2026-0311</td><td><span class="chip bg-red-50 text-red-600">Sortie</span></td><td>Fer à béton Ø12</td><td>−60</td><td>Limete</td><td>Chantier Matete</td><td>A. Kalala</td><td class="text-ink-500">01/07 16:40</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BS-2026-0311')">Détail</button></td></tr>
+          <tr><td class="font-semibold">TR-2026-0088</td><td><span class="chip bg-indigo-50 text-indigo-600">Transfert</span></td><td>Aliment porc croissance</td><td>30</td><td>Gombe</td><td>Ferme Menkao</td><td>J. Mayuba</td><td class="text-ink-500">01/07 11:05</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','TR-2026-0088')">Détail</button></td></tr>
+          <tr><td class="font-semibold">BR-2026-0141</td><td><span class="chip bg-em-50 text-em-700">Entrée</span></td><td>Peinture blanche 20L</td><td>+45</td><td>Peintex Congo</td><td>Gombe</td><td>P. Ngoy</td><td class="text-ink-500">30/06 14:22</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BR-2026-0141')">Détail</button></td></tr>
+          <tr><td class="font-semibold">BS-2026-0310</td><td><span class="chip bg-red-50 text-red-600">Sortie</span></td><td>Gants de chantier</td><td>−24</td><td>Limete</td><td>Équipe BTP 2</td><td>A. Kalala</td><td class="text-ink-500">30/06 08:50</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','BS-2026-0310')">Détail</button></td></tr>
+          <tr><td class="font-semibold">AJ-2026-0034</td><td><span class="chip bg-amber-50 text-amber-700">Ajustement</span></td><td>Tôle galva 3m</td><td>−2</td><td>Inventaire</td><td>Matadi</td><td>J. Mayuba</td><td class="text-ink-500">29/06 17:30</td><td><button class="btn btn-ghost btn-xs" onclick="openModal('mvtDetail','AJ-2026-0034')">Détail</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : APPROVISIONNEMENT ============ -->
+  <section class="view" id="view-appro">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div class="card p-4"><div class="text-[11.5px] font-semibold text-ink-500 mb-1">Demandes en attente</div><div class="font-display font-bold text-[20px]">4</div></div>
+      <div class="card p-4"><div class="text-[11.5px] font-semibold text-ink-500 mb-1">Commandes en cours</div><div class="font-display font-bold text-[20px]">8</div></div>
+      <div class="card p-4"><div class="text-[11.5px] font-semibold text-ink-500 mb-1">À réceptionner</div><div class="font-display font-bold text-[20px] text-em-600">3</div></div>
+      <div class="card p-4"><div class="text-[11.5px] font-semibold text-ink-500 mb-1">Engagé ce mois</div><div class="font-display font-bold text-[20px]">42 780 <span class="text-[12px] text-ink-400">USD</span></div></div>
+    </div>
+
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-display font-bold text-[15px]">Demandes d'achat</h3>
+      <button class="btn btn-em" onclick="openModal('demande')"><i data-lucide="plus" class="w-4 h-4"></i>Nouvelle demande</button>
+    </div>
+    <div class="card mb-6">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Réf.</th><th>Objet</th><th>Demandeur</th><th>Montant estimé</th><th>Statut</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr><td class="font-semibold">DA-2026-0067</td><td>Réappro ciment + fer chantier Matete</td><td>A. Kalala</td><td>8 450 USD</td><td><span class="chip bg-amber-50 text-amber-700">En attente</span></td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="approve(this,'DA-2026-0067')">Approuver</button><button class="btn btn-danger btn-xs" onclick="reject(this,'DA-2026-0067')">Rejeter</button></td></tr>
+          <tr><td class="font-semibold">DA-2026-0066</td><td>Aliment porc T3 (200 sacs)</td><td>Ferme Menkao</td><td>6 200 USD</td><td><span class="chip bg-amber-50 text-amber-700">En attente</span></td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="approve(this,'DA-2026-0066')">Approuver</button><button class="btn btn-danger btn-xs" onclick="reject(this,'DA-2026-0066')">Rejeter</button></td></tr>
+          <tr><td class="font-semibold">DA-2026-0065</td><td>Fournitures bureau siège</td><td>S. Ilunga</td><td>980 000 CDF</td><td><span class="chip bg-em-50 text-em-700">Approuvée</span></td>
+            <td><button class="btn btn-ghost btn-xs" onclick="openModal('commande','DA-2026-0065')">Créer la commande</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-display font-bold text-[15px]">Commandes fournisseurs</h3>
+      <button class="btn btn-ghost" onclick="openModal('commande')"><i data-lucide="plus" class="w-4 h-4"></i>Commande directe</button>
+    </div>
+    <div class="card">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Réf.</th><th>Fournisseur</th><th>Lignes</th><th>Montant</th><th>Livraison prévue</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="font-semibold">CF-2026-0102</td><td>Kin Matériaux SARL</td><td>3</td><td>12 400 USD</td><td>05/07/2026</td><td><span class="chip bg-indigo-50 text-indigo-600">Confirmée</span></td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="go('receptions')">Réceptionner</button><button class="btn btn-ghost btn-xs" onclick="openModal('cfDetail','CF-2026-0102')">Détail</button></td></tr>
+          <tr><td class="font-semibold">CF-2026-0101</td><td>AgroFeed Congo</td><td>1</td><td>6 200 USD</td><td>04/07/2026</td><td><span class="chip bg-indigo-50 text-indigo-600">Confirmée</span></td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="go('receptions')">Réceptionner</button><button class="btn btn-ghost btn-xs" onclick="openModal('cfDetail','CF-2026-0101')">Détail</button></td></tr>
+          <tr><td class="font-semibold">CF-2026-0100</td><td>Peintex Congo</td><td>2</td><td>3 150 USD</td><td>Livrée 30/06</td><td><span class="chip bg-em-50 text-em-700">Réceptionnée</span></td>
+            <td><button class="btn btn-ghost btn-xs" onclick="openModal('cfDetail','CF-2026-0100')">Détail</button></td></tr>
+          <tr><td class="font-semibold">CF-2026-0099</td><td>Quincaillerie Moderne</td><td>5</td><td>4 780 000 CDF</td><td>08/07/2026</td><td><span class="chip bg-ink-100 text-ink-600">Envoyée</span></td>
+            <td class="space-x-1.5"><button class="btn btn-ghost btn-xs" onclick="toast('Relance envoyée au fournisseur (mockup)')">Relancer</button><button class="btn btn-ghost btn-xs" onclick="openModal('cfDetail','CF-2026-0099')">Détail</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : RECEPTIONS ============ -->
+  <section class="view" id="view-receptions">
+    <p class="text-[13px] text-ink-500 mb-4">3 commandes confirmées en attente de réception.</p>
+    <div class="space-y-4">
+      <div class="card p-5">
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+          <div class="grad-em w-10 h-10 rounded-xl flex items-center justify-center"><i data-lucide="truck" class="w-5 h-5 text-white"></i></div>
+          <div class="flex-1 min-w-[160px]">
+            <div class="font-semibold text-[14px]">CF-2026-0102 · Kin Matériaux SARL</div>
+            <div class="text-[11.5px] text-ink-500">Livraison prévue le 05/07/2026 · Entrepôt Limete · 12 400 USD</div>
+          </div>
+          <span class="chip bg-indigo-50 text-indigo-600">Confirmée</span>
+        </div>
+        <div class="scrollx"><table class="tbl w-full mb-3">
+          <thead><tr><th>Article</th><th>Commandé</th><th>Déjà reçu</th><th>À recevoir</th></tr></thead>
+          <tbody>
+            <tr><td>Ciment gris 50kg</td><td>400 sacs</td><td>200</td><td class="font-semibold">200</td></tr>
+            <tr><td>Fer à béton Ø12</td><td>300 barres</td><td>0</td><td class="font-semibold">300</td></tr>
+            <tr><td>Tôle galva 3m</td><td>80 pièces</td><td>0</td><td class="font-semibold">80</td></tr>
+          </tbody>
+        </table></div>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-em" onclick="openModal('reception','CF-2026-0102')"><i data-lucide="package-check" class="w-4 h-4"></i>Réceptionner</button>
+          <button class="btn btn-ghost" onclick="toast('Bon de commande PDF ouvert (mockup)')"><i data-lucide="file-text" class="w-4 h-4"></i>Bon de commande</button>
+          <button class="btn btn-ghost" onclick="toast('Litige signalé au fournisseur (mockup)')"><i data-lucide="flag" class="w-4 h-4"></i>Signaler un litige</button>
+        </div>
+      </div>
+      <div class="card p-5">
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+          <div class="grad-em w-10 h-10 rounded-xl flex items-center justify-center"><i data-lucide="truck" class="w-5 h-5 text-white"></i></div>
+          <div class="flex-1 min-w-[160px]">
+            <div class="font-semibold text-[14px]">CF-2026-0101 · AgroFeed Congo</div>
+            <div class="text-[11.5px] text-ink-500">Livraison prévue le 04/07/2026 · Ferme Menkao · 6 200 USD</div>
+          </div>
+          <span class="chip bg-indigo-50 text-indigo-600">Confirmée</span>
+        </div>
+        <div class="scrollx"><table class="tbl w-full mb-3">
+          <thead><tr><th>Article</th><th>Commandé</th><th>Déjà reçu</th><th>À recevoir</th></tr></thead>
+          <tbody><tr><td>Aliment porc croissance</td><td>200 sacs</td><td>0</td><td class="font-semibold">200</td></tr></tbody>
+        </table></div>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-em" onclick="openModal('reception','CF-2026-0101')"><i data-lucide="package-check" class="w-4 h-4"></i>Réceptionner</button>
+          <button class="btn btn-ghost" onclick="toast('Bon de commande PDF ouvert (mockup)')"><i data-lucide="file-text" class="w-4 h-4"></i>Bon de commande</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VUE : FOURNISSEURS ============ -->
+  <section class="view" id="view-fournisseurs">
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[13px] text-ink-500">12 fournisseurs actifs</p>
+      <button class="btn btn-em" onclick="openModal('fournisseur')"><i data-lucide="plus" class="w-4 h-4"></i>Nouveau fournisseur</button>
+    </div>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" id="supp-cards"></div>
+  </section>
+
+  <!-- ============ VUE : INVENTAIRE ============ -->
+  <section class="view" id="view-inventaire">
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-[13px] text-ink-500">Sessions de comptage physique et écarts constatés.</p>
+      <button class="btn btn-em" onclick="openModal('inventaire')"><i data-lucide="plus" class="w-4 h-4"></i>Lancer un inventaire</button>
+    </div>
+    <div class="card mb-5">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Réf.</th><th>Entrepôt</th><th>Articles comptés</th><th>Écarts</th><th>Statut</th><th>Date</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="font-semibold">INV-2026-07</td><td>Limete</td><td>142 / 380</td><td>—</td><td><span class="chip bg-indigo-50 text-indigo-600">En cours</span></td><td class="text-ink-500">02/07/2026</td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="openModal('comptage','INV-2026-07')">Continuer le comptage</button></td></tr>
+          <tr><td class="font-semibold">INV-2026-06</td><td>Matadi</td><td>96 / 96</td><td class="text-amber-600 font-semibold">3 écarts</td><td><span class="chip bg-amber-50 text-amber-700">À valider</span></td><td class="text-ink-500">29/06/2026</td>
+            <td class="space-x-1.5"><button class="btn btn-em btn-xs" onclick="validateInv(this,'INV-2026-06')">Valider les ajustements</button><button class="btn btn-ghost btn-xs" onclick="openModal('ecarts','INV-2026-06')">Voir écarts</button></td></tr>
+          <tr><td class="font-semibold">INV-2026-05</td><td>Gombe</td><td>210 / 210</td><td>0 écart</td><td><span class="chip bg-em-50 text-em-700">Clôturé</span></td><td class="text-ink-500">15/06/2026</td>
+            <td><button class="btn btn-ghost btn-xs" onclick="toast('Rapport PDF ouvert (mockup)')">Rapport</button></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card p-5">
+      <h3 class="font-display font-bold text-[15px] mb-3">Écarts en attente — INV-2026-06 (Matadi)</h3>
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Article</th><th>Stock théorique</th><th>Compté</th><th>Écart</th><th>Valeur</th></tr></thead>
+        <tbody>
+          <tr><td>Tôle galva 3m</td><td>58</td><td>56</td><td class="text-red-600 font-semibold">−2</td><td>−36 USD</td></tr>
+          <tr><td>Clous 10cm (carton)</td><td>24</td><td>25</td><td class="text-em-600 font-semibold">+1</td><td>+8 USD</td></tr>
+          <tr><td>Brouette renforcée</td><td>12</td><td>11</td><td class="text-red-600 font-semibold">−1</td><td>−45 USD</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+</div>
+</div>
+
+<!-- ===================== BOTTOM NAV (mobile) ===================== -->
+<nav id="bottomnav"></nav>
+
+<!-- ===================== MODAL ===================== -->
+<div id="overlay" onclick="if(event.target===this)closeModal()">
+  <div id="modal"></div>
+</div>
+
+<!-- ===================== TOASTS ===================== -->
+<div id="toasts"></div>
+
+<script>
+/* ---------- données ---------- */
+const NAV = [
+  {id:'dashboard', icon:'layout-dashboard', label:'Tableau de bord'},
+  {id:'entrepots', icon:'warehouse', label:'Entrepôts'},
+  {id:'plan', icon:'map', label:'Plan entrepôt'},
+  {id:'stock', icon:'boxes', label:'Stock & articles'},
+  {id:'mouvements', icon:'arrow-left-right', label:'Mouvements'},
+  {id:'appro', icon:'shopping-cart', label:'Approvisionnement'},
+  {id:'receptions', icon:'package-check', label:'Réceptions'},
+  {id:'fournisseurs', icon:'users', label:'Fournisseurs'},
+  {id:'inventaire', icon:'clipboard-list', label:'Inventaire'},
+];
+const BOTTOM = ['dashboard','stock','mouvements','appro','receptions'];
+
+const WAREHOUSES = [
+  {name:'Entrepôt Limete', loc:'Kinshasa · 7e Rue Limete', items:380, cap:82, mgr:'P. Ngoy', val:'96 300 USD'},
+  {name:'Entrepôt Gombe', loc:'Kinshasa · Av. du Port', items:210, cap:55, mgr:'S. Ilunga', val:'41 900 USD'},
+  {name:'Ferme Menkao', loc:'Plateau des Batéké', items:96, cap:71, mgr:'D. Mbuyi', val:'22 450 USD'},
+  {name:'Dépôt Matadi', loc:'Kongo Central · Port', items:96, cap:38, mgr:'F. Nzuzi', val:'23 600 USD'},
+];
+
+const STOCK = [
+  {a:'Ciment gris 50kg', c:'Matériaux BTP', q:'0 sac', s:150, w:'Limete', v:'14,50 USD', st:'rupture'},
+  {a:'Fer à béton Ø12', c:'Matériaux BTP', q:'40 barres', s:100, w:'Limete', v:'18,00 USD', st:'bas'},
+  {a:'Aliment porc croissance', c:'Intrants agricoles', q:'12 sacs', s:50, w:'Ferme Menkao', v:'31,00 USD', st:'bas'},
+  {a:'Peinture blanche 20L', c:'Matériaux BTP', q:'62 bidons', s:20, w:'Gombe', v:'70,00 USD', st:'ok'},
+  {a:'Tôle galva 3m', c:'Matériaux BTP', q:'56 pièces', s:30, w:'Matadi', v:'18,00 USD', st:'ok'},
+  {a:'Gants de chantier', c:'Pièces & outillage', q:'148 paires', s:60, w:'Limete', v:'4 500 CDF', st:'ok'},
+  {a:'Rame papier A4', c:'Fournitures bureau', q:'85 rames', s:30, w:'Gombe', v:'12 000 CDF', st:'ok'},
+  {a:'Vaccin PPC (dose)', c:'Intrants agricoles', q:'320 doses', s:100, w:'Ferme Menkao', v:'1,20 USD', st:'ok'},
+];
+
+const SUPPLIERS = [
+  {n:'Kin Matériaux SARL', cat:'Matériaux BTP', tel:'+243 810 234 567', orders:14, note:'4,6', delay:'2,1 j'},
+  {n:'AgroFeed Congo', cat:'Intrants agricoles', tel:'+243 995 118 002', orders:9, note:'4,8', delay:'1,4 j'},
+  {n:'Peintex Congo', cat:'Peintures & finitions', tel:'+243 820 447 913', orders:6, note:'4,2', delay:'3,0 j'},
+  {n:'Quincaillerie Moderne', cat:'Outillage', tel:'+243 852 660 118', orders:11, note:'3,9', delay:'4,2 j'},
+  {n:'VetPharma Kin', cat:'Produits vétérinaires', tel:'+243 901 552 764', orders:5, note:'4,7', delay:'1,8 j'},
+  {n:'Bureau Plus', cat:'Fournitures bureau', tel:'+243 815 903 341', orders:4, note:'4,1', delay:'2,5 j'},
+];
+
+/* ---------- plans des entrepôts ---------- */
+const PLANS = {
+  'Entrepôt Limete': [
+    {zone:'Zone A — Matériaux lourds', cells:[
+      {code:'A-01', occ:0,  items:[{a:'Ciment gris 50kg', q:'0 sac (rupture)'}]},
+      {code:'A-02', occ:35, items:[{a:'Fer à béton Ø12', q:'40 barres'}]},
+      {code:'A-03', occ:90, items:[{a:'Gravier (big bag)', q:'18 sacs'}]},
+      {code:'A-04', occ:72, items:[{a:'Sable de rivière (big bag)', q:'14 sacs'}]},
+      {code:'A-05', occ:55, items:[{a:'Blocs ciment 15', q:'640 pièces'}]},
+      {code:'A-06', occ:0,  items:[]},
+    ]},
+    {zone:'Zone B — Finitions & liquides', cells:[
+      {code:'B-01', occ:64, items:[{a:'Peinture blanche 20L', q:'22 bidons'}]},
+      {code:'B-02', occ:88, items:[{a:'Vernis bois 5L', q:'46 bidons'},{a:'Diluant 1L', q:'60 flacons'}]},
+      {code:'B-03', occ:40, items:[{a:'Colle carrelage 25kg', q:'35 sacs'}]},
+      {code:'B-04', occ:20, items:[{a:'Joint silicone', q:'88 cartouches'}]},
+    ]},
+    {zone:'Zone C — Outillage & EPI', cells:[
+      {code:'C-01', occ:58, items:[{a:'Brouette renforcée', q:'9 pièces'}]},
+      {code:'C-02', occ:75, items:[{a:'Pelles & pioches', q:'42 pièces'}]},
+      {code:'C-03', occ:45, items:[{a:'Gants de chantier', q:'148 paires'},{a:'Casques de chantier', q:'36 pièces'}]},
+      {code:'C-04', occ:30, items:[{a:'Bottes de sécurité', q:'25 paires'}]},
+      {code:'C-05', occ:0,  items:[]},
+      {code:'C-06', occ:92, items:[{a:'Clous 10cm (carton)', q:'30 cartons'}]},
+    ]},
+  ],
+  'Entrepôt Gombe': [
+    {zone:'Zone A — Fournitures bureau', cells:[
+      {code:'A-01', occ:52, items:[{a:'Rame papier A4', q:'85 rames'}]},
+      {code:'A-02', occ:38, items:[{a:'Cartouches encre', q:'24 pièces'}]},
+      {code:'A-03', occ:70, items:[{a:'Classeurs & archives', q:'120 pièces'}]},
+      {code:'A-04', occ:0,  items:[]},
+    ]},
+    {zone:'Zone B — Peintures', cells:[
+      {code:'B-01', occ:80, items:[{a:'Peinture blanche 20L', q:'40 bidons'}]},
+      {code:'B-02', occ:44, items:[{a:'Rouleaux & pinceaux', q:'95 pièces'}]},
+    ]},
+  ],
+  'Ferme Menkao': [
+    {zone:'Magasin 1 — Aliments', cells:[
+      {code:'M1-01', occ:24, items:[{a:'Aliment porc croissance', q:'12 sacs'}]},
+      {code:'M1-02', occ:66, items:[{a:'Aliment porc gestation', q:'48 sacs'}]},
+      {code:'M1-03', occ:90, items:[{a:'Maïs grain (sac 50kg)', q:'110 sacs'}]},
+    ]},
+    {zone:'Magasin 2 — Vétérinaire (froid)', cells:[
+      {code:'M2-01', occ:60, items:[{a:'Vaccin PPC (dose)', q:'320 doses'}]},
+      {code:'M2-02', occ:35, items:[{a:'Antiparasitaires', q:'54 flacons'}]},
+    ]},
+  ],
+  'Dépôt Matadi': [
+    {zone:'Zone unique — Transit port', cells:[
+      {code:'T-01', occ:74, items:[{a:'Tôle galva 3m', q:'56 pièces'}]},
+      {code:'T-02', occ:50, items:[{a:'Clous 10cm (carton)', q:'25 cartons'}]},
+      {code:'T-03', occ:41, items:[{a:'Brouette renforcée', q:'11 pièces'}]},
+      {code:'T-04', occ:0,  items:[]},
+    ]},
+  ],
+};
+
+function cellBg(c){
+  if(!c.items.length && c.occ===0) return 'background:#e2e8f0;color:#94a3b8;';
+  const col = c.occ>85?'#f87171':c.occ>=60?'#fbbf24':'#34d399';
+  return `background:${col};color:#052e22;`;
+}
+function renderPlan(highlightCodes){
+  const wh = document.getElementById('plan-wh').value;
+  const zones = PLANS[wh];
+  document.getElementById('plan-grid').innerHTML = `
+    <div class="flex items-center gap-2 mb-4 p-3 rounded-xl bg-ink-900 text-white text-[12px] font-semibold">
+      <i data-lucide="truck" class="w-4 h-4 text-em-400"></i>Quai de réception / expédition
+      <span class="ml-auto font-normal text-ink-400">Entrée principale ↓</span>
+    </div>
+    ${zones.map(z=>`
+      <div class="mb-5">
+        <div class="text-[12px] font-bold text-ink-700 mb-2 flex items-center gap-2"><i data-lucide="rows-3" class="w-3.5 h-3.5 text-em-600"></i>${z.zone}</div>
+        <div class="grid gap-2" style="grid-template-columns:repeat(auto-fill,minmax(96px,1fr));">
+          ${z.cells.map(c=>`
+            <div class="rounded-xl p-2.5 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md ${highlightCodes&&highlightCodes.includes(c.code)?'ring-4 ring-em-600 ring-offset-2':''}"
+                 style="${cellBg(c)}" data-code="${c.code}" onclick="openModal('cellDetail','${wh}|${c.code}')">
+              <div class="font-bold text-[13px] font-display">${c.code}</div>
+              <div class="text-[10px] font-semibold opacity-80">${c.items.length? c.occ+'% · '+c.items.length+' art.' : 'Vide'}</div>
+              <div class="text-[10.5px] mt-1 leading-tight truncate">${c.items.map(i=>i.a).join(', ')||'—'}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('')}`;
+  lucide.createIcons();
+}
+function locate(name){
+  const q = (name||'').trim().toLowerCase();
+  if(!q){toast('Saisir un article à localiser');return;}
+  let found = null;
+  for(const [wh,zones] of Object.entries(PLANS)){
+    const codes = [];
+    zones.forEach(z=>z.cells.forEach(c=>{ if(c.items.some(i=>i.a.toLowerCase().includes(q))) codes.push({code:c.code, zone:z.zone, items:c.items.filter(i=>i.a.toLowerCase().includes(q))}); }));
+    if(codes.length){found={wh,codes};break;}
+  }
+  const res = document.getElementById('plan-result');
+  if(!found){
+    res.style.display='block';
+    document.getElementById('plan-result-title').textContent='Aucun emplacement trouvé';
+    document.getElementById('plan-result-body').textContent='« '+name+' » n’est rangé dans aucun emplacement connu.';
+    renderPlan();
+    return;
+  }
+  document.getElementById('plan-wh').value = found.wh;
+  renderPlan(found.codes.map(c=>c.code));
+  res.style.display='block';
+  document.getElementById('plan-result-title').textContent = found.codes[0].items[0].a + ' — ' + found.wh;
+  document.getElementById('plan-result-body').innerHTML = found.codes.map(c=>
+    `<div class="flex items-center gap-2 py-1"><span class="chip bg-em-50 text-em-700 font-mono">${c.code}</span> ${c.zone} · ${c.items.map(i=>i.q).join(', ')}</div>`).join('');
+  toast('Article localisé : '+found.codes.map(c=>c.code).join(', '), true);
+  lucide.createIcons();
+}
+function locateArticle(art){
+  go('plan');
+  document.getElementById('plan-search').value = art;
+  locate(art);
+}
+
+/* ---------- navigation ---------- */
+function go(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  const item = NAV.find(n=>n.id===id);
+  document.getElementById('viewname').textContent = item.label;
+  document.getElementById('mob-viewname').textContent = item.label;
+  document.querySelectorAll('.navlink').forEach(el=>el.classList.toggle('nav-active', el.dataset.id===id));
+  document.querySelectorAll('.bn').forEach(el=>el.classList.toggle('bn-active', el.dataset.id===id));
+  closeDrawer();
+  window.scrollTo({top:0});
+}
+function buildNav(){
+  const html = NAV.map(n=>`
+    <a class="navlink flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium hover:bg-white/5 transition" data-id="${n.id}" onclick="go('${n.id}')">
+      <i data-lucide="${n.icon}" class="w-[18px] h-[18px]"></i>${n.label}
+    </a>`).join('');
+  document.getElementById('navlist').innerHTML = html;
+  document.getElementById('navlist-mobile').innerHTML = html;
+  document.getElementById('bottomnav').innerHTML = BOTTOM.map(id=>{
+    const n = NAV.find(x=>x.id===id);
+    return `<div class="bn" data-id="${id}" onclick="go('${id}')"><i data-lucide="${n.icon}" class="w-5 h-5"></i>${n.label.split(' ')[0].replace('&','')}</div>`;
+  }).join('');
+}
+
+/* ---------- drawer ---------- */
+function openDrawer(){document.getElementById('drawer').classList.add('open');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
+
+/* ---------- toast ---------- */
+function toast(msg, ok){
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<i data-lucide="${ok?'check-circle-2':'info'}" class="w-4 h-4 ${ok?'text-em-400':'text-ink-300'}"></i>${msg}`;
+  document.getElementById('toasts').appendChild(t);
+  lucide.createIcons();
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);}, 2600);
+}
+
+/* ---------- rendu dashboard / listes ---------- */
+function barColor(p){return p>=80?'#ef4444':p>=65?'#f59e0b':'#10b981';}
+function renderWh(){
+  document.getElementById('dash-wh').innerHTML = WAREHOUSES.map(w=>`
+    <div class="cursor-pointer group" onclick="go('entrepots')">
+      <div class="flex items-center justify-between text-[12.5px] mb-1.5">
+        <span class="font-semibold group-hover:text-em-700">${w.name}</span>
+        <span class="text-ink-500">${w.cap}% · ${w.items} articles</span>
+      </div>
+      <div class="h-2.5 rounded-full bg-ink-100 overflow-hidden">
+        <div class="h-full rounded-full" style="width:${w.cap}%;background:${barColor(w.cap)}"></div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('wh-cards').innerHTML = WAREHOUSES.map(w=>`
+    <div class="card p-5">
+      <div class="flex items-start gap-3 mb-3">
+        <div class="grad-em w-11 h-11 rounded-xl flex items-center justify-center"><i data-lucide="warehouse" class="w-5 h-5 text-white"></i></div>
+        <div class="flex-1 min-w-0">
+          <div class="font-display font-bold text-[15px]">${w.name}</div>
+          <div class="text-[11.5px] text-ink-500">${w.loc}</div>
+        </div>
+        <span class="chip ${w.cap>=80?'bg-red-50 text-red-600':w.cap>=65?'bg-amber-50 text-amber-700':'bg-em-50 text-em-700'}">${w.cap}% occupé</span>
+      </div>
+      <div class="h-2.5 rounded-full bg-ink-100 overflow-hidden mb-3">
+        <div class="h-full rounded-full" style="width:${w.cap}%;background:${barColor(w.cap)}"></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center mb-4">
+        <div class="bg-ink-50 rounded-xl py-2"><div class="text-[10.5px] text-ink-500">Articles</div><div class="font-bold text-[14px]">${w.items}</div></div>
+        <div class="bg-ink-50 rounded-xl py-2"><div class="text-[10.5px] text-ink-500">Valeur</div><div class="font-bold text-[12.5px]">${w.val}</div></div>
+        <div class="bg-ink-50 rounded-xl py-2"><div class="text-[10.5px] text-ink-500">Resp.</div><div class="font-bold text-[12.5px]">${w.mgr}</div></div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-em btn-xs flex-1 justify-center" onclick="go('stock');toast('Filtre : ${w.name}')"><i data-lucide="boxes" class="w-3.5 h-3.5"></i>Voir le stock</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="go('plan');document.getElementById('plan-wh').value='${w.name}';renderPlan()"><i data-lucide="map" class="w-3.5 h-3.5"></i>Plan</button>
+        <button class="btn btn-ghost btn-xs" onclick="toast('Modification de ${w.name} (mockup)')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+      </div>
+    </div>`).join('');
+}
+function renderStock(){
+  const badge = {ok:'<span class="chip bg-em-50 text-em-700">OK</span>', bas:'<span class="chip bg-amber-50 text-amber-700">Stock bas</span>', rupture:'<span class="chip bg-red-50 text-red-600">Rupture</span>'};
+  document.getElementById('stock-rows').innerHTML = STOCK.map(r=>`
+    <tr>
+      <td class="font-semibold">${r.a}</td><td class="text-ink-500">${r.c}</td>
+      <td class="${r.st==='rupture'?'text-red-600 font-bold':r.st==='bas'?'text-amber-600 font-bold':''}">${r.q}</td>
+      <td class="text-ink-500">${r.s}</td><td>${r.w}</td><td>${r.v}</td><td>${badge[r.st]}</td>
+      <td class="space-x-1.5">
+        ${r.st!=='ok'?`<button class="btn btn-em btn-xs" onclick="openModal('reappro','${r.a}')">Commander</button>`:''}
+        <button class="btn btn-ghost btn-xs" onclick="locateArticle('${r.a}')"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i></button>
+        <button class="btn btn-ghost btn-xs" onclick="openModal('ajuster','${r.a}')">Ajuster</button>
+        <button class="btn btn-ghost btn-xs" onclick="openModal('articleDetail','${r.a}')">Fiche</button>
+      </td>
+    </tr>`).join('');
+}
+function renderSuppliers(){
+  document.getElementById('supp-cards').innerHTML = SUPPLIERS.map(s=>`
+    <div class="card p-5">
+      <div class="flex items-start gap-3 mb-3">
+        <div class="w-11 h-11 rounded-xl bg-ink-900 text-white flex items-center justify-center font-bold text-[13px]">${s.n.split(' ').map(x=>x[0]).slice(0,2).join('')}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-display font-bold text-[14.5px] truncate">${s.n}</div>
+          <div class="text-[11.5px] text-ink-500">${s.cat}</div>
+        </div>
+        <span class="chip bg-em-50 text-em-700"><i data-lucide="star" class="w-3 h-3"></i>${s.note}</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center mb-3">
+        <div class="bg-ink-50 rounded-xl py-2"><div class="text-[10.5px] text-ink-500">Commandes</div><div class="font-bold text-[14px]">${s.orders}</div></div>
+        <div class="bg-ink-50 rounded-xl py-2"><div class="text-[10.5px] text-ink-500">Délai moy.</div><div class="font-bold text-[14px]">${s.delay}</div></div>
+        <div class="bg-ink-50 rounded-xl py-2 cursor-pointer hover:bg-em-50" onclick="toast('Appel vers ${s.tel} (mockup)')"><div class="text-[10.5px] text-ink-500">Contact</div><div class="font-bold text-[11px]">${s.tel.slice(0,8)}…</div></div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-em btn-xs flex-1 justify-center" onclick="openModal('commande')"><i data-lucide="shopping-cart" class="w-3.5 h-3.5"></i>Commander</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('Historique de ${s.n} (mockup)')"><i data-lucide="history" class="w-3.5 h-3.5"></i>Historique</button>
+        <button class="btn btn-ghost btn-xs" onclick="toast('Modification de ${s.n} (mockup)')"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+/* ---------- onglets mouvements ---------- */
+function mvtTab(btn,label){
+  document.querySelectorAll('#mvt-tabs .tabbtn').forEach(b=>b.classList.remove('tab-active'));
+  btn.classList.add('tab-active');
+  toast('Filtre mouvements : '+label);
+}
+
+/* ---------- actions workflow ---------- */
+function approve(btn,ref){
+  const cell = btn.closest('tr').querySelector('td:nth-child(5)');
+  cell.innerHTML = '<span class="chip bg-em-50 text-em-700">Approuvée</span>';
+  btn.parentElement.innerHTML = `<button class="btn btn-ghost btn-xs" onclick="openModal('commande','${ref}')">Créer la commande</button>`;
+  toast('Demande '+ref+' approuvée', true);
+}
+function reject(btn,ref){
+  const cell = btn.closest('tr').querySelector('td:nth-child(5)');
+  cell.innerHTML = '<span class="chip bg-red-50 text-red-600">Rejetée</span>';
+  btn.parentElement.innerHTML = '<span class="text-[11.5px] text-ink-400">—</span>';
+  toast('Demande '+ref+' rejetée');
+}
+function validateInv(btn,ref){
+  const row = btn.closest('tr');
+  row.querySelector('td:nth-child(5)').innerHTML = '<span class="chip bg-em-50 text-em-700">Clôturé</span>';
+  btn.parentElement.innerHTML = '<button class="btn btn-ghost btn-xs" onclick="toast(\'Rapport PDF ouvert (mockup)\')">Rapport</button>';
+  toast('Ajustements de '+ref+' validés — stock corrigé', true);
+}
+
+/* ---------- modals ---------- */
+function mHead(title, sub){
+  return `<div class="flex items-start justify-between p-5 pb-3">
+    <div><div class="font-display font-bold text-[17px]">${title}</div>${sub?`<div class="text-[12px] text-ink-500 mt-0.5">${sub}</div>`:''}</div>
+    <button class="p-1.5 rounded-lg hover:bg-ink-100" onclick="closeModal()"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>`;
+}
+function mFoot(action, label){
+  return `<div class="flex gap-2 p-5 pt-2">
+    <button class="btn btn-ghost flex-1 justify-center" onclick="closeModal()">Annuler</button>
+    <button class="btn btn-em flex-1 justify-center" onclick="closeModal();toast('${action}', true)">${label}</button>
+  </div>`;
+}
+const F = (lbl, inner) => `<div><label class="lbl">${lbl}</label>${inner}</div>`;
+const SEL = opts => `<select class="field">${opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+
+const MODALS = {
+  mvt: () => mHead('Nouveau mouvement de stock','Entrée, sortie ou transfert') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Type de mouvement', SEL(['Entrée (réception hors commande)','Sortie (consommation / chantier)','Transfert entre entrepôts','Ajustement']))}
+      ${F('Article', SEL(STOCK.map(s=>s.a)))}
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Quantité','<input class="field" type="number" placeholder="0" />')}
+        ${F('Unité', SEL(['sac','barre','pièce','bidon','carton','dose']))}
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Entrepôt origine', SEL(WAREHOUSES.map(w=>w.name)))}
+        ${F('Destination', SEL(['—','Chantier Matete','Équipe BTP 2',...WAREHOUSES.map(w=>w.name)]))}
+      </div>
+      ${F('Motif / référence','<input class="field" placeholder="Ex. bon de sortie chantier…" />')}
+    </div>` + mFoot('Mouvement enregistré','Enregistrer'),
+
+  entrepot: () => mHead('Nouvel entrepôt') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Nom','<input class="field" placeholder="Ex. Dépôt Lubumbashi" />')}
+      ${F('Adresse','<input class="field" placeholder="Ville, avenue…" />')}
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Responsable', SEL(['P. Ngoy','S. Ilunga','D. Mbuyi','F. Nzuzi']))}
+        ${F('Capacité (m²)','<input class="field" type="number" placeholder="500" />')}
+      </div>
+      ${F('Téléphone du site','<input class="field" value="+243 " />')}
+    </div>` + mFoot('Entrepôt créé','Créer l’entrepôt'),
+
+  article: () => mHead('Nouvel article','Référencement au catalogue') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Désignation','<input class="field" placeholder="Ex. Ciment gris 50kg" />')}
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Catégorie', SEL(['Matériaux BTP','Intrants agricoles','Fournitures bureau','Pièces & outillage']))}
+        ${F('Unité', SEL(['sac','pièce','barre','bidon','carton','litre','kg']))}
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        ${F('Prix unitaire','<input class="field" type="number" placeholder="0.00" />')}
+        ${F('Devise', SEL(['USD','CDF']))}
+        ${F('Seuil d’alerte','<input class="field" type="number" placeholder="0" />')}
+      </div>
+      ${F('Entrepôt par défaut', SEL(WAREHOUSES.map(w=>w.name)))}
+      ${F('Fournisseur principal', SEL(SUPPLIERS.map(s=>s.n)))}
+    </div>` + mFoot('Article créé','Créer l’article'),
+
+  ajuster: (art) => mHead('Ajuster le stock', art) + `
+    <div class="px-5 space-y-3.5">
+      <div class="bg-ink-50 rounded-xl p-3 text-[12.5px]">Stock actuel : <b>${(STOCK.find(s=>s.a===art)||{q:'—'}).q}</b></div>
+      ${F('Nouvelle quantité','<input class="field" type="number" placeholder="0" />')}
+      ${F('Motif', SEL(['Casse / perte','Erreur de saisie','Don / consommation interne','Vol constaté','Autre']))}
+      ${F('Commentaire','<textarea class="field" rows="2" placeholder="Précisions…"></textarea>')}
+    </div>` + mFoot('Ajustement enregistré (avec trace)','Ajuster'),
+
+  articleDetail: (art) => {
+    const r = STOCK.find(s=>s.a===art) || STOCK[0];
+    return mHead(r.a, r.c) + `
+    <div class="px-5 space-y-3">
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="bg-ink-50 rounded-xl py-3"><div class="text-[10.5px] text-ink-500">Stock</div><div class="font-bold">${r.q}</div></div>
+        <div class="bg-ink-50 rounded-xl py-3"><div class="text-[10.5px] text-ink-500">Seuil</div><div class="font-bold">${r.s}</div></div>
+        <div class="bg-ink-50 rounded-xl py-3"><div class="text-[10.5px] text-ink-500">Valeur unit.</div><div class="font-bold">${r.v}</div></div>
+      </div>
+      <div class="text-[12.5px] text-ink-600">Entrepôt principal : <b>${r.w}</b> · Rotation : 34 j · Dernier mouvement : 02/07/2026</div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="closeModal();locateArticle('${r.a}')"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i>Localiser</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="closeModal();go('mouvements')">Mouvements</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('Étiquette code-barres imprimée (mockup)')">Code-barres</button>
+        <button class="btn btn-em btn-xs flex-1 justify-center" onclick="closeModal();openModal('reappro','${r.a}')">Commander</button>
+      </div>
+    </div><div class="p-3"></div>`;
+  },
+
+  reappro: (art) => mHead('Demande de réapprovisionnement', art) + `
+    <div class="px-5 space-y-3.5">
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Quantité à commander','<input class="field" type="number" value="200" />')}
+        ${F('Fournisseur', SEL(SUPPLIERS.map(s=>s.n)))}
+      </div>
+      ${F('Entrepôt de livraison', SEL(WAREHOUSES.map(w=>w.name)))}
+      ${F('Urgence', SEL(['Normale','Urgente (rupture)','Planifiée']))}
+      ${F('Justification','<textarea class="field" rows="2" placeholder="Ex. rupture bloquante chantier Matete…"></textarea>')}
+    </div>` + mFoot('Demande d’achat créée — en attente d’approbation','Soumettre la demande'),
+
+  demande: () => MODALS.reappro('Nouvelle demande d\'achat'),
+
+  commande: (ref) => mHead('Commande fournisseur', ref?('Depuis la demande '+ref):'Commande directe') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Fournisseur', SEL(SUPPLIERS.map(s=>s.n)))}
+      <div>
+        <label class="lbl">Lignes de commande</label>
+        <div class="space-y-2" id="cf-lines">
+          <div class="flex gap-2"><select class="field flex-1">${STOCK.map(s=>`<option>${s.a}</option>`).join('')}</select><input class="field !w-20" type="number" placeholder="Qté" /></div>
+        </div>
+        <button class="btn btn-ghost btn-xs mt-2" onclick="addLine()"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter une ligne</button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Devise', SEL(['USD','CDF']))}
+        ${F('Livraison prévue','<input class="field" type="date" value="2026-07-08" />')}
+      </div>
+      ${F('Entrepôt de livraison', SEL(WAREHOUSES.map(w=>w.name)))}
+    </div>` + mFoot('Commande fournisseur envoyée','Envoyer la commande'),
+
+  cfDetail: (ref) => mHead('Commande '+ref,'Kin Matériaux SARL · 12 400 USD') + `
+    <div class="px-5 space-y-3">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Article</th><th>Qté</th><th>PU</th><th>Total</th></tr></thead>
+        <tbody>
+          <tr><td>Ciment gris 50kg</td><td>400</td><td>14,50 USD</td><td>5 800 USD</td></tr>
+          <tr><td>Fer à béton Ø12</td><td>300</td><td>18,00 USD</td><td>5 400 USD</td></tr>
+          <tr><td>Tôle galva 3m</td><td>80</td><td>15,00 USD</td><td>1 200 USD</td></tr>
+        </tbody>
+      </table></div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('PDF ouvert (mockup)')">PDF</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('Relance envoyée (mockup)')">Relancer</button>
+        <button class="btn btn-em btn-xs flex-1 justify-center" onclick="closeModal();go('receptions')">Réceptionner</button>
+      </div>
+    </div><div class="p-3"></div>`,
+
+  reception: (ref) => mHead('Réception — '+ref,'Contrôle des quantités livrées') + `
+    <div class="px-5 space-y-3.5">
+      <div class="space-y-2">
+        <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Ciment gris 50kg</span><span class="text-[11.5px] text-ink-500">attendu 200</span><input class="field !w-20" type="number" value="200" /></div>
+        <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Fer à béton Ø12</span><span class="text-[11.5px] text-ink-500">attendu 300</span><input class="field !w-20" type="number" value="300" /></div>
+        <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Tôle galva 3m</span><span class="text-[11.5px] text-ink-500">attendu 80</span><input class="field !w-20" type="number" value="78" /></div>
+      </div>
+      ${F('État de la livraison', SEL(['Conforme','Partielle','Avec réserves (casse, manquants…)']))}
+      ${F('Remarques','<textarea class="field" rows="2" placeholder="Ex. 2 tôles endommagées…"></textarea>')}
+      <div class="bg-em-50 rounded-xl p-3 text-[12px] text-em-800 flex gap-2"><i data-lucide="info" class="w-4 h-4 shrink-0"></i>Le stock sera incrémenté et un bon de réception généré automatiquement.</div>
+    </div>` + mFoot('Réception validée — stock mis à jour','Valider la réception'),
+
+  fournisseur: () => mHead('Nouveau fournisseur') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Raison sociale','<input class="field" placeholder="Ex. Kin Matériaux SARL" />')}
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Catégorie', SEL(['Matériaux BTP','Intrants agricoles','Outillage','Fournitures bureau','Produits vétérinaires']))}
+        ${F('Téléphone','<input class="field" value="+243 " />')}
+      </div>
+      ${F('Email','<input class="field" type="email" placeholder="contact@…" />')}
+      ${F('Adresse','<input class="field" placeholder="Ville, avenue…" />')}
+      <div class="grid grid-cols-2 gap-3">
+        ${F('Devise habituelle', SEL(['USD','CDF']))}
+        ${F('Délai de paiement', SEL(['Comptant','15 jours','30 jours']))}
+      </div>
+    </div>` + mFoot('Fournisseur créé','Créer le fournisseur'),
+
+  inventaire: () => mHead('Lancer un inventaire','Comptage physique') + `
+    <div class="px-5 space-y-3.5">
+      ${F('Entrepôt', SEL(WAREHOUSES.map(w=>w.name)))}
+      ${F('Périmètre', SEL(['Inventaire complet','Par catégorie','Articles à forte valeur','Articles en alerte']))}
+      ${F('Équipe de comptage', SEL(['P. Ngoy + A. Kalala','S. Ilunga + D. Mbuyi','F. Nzuzi seul']))}
+      ${F('Date de début','<input class="field" type="date" value="2026-07-03" />')}
+      <div class="bg-amber-50 rounded-xl p-3 text-[12px] text-amber-800 flex gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 shrink-0"></i>Les mouvements de l’entrepôt seront gelés pendant le comptage.</div>
+    </div>` + mFoot('Inventaire lancé — feuilles de comptage générées','Lancer'),
+
+  comptage: (ref) => mHead('Comptage — '+ref,'Entrepôt Limete · 142/380 articles') + `
+    <div class="px-5 space-y-2.5">
+      <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Peinture blanche 20L<div class="text-[10.5px] text-ink-400 font-normal">Théorique : 62</div></span><input class="field !w-24" type="number" placeholder="Compté" /></div>
+      <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Gants de chantier<div class="text-[10.5px] text-ink-400 font-normal">Théorique : 148</div></span><input class="field !w-24" type="number" placeholder="Compté" /></div>
+      <div class="flex items-center gap-2"><span class="flex-1 text-[13px] font-semibold">Brouette renforcée<div class="text-[10.5px] text-ink-400 font-normal">Théorique : 12</div></span><input class="field !w-24" type="number" placeholder="Compté" /></div>
+      <button class="btn btn-ghost btn-xs w-full justify-center" onclick="toast('Article suivant (mockup)')">Article suivant<i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
+    </div>` + mFoot('Comptages enregistrés','Enregistrer'),
+
+  ecarts: (ref) => mHead('Écarts — '+ref,'Dépôt Matadi · 3 écarts') + `
+    <div class="px-5">
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Article</th><th>Théorique</th><th>Compté</th><th>Écart</th></tr></thead>
+        <tbody>
+          <tr><td>Tôle galva 3m</td><td>58</td><td>56</td><td class="text-red-600 font-semibold">−2</td></tr>
+          <tr><td>Clous 10cm (carton)</td><td>24</td><td>25</td><td class="text-em-600 font-semibold">+1</td></tr>
+          <tr><td>Brouette renforcée</td><td>12</td><td>11</td><td class="text-red-600 font-semibold">−1</td></tr>
+        </tbody>
+      </table></div>
+    </div>` + mFoot('Ajustements validés — stock corrigé','Valider les ajustements'),
+
+  cellDetail: (arg) => {
+    const [wh, code] = arg.split('|');
+    let cell=null, zoneName='';
+    PLANS[wh].forEach(z=>z.cells.forEach(c=>{if(c.code===code){cell=c;zoneName=z.zone;}}));
+    return mHead('Emplacement '+code, wh+' · '+zoneName) + `
+    <div class="px-5 space-y-3">
+      <div class="flex items-center gap-3">
+        <div class="h-2.5 flex-1 rounded-full bg-ink-100 overflow-hidden"><div class="h-full rounded-full" style="width:${cell.occ}%;background:${cell.occ>85?'#ef4444':cell.occ>=60?'#f59e0b':'#10b981'}"></div></div>
+        <span class="text-[12px] font-bold">${cell.occ}% occupé</span>
+      </div>
+      ${cell.items.length?`
+      <div class="scrollx"><table class="tbl w-full">
+        <thead><tr><th>Article stocké</th><th>Quantité</th><th></th></tr></thead>
+        <tbody>${cell.items.map(i=>`<tr><td class="font-semibold">${i.a}</td><td>${i.q}</td>
+          <td class="space-x-1.5"><button class="btn btn-ghost btn-xs" onclick="closeModal();openModal('mvt')">Sortir</button><button class="btn btn-ghost btn-xs" onclick="closeModal();openModal('ajuster','${i.a}')">Ajuster</button></td></tr>`).join('')}</tbody>
+      </table></div>`
+      :'<div class="bg-ink-50 rounded-xl p-4 text-center text-[13px] text-ink-500">Emplacement vide — disponible pour rangement.</div>'}
+      <div class="flex gap-2">
+        <button class="btn btn-em btn-xs flex-1 justify-center" onclick="closeModal();openModal('mvt')"><i data-lucide="arrow-down-left" class="w-3.5 h-3.5"></i>Ranger ici</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('Étiquette emplacement ${code} imprimée (mockup)')"><i data-lucide="qr-code" class="w-3.5 h-3.5"></i>Étiquette QR</button>
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="closeModal();openModal('comptage','INV-2026-07')"><i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>Compter</button>
+      </div>
+    </div><div class="p-3"></div>`;
+  },
+
+  mvtDetail: (ref) => mHead('Mouvement '+ref, ref.startsWith('BR')?'Bon de réception':ref.startsWith('BS')?'Bon de sortie':ref.startsWith('TR')?'Bon de transfert':'Ajustement') + `
+    <div class="px-5 space-y-3">
+      <div class="grid grid-cols-2 gap-2 text-[12.5px]">
+        <div class="bg-ink-50 rounded-xl p-3"><div class="text-[10.5px] text-ink-500">Opérateur</div><b>P. Ngoy</b></div>
+        <div class="bg-ink-50 rounded-xl p-3"><div class="text-[10.5px] text-ink-500">Date</div><b>02/07/2026 09:14</b></div>
+        <div class="bg-ink-50 rounded-xl p-3"><div class="text-[10.5px] text-ink-500">Pièce liée</div><b>CF-2026-0102</b></div>
+        <div class="bg-ink-50 rounded-xl p-3"><div class="text-[10.5px] text-ink-500">Valeur</div><b>2 900 USD</b></div>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-xs flex-1 justify-center" onclick="toast('Bon PDF ouvert (mockup)')">Imprimer le bon</button>
+        <button class="btn btn-danger btn-xs flex-1 justify-center" onclick="closeModal();toast('Demande d’annulation envoyée pour validation (mockup)')">Demander l’annulation</button>
+      </div>
+    </div><div class="p-3"></div>`,
+};
+
+function openModal(kind, arg){
+  document.getElementById('modal').innerHTML = MODALS[kind](arg);
+  document.getElementById('overlay').classList.add('open');
+  lucide.createIcons();
+}
+function closeModal(){document.getElementById('overlay').classList.remove('open');}
+function addLine(){
+  const div = document.createElement('div');
+  div.className = 'flex gap-2';
+  div.innerHTML = `<select class="field flex-1">${STOCK.map(s=>`<option>${s.a}</option>`).join('')}</select><input class="field !w-20" type="number" placeholder="Qté" />`;
+  document.getElementById('cf-lines').appendChild(div);
+}
+
+/* ---------- init ---------- */
+buildNav();
+renderWh();
+renderStock();
+renderSuppliers();
+renderPlan();
+document.getElementById('plan-articles').innerHTML =
+  [...new Set(Object.values(PLANS).flatMap(zs=>zs.flatMap(z=>z.cells.flatMap(c=>c.items.map(i=>i.a)))))]
+    .map(a=>`<option value="${a}"></option>`).join('');
+lucide.createIcons();
+go('dashboard');
+</script>
+</body>
+</html>

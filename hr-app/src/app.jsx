@@ -1,4 +1,5 @@
 import React from "react";
+import DOMPurify from "dompurify";
 import PhoneInputBase, { formatPhoneNumberIntl } from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
 import fr from "react-phone-number-input/locale/fr.json";
@@ -6,8 +7,22 @@ import "react-phone-number-input/style.css";
 import { api, API_ROOT } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
-import { defaultSymbol, symbolFor } from "./currency.js";
+import { defaultSymbol, symbolFor, cleanCurrencySymbol } from "./currency.js";
 import { AV_COLORS } from "./data.js";
+
+function sanitizeHtml(html) {
+  return DOMPurify.sanitize(String(html ?? ""), {
+    USE_PROFILES: { html: true },
+  });
+}
+
+function openSanitizedHtml(html, print = false) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(sanitizeHtml(html));
+  w.document.close();
+  if (print) w.print();
+}
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -30,6 +45,7 @@ const P = {
   userPlus: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M19 8v6M22 11h-6",
   network: "M9 2h6v6H9zM2 16h6v6H2zM16 16h6v6h-6zM12 8v4M6 16v-2h12v2",
   barChart: "M3 3v18h18M7 16v-5M12 16V8M17 16v-9",
+  activity: "M3 12h4l3 8 4-16 3 8h4",
   circleUser: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M7 20a5 5 0 0 1 10 0M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
   bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0",
   plus: "M12 5v14M5 12h14",
@@ -91,6 +107,7 @@ const NAV = [
   { id: "timesheet", label: "Temps projets", icon: "timer" },
   { section: "Paie & rémunération" },
   { id: "paie", label: "Paie", icon: "wallet" },
+  { id: "previsionnel", label: "Prévisionnel", icon: "activity" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
   { id: "declarations", label: "Déclarations sociales", icon: "fileCheck" },
   { section: "Développement" },
@@ -102,6 +119,8 @@ const NAV = [
   { id: "organigramme", label: "Postes & départements", icon: "network" },
   { id: "reporting", label: "Reporting RH", icon: "barChart" },
   { id: "selfservice", label: "Espace employé", icon: "circleUser" },
+  { section: "Système" },
+  { id: "parametres", label: "Paramètres", icon: "settings" },
 ];
 const ITEMS = NAV.filter((n) => n.id);
 const TITLES = Object.fromEntries(ITEMS.map((n) => [n.id, n.label]));
@@ -492,6 +511,7 @@ Object.assign(ACTION_FORMS, {
   employee: { title: "Nouvel employÃ©", submit: "CrÃ©er", success: "EmployÃ© crÃ©Ã© dans la base.", defaults: { firstName: "", lastName: "", username: "", password: "ChangeMe123!", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "" }, fields: [{ key: "firstName", label: "PrÃ©nom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "password", label: "Mot de passe initial", type: "password", required: true }, { key: "roleId", label: "RÃ´le", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "TÃ©lÃ©phone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }] },
   editEmployee: { title: "Modifier employe", submit: "Enregistrer", success: "Employe modifie dans la base.", defaults: { id: "", firstName: "", lastName: "", username: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" }, fields: [{ key: "firstName", label: "Prenom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "Telephone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }, { key: "bloodGroup", label: "Groupe sanguin" }, { key: "street", label: "Adresse" }, { key: "city", label: "Ville" }, { key: "country", label: "Pays" }] },
   designation: { title: "Nouveau poste", submit: "CrÃ©er", success: "Poste crÃ©Ã© dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du poste", required: true }] },
+  department: { title: "Nouveau departement", submit: "Creer", success: "Departement cree dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du departement", required: true }] },
   shift: { title: "Nouvel horaire", submit: "CrÃ©er", success: "Horaire crÃ©Ã© dans la base.", defaults: { name: "", startTime: "08:00", endTime: "17:00" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "startTime", label: "DÃ©but", type: "time", required: true }, { key: "endTime", label: "Fin", type: "time", required: true }] },
   award: { title: "Nouvelle rÃ©compense", submit: "CrÃ©er", success: "RÃ©compense crÃ©Ã©e dans la base.", defaults: { name: "", description: "" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "description", label: "Description", type: "textarea" }] },
   designationHistory: { title: "Affecter un poste", submit: "Enregistrer", success: "Historique de poste enregistrÃ©.", defaults: { userId: "", designationId: "", designationStartDate: TODAY, designationEndDate: "", designationComment: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations", required: true }, { key: "designationStartDate", label: "DÃ©but", type: "date" }, { key: "designationEndDate", label: "Fin", type: "date" }, { key: "designationComment", label: "Commentaire", type: "textarea" }] },
@@ -1251,6 +1271,7 @@ function App() {
           state: form.state, zipCode: form.zipCode, country: form.country, status: canManageUserStatus() ? form.status : undefined,
         }));
       }
+      if (kind === "department") await api.createDepartment({ name: form.name });
       if (kind === "designation") await api.createDesignation({ name: form.name });
       if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
       if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
@@ -1291,15 +1312,17 @@ function App() {
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
     paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} reload={load} />,
+    previsionnel: <Forecast />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
     formation: <Formation {...ctx} />,
     recrutement: <Recrutement {...ctx} reload={load} />,
     projets: <ProjetsONG data={data} staff={staff} setModal={setModal} />,
-    organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
+    organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} onNewDept={() => setModal({ kind: "department" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
     selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
+    parametres: <Parametres />,
   };
 
   return (
@@ -1384,6 +1407,228 @@ function App() {
       <Toaster />
       <AiAssistant />
     </div>
+  );
+}
+
+/* ── Prévisionnel RH (masse salariale projetée) ────────────────────────── */
+// Réutilise le moteur forecast backend2 avec scope "hr" : projette la masse
+// salariale (contrats actifs) comme sortie. Copie adaptée (pas de code partagé
+// entre apps : builds Vite isolés).
+const HRF_HORIZONS = [
+  { v: 1, label: "1 mois" }, { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" },
+  { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
+];
+const HRF_MODES = [
+  { v: "prudent", label: "Prudent", hint: "engagé seul", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
+  { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
+];
+const hrfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const hrfSigned = (v) => (v > 0 ? "+" : "") + hrfNf.format(Math.round(Number(v || 0)));
+function hrfMonth(key) {
+  const [y, m] = key.split("-");
+  const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+  return `${names[Number(m) - 1]} ${y}`;
+}
+function hrfSeries(months) {
+  const byCur = new Map();
+  for (const m of months) {
+    for (const c of m.currencies) {
+      const key = String(c.currencyId ?? "null");
+      const code = cleanCurrencySymbol({ currencyCode: c.currencyCode, currencySymbol: c.currencySymbol }) || c.currencyCode || "?";
+      const entry = byCur.get(key) || { code, points: [] };
+      const last = entry.points.length ? entry.points[entry.points.length - 1] : null;
+      const prev = last ? last.cumul : 0, prevLow = last ? last.low : 0, prevHigh = last ? last.high : 0;
+      const opening = Number(c.opening || 0), net = Number(c.net || 0);
+      const cumul = prev + opening + net;
+      const low = prevLow + opening + Number(c.netLow ?? net);
+      const high = prevHigh + opening + Number(c.netHigh ?? net);
+      entry.points.push({ month: m.month, net, opening, cumul, low, high });
+      byCur.set(key, entry);
+    }
+  }
+  return [...byCur.values()];
+}
+function HrfChart({ serie }) {
+  const W = 560, H = 170, pad = 30, color = "#2563eb";
+  const pts = serie.points;
+  if (pts.length < 2) return <div className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
+  const min = Math.min(0, ...ys), max = Math.max(0, ...ys), span = max - min || 1;
+  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
+  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
+  const zeroY = y(0), gid = `hrf-${serie.code}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.18" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="#cbd5e1" strokeDasharray="3 3" />
+      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
+      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="#fff" stroke={color} strokeWidth="2">
+          <title>{`${hrfMonth(p.month)} : ${hrfSigned(p.cumul)} ${serie.code}`}</title>
+        </circle>
+      ))}
+      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
+        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="#94a3b8">{hrfMonth(p.month)}</text>
+      ))}
+    </svg>
+  );
+}
+function HrfSeg({ active, disabled, onClick, title, children }) {
+  return (
+    <button onClick={onClick} disabled={disabled} title={title}
+      style={{
+        height: 32, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1,
+        border: active ? 0 : "1px solid #e2e8f0",
+        background: active ? "linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%)" : "#fff",
+        color: active ? "#fff" : "#475569",
+      }}>{children}</button>
+  );
+}
+function Forecast() {
+  const [horizon, setHorizon] = React.useState(3);
+  const [mode, setMode] = React.useState("prudent");
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [showSim, setShowSim] = React.useState(false);
+  const [payPct, setPayPct] = React.useState(0);
+  const adjust = payPct !== 0 ? `hr:${(1 + payPct / 100).toFixed(2)}` : "";
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true); setError("");
+    api.forecastCashFlow({ horizon, mode, scope: "hr", adjust })
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { if (alive) setError(String(e.message || e)); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [horizon, mode, adjust]);
+
+  const series = React.useMemo(() => (data ? hrfSeries(data.months) : []), [data]);
+  // Masse salariale = sortie (montants négatifs) → on affiche la valeur absolue cumulée.
+  const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, total: last ? Math.abs(last.cumul) : 0 }; });
+  const horizonLabel = HRF_HORIZONS.find((h) => h.v === horizon)?.label;
+  const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "#64748b" };
+
+  return (
+    <div style={{ maxWidth: 860 }}>
+      <h2 style={{ margin: "0 0 2px" }}>Prévisionnel — Masse salariale</h2>
+      <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Projection de la masse salariale (contrats actifs), par devise. Aucune conversion entre devises.</p>
+
+      <div className="card" style={{ padding: 18, marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
+        <div>
+          <div style={upper}>Horizon</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {HRF_HORIZONS.map((h) => <HrfSeg key={h.v} active={horizon === h.v} onClick={() => setHorizon(h.v)}>{h.label}</HrfSeg>)}
+          </div>
+        </div>
+        <div>
+          <div style={upper}>Hypothèse</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {HRF_MODES.map((m) => (
+              <HrfSeg key={m.v} active={mode === m.v} disabled={!m.enabled} title={m.enabled ? m.hint : `${m.hint} — à venir`} onClick={() => m.enabled && setMode(m.v)}>
+                {m.label} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {m.hint}</span>
+              </HrfSeg>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto" }}>
+          <div style={upper}>Simulation</div>
+          <HrfSeg active={showSim || payPct !== 0} onClick={() => setShowSim((v) => !v)}>« Et si ? »</HrfSeg>
+        </div>
+      </div>
+
+      {showSim && (
+        <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <strong style={{ fontSize: 14 }}>Simulation « et si ? » — salaires</strong>
+            {payPct !== 0 && <button className="btn btn-ghost" style={{ height: 28, fontSize: 12 }} onClick={() => setPayPct(0)}>Réinitialiser</button>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 96, fontSize: 13 }}>Salaires</span>
+            <input type="range" min={-50} max={50} step={5} value={payPct} onChange={(e) => setPayPct(Number(e.target.value))} style={{ flex: 1, minWidth: 120, accentColor: "#2563eb" }} />
+            <span style={{ width: 46, textAlign: "right", fontSize: 13, fontWeight: 700, color: payPct > 0 ? "#dc2626" : payPct < 0 ? "#16a34a" : "#94a3b8" }}>{payPct > 0 ? "+" : ""}{payPct}%</span>
+          </div>
+          <p className="muted" style={{ fontSize: 11, margin: "8px 0 0" }}>Ajuste la masse salariale projetée (ex. embauches/départs prévus).</p>
+        </div>
+      )}
+
+      {loading && <div className="card" style={{ padding: 18 }}><span className="muted">Calcul de la projection…</span></div>}
+      {error && <div className="card" style={{ padding: 18, color: "#dc2626" }}>Erreur : {error}</div>}
+
+      {!loading && !error && data && (summary.length === 0 ? (
+        <div className="card" style={{ padding: 18 }}><span className="muted">Aucun contrat actif à projeter sur cet horizon.</span></div>
+      ) : (
+        <>
+          <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>
+              À ce rythme, la masse salariale projetée à <strong>{horizonLabel}</strong> représente{" "}
+              {summary.map((s, i) => (<strong key={s.code} style={{ color: "#dc2626" }}>{i > 0 ? " et " : ""}{hrfNf.format(Math.round(s.total))} {s.code}</strong>))}.
+            </div>
+            <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
+              {summary.map((s) => (
+                <div key={s.code} className="card" style={{ padding: 16, borderRadius: 14, background: "#f8fafc" }}>
+                  <div className="kpi-label">Masse salariale · {s.code}</div>
+                  <div className="kpi-value" style={{ color: "#dc2626" }}>{hrfNf.format(Math.round(s.total))} {s.code}</div>
+                  <div className="kpi-sub">sur {horizonLabel}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {series.map((s) => (
+            <div className="card" style={{ padding: 18, marginBottom: 14 }} key={s.code}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <strong style={{ fontSize: 15 }}>Trésorerie projetée (salaires) · {s.code}</strong>
+                <span className="chip">{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
+              </div>
+              <HrfChart serie={s} />
+            </div>
+          ))}
+        </>
+      ))}
+    </div>
+  );
+}
+
+/* ── Paramètres (dont version applicative) ─────────────────────────────── */
+function Parametres() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <>
+      <PageHead eyebrow="Système" title="Paramètres" />
+      <div className="card" style={{ maxWidth: 560, padding: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
+        <Row k="Version" v={`v${base}`} />
+        <Row k="Build" v={build} />
+        <Row k="Commit" v={commit} />
+        <Row k="Dernière mise à jour" v={lastUpdate} />
+        <Row k="Environnement" v={env} />
+      </div>
+    </>
   );
 }
 
@@ -1842,7 +2087,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
               <EmptyState title="Module discipline a connecter" detail="Aucune table/API discipline n'existe encore pour cet employe." />
             </Employee360Panel>
             <Employee360Panel title="Documents signes">
-              <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(d.content); w.document.close(); }}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
+              <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(d.content)}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
             </Employee360Panel>
             {candidatureRecord && (
               <Employee360Panel title="Dossier de candidature">
@@ -1990,7 +2235,7 @@ function Conges({ data, staff, setModal }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{name} - <span className="muted" style={{ fontWeight: 400 }}>{c.type || "Conge"}</span></div>
                   <div className="tiny">{detail(c)} - {nf.format(Number(c.requestedDays || 0))} j{c.reason ? " - " + c.reason : ""}</div>
-                  <div className="tiny">Solde: {nf.format(Number(c.balanceBefore || 0))} -> {nf.format(Number(c.balanceAfter || 0))} j</div>
+                  <div className="tiny">Solde: {nf.format(Number(c.balanceBefore || 0))} {"→"} {nf.format(Number(c.balanceAfter || 0))} j</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span>
@@ -2031,15 +2276,21 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const [periodFilter, setPeriodFilter] = React.useState("");
   const [generating, setGenerating] = React.useState(false);
   const [generateError, setGenerateError] = React.useState("");
+  const [generateInfo, setGenerateInfo] = React.useState("");
+  const [bulkSubmitting, setBulkSubmitting] = React.useState(false);
   const rows = data.salaries || [];
   const payrollRows = data.payrolls || [];
   const summary = data.payrollSummary || EMPTY_DATA.payrollSummary;
   const [payrollPreview, setPayrollPreview] = React.useState(null); // { html } ou { loading:true }
+  const previewFrameRef = React.useRef(null);
   const openPayrollPreview = async (p) => {
     setPayrollPreview({ loading: true });
-    try { setPayrollPreview({ html: await api.payrollHtml(p.id) }); }
+    // L'HTML backend embarque un window.print() au chargement (voulu pour l'onglet
+    // dédié) : on le retire pour l'aperçu, l'impression se fait via le bouton.
+    try { setPayrollPreview({ html: (await api.payrollHtml(p.id)).replace(/<script>[\s\S]*?<\/script>/g, "") }); }
     catch (e) { setPayrollPreview(null); alert(e.message); }
   };
+  const printPreview = () => { try { previewFrameRef.current?.contentWindow?.print(); } catch (e) { alert(e.message); } };
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
@@ -2071,17 +2322,52 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const payrollGrossLines = moneyLinesFrom(filteredPayrolls, (p) => p.grossSalary ?? payrollGross(p), moneySymbolFor);
   const availablePeriods = [...new Set(payrollRows.map((p) => p.period).filter(Boolean))].sort().reverse();
 
+  const now = new Date();
+  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // Période de paie choisie par la personne RH (défaut : mois courant).
+  const [payPeriod, setPayPeriod] = React.useState(currentPeriod);
+  const monthRows = payrollRows.filter((p) => p.period === payPeriod);
+  const monthDrafts = monthRows.filter((p) => ["draft", "rejected"].includes(String(p.status || "draft")));
+  const monthPending = monthRows.filter((p) => String(p.status) === "pending_approval").length;
+  const monthValidated = monthRows.filter((p) => String(p.status) === "validated").length;
+  const monthPaid = monthRows.filter((p) => String(p.status) === "paid").length;
+
   const handleGenerate = async () => {
     if (!employeeFilter) { setGenerateError("Selectionne un employe pour generer la paie."); return; }
-    const now = new Date();
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    setGenerating(true); setGenerateError("");
+    setGenerating(true); setGenerateError(""); setGenerateInfo("");
     try {
-      const draft = await api.generatePayroll(employeeFilter, period);
+      const draft = await api.generatePayroll(employeeFilter, payPeriod);
       setModal({ kind: "payroll", prefill: draft });
     } catch (e) {
       setGenerateError(e.message || "Erreur lors de la generation.");
     } finally { setGenerating(false); }
+  };
+
+  const handleGenerateMonth = async () => {
+    setGenerating(true); setGenerateError(""); setGenerateInfo("");
+    try {
+      const res = await api.generateMonthPayrolls(payPeriod);
+      const parts = [`${res.created} bulletin(s) cree(s)`];
+      if (res.alreadyExisting) parts.push(`${res.alreadyExisting} deja existant(s)`);
+      if (res.errors?.length) parts.push(`${res.errors.length} erreur(s) : ${res.errors.map((e) => `${personName(staff, e.userId)} (${e.error})`).join(" ; ")}`);
+      setGenerateInfo(`Periode ${res.period} — ${parts.join(", ")}.`);
+      reload();
+    } catch (e) {
+      setGenerateError(e.message || "Erreur lors de la generation du mois.");
+    } finally { setGenerating(false); }
+  };
+
+  const handleSubmitAllDrafts = async () => {
+    if (!monthDrafts.length) return;
+    setBulkSubmitting(true); setGenerateError(""); setGenerateInfo("");
+    let ok = 0; const fails = [];
+    for (const p of monthDrafts) {
+      try { await api.submitPayroll(p.id); ok += 1; }
+      catch (e) { fails.push(`${personName(staff, p.userId)} (${e.message})`); }
+    }
+    setGenerateInfo(`${ok} bulletin(s) soumis pour approbation${fails.length ? ` — echecs : ${fails.join(" ; ")}` : ""}.`);
+    setBulkSubmitting(false);
+    reload();
   };
 
   const handleSubmit = async (p) => {
@@ -2116,7 +2402,29 @@ function Paie({ data, staff, masse, setModal, reload }) {
   );
   return (
     <>
-      <PageHead eyebrow="Payroll" title="Paie professionnelle" action="Nouveau bulletin" actionIcon="plus" onAction={() => setModal({ kind: "payroll" })} />
+      <PageHead eyebrow="Payroll" title="Paie professionnelle" action={generating ? "Calcul..." : `Generer la paie de ${payPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} />
+      <div className="card pad" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 1 — Generer</div>
+            <label className="tiny muted" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>Periode de paie :
+              <input type="month" className="pillbtn" value={payPeriod} onChange={(e) => { if (e.target.value) setPayPeriod(e.target.value); }} aria-label="Periode de paie" />
+            </label>
+            <div className="tiny muted">{monthRows.length} bulletin(s) sur cette periode. Le bouton en haut cree un brouillon pour chaque employe sous contrat qui n'en a pas encore.</div>
+          </div>
+          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 2 — Faire approuver</div>
+            <div className="tiny muted">{monthDrafts.length} brouillon(s) a soumettre, {monthPending} en attente du superieur.</div>
+            {monthDrafts.length > 0 && <button type="button" className="link" style={{ fontSize: 12 }} onClick={handleSubmitAllDrafts} disabled={bulkSubmitting}>{bulkSubmitting ? "Envoi..." : "Tout soumettre"}</button>}
+          </div>
+          <div style={{ flex: "1 1 180px", minWidth: 180 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Etape 3 — Payer</div>
+            <div className="tiny muted">{monthValidated} valide(s) a payer, {monthPaid} paye(s). Marque chaque bulletin paye dans la liste ci-dessous.</div>
+          </div>
+        </div>
+        {generateInfo && <div className="chip emerald" style={{ marginTop: 10 }}>{generateInfo}</div>}
+        {generateError && <div className="chip amber" style={{ marginTop: 10 }}>{generateError}</div>}
+      </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Brouillons" value={summary.workflow.draft} />
         <KPI label="En approbation" value={payrollRows.filter((p) => String(p.status) === "pending_approval").length} tone={payrollRows.filter((p) => String(p.status) === "pending_approval").length ? "warn" : undefined} />
@@ -2133,19 +2441,17 @@ function Paie({ data, staff, masse, setModal, reload }) {
         <div className="section-head">
           <h3 className="font-display">Bulletins de paie</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <button type="button" className="pillbtn" onClick={handleGenerate} disabled={generating} title="Generer depuis contrat et presences du mois en cours">
-              <Icon name="play" style={{ width: 13, height: 13 }} /> {generating ? "Calcul..." : "Generer depuis contrat"}
+            <button type="button" className="pillbtn" onClick={handleGenerate} disabled={generating} title="Generer le bulletin de l'employe selectionne dans le filtre ci-dessous">
+              <Icon name="play" style={{ width: 13, height: 13 }} /> {generating ? "Calcul..." : "Generer pour un employe"}
             </button>
+            <button type="button" className="link" onClick={() => setModal({ kind: "payroll" })} title="Cas exceptionnel : saisir un bulletin entierement a la main"><Icon name="plus" style={{ width: 13, height: 13 }} /> Saisie manuelle</button>
             <button type="button" className="link" onClick={exportPayrolls}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button>
           </div>
         </div>
-        {generateError && <div className="chip amber" style={{ marginBottom: 8 }}>{generateError}</div>}
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
-          <select className="pillbtn" value={employeeFilter} onChange={(e) => { setEmployeeFilter(e.target.value); setGenerateError(""); }} aria-label="Filtrer par employe">
-            <option value="">Tous les employes</option>
-            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-          </select>
+          <Autocomplete value={employeeFilter} onChange={(v) => { setEmployeeFilter(v); setGenerateError(""); }}
+            placeholder="Tous les employes" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           <select className="pillbtn" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} aria-label="Filtrer par periode">
             <option value="">Toutes les periodes</option>
             {availablePeriods.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -2180,13 +2486,12 @@ function Paie({ data, staff, masse, setModal, reload }) {
                 {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--red-500, #ef4444)" }} onClick={() => handleReject(p)}>Rejeter</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openPayrollPreview(p)}>Aperçu</button>
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/payrolls/${p.id}/pdf`, `fiche-paie-${p.id}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
+                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openPayrollPreview(p)}>Aperçu / PDF</button>
               </td>
             </tr>;
           })}</tbody>
         </table></div>
-        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin ou Generer depuis contrat pour creer la premiere paie." : "Modifie la recherche ou les filtres."} />}
+        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? `Clique sur "Generer la paie de ${currentPeriod}" en haut pour creer les bulletins de tous les employes sous contrat.` : "Modifie la recherche ou les filtres."} />}
       </div>
 
       {payrollPreview && (
@@ -2194,11 +2499,14 @@ function Paie({ data, staff, masse, setModal, reload }) {
           <div style={{ background: "#fff", borderRadius: 10, width: "min(820px,96vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.22)" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>Aperçu du bulletin</span>
-              <button type="button" className="link" onClick={() => setPayrollPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {!payrollPreview.loading && <button type="button" className="pillbtn" onClick={printPreview}><Icon name="download" style={{ width: 13, height: 13 }} /> Imprimer / PDF</button>}
+                <button type="button" className="link" onClick={() => setPayrollPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+              </div>
             </div>
             {payrollPreview.loading
               ? <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Chargement…</div>
-              : <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: payrollPreview.html }} />}
+              : <iframe ref={previewFrameRef} title="Bulletin de paie" srcDoc={payrollPreview.html} style={{ width: "100%", height: "72vh", border: 0, display: "block", background: "#fff" }} />}
           </div>
         </div>
       )}
@@ -2325,10 +2633,8 @@ function Dossiers({ data, staff, setModal, reload }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, color: "var(--muted)" }}>Employe</label>
-            <select className="pillbtn" value={genForm.userId} onChange={(e) => { setGenForm((f) => ({ ...f, userId: e.target.value })); setGenError(""); }} style={{ minWidth: 180 }}>
-              <option value="">-- Choisir un employe --</option>
-              {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-            </select>
+            <Autocomplete value={genForm.userId} onChange={(v) => { setGenForm((f) => ({ ...f, userId: v })); setGenError(""); }} style={{ minWidth: 180 }}
+              placeholder="-- Choisir un employe --" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, color: "var(--muted)" }}>Type de document</label>
@@ -2350,10 +2656,8 @@ function Dossiers({ data, staff, setModal, reload }) {
         </div>
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher employe, type, reference..." /></label>
-          <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)}>
-            <option value="">Tous les employes</option>
-            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-          </select>
+          <Autocomplete value={employeeFilter} onChange={setEmployeeFilter}
+            placeholder="Tous les employes" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           <select className="pillbtn" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">Tous les types</option>
             {docTypes.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -2393,12 +2697,11 @@ function Dossiers({ data, staff, setModal, reload }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>{preview.documentType} — {preview.reference}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/documents/${preview.id}/pdf`, `${preview.reference || "document"}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
-                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(preview.content); w.document.close(); w.print(); }}>Imprimer</button>
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(preview.content, true)}>Imprimer / PDF</button>
                 <button type="button" className="link" onClick={() => setPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
               </div>
             </div>
-            <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: preview.content }} />
+            <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.content) }} />
           </div>
         </div>
       )}
@@ -2504,7 +2807,7 @@ function ProjetsONG({ data, staff, setModal }) {
           <div className="section-head"><h3 className="font-display">Projets</h3><button type="button" className="link" onClick={() => setModal({ kind: "hrProject" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Projet</button></div>
           <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 900 }}>
             <thead><tr><th>Projet</th><th>Financeur</th><th className="r">Budget RH</th><th className="r">Planifie / mois</th><th className="r">Reel timesheets</th><th className="r">Ecart budget</th><th className="r">Statut</th></tr></thead>
-            <tbody>{projects.map((p) => { const r = reportByProject.get(String(p.id)); return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r"><MoneyLines lines={reportMoneyLines(r?.actualCost || [])} /></td><td className="r">{r ? fc(r.budgetVariance, moneySymbolFor(p)) : "-"}</td><td className="r">{statusChip(p.status)}</td></tr>; })}</tbody>
+            <tbody>{projects.map((p) => { const r = reportByProject.get(String(p.id)); return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r"><MoneyLines lines={reportMoneyLines(r?.actualCost || [])} /></td><td className="r">{r ? fc(r.budgetVariance, moneySymbolFor(p)) : "-"}</td><td className="r"><span className={"chip " + chipForStatus(p.status)}>{statusLabel(p.status)}</span></td></tr>; })}</tbody>
           </table></div>
           {projects.length === 0 && <EmptyState title="Aucun projet en base" detail="Cree un projet pour affecter les couts RH par financeur ou centre de cout." />}
         </div>
@@ -2512,7 +2815,7 @@ function ProjetsONG({ data, staff, setModal }) {
           <div className="section-head"><h3 className="font-display">Affectations employes</h3><button type="button" className="btn btn-accent grad-accent" disabled={!projects.length || !staff.length} onClick={() => setModal({ kind: "hrProjectAssignment" })}><Icon name="plus" /> Affecter</button></div>
           <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 780 }}>
             <thead><tr><th>Employe</th><th>Projet</th><th>Role</th><th className="r">Temps</th><th className="r">Cout mensuel</th><th className="r">Statut</th></tr></thead>
-            <tbody>{assignmentRows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{personName(staff, a.userId)}<div className="tiny">{[dateOnly(a.startDate), dateOnly(a.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{projectName(a.projectId)}</td><td>{a.role || "-"}</td><td className="r">{nf.format(Number(a.timePercent || 0))} %</td><td className="r">{fc(weightedCost(a), moneySymbolFor(a))}</td><td className="r">{statusChip(a.status)}</td></tr>)}</tbody>
+            <tbody>{assignmentRows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{personName(staff, a.userId)}<div className="tiny">{[dateOnly(a.startDate), dateOnly(a.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{projectName(a.projectId)}</td><td>{a.role || "-"}</td><td className="r">{nf.format(Number(a.timePercent || 0))} %</td><td className="r">{fc(weightedCost(a), moneySymbolFor(a))}</td><td className="r"><span className={"chip " + chipForStatus(a.status)}>{statusLabel(a.status)}</span></td></tr>)}</tbody>
           </table></div>
           {assignmentRows.length === 0 && <EmptyState title="Aucune affectation en base" detail="Les couts RH par projet seront calcules des qu'un employe est affecte." />}
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}><button type="button" className="link" onClick={exportAssignments}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
@@ -2778,15 +3081,11 @@ function Recrutement({ data, reload, setModal }) {
               <label className="field-label" style={{ marginTop: 10 }}>Mot de passe initial (optionnel)</label>
               <input className="input" type="password" placeholder="Par défaut: nom+année" value={convertForm.password} onChange={(e) => setConvertForm((f) => ({ ...f, password: e.target.value }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Rôle</label>
-              <select className="select" value={convertForm.roleId} onChange={(e) => setConvertForm((f) => ({ ...f, roleId: e.target.value }))}>
-                <option value="">-- Rôle par défaut (Employé) --</option>
-                {(data.roles || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
+              <Autocomplete className="select" value={convertForm.roleId} onChange={(v) => setConvertForm((f) => ({ ...f, roleId: v }))} style={{ display: "block" }}
+                placeholder="-- Rôle par défaut (Employé) --" options={(data.roles || []).map((r) => ({ value: r.id, label: r.name }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Département</label>
-              <select className="select" value={convertForm.departmentId} onChange={(e) => setConvertForm((f) => ({ ...f, departmentId: e.target.value }))}>
-                <option value="">-- Aucun --</option>
-                {(data.departments || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <Autocomplete className="select" value={convertForm.departmentId} onChange={(v) => setConvertForm((f) => ({ ...f, departmentId: v }))} style={{ display: "block" }}
+                placeholder="-- Aucun --" options={(data.departments || []).map((d) => ({ value: d.id, label: d.name }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Date d'entrée</label>
               <input className="input" type="date" value={convertForm.joinDate} onChange={(e) => setConvertForm((f) => ({ ...f, joinDate: e.target.value }))} />
             </div>
@@ -2802,7 +3101,7 @@ function Recrutement({ data, reload, setModal }) {
 }
 
 /* Organigramme */
-function Organigramme({ departments, designations, canMutate, onNew }) {
+function Organigramme({ departments, designations, canMutate, onNew, onNewDept }) {
   const tones = { teal: { bg: "var(--teal-50)", bd: "var(--teal-200)", fg: "var(--teal-800)", sub: "var(--teal-600)" }, sky: { bg: "var(--sky-50)", bd: "var(--sky-400)", fg: "var(--sky-700)", sub: "var(--sky-600)" }, emerald: { bg: "var(--emerald-100)", bd: "var(--emerald-500)", fg: "var(--emerald-700)", sub: "var(--emerald-600)" }, amber: { bg: "var(--amber-50)", bd: "var(--amber-400)", fg: "var(--amber-700)", sub: "var(--amber-600)" }, ink: { bg: "var(--ink-50)", bd: "var(--ink-200)", fg: "var(--ink-700)", sub: "var(--ink-500)" } };
   const palette = ["accent-soft", "sky-soft", "emerald", "amber", "ink"];
   const total = departments.reduce((s, d) => s + Number(d.count || 0), 0);
@@ -2814,7 +3113,7 @@ function Organigramme({ departments, designations, canMutate, onNew }) {
         {departments.length === 0 && <EmptyState title="Aucun departement en base" />}
       </div>
       <div className="g2">
-        <div className="card pad"><h3 className="block-title font-display">Departements</h3>{departments.length === 0 && <EmptyState title="Aucun departement en base" />}{departments.map((d) => <div className="row" key={d.id || d.name}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div></div><span className="chip ink">{d.count}</span></div>)}</div>
+        <div className="card pad"><h3 className="block-title font-display">Departements</h3>{departments.length === 0 && <EmptyState title="Aucun departement en base" />}{departments.map((d) => <div className="row" key={d.id || d.name}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div></div><span className="chip ink">{d.count}</span></div>)}<button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNewDept}><Icon name="plus" /> Nouveau departement</button></div>
         <div className="card pad"><h3 className="block-title font-display">Postes</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{designations.map((d, i) => <span key={d.id} className={"chip " + palette[i % palette.length]}>{d.name}</span>)}</div>{designations.length === 0 && <EmptyState title="Aucun poste en base" />}<button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Ajouter un poste</button></div>
       </div>
     </>

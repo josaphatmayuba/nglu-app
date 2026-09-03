@@ -6,6 +6,7 @@ Three environments, three configurations.
 |---|---|---|---|---|
 | **Local** | http://localhost:3000 | n'importe quelle branche | Machine du dev | MySQL container local |
 | **Development** | https://dev.ongdngolu.org | `develop` | Lightsail (16.54.167.125) | MySQL container sur le serveur |
+| **Avelomi Development** | https://dev.avelomi.com | `develop` | Lightsail (3.128.45.29) | Static site only |
 | **Production** | https://ongdngolu.org | `master` | Lightsail (16.54.167.125) | MySQL externe (35.169.124.49) |
 
 ---
@@ -176,7 +177,7 @@ git clone -b develop https://bitbucket.org/ngolu-ong-gestion/nglu-app.git /opt/n
 ```bash
 # Production
 cp /opt/nglu-app/.env.prod.example /opt/nglu-app/.env.prod
-nano /opt/nglu-app/.env.prod   # Remplir DB_PASSWORD, JWT_SECRET, etc.
+nano /opt/nglu-app/.env.prod   # Remplir DB_PASSWORD, JWT_SECRET, REFRESH_SECRET, etc.
 cp /opt/nglu-app/.env.prod /opt/nglu-app/.env  # Docker Compose lit .env par défaut
 
 # Development

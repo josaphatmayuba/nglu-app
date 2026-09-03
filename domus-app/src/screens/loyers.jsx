@@ -4,11 +4,13 @@ import {
   Banknote, BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search,
 } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
+import { useToast } from "../components/Dialog.jsx";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -287,9 +289,9 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         <div className="immo-modal-head">
           <div>
             <div className="eyebrow">Encaissement rapide</div>
-            <h3>Régler le loyer en retard</h3>
+            <h3>{t("Régler le loyer en retard")}</h3>
           </div>
-          <button className="immo-flat-icon" onClick={onClose} aria-label="Fermer"><X size={16} /></button>
+          <button className="immo-flat-icon" onClick={onClose} aria-label={t("Fermer")}><X size={16} /></button>
         </div>
         <div className="immo-modal-body">
           <div className="immo-pay-row"><span>Locataire</span><strong>{card.name}</strong></div>
@@ -357,6 +359,7 @@ export function Loyers({ go }) {
   const { data, loading, error, reload } = useApi(loadPaymentsModule, []);
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
+  const toast = useToast();
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -451,13 +454,13 @@ export function Loyers({ go }) {
     <>
       <div className="immo-header">
         <div>
-          <h1>Loyers &amp; paiements</h1>
+          <h1>{t("Loyers & paiements")}</h1>
           <p>Encaissements et suivi des paiements de loyer</p>
         </div>
         <div className="immo-header-actions">
           <label className="immo-search">
             <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Locataire, logement, methode..." />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Locataire, logement, methode...")} />
           </label>
           <button className="immo-btn"><Download size={16} /> Export CSV</button>
           <button className="immo-btn primary" onClick={() => go("paiement")}><Smartphone size={16} /> Encaisser</button>
@@ -487,7 +490,7 @@ export function Loyers({ go }) {
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-            onClick={() => api.runOverdueReminders().then(() => alert("Rappels lancés")).catch((e) => alert(e.message))}>
+            onClick={() => api.runOverdueReminders().then(() => toast.success(t("Rappels lancés"))).catch((e) => toast.error(e.message))}>
             <BellRing size={16} /> Relancer les impayés
           </button>
         </div>
@@ -515,12 +518,12 @@ export function Loyers({ go }) {
       {rows.length === 0 ? (
         <div className="immo-empty">
           <Wallet size={28} />
-          <h3>Aucun paiement</h3>
+          <h3>{t("Aucun paiement")}</h3>
           <p>Cliquez « Encaisser » pour enregistrer le premier paiement.</p>
         </div>
       ) : view === "locataire" ? (
         shownCards.length === 0 ? (
-          <div className="immo-empty"><Wallet size={28} /><h3>Aucun résultat</h3><p>Aucun locataire ne correspond à « {query} ».</p></div>
+          <div className="immo-empty"><Wallet size={28} /><h3>{t("Aucun résultat")}</h3><p>{tf(t("Aucun locataire ne correspond à « {q} »."), {q: query})}</p></div>
         ) : (
           <div className="immo-pay-grid">
             {shownCards.map((c, i) => <TenantPayCard key={c.lease?.id ?? c.name} card={c} index={i} onPay={setPayTarget} />)}

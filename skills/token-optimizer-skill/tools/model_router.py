@@ -21,8 +21,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+# Console Windows (cp1252) : forcer UTF-8 pour les accents et l'emoji.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 FAST_KEYWORDS = [
     "css", "style", "couleur", "button", "bouton", "texte", "prompt", "ticket",
@@ -43,6 +50,10 @@ RELIABLE_KEYWORDS = [
     "architecture", "refactor", "refactorisation", "audit", "production", "bug complexe",
     "performance", "concurrence", "race condition", "paiement", "payment", "finance",
     "données sensibles", "secret", "env", "docker", "deploy", "nginx", "ci/cd",
+    # spécifique nglu-app
+    "drizzle", "mysql", "compta", "comptabilité", "stock", "bail", "loyer", "caution",
+    "middleware", "whitelist", "refresh", "rotation", "lightsail", "pipeline",
+    "backend2", "farmos", "rentabilité", "prod", "déploiement",
 ]
 
 HIGH_RISK_HINTS = [
@@ -119,9 +130,9 @@ def route(task: str) -> Dict[str, object]:
         reason = "La tâche semble ciblée, simple et peu risquée."
 
     label = {
-        "fast": "modèle rapide / économique",
-        "balanced": "modèle équilibré",
-        "reliable": "modèle raisonnement fort",
+        "fast": "rapide (Haiku 4.5)",
+        "balanced": "équilibré (Sonnet 4.6)",
+        "reliable": "fort (Opus 4.8)",
     }[profile]
     cost = {"fast": "bas", "balanced": "moyen", "reliable": "élevé"}[profile]
 
@@ -140,7 +151,23 @@ def route(task: str) -> Dict[str, object]:
     }
 
 
+SHORT_REASON = {
+    "fast": "tâche ciblée, simple, peu risquée",
+    "balanced": "plusieurs éléments ou logique métier standard",
+    "reliable": "zone risquée/critique (erreur coûteuse)",
+}
+
+
 def format_text(decision: Dict[str, object], task: str) -> str:
+    # Ligne unique non bloquante, alignée sur la Règle 0 du skill.
+    profile = decision["recommended_profile"]
+    model = decision["recommended_model_class"].split(" ")[0]  # rapide/équilibré/fort
+    return (
+        f'🔹 Modèle: {model} — {SHORT_REASON[profile]}. Dis "change" sinon je continue.'
+    )
+
+
+def format_long(decision: Dict[str, object]) -> str:
     return f"""Recommandation modèle :
 - Tâche : {decision['task_type']}
 - Niveau d’effort : {decision['effort']}
@@ -149,9 +176,7 @@ def format_text(decision: Dict[str, object], task: str) -> str:
 - Coût token estimé : {decision['estimated_token_cost']}
 - Modèle recommandé : {decision['recommended_model_class']}
 - Profil à utiliser : profiles/{decision['recommended_profile']}.json
-- Pourquoi : {decision['reason']}
-
-Confirme si je continue avec ce modèle ou si tu veux changer avant que je commence."""
+- Pourquoi : {decision['reason']}"""
 
 
 def main() -> int:
@@ -160,6 +185,7 @@ def main() -> int:
     parser.add_argument("--task-file", help="Lire la tâche depuis un fichier texte")
     parser.add_argument("--json", action="store_true", help="Sortie JSON pour wrapper automatique")
     parser.add_argument("--show-scores", action="store_true", help="Afficher les scores internes")
+    parser.add_argument("--long", action="store_true", help="Format détaillé multi-lignes")
     args = parser.parse_args()
 
     if args.task_file:
@@ -175,6 +201,8 @@ def main() -> int:
 
     if args.json:
         print(json.dumps(decision, ensure_ascii=False, indent=2))
+    elif args.long:
+        print(format_long(decision))
     else:
         print(format_text(decision, task))
     return 0

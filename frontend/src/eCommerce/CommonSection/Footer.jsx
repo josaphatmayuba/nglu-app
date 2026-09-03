@@ -16,12 +16,7 @@ export default function Footer() {
     <div className="bg-white">
       {data && (
         <div className="flex justify-center items-center py-3">
-          <span>
-            OS ERP copyright &copy; by{" "}
-            <a href="https://solution.omega.ac/" className="font-bold">
-              Omega Solution
-            </a>
-          </span>
+          <span>&copy; {new Date().getFullYear()}</span>
         </div>
       )}
       {/* <FooterMobile /> */}

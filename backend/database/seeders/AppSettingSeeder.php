@@ -14,15 +14,15 @@ class AppSettingSeeder extends Seeder
     public function run(): void
     {
         $setting = new AppSetting();
-        $setting->companyName = 'OS Inventory';
+        $setting->companyName = 'Avelomi';
         $setting->dashboardType = 'inventory';
         $setting->tagLine = 'Manage your Inventory, Sales, Purchases etc';
-        $setting->address = 'House: 139, Road: 13, Sectorr: 10, Uttara, Dhaka-1230';
-        $setting->phone = '+880 18 2021 5555';
-        $setting->email = 'solution@omega.ac';
-        $setting->website = 'https://solution.omega.ac';
-        $setting->footer = 'OS Inventory copyright by Omega Solution LLC';
-        $setting->logo = 'os-inventory-logo.png';
+        $setting->address = '';
+        $setting->phone = '';
+        $setting->email = 'contact@avelomi.com';
+        $setting->website = 'https://avelomi.com';
+        $setting->footer = 'Avelomi';
+        $setting->logo = 'avelomi-logo.png';
         $setting->currencyId = 3;
         $setting->isDiscount = 'false';  // New field
         $setting->isTax = 'false';       // New field

@@ -8,6 +8,7 @@ node_modules/
 dist/
 dist-dev/
 dist-prod/
+dist-avelomi/
 
 # Compiled Java class files
 *.class
@@ -53,13 +54,20 @@ Thumbs.db
 # ── Environment files (NEVER commit real secrets) ───────────
 # Ignore all live env files
 .env
+.env.*
 .env.local
 .env.prod
 .env.dev
+backend/.env
+backend/.env.*
 backend2/.env
+backend2/.env.*
 backend2/.env.local
 middleware/.env
+middleware/.env.*
 middleware/.env.local
+frontend/.env
+frontend/.env.*
 frontend/.env.local
 
 # But keep committed templates
@@ -69,6 +77,7 @@ frontend/.env.local
 !frontend/.env.production
 !frontend/.env.development
 !backend2/.env.example
+!mail/stalwart/.env.example
 
 # Local Claude settings
 .claude/
@@ -76,3 +85,6 @@ frontend/.env.local
 # Backend2 storage
 backend2/storage/
 Userspaulnjira.json
+
+# Inventaire animaux (fichier de travail local)
+farmos_inventaire_animaux_reorganise.csv

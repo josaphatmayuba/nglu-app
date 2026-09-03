@@ -9,9 +9,12 @@ import {
   products,
   saleInvoiceProducts,
   saleInvoices,
+  suppliers,
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
+import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import {
   CreatePaymentSaleInvoiceDto,
   CreateSaleInvoiceDto,
@@ -31,7 +34,10 @@ function generateInvoiceId(prefix: string, length = 13): string {
 
 @Injectable()
 export class SaleInvoicesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async create(input: CreateSaleInvoiceDto, orgId: number) {
     // 1. Validate products and stock
@@ -104,8 +110,8 @@ export class SaleInvoicesService {
     // Resolve currency: explicit input or fallback to app default
     let currencyId = input.currencyId ?? null;
     if (!currencyId) {
-      const [setting] = await this.db.select({ currencyId: appSettings.currencyId }).from(appSettings).limit(1);
-      currencyId = setting?.currencyId ?? null;
+      const setting = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+      currencyId = (setting?.currencyId as number | null) ?? null;
     }
 
     await this.db.insert(saleInvoices).values({
@@ -221,6 +227,45 @@ export class SaleInvoicesService {
       }
     }
 
+    // 5 bis. Ecriture comptable moderne (partie double, header + lignes) via LedgerService.
+    // Ecrit en parallele des transactions plates ci-dessus (dual-write strangler) ;
+    // les lecteurs basculeront sur journal_entry_lines en Phase 4. Idempotent par facture.
+    const ledgerLines: LedgerLineInput[] = [
+      // Cost of sales: debit 9 / credit 3
+      { accountId: 9, side: "DEBIT", amount: totalPurchasePrice, description: `Cost of sales ${invoiceId}` },
+      { accountId: 3, side: "CREDIT", amount: totalPurchasePrice, description: `Inventory ${invoiceId}` },
+      // Account receivable (TTC): debit 4 / credit 8
+      { accountId: 4, side: "DEBIT", amount: totalAmount + totalTaxAmount, description: `Account receivable ${invoiceId}` },
+      { accountId: 8, side: "CREDIT", amount: totalAmount + totalTaxAmount, description: `Sale invoice ${invoiceId}` },
+    ];
+    if (totalTaxAmount > 0) {
+      // VAT: debit 16 / credit 8
+      ledgerLines.push(
+        { accountId: 16, side: "DEBIT", amount: totalTaxAmount, description: `VAT ${invoiceId}` },
+        { accountId: 8, side: "CREDIT", amount: totalTaxAmount, description: `VAT for sale invoice ${invoiceId}` },
+      );
+    }
+    for (const payment of input.paidAmount ?? []) {
+      if (payment.amount > 0) {
+        // Payment: debit cash/bank (paymentType) / credit receivable 4
+        ledgerLines.push(
+          { accountId: payment.paymentType ?? 1, side: "DEBIT", amount: payment.amount, description: `Payment ${invoiceId}` },
+          { accountId: 4, side: "CREDIT", amount: payment.amount, description: `Payment for sale invoice ${invoiceId}` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        reference: `SALE-${invoiceId}`,
+        particulars: `Sale invoice ${invoiceId}`,
+        sourceModule: "sale",
+        relatedId: invoiceId,
+        idempotencyKey: `sale:${invoiceId}`,
+        lines: ledgerLines,
+      },
+      orgId,
+    );
+
     // 6. Update product stock
     for (let i = 0; i < input.saleInvoiceProduct.length; i++) {
       const item = input.saleInvoiceProduct[i];
@@ -288,6 +333,7 @@ export class SaleInvoicesService {
         customerFirstName: customers.firstName,
         customerLastName: customers.lastName,
         customerPhone: customers.phone,
+        currencyCode: currencies.currencyCode,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })
@@ -307,19 +353,19 @@ export class SaleInvoicesService {
     return { getAllSaleInvoice: rows, totalSaleInvoice: Number(total ?? 0) };
   }
 
-  async findHold() {
+  async findHold(orgId: number) {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
-  async findByCustomer(customerId: number) {
+  async findByCustomer(customerId: number, orgId: number) {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
@@ -327,7 +373,42 @@ export class SaleInvoicesService {
     const where = orgId !== undefined
       ? and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true"))
       : and(eq(saleInvoices.id, id), eq(saleInvoices.status, "true"));
-    const rows = await this.db.select().from(saleInvoices).where(where).limit(1);
+
+    const rows = await this.db
+      .select({
+        id: saleInvoices.id,
+        organizationId: saleInvoices.organizationId,
+        date: saleInvoices.date,
+        invoiceMemoNo: saleInvoices.invoiceMemoNo,
+        totalAmount: saleInvoices.totalAmount,
+        totalTaxAmount: saleInvoices.totalTaxAmount,
+        totalDiscountAmount: saleInvoices.totalDiscountAmount,
+        paidAmount: saleInvoices.paidAmount,
+        dueAmount: saleInvoices.dueAmount,
+        profit: saleInvoices.profit,
+        customerId: saleInvoices.customerId,
+        currencyId: saleInvoices.currencyId,
+        userId: saleInvoices.userId,
+        note: saleInvoices.note,
+        dueDate: saleInvoices.dueDate,
+        isHold: saleInvoices.isHold,
+        orderStatus: saleInvoices.orderStatus,
+        status: saleInvoices.status,
+        createdAt: saleInvoices.createdAt,
+        updatedAt: saleInvoices.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(saleInvoices)
+      .leftJoin(currencies, eq(saleInvoices.currencyId, currencies.id))
+      .where(where)
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Sale invoice not found.");
@@ -365,11 +446,11 @@ export class SaleInvoicesService {
     };
   }
 
-  async update(id: string, input: UpdateSaleInvoiceDto) {
+  async update(id: string, input: UpdateSaleInvoiceDto, orgId: number) {
     const rows = await this.db
       .select({ id: saleInvoices.id })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, id))
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
@@ -385,16 +466,16 @@ export class SaleInvoicesService {
         ...(input.note !== undefined ? { note: input.note } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(saleInvoices.id, id));
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
 
-    return this.findOne(id);
+    return this.findOne(id, orgId);
   }
 
-  async updateHold(id: string, input: UpdateHoldDto) {
+  async updateHold(id: string, input: UpdateHoldDto, orgId: number) {
     const rows = await this.db
       .select({ id: saleInvoices.id })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, id))
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
@@ -404,16 +485,26 @@ export class SaleInvoicesService {
     await this.db
       .update(saleInvoices)
       .set({ isHold: input.isHold, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(saleInvoices.id, id));
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
 
     return { message: "Hold status updated." };
   }
 
-  async updateOrderStatus(input: UpdateOrderStatusDto) {
+  async updateOrderStatus(input: UpdateOrderStatusDto, orgId: number) {
+    const rows = await this.db
+      .select({ id: saleInvoices.id })
+      .from(saleInvoices)
+      .where(and(eq(saleInvoices.id, input.id), eq(saleInvoices.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Sale invoice not found.");
+    }
+
     await this.db
       .update(saleInvoices)
       .set({ orderStatus: input.orderStatus, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(saleInvoices.id, input.id));
+      .where(and(eq(saleInvoices.id, input.id), eq(saleInvoices.organizationId, orgId)));
 
     return { message: "Order status updated." };
   }
@@ -443,12 +534,12 @@ export class SaleInvoicesService {
   }
 
   // Payment sale invoices
-  async createPayment(input: CreatePaymentSaleInvoiceDto) {
-    // Validate invoice exists
+  async createPayment(input: CreatePaymentSaleInvoiceDto, orgId: number) {
+    // Validate invoice exists (de CETTE org : on ne paie pas la facture d une autre).
     const [invoice] = await this.db
       .select({ id: saleInvoices.id, dueAmount: saleInvoices.dueAmount })
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!invoice) {
@@ -457,6 +548,7 @@ export class SaleInvoicesService {
 
     // Create payment record
     await this.db.insert(paymentSaleInvoices).values({
+      organizationId: orgId,
       date: new Date(input.date),
       amount: input.amount,
       saleInvoiceId: input.saleInvoiceId,
@@ -467,6 +559,7 @@ export class SaleInvoicesService {
 
     // Create transaction
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: sql`CURRENT_TIMESTAMP`,
       debitId: 1,
       creditId: 4,
@@ -496,18 +589,21 @@ export class SaleInvoicesService {
     return { message: "Payment recorded successfully." };
   }
 
-  async findAllPayments(query: Record<string, string>) {
+  async findAllPayments(query: Record<string, string>, org: number) {
+    const orgFilter = eq(paymentSaleInvoices.organizationId, org);
     if (query["query"] === "all") {
       return this.db
         .select()
         .from(paymentSaleInvoices)
+        .where(orgFilter)
         .orderBy(desc(paymentSaleInvoices.id));
     }
 
     if (query["query"] === "info") {
       const [row] = await this.db
         .select({ total: sum(paymentSaleInvoices.amount), cnt: count(paymentSaleInvoices.id) })
-        .from(paymentSaleInvoices);
+        .from(paymentSaleInvoices)
+        .where(orgFilter);
       return { _count: { id: Number(row.cnt ?? 0) }, _sum: { amount: row.total ?? null } };
     }
 
@@ -516,13 +612,15 @@ export class SaleInvoicesService {
     const rows = await this.db
       .select()
       .from(paymentSaleInvoices)
+      .where(orgFilter)
       .orderBy(desc(paymentSaleInvoices.id))
       .limit(limit)
       .offset(skip);
 
     const [{ total }] = await this.db
       .select({ total: count(paymentSaleInvoices.id) })
-      .from(paymentSaleInvoices);
+      .from(paymentSaleInvoices)
+      .where(orgFilter);
 
     return { getAllPayment: rows, totalPayment: Number(total ?? 0) };
   }

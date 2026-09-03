@@ -127,7 +127,7 @@ const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor
                     <div className="flex flex-col gap-0.5">
                         {byCurrency.map((entry, i) => (
                             <span key={entry.currencyId ?? i} className="text-base md:text-xl font-semibold text-ink-900 leading-tight">
-                                {formatCurrency(entry.amount, entry.currencySymbol)}
+                                {entry.currencyCode ? `${entry.currencyCode} ` : ''}{formatCurrency(entry.amount, entry.currencySymbol)}
                             </span>
                         ))}
                     </div>

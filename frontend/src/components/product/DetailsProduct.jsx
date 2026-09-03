@@ -10,6 +10,7 @@ import {
   loadSingleProduct,
 } from "../../redux/rtk/features/product/productSlice";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import Loader from "../loader/loader";
 import GalleryImageSlider from "./GalleryImageSlider";
 import GenerateBarcode from "./barcodeGenerator";
@@ -125,7 +126,7 @@ const DetailsProduct = () => {
                       <p className="text-2xl font-bold text-gray-800">
                         <span
                           dangerouslySetInnerHTML={{
-                            __html: currency?.currencySymbol,
+                            __html: sanitizeHtml(currency?.currencySymbol),
                           }}
                         />
                         {product?.productSalePrice}
@@ -138,7 +139,7 @@ const DetailsProduct = () => {
                       <p className="text-2xl font-bold text-gray-800">
                         <span
                           dangerouslySetInnerHTML={{
-                            __html: currency?.currencySymbol,
+                            __html: sanitizeHtml(currency?.currencySymbol),
                           }}
                         />
                         {product?.productPurchasePrice}
@@ -308,7 +309,7 @@ const DetailsProduct = () => {
                       <div
                         className="prose prose-sm max-w-none text-gray-700"
                         dangerouslySetInnerHTML={{
-                          __html: product?.description,
+                          __html: sanitizeHtml(product?.description),
                         }}
                       />
                     ) : (

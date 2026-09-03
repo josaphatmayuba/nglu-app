@@ -82,6 +82,27 @@ const put = (path, body) => jsonFetch(path, { method: "PUT", body: JSON.stringif
 const patch = (path, body) => jsonFetch(path, { method: "PATCH", body: JSON.stringify(body || {}) });
 const del = (path) => jsonFetch(path, { method: "DELETE" });
 
+async function multipartFetch(path, formData) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+  if (!res.ok) {
+    if (res.status === 401) clearToken();
+    const body = await res.text().catch(() => "");
+    throw new Error(cleanApiError(res, body));
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function authenticatedFileUrl(path) {
+  const token = readToken();
+  const sep = path.includes("?") ? "&" : "?";
+  return `${BASE}${path}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
+}
+
 // ── Endpoints (alignés sur property-management.controller.ts) ──
 export const api = {
   currencies: () => jsonFetch("/currency?query=all", { method: "GET", base: API_ROOT }),
@@ -90,6 +111,16 @@ export const api = {
   updateSetting: (b) => jsonFetch("/setting", { method: "PUT", base: API_ROOT, body: JSON.stringify(b || {}) }),
   setCurrencyStatus: (id, status) => jsonFetch(`/currency/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status }) }),
   bulkCurrencyStatus: (ids, status) => jsonFetch("/currency/bulk-status", { method: "PATCH", base: API_ROOT, body: JSON.stringify({ ids, status }) }),
+
+  // Prévisionnel (module forecast backend2) — scope figé "domus" pour cette app.
+  forecastCashFlow: ({ horizon, mode, scope = "domus", adjust } = {}) =>
+    jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { method: "GET", base: API_ROOT }),
+  forecastProduction: ({ horizon } = {}) =>
+    jsonFetch(`/forecast/production?horizon=${horizon}`, { method: "GET", base: API_ROOT }),
+  forecastVariance: ({ scope = "domus" } = {}) =>
+    jsonFetch(`/forecast/variance?scope=${scope}`, { method: "GET", base: API_ROOT }),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "domus" } = {}) =>
+    jsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST", base: API_ROOT }),
 
   // Moyens de paiement configurables (table paymentMethod partagée avec le CRM).
   paymentMethods: () => jsonFetch("/payment-method?query=all", { method: "GET", base: API_ROOT }),
@@ -105,19 +136,38 @@ export const api = {
   updateTenant: (id, b) => put(`/tenants/${id}`, b),
   // Suppression = soft-delete (status=false) via l'API customer partagée du CRM.
   deleteTenant: (id) => jsonFetch(`/customer/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status: "false" }) }),
+  // Copie de la pièce d'identité du locataire (une copie par locataire, MinIO).
+  uploadTenantIdDocument: (id, file) => {
+    const form = new FormData();
+    form.append("document", file);
+    return multipartFetch(`/tenants/${id}/id-document`, form);
+  },
+  deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
+  tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
+  updateOnboarding: (id, b) => patch(`/onboarding/${id}`, b),
   validateOnboarding: (id) => post(`/onboarding/${id}/validate`),
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
-  sendOnboardingSms: (b) => jsonFetch("/send-sms", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
-  sendOnboardingEmail: (b) => jsonFetch("/property-management/onboarding/send-email", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),
+  sendOnboardingEmail: (id) => post(`/onboarding/${id}/send-email`),
 
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
   createProperty: (b) => post("/properties", b),
   updateProperty: (id, b) => put(`/properties/${id}`, b),
   deleteProperty: (id) => del(`/properties/${id}`),
+  propertyPhotos: () => get("/properties/photos"),
+  propertyPhotosForProperty: (id) => get(`/properties/${id}/photos`),
+  uploadPropertyPhoto: (id, file, unitId = null) => {
+    const form = new FormData();
+    form.append("photo", file);
+    if (unitId != null && unitId !== "") form.append("unitId", String(unitId));
+    return multipartFetch(`/properties/${id}/photos`, form);
+  },
+  deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),
+  propertyPhotoUrl: (photoId) => authenticatedFileUrl(`/properties/photos/${photoId}/file`),
 
   units: () => get("/units"),
   unit: (id) => get(`/units/${id}`),
@@ -132,6 +182,17 @@ export const api = {
   renewLease: (id, b) => post(`/leases/${id}/renew`, b),
   deleteLease: (id) => del(`/leases/${id}`),
 
+  // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
+  leaseDocuments: (id) => get(`/leases/${id}/documents`),
+  uploadLeaseDocument: (id, file, notes = "") => {
+    const form = new FormData();
+    form.append("document", file);
+    if (notes) form.append("notes", notes);
+    return multipartFetch(`/leases/${id}/documents`, form);
+  },
+  deleteLeaseDocument: (documentId) => del(`/leases/documents/${documentId}`),
+  leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
+
   payments: () => get("/payments"),
   createPayment: (b) => post("/payments", b),
   sendReminder: (b) => post("/payments/reminder", b),
@@ -142,19 +203,58 @@ export const api = {
   createMaintenance: (b) => post("/maintenance", b),
   updateMaintenance: (id, b) => put(`/maintenance/${id}`, b),
   deleteMaintenance: (id) => del(`/maintenance/${id}`),
+  // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /property-management)
+  suppliers: () => jsonFetch("/supplier?query=all&type=real_estate", { method: "GET", base: API_ROOT }),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
+  deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
+  maintenancePhotos: (id) => get(`/maintenance/${id}/photos`),
+  uploadMaintenancePhoto: (id, file, photoType = "before") => {
+    const form = new FormData();
+    form.append("photo", file);
+    if (photoType) form.append("photoType", photoType);
+    return multipartFetch(`/maintenance/${id}/photos`, form);
+  },
+  deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
+  maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
 
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),
   collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
   returnDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit/return`, b),
 
+  // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
+  reservations: () => get("/reservations"),
+  reservation: (id) => get(`/reservations/${id}`),
+  reservationsForProperty: (id) => get(`/properties/${id}/reservations`),
+  createReservation: (b) => post("/reservations", b),
+  updateReservation: (id, b) => put(`/reservations/${id}`, b),
+  deleteReservation: (id) => del(`/reservations/${id}`),
+  confirmReservation: (id) => post(`/reservations/${id}/confirm`),
+  checkInReservation: (id) => post(`/reservations/${id}/check-in`),
+  payReservation: (id, b) => post(`/reservations/${id}/pay`, b),
+  checkOutReservation: (id, b) => post(`/reservations/${id}/check-out`, b),
+  cancelReservation: (id) => post(`/reservations/${id}/cancel`),
+  reservationAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>
+    get(`/reservations/availability?propertyId=${propertyId}${unitId ? `&unitId=${unitId}` : ""}&checkIn=${checkIn}&checkOut=${checkOut}`),
+  coupons: () => get("/coupons"),
+  validateCoupon: ({ code, amount, currencyId }) =>
+    get(`/coupons/validate?code=${encodeURIComponent(code || "")}&amount=${encodeURIComponent(amount || 0)}${currencyId ? `&currencyId=${encodeURIComponent(currencyId)}` : ""}`),
+  createCoupon: (b) => post("/coupons", b),
+  updateCoupon: (id, b) => put(`/coupons/${id}`, b),
+  deleteCoupon: (id) => del(`/coupons/${id}`),
+
   contracts: () => get("/contracts"),
   contract: (id) => get(`/contracts/${id}`),
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
+  sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
   deleteContract: (id) => del(`/contracts/${id}`),
+  markContractSignedManually: (id, file) => {
+    const form = new FormData();
+    form.append("document", file);
+    return multipartFetch(`/contracts/${id}/mark-signed-manually`, form);
+  },
 
   // Messages / notifications configurables (table email_templates partagée).
   messageTemplates: () => jsonFetch("/email-templates", { method: "GET", base: API_ROOT }),
@@ -168,6 +268,18 @@ export const api = {
   updateContractTemplate: (id, b) => put(`/contract-templates/${id}`, b),
   activateContractTemplate: (id) => patch(`/contract-templates/${id}/activate`),
   deleteContractTemplate: (id) => del(`/contract-templates/${id}`),
+
+  // Enquête de prélocation (Québec) — dossier interne du gestionnaire (JWT).
+  prescreenings: (status) => get(`/prescreenings${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  prescreening: (id) => get(`/prescreenings/${id}`),
+  createPrescreeningInvite: (b) => post("/prescreenings/invite", b),
+  addPrescreeningReference: (id, b) => post(`/prescreenings/${id}/references`, b),
+  updatePrescreeningReferenceContact: (id, refId, b) => post(`/prescreenings/${id}/references/${refId}/contact`, b),
+  decidePrescreening: (id, b) => post(`/prescreenings/${id}/decision`, b),
+  markPrescreeningCreditCheck: (id) => post(`/prescreenings/${id}/credit-check/mark`),
+  convertPrescreeningToOnboarding: (id) => post(`/prescreenings/${id}/convert-to-onboarding`),
+  purgePrescreening: (id) => post(`/prescreenings/${id}/purge`),
+  prescreeningConsentTexts: () => get("/prescreenings/consent-texts"),
 };
 
 // ── Onboarding public (page locataire Domus, sans authentification) ──
@@ -175,7 +287,8 @@ export const api = {
 // Domus possède sa PROPRE page publique : on réécrit le lien vers une URL propre
 // sous /domus/. nginx assure le fallback SPA (`@dev_domus_spa`/`@prod_domus_spa`
 // → /domus/index.html) pour ce deep-link, donc pas besoin de routage par hash.
-export const ONBOARDING_PATH = "/domus/onboarding/tenant";
+// Base injectee par vite : "/domus/" (defaut) ou "/" (build --mode avelomi).
+export const ONBOARDING_PATH = `${import.meta.env.BASE_URL}onboarding/tenant`;
 export function domusOnboardingUrl(backendUrl) {
   try {
     const u = new URL(backendUrl);
@@ -184,6 +297,22 @@ export function domusOnboardingUrl(backendUrl) {
     return `${u.origin}${ONBOARDING_PATH}?token=${encodeURIComponent(token)}`;
   } catch {
     return backendUrl || "";
+  }
+}
+
+// Même principe pour l'enquête de prélocation (Québec) : URL propre Domus
+// sous /domus/prescreening/candidature?token=... (deep-link mobile à préserver).
+export const PRESCREENING_PATH = `${import.meta.env.BASE_URL}prescreening/candidature`;
+export function domusPrescreeningUrl(backendUrlOrToken) {
+  if (!backendUrlOrToken) return "";
+  try {
+    const u = new URL(backendUrlOrToken);
+    const token = u.searchParams.get("token");
+    if (!token) return backendUrlOrToken || "";
+    return `${u.origin}${PRESCREENING_PATH}?token=${encodeURIComponent(token)}`;
+  } catch {
+    // Pas une URL absolue : on suppose que c'est déjà un token brut.
+    return `${window.location.origin}${PRESCREENING_PATH}?token=${encodeURIComponent(backendUrlOrToken)}`;
   }
 }
 
@@ -208,6 +337,28 @@ export const publicApi = {
     publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
   submitOnboarding: (token, values) =>
     publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
+  prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),
+  savePrescreening: (token, values) =>
+    publicFetch(`/tenant-prescreening/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+  recordPrescreeningConsent: (token, consentType, granted) =>
+    publicFetch(`/tenant-prescreening/consent?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ consentType, granted }) }),
+  submitPrescreening: (token) =>
+    publicFetch(`/tenant-prescreening/submit?token=${encodeURIComponent(token)}`, { method: "POST" }),
+  prescreeningConsentText: (version, locale, consentType) =>
+    publicFetch(`/tenant-prescreening/consent-text?version=${encodeURIComponent(version)}&locale=${encodeURIComponent(locale)}&consentType=${encodeURIComponent(consentType)}`),
+  stays: () => publicFetch("/property-management/public/stays"),
+  stay: (key) => publicFetch(`/property-management/public/stays/${encodeURIComponent(key)}`),
+  publicPhotoUrl: (photoId) => `${API_ROOT}/property-management/public/photos/${encodeURIComponent(photoId)}/file`,
+  publicAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>
+    publicFetch(`/property-management/public/availability?propertyId=${encodeURIComponent(propertyId)}${unitId ? `&unitId=${encodeURIComponent(unitId)}` : ""}&checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}`),
+  validatePublicCoupon: ({ code, amount, currencyId }) =>
+    publicFetch(`/property-management/public/coupons/validate?code=${encodeURIComponent(code || "")}&amount=${encodeURIComponent(amount || 0)}${currencyId ? `&currencyId=${encodeURIComponent(currencyId)}` : ""}`),
+  createPublicReservation: (values) =>
+    publicFetch("/property-management/public/reservations", { method: "POST", body: JSON.stringify(values || {}) }),
+  createPublicLeaseRequest: (values) =>
+    publicFetch("/property-management/public/lease-requests", { method: "POST", body: JSON.stringify(values || {}) }),
 };
 
 // ── Rejeu de la file d'attente hors ligne ──

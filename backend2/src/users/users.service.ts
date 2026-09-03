@@ -37,7 +37,7 @@ export class UsersService {
     private readonly mailAccounts: MailAccountsService,
   ) {}
 
-  async findAll(query: Record<string, string>) {
+  async findAll(query: Record<string, string>, orgId: number) {
     if (query["query"] === "all") {
       const rows = await this.db
         .select({
@@ -50,7 +50,7 @@ export class UsersService {
         .leftJoin(roles, eq(roles.id, users.roleId))
         .leftJoin(designations, eq(designations.id, users.designationId))
         .leftJoin(departments, eq(departments.id, users.departmentId))
-        .where(eq(users.status, "true"))
+        .where(and(eq(users.status, "true"), eq(users.organizationId, orgId)))
         .orderBy(desc(users.id));
 
       const userIds = rows.map((r) => r.user.id);
@@ -97,6 +97,7 @@ export class UsersService {
         .where(
           and(
             eq(users.status, "true"),
+            eq(users.organizationId, orgId),
             or(like(users.username, key), like(users.firstName, key), like(users.lastName, key)),
           ),
         )
@@ -110,6 +111,7 @@ export class UsersService {
         .where(
           and(
             eq(users.status, "true"),
+            eq(users.organizationId, orgId),
             or(like(users.username, key), like(users.firstName, key), like(users.lastName, key)),
           ),
         );
@@ -123,7 +125,7 @@ export class UsersService {
       .select({ user: users, role: { id: roles.id, name: roles.name } })
       .from(users)
       .leftJoin(roles, eq(roles.id, users.roleId))
-      .where(query["status"] ? eq(users.status, query["status"]) : undefined)
+      .where(and(eq(users.organizationId, orgId), query["status"] ? eq(users.status, query["status"]) : undefined))
       .orderBy(desc(users.id))
       .limit(limit)
       .offset(skip);
@@ -131,7 +133,7 @@ export class UsersService {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(users)
-      .where(query["status"] ? eq(users.status, query["status"]) : undefined);
+      .where(and(eq(users.organizationId, orgId), query["status"] ? eq(users.status, query["status"]) : undefined));
 
     return {
       getAllUser: rows.map((r) => ({ ...this.safeUser(r.user), role: r.role })),
@@ -139,12 +141,12 @@ export class UsersService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, orgId: number) {
     const rows = await this.db
       .select({ user: users, role: { id: roles.id, name: roles.name } })
       .from(users)
       .leftJoin(roles, eq(roles.id, users.roleId))
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("User not found!");
@@ -179,7 +181,7 @@ export class UsersService {
     };
   }
 
-  async create(dto: CreateUserDto, ctx: AuditContext = {}) {
+  async create(dto: CreateUserDto, orgId: number, ctx: AuditContext = {}) {
     const existing = await this.db
       .select({ id: users.id })
       .from(users)
@@ -207,6 +209,7 @@ export class UsersService {
     try {
       [result] = await this.db.insert(users).values({
         ...dto,
+        organizationId: orgId,
         employeeId,
         email: mailbox?.email ?? dto.email,
         password: hash,
@@ -230,14 +233,14 @@ export class UsersService {
       generatedEmail: mailbox?.email,
     });
 
-    return this.findOne(newId);
+    return this.findOne(newId, orgId);
   }
 
-  async update(id: number, dto: UpdateUserDto, ctx: AuditContext = {}) {
+  async update(id: number, dto: UpdateUserDto, orgId: number, ctx: AuditContext = {}) {
     const [user] = await this.db
       .select({ id: users.id, roleId: users.roleId })
       .from(users)
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId)))
       .limit(1);
 
     if (!user) throw new NotFoundException("User not found!");
@@ -255,7 +258,7 @@ export class UsersService {
     if (dto.birthDate) updateData["birthDate"] = dto.birthDate;
     updateData["updatedAt"] = sql`CURRENT_TIMESTAMP`;
 
-    await this.db.update(users).set(updateData).where(eq(users.id, id));
+    await this.db.update(users).set(updateData).where(and(eq(users.id, id), eq(users.organizationId, orgId)));
 
     const roleChanged = Boolean(dto.roleId && dto.roleId !== user.roleId);
     if (roleChanged) {
@@ -273,16 +276,16 @@ export class UsersService {
       newRoleId: dto.roleId,
     });
 
-    return this.findOne(id);
+    return this.findOne(id, orgId);
   }
 
-  async remove(id: number, status: string, ctx: AuditContext = {}) {
+  async remove(id: number, status: string, orgId: number, ctx: AuditContext = {}) {
     if (!status) throw new BadRequestException("status is required");
 
     const [user] = await this.db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.id, id))
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId)))
       .limit(1);
 
     if (!user) throw new NotFoundException("User not found!");
@@ -290,7 +293,7 @@ export class UsersService {
     await this.db
       .update(users)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(users.id, id));
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId)));
 
     await this.audit.log("admin.user.status_changed", `user:${id}`, ctx, { status });
 

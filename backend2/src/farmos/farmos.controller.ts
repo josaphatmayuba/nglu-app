@@ -15,29 +15,51 @@ import {
 import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentFarmosSpecies, type FarmosSpeciesScope } from "../auth/decorators/farmos-species-scope.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
+import { FarmosSpeciesGuard } from "../auth/guards/farmos-species.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   ConsumeMedicineDto,
   CreateAnimalDto,
+  DeclareAnimalIllnessDto,
+  DeclareAnimalRecoveryDto,
+  CreateHealthObservationDto,
+  ImportAnimalsDto,
   CreateFarmosStaffDto,
   CreateDiseaseDto,
+  SuggestDiseaseDto,
+  LinkDiseaseMedicineDto,
   CreateExpenseDto,
+  CreateProfitabilitySnapshotDto,
+  CreateBatchAdjustmentDto,
+  CreateBatchTransferDto,
+  CreateBatchSplitDto,
   CreateMedicineDto,
   CreateMortalityEventDto,
+  CreateWeighingDto,
+  ImportWeighingsDto,
+  UpdateFarmosStaffDto,
+  SetFarmosStaffStatusDto,
   CreateVaccinationDto,
   CreateVetExamDto,
   SignVetExamDto,
   CreateFarmosDocumentDto,
   UpsertFarmosBuildingDto,
   CreateWorkLogDto,
+  CreateTaskDto,
+  UpdateTaskDto,
+  CreateFieldNoteDto,
+  SaveReportDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
+  UpdateReproductionEventDto,
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
+  DeclareBoxDiseaseDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
   UpdateFarmosSpeciesSettingsDto,
@@ -45,8 +67,19 @@ import {
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
   UpsertFarmosPriceDto,
+  CreateFeedLotDto,
+  CreateFeedMovementDto,
+  BulkFeedMovementDto,
+  BulkCreateAnimalOperationsDto,
+  CreateAnimalOperationDto,
+  CreateOperationTypeDto,
+  UpdateAnimalOperationDto,
+  UpdateOperationTypeDto,
 } from "./dto/farmos.dto";
 import { FarmosService } from "./farmos.service";
+import { FarmosFeedService } from "./farmos-feed.service";
+import { FarmosOperationsService } from "./farmos-operations.service";
+import { FarmosProfitabilityService } from "./farmos-profitability.service";
 
 const FARMOS_REALTIME_TABLES = [
   "animals",
@@ -68,10 +101,15 @@ const FARMOS_REALTIME_TABLES = [
 
 @ApiTags("farmos")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, FarmosSpeciesGuard)
 @Controller("farmos")
 export class FarmosController {
-  constructor(private readonly farmos: FarmosService) {}
+  constructor(
+    private readonly farmos: FarmosService,
+    private readonly farmosFeed: FarmosFeedService,
+    private readonly farmosOperations: FarmosOperationsService,
+    private readonly farmosProfitability: FarmosProfitabilityService,
+  ) {}
 
   @ApiOperation({ summary: "FarmOS dashboard snapshot grouped in one request" })
   @Permissions("readAll-farmos")
@@ -139,8 +177,33 @@ export class FarmosController {
   @ApiOperation({ summary: "List FarmOS animals" })
   @Permissions("readAll-farmos")
   @Get("animals")
-  listAnimals(@CurrentOrg() orgId: number) {
-    return this.farmos.listAnimals(orgId);
+  listAnimals(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listAnimals(orgId, species);
+  }
+
+  @ApiOperation({ summary: "All species assignments of the org (map userId -> species[])" })
+  @Permissions("readAll-farmos")
+  @Get("species-assignments")
+  listAllSpeciesAssignments(@CurrentOrg() orgId: number) {
+    return this.farmos.listAllSpeciesAssignments(orgId);
+  }
+
+  @ApiOperation({ summary: "List species assigned to a user (RBAC par espèce)" })
+  @Permissions("readAll-farmos")
+  @Get("species-assignments/:userId")
+  listSpeciesAssignments(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listSpeciesAssignments(userId, orgId);
+  }
+
+  @ApiOperation({ summary: "Set species assigned to a user (set complet, RBAC par espèce)" })
+  @Permissions("update-farmos")
+  @Post("species-assignments/:userId")
+  setSpeciesAssignments(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: { species: string[] },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.setSpeciesAssignments(userId, Array.isArray(body?.species) ? body.species : [], orgId);
   }
 
   @ApiOperation({ summary: "Get FarmOS animal by id" })
@@ -157,6 +220,13 @@ export class FarmosController {
     return this.farmos.createAnimal(body, orgId);
   }
 
+  @ApiOperation({ summary: "Import animals in bulk from a mapped CSV (COMP-P1-001)." })
+  @Permissions("create-farmos")
+  @Post("animals/import")
+  importAnimals(@Body() body: ImportAnimalsDto, @CurrentOrg() orgId: number) {
+    return this.farmos.importAnimals(body, orgId);
+  }
+
   @ApiOperation({ summary: "Update a FarmOS animal" })
   @Permissions("update-farmos")
   @Put("animals/:id")
@@ -164,8 +234,9 @@ export class FarmosController {
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateAnimalDto,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
   ) {
-    return this.farmos.updateAnimal(id, body, orgId);
+    return this.farmos.updateAnimal(id, body, orgId, userId);
   }
 
   @Permissions("update-farmos")
@@ -174,8 +245,73 @@ export class FarmosController {
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateAnimalDto,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
   ) {
-    return this.farmos.updateAnimal(id, body, orgId);
+    return this.farmos.updateAnimal(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Historique des changements de statut sante d'un animal (sain/malade/quarantaine, cause, note, auteur)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/status-history")
+  listAnimalStatusHistory(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listAnimalStatusHistory(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Declarer une maladie/quarantaine sur un animal (ouvre un episode sante)." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-declare")
+  declareAnimalIllness(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareAnimalIllnessDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.declareAnimalIllness(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Declarer la guerison d'un animal (ferme l'episode sante ouvert)." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-heal")
+  declareAnimalRecovery(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareAnimalRecoveryDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.declareAnimalRecovery(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Episode sante ouvert d'un animal (avec ses observations de suivi)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/health-episode")
+  getHealthEpisode(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getHealthEpisodeDetail(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajouter une observation de suivi sur l'episode sante ouvert d'un animal." })
+  @Permissions("update-farmos")
+  @Post("animals/:id/health-observations")
+  addHealthObservation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateHealthObservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.addHealthObservation(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Lister les observations de suivi sante d'un animal." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/health-observations")
+  listHealthObservations(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listHealthObservations(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Remove an animal from POS sale listing when no sale exists." })
+  @Permissions("update-farmos")
+  @Delete("animals/:id/listing")
+  unlistAnimalFromSale(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.unlistAnimalFromSale(id, orgId);
   }
 
   @ApiOperation({ summary: "Soft-delete a FarmOS animal" })
@@ -242,8 +378,8 @@ export class FarmosController {
 
   @Permissions("readAll-farmos")
   @Get("treatments")
-  listTreatments(@CurrentOrg() orgId: number) {
-    return this.farmos.listTreatments(orgId);
+  listTreatments(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listTreatments(orgId, species);
   }
 
   @Permissions("readAll-farmos")
@@ -332,29 +468,67 @@ export class FarmosController {
     return this.farmos.deleteDisease(id, orgId);
   }
 
+  @ApiOperation({ summary: "AI-assisted disease suggestion from a free-text description of observed signs." })
+  @Permissions("readAll-farmos")
+  @Post("diseases/suggest")
+  suggestDisease(@Body() body: SuggestDiseaseDto, @CurrentOrg() orgId: number) {
+    return this.farmos.suggestDisease(body.species, body.description, orgId);
+  }
+
+  @ApiOperation({ summary: "List medicines/vaccines in stock linked to a disease." })
+  @Permissions("readAll-farmos")
+  @Get("diseases/:id/medicines")
+  listDiseaseMedicines(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listDiseaseMedicines(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Link a medicine/vaccine from stock to a disease." })
+  @Permissions("update-farmos")
+  @Post("diseases/:id/medicines")
+  linkDiseaseMedicine(@Param("id", ParseIntPipe) id: number, @Body() body: LinkDiseaseMedicineDto, @CurrentOrg() orgId: number) {
+    return this.farmos.linkDiseaseMedicine(id, body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Delete("diseases/:id/medicines/:medicineId")
+  unlinkDiseaseMedicine(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("medicineId", ParseIntPipe) medicineId: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.unlinkDiseaseMedicine(id, medicineId, orgId);
+  }
+
   // ─── Reproduction events ─────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List reproduction events for the organisation." })
   @Permissions("readAll-farmos")
   @Get("reproduction-events")
-  listReproductionEvents(@CurrentOrg() orgId: number) {
-    return this.farmos.listReproductionEvents(orgId);
+  listReproductionEvents(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listReproductionEvents(orgId, species);
   }
 
   // ─── Sales & expenses ────────────────────────────────────────────────────
 
+  @ApiOperation({ summary: "Stock œufs disponible (produit - vendu)." })
+  @Permissions("readAll-farmos")
+  @Get("egg-stock")
+  getEggStock(@CurrentOrg() orgId: number) {
+    return this.farmos.getEggStock(orgId);
+  }
+
   @ApiOperation({ summary: "List FarmOS sales for the organisation." })
   @Permissions("readAll-farmos")
   @Get("sales")
-  listSales(@CurrentOrg() orgId: number) {
-    return this.farmos.listSales(orgId);
+  listSales(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listSales(orgId, species);
   }
 
   @ApiOperation({ summary: "List FarmOS expenses for the organisation." })
   @Permissions("readAll-farmos")
   @Get("expenses")
-  listExpenses(@CurrentOrg() orgId: number) {
-    return this.farmos.listExpenses(orgId);
+  listExpenses(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listExpenses(orgId, species);
   }
 
   @Permissions("create-farmos")
@@ -381,10 +555,32 @@ export class FarmosController {
     return this.farmos.deleteExpense(id, orgId);
   }
 
+  @Permissions("update-farmos")
+  @Post("expenses/:id/approve")
+  approveExpense(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { comment?: string },
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.approveExpense(id, body?.comment, orgId, userId);
+  }
+
   @Permissions("create-farmos")
   @Post("reproduction-events")
   createReproductionEvent(@Body() body: CreateReproductionEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createReproductionEvent(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Confirmer ou infirmer une gestation en cours (outcome)." })
+  @Permissions("update-farmos")
+  @Patch("reproduction-events/:id")
+  updateReproductionEvent(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateReproductionEventDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.updateReproductionEvent(id, body, orgId);
   }
 
   @Permissions("delete-farmos")
@@ -398,8 +594,8 @@ export class FarmosController {
   @ApiOperation({ summary: "List production logs for the organisation." })
   @Permissions("readAll-farmos")
   @Get("production-logs")
-  listProductionLogs(@CurrentOrg() orgId: number) {
-    return this.farmos.listProductionLogs(orgId);
+  listProductionLogs(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listProductionLogs(orgId, species);
   }
 
   @Permissions("create-farmos")
@@ -419,14 +615,35 @@ export class FarmosController {
   @ApiOperation({ summary: "List vaccinations." })
   @Permissions("readAll-farmos")
   @Get("vaccinations")
-  listVaccinations(@CurrentOrg() orgId: number) {
-    return this.farmos.listVaccinations(orgId);
+  listVaccinations(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listVaccinations(orgId, species);
   }
 
   @Permissions("create-farmos")
   @Post("vaccinations")
   createVaccination(@Body() body: CreateVaccinationDto, @CurrentOrg() orgId: number) {
     return this.farmos.createVaccination(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Base de donnees de vaccins (catalogue, filtrable par espece)." })
+  @Permissions("readAll-farmos")
+  @Get("vaccines")
+  listVaccines(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmos.listVaccines(orgId, species);
+  }
+
+  @ApiOperation({ summary: "Fiche complete d'un vaccin (specifications)." })
+  @Permissions("readAll-farmos")
+  @Get("vaccines/:id")
+  getVaccine(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getVaccine(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajoute un vaccin a la base (personnalise)." })
+  @Permissions("create-farmos")
+  @Post("vaccines")
+  createVaccine(@Body() body: any, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createVaccine(body, orgId, userId);
   }
 
   @Permissions("readAll-farmos")
@@ -496,11 +713,61 @@ export class FarmosController {
     return this.farmos.deleteDocument(id, orgId);
   }
 
+  // ─── Fermes ───────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("farms")
+  listFarms(@CurrentOrg() orgId: number) {
+    return this.farmos.listFarms(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("farms")
+  createFarm(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createFarm(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("farms/:id")
+  updateFarm(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateFarm(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("farms/:id")
+  deleteFarm(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteFarm(id, orgId);
+  }
+
+  // ─── Zones ────────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("zones")
+  listZones(@CurrentOrg() orgId: number) {
+    return this.farmos.listZones(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("zones")
+  createZone(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createZone(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("zones/:id")
+  updateZone(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateZone(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("zones/:id")
+  deleteZone(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteZone(id, orgId);
+  }
+
   // ─── Bâtiments ────────────────────────────────────────────────────────────
   @Permissions("readAll-farmos")
   @Get("buildings")
-  listBuildings(@CurrentOrg() orgId: number, @Query("species") species?: string) {
-    return this.farmos.listBuildings(orgId, species || null);
+  listBuildings(@CurrentOrg() orgId: number, @Query("species") species?: string, @Query("zone_id") zoneId?: string) {
+    return this.farmos.listBuildings(orgId, species || null, zoneId ? Number(zoneId) : null);
   }
 
   @Permissions("create-farmos")
@@ -521,37 +788,181 @@ export class FarmosController {
     return this.farmos.deleteBuilding(id, orgId);
   }
 
-  // ─── Rapports PDF (#3) ────────────────────────────────────────────────────
+  // ─── Box (loges/emplacements) ─────────────────────────────────────────────
   @Permissions("readAll-farmos")
-  @Get("vet-exams/:id/pdf")
-  async vetExamPdf(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
-    const { buffer, reference } = await this.farmos.vetExamPdf(id, orgId);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
-    res.setHeader("Content-Length", buffer.length);
-    res.end(buffer);
+  @Get("boxes")
+  listBoxes(@CurrentOrg() orgId: number, @Query("building_id") buildingId?: string) {
+    return this.farmos.listBoxes(orgId, buildingId ? Number(buildingId) : null);
+  }
+
+  @ApiOperation({ summary: "Full box context (box + building + zone + farm + animals) — for label & scan." })
+  @Permissions("readAll-farmos")
+  @Get("boxes/:id/context")
+  getBoxContext(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getBoxContext(id, orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("boxes")
+  createBox(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createBox(body, orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("boxes/generate")
+  generateBoxes(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.generateBoxes(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("boxes/:id")
+  updateBox(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateBox(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Post("boxes/delete-batch")
+  deleteBoxes(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteBoxes(body?.ids, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("boxes/:id")
+  deleteBox(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteBox(id, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Post("boxes/assign")
+  assignAnimalsToBox(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.assignAnimalsToBox(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Declare a disease on a whole box (mass treatment)." })
+  @Permissions("update-farmos")
+  @Post("boxes/:id/declare-disease")
+  declareBoxDisease(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareBoxDiseaseDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.declareBoxDisease(id, body, orgId);
+  }
+
+  // ─── Éléments de terrain (décor du plan) ──────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("land-features")
+  listLandFeatures(@CurrentOrg() orgId: number, @Query("zone_id") zoneId?: string) {
+    return this.farmos.listLandFeatures(orgId, zoneId ? Number(zoneId) : null);
+  }
+
+  @Permissions("create-farmos")
+  @Post("land-features")
+  createLandFeature(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createLandFeature(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("land-features/:id")
+  updateLandFeature(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateLandFeature(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("land-features/:id")
+  deleteLandFeature(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteLandFeature(id, orgId);
+  }
+
+  // ─── Rapports imprimables (#3) — HTML, impression côté navigateur ──────────
+  @Permissions("readAll-farmos")
+  @Get("vet-exams/:id/html")
+  async vetExamHtml(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
+    const { html, reference } = await this.farmos.vetExamHtml(id, orgId);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="${reference}.html"`);
+    res.send(html);
   }
 
   @Permissions("readAll-farmos")
-  @Get("reports/finance/pdf")
-  async financePdf(@CurrentOrg() orgId: number, @Res() res: Response) {
-    const { buffer, reference } = await this.farmos.financePdf(orgId);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
-    res.setHeader("Content-Length", buffer.length);
-    res.end(buffer);
+  @Get("reports/finance/html")
+  async financeHtml(@CurrentOrg() orgId: number, @Res() res: Response) {
+    const { html, reference } = await this.farmos.financeHtml(orgId);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="${reference}.html"`);
+    res.send(html);
   }
 
   @Permissions("readAll-farmos")
   @Get("mortality-events")
-  listMortalityEvents(@CurrentOrg() orgId: number) {
-    return this.farmos.listMortalityEvents(orgId);
+  listMortalityEvents(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listMortalityEvents(orgId, species);
+  }
+
+  @Permissions("readAll-farmos")
+  @Get("mortality-events/stats")
+  getMortalityStats(@CurrentOrg() orgId: number) {
+    return this.farmos.getMortalityStats(orgId);
   }
 
   @Permissions("create-farmos")
   @Post("mortality-events")
   createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createMortalityEvent(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajuste manuellement le count d'un lot existant (achat, transfert, correction)." })
+  @Permissions("create-farmos")
+  @Post("batch-adjustments")
+  createBatchAdjustment(@Body() body: CreateBatchAdjustmentDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchAdjustment(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Historique des ajustements manuels d'un lot (animal)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/batch-adjustments")
+  listBatchAdjustments(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.listBatchAdjustments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Transfere N tetes d'un lot vers un autre lot existant (meme espece), en une seule operation atomique et tracee." })
+  @Permissions("create-farmos")
+  @Post("batch-transfers")
+  createBatchTransfer(@Body() body: CreateBatchTransferDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchTransfer(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Scinde un lot : extrait N tetes pour en faire N fiches animales individuelles distinctes (suivi propre), en conservant filiation et localisation." })
+  @Permissions("create-farmos")
+  @Post("batch-splits")
+  createBatchSplit(@Body() body: CreateBatchSplitDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBatchSplit(body, orgId);
+  }
+
+  // ─── Pesées ──────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("weighings")
+  listWeighings(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope, @Query("animal_id") animalId?: string) {
+    return this.farmos.listWeighings(orgId, animalId ? Number(animalId) : undefined, species);
+  }
+
+  @Permissions("create-farmos")
+  @Post("weighings")
+  createWeighing(@Body() body: CreateWeighingDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createWeighing(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Import weighings in bulk from a mapped CSV (COMP-P2-014)." })
+  @Permissions("create-farmos")
+  @Post("weighings/import")
+  importWeighings(@Body() body: ImportWeighingsDto, @CurrentOrg() orgId: number) {
+    return this.farmos.importWeighings(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("weighings/:id")
+  deleteWeighing(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteWeighing(id, orgId);
   }
 
   @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 ChatGPT integration)." })
@@ -580,6 +991,121 @@ export class FarmosController {
   @Get("profitability")
   getProfitability(@CurrentOrg() orgId: number) {
     return this.farmos.getProfitability(orgId);
+  }
+
+  // ─── Rentabilité (P&L) par animal / lot — Phase 3 (calcul SQL à la volée) ──
+  @ApiOperation({ summary: "P&L KPI summary, grouped by currency (realized / valued production / latent herd value)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/summary")
+  getProfitabilitySummary(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+    @Query("currencyId") currencyId?: string,
+  ) {
+    return this.farmosProfitability.getSummary(orgId, from, to, species, currencyId ? Number(currencyId) : undefined, speciesScope);
+  }
+
+  @ApiOperation({ summary: "P&L aggregated by lot." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/by-lot")
+  getProfitabilityByLot(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+  ) {
+    return this.farmosProfitability.getByLot(orgId, from, to, species, speciesScope);
+  }
+
+  @ApiOperation({ summary: "P&L aggregated by animal, paginated." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/by-animal")
+  getProfitabilityByAnimal(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+    @Query("lot") lot?: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+    @Query("sort") sort?: string,
+  ) {
+    return this.farmosProfitability.getByAnimal(orgId, {
+      from, to, species, lot,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+      sort,
+    }, speciesScope);
+  }
+
+  @ApiOperation({ summary: "Cost drivers ranking (top expense/feed/treatment/vaccination/operation/mortality postes)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/cost-drivers")
+  getProfitabilityCostDrivers(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.farmosProfitability.getCostDrivers(orgId, from, to, speciesScope);
+  }
+
+  @ApiOperation({ summary: "CSV export of the per-animal P&L (blob download, never <a href>)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/export")
+  async exportProfitabilityCsv(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+    @Res() res: Response,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("species") species?: string,
+  ) {
+    const csv = await this.farmosProfitability.exportCsv(orgId, from, to, species, speciesScope);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentabilite-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  }
+
+  @ApiOperation({ summary: "Figer un snapshot de rentabilité pour une période (clôture explicite)." })
+  @Permissions("update-farmos")
+  @Post("profitability/snapshot")
+  createProfitabilitySnapshot(
+    @Body() body: CreateProfitabilitySnapshotDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmosProfitability.createSnapshot(orgId, body, userId);
+  }
+
+  @ApiOperation({ summary: "Liste des snapshots de rentabilité figés." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/snapshots")
+  listProfitabilitySnapshots(@CurrentOrg() orgId: number, @Query("scope") scope?: string, @Query("scopeKey") scopeKey?: string) {
+    return this.farmosProfitability.listSnapshots(orgId, scope, scopeKey);
+  }
+
+  @ApiOperation({ summary: "Timeline détaillée coûts/revenus pour un animal (drill-down)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability/animal/:id")
+  getProfitabilityAnimalTimeline(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() speciesScope: FarmosSpeciesScope,
+  ) {
+    return this.farmosProfitability.getAnimalTimeline(orgId, id, speciesScope);
+  }
+
+  @ApiOperation({ summary: "Intra-org benchmarks: compare this org's lots (internal quartiles)." })
+  @Permissions("readAll-farmos")
+  @Get("benchmarks")
+  getBenchmarks(@CurrentOrg() orgId: number) {
+    return this.farmos.getBenchmarks(orgId);
   }
 
   @ApiOperation({ summary: "List user-editable lookup values (breeds, vets, routes, …)." })
@@ -617,11 +1143,32 @@ export class FarmosController {
     return this.farmos.listFarmosStaff(orgId, role || null);
   }
 
+  @ApiOperation({ summary: "Roles assignable to a staff member (permission management)." })
+  @Permissions("readAll-farmos")
+  @Get("staff/roles")
+  listAssignableRoles() {
+    return this.farmos.listAssignableRoles();
+  }
+
   @ApiOperation({ summary: "Onboard a FarmOS staff member (also visible in CRM /staff)." })
   @Permissions("create-farmos")
   @Post("staff")
   createFarmosStaff(@Body() body: CreateFarmosStaffDto, @CurrentOrg() orgId: number) {
     return this.farmos.createFarmosStaff(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a FarmOS staff member (name, phone, designation)." })
+  @Permissions("update-farmos")
+  @Put("staff/:id")
+  updateFarmosStaff(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateFarmosStaffDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateFarmosStaff(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Set a FarmOS staff member status: active / left / resigned." })
+  @Permissions("update-farmos")
+  @Patch("staff/:id/status")
+  setFarmosStaffStatus(@Param("id", ParseIntPipe) id: number, @Body() body: SetFarmosStaffStatusDto, @CurrentOrg() orgId: number) {
+    return this.farmos.setFarmosStaffStatus(id, body, orgId);
   }
 
   @ApiOperation({ summary: "List daily work logs. Optional ?user_id, ?from, ?to (YYYY-MM-DD)." })
@@ -641,6 +1188,86 @@ export class FarmosController {
   @Post("work-logs")
   createWorkLog(@Body() body: CreateWorkLogDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.farmos.createWorkLog(body, orgId, userId);
+  }
+
+  // ─── Tasks (taches equipe, COMP-P1-010) ──────────────────────────────────
+
+  @ApiOperation({ summary: "List team tasks. Optional ?status, ?assigned_user_id." })
+  @Permissions("readAll-farmos")
+  @Get("tasks")
+  listTasks(
+    @CurrentOrg() orgId: number,
+    @Query("status") status?: string,
+    @Query("assigned_user_id") assignedUserId?: string,
+  ) {
+    return this.farmos.listTasks(orgId, { status: status || null, assignedUserId: assignedUserId ? Number(assignedUserId) : null });
+  }
+
+  @ApiOperation({ summary: "Create a team task." })
+  @Permissions("create-farmos")
+  @Post("tasks")
+  createTask(@Body() body: CreateTaskDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createTask(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a team task (status, assignee, fields)." })
+  @Permissions("update-farmos")
+  @Patch("tasks/:id")
+  updateTask(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTaskDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateTask(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a team task." })
+  @Permissions("delete-farmos")
+  @Delete("tasks/:id")
+  deleteTask(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteTask(id, orgId);
+  }
+
+  // ─── Field notes (notes terrain GPS, COMP-P1-009) ─────────────────────────
+
+  @ApiOperation({ summary: "List geolocated field notes." })
+  @Permissions("readAll-farmos")
+  @Get("field-notes")
+  listFieldNotes(@CurrentOrg() orgId: number) {
+    return this.farmos.listFieldNotes(orgId);
+  }
+
+  @ApiOperation({ summary: "Create a geolocated field note." })
+  @Permissions("create-farmos")
+  @Post("field-notes")
+  createFieldNote(@Body() body: CreateFieldNoteDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createFieldNote(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a field note." })
+  @Permissions("delete-farmos")
+  @Delete("field-notes/:id")
+  deleteFieldNote(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteFieldNote(id, orgId);
+  }
+
+  // ─── Saved reports (rapports custom, COMP-P2-017) ─────────────────────────
+
+  @ApiOperation({ summary: "List saved custom reports." })
+  @Permissions("readAll-farmos")
+  @Get("saved-reports")
+  listSavedReports(@CurrentOrg() orgId: number) {
+    return this.farmos.listSavedReports(orgId);
+  }
+
+  @ApiOperation({ summary: "Save a custom report (columns + filters)." })
+  @Permissions("create-farmos")
+  @Post("saved-reports")
+  createSavedReport(@Body() body: SaveReportDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createSavedReport(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a saved report." })
+  @Permissions("delete-farmos")
+  @Delete("saved-reports/:id")
+  deleteSavedReport(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteSavedReport(id, orgId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────
@@ -733,5 +1360,214 @@ export class FarmosController {
   @Delete("animals/photos/:id")
   deleteAnimalPhoto(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
     return this.farmos.deleteAnimalPhoto(id, orgId);
+  }
+
+  // ─── Stock aliment (Phase 1) ─────────────────────────────────────────────
+
+  @ApiOperation({ summary: "Référentiel des aliments (farmos_medicines kind=feed)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/references")
+  listFeedReferences(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.listFeedReferences(orgId);
+  }
+
+  @ApiOperation({ summary: "Lots d'aliment reçus (?medicineId=)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/lots")
+  listFeedLots(@CurrentOrg() orgId: number, @Query("medicineId") medicineId?: string) {
+    return this.farmosFeed.listFeedLots(orgId, medicineId ? Number(medicineId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Réception d'un lot d'aliment (crée lot + mouvement in + dépense feed)." })
+  @Permissions("create-farmos")
+  @Post("feed/lots")
+  createFeedLot(@Body() body: CreateFeedLotDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedLot(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Suppression (soft) d'un lot d'aliment + contre-mouvement." })
+  @Permissions("delete-farmos")
+  @Delete("feed/lots/:id")
+  deleteFeedLot(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosFeed.deleteFeedLot(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Journal des mouvements de stock aliment (?from&to&medicineId&buildingId&lot&species)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/movements")
+  listFeedMovements(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() species: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("medicineId") medicineId?: string,
+    @Query("buildingId") buildingId?: string,
+    @Query("lot") lot?: string,
+    @Query("species") speciesFilter?: string,
+  ) {
+    return this.farmosFeed.listFeedMovements(
+      orgId,
+      {
+        from,
+        to,
+        medicineId: medicineId ? Number(medicineId) : undefined,
+        buildingId: buildingId ? Number(buildingId) : undefined,
+        lot,
+        species: speciesFilter,
+      },
+      species,
+    );
+  }
+
+  @ApiOperation({ summary: "Distribution d'aliment (sortie FIFO, décrément via consumeMedicine)." })
+  @Permissions("create-farmos")
+  @Post("feed/movements")
+  createFeedMovement(@Body() body: CreateFeedMovementDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedMovement(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Saisie journalière multi-bâtiments en une transaction." })
+  @Permissions("create-farmos")
+  @Post("feed/movements/bulk")
+  createFeedMovementsBulk(@Body() body: BulkFeedMovementDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmosFeed.createFeedMovementsBulk(body, orgId, userId ?? null);
+  }
+
+  @ApiOperation({ summary: "Suppression (soft) d'un mouvement + réincrément du stock." })
+  @Permissions("delete-farmos")
+  @Delete("feed/movements/:id")
+  deleteFeedMovement(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosFeed.deleteFeedMovement(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Niveau de stock courant + couverture en jours + statut." })
+  @Permissions("readAll-farmos")
+  @Get("feed/stock")
+  getFeedStock(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.getFeedStock(orgId);
+  }
+
+  @ApiOperation({ summary: "Alertes stock aliment (seuil bas / péremption < 30j)." })
+  @Permissions("readAll-farmos")
+  @Get("feed/alerts")
+  getFeedAlerts(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.getFeedAlerts(orgId);
+  }
+
+  @ApiOperation({ summary: "Réconcilie farmos_medicines.quantity sur la somme des mouvements aliment." })
+  @Permissions("update-farmos")
+  @Post("feed/recompute")
+  recomputeFeedStock(@CurrentOrg() orgId: number) {
+    return this.farmosFeed.recomputeFeedStock(orgId);
+  }
+
+  // ─── Opérations zootechniques (Phase 2) ─────────────────────────────────
+
+  @ApiOperation({ summary: "Catalogue des types d'opération (castration, tonte, écornage…)." })
+  @Permissions("readAll-farmos")
+  @Get("operation-types")
+  listOperationTypes(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmosOperations.listOperationTypes(orgId, species ?? null);
+  }
+
+  @ApiOperation({ summary: "Crée un type d'opération dans le catalogue." })
+  @Permissions("create-farmos")
+  @Post("operation-types")
+  createOperationType(@Body() body: CreateOperationTypeDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.createOperationType(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Met à jour un type d'opération." })
+  @Permissions("update-farmos")
+  @Patch("operation-types/:id")
+  updateOperationType(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateOperationTypeDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmosOperations.updateOperationType(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft) un type d'opération." })
+  @Permissions("delete-farmos")
+  @Delete("operation-types/:id")
+  deleteOperationType(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.deleteOperationType(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Initialise le catalogue standard (castration, tonte, écornage, boucle, onglons, dents, caudectomie, ébecquage). Idempotent." })
+  @Permissions("update-farmos")
+  @Post("operation-types/bootstrap")
+  bootstrapOperationTypes(@CurrentOrg() orgId: number) {
+    return this.farmosOperations.bootstrapOperationTypes(orgId);
+  }
+
+  @ApiOperation({ summary: "Liste des opérations zootechniques réalisées." })
+  @Permissions("readAll-farmos")
+  @Get("operations")
+  listOperations(
+    @CurrentOrg() orgId: number,
+    @CurrentFarmosSpecies() species: FarmosSpeciesScope,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("code") code?: string,
+    @Query("animalId") animalId?: string,
+    @Query("lot") lot?: string,
+    @Query("species") speciesFilter?: string,
+  ) {
+    return this.farmosOperations.listOperations(orgId, species, {
+      from,
+      to,
+      code,
+      animalId: animalId ? Number(animalId) : undefined,
+      lot,
+      species: speciesFilter,
+    });
+  }
+
+  @ApiOperation({ summary: "Détail d'une opération." })
+  @Permissions("readAll-farmos")
+  @Get("operations/:id")
+  getOperation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.getOperation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Enregistre une opération zootechnique (crée la dépense liée si cost > 0)." })
+  @Permissions("create-farmos")
+  @Post("operations")
+  createOperation(@Body() body: CreateAnimalOperationDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.createOperation(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Acte de lot : applique une opération à N animaux sélectionnés en une transaction." })
+  @Permissions("create-farmos")
+  @Post("operations/bulk")
+  bulkCreateOperations(@Body() body: BulkCreateAnimalOperationsDto, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.bulkCreateOperations(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Met à jour une opération." })
+  @Permissions("update-farmos")
+  @Patch("operations/:id")
+  updateOperation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateAnimalOperationDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmosOperations.updateOperation(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft) une opération + soft delete de la dépense liée." })
+  @Permissions("delete-farmos")
+  @Delete("operations/:id")
+  deleteOperation(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.deleteOperation(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Timeline des opérations zootechniques d'un animal (dossier animal)." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/operations")
+  listAnimalOperations(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmosOperations.listAnimalOperations(id, orgId);
   }
 }

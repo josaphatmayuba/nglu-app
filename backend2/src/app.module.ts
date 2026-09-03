@@ -18,12 +18,18 @@ import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { FarmosModule } from "./farmos/farmos.module";
+import { KodatillModule } from "./kodatill/kodatill.module";
+import { JournalEntrepriseModule } from "./journal-entreprise/journal-entreprise.module";
+import { DiscussionModule } from "./discussion/discussion.module";
+import { ChatModule } from "./chat/chat.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { MessagesModule } from "./messages/messages.module";
+import { MigrationModule } from "./migration/migration.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
+import { OrganizationsModule } from "./organizations/organizations.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
 import { ProductBrandsModule } from "./product-brands/product-brands.module";
@@ -41,8 +47,18 @@ import { SuppliersModule } from "./suppliers/suppliers.module";
 import { SystemEmailModule } from "./system-email/system-email.module";
 import { TransactionTypesModule } from "./transaction-types/transaction-types.module";
 import { TransactionsModule } from "./transactions/transactions.module";
+import { LedgerModule } from "./ledger/ledger.module";
+import { ForecastModule } from "./forecast/forecast.module";
+import { WorkflowModule } from "./workflow/workflow.module";
+import { BudgetModule } from "./budget/budget.module";
+import { ProcurementModule } from "./procurement/procurement.module";
+import { DocumentsModule } from "./documents/documents.module";
+import { ProjectsModule } from "./projects/projects.module";
+import { SignaturesModule } from "./signatures/signatures.module";
+import { VaccineRegistryModule } from "./vaccine-registry/vaccine-registry.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
+import { WhatsappModule } from "./whatsapp/whatsapp.module";
 
 @Module({
   imports: [
@@ -64,12 +80,18 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     EmailTemplatesModule,
     FarmosModule,
+    KodatillModule,
+    JournalEntrepriseModule,
+    DiscussionModule,
+    ChatModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
     MailAccountsModule,
     ManufacturersModule,
     MessagesModule,
+    MigrationModule,
     NotificationPreferencesModule,
+    OrganizationsModule,
     PaymentMethodsModule,
     PermissionsModule,
     ProductBrandsModule,
@@ -86,9 +108,19 @@ import { UsersModule } from "./users/users.module";
     SuppliersModule,
     SystemEmailModule,
     TransactionsModule,
+    LedgerModule,
+    ForecastModule,
+    WorkflowModule,
+    BudgetModule,
+    ProcurementModule,
+    DocumentsModule,
+    ProjectsModule,
+    SignaturesModule,
+    VaccineRegistryModule,
     TransactionTypesModule,
     UomModule,
     UsersModule,
+    WhatsappModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

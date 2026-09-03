@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
 import { subAccounts, transactionTypes } from "../database/schema";
@@ -14,16 +14,18 @@ const creditAccount = alias(subAccounts, "creditAccount");
 export class TransactionTypesService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async findAll() {
+  async findAll(org: number) {
     const rows = await this.baseQuery()
-      .where(eq(transactionTypes.isActive, true))
+      .where(and(eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, org)))
       .orderBy(desc(transactionTypes.id));
 
     return rows.map(this.toResponse);
   }
 
-  async findOne(id: number) {
-    const rows = await this.baseQuery().where(eq(transactionTypes.id, id)).limit(1);
+  async findOne(id: number, org: number) {
+    const rows = await this.baseQuery()
+      .where(and(eq(transactionTypes.id, id), eq(transactionTypes.organizationId, org)))
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Transaction type not found.");
@@ -32,10 +34,11 @@ export class TransactionTypesService {
     return this.toResponse(rows[0]);
   }
 
-  async create(input: CreateTransactionTypeDto) {
-    await this.ensureAccountsExist([input.debitAccountId, input.creditAccountId]);
+  async create(input: CreateTransactionTypeDto, org: number) {
+    await this.ensureAccountsExist([input.debitAccountId, input.creditAccountId], org);
 
     const [result] = await this.db.insert(transactionTypes).values({
+      organizationId: org,
       name: input.name,
       debitAccountId: input.debitAccountId,
       creditAccountId: input.creditAccountId,
@@ -45,16 +48,16 @@ export class TransactionTypesService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    return this.findOne(Number(result.insertId), org);
   }
 
-  async update(id: number, input: UpdateTransactionTypeDto) {
-    await this.ensureTransactionTypeExists(id);
+  async update(id: number, input: UpdateTransactionTypeDto, org: number) {
+    await this.ensureTransactionTypeExists(id, org);
 
     const accountIds = [input.debitAccountId, input.creditAccountId].filter(
       (accountId): accountId is number => typeof accountId === "number",
     );
-    await this.ensureAccountsExist(accountIds);
+    await this.ensureAccountsExist(accountIds, org);
 
     await this.db
       .update(transactionTypes)
@@ -66,26 +69,28 @@ export class TransactionTypesService {
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(transactionTypes.id, id));
+      .where(and(eq(transactionTypes.id, id), eq(transactionTypes.organizationId, org)));
 
-    return this.findOne(id);
+    return this.findOne(id, org);
   }
 
-  async remove(id: number) {
-    await this.ensureTransactionTypeExists(id);
+  async remove(id: number, org: number) {
+    await this.ensureTransactionTypeExists(id, org);
 
-    await this.db.delete(transactionTypes).where(eq(transactionTypes.id, id));
+    await this.db
+      .delete(transactionTypes)
+      .where(and(eq(transactionTypes.id, id), eq(transactionTypes.organizationId, org)));
 
     return {
       message: "Transaction type deleted successfully.",
     };
   }
 
-  private async ensureTransactionTypeExists(id: number) {
+  private async ensureTransactionTypeExists(id: number, org: number) {
     const rows = await this.db
       .select({ id: transactionTypes.id })
       .from(transactionTypes)
-      .where(eq(transactionTypes.id, id))
+      .where(and(eq(transactionTypes.id, id), eq(transactionTypes.organizationId, org)))
       .limit(1);
 
     if (!rows.length) {
@@ -93,17 +98,19 @@ export class TransactionTypesService {
     }
   }
 
-  private async ensureAccountsExist(accountIds: number[]) {
+  private async ensureAccountsExist(accountIds: number[], org: number) {
     const uniqueAccountIds = [...new Set(accountIds)];
 
     if (!uniqueAccountIds.length) {
       return;
     }
 
+    // Les sous-comptes references doivent appartenir a l org (anti-fuite : on ne
+    // peut pas lier une regle de transaction au compte d une autre organisation).
     const rows = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(inArray(subAccounts.id, uniqueAccountIds));
+      .where(and(inArray(subAccounts.id, uniqueAccountIds), eq(subAccounts.organizationId, org)));
 
     if (rows.length !== uniqueAccountIds.length) {
       throw new BadRequestException("Debit or credit account does not exist.");

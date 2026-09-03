@@ -7,15 +7,29 @@ services:
     image: redis:7-alpine
     container_name: nglu_prod_redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD}"]
     networks:
       - nglu_prod_network
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: nglu_prod_minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nglu_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me_minio_password_32_chars_minimum}
+    volumes:
+      - nglu_prod_minio_data:/data
+    networks:
+      - nglu_prod_network
+    mem_limit: 192m
 
   backend2:
     build:
@@ -30,7 +44,7 @@ services:
       DB_PORT: ${DB_PORT:-9306}
       DB_DATABASE: ${DB_DATABASE:-nglu_db}
       DB_USERNAME: ${DB_USERNAME:-nglu_user}
-      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_PASSWORD: ${DB_PASSWORD:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
       APP_URL: ${APP_URL:-https://ongdngolu.org}
       # Production routing contract: marketing lives at /, CRM entrypoint is /crm.
@@ -38,8 +52,11 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org/crm}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
-      JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
-      REFRESH_SECRET: ${REFRESH_SECRET:-changeme_in_prod}
+      JWT_SECRET: ${JWT_SECRET:-}
+      # Optional only for backward compatibility: backend2 falls back to a strong
+      # JWT_SECRET when REFRESH_SECRET is missing. Set a dedicated value in prod.
+      REFRESH_SECRET: ${REFRESH_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       PERMISSIONS_GUARD_CACHE_TTL_MS: ${PERMISSIONS_GUARD_CACHE_TTL_MS:-0}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
       REDIS_HOST: ${REDIS_HOST:-redis}
@@ -59,10 +76,17 @@ services:
       IMAP_PASS: ${IMAP_PASS:-}
       IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
       IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
-      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      # Internal-only Stalwart admin/JMAP endpoint. Never point this at public mail.ongdngolu.org:8088.
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-}
       STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
       STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
       STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_TLS_PORT: ${TURN_TLS_PORT:-5349}
+      TURN_REALM: ${TURN_REALM:-nglu.chat}
+      TURN_CREDENTIAL_TTL: ${TURN_CREDENTIAL_TTL:-3600}
       TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
       TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
       TWILIO_FROM: ${TWILIO_FROM:-}
@@ -70,12 +94,25 @@ services:
       RENT_REMINDERS_ENABLED: ${RENT_REMINDERS_ENABLED:-false}
       RENT_REMINDER_OVERDUE_DAYS: ${RENT_REMINDER_OVERDUE_DAYS:-15}
       RENT_REMINDER_CRON: ${RENT_REMINDER_CRON:-0 9 * * *}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-nglu_minio}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-change_me_minio_password_32_chars_minimum}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-nglu-files}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_AUTH_DIR: /app/storage/whatsapp-auth
+      WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID: ${WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID:-}
+    volumes:
+      - nglu_prod_whatsapp_auth:/app/storage/whatsapp-auth
     networks:
       - nglu_prod_network
     mem_limit: 180m
     depends_on:
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
 
   middleware:
     build:
@@ -84,9 +121,10 @@ services:
     container_name: nglu_prod_middleware
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       PORT: 3001
       BACKEND_URL: http://backend2:8001
-      JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
+      JWT_SECRET: ${JWT_SECRET:-}
     depends_on:
       - backend2
     networks:
@@ -116,11 +154,17 @@ services:
       # (/opt/nglu-app-dev/) and follow the develop branch independently.
       - /opt/nglu-app-dev/frontend/dist:/usr/share/nginx/html-dev:ro
       - /opt/nglu-app-dev/marketing-site/dist:/usr/share/nginx/html-marketing-dev:ro
+      - /opt/nglu-app-dev/avelomi-site/dist:/usr/share/nginx/html-avelomi-dev:ro
       - /opt/nglu-app-dev/farmos-app/dist:/usr/share/nginx/html-farmos-dev:ro
       - /opt/nglu-app-dev/batipro-app/dist:/usr/share/nginx/html-batipro-dev:ro
       - /opt/nglu-app-dev/hr-app/dist:/usr/share/nginx/html-hr-dev:ro
       - /opt/nglu-app-dev/comptabilite-app/dist:/usr/share/nginx/html-comptabilite-dev:ro
       - /opt/nglu-app-dev/domus-app/dist:/usr/share/nginx/html-domus-dev:ro
+      - /opt/nglu-app-dev/journal-app/dist:/usr/share/nginx/html-journal-dev:ro
+      - /opt/nglu-app-dev/migration-app/dist:/usr/share/nginx/html-migration-dev:ro
+      - /opt/nglu-app-dev/tickets-app/dist:/usr/share/nginx/html-tickets-dev:ro
+      - /opt/nglu-app-dev/chat-app/dist:/usr/share/nginx/html-chat-dev:ro
+      - /opt/nglu-app-dev/kodatill-app/dist:/usr/share/nginx/html-kodatill-dev:ro
     depends_on:
       - middleware
     networks:
@@ -129,6 +173,12 @@ services:
     mem_limit: 48m
 
 # No named volumes — certbot uses bind mount /var/www/certbot
+
+volumes:
+  nglu_prod_minio_data:
+    name: nglu_prod_minio_data
+  nglu_prod_whatsapp_auth:
+    name: nglu_prod_whatsapp_auth
 
 networks:
   nglu_prod_network:

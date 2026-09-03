@@ -5,15 +5,12 @@
 // création (FIFO), une mutation à la fois pour respecter les dépendances
 // (ex: créer un animal puis lui attacher un traitement).
 
-import Dexie from "dexie";
 import { db as cacheDb, replaceCache } from "./offline-db";
 import { getToken } from "./auth.jsx";
 
-// La même base que offline-db.js ne supporte pas l'ajout d'une table après
-// coup sans bumper la version → on bumpe.
-cacheDb.version(2).stores({
-  outbox: "++id, status, kind, createdAt",
-});
+// Le store "outbox" est déclaré dans offline-db.js (version 2) — toutes les
+// versions Dexie de cette base doivent vivre dans ce seul fichier, voir le
+// commentaire en tête de offline-db.js.
 
 // Statuts possibles d'une mutation : pending → syncing → done (ou error).
 const STATUS = { pending: "pending", syncing: "syncing", done: "done", error: "error" };

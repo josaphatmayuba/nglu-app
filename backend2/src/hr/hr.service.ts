@@ -33,6 +33,7 @@ import {
   hrPerformanceReviews,
   hrProjectAssignments,
   hrProjects,
+  projects,
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
@@ -44,6 +45,9 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
+import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import {
   CreateAwardDto,
   CreateAwardHistoryDto,
@@ -106,27 +110,46 @@ export class HrService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly emails: SystemEmailService,
+    private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
 
-  listDesignations(q: Record<string, string>) {
-    return this.listSimple(q, designations, "getAllDesignation", "totalDesignation");
+  /** Approuve une paie ; comptabilise l'ecriture en attente a l'approbation finale. */
+  async approveSalary(salaryHistoryId: number, comment: string | undefined, orgId = 1, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "payroll" && i.entityId === String(salaryHistoryId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette paie.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("payroll", String(salaryHistoryId), orgId, userId);
+    }
+    return { salaryHistoryId, approval: result };
   }
 
-  findDesignation(id: number) {
-    return this.findOne(designations, id, "Designation not found.");
+  listDesignations(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, designations, "getAllDesignation", "totalDesignation", orgId);
   }
 
-  async createDesignation(input: CreateDesignationDto) {
+  findDesignation(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(designations, id, "Designation not found.")
+      : this.findOneInOrg(designations, id, orgId, "Designation not found.");
+  }
+
+  async createDesignation(input: CreateDesignationDto, orgId: number) {
     const [result] = await this.db.insert(designations).values({
+      organizationId: orgId,
       name: input.name,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findDesignation(Number(result.insertId));
+    return this.findDesignation(Number(result.insertId), orgId);
   }
 
-  async updateDesignation(id: number, input: UpdateDesignationDto) {
-    await this.findDesignation(id);
+  async updateDesignation(id: number, input: UpdateDesignationDto, orgId: number) {
+    await this.findDesignation(id, orgId);
     await this.db
       .update(designations)
       .set({
@@ -134,20 +157,23 @@ export class HrService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(designations.id, id));
-    return this.findDesignation(id);
+      .where(and(eq(designations.id, id), eq(designations.organizationId, orgId)));
+    return this.findDesignation(id, orgId);
   }
 
-  listShifts(q: Record<string, string>) {
-    return this.listSimple(q, shifts, "getAllShift", "totalShift");
+  listShifts(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, shifts, "getAllShift", "totalShift", orgId);
   }
 
-  findShift(id: number) {
-    return this.findOne(shifts, id, "Shift not found.");
+  findShift(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(shifts, id, "Shift not found.")
+      : this.findOneInOrg(shifts, id, orgId, "Shift not found.");
   }
 
-  async createShift(input: CreateShiftDto) {
+  async createShift(input: CreateShiftDto, orgId: number) {
     const [result] = await this.db.insert(shifts).values({
+      organizationId: orgId,
       name: input.name,
       startTime: this.normalizeTime(input.startTime),
       endTime: this.normalizeTime(input.endTime),
@@ -155,11 +181,11 @@ export class HrService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findShift(Number(result.insertId));
+    return this.findShift(Number(result.insertId), orgId);
   }
 
-  async updateShift(id: number, input: UpdateShiftDto) {
-    const current = await this.findShift(id);
+  async updateShift(id: number, input: UpdateShiftDto, orgId: number) {
+    const current = await this.findShift(id, orgId);
     const startTime = input.startTime ?? current.startTime;
     const endTime = input.endTime ?? current.endTime;
     await this.db
@@ -172,29 +198,31 @@ export class HrService {
         workHour: this.workHours(startTime, endTime),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(shifts.id, id));
-    return this.findShift(id);
+      .where(and(eq(shifts.id, id), eq(shifts.organizationId, orgId)));
+    return this.findShift(id, orgId);
   }
 
-  listAttendances(q: Record<string, string>) {
-    return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance");
+  listAttendances(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance", orgId);
   }
 
-  findAttendance(id: number) {
-    return this.findOne(hrAttendances, id, "Attendance not found.");
+  findAttendance(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrAttendances, id, "Attendance not found.")
+      : this.findOneInOrg(hrAttendances, id, orgId, "Attendance not found.");
   }
 
-  async createAttendance(input: CreateHrAttendanceDto) {
+  async createAttendance(input: CreateHrAttendanceDto, orgId: number) {
     await this.validateAttendanceRefs(input);
     const payload = await this.attendancePayload(input);
-    return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id));
+    return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id), orgId);
   }
 
-  async updateAttendance(id: number, input: UpdateHrAttendanceDto) {
-    const current = await this.findAttendance(id);
+  async updateAttendance(id: number, input: UpdateHrAttendanceDto, orgId: number) {
+    const current = await this.findAttendance(id, orgId);
     await this.validateAttendanceRefs(input);
     const payload = await this.attendancePayload({ ...current, ...input });
-    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id));
+    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id, orgId), orgId);
   }
 
   async attendanceSummary(q: Record<string, string>) {
@@ -265,26 +293,29 @@ export class HrService {
     };
   }
 
-  listAwards(q: Record<string, string>) {
-    return this.listSimple(q, awards, "getAllAward", "totalAward");
+  listAwards(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, awards, "getAllAward", "totalAward", orgId);
   }
 
-  findAward(id: number) {
-    return this.findOne(awards, id, "Award not found.");
+  findAward(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(awards, id, "Award not found.")
+      : this.findOneInOrg(awards, id, orgId, "Award not found.");
   }
 
-  async createAward(input: CreateAwardDto) {
+  async createAward(input: CreateAwardDto, orgId: number) {
     const [result] = await this.db.insert(awards).values({
+      organizationId: orgId,
       name: input.name,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findAward(Number(result.insertId));
+    return this.findAward(Number(result.insertId), orgId);
   }
 
-  async updateAward(id: number, input: UpdateAwardDto) {
-    await this.findAward(id);
+  async updateAward(id: number, input: UpdateAwardDto, orgId: number) {
+    await this.findAward(id, orgId);
     await this.db
       .update(awards)
       .set({
@@ -293,16 +324,17 @@ export class HrService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(awards.id, id));
-    return this.findAward(id);
+      .where(and(eq(awards.id, id), eq(awards.organizationId, orgId)));
+    return this.findAward(id, orgId);
   }
 
-  listDesignationHistory(q: Record<string, string>) {
-    return this.listHistory(q, designationHistories, "getAllDesignationHistory", "totalDesignationHistory");
+  listDesignationHistory(q: Record<string, string>, orgId: number) {
+    return this.listHistory(q, designationHistories, "getAllDesignationHistory", "totalDesignationHistory", orgId);
   }
 
-  async createDesignationHistory(input: CreateDesignationHistoryDto) {
+  async createDesignationHistory(input: CreateDesignationHistoryDto, orgId: number) {
     const [result] = await this.db.insert(designationHistories).values({
+      organizationId: orgId,
       userId: input.userId,
       designationId: input.designationId,
       startDate: input.designationStartDate ?? null,
@@ -314,12 +346,14 @@ export class HrService {
     return this.findDesignationHistory(Number(result.insertId));
   }
 
-  findDesignationHistory(id: number) {
-    return this.findOne(designationHistories, id, "Designation history not found.");
+  findDesignationHistory(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(designationHistories, id, "Designation history not found.")
+      : this.findOneInOrg(designationHistories, id, orgId, "Designation history not found.");
   }
 
-  async updateDesignationHistory(id: number, input: UpdateDesignationHistoryDto) {
-    await this.findDesignationHistory(id);
+  async updateDesignationHistory(id: number, input: UpdateDesignationHistoryDto, orgId: number) {
+    await this.findDesignationHistory(id, orgId);
     await this.db.update(designationHistories).set({
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.designationId !== undefined ? { designationId: input.designationId } : {}),
@@ -327,15 +361,48 @@ export class HrService {
       ...(input.designationEndDate !== undefined ? { endDate: input.designationEndDate } : {}),
       ...(input.designationComment !== undefined ? { comment: input.designationComment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(designationHistories.id, id));
-    return this.findDesignationHistory(id);
+    }).where(and(eq(designationHistories.id, id), eq(designationHistories.organizationId, orgId)));
+    return this.findDesignationHistory(id, orgId);
   }
 
-  listSalaryHistory(q: Record<string, string>) {
-    return this.listHistory(q, salaryHistories, "getAllSalaryHistory", "totalSalaryHistory");
+  async listSalaryHistory(q: Record<string, string>, orgId: number) {
+    const { skip, limit } = this.pagination(q);
+    const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const where = and(
+      eq(salaryHistories.organizationId, orgId),
+      userId ? eq(salaryHistories.userId, userId) : undefined,
+    );
+    const rows = await this.db
+      .select({
+        id: salaryHistories.id,
+        userId: salaryHistories.userId,
+        salary: salaryHistories.salary,
+        currencyId: salaryHistories.currencyId,
+        startDate: salaryHistories.startDate,
+        endDate: salaryHistories.endDate,
+        comment: salaryHistories.comment,
+        createdAt: salaryHistories.createdAt,
+        updatedAt: salaryHistories.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(salaryHistories)
+      .leftJoin(currencies, eq(salaryHistories.currencyId, currencies.id))
+      .where(where)
+      .orderBy(desc(salaryHistories.id))
+      .limit(limit)
+      .offset(skip);
+    const [{ total }] = await this.db.select({ total: count(salaryHistories.id) }).from(salaryHistories).where(where);
+    return { getAllSalaryHistory: rows, totalSalaryHistory: Number(total ?? 0) };
   }
 
-  async createSalaryHistory(input: CreateSalaryHistoryDto) {
+  async createSalaryHistory(input: CreateSalaryHistoryDto, orgId: number) {
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -359,6 +426,7 @@ export class HrService {
     const txType = creditAccountId === 1 ? "SAL - Payroll Cash" : "SAL - Payroll Journal";
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: input.salaryStartDate ? new Date(input.salaryStartDate) : sql`CURRENT_TIMESTAMP` as any,
       debitId: 10, // Salary expense sub-account
       creditId: creditAccountId,
@@ -371,15 +439,68 @@ export class HrService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findSalaryHistory(salaryHistoryId);
+    // Ecriture moderne (dual-write) : debit charge salaire (10) / credit caisse ou banque.
+    await this.ledger.post(
+      {
+        date: input.salaryStartDate ? new Date(input.salaryStartDate) : undefined,
+        reference: `SALARY-${salaryHistoryId}`,
+        particulars: input.salaryComment || `Salary payment${input.salaryStartDate ? ` — ${input.salaryStartDate}` : ""}`,
+        sourceModule: "payroll",
+        relatedId: String(salaryHistoryId),
+        currencyId: currencyId ?? undefined,
+        idempotencyKey: `salary:${salaryHistoryId}`,
+        lines: [
+          { accountId: 10, side: "DEBIT", amount: Number(input.salary), description: "Salary expense" },
+          { accountId: creditAccountId, side: "CREDIT", amount: Number(input.salary), description: creditAccountId === 1 ? "Cash" : "Bank" },
+        ],
+      },
+      orgId,
+    );
+
+    // Soumet la paie au circuit d'approbation (effectif si le module payroll est gate).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "payroll", entityId: String(salaryHistoryId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[HR] submit payroll approval skipped:", (err as Error).message);
+    }
+
+    return this.findSalaryHistory(salaryHistoryId, orgId);
   }
 
-  findSalaryHistory(id: number) {
-    return this.findOne(salaryHistories, id, "Salary history not found.");
+  async findSalaryHistory(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        id: salaryHistories.id,
+        userId: salaryHistories.userId,
+        salary: salaryHistories.salary,
+        currencyId: salaryHistories.currencyId,
+        startDate: salaryHistories.startDate,
+        endDate: salaryHistories.endDate,
+        comment: salaryHistories.comment,
+        createdAt: salaryHistories.createdAt,
+        updatedAt: salaryHistories.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(salaryHistories)
+      .leftJoin(currencies, eq(salaryHistories.currencyId, currencies.id))
+      .where(and(eq(salaryHistories.id, id), eq(salaryHistories.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Salary history not found.");
+    return rows[0];
   }
 
-  async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto) {
-    await this.findSalaryHistory(id);
+  async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto, orgId: number) {
+    await this.findSalaryHistory(id, orgId);
 
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
@@ -393,16 +514,163 @@ export class HrService {
       ...(input.salaryEndDate !== undefined ? { endDate: input.salaryEndDate } : {}),
       ...(input.salaryComment !== undefined ? { comment: input.salaryComment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(salaryHistories.id, id));
-    return this.findSalaryHistory(id);
+    }).where(and(eq(salaryHistories.id, id), eq(salaryHistories.organizationId, orgId)));
+    return this.findSalaryHistory(id, orgId);
   }
 
-  listPayrolls(q: Record<string, string>) {
-    return this.listHrRecords(q, hrPayrolls, "getAllHrPayroll", "totalHrPayroll");
+  async listPayrolls(q: Record<string, string>, orgId: number) {
+    const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const status = q["status"];
+    const where = and(
+      eq(hrPayrolls.organizationId, orgId),
+      userId ? eq(hrPayrolls.userId, userId) : undefined,
+      status ? eq(hrPayrolls.status, status) : ne(hrPayrolls.status, "false"),
+    );
+    if (q["query"] === "all") {
+      return this.db
+        .select({
+          id: hrPayrolls.id,
+          userId: hrPayrolls.userId,
+          contractId: hrPayrolls.contractId,
+          period: hrPayrolls.period,
+          currencyId: hrPayrolls.currencyId,
+          baseSalary: hrPayrolls.baseSalary,
+          transportAllowance: hrPayrolls.transportAllowance,
+          housingAllowance: hrPayrolls.housingAllowance,
+          riskAllowance: hrPayrolls.riskAllowance,
+          otherAllowances: hrPayrolls.otherAllowances,
+          overtimeHours: hrPayrolls.overtimeHours,
+          overtimeAmount: hrPayrolls.overtimeAmount,
+          unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+          advanceDeduction: hrPayrolls.advanceDeduction,
+          taxAmount: hrPayrolls.taxAmount,
+          cnssAmount: hrPayrolls.cnssAmount,
+          otherDeductions: hrPayrolls.otherDeductions,
+          workedDays: hrPayrolls.workedDays,
+          absenceDays: hrPayrolls.absenceDays,
+          paidLeaveDays: hrPayrolls.paidLeaveDays,
+          status: hrPayrolls.status,
+          notes: hrPayrolls.notes,
+          createdAt: hrPayrolls.createdAt,
+          updatedAt: hrPayrolls.updatedAt,
+          currency: {
+            id: currencies.id,
+            currencyCode: currencies.currencyCode,
+            currencyName: currencies.currencyName,
+            currencySymbol: currencies.currencySymbol,
+            decimalPlaces: currencies.decimalPlaces,
+            status: currencies.status,
+          },
+        })
+        .from(hrPayrolls)
+        .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+        .where(where)
+        .orderBy(desc(hrPayrolls.id));
+    }
+    const { skip, limit } = this.pagination(q);
+    const rows = await this.db
+      .select({
+        id: hrPayrolls.id,
+        userId: hrPayrolls.userId,
+        contractId: hrPayrolls.contractId,
+        period: hrPayrolls.period,
+        currencyId: hrPayrolls.currencyId,
+        baseSalary: hrPayrolls.baseSalary,
+        transportAllowance: hrPayrolls.transportAllowance,
+        housingAllowance: hrPayrolls.housingAllowance,
+        riskAllowance: hrPayrolls.riskAllowance,
+        otherAllowances: hrPayrolls.otherAllowances,
+        overtimeHours: hrPayrolls.overtimeHours,
+        overtimeAmount: hrPayrolls.overtimeAmount,
+        unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+        advanceDeduction: hrPayrolls.advanceDeduction,
+        taxAmount: hrPayrolls.taxAmount,
+        cnssAmount: hrPayrolls.cnssAmount,
+        otherDeductions: hrPayrolls.otherDeductions,
+        grossSalary: hrPayrolls.grossSalary,
+        netSalary: hrPayrolls.netSalary,
+        workedDays: hrPayrolls.workedDays,
+        absenceDays: hrPayrolls.absenceDays,
+        paidLeaveDays: hrPayrolls.paidLeaveDays,
+        status: hrPayrolls.status,
+        notes: hrPayrolls.notes,
+        createdAt: hrPayrolls.createdAt,
+        updatedAt: hrPayrolls.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(hrPayrolls)
+      .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+      .where(where)
+      .orderBy(desc(hrPayrolls.id))
+      .limit(limit)
+      .offset(skip);
+    const [{ total }] = await this.db.select({ total: count(hrPayrolls.id) }).from(hrPayrolls).where(where);
+    return { getAllHrPayroll: rows, totalHrPayroll: Number(total ?? 0) };
   }
 
-  findPayroll(id: number) {
-    return this.findOne(hrPayrolls, id, "Payroll not found.");
+  async findPayroll(id: number, orgId?: number) {
+    const rows = await this.db
+      .select({
+        id: hrPayrolls.id,
+        userId: hrPayrolls.userId,
+        contractId: hrPayrolls.contractId,
+        period: hrPayrolls.period,
+        currencyId: hrPayrolls.currencyId,
+        baseSalary: hrPayrolls.baseSalary,
+        transportAllowance: hrPayrolls.transportAllowance,
+        housingAllowance: hrPayrolls.housingAllowance,
+        riskAllowance: hrPayrolls.riskAllowance,
+        otherAllowances: hrPayrolls.otherAllowances,
+        overtimeHours: hrPayrolls.overtimeHours,
+        overtimeAmount: hrPayrolls.overtimeAmount,
+        unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+        advanceDeduction: hrPayrolls.advanceDeduction,
+        taxAmount: hrPayrolls.taxAmount,
+        cnssAmount: hrPayrolls.cnssAmount,
+        otherDeductions: hrPayrolls.otherDeductions,
+        grossSalary: hrPayrolls.grossSalary,
+        netSalary: hrPayrolls.netSalary,
+        workedDays: hrPayrolls.workedDays,
+        absenceDays: hrPayrolls.absenceDays,
+        paidLeaveDays: hrPayrolls.paidLeaveDays,
+        status: hrPayrolls.status,
+        notes: hrPayrolls.notes,
+        submittedBy: hrPayrolls.submittedBy,
+        submittedAt: hrPayrolls.submittedAt,
+        approvedBy: hrPayrolls.approvedBy,
+        approvedAt: hrPayrolls.approvedAt,
+        approvalComment: hrPayrolls.approvalComment,
+        rejectedBy: hrPayrolls.rejectedBy,
+        rejectedAt: hrPayrolls.rejectedAt,
+        rejectionComment: hrPayrolls.rejectionComment,
+        paidBy: hrPayrolls.paidBy,
+        paidAt: hrPayrolls.paidAt,
+        createdAt: hrPayrolls.createdAt,
+        updatedAt: hrPayrolls.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(hrPayrolls)
+      .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+      .where(orgId === undefined
+        ? eq(hrPayrolls.id, id)
+        : and(eq(hrPayrolls.id, id), eq(hrPayrolls.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Payroll not found.");
+    return rows[0];
   }
 
   async payrollPdfHtml(id: number): Promise<string> {
@@ -413,8 +681,8 @@ export class HrService {
       ? await this.db.select({ currencyCode: currencies.currencyCode }).from(currencies).where(eq(currencies.id, Number(payroll.currencyId))).limit(1)
       : [null];
 
-    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
-    const orgName = settingRow?.companyName || "Mon Organisation";
+    const settingRow = await readOrgAppSetting(this.db, 1, { companyName: appSettings.companyName });
+    const orgName = (settingRow?.companyName as string | null) || "Mon Organisation";
     const employeeName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(" ") || `Employé #${payroll.userId}`;
     const matricule = userRow?.employeeId || `EMP-${String(payroll.userId).padStart(6, "0")}`;
     const curr = currencyRow?.currencyCode || "USD";
@@ -534,67 +802,25 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 </body></html>`;
   }
 
-  // Rendu HTML -> PDF via Puppeteer (mutualisé entre fiches de paie et documents RH).
-  private async htmlToPdf(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const puppeteer = require("puppeteer");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    // Alpine: le binaire chromium peut etre /usr/bin/chromium OU /usr/bin/chromium-browser.
-    // On resout le 1er chemin existant (la var d'env peut pointer un chemin absent -> 500).
-    const candidates = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      "/usr/bin/chromium",
-      "/usr/bin/chromium-browser",
-    ].filter(Boolean) as string[];
-    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-    try {
-      const page = await browser.newPage();
-      // Retire le script d'auto-impression éventuel avant la génération PDF.
-      const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
-      await page.setContent(cleanHtml, { waitUntil: "networkidle0" });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await browser.close();
-    }
-  }
+  // La génération PDF serveur (pdf-service/Puppeteer) est supprimée : les PDF
+  // se font côté navigateur via l'aperçu HTML + Imprimer / Enregistrer en PDF.
 
-  async generatePayrollPdf(id: number): Promise<Buffer> {
-    const html = await this.payrollPdfHtml(id);
-    return this.htmlToPdf(html);
-  }
-
-  // PDF d'un document RH déjà généré (réutilise le HTML stocké dans `content`).
-  async documentPdf(id: number): Promise<{ buffer: Buffer; reference: string }> {
-    const doc = await this.findDocument(id) as Record<string, any>;
-    const html = String(doc.content || "");
-    if (!html.trim()) throw new BadRequestException("This document has no content to render.");
-    const buffer = await this.htmlToPdf(html);
-    return { buffer, reference: String(doc.reference || `document-${id}`) };
-  }
-
-  async createPayroll(input: CreateHrPayrollDto) {
+  async createPayroll(input: CreateHrPayrollDto, orgId: number) {
     await this.validatePayrollRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...input, currencyId });
-    return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id));
+    return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id), orgId);
   }
 
-  async updatePayroll(id: number, input: UpdateHrPayrollDto) {
-    const current = await this.findPayroll(id);
+  async updatePayroll(id: number, input: UpdateHrPayrollDto, orgId: number) {
+    const current = await this.findPayroll(id, orgId);
     const currentStatus = String(current.status || "draft");
     if (currentStatus === "paid") throw new BadRequestException("Cannot modify a paid payroll.");
     await this.validatePayrollRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...current, ...input });
-    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
+    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id, orgId), orgId);
   }
 
   async submitPayroll(id: number, submittedBy?: number | null) {
@@ -760,6 +986,37 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
+  // Génération groupée : un bulletin brouillon par employé sous contrat actif
+  // de l'org qui n'a pas encore de bulletin sur la période. Idempotent : les
+  // employés déjà servis sont comptés dans alreadyExisting, jamais dupliqués.
+  async generateMonthPayrolls(q: Record<string, string>, orgId: number) {
+    const period = q["period"] || this.currentPayrollPeriod();
+    const contractRows = await this.db
+      .select({ userId: hrContracts.userId })
+      .from(hrContracts)
+      .where(and(eq(hrContracts.organizationId, orgId), ne(hrContracts.status, "terminated")));
+    const userIds = [...new Set(contractRows.map((c) => Number(c.userId)))];
+    const existing = await this.db
+      .select({ userId: hrPayrolls.userId })
+      .from(hrPayrolls)
+      .where(and(eq(hrPayrolls.organizationId, orgId), eq(hrPayrolls.period, period), ne(hrPayrolls.status, "false")));
+    const done = new Set(existing.map((p) => Number(p.userId)));
+    let created = 0;
+    let alreadyExisting = 0;
+    const errors: Array<{ userId: number; error: string }> = [];
+    for (const userId of userIds) {
+      if (done.has(userId)) { alreadyExisting += 1; continue; }
+      try {
+        const draft = await this.generatePayroll({ userId: String(userId), period });
+        await this.createPayroll(draft as CreateHrPayrollDto, orgId);
+        created += 1;
+      } catch (err) {
+        errors.push({ userId, error: (err as Error).message });
+      }
+    }
+    return { period, eligible: userIds.length, created, alreadyExisting, errors };
+  }
+
   private computeIpr(taxableBase: number, taxRule: typeof hrTaxRules.$inferSelect): number {
     const brackets = taxRule.iprBrackets as Array<{ upTo: number | null; rate: number }> | null;
     if (brackets && brackets.length > 0) {
@@ -806,15 +1063,62 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listProjects(q: Record<string, string>) {
-    return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject");
+  async listProjects(q: Record<string, string>, orgId: number) {
+    // Reflete le registre partage `projects` (projets compta/maintenance/app projet)
+    // dans hr_projects pour que HR voie tout. Best-effort : un drift de schema ne
+    // doit pas casser la liste.
+    try {
+      await this.ensureHrProjectsFromRegistry(orgId);
+    } catch (err) {
+      this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
+    }
+    return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject", orgId);
   }
 
-  findProject(id: number) {
-    return this.findOne(hrProjects, id, "HR project not found.");
+  /**
+   * Cree/maj le reflet HR des projets du registre partage `projects`.
+   * Idempotent par (organization_id, source_system='projects', external_ref=projects.id).
+   * Les champs RH (hrBudget, managerId, affectations) ne sont jamais ecrases : seuls
+   * nom / code / donor / devise / dates sont propages depuis le registre.
+   */
+  private async ensureHrProjectsFromRegistry(orgId: number) {
+    await this.db.execute(sql`
+      insert into ${hrProjects} (
+        organization_id, code, name, donor, currencyId,
+        startDate, endDate, source_system, external_ref, status, created_at, updated_at
+      )
+      select
+        p.organization_id, p.code, p.name, p.donor, p.currency_id,
+        p.start_date, p.end_date, 'projects', cast(p.id as char), 'active', now(), now()
+      from ${projects} p
+      where p.organization_id = ${orgId}
+        and p.is_active = 1
+        and not exists (
+          select 1 from ${hrProjects} h
+          where h.organization_id = p.organization_id
+            and h.source_system = 'projects'
+            and h.external_ref = cast(p.id as char) collate utf8mb4_0900_ai_ci
+        )
+    `);
+    await this.db.execute(sql`
+      update ${hrProjects} h
+      join ${projects} p
+        on p.organization_id = h.organization_id
+       and cast(p.id as char) collate utf8mb4_0900_ai_ci = h.external_ref
+      set h.name = p.name, h.code = p.code, h.donor = p.donor, h.updated_at = now()
+      where h.organization_id = ${orgId}
+        and h.source_system = 'projects'
+        and p.is_active = 1
+    `);
   }
 
-  async createProject(input: CreateHrProjectDto) {
+  findProject(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrProjects, id, "HR project not found.")
+      : this.findOneInOrg(hrProjects, id, orgId, "HR project not found.");
+  }
+
+  async createProject(input: CreateHrProjectDto, orgId: number) {
     await this.validateProjectRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -825,28 +1129,30 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       currencyId: currencyId ?? null,
       hrBudget: Number(input.hrBudget || 0),
       status: input.status || "active",
-    }, (id) => this.findProject(id));
+    }, (id) => this.findProject(id), orgId);
   }
 
-  async updateProject(id: number, input: UpdateHrProjectDto) {
-    await this.findProject(id);
+  async updateProject(id: number, input: UpdateHrProjectDto, orgId: number) {
+    await this.findProject(id, orgId);
     await this.validateProjectRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     return this.updateRecord(hrProjects, id, {
       ...input,
       ...(input.hrBudget !== undefined ? { hrBudget: Number(input.hrBudget || 0) } : {}),
-    }, () => this.findProject(id));
+    }, () => this.findProject(id, orgId), orgId);
   }
 
-  listProjectAssignments(q: Record<string, string>) {
-    return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment");
+  listProjectAssignments(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment", orgId);
   }
 
-  findProjectAssignment(id: number) {
-    return this.findOne(hrProjectAssignments, id, "HR project assignment not found.");
+  findProjectAssignment(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrProjectAssignments, id, "HR project assignment not found.")
+      : this.findOneInOrg(hrProjectAssignments, id, orgId, "HR project assignment not found.");
   }
 
-  async createProjectAssignment(input: CreateHrProjectAssignmentDto) {
+  async createProjectAssignment(input: CreateHrProjectAssignmentDto, orgId: number) {
     await this.validateProjectAssignmentRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -856,42 +1162,48 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       timePercent: Number(input.timePercent ?? 100),
       monthlyCost: Number(input.monthlyCost || 0),
       status: input.status || "active",
-    }, (id) => this.findProjectAssignment(id));
+    }, (id) => this.findProjectAssignment(id), orgId);
   }
 
-  async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto) {
-    await this.findProjectAssignment(id);
+  async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto, orgId: number) {
+    await this.findProjectAssignment(id, orgId);
     await this.validateProjectAssignmentRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     return this.updateRecord(hrProjectAssignments, id, {
       ...input,
       ...(input.timePercent !== undefined ? { timePercent: Number(input.timePercent ?? 100) } : {}),
       ...(input.monthlyCost !== undefined ? { monthlyCost: Number(input.monthlyCost || 0) } : {}),
-    }, () => this.findProjectAssignment(id));
+    }, () => this.findProjectAssignment(id, orgId), orgId);
   }
 
-  async projectAnalytics(q: Record<string, string>) {
+  async projectAnalytics(q: Record<string, string>, orgId: number) {
     const monthFilter = q["month"] || "";
     const startFilter = q["startDate"] || "";
     const endFilter = q["endDate"] || "";
 
+    try {
+      await this.ensureHrProjectsFromRegistry(orgId);
+    } catch (err) {
+      this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
+    }
+
     const [projectRows, assignmentRows, timesheetRows, staffRows, salaryRows, departmentRows] = await Promise.all([
-      this.db.select().from(hrProjects).where(ne(hrProjects.status, "false")).orderBy(desc(hrProjects.id)),
-      this.db.select().from(hrProjectAssignments).where(ne(hrProjectAssignments.status, "false")).orderBy(desc(hrProjectAssignments.id)),
-      this.db.select().from(hrTimesheets).where(ne(hrTimesheets.status, "false")).orderBy(desc(hrTimesheets.id)),
+      this.db.select().from(hrProjects).where(and(eq(hrProjects.organizationId, orgId), ne(hrProjects.status, "false"))).orderBy(desc(hrProjects.id)),
+      this.db.select().from(hrProjectAssignments).where(and(eq(hrProjectAssignments.organizationId, orgId), ne(hrProjectAssignments.status, "false"))).orderBy(desc(hrProjectAssignments.id)),
+      this.db.select().from(hrTimesheets).where(and(eq(hrTimesheets.organizationId, orgId), ne(hrTimesheets.status, "false"))).orderBy(desc(hrTimesheets.id)),
       this.db.select({
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
         departmentId: users.departmentId,
-      }).from(users),
+      }).from(users).where(eq(users.organizationId, orgId)),
       this.db.select({
         userId: salaryHistories.userId,
         salary: salaryHistories.salary,
         currencyId: salaryHistories.currencyId,
         id: salaryHistories.id,
-      }).from(salaryHistories).orderBy(desc(salaryHistories.id)),
-      this.db.select({ id: departments.id, name: departments.name }).from(departments),
+      }).from(salaryHistories).where(eq(salaryHistories.organizationId, orgId)).orderBy(desc(salaryHistories.id)),
+      this.db.select({ id: departments.id, name: departments.name }).from(departments).where(eq(departments.organizationId, orgId)),
     ]);
 
     const projectsById = new Map(projectRows.map((project) => [Number(project.id), project]));
@@ -1000,12 +1312,13 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listAwardHistory(q: Record<string, string>) {
-    return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory");
+  listAwardHistory(q: Record<string, string>, orgId: number) {
+    return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory", orgId);
   }
 
-  async createAwardHistory(input: CreateAwardHistoryDto) {
+  async createAwardHistory(input: CreateAwardHistoryDto, orgId: number) {
     const [result] = await this.db.insert(awardHistories).values({
+      organizationId: orgId,
       userId: input.userId,
       awardId: input.awardId,
       awardedDate: input.awardedDate,
@@ -1016,58 +1329,62 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.findAwardHistory(Number(result.insertId));
   }
 
-  findAwardHistory(id: number) {
-    return this.findOne(awardHistories, id, "Award history not found.");
+  findAwardHistory(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(awardHistories, id, "Award history not found.")
+      : this.findOneInOrg(awardHistories, id, orgId, "Award history not found.");
   }
 
-  async updateAwardHistory(id: number, input: UpdateAwardHistoryDto) {
-    await this.findAwardHistory(id);
+  async updateAwardHistory(id: number, input: UpdateAwardHistoryDto, orgId: number) {
+    await this.findAwardHistory(id, orgId);
     await this.db.update(awardHistories).set({
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.awardId !== undefined ? { awardId: input.awardId } : {}),
       ...(input.awardedDate !== undefined ? { awardedDate: input.awardedDate } : {}),
       ...(input.comment !== undefined ? { comment: input.comment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(awardHistories.id, id));
-    return this.findAwardHistory(id);
+    }).where(and(eq(awardHistories.id, id), eq(awardHistories.organizationId, orgId)));
+    return this.findAwardHistory(id, orgId);
   }
 
-  listLeaveRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest");
+  listLeaveRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest", orgId);
   }
 
-  findLeaveRequest(id: number) {
-    return this.findOne(hrLeaveRequests, id, "Leave request not found.");
+  findLeaveRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrLeaveRequests, id, "Leave request not found.")
+      : this.findOneInOrg(hrLeaveRequests, id, orgId, "Leave request not found.");
   }
 
-  async createLeaveRequest(input: CreateHrLeaveRequestDto) {
+  async createLeaveRequest(input: CreateHrLeaveRequestDto, orgId: number) {
     await this.validateLeaveRefs(input);
     await this.assertNoLockedPayroll(Number(input.userId), String(input.startDate), String(input.endDate));
     const payload = await this.leavePayload(input);
-    const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id));
+    const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id), orgId);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     return saved;
   }
 
-  async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto) {
-    const current = await this.findLeaveRequest(id);
+  async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto, orgId: number) {
+    const current = await this.findLeaveRequest(id, orgId);
     await this.validateLeaveRefs(input);
     const userId = Number(input.userId ?? current.userId);
     // Verrou sur l'ancienne ET la nouvelle plage (déplacer hors/dans une période verrouillée).
     await this.assertNoLockedPayroll(userId, String(current.startDate), String(current.endDate));
     await this.assertNoLockedPayroll(userId, String(input.startDate ?? current.startDate), String(input.endDate ?? current.endDate));
     const payload = await this.leavePayload({ ...current, ...input }, id);
-    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id));
-    const saved = await this.findLeaveRequest(id);
+    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id, orgId), orgId);
+    const saved = await this.findLeaveRequest(id, orgId);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     if (["rejected", "cancelled"].includes(String(saved.status || "").toLowerCase())) await this.clearLeaveAttendance(saved.id);
     return saved;
   }
 
-  async deleteLeaveRequest(id: number) {
+  async deleteLeaveRequest(id: number, orgId: number) {
     const current = await this.findLeaveRequest(id);
     await this.assertNoLockedPayroll(Number(current.userId), String(current.startDate), String(current.endDate));
-    return this.deleteRow(hrLeaveRequests, id);
+    return this.deleteRow(hrLeaveRequests, id, orgId);
   }
 
   async leaveSummary(q: Record<string, string>) {
@@ -1123,43 +1440,47 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listContracts(q: Record<string, string>) {
-    return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract");
+  listContracts(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract", orgId);
   }
 
-  findContract(id: number) {
-    return this.findOne(hrContracts, id, "HR contract not found.");
+  findContract(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrContracts, id, "HR contract not found.")
+      : this.findOneInOrg(hrContracts, id, orgId, "HR contract not found.");
   }
 
-  async createContract(input: CreateHrContractDto) {
+  async createContract(input: CreateHrContractDto, orgId: number) {
     await this.validateContractRefs(input);
     const reference = input.reference || (await this.nextContractReference(input.startDate));
-    return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id));
+    return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id), orgId);
   }
 
-  async updateContract(id: number, input: UpdateHrContractDto) {
-    await this.findContract(id);
+  async updateContract(id: number, input: UpdateHrContractDto, orgId: number) {
+    await this.findContract(id, orgId);
     await this.validateContractRefs(input);
-    return this.updateRecord(hrContracts, id, input, () => this.findContract(id));
+    return this.updateRecord(hrContracts, id, input, () => this.findContract(id, orgId), orgId);
   }
 
-  listDocuments(q: Record<string, string>) {
-    return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument");
+  listDocuments(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument", orgId);
   }
 
-  findDocument(id: number) {
-    return this.findOne(hrDocuments, id, "HR document not found.");
+  findDocument(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrDocuments, id, "HR document not found.")
+      : this.findOneInOrg(hrDocuments, id, orgId, "HR document not found.");
   }
 
-  async createDocument(input: CreateHrDocumentDto) {
+  async createDocument(input: CreateHrDocumentDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrDocuments, input, (id) => this.findDocument(id));
+    return this.createRecord(hrDocuments, input, (id) => this.findDocument(id), orgId);
   }
 
-  async updateDocument(id: number, input: UpdateHrDocumentDto) {
-    await this.findDocument(id);
+  async updateDocument(id: number, input: UpdateHrDocumentDto, orgId: number) {
+    await this.findDocument(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id));
+    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id, orgId), orgId);
   }
 
   // Workflow document RH : draft/rejected -> pending_validation -> approved -> signed.
@@ -1271,7 +1592,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  async generateDocument(input: GenerateHrDocumentDto) {
+  async generateDocument(input: GenerateHrDocumentDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     const [userRow] = await this.db.select().from(users).where(eq(users.id, input.userId)).limit(1);
     const contracts = await this.db.select().from(hrContracts)
@@ -1279,8 +1600,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       .orderBy(desc(hrContracts.id)).limit(1);
     const contract = contracts[0] ?? null;
 
-    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
-    const orgName = settingRow?.companyName || "Mon Organisation";
+    const settingRow = await readOrgAppSetting(this.db, 1, { companyName: appSettings.companyName });
+    const orgName = (settingRow?.companyName as string | null) || "Mon Organisation";
     const today = new Date().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
     const employeeName = [userRow.firstName, userRow.lastName].filter(Boolean).join(" ");
     const poste = contract?.designationId ? `Poste #${contract.designationId}` : "Non defini";
@@ -1309,7 +1630,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       generatedBy: input.generatedBy ?? null,
       generatedAt: sql`CURRENT_TIMESTAMP`,
       note: `Genere automatiquement le ${today}`,
-    }, (id) => this.findDocument(id));
+    }, (id) => this.findDocument(id), orgId);
   }
 
   private async nextDocumentVersion(userId: number, templateType: string) {
@@ -1415,159 +1736,175 @@ ${footer}`;
     return `${header}<p>Template <strong>${templateType}</strong> non reconnu.</p>${footer}`;
   }
 
-  listExpenseRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest");
+  listExpenseRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest", orgId);
   }
 
-  findExpenseRequest(id: number) {
-    return this.findOne(hrExpenseRequests, id, "Expense request not found.");
+  findExpenseRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrExpenseRequests, id, "Expense request not found.")
+      : this.findOneInOrg(hrExpenseRequests, id, orgId, "Expense request not found.");
   }
 
-  async createExpenseRequest(input: CreateHrExpenseRequestDto) {
+  async createExpenseRequest(input: CreateHrExpenseRequestDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id));
+    return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id), orgId);
   }
 
-  async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto) {
-    await this.findExpenseRequest(id);
+  async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto, orgId: number) {
+    await this.findExpenseRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id));
+    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id, orgId), orgId);
   }
 
-  listSocialDeclarations(q: Record<string, string>) {
-    return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration");
+  listSocialDeclarations(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration", orgId);
   }
 
-  findSocialDeclaration(id: number) {
-    return this.findOne(hrSocialDeclarations, id, "Social declaration not found.");
+  findSocialDeclaration(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrSocialDeclarations, id, "Social declaration not found.")
+      : this.findOneInOrg(hrSocialDeclarations, id, orgId, "Social declaration not found.");
   }
 
-  async createSocialDeclaration(input: CreateHrSocialDeclarationDto) {
-    return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id));
+  async createSocialDeclaration(input: CreateHrSocialDeclarationDto, orgId: number) {
+    return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id), orgId);
   }
 
-  async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto) {
-    await this.findSocialDeclaration(id);
-    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id));
+  async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto, orgId: number) {
+    await this.findSocialDeclaration(id, orgId);
+    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id, orgId), orgId);
   }
 
-  listPerformanceReviews(q: Record<string, string>) {
-    return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview");
+  listPerformanceReviews(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview", orgId);
   }
 
-  findPerformanceReview(id: number) {
-    return this.findOne(hrPerformanceReviews, id, "Performance review not found.");
+  findPerformanceReview(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrPerformanceReviews, id, "Performance review not found.")
+      : this.findOneInOrg(hrPerformanceReviews, id, orgId, "Performance review not found.");
   }
 
-  async createPerformanceReview(input: CreateHrPerformanceReviewDto) {
+  async createPerformanceReview(input: CreateHrPerformanceReviewDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
-    return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id));
+    return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id), orgId);
   }
 
-  async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto) {
-    await this.findPerformanceReview(id);
+  async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto, orgId: number) {
+    await this.findPerformanceReview(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
-    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id));
+    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id, orgId), orgId);
   }
 
-  listTrainingSessions(q: Record<string, string>) {
-    return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession");
+  listTrainingSessions(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession", orgId);
   }
 
-  findTrainingSession(id: number) {
-    return this.findOne(hrTrainingSessions, id, "Training session not found.");
+  findTrainingSession(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrTrainingSessions, id, "Training session not found.")
+      : this.findOneInOrg(hrTrainingSessions, id, orgId, "Training session not found.");
   }
 
-  async createTrainingSession(input: CreateHrTrainingSessionDto) {
-    return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id));
+  async createTrainingSession(input: CreateHrTrainingSessionDto, orgId: number) {
+    return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id), orgId);
   }
 
-  async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto) {
-    await this.findTrainingSession(id);
-    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id));
+  async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto, orgId: number) {
+    await this.findTrainingSession(id, orgId);
+    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id, orgId), orgId);
   }
 
-  listTimesheets(q: Record<string, string>) {
-    return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet");
+  listTimesheets(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet", orgId);
   }
 
-  findTimesheet(id: number) {
-    return this.findOne(hrTimesheets, id, "Timesheet not found.");
+  findTimesheet(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrTimesheets, id, "Timesheet not found.")
+      : this.findOneInOrg(hrTimesheets, id, orgId, "Timesheet not found.");
   }
 
-  async createTimesheet(input: CreateHrTimesheetDto) {
+  async createTimesheet(input: CreateHrTimesheetDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     const payload = await this.timesheetPayload(input);
-    return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id));
+    return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id), orgId);
   }
 
-  async updateTimesheet(id: number, input: UpdateHrTimesheetDto) {
-    const current = await this.findTimesheet(id);
+  async updateTimesheet(id: number, input: UpdateHrTimesheetDto, orgId: number) {
+    const current = await this.findTimesheet(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const payload = await this.timesheetPayload({ ...current, ...input });
-    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id));
+    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id, orgId), orgId);
   }
 
-  listEmployeeRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest");
+  listEmployeeRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest", orgId);
   }
 
-  findEmployeeRequest(id: number) {
-    return this.findOne(hrEmployeeRequests, id, "Employee request not found.");
+  findEmployeeRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrEmployeeRequests, id, "Employee request not found.")
+      : this.findOneInOrg(hrEmployeeRequests, id, orgId, "Employee request not found.");
   }
 
-  async createEmployeeRequest(input: CreateHrEmployeeRequestDto) {
+  async createEmployeeRequest(input: CreateHrEmployeeRequestDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id));
+    return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id), orgId);
   }
 
-  async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto) {
-    await this.findEmployeeRequest(id);
+  async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto, orgId: number) {
+    await this.findEmployeeRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
-    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id));
+    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id, orgId), orgId);
   }
 
-  listRecruitmentOffers(q: Record<string, string>) {
-    return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer");
+  listRecruitmentOffers(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer", orgId);
   }
 
-  findRecruitmentOffer(id: number) {
-    return this.findOne(hrRecruitmentOffers, id, "Recruitment offer not found.");
+  findRecruitmentOffer(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrRecruitmentOffers, id, "Recruitment offer not found.")
+      : this.findOneInOrg(hrRecruitmentOffers, id, orgId, "Recruitment offer not found.");
   }
 
-  async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto) {
+  async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto, orgId: number) {
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
-    return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id));
+    return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id), orgId);
   }
 
-  async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto) {
-    await this.findRecruitmentOffer(id);
+  async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto, orgId: number) {
+    await this.findRecruitmentOffer(id, orgId);
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
-    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id));
+    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id, orgId), orgId);
   }
 
   // ─── Stade 9: Recrutement / Candidats ────────────────────────────────────────
 
-  listCandidates(q: Record<string, string>) {
-    return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate");
+  listCandidates(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate", orgId);
   }
 
-  findCandidate(id: number) {
-    return this.findOne(hrCandidates, id, "Candidate not found.");
+  findCandidate(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrCandidates, id, "Candidate not found.")
+      : this.findOneInOrg(hrCandidates, id, orgId, "Candidate not found.");
   }
 
-  async createCandidate(input: CreateHrCandidateDto) {
+  async createCandidate(input: CreateHrCandidateDto, orgId: number) {
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id));
+    return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id), orgId);
   }
 
-  async updateCandidate(id: number, input: UpdateHrCandidateDto) {
-    const previous = await this.findCandidate(id) as Record<string, any>;
+  async updateCandidate(id: number, input: UpdateHrCandidateDto, orgId: number) {
+    const previous = await this.findCandidate(id, orgId) as Record<string, any>;
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id)) as Record<string, any>;
+    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id, orgId), orgId) as Record<string, any>;
     const oldStage = String(previous.stage || "").toLowerCase();
     const newStage = String(updated.stage || "").toLowerCase();
     if (newStage && newStage !== oldStage) {
@@ -1965,7 +2302,7 @@ ${footer}`;
   // Le contexte RH agrégé (aiContext) est injecté dans le prompt système, et le
   // LLM peut déclencher la génération d'un document RH via un tool contrôlé.
   // La clé API reste côté serveur (jamais exposée au client).
-  async aiChat(message: string, extraContext?: string | null, actorId?: number | null) {
+  async aiChat(message: string, extraContext?: string | null, actorId?: number | null, orgId = 1) {
     const trimmed = String(message || "").trim();
     if (!trimmed) throw new BadRequestException("Message is required.");
     if (!env.anthropic.apiKey) {
@@ -2009,7 +2346,7 @@ ${footer}`;
         messages.push({ role: "assistant", content: data.content });
         const toolResults: any[] = [];
         for (const tu of toolUses) {
-          const result = await this.runAiDocumentTool(tu.input, actorId);
+          const result = await this.runAiDocumentTool(tu.input, actorId, orgId);
           if (result.document) generatedDocuments.push(result.document);
           toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result.message, is_error: result.isError });
         }
@@ -2029,7 +2366,7 @@ ${footer}`;
 
   // Exécute le tool generate_hr_document demandé par le LLM, avec garde-fous.
   // Renvoie un message texte pour le LLM (jamais d'exception : on rapporte l'erreur au modèle).
-  private async runAiDocumentTool(input: any, actorId?: number | null): Promise<{ message: string; isError: boolean; document?: { id: number; reference: string; documentType: string; userId: number } }> {
+  private async runAiDocumentTool(input: any, actorId?: number | null, orgId = 1): Promise<{ message: string; isError: boolean; document?: { id: number; reference: string; documentType: string; userId: number } }> {
     const userId = Number(input?.userId);
     const templateType = String(input?.templateType || "");
     if (!Number.isInteger(userId) || userId <= 0) return { message: "userId invalide.", isError: true };
@@ -2037,7 +2374,7 @@ ${footer}`;
       return { message: `templateType invalide. Valeurs autorisées : ${this.documentTemplateTypes.join(", ")}.`, isError: true };
     }
     try {
-      const doc = await this.generateDocument({ userId, templateType, generatedBy: actorId ?? null }) as Record<string, any>;
+      const doc = await this.generateDocument({ userId, templateType, generatedBy: actorId ?? null }, orgId) as Record<string, any>;
       const document = { id: Number(doc.id), reference: String(doc.reference), documentType: String(doc.documentType), userId };
       return { message: `Document généré (brouillon) : ${document.documentType}, référence ${document.reference}, id ${document.id}.`, isError: false, document };
     } catch (error) {
@@ -2045,7 +2382,7 @@ ${footer}`;
     }
   }
 
-  async staffOverview() {
+  async staffOverview(orgId: number) {
     const rows = await this.db
       .select({
         user: users,
@@ -2057,6 +2394,7 @@ ${footer}`;
       .leftJoin(roles, eq(roles.id, users.roleId))
       .leftJoin(designations, eq(designations.id, users.designationId))
       .leftJoin(departments, eq(departments.id, users.departmentId))
+      .where(eq(users.organizationId, orgId))
       .orderBy(desc(users.id));
 
     const userIds = rows.map((r) => r.user.id);
@@ -2070,7 +2408,7 @@ ${footer}`;
           currencyId: salaryHistories.currencyId,
         })
         .from(salaryHistories)
-        .where(inArray(salaryHistories.userId, userIds))
+        .where(and(eq(salaryHistories.organizationId, orgId), inArray(salaryHistories.userId, userIds)))
         .orderBy(desc(salaryHistories.id));
       for (const s of allSalaries) {
         if (!(s.userId in salaryMap)) {
@@ -2082,9 +2420,9 @@ ${footer}`;
 
     const [allDesignations, allDepartments] = await Promise.all([
       this.db.select({ id: designations.id, name: designations.name })
-        .from(designations).where(eq(designations.status, "true")).orderBy(designations.name),
+        .from(designations).where(and(eq(designations.organizationId, orgId), eq(designations.status, "true"))).orderBy(designations.name),
       this.db.select({ id: departments.id, name: departments.name })
-        .from(departments).where(eq(departments.status, "true")).orderBy(departments.name),
+        .from(departments).where(and(eq(departments.organizationId, orgId), eq(departments.status, "true"))).orderBy(departments.name),
     ]);
 
     return {
@@ -2106,21 +2444,33 @@ ${footer}`;
     };
   }
 
-  async deleteRow(table: any, id: number) {
+  async deleteRow(table: any, id: number, orgId: number) {
     if (!table.status) {
       throw new BadRequestException("Soft delete is not available for this HR record type yet.");
     }
-    await this.findOne(table, id, "Record not found.");
+    await this.findOneInOrg(table, id, orgId, "Record not found.");
     await this.db
       .update(table)
       .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(table.id, id));
+      .where(and(eq(table.id, id), eq(table.organizationId, orgId)));
     return { message: "Deleted successfully." };
   }
 
-  private async listSimple(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  // Verifie qu une ligne existe ET appartient a l org (isolation multi-tenant).
+  private async findOneInOrg(table: any, id: number, orgId: number, message: string) {
+    const [row] = await this.db
+      .select()
+      .from(table)
+      .where(and(eq(table.id, id), eq(table.organizationId, orgId)))
+      .limit(1);
+    if (!row) throw new NotFoundException(message);
+    return row;
+  }
+
+  private async listSimple(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const status = q["status"];
     const where = and(
+      eq(table.organizationId, orgId),
       q["query"] === "search" ? like(table.name, `%${q["key"] ?? ""}%`) : undefined,
       eq(table.status, status ?? "true"),
     );
@@ -2133,20 +2483,24 @@ ${footer}`;
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async listHistory(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  private async listHistory(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const { skip, limit } = this.pagination(q);
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
-    const where = userId ? eq(table.userId, userId) : undefined;
+    const where = and(
+      eq(table.organizationId, orgId),
+      userId ? eq(table.userId, userId) : undefined,
+    );
     const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
     const [{ total }] = await this.db.select({ total: count(table.id) }).from(table).where(where);
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
     const projectId = q["projectId"] && table.projectId ? Number(q["projectId"]) : undefined;
     const status = q["status"];
     const where = and(
+      eq(table.organizationId, orgId),
       userId ? eq(table.userId, userId) : undefined,
       projectId ? eq(table.projectId, projectId) : undefined,
       status ? eq(table.status, status) : ne(table.status, "false"),
@@ -2160,20 +2514,21 @@ ${footer}`;
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async createRecord(table: any, input: Record<string, any>, find: (id: number) => Promise<any>) {
+  private async createRecord(table: any, input: Record<string, any>, find: (id: number) => Promise<any>, orgId: number) {
     const [result] = await this.db.insert(table).values({
       ...this.compact(input),
+      organizationId: orgId,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
     return find(Number(result.insertId));
   }
 
-  private async updateRecord(table: any, id: number, input: Record<string, any>, find: () => Promise<any>) {
+  private async updateRecord(table: any, id: number, input: Record<string, any>, find: () => Promise<any>, orgId: number) {
     await this.db.update(table).set({
       ...this.compact(input),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(table.id, id));
+    }).where(and(eq(table.id, id), eq(table.organizationId, orgId)));
     return find();
   }
 
@@ -2187,12 +2542,9 @@ ${footer}`;
     return rows[0];
   }
 
-  private async resolveDefaultCurrency(): Promise<number | null> {
-    const [row] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
-    return row?.currencyId ?? null;
+  private async resolveDefaultCurrency(orgId = 1): Promise<number | null> {
+    const row = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+    return (row?.currencyId as number | null) ?? null;
   }
 
   private async ensureExists(table: any, id: number, message: string) {
@@ -2619,9 +2971,9 @@ ${footer}`;
   }
 
   // Statut à partir duquel un bulletin verrouille sa période (réglage RH).
-  private async payrollLockStage(): Promise<"validated" | "paid"> {
-    const [row] = await this.db.select({ stage: appSettings.payrollLockStage }).from(appSettings).limit(1);
-    return String(row?.stage || "paid") === "validated" ? "validated" : "paid";
+  private async payrollLockStage(orgId = 1): Promise<"validated" | "paid"> {
+    const row = await readOrgAppSetting(this.db, orgId, { stage: appSettings.payrollLockStage });
+    return String((row?.stage as string | null) || "paid") === "validated" ? "validated" : "paid";
   }
 
   // Refuse l'opération si un bulletin verrouillant (statut >= seuil réglé) de
@@ -2788,22 +3140,23 @@ ${footer}`;
     return { [field]: path };
   }
 
-  async listPersonalDocuments(userId: number) {
+  async listPersonalDocuments(userId: number, orgId: number) {
     return this.db.select().from(hrPersonalDocuments)
-      .where(eq(hrPersonalDocuments.userId, userId))
+      .where(and(eq(hrPersonalDocuments.organizationId, orgId), eq(hrPersonalDocuments.userId, userId)))
       .orderBy(desc(hrPersonalDocuments.createdAt));
   }
 
-  async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto) {
+  async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto, orgId: number) {
     await this.ensureExists(users, dto.userId, "Employee not found.");
     const { name, path } = this.saveFile(file);
     const [existing] = await this.db.select({ version: hrPersonalDocuments.version })
       .from(hrPersonalDocuments)
-      .where(and(eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
+      .where(and(eq(hrPersonalDocuments.organizationId, orgId), eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
       .orderBy(desc(hrPersonalDocuments.version))
       .limit(1);
     const version = (existing?.version ?? 0) + 1;
     const [result] = await this.db.insert(hrPersonalDocuments).values({
+      organizationId: orgId,
       userId: dto.userId,
       documentType: dto.documentType,
       fileName: file.originalname,
@@ -2815,31 +3168,37 @@ ${footer}`;
       uploadedBy: dto.uploadedBy ?? null,
     });
     return this.db.select().from(hrPersonalDocuments)
-      .where(eq(hrPersonalDocuments.id, Number((result as any).insertId)))
+      .where(and(eq(hrPersonalDocuments.id, Number((result as any).insertId)), eq(hrPersonalDocuments.organizationId, orgId)))
       .limit(1).then((r) => r[0]);
   }
 
-  async deletePersonalDocument(id: number) {
-    const [doc] = await this.db.select().from(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id)).limit(1);
+  async deletePersonalDocument(id: number, orgId: number) {
+    const [doc] = await this.db.select().from(hrPersonalDocuments)
+      .where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId))).limit(1);
     if (!doc) throw new NotFoundException("Document not found.");
     const localFile = join(this.uploadDir, doc.filePath.replace(/^\/files\//, ""));
     if (existsSync(localFile)) unlinkSync(localFile);
-    await this.db.delete(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id));
+    await this.db.delete(hrPersonalDocuments).where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId)));
     return { deleted: true };
   }
 
-  listTaxRules() {
-    return this.db.select().from(hrTaxRules).orderBy(hrTaxRules.countryName);
+  listTaxRules(orgId: number) {
+    return this.db.select().from(hrTaxRules)
+      .where(eq(hrTaxRules.organizationId, orgId))
+      .orderBy(hrTaxRules.countryName);
   }
 
-  async findTaxRule(id: number) {
-    const [row] = await this.db.select().from(hrTaxRules).where(eq(hrTaxRules.id, id)).limit(1);
+  async findTaxRule(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrTaxRules)
+      .where(orgId === undefined ? eq(hrTaxRules.id, id) : and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Tax rule not found.");
     return row;
   }
 
-  async createTaxRule(input: CreateHrTaxRuleDto) {
+  async createTaxRule(input: CreateHrTaxRuleDto, orgId: number) {
     const [result] = await this.db.insert(hrTaxRules).values({
+      organizationId: orgId,
       countryCode: input.countryCode.toUpperCase(),
       countryName: input.countryName,
       cnssEmployeeRate: Number(input.cnssEmployeeRate ?? 0),
@@ -2850,10 +3209,10 @@ ${footer}`;
       notes: input.notes ?? null,
       isActive: 1,
     });
-    return this.findTaxRule((result as any).insertId);
+    return this.findTaxRule((result as any).insertId, orgId);
   }
 
-  async updateTaxRule(id: number, input: UpdateHrTaxRuleDto) {
+  async updateTaxRule(id: number, input: UpdateHrTaxRuleDto, orgId: number) {
     await this.findTaxRule(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
@@ -2866,41 +3225,45 @@ ${footer}`;
     if (input.notes !== undefined) patch["notes"] = input.notes ?? null;
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrTaxRules).set(patch).where(eq(hrTaxRules.id, id));
+      await this.db.update(hrTaxRules).set(patch).where(and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)));
     }
     return this.findTaxRule(id);
   }
 
-  async deleteTaxRule(id: number) {
+  async deleteTaxRule(id: number, orgId: number) {
     await this.findTaxRule(id);
-    await this.db.delete(hrTaxRules).where(eq(hrTaxRules.id, id));
+    await this.db.delete(hrTaxRules).where(and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)));
     return { deleted: true };
   }
 
-  listPublicHolidays(q: Record<string, string> = {}) {
-    const where = q["country"]
-      ? eq(hrPublicHolidays.countryCode, String(q["country"]).toUpperCase())
-      : undefined;
+  listPublicHolidays(q: Record<string, string> = {}, orgId: number) {
+    const where = and(
+      eq(hrPublicHolidays.organizationId, orgId),
+      q["country"] ? eq(hrPublicHolidays.countryCode, String(q["country"]).toUpperCase()) : undefined,
+    );
     return this.db.select().from(hrPublicHolidays).where(where).orderBy(hrPublicHolidays.date);
   }
 
-  async findPublicHoliday(id: number) {
-    const [row] = await this.db.select().from(hrPublicHolidays).where(eq(hrPublicHolidays.id, id)).limit(1);
+  async findPublicHoliday(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrPublicHolidays)
+      .where(orgId === undefined ? eq(hrPublicHolidays.id, id) : and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Public holiday not found.");
     return row;
   }
 
-  async createPublicHoliday(input: CreateHrPublicHolidayDto) {
+  async createPublicHoliday(input: CreateHrPublicHolidayDto, orgId: number) {
     const [result] = await this.db.insert(hrPublicHolidays).values({
+      organizationId: orgId,
       countryCode: input.countryCode.toUpperCase(),
       date: input.date,
       name: input.name,
       isActive: input.isActive === 0 ? 0 : 1,
     });
-    return this.findPublicHoliday((result as any).insertId);
+    return this.findPublicHoliday((result as any).insertId, orgId);
   }
 
-  async updatePublicHoliday(id: number, input: UpdateHrPublicHolidayDto) {
+  async updatePublicHoliday(id: number, input: UpdateHrPublicHolidayDto, orgId: number) {
     await this.findPublicHoliday(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
@@ -2908,43 +3271,47 @@ ${footer}`;
     if (input.name !== undefined) patch["name"] = input.name;
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrPublicHolidays).set(patch).where(eq(hrPublicHolidays.id, id));
+      await this.db.update(hrPublicHolidays).set(patch).where(and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)));
     }
     return this.findPublicHoliday(id);
   }
 
-  async deletePublicHoliday(id: number) {
+  async deletePublicHoliday(id: number, orgId: number) {
     await this.findPublicHoliday(id);
-    await this.db.delete(hrPublicHolidays).where(eq(hrPublicHolidays.id, id));
+    await this.db.delete(hrPublicHolidays).where(and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)));
     return { deleted: true };
   }
 
-  listLeaveEntitlements(q: Record<string, string> = {}) {
-    const where = q["country"]
-      ? eq(hrLeaveEntitlements.countryCode, String(q["country"]).toUpperCase())
-      : undefined;
+  listLeaveEntitlements(q: Record<string, string> = {}, orgId: number) {
+    const where = and(
+      eq(hrLeaveEntitlements.organizationId, orgId),
+      q["country"] ? eq(hrLeaveEntitlements.countryCode, String(q["country"]).toUpperCase()) : undefined,
+    );
     return this.db.select().from(hrLeaveEntitlements).where(where)
       .orderBy(hrLeaveEntitlements.countryCode, hrLeaveEntitlements.leaveType);
   }
 
-  async findLeaveEntitlement(id: number) {
-    const [row] = await this.db.select().from(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id)).limit(1);
+  async findLeaveEntitlement(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrLeaveEntitlements)
+      .where(orgId === undefined ? eq(hrLeaveEntitlements.id, id) : and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Leave entitlement not found.");
     return row;
   }
 
-  async createLeaveEntitlement(input: CreateHrLeaveEntitlementDto) {
+  async createLeaveEntitlement(input: CreateHrLeaveEntitlementDto, orgId: number) {
     const [result] = await this.db.insert(hrLeaveEntitlements).values({
+      organizationId: orgId,
       countryCode: (input.countryCode || "*").toUpperCase(),
       leaveType: input.leaveType,
       contractType: input.contractType ?? null,
       entitlementDays: Number(input.entitlementDays ?? 0),
       isActive: input.isActive === 0 ? 0 : 1,
     });
-    return this.findLeaveEntitlement((result as any).insertId);
+    return this.findLeaveEntitlement((result as any).insertId, orgId);
   }
 
-  async updateLeaveEntitlement(id: number, input: UpdateHrLeaveEntitlementDto) {
+  async updateLeaveEntitlement(id: number, input: UpdateHrLeaveEntitlementDto, orgId: number) {
     await this.findLeaveEntitlement(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = (input.countryCode || "*").toUpperCase();
@@ -2953,14 +3320,14 @@ ${footer}`;
     if (input.entitlementDays !== undefined) patch["entitlementDays"] = Number(input.entitlementDays);
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrLeaveEntitlements).set(patch).where(eq(hrLeaveEntitlements.id, id));
+      await this.db.update(hrLeaveEntitlements).set(patch).where(and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)));
     }
     return this.findLeaveEntitlement(id);
   }
 
-  async deleteLeaveEntitlement(id: number) {
+  async deleteLeaveEntitlement(id: number, orgId: number) {
     await this.findLeaveEntitlement(id);
-    await this.db.delete(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id));
+    await this.db.delete(hrLeaveEntitlements).where(and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)));
     return { deleted: true };
   }
 
@@ -2970,11 +3337,17 @@ ${footer}`;
 
   async setPayrollLockStage(stage: string) {
     const value = String(stage) === "validated" ? "validated" : "paid";
-    const [row] = await this.db.select({ id: appSettings.id }).from(appSettings).limit(1);
+    // HR n'est pas (encore) scope par org : on cible la ligne org #1.
+    const [row] = await this.db
+      .select({ id: appSettings.id })
+      .from(appSettings)
+      .where(eq(appSettings.organizationId, 1))
+      .orderBy(appSettings.id)
+      .limit(1);
     if (row) {
       await this.db.update(appSettings).set({ payrollLockStage: value }).where(eq(appSettings.id, row.id));
     } else {
-      await this.db.insert(appSettings).values({ payrollLockStage: value });
+      await this.db.insert(appSettings).values({ organizationId: 1, payrollLockStage: value });
     }
     return { stage: value };
   }

@@ -7,6 +7,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     // UI
     search:    <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
     plus:      <path d="M12 3v18M3 12h18"/>,
+    "chevron-left": <path d="m15 18-6-6 6-6"/>,
     minus:     <path d="M3 12h18"/>,
     check:     <path d="M20 7 9 18l-5-5"/>,
     x:         <path d="M18 6 6 18M6 6l12 12"/>,
@@ -37,6 +38,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     egg:       <path d="M12 3c4 0 7 6 7 11a7 7 0 1 1-14 0c0-5 3-11 7-11z"/>,
     leaf:      <><path d="M5 21c5-2 11-8 14-16-8 1-16 6-16 14 0 1 1 2 2 2z"/><path d="M5 21 14 12"/></>,
     barn:      <><path d="M3 21V10l9-6 9 6v11"/><path d="M3 21h18M9 21v-6h6v6M9 11h6"/></>,
+    building:  <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M10 5V3M14 5V3M8 14h2M14 14h2M8 18h2M14 18h2"/></>,
     chart:     <><path d="M3 3v18h18"/><path d="m7 14 3-3 4 4 5-6"/></>,
     chartBar:  <><rect x="4" y="13" width="3" height="8"/><rect x="10" y="9" width="3" height="12"/><rect x="16" y="5" width="3" height="16"/><path d="M3 21h18"/></>,
     chartPie:  <><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 3a7 7 0 0 1 7 7"/></>,
@@ -56,6 +58,8 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     rotate:    <><path d="M3 8a8 8 0 0 1 13.85-2.5L21 9"/><path d="M21 4v5h-5"/><path d="M21 16a8 8 0 0 1-13.85 2.5L3 15"/><path d="M3 20v-5h5"/></>,
     mic:       <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></>,
     gallery:   <><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="1.5"/><path d="m21 16-5-5-9 9"/></>,
+    // Opérations zootechniques (Phase 2)
+    scissors:  <><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></>,
     nfc:       <><path d="M6 10a6 6 0 0 1 12 0v4a6 6 0 0 1-12 0z"/><path d="M3 8a9 9 0 0 1 18 0v8a9 9 0 0 1-18 0z"/></>,
     location:  <><path d="M12 22s-7-7-7-12a7 7 0 1 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="10" r="3"/></>,
     cpu:       <><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></>,
@@ -65,6 +69,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     download:  <><path d="M12 3v13M5 11l7 7 7-7M5 21h14"/></>,
     upload:    <><path d="M12 21V8M5 13l7-7 7 7M5 3h14"/></>,
     edit:      <><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="m18.5 2.5 3 3L12 15l-4 1 1-4z"/></>,
+    save:      <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></>,
     trash:     <><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></>,
     link:      <><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></>,
     eye:       <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></>,
@@ -85,6 +90,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     pause:     <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
     fingerprint: <><path d="M12 3a9 9 0 0 0-9 9c0 4 1 6 2 8M21 12a9 9 0 0 0-15-7M8 21c-1-3-1-6-1-9a5 5 0 0 1 10 0c0 4 1 7 2 9M12 12c0 5 1 8 2 10M16 18c-1-2-1-4-1-6"/></>,
     wallet:    <><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></>,
+    skull:     <><path d="M12 2a8 8 0 0 0-8 8c0 2.5 1.2 4.2 2.5 5.2.5.4.5 1 .5 1.6V19a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2.2c0-.6 0-1.2.5-1.6C18.8 14.2 20 12.5 20 10a8 8 0 0 0-8-8z"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><path d="M10 20v2M14 20v2"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -96,7 +102,26 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
 };
 
 // ─── Animal silhouettes (simplified, monoline) ───────────────────────────
+// Emojis natifs colorés par espèce (rendu "réaliste", cross-plateforme).
+const ANIMAL_EMOJI = {
+  cow: "🐄", pig: "🐖", chicken: "🐔", fish: "🐟", goat: "🐐",
+  sheep: "🐑", rabbit: "🐇", duck: "🦆", turkey: "🦃",
+};
+
 const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.6 }) => {
+  // Emoji natif si disponible pour l'espèce ; sinon fallback sur le tracé SVG.
+  const emoji = ANIMAL_EMOJI[kind];
+  if (emoji) {
+    return (
+      <span
+        role="img"
+        aria-label={kind}
+        style={{ fontSize: size, lineHeight: 1, display: "inline-block", verticalAlign: "middle" }}
+      >
+        {emoji}
+      </span>
+    );
+  }
   const glyphs = {
     cow: (
       // cow head
@@ -193,38 +218,32 @@ const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.
   );
 };
 
-// ─── Brand mark: cow head in a circle with wheat + grass (FarmOS) ────────
-const Brand = ({ size = 28, color = "#ECF1EC", accent = "#D7AA45" }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    {/* outer ring */}
-    <circle cx="32" cy="32" r="29" stroke={color} strokeWidth="2.4"/>
-
-    {/* top wheat sprig + flanking arcs (accent) */}
-    <path d="M22 16C25 12.5 28.5 11 31 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M42 16C39 12.5 35.5 11 33 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M32 18.5V10.5" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M32 11.5C34.2 12 35.4 14 34.6 16.2C32.4 15.7 31.2 13.7 32 11.5Z" fill={accent}/>
-    <path d="M32 11.5C29.8 12 28.6 14 29.4 16.2C31.6 15.7 32.8 13.7 32 11.5Z" fill={accent}/>
-
-    {/* ears */}
-    <path d="M19.5 27C11.5 22.5 6.5 27.5 10.5 33C15 31.5 18 29.5 21.5 27.5Z" fill={color}/>
-    <path d="M44.5 27C52.5 22.5 57.5 27.5 53.5 33C49 31.5 46 29.5 42.5 27.5Z" fill={color}/>
-
-    {/* head / face */}
-    <path d="M20.5 28C19.5 21.5 25 18 32 18C39 18 44.5 21.5 43.5 28C42.8 33 41.5 37 37.5 41C38.5 45 35.5 47.5 32 47.5C28.5 47.5 25.5 45 26.5 41C22.5 37 21.2 33 20.5 28Z" fill={color}/>
-
-    {/* eyes + muzzle details (negative space) */}
-    <path d="M25.5 29C27.5 28 29.5 29 29.5 31C27.5 32 25.5 31 25.5 29Z" fill="#0E2418"/>
-    <path d="M38.5 29C36.5 28 34.5 29 34.5 31C36.5 32 38.5 31 38.5 29Z" fill="#0E2418"/>
-    <path d="M28 40.5C30.5 39 33.5 39 36 40.5" stroke="#0E2418" strokeWidth="1.6" strokeLinecap="round"/>
-    <circle cx="29.5" cy="38" r="1.2" fill="#0E2418"/>
-    <circle cx="34.5" cy="38" r="1.2" fill="#0E2418"/>
-
-    {/* grass at the base */}
-    <path d="M16 54C17.5 48 21 45.5 25.5 46C22.5 48.5 20 51 18.5 55Z" fill={color}/>
-    <path d="M48 54C46.5 48 43 45.5 38.5 46C41.5 48.5 44 51 45.5 55Z" fill={color}/>
-    <path d="M29.5 55.5C29.5 51 31 48.5 33.5 49.5C32.5 52 31.5 53.5 31.5 56Z" fill={color}/>
-  </svg>
-);
+// ─── Brand mark — vrai logo FarmOS ────────────────────────────────────────
+// `farmos-logo.png` = le VRAI logo (tête de vache réaliste + épis + herbe dans
+// un cercle), extrait de la planche officielle farmos-brand-concept.png.
+// (Le farmos-icon.svg et l'ancien tracé SVG étaient des versions ratées.)
+// Le logo a un trait vert foncé sur fond transparent → `onDark` ajoute une
+// pastille claire pour rester lisible sur les fonds foncés (sidebar).
+const Brand = ({ size = 28, onDark = false }) => {
+  const pad = onDark ? Math.round(size * 0.1) : 0;
+  return (
+    <span
+      role="img"
+      aria-label="FarmOS"
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size, height: size, flexShrink: 0, boxSizing: "border-box", padding: pad,
+        background: onDark ? "var(--parchment-50, #FBF8F2)" : "transparent",
+        borderRadius: onDark ? Math.round(size * 0.24) : 0,
+      }}
+    >
+      <img
+        src={`${import.meta.env.BASE_URL}farmos-logo.png`}
+        alt="FarmOS"
+        style={{ width: size - pad * 2, height: size - pad * 2, objectFit: "contain", display: "block" }}
+      />
+    </span>
+  );
+};
 
 export { Icon, AnimalGlyph, Brand };

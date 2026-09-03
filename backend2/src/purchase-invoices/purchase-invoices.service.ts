@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { and, count, desc, eq, gte, lte, sql, sum } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
+  currencies,
   paymentPurchaseInvoices,
   products,
   purchaseInvoiceProducts,
@@ -10,6 +12,9 @@ import {
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
+import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -26,7 +31,38 @@ function generateInvoiceId(prefix: string, length = 13): string {
 
 @Injectable()
 export class PurchaseInvoicesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
+  ) {}
+
+  /** Soumet la facture d'achat au circuit d'approbation (no-op si pas de workflow). */
+  private async submitForApproval(invoiceId: string, orgId: number, userId?: number) {
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "purchase", entityId: String(invoiceId) },
+        orgId,
+        userId,
+      );
+    } catch (err) {
+      console.warn("[PurchaseInvoices] submitForApproval skipped:", (err as Error).message);
+    }
+  }
+
+  /** Approuve une facture d'achat ; comptabilise l'ecriture en attente a l'approbation finale. */
+  async approveInvoice(invoiceId: string, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "purchase" && i.entityId === String(invoiceId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette facture.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("purchase", String(invoiceId), orgId, userId);
+    }
+    return { invoiceId, approval: result };
+  }
 
   async create(input: CreatePurchaseInvoiceDto, orgId: number) {
     // 1. Validate supplier
@@ -59,6 +95,13 @@ export class PurchaseInvoicesService {
     // 3. Create invoice
     const invoiceId = generateInvoiceId("P");
 
+    // Resolve currency: explicit input or fallback to app default
+    let currencyId = input.currencyId ?? null;
+    if (!currencyId) {
+      const setting = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+      currencyId = (setting?.currencyId as number | null) ?? null;
+    }
+
     await this.db.insert(purchaseInvoices).values({
       id: invoiceId,
       organizationId: orgId,
@@ -70,6 +113,7 @@ export class PurchaseInvoicesService {
       paidAmount: totalPaidAmount,
       dueAmount,
       supplierId: input.supplierId,
+      currencyId,
       note: input.note ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -145,6 +189,45 @@ export class PurchaseInvoicesService {
       }
     }
 
+    // 5 bis. Ecriture comptable moderne (partie double) via LedgerService.
+    // Dual-write strangler ; idempotent par facture. Lignes alignees sur les
+    // transactions plates ci-dessus (achat: debit 3/credit 5, tva: debit 15/credit 5,
+    // paiement: debit 5/credit cash). Globalement equilibree.
+    const ledgerLines: LedgerLineInput[] = [];
+    if (totalPurchasePrice > 0) {
+      ledgerLines.push(
+        { accountId: 3, side: "DEBIT", amount: totalPurchasePrice, description: `Inventory ${invoiceId}` },
+        { accountId: 5, side: "CREDIT", amount: totalPurchasePrice, description: `Purchase invoice ${invoiceId}` },
+      );
+    }
+    if (totalTax > 0) {
+      ledgerLines.push(
+        { accountId: 15, side: "DEBIT", amount: totalTax, description: `VAT input ${invoiceId}` },
+        { accountId: 5, side: "CREDIT", amount: totalTax, description: `Tax for purchase invoice ${invoiceId}` },
+      );
+    }
+    for (const payment of input.paidAmount ?? []) {
+      if (payment.amount > 0) {
+        ledgerLines.push(
+          { accountId: 5, side: "DEBIT", amount: payment.amount, description: `Payment ${invoiceId}` },
+          { accountId: payment.paymentType ?? 1, side: "CREDIT", amount: payment.amount, description: `Payment for purchase invoice ${invoiceId}` },
+        );
+      }
+    }
+    if (ledgerLines.length >= 2) {
+      await this.ledger.post(
+        {
+          reference: `PURCH-${invoiceId}`,
+          particulars: `Purchase invoice ${invoiceId}`,
+          sourceModule: "purchase",
+          relatedId: invoiceId,
+          idempotencyKey: `purchase:${invoiceId}`,
+          lines: ledgerLines,
+        },
+        orgId,
+      );
+    }
+
     // 6. Update product stock (increase and recalculate avg purchase price)
     for (const item of invoiceProducts) {
       const [product] = await this.db
@@ -180,6 +263,9 @@ export class PurchaseInvoicesService {
           .where(eq(products.id, item.productId));
       }
     }
+
+    // Soumet au circuit d'approbation (effectif si le module purchase est gate).
+    await this.submitForApproval(invoiceId, orgId);
 
     return this.findOne(invoiceId, orgId);
   }
@@ -221,14 +307,19 @@ export class PurchaseInvoicesService {
         paidAmount: purchaseInvoices.paidAmount,
         dueAmount: purchaseInvoices.dueAmount,
         supplierId: purchaseInvoices.supplierId,
+        currencyId: purchaseInvoices.currencyId,
         note: purchaseInvoices.note,
         createdAt: purchaseInvoices.createdAt,
         updatedAt: purchaseInvoices.updatedAt,
         supplierName: suppliers.name,
         supplierPhone: suppliers.phone,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
       })
       .from(purchaseInvoices)
       .leftJoin(suppliers, eq(suppliers.id, purchaseInvoices.supplierId))
+      .leftJoin(currencies, eq(currencies.id, purchaseInvoices.currencyId))
       .where(where)
       .orderBy(desc(purchaseInvoices.createdAt))
       .limit(limit)
@@ -248,8 +339,33 @@ export class PurchaseInvoicesService {
       : and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.status, "true"));
 
     const rows = await this.db
-      .select()
+      .select({
+        id: purchaseInvoices.id,
+        organizationId: purchaseInvoices.organizationId,
+        date: purchaseInvoices.date,
+        invoiceMemoNo: purchaseInvoices.invoiceMemoNo,
+        supplierMemoNo: purchaseInvoices.supplierMemoNo,
+        totalAmount: purchaseInvoices.totalAmount,
+        totalTax: purchaseInvoices.totalTax,
+        paidAmount: purchaseInvoices.paidAmount,
+        dueAmount: purchaseInvoices.dueAmount,
+        supplierId: purchaseInvoices.supplierId,
+        currencyId: purchaseInvoices.currencyId,
+        note: purchaseInvoices.note,
+        status: purchaseInvoices.status,
+        createdAt: purchaseInvoices.createdAt,
+        updatedAt: purchaseInvoices.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
       .from(purchaseInvoices)
+      .leftJoin(currencies, eq(purchaseInvoices.currencyId, currencies.id))
       .where(where)
       .limit(1);
 
@@ -280,11 +396,11 @@ export class PurchaseInvoicesService {
   }
 
   // Payment purchase invoices
-  async createPayment(input: CreatePaymentPurchaseInvoiceDto) {
+  async createPayment(input: CreatePaymentPurchaseInvoiceDto, orgId: number) {
     const [invoice] = await this.db
       .select({ id: purchaseInvoices.id, dueAmount: purchaseInvoices.dueAmount })
       .from(purchaseInvoices)
-      .where(and(eq(purchaseInvoices.id, input.purchaseInvoiceId), eq(purchaseInvoices.status, "true")))
+      .where(and(eq(purchaseInvoices.id, input.purchaseInvoiceId), eq(purchaseInvoices.status, "true"), eq(purchaseInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!invoice) {
@@ -292,6 +408,7 @@ export class PurchaseInvoicesService {
     }
 
     await this.db.insert(paymentPurchaseInvoices).values({
+      organizationId: orgId,
       date: new Date(input.date),
       amount: input.amount,
       purchaseInvoiceId: input.purchaseInvoiceId,
@@ -301,6 +418,7 @@ export class PurchaseInvoicesService {
     });
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: sql`CURRENT_TIMESTAMP`,
       debitId: 5,
       creditId: 1,
@@ -351,11 +469,13 @@ export class PurchaseInvoicesService {
     return { message: "Purchase invoice deleted successfully." };
   }
 
-  async findAllPayments(query: Record<string, string>) {
+  async findAllPayments(query: Record<string, string>, org: number) {
+    const orgFilter = eq(paymentPurchaseInvoices.organizationId, org);
     if (query["query"] === "all") {
       return this.db
         .select()
         .from(paymentPurchaseInvoices)
+        .where(orgFilter)
         .orderBy(desc(paymentPurchaseInvoices.id));
     }
 
@@ -365,7 +485,8 @@ export class PurchaseInvoicesService {
           total: sum(paymentPurchaseInvoices.amount),
           cnt: count(paymentPurchaseInvoices.id),
         })
-        .from(paymentPurchaseInvoices);
+        .from(paymentPurchaseInvoices)
+        .where(orgFilter);
       return { _count: { id: Number(row.cnt ?? 0) }, _sum: { amount: row.total ?? null } };
     }
 
@@ -374,13 +495,15 @@ export class PurchaseInvoicesService {
     const rows = await this.db
       .select()
       .from(paymentPurchaseInvoices)
+      .where(orgFilter)
       .orderBy(desc(paymentPurchaseInvoices.id))
       .limit(limit)
       .offset(skip);
 
     const [{ total }] = await this.db
       .select({ total: count(paymentPurchaseInvoices.id) })
-      .from(paymentPurchaseInvoices);
+      .from(paymentPurchaseInvoices)
+      .where(orgFilter);
 
     return { getAllPayment: rows, totalPayment: Number(total ?? 0) };
   }

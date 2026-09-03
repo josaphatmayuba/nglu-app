@@ -1,0 +1,563 @@
+{
+  "source": "db-backup-postgres (1) (3).sql",
+  "table_count": 35,
+  "tables": {
+    "Devis": {
+      "row_count": 38,
+      "csv_file": "csv/Devis.csv",
+      "columns": [
+        "id",
+        "subject",
+        "description",
+        "status",
+        "state_status",
+        "image",
+        "creator_id",
+        "approval",
+        "comment"
+      ]
+    },
+    "_prisma_migrations": {
+      "row_count": 21,
+      "csv_file": "csv/prisma_migrations.csv",
+      "columns": [
+        "id",
+        "checksum",
+        "finished_at",
+        "migration_name",
+        "logs",
+        "rolled_back_at",
+        "started_at",
+        "applied_steps_count"
+      ]
+    },
+    "account": {
+      "row_count": 7,
+      "csv_file": "csv/account.csv",
+      "columns": [
+        "id",
+        "name",
+        "type",
+        "creator_id",
+        "createdAt"
+      ]
+    },
+    "appSetting": {
+      "row_count": 1,
+      "csv_file": "csv/appSetting.csv",
+      "columns": [
+        "id",
+        "company_name",
+        "tag_line",
+        "address",
+        "phone",
+        "email",
+        "website",
+        "footer"
+      ]
+    },
+    "contract": {
+      "row_count": 24,
+      "csv_file": "csv/contract.csv",
+      "columns": [
+        "id",
+        "customer_id",
+        "realestate_id",
+        "contract_type_id",
+        "rent_amount",
+        "note",
+        "imageName",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "start_date",
+        "end_date",
+        "lessor_address",
+        "lessor_fullname",
+        "devise_id",
+        "lessor_city",
+        "sign_city"
+      ]
+    },
+    "contract_type": {
+      "row_count": 3,
+      "csv_file": "csv/contract_type.csv",
+      "columns": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "creator_id",
+        "day"
+      ]
+    },
+    "customer": {
+      "row_count": 19,
+      "csv_file": "csv/customer.csv",
+      "columns": [
+        "id",
+        "first_name",
+        "last_name",
+        "phone2",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "activity",
+        "birth_date",
+        "child_age",
+        "child_number",
+        "contacted_person",
+        "email",
+        "entity_address",
+        "entity_name",
+        "hiring_date",
+        "main_activity",
+        "marital_status",
+        "middle_name",
+        "monthly_pay",
+        "moving_reason",
+        "nationality",
+        "occupant_number",
+        "old_address",
+        "old_lessor",
+        "origin_province",
+        "other_allowance",
+        "other_monthly_income",
+        "partenair_name",
+        "phone",
+        "phone3",
+        "prossional_status",
+        "seniority",
+        "sex",
+        "contract_type"
+      ]
+    },
+    "designation": {
+      "row_count": 11,
+      "csv_file": "csv/designation.csv",
+      "columns": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "devise": {
+      "row_count": 2,
+      "csv_file": "csv/devise.csv",
+      "columns": [
+        "id",
+        "name",
+        "code",
+        "creator_id"
+      ]
+    },
+    "invoiceProductStock": {
+      "row_count": 10,
+      "csv_file": "csv/invoiceProductStock.csv",
+      "columns": [
+        "id",
+        "product_id",
+        "invoice_id",
+        "product_quantity",
+        "product_price",
+        "created_at",
+        "updated_at",
+        "operation_name",
+        "product_stock",
+        "observation",
+        "devise_id"
+      ]
+    },
+    "permission": {
+      "row_count": 117,
+      "csv_file": "csv/permission.csv",
+      "columns": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "product": {
+      "row_count": 25,
+      "csv_file": "csv/product.csv",
+      "columns": [
+        "id",
+        "name",
+        "quantity",
+        "purchase_price",
+        "sale_price",
+        "imageName",
+        "product_category_id",
+        "unit_measurement",
+        "unit_type",
+        "sku",
+        "reorder_quantity",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "devise_id"
+      ]
+    },
+    "product_category": {
+      "row_count": 5,
+      "csv_file": "csv/product_category.csv",
+      "columns": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "project": {
+      "row_count": 1,
+      "csv_file": "csv/project.csv",
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "purchaseInvoice": {
+      "row_count": 1,
+      "csv_file": "csv/purchaseInvoice.csv",
+      "columns": [
+        "id",
+        "date",
+        "total_amount",
+        "discount",
+        "paid_amount",
+        "due_amount",
+        "supplier_id",
+        "note",
+        "supplier_memo_no",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "devise_id"
+      ]
+    },
+    "purchaseInvoiceProduct": {
+      "row_count": 1,
+      "csv_file": "csv/purchaseInvoiceProduct.csv",
+      "columns": [
+        "id",
+        "product_id",
+        "invoice_id",
+        "product_quantity",
+        "product_purchase_price",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "devise_id"
+      ]
+    },
+    "realestate": {
+      "row_count": 19,
+      "csv_file": "csv/realestate.csv",
+      "columns": [
+        "id",
+        "address",
+        "city",
+        "country",
+        "municipalities",
+        "imageName",
+        "purchase_price",
+        "sale_price",
+        "realestate_type_id",
+        "note",
+        "area",
+        "apartment_number",
+        "year_of_construction",
+        "code",
+        "creator_id",
+        "status",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "realestate_type": {
+      "row_count": 4,
+      "csv_file": "csv/realestate_type.csv",
+      "columns": [
+        "id",
+        "name",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "rent_payment": {
+      "row_count": 374,
+      "csv_file": "csv/rent_payment.csv",
+      "columns": [
+        "id",
+        "contract_id",
+        "payment_status",
+        "planned_payment_date",
+        "createdAt",
+        "updatedAt",
+        "due_payment",
+        "payment",
+        "discount",
+        "devise_id",
+        "payment_date"
+      ]
+    },
+    "report": {
+      "row_count": 77,
+      "csv_file": "csv/report.csv",
+      "columns": [
+        "id",
+        "subject",
+        "content",
+        "image",
+        "date",
+        "status",
+        "creator_id"
+      ]
+    },
+    "returnPurchaseInvoice": {
+      "row_count": 0,
+      "csv_file": "csv/returnPurchaseInvoice.csv",
+      "columns": [
+        "id",
+        "date",
+        "total_amount",
+        "note",
+        "purchaseInvoice_id",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "returnPurchaseInvoiceProduct": {
+      "row_count": 0,
+      "csv_file": "csv/returnPurchaseInvoiceProduct.csv",
+      "columns": [
+        "id",
+        "product_id",
+        "invoice_id",
+        "product_quantity",
+        "product_purchase_price",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "returnSaleInvoice": {
+      "row_count": 0,
+      "csv_file": "csv/returnSaleInvoice.csv",
+      "columns": [
+        "id",
+        "date",
+        "total_amount",
+        "note",
+        "saleInvoice_id",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "returnSaleInvoiceProduct": {
+      "row_count": 0,
+      "csv_file": "csv/returnSaleInvoiceProduct.csv",
+      "columns": [
+        "id",
+        "product_id",
+        "invoice_id",
+        "product_quantity",
+        "product_sale_price",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "role": {
+      "row_count": 22,
+      "csv_file": "csv/role.csv",
+      "columns": [
+        "id",
+        "name",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "rolePermission": {
+      "row_count": 336,
+      "csv_file": "csv/rolePermission.csv",
+      "columns": [
+        "id",
+        "role_id",
+        "permission_id",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    },
+    "saleInvoice": {
+      "row_count": 11,
+      "csv_file": "csv/saleInvoice.csv",
+      "columns": [
+        "id",
+        "date",
+        "total_amount",
+        "discount",
+        "paid_amount",
+        "due_amount",
+        "profit",
+        "customer_id",
+        "user_id",
+        "note",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "devise_id"
+      ]
+    },
+    "saleInvoiceProduct": {
+      "row_count": 11,
+      "csv_file": "csv/saleInvoiceProduct.csv",
+      "columns": [
+        "id",
+        "product_id",
+        "invoice_id",
+        "product_quantity",
+        "product_sale_price",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "session": {
+      "row_count": 552,
+      "csv_file": "csv/session.csv",
+      "columns": [
+        "id",
+        "token",
+        "date",
+        "connected"
+      ]
+    },
+    "subAccount": {
+      "row_count": 85,
+      "csv_file": "csv/subAccount.csv",
+      "columns": [
+        "id",
+        "name",
+        "account_id",
+        "status",
+        "creator_id"
+      ]
+    },
+    "supplier": {
+      "row_count": 4,
+      "csv_file": "csv/supplier.csv",
+      "columns": [
+        "id",
+        "name",
+        "phone",
+        "address",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id"
+      ]
+    },
+    "transaction": {
+      "row_count": 1178,
+      "csv_file": "csv/transaction.csv",
+      "columns": [
+        "id",
+        "date",
+        "debit_id",
+        "credit_id",
+        "particulars",
+        "amount",
+        "type",
+        "related_id",
+        "status",
+        "created_at",
+        "updated_at",
+        "creator_id",
+        "contract_id",
+        "device_id",
+        "rent_payment_id",
+        "transaction_type_id"
+      ]
+    },
+    "transactionType": {
+      "row_count": 79,
+      "csv_file": "csv/transactionType.csv",
+      "columns": [
+        "id",
+        "name",
+        "activity",
+        "status",
+        "details",
+        "debit_id",
+        "credit_id",
+        "creator_id"
+      ]
+    },
+    "user": {
+      "row_count": 32,
+      "csv_file": "csv/user.csv",
+      "columns": [
+        "uuid",
+        "id",
+        "username",
+        "first_name",
+        "last_name",
+        "password",
+        "birthday",
+        "role",
+        "email",
+        "salary",
+        "designation_id",
+        "join_date",
+        "leave_date",
+        "id_no",
+        "department",
+        "phone",
+        "address",
+        "blood_group",
+        "image",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "creator_id",
+        "devise_id"
+      ]
+    },
+    "userProject": {
+      "row_count": 1,
+      "csv_file": "csv/userProject.csv",
+      "columns": [
+        "id",
+        "user_id",
+        "project_id",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "creator_id"
+      ]
+    }
+  }
+}

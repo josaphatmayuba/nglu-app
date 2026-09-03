@@ -2,12 +2,127 @@
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
-import { api } from "./api";
+import { api, GESTATION_DAYS_BY_SPECIES } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
+import { defaultCurrencyId, defaultSymbol } from "./currency";
+import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
+import { animalQty } from "./animal-category";
+import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
 // Species-aware forms (e.g., milk entry only for milk-producing species).
+
+// ProjectSelect — rattache une depense a un projet/financeur (axe analytique).
+function ProjectSelect({ lang, value, onChange }) {
+  const [projects, setProjects] = React.useState([]);
+  React.useEffect(() => {
+    api.listProjects().then((r) => setProjects(Array.isArray(r) ? r : [])).catch(() => setProjects([]));
+  }, []);
+  if (projects.length === 0) return null; // pas de projet defini → champ masque
+  return (
+    <FormField label={lang === "fr" ? "Projet / financeur" : "Project / donor"}>
+      <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">{lang === "fr" ? "— Aucun —" : "— None —"}</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}{p.donor ? ` (${p.donor})` : ""}</option>
+        ))}
+      </select>
+    </FormField>
+  );
+}
+
+// VaccineField — selecteur depuis la base de vaccins (specifications veterinaires).
+// Liste filtrable par espece + saisie libre conservee + panneau de details du vaccin choisi.
+function VaccineField({ lang, value, species, onChange }) {
+  const fr = lang === "fr";
+  const [list, setList] = React.useState([]);
+  const [detail, setDetail] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    api.listVaccines(species).then((r) => setList(Array.isArray(r) ? r : [])).catch(() => setList([]));
+  }, [species]);
+
+  const pick = async (v) => {
+    onChange(v.name);
+    setOpen(false);
+    try { setDetail(await api.getVaccine(v.id)); } catch { setDetail(null); }
+  };
+
+  const Row = ({ k, v }) => v ? (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border-1)", fontSize: 12 }}>
+      <span style={{ color: "var(--fg-2)", flexShrink: 0 }}>{k}</span>
+      <span style={{ textAlign: "right" }}>{v}</span>
+    </div>
+  ) : null;
+
+  return (
+    <FormField label={fr ? "Vaccin" : "Vaccine"} required>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input"
+          placeholder={fr ? "Choisir ou saisir un vaccin…" : "Pick or type a vaccine…"}
+          value={value}
+          onChange={(e) => { onChange(e.target.value); setDetail(null); }}
+          onFocus={() => setOpen(true)}
+        />
+        {open && list.length > 0 && (
+          <div style={{ position: "absolute", zIndex: 30, top: "100%", left: 0, right: 0, maxHeight: 240, overflowY: "auto", background: "var(--bg-1, #fff)", border: "1px solid var(--border-1)", borderRadius: 10, marginTop: 4, boxShadow: "0 8px 24px rgba(0,0,0,.12)" }}>
+            {list
+              .filter((v) => !value || v.name.toLowerCase().includes(value.toLowerCase()))
+              .slice(0, 40)
+              .map((v) => (
+                <button type="button" key={v.id} onClick={() => pick(v)}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: "transparent", border: 0, borderBottom: "1px solid var(--border-1)", cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{v.name}</div>
+                  <div style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{[v.species, v.targetDiseases].filter(Boolean).join(" · ")}</div>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {detail && (
+        <div className="card" style={{ marginTop: 8, padding: 12, fontSize: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <b style={{ fontSize: 13 }}>{detail.name}</b>
+            <button type="button" onClick={() => setDetail(null)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3)" }}>✕</button>
+          </div>
+          <Row k={fr ? "Maladies cibles" : "Target diseases"} v={detail.targetDiseases} />
+          <Row k={fr ? "Espèces" : "Species"} v={detail.species} />
+          <Row k={fr ? "Type" : "Type"} v={detail.vaccineType} />
+          <Row k={fr ? "Noms commerciaux" : "Brands"} v={detail.commercialNames} />
+          <Row k={fr ? "Fabricant" : "Manufacturer"} v={detail.manufacturer} />
+          <Row k={fr ? "Dose" : "Dose"} v={detail.dose} />
+          <Row k={fr ? "Voie" : "Route"} v={detail.route} />
+          <Row k={fr ? "Primo-vaccination" : "Primo age"} v={detail.primoAge} />
+          <Row k={fr ? "Rappels" : "Boosters"} v={detail.boosterSchedule} />
+          <Row k={fr ? "Durée de protection" : "Protection"} v={detail.protectionDuration} />
+          <Row k={fr ? "Durée de traitement" : "Treatment duration"} v={detail.treatmentDuration} />
+          <Row k={fr ? "Délai retrait viande" : "Withdrawal meat"} v={detail.withdrawalMeat} />
+          <Row k={fr ? "Délai retrait lait" : "Withdrawal milk"} v={detail.withdrawalMilk} />
+          <Row k={fr ? "Délai retrait œufs" : "Withdrawal eggs"} v={detail.withdrawalEggs} />
+          <Row k={fr ? "Effets secondaires" : "Side effects"} v={detail.sideEffects} />
+          <Row k={fr ? "Contre-indications" : "Contraindications"} v={detail.contraindications} />
+          <Row k={fr ? "Précautions" : "Precautions"} v={detail.precautions} />
+          <Row k={fr ? "Conservation" : "Storage"} v={detail.storage} />
+          <Row k={fr ? "Conditionnement" : "Packaging"} v={detail.packaging} />
+          {detail.sourceUrl && (
+            <div style={{ paddingTop: 6 }}>
+              <a href={detail.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--clay-700, #b45309)" }}>
+                {fr ? "Source / fiche du vaccin ↗" : "Source / datasheet ↗"}
+              </a>
+            </div>
+          )}
+          <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--fg-3)", fontStyle: "italic" }}>
+            {fr ? "Données indicatives — à valider par un vétérinaire avant usage." : "Indicative data — confirm with a veterinarian before use."}
+          </div>
+        </div>
+      )}
+    </FormField>
+  );
+}
 
 // Récupère l'ID numérique d'un row, qu'il vienne d'une API brute (id=7) ou
 // d'un adapter qui préfixe (id="M-7", _pk=7). Retourne null si aucun.
@@ -281,6 +396,39 @@ const animalLabel = (a) => {
   return id && a.name ? `${base} · ${id}` : base;
 };
 
+const animalOptionId = (a) => {
+  const id = toNumericId(a);
+  return id != null ? String(id) : "";
+};
+
+const animalHeadcount = (rows) => (rows || []).reduce((sum, a) => sum + animalQty(a), 0);
+
+const buildAnimalLocationResolver = (buildings = []) => {
+  const byId = new Map();
+  const byName = new Map();
+  (buildings || []).forEach((b) => {
+    if (b?.id != null) byId.set(Number(b.id), b);
+    if (b?.name) byName.set(String(b.name).trim().toLowerCase(), b);
+  });
+  return (animal) => {
+    const direct = animal?.zoneId ?? animal?.zone_id;
+    if (direct != null && direct !== "") return Number(direct);
+    const buildingId = animal?.buildingId ?? animal?.building_id;
+    if (buildingId != null && byId.has(Number(buildingId))) {
+      const zoneId = byId.get(Number(buildingId))?.zoneId ?? byId.get(Number(buildingId))?.zone_id;
+      if (zoneId != null && zoneId !== "") return Number(zoneId);
+    }
+    const barn = animal?.barn ? String(animal.barn).trim().toLowerCase() : "";
+    if (barn && byName.has(barn)) {
+      const zoneId = byName.get(barn)?.zoneId ?? byName.get(barn)?.zone_id;
+      if (zoneId != null && zoneId !== "") return Number(zoneId);
+    }
+    return null;
+  };
+};
+
+const appendNotes = (...parts) => parts.filter((p) => p != null && String(p).trim()).join("\n") || null;
+
 const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultSpecies, enabledSpecies, context, onSaved }) => {
   const [tab, setTab] = React.useState(defaultTab);
   React.useEffect(() => { if (open) setTab(defaultTab); }, [open, defaultTab]);
@@ -293,6 +441,7 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
     { id: "health",     icon: "syringe",   fr: "Soin / vaccin",   en: "Care / vaccine" },
     { id: "stock",      icon: "package",   fr: "Stock",           en: "Stock" },
     { id: "repro",      icon: "fingerprint", fr: "Reproduction",  en: "Reproduction" },
+    { id: "operation",  icon: "scissors",  fr: "Intervention",    en: "Operation" },
     { id: "death",      icon: "alert",     fr: "Mortalité",       en: "Mortality" },
   ];
 
@@ -351,6 +500,7 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
           {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "stock"      && <StockForm      lang={lang} onSaved={onSaved} onClose={onClose}/>}
           {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "operation"  && <OperationForm  lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "death"      && <DeathForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} onSaved={onSaved} onClose={onClose}/>}
         </div>
       </aside>
@@ -395,6 +545,10 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
+    if (!form.dob) {
+      onSaved && onSaved({ kind: "animal", severity: "error", message: lang === "fr" ? "La date de naissance est obligatoire." : "Date of birth is required." });
+      return;
+    }
     setSaving(true);
     const payload = {
       species,
@@ -497,8 +651,8 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
               </div>
             </FormField>
           )}
-          <FormField label={lang === "fr" ? "Date de naissance" : "Date of birth"}>
-            <input className="input" type="date" value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
+          <FormField label={(lang === "fr" ? "Date de naissance" : "Date of birth") + " *"}>
+            <input className="input" type="date" required value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
           </FormField>
           <FormField label={lang === "fr" ? "Poids (kg)" : "Weight (kg)"}>
             <input className="input mono" type="number" placeholder="450" value={form.weight || ""} onChange={(e) => set("weight", e.target.value)}/>
@@ -648,7 +802,9 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
     api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
   }, []);
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
   const submit = async () => {
     if (saving) return;
     if (!form.value || !form.date) {
@@ -656,6 +812,10 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
       return;
     }
     const selectedAnimal = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
+    if (selectedAnimal && isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind: "production", severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
     const unit = productKind === "milk" ? "L" : productKind === "eggs" ? "œufs" : productKind === "wool" ? "kg" : "kg";
     const flockCount = selectedAnimal?.count ?? selectedAnimal?.animalCount ?? null;
     const eggs = Number(form.value) || 0;
@@ -669,10 +829,33 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
       ? { broken: form.broken ? Number(form.broken) : null, size: form.size ? Number(form.size) : null, lay_rate: autoLayRate != null ? Number(autoLayRate.toFixed(2)) : null }
       : null;
     setSaving(true);
+    // "growth" (poids/croissance : porc, poisson, poulet secondaire…) est
+    // désormais unifié avec l'onglet Poids : une seule table d'historique
+    // (farmos_weighings) au lieu de dupliquer dans production_logs.
+    if (productKind === "growth") {
+      const animalId = toNumericId(selectedAnimal);
+      if (!animalId) {
+        setSaving(false);
+        onSaved && onSaved({ kind: "production", severity: "error", message: lang === "fr" ? "Sélectionnez un animal pour enregistrer une pesée." : "Select an animal to record a weighing." });
+        return;
+      }
+      try {
+        await api.createWeighing({ animal_id: animalId, weigh_date: form.date, weight: Number(form.value), weight_unit: "kg", notes: form.notes || null });
+        window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan pesée" : "Weighing scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${species} · poids · ${form.value} kg`);
+        onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Pesée enregistrée — ${form.value} kg` : `Weighing saved — ${form.value} kg` });
+        onClose();
+      } catch (err) {
+        onSaved && onSaved({ kind: "production", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     const payload = {
       animal_id: toNumericId(selectedAnimal),
       species,
-      product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : productKind === "wool" ? "wool" : "growth",
+      product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : "wool",
       log_date: form.date,
       period: form.period || "AM",
       quantity: Number(form.value),
@@ -683,7 +866,8 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
     try {
       await api.createProductionLog(payload);
       window.dispatchEvent(new CustomEvent("farmos:production-created"));
-      onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Production ${productKind === "milk" ? "lait" : productKind === "eggs" ? "œufs" : "poids"} enregistrée — ${form.value} ${unit}` : `Production saved — ${form.value} ${unit}` });
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan production" : "Production scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${species} · ${productKind} · ${form.value} ${unit}`);
+      onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Production ${productKind === "milk" ? "lait" : "œufs"} enregistrée — ${form.value} ${unit}` : `Production saved — ${form.value} ${unit}` });
       onClose();
     } catch (err) {
       onSaved && onSaved({ kind: "production", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -707,23 +891,25 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
         </div>
       </FormSection>
 
-      <FormSection label={lang === "fr" ? `Production ${productKind === "milk" ? "laitière" : productKind === "eggs" ? "d'œufs" : productKind === "wool" ? "laine" : "et croissance"}` : `Production`}>
+      <FormSection label={lang === "fr" ? `Production ${productKind === "milk" ? "laitière" : productKind === "eggs" ? "d'œufs" : productKind === "wool" ? "laine" : "— pesée"}` : `Production${productKind === "growth" ? " — weighing" : ""}`}>
         <FormGrid cols={2}>
           <FormField label={lang === "fr" ? "Date" : "Date"} required>
             <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
           </FormField>
-          <FormField label={lang === "fr" ? "Période" : "Period"}>
-            <Autocomplete
-              value={form.period || "AM"}
-              onChange={(v) => set("period", v || "AM")}
-              allowClear={false}
-              options={[
-                { value: "AM", label: lang === "fr" ? "Traite matin" : "Morning" },
-                { value: "PM", label: lang === "fr" ? "Traite après-midi" : "Afternoon" },
-                { value: "day", label: lang === "fr" ? "Total jour" : "Daily total" },
-              ]}
-            />
-          </FormField>
+          {productKind !== "growth" && (
+            <FormField label={lang === "fr" ? "Période" : "Period"}>
+              <Autocomplete
+                value={form.period || "AM"}
+                onChange={(v) => set("period", v || "AM")}
+                allowClear={false}
+                options={[
+                  { value: "AM", label: lang === "fr" ? "Traite matin" : "Morning" },
+                  { value: "PM", label: lang === "fr" ? "Traite après-midi" : "Afternoon" },
+                  { value: "day", label: lang === "fr" ? "Total jour" : "Daily total" },
+                ]}
+              />
+            </FormField>
+          )}
         </FormGrid>
         <FormGrid cols={2}>
           <FormField label={lang === "fr" ? "Animal / Lot" : "Animal / Batch"}>
@@ -731,7 +917,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-              options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
           {productKind === "milk" && (
@@ -808,6 +994,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
         <textarea className="input" style={{ height: 64, padding: 10 }} placeholder={lang === "fr" ? "Observations…" : "Observations…"} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)}/>
       </FormSection>
 
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
@@ -816,22 +1003,42 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
 // ─── Health (treatment / vaccine) ────────────────────────────────────────
 const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
   const availableSpecies = activeSpeciesList(enabledSpecies);
-  const [kind, setKind] = React.useState("treatment");
+  const [kind, setKind] = React.useState(context?.kind || "treatment");
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
     species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
+    // Pré-sélection du type d'application depuis le bouton d'origine (Individuel / Lot).
+    scope: context?.scope || "individual",
+    // Pré-remplissage depuis « Programmer maintenant » (rappel de vaccin en retard).
+    vaccine: context?.vaccine || "",
+    target: context?.target || "",
+    zone: context?.zoneId != null ? String(context.zoneId) : "",
+    lot: context?.lot || "",
+    selectedIds: Array.isArray(context?.animalIds) ? context.animalIds.map(String) : [],
+    reason: context?.reason || "",
+    n: context?.n != null ? String(context.n) : "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [liveDiseases, setLiveDiseases] = React.useState(null);
+  const [liveZones, setLiveZones] = React.useState([]);
+  const [liveBuildings, setLiveBuildings] = React.useState([]);
   const loadAll = React.useCallback(() => {
-    Promise.all([api.listAnimals(), api.listMedicines(), api.listDiseases()])
-      .then(([a, m, d]) => {
+    Promise.all([
+      api.listAnimals(),
+      api.listMedicines(),
+      api.listDiseases(),
+      api.listZones().catch(() => []),
+      api.listBuildings().catch(() => []),
+    ])
+      .then(([a, m, d, z, b]) => {
         if (Array.isArray(a)) setLiveAnimals(a);
         if (Array.isArray(m)) setLiveMeds(m);
         if (Array.isArray(d)) setLiveDiseases(d);
+        if (Array.isArray(z)) setLiveZones(z);
+        if (Array.isArray(b)) setLiveBuildings(b);
       })
       .catch(() => {});
   }, []);
@@ -842,10 +1049,77 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     return () => window.removeEventListener("farmos:lookup-created", refetch);
   }, [loadAll]);
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const medsForSpecies = (liveMeds || []).filter((s) => s.kind === "med" && s.species?.includes(form.species));
   const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
   const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : [];
+  const getAnimalZoneId = React.useMemo(() => buildAnimalLocationResolver(liveBuildings), [liveBuildings]);
+  const lotsForSpecies = React.useMemo(() => {
+    const byLot = new Map();
+    writableAnimalsForSpecies.forEach((a) => {
+      const lot = (a.lot || "").trim();
+      if (!lot) return;
+      byLot.set(lot, (byLot.get(lot) || 0) + animalQty(a));
+    });
+    return Array.from(byLot.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([lot, count]) => ({ value: lot, label: `${lot} · ${count.toLocaleString("fr-CA")} ${lang === "fr" ? "animaux" : "animals"}` }));
+  }, [writableAnimalsForSpecies, lang]);
+  const zonesForSpecies = React.useMemo(() => {
+    return (liveZones || []).map((z) => {
+      const count = animalHeadcount(writableAnimalsForSpecies.filter((a) => getAnimalZoneId(a) === Number(z.id)));
+      return { value: String(z.id), label: `${z.name} · ${count.toLocaleString("fr-CA")} ${lang === "fr" ? "animaux" : "animals"}`, raw: z, count };
+    }).filter((z) => z.count > 0);
+  }, [liveZones, writableAnimalsForSpecies, getAnimalZoneId, lang]);
+  const setSpecies = (species) => setForm((f) => ({
+    ...f,
+    species: species || availableSpecies[0]?.id || "cow",
+    animal: "",
+    lot: "",
+    zone: "",
+    selectedIds: [],
+  }));
+  const setScope = (scope) => setForm((f) => ({
+    ...f,
+    scope: scope || "individual",
+    animal: "",
+    lot: "",
+    zone: "",
+    selectedIds: [],
+  }));
+  const toggleSelectedAnimal = (id) => setForm((f) => {
+    const ids = Array.isArray(f.selectedIds) ? f.selectedIds : [];
+    return { ...f, selectedIds: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] };
+  });
+  const vaccinationTarget = React.useMemo(() => {
+    const scope = form.scope || "individual";
+    const selectedAnimal = writableAnimalsForSpecies.find((a) => animalOptionId(a) === String(form.animal));
+    const selectedZone = zonesForSpecies.find((z) => String(z.value) === String(form.zone));
+    const selectedIds = new Set((form.selectedIds || []).map(String));
+    let rows = [];
+    let label = "";
+    if (scope === "individual") {
+      rows = selectedAnimal ? [selectedAnimal] : [];
+      label = selectedAnimal ? animalLabel(selectedAnimal) : "";
+    } else if (scope === "lot") {
+      const lot = (form.lot || "").trim();
+      rows = lot ? writableAnimalsForSpecies.filter((a) => (a.lot || "").trim() === lot) : [];
+      label = lot ? `Lot: ${lot}` : "";
+    } else if (scope === "zone") {
+      rows = form.zone ? writableAnimalsForSpecies.filter((a) => getAnimalZoneId(a) === Number(form.zone)) : [];
+      label = selectedZone ? `Zone: ${selectedZone.raw?.name || selectedZone.label}` : "";
+    } else if (scope === "selection") {
+      rows = writableAnimalsForSpecies.filter((a) => selectedIds.has(animalOptionId(a)));
+      const names = rows.slice(0, 3).map(animalLabel).join(", ");
+      label = rows.length ? `${lang === "fr" ? "Sélection" : "Selection"}: ${names}${rows.length > 3 ? "..." : ""}` : "";
+    } else if (scope === "collective") {
+      rows = writableAnimalsForSpecies;
+      label = lang === "fr" ? `Tous les ${speciesDef.fr.toLowerCase()}` : `All ${speciesDef.en.toLowerCase()}`;
+    }
+    return { scope, rows, label, count: animalHeadcount(rows), rowCount: rows.length };
+  }, [form.scope, form.animal, form.lot, form.zone, form.selectedIds, writableAnimalsForSpecies, zonesForSpecies, getAnimalZoneId, speciesDef, lang]);
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
 
   const submit = async () => {
     if (saving) return;
@@ -854,16 +1128,33 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
         onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Vaccin et date requis." : "Vaccine and date required." });
         return;
       }
+      if (!liveAnimals) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Les animaux ne sont pas chargés. Impossible de cibler la vaccination." : "Animals are not loaded. Vaccination cannot be targeted." });
+        return;
+      }
+      if (!vaccinationTarget.label || vaccinationTarget.count <= 0) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis une zone, un lot, un animal ou une sélection avant d'enregistrer le vaccin." : "Choose a zone, batch, animal or selection before saving the vaccine." });
+        return;
+      }
       setSaving(true);
       try {
+        const targetIds = vaccinationTarget.rows.map(toNumericId).filter((id) => id != null);
+        const targetNotes = appendNotes(
+          form.booster ? `Prochain rappel: ${form.booster}` : null,
+          `Mode cible: ${vaccinationTarget.scope}`,
+          `Animaux ciblés (${targetIds.length} ligne(s), ${vaccinationTarget.count} tête(s)): ${targetIds.join(", ")}`,
+          context?.n != null && Number(context.n) !== vaccinationTarget.count ? `Effectif du rappel précédent: ${context.n}` : null,
+        );
         await api.createVaccination({
           species: form.species,
           vaccine: form.vaccine,
           due_date: form.date,
-          animal_count: form.n ? Number(form.n) : null,
-          notes: form.booster ? `Prochain rappel: ${form.booster}` : null,
+          target: vaccinationTarget.label.slice(0, 240),
+          animal_count: vaccinationTarget.count,
+          notes: targetNotes,
         });
-        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré` : `Vaccine ${form.vaccine} saved` });
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan vaccin" : "Vaccine scan"} — ${form.date}`, `${lang === "fr" ? "Cible" : "Target"}: ${vaccinationTarget.label} · ${form.vaccine}`);
+        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré — ${vaccinationTarget.count} animaux` : `Vaccine ${form.vaccine} saved — ${vaccinationTarget.count} animals` });
         onClose();
       } catch (err) {
         onSaved && onSaved({ kind, severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -885,6 +1176,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
           vet: form.vet || null,
           diagnosis: form.diagnosis || null,
         });
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan examen vét" : "Vet exam scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species}${form.vet ? ` · ${form.vet}` : ""}`);
         onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? "Examen vétérinaire enregistré" : "Vet exam saved" });
         onClose();
       } catch (err) {
@@ -904,6 +1196,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis un animal ou un lot existant en base avant d'enregistrer." : "Select an existing database animal or batch before saving." });
       return;
     }
+    if (isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind, severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
     if (!selectedDisease || !selectedDisease.id) {
       onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis ou ajoute une maladie liee a l'espece avant d'enregistrer." : "Select or add a disease linked to the species before saving." });
       return;
@@ -918,6 +1214,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       disease_id: toNumericId(selectedDisease),
       medicine_id: toNumericId(selectedMed),
       medicine_name: selectedMed?.name || null,
+      medicine_quantity: form.medQty ? Number(form.medQty) : null, // décrémente le stock
       dosage: form.dosage || null,
       route: form.route || null,
       start_date: startDate,
@@ -927,6 +1224,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     try {
       await api.createTreatment(payload);
       window.dispatchEvent(new CustomEvent("farmos:treatment-created"));
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan traitement" : "Treatment scan"} — ${startDate}`, `${lang === "fr" ? "Animal" : "Animal"}: ${selectedAnimal?.name || form.animal}${selectedMed?.name ? ` · ${selectedMed.name}` : ""}`);
       onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? "Traitement enregistré" : "Treatment saved" });
       onClose();
     } catch (err) {
@@ -957,32 +1255,102 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
           <FormField label={lang === "fr" ? "Type d'application" : "Application type"}>
             <Autocomplete
               value={form.scope || "individual"}
-              onChange={(v) => set("scope", v || "individual")}
+              onChange={(v) => setScope(v || "individual")}
               allowClear={false}
               options={[
                 { value: "individual", label: lang === "fr" ? "Individuel" : "Individual" },
                 { value: "lot", label: lang === "fr" ? "Par lot" : "By batch" },
-                { value: "collective", label: lang === "fr" ? "Collectif" : "Collective" },
+                { value: "zone", label: lang === "fr" ? "Par zone" : "By zone" },
+                { value: "selection", label: lang === "fr" ? "Sélection" : "Selection" },
+                { value: "collective", label: lang === "fr" ? "Tous admissibles" : "All eligible" },
               ]}
             />
           </FormField>
           <FormField label={lang === "fr" ? "Espèce" : "Species"}>
             <Autocomplete
               value={form.species}
-              onChange={(v) => set("species", v || availableSpecies[0]?.id || "cow")}
+              onChange={(v) => setSpecies(v || availableSpecies[0]?.id || "cow")}
               allowClear={false}
               options={availableSpecies.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
             />
           </FormField>
         </FormGrid>
-        <FormField label={lang === "fr" ? "Animal / Lot concerné" : "Animal / Batch concerned"}>
-          <Autocomplete
-            value={form.animal || ""}
-            onChange={(v) => set("animal", v)}
-            placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-            options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
-          />
-        </FormField>
+        {kind === "vaccine" ? (
+          <>
+            {(form.scope || "individual") === "individual" && (
+              <FormField label={lang === "fr" ? "Animal / lot vacciné" : "Vaccinated animal / batch"}>
+                <Autocomplete
+                  value={form.animal || ""}
+                  onChange={(v) => set("animal", v)}
+                  placeholder={lang === "fr" ? "Rechercher un animal ou un lot…" : "Search an animal or batch…"}
+                  options={writableAnimalsForSpecies.map((a) => ({ value: animalOptionId(a), label: `${animalLabel(a)}${animalQty(a) > 1 ? ` · ${animalQty(a)} ${lang === "fr" ? "têtes" : "head"}` : ""}` }))}
+                />
+              </FormField>
+            )}
+            {form.scope === "lot" && (
+              <FormField label={lang === "fr" ? "Lot à vacciner" : "Batch to vaccinate"}>
+                <Autocomplete
+                  value={form.lot || ""}
+                  onChange={(v) => set("lot", v)}
+                  placeholder={lang === "fr" ? "Choisir un lot existant…" : "Choose an existing batch…"}
+                  options={lotsForSpecies}
+                />
+              </FormField>
+            )}
+            {form.scope === "zone" && (
+              <FormField label={lang === "fr" ? "Zone à vacciner" : "Zone to vaccinate"}>
+                <Autocomplete
+                  value={form.zone || ""}
+                  onChange={(v) => set("zone", v)}
+                  placeholder={lang === "fr" ? "Choisir une zone avec animaux…" : "Choose a zone with animals…"}
+                  options={zonesForSpecies.map(({ value, label }) => ({ value, label }))}
+                />
+              </FormField>
+            )}
+            {form.scope === "selection" && (
+              <div style={{ border: "1px solid var(--border-1)", borderRadius: 8, background: "var(--paper)", overflow: "hidden" }}>
+                <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-2)" }}>{lang === "fr" ? "Animaux à sélectionner" : "Animals to select"}</span>
+                  <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{vaccinationTarget.rowCount}/{writableAnimalsForSpecies.length}</span>
+                </div>
+                <div style={{ maxHeight: 190, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                  {writableAnimalsForSpecies.map((a) => {
+                    const id = animalOptionId(a);
+                    const checked = (form.selectedIds || []).includes(id);
+                    return (
+                      <label key={id || a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--border-1)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleSelectedAnimal(id)} />
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{animalLabel(a)}</span>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{animalQty(a)}</span>
+                      </label>
+                    );
+                  })}
+                  {writableAnimalsForSpecies.length === 0 && (
+                    <div style={{ padding: 10, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun animal admissible pour cette espèce." : "No eligible animal for this species."}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <div style={{ padding: "10px 12px", border: "1px solid var(--border-1)", borderRadius: 8, background: "var(--bg-sunken)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{lang === "fr" ? "Cible calculée" : "Calculated target"}</div>
+                <div style={{ fontSize: 12.5, color: vaccinationTarget.label ? "var(--ink-800)" : "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {vaccinationTarget.label || (lang === "fr" ? "Choisir une cible avant d'enregistrer" : "Choose a target before saving")}
+                </div>
+              </div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--forest-700)", flexShrink: 0 }}>{vaccinationTarget.count}</div>
+            </div>
+          </>
+        ) : (
+          <FormField label={lang === "fr" ? "Animal / Lot concerné" : "Animal / Batch concerned"}>
+            <Autocomplete
+              value={form.animal || ""}
+              onChange={(v) => set("animal", v)}
+              placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+            />
+          </FormField>
+        )}
       </FormSection>
 
       {kind === "treatment" && (
@@ -1018,6 +1386,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
                 placeholder={lang === "fr" ? "Rechercher ou ajouter une voie…" : "Search or add a route…"}
               />
             </FormField>
+            <FormField label={lang === "fr" ? "Qté prélevée du stock" : "Qty taken from stock"}>
+              <input className="input mono" type="number" min="0" step="any" placeholder="0"
+                value={form.medQty || ""} onChange={(e) => set("medQty", e.target.value)}/>
+            </FormField>
           </FormGrid>
           <FormGrid cols={3}>
             <FormField label={lang === "fr" ? "Dosage" : "Dosage"}>
@@ -1049,14 +1421,19 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       {kind === "vaccine" && (
         <FormSection label={lang === "fr" ? "Vaccination" : "Vaccination"}>
           <FormGrid cols={2}>
-            <FormField label={lang === "fr" ? "Vaccin" : "Vaccine"} required>
-              <input className="input" placeholder={lang === "fr" ? "Mycoplasme, Newcastle, IBR…" : "Mycoplasma, Newcastle, IBR…"} value={form.vaccine || ""} onChange={(e) => set("vaccine", e.target.value)}/>
-            </FormField>
+            <VaccineField lang={lang} value={form.vaccine || ""} species={form.species} onChange={(v) => set("vaccine", v)} />
             <FormField label={lang === "fr" ? "Date" : "Date"}>
               <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
             </FormField>
             <FormField label={lang === "fr" ? "Nombre d'animaux" : "Animal count"}>
-              <input className="input mono" type="number" placeholder="124" value={form.n || ""} onChange={(e) => set("n", e.target.value)}/>
+              <input
+                className="input mono"
+                type="number"
+                value={vaccinationTarget.count || ""}
+                readOnly
+                placeholder={lang === "fr" ? "Calculé depuis la cible" : "Calculated from target"}
+                style={{ background: "var(--bg-sunken)", color: "var(--ink-800)" }}
+              />
             </FormField>
             <FormField label={lang === "fr" ? "Prochain rappel" : "Next booster"}>
               <input className="input" type="date" value={form.booster || ""} onChange={(e) => set("booster", e.target.value)}/>
@@ -1096,6 +1473,121 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
         </FormSection>
       )}
 
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
+      <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
+    </div>
+  );
+};
+
+// ─── Intervention zootechnique (Phase 2) — saisie rapide, animal unique ──
+const OperationForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
+  const [form, setForm] = React.useState({
+    date: new Date().toISOString().slice(0, 10),
+    species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
+    code: "",
+    animal: context?.animalId != null ? String(context.animalId) : "",
+    lot: context?.lot || "",
+    quantity: "",
+    unit: "",
+    notes: "",
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [types, setTypes] = React.useState([]);
+  const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    api.listOperationTypes().then((rows) => setTypes(Array.isArray(rows) ? rows : [])).catch(() => {});
+    api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
+  }, []);
+
+  const typesForSpecies = types.filter((t) => !t.species || t.species.includes(form.species));
+  React.useEffect(() => {
+    if (!form.code && typesForSpecies.length) set("code", typesForSpecies[0].code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.species, types.length]);
+  const selectedType = types.find((t) => t.code === form.code) || null;
+  const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species).filter((a) => !isSaleLockedAnimal(a));
+
+  const submit = async () => {
+    if (saving) return;
+    if (!form.code) {
+      onSaved && onSaved({ kind: "operation", severity: "error", message: lang === "fr" ? "Type d'intervention requis." : "Operation type required." });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.createOperation({
+        operation_code: form.code,
+        animal_id: form.animal ? Number(form.animal) : null,
+        lot: !form.animal ? (form.lot || null) : null,
+        species: form.species,
+        operation_date: form.date,
+        quantity: form.quantity !== "" ? Number(form.quantity) : null,
+        unit: form.unit || selectedType?.defaultUnit || null,
+        notes: form.notes || null,
+      });
+      onSaved && onSaved({ kind: "operation", severity: "success", message: lang === "fr" ? "Intervention enregistrée." : "Operation recorded." });
+      onClose();
+    } catch (err) {
+      onSaved && onSaved({ kind: "operation", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <FormSection label={lang === "fr" ? "Espèce" : "Species"}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {availableSpecies.map((s) => (
+            <button key={s.id} type="button" onClick={() => set("species", s.id)}
+              className={`species-pill ${form.species === s.id ? "active" : ""}`}
+              style={{ height: 32, fontSize: 12 }}>
+              <AnimalGlyph kind={s.glyph} size={14} color={form.species === s.id ? "var(--bone-50)" : "var(--forest-700)"}/>
+              {lang === "fr" ? s.fr : s.en}
+            </button>
+          ))}
+        </div>
+      </FormSection>
+      <FormSection label={lang === "fr" ? "Intervention" : "Operation"}>
+        <FormField label={lang === "fr" ? "Type" : "Type"} required>
+          <select className="input" value={form.code} onChange={(e) => set("code", e.target.value)}>
+            {typesForSpecies.length === 0 && <option value="">{lang === "fr" ? "Aucun type — voir Paramètres" : "No type — see Settings"}</option>}
+            {typesForSpecies.map((t) => <option key={t.id} value={t.code}>{(lang === "fr" ? t.labelFr : t.labelEn) || t.code}</option>)}
+          </select>
+        </FormField>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Date" : "Date"} required>
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Animal (optionnel)" : "Animal (optional)"}>
+            <select className="input" value={form.animal} onChange={(e) => set("animal", e.target.value)}>
+              <option value="">{lang === "fr" ? "— ou lot ci-dessous —" : "— or batch below —"}</option>
+              {animalsForSpecies.map((a) => <option key={a.id} value={a._pk ?? a.id}>{a.name || a.externalId || a.id}</option>)}
+            </select>
+          </FormField>
+        </FormGrid>
+        {!form.animal && (
+          <FormField label={lang === "fr" ? "Lot" : "Batch"}>
+            <input className="input" value={form.lot} onChange={(e) => set("lot", e.target.value)}/>
+          </FormField>
+        )}
+        {selectedType?.defaultUnit && (
+          <FormGrid cols={2}>
+            <FormField label={lang === "fr" ? "Quantité" : "Quantity"}>
+              <input className="input mono" type="number" step="0.01" min="0" value={form.quantity} onChange={(e) => set("quantity", e.target.value)}/>
+            </FormField>
+            <FormField label={lang === "fr" ? "Unité" : "Unit"}>
+              <input className="input" value={form.unit || selectedType.defaultUnit} onChange={(e) => set("unit", e.target.value)}/>
+            </FormField>
+          </FormGrid>
+        )}
+        <FormField label={lang === "fr" ? "Notes" : "Notes"}>
+          <textarea className="input" style={{ height: 60, padding: 10 }} value={form.notes} onChange={(e) => set("notes", e.target.value)}/>
+        </FormField>
+      </FormSection>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
@@ -1106,9 +1598,25 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const [mode, setMode] = React.useState("in");
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [currencies, setCurrencies] = React.useState([]);
+  const [fallbackCurrencyId, setFallbackCurrencyId] = React.useState(null);
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [lots, setLots] = React.useState([]);
   const [invoiceDirty, setInvoiceDirty] = React.useState(false);
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        if (cancel) return;
+        const list = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        const defaultId = defaultCurrencyId(setting.value, list);
+        setCurrencies(list);
+        setFallbackCurrencyId(defaultId);
+        setForm((f) => f.currency_id || !defaultId ? f : { ...f, currency_id: defaultId });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
   React.useEffect(() => {
     api.listExpenses().then((rows) => {
       if (invoiceDirty) return;
@@ -1168,6 +1676,10 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       return;
     }
     const category = selectedMed?.kind === "feed" ? "feed" : "medicine";
+    if (currencies.length && !form.currency_id) {
+      onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Devise requise." : "Currency is required." });
+      return;
+    }
     if (!form.cost || !form.date) {
       onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Coût et date requis." : "Cost and date are required." });
       return;
@@ -1179,9 +1691,11 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       quantity: form.qty ? Number(form.qty) : null,
       unit: selectedMed?.unit || null,
       amount: Number(form.cost),
+      currency_id: form.currency_id ? Number(form.currency_id) : null,
       supplier: form.supplier || null,
       expense_date: form.date,
       related_medicine_id: toNumericId(selectedMed),
+      project_id: form.project_id || null,
     };
     try {
       await api.createExpense(payload);
@@ -1235,8 +1749,15 @@ const StockForm = ({ lang, onSaved, onClose }) => {
             <FormField label={lang === "fr" ? "Fournisseur" : "Supplier"}>
               <input className="input" placeholder="Coop Agri-Pro" value={form.supplier || ""} onChange={(e) => set("supplier", e.target.value)}/>
             </FormField>
-            <FormField label={lang === "fr" ? "Coût total ($)" : "Total cost ($)"}>
-              <input className="input mono" type="number" placeholder="4320" value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
+            <ProjectSelect lang={lang} value={form.project_id} onChange={(v) => set("project_id", v)} />
+            <FormField label={lang === "fr" ? "Coût total" : "Total cost"}>
+              <AmountCurrencyInput
+                amount={form.cost || ""}
+                onAmountChange={(value) => set("cost", value)}
+                currencyId={form.currency_id || fallbackCurrencyId || ""}
+                onCurrencyChange={(value) => set("currency_id", value)}
+                currencies={currencies}
+              />
             </FormField>
             <FormField label={lang === "fr" ? "N° facture" : "Invoice #"}>
               <div style={{ display: "flex", gap: 6 }}>
@@ -1332,6 +1853,32 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     const sex = a.sex;
     return sp === form.species && (sex === "F" || sex === "Mixte" || !sex);
   });
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
+
+  // Détection de consanguinité : compare la filiation (mother_id/father_id, qui
+  // référencent un external_id ou un nom) de la femelle et du mâle choisi.
+  // Retourne une raison FR/EN si apparentés, sinon null. Non bloquant.
+  const inbreedingWarning = (female, maleExtId) => {
+    if (!female || !maleExtId || !liveAnimals) return null;
+    const idOf = (a) => String(a.external_id ?? a.externalId ?? a.id);
+    const male = liveAnimals.find((a) => idOf(a) === String(maleExtId) || String(a.id) === String(maleExtId));
+    const fMother = female.mother_id ?? female.motherId;
+    const fFather = female.father_id ?? female.fatherId;
+    const femaleKeys = [idOf(female), female.name].filter(Boolean).map(String);
+    // 1) le mâle est le père de la femelle
+    if (fFather && male && (idOf(male) === String(fFather) || male.name === fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    if (fFather && String(maleExtId) === String(fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    // 2) la femelle est la mère du mâle
+    if (male) {
+      const mMother = male.mother_id ?? male.motherId;
+      if (mMother && femaleKeys.includes(String(mMother))) return lang === "fr" ? "la femelle est la mère du mâle" : "the female is the male's mother";
+      // 3) même mère ou même père (fratrie)
+      const mFather = male.father_id ?? male.fatherId;
+      if (fMother && mMother && String(fMother) === String(mMother)) return lang === "fr" ? "même mère (fratrie)" : "same mother (siblings)";
+      if (fFather && mFather && String(fFather) === String(mFather)) return lang === "fr" ? "même père (fratrie)" : "same father (siblings)";
+    }
+    return null;
+  };
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -1340,13 +1887,48 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       onSaved && onSaved({ kind: "repro", severity: "error", message: lang === "fr" ? "Selectionne un animal existant en BD." : "Select an animal that exists in the database." });
       return;
     }
+    if (isSaleLockedAnimal(selected)) {
+      onSaved && onSaved({ kind: "repro", severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
+    // Anti-consanguinité : pour une saillie/IA naturelle avec un mâle identifié,
+    // avertir si la femelle et le mâle sont apparentés (non bloquant).
+    if (kind === "ai") {
+      const maleRef = form.sire_animal_id || form.male;
+      const warn = inbreedingWarning(selected, maleRef);
+      if (warn) {
+        const msg = (lang === "fr"
+          ? `⚠ Risque de consanguinité : ${warn}. Confirmer l'accouplement quand même ?`
+          : `⚠ Inbreeding risk: ${warn}. Confirm mating anyway?`);
+        if (!window.confirm(msg)) return;
+      }
+    }
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";
+    // Prevision de mise bas : IA/saillie sur une femelle => on peut deja
+    // calculer la date prevue a partir de la duree de gestation de l'espece.
+    let expectedDueDate = null;
+    if (kind === "ai" && form.date) {
+      const days = GESTATION_DAYS_BY_SPECIES[form.species];
+      if (days) {
+        const due = new Date(form.date);
+        due.setDate(due.getDate() + days);
+        expectedDueDate = due.toISOString().slice(0, 10);
+      }
+    }
     const payload = {
       animal_id: toNumericId(selected),
       event_type: eventType,
       event_date: form.date,
+      expected_due_date: expectedDueDate,
       offspring_count: kind === "birth" ? (form.live ? Number(form.live) : null) : null,
+      // Indicateurs de portee (COMP-P2-007) — surtout porc, valables toutes especes.
+      stillborn_count: kind === "birth" && form.dead ? Number(form.dead) : null,
+      mummified_count: kind === "birth" && form.mummified ? Number(form.mummified) : null,
+      avg_birth_weight: kind === "birth" && form.weight ? Number(form.weight) : null,
+      birth_difficulty: kind === "birth" ? (form.difficulty || null) : null,
+      born_male_count: kind === "birth" && form.bornMale ? Number(form.bornMale) : null,
+      born_female_count: kind === "birth" && form.bornFemale ? Number(form.bornFemale) : null,
       outcome: kind === "birth" ? "success" : "pending",
       partner_external_id: form.male || null,
       notes: form.notes || null,
@@ -1355,9 +1937,13 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       sire_animal_id: kind === "ai" && form.breeding_type === "natural" ? (form.sire_animal_id || null) : null,
     };
     try {
-      await api.createReproductionEvent(payload);
+      const res = await api.createReproductionEvent(payload);
       window.dispatchEvent(new CustomEvent("farmos:repro-created"));
-      onSaved && onSaved({ kind: "repro", severity: "success", message: lang === "fr" ? (kind === "heat" ? "Chaleur enregistrée" : kind === "ai" ? "IA enregistrée" : "Mise bas enregistrée") : (kind === "heat" ? "Heat saved" : kind === "ai" ? "AI saved" : "Birth saved") });
+      const addedToHerd = kind === "birth" && (res?.created_animal_ids?.length || 0) > 0;
+      const birthMsg = addedToHerd
+        ? (lang === "fr" ? `Mise bas enregistrée · ${payload.offspring_count} ajouté(s) au cheptel` : `Birth saved · ${payload.offspring_count} added to herd`)
+        : (lang === "fr" ? "Mise bas enregistrée" : "Birth saved");
+      onSaved && onSaved({ kind: "repro", severity: "success", message: lang === "fr" ? (kind === "heat" ? "Chaleur enregistrée" : kind === "ai" ? "IA enregistrée" : birthMsg) : (kind === "heat" ? "Heat saved" : kind === "ai" ? "AI saved" : birthMsg) });
       onClose();
     } catch (err) {
       onSaved && onSaved({ kind: "repro", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -1397,7 +1983,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher une femelle…" : "Search a female…"}
-              options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
         </FormGrid>
@@ -1486,10 +2072,20 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
             </FormField>
           </FormGrid>
         )}
-        <FormGrid cols={2}>
+        <FormGrid cols={3}>
           {kind === "birth" && (
             <FormField label={lang === "fr" ? "Nb. nés vivants" : "Live births"}>
               <input className="input mono" type="number" placeholder={form.species === "pig" ? "11" : "1"} value={form.live || ""} onChange={(e) => set("live", e.target.value)}/>
+            </FormField>
+          )}
+          {kind === "birth" && (
+            <FormField label={lang === "fr" ? "dont mâles (si connu)" : "of which males (if known)"}>
+              <input className="input mono" type="number" placeholder="—" value={form.bornMale || ""} onChange={(e) => set("bornMale", e.target.value)}/>
+            </FormField>
+          )}
+          {kind === "birth" && (
+            <FormField label={lang === "fr" ? "dont femelles (si connu)" : "of which females (if known)"}>
+              <input className="input mono" type="number" placeholder="—" value={form.bornFemale || ""} onChange={(e) => set("bornFemale", e.target.value)}/>
             </FormField>
           )}
         </FormGrid>
@@ -1498,6 +2094,11 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
             <FormField label={lang === "fr" ? "Mort-nés" : "Stillborn"}>
               <input className="input mono" type="number" placeholder="0" value={form.dead || ""} onChange={(e) => set("dead", e.target.value)}/>
             </FormField>
+            {form.species === "pig" && (
+              <FormField label={lang === "fr" ? "Momifiés" : "Mummified"}>
+                <input className="input mono" type="number" placeholder="0" value={form.mummified || ""} onChange={(e) => set("mummified", e.target.value)}/>
+              </FormField>
+            )}
             <FormField label={lang === "fr" ? "Poids moyen (kg)" : "Avg weight (kg)"}>
               <input className="input mono" type="number" step="0.01" placeholder={form.species === "pig" ? "1.4" : "40"} value={form.weight || ""} onChange={(e) => set("weight", e.target.value)}/>
             </FormField>
@@ -1532,10 +2133,20 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: normalizeDefaultSpecies(defaultSpecies, enabledSpecies) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [lossCurrencySymbol, setLossCurrencySymbol] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
   React.useEffect(() => {
     api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        const list = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        setLossCurrencySymbol(defaultSymbol(setting.value, list));
+      })
+      .catch(() => {});
   }, []);
+  const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const submit = async () => {
     if (saving) return;
     if (!form.date || !form.cause) {
@@ -1543,6 +2154,10 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
       return;
     }
     const selectedAnimal = (liveAnimals || []).find((a) => String(a.id) === String(form.animal) || String(a.externalId || a.external_id) === String(form.animal));
+    if (selectedAnimal && isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind: "death", severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
     setSaving(true);
     try {
       await api.createMortalityEvent({
@@ -1552,8 +2167,17 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         count: form.count ? Number(form.count) : 1,
         cause: form.cause,
         necropsy_requested: !!form.necropsy,
+        event_time: form.time || null,
+        barn: form.barn || null,
+        lot: form.lot || null,
+        confirmed_cause: form.confirmed_cause || null,
+        pre_death_symptoms: form.symptoms || null,
+        vet_consulted: form.vet || null,
+        estimated_loss: form.loss === "" || form.loss == null ? null : Number(form.loss),
+        necropsy_done: !!form.necropsy_done,
         notes: form.notes || null,
       });
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan mortalité" : "Mortality scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species}${form.barn ? ` · ${lang === "fr" ? "Bâtiment" : "Barn"}: ${form.barn}` : ""}${form.lot ? ` · Lot: ${form.lot}` : ""}`);
       onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` });
       onClose();
     } catch (err) {
@@ -1592,7 +2216,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-              options={(liveAnimals || []).filter((a) => a.species === form.species).map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
         </FormGrid>
@@ -1628,9 +2252,94 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         </FormField>
       </FormSection>
 
+      <FormSection label={lang === "fr" ? "Détails avancés" : "Advanced details"}>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Heure" : "Time"}>
+            <input className="input mono" type="time" value={form.time || ""} onChange={(e) => set("time", e.target.value)}/>
+          </FormField>
+          <FormField label={`${lang === "fr" ? "Perte estimée" : "Estimated loss"} (${lossCurrencySymbol})`}>
+            <input className="input mono" type="number" min="0" step="0.01" value={form.loss || ""} onChange={(e) => set("loss", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Bâtiment" : "Barn"}>
+            <input className="input" value={form.barn || ""} onChange={(e) => set("barn", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Lot" : "Lot"}>
+            <input className="input" value={form.lot || ""} onChange={(e) => set("lot", e.target.value)}/>
+          </FormField>
+        </FormGrid>
+        <FormField label={lang === "fr" ? "Cause confirmée (post-mortem)" : "Confirmed cause (post-mortem)"}>
+          <input className="input" value={form.confirmed_cause || ""} onChange={(e) => set("confirmed_cause", e.target.value)} placeholder={lang === "fr" ? "Après autopsie / labo…" : "After necropsy / lab…"}/>
+        </FormField>
+        <FormField label={lang === "fr" ? "Symptômes avant décès" : "Pre-death symptoms"}>
+          <textarea className="input" style={{ height: 60, padding: 10 }} value={form.symptoms || ""} onChange={(e) => set("symptoms", e.target.value)}/>
+        </FormField>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Vétérinaire consulté" : "Vet consulted"}>
+            <input className="input" value={form.vet || ""} onChange={(e) => set("vet", e.target.value)}/>
+          </FormField>
+          <FormField label="">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink-800)", marginTop: 22 }}>
+              <input type="checkbox" checked={form.necropsy_done || false} onChange={(e) => set("necropsy_done", e.target.checked)}/>
+              {lang === "fr" ? "Autopsie réalisée" : "Necropsy done"}
+            </label>
+          </FormField>
+        </FormGrid>
+      </FormSection>
+
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
+};
+
+// ─── Scan attachment (fiche papier numérisée) ────────────────────────────
+// Lit un fichier image ou PDF, le convertit en base64, et expose dataUrl + meta.
+// Utilisé dans les formulaires de saisie pour joindre le scan de la fiche terrain.
+const useScanAttachment = () => {
+  const [scan, setScan] = React.useState(null); // { dataUrl, filename, contentType, sizeBytes }
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) { setScan(null); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => setScan({ dataUrl: ev.target.result, filename: file.name, contentType: file.type, sizeBytes: file.size });
+    reader.readAsDataURL(file);
+  };
+  const clear = () => setScan(null);
+  return { scan, handleFile, clear };
+};
+
+const ScanAttachmentField = ({ lang, scan, onFile, onClear }) => (
+  <FormSection label={lang === "fr" ? "Scan fiche terrain (optionnel)" : "Field sheet scan (optional)"}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 12, color: "var(--fg-3)", lineHeight: 1.4 }}>
+        {lang === "fr"
+          ? "Joindre la photo ou le scan de la fiche papier remplie pour archivage."
+          : "Attach the photo or scan of the filled paper sheet for archiving."}
+      </div>
+      {scan ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-sunken)", borderRadius: 8, border: "1px solid var(--border-1)" }}>
+          <Icon name="report" size={14} color="var(--forest-700)"/>
+          <span style={{ fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scan.filename}</span>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{(scan.sizeBytes / 1024).toFixed(0)} Ko</span>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onClear} style={{ padding: "2px 8px", minWidth: 0, height: 26 }}>✕</button>
+        </div>
+      ) : (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "8px 12px", border: "1px dashed var(--border-2)", borderRadius: 8, fontSize: 12, color: "var(--fg-2)", background: "var(--bg-sunken)", width: "fit-content" }}>
+          <Icon name="report" size={13} color="var(--fg-3)"/>
+          {lang === "fr" ? "Choisir un fichier…" : "Choose a file…"}
+          <input type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={onFile}/>
+        </label>
+      )}
+    </div>
+  </FormSection>
+);
+
+// Après soumission réussie d'un form, envoie le scan comme document farmos_documents.
+const submitScanDocument = async (scan, title, notes) => {
+  if (!scan?.dataUrl) return;
+  try {
+    await api.createDocument({ doc_type: "field_scan", title, data_url: scan.dataUrl, filename: scan.filename, content_type: scan.contentType, size_bytes: scan.sizeBytes, notes });
+  } catch (_) { /* scan non bloquant */ }
 };
 
 // ─── Form helpers ────────────────────────────────────────────────────────
@@ -1689,4 +2398,4 @@ const Toast = ({ message, severity, onClose }) => {
   );
 };
 
-export { QuickEntryDrawer, Toast };
+export { QuickEntryDrawer, Toast, AutocompleteDB, Autocomplete };

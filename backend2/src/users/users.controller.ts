@@ -22,6 +22,7 @@ import {
 import { Throttle } from "@nestjs/throttler";
 import { Request } from "express";
 import type { AuditContext } from "../audit/audit.service";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -35,14 +36,16 @@ function auditCtx(req: Request): AuditContext {
 
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("user")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("user")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @ApiOperation({ summary: "Register a new user (public)" })
+  @ApiOperation({ summary: "Register a new user in the current organization" })
   @Post("register")
-  register(@Body() body: CreateUserDto, @Req() req: Request) {
-    return this.usersService.create(body, auditCtx(req));
+  register(@Body() body: CreateUserDto, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.usersService.create(body, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Get all users (query=all|search or paginated)" })
@@ -52,36 +55,28 @@ export class UsersController {
   @ApiQuery({ name: "roleId", required: false })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "count", required: false, type: Number })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@Query() query: Record<string, string>) {
-    return this.usersService.findAll(query);
+  findAll(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.usersService.findAll(query, orgId);
   }
 
   @ApiOperation({ summary: "Get single user by ID" })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.usersService.findOne(id);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.usersService.findOne(id, orgId);
   }
 
   @ApiOperation({ summary: "Update user" })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUserDto, @Req() req: Request) {
-    return this.usersService.update(id, body, auditCtx(req));
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUserDto, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.usersService.update(id, body, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Soft delete user (update status)" })
   @ApiOkResponse({ schema: { example: { message: "User deleted successfully" } } })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
   @Patch(":id")
   @HttpCode(200)
-  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request) {
-    return this.usersService.remove(id, status, auditCtx(req));
+  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.usersService.remove(id, status, orgId, auditCtx(req));
   }
 }

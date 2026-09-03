@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions, roles } from "../database/schema";
@@ -14,12 +14,17 @@ export class RolesService {
     private readonly audit: AuditService,
   ) {}
 
-  async findAll(query: Record<string, string>) {
+  // orgId : Phase 0 multi-tenant — les roles sont isoles par organisation. Tant
+  // qu il n y a qu une org (=1), le comportement est identique a avant.
+  async findAll(query: Record<string, string>, orgId?: number) {
+    const orgFilter = orgId !== undefined ? eq(roles.organizationId, orgId) : undefined;
+
     if (query["query"] === "all") {
+      const where = and(eq(roles.status, "true"), orgFilter);
       const rows = await this.db
         .select()
         .from(roles)
-        .where(eq(roles.status, "true"))
+        .where(where)
         .orderBy(desc(roles.id));
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
@@ -27,7 +32,7 @@ export class RolesService {
       const [{ count }] = await this.db
         .select({ count: sql<number>`count(*)` })
         .from(roles)
-        .where(eq(roles.status, "true"));
+        .where(where);
 
       return { getAllRole: withPerms, totalRole: Number(count) };
     }
@@ -35,11 +40,12 @@ export class RolesService {
     if (query["query"] === "search") {
       const key = `%${query["key"] ?? ""}%`;
       const { skip, limit } = this.pagination(query);
+      const where = and(like(roles.name, key), orgFilter);
 
       const rows = await this.db
         .select()
         .from(roles)
-        .where(like(roles.name, key))
+        .where(where)
         .orderBy(desc(roles.id))
         .limit(limit)
         .offset(skip);
@@ -47,7 +53,7 @@ export class RolesService {
       const [{ count }] = await this.db
         .select({ count: sql<number>`count(*)` })
         .from(roles)
-        .where(like(roles.name, key));
+        .where(where);
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
@@ -61,11 +67,12 @@ export class RolesService {
     const { skip, limit } = this.pagination(query);
 
     const statusFilter = query["status"] ? inArray(roles.status, query["status"].split(",")) : undefined;
+    const where = and(statusFilter, orgFilter);
 
     const rows = await this.db
       .select()
       .from(roles)
-      .where(statusFilter)
+      .where(where)
       .orderBy(desc(roles.id))
       .limit(limit)
       .offset(skip);
@@ -73,23 +80,28 @@ export class RolesService {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(roles)
-      .where(statusFilter);
+      .where(where);
 
     const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
     return { getAllRole: withPerms, totalRole: Number(count) };
   }
 
-  async findOne(id: number) {
-    const [role] = await this.db.select().from(roles).where(eq(roles.id, id)).limit(1);
+  async findOne(id: number, orgId?: number) {
+    const [role] = await this.db
+      .select()
+      .from(roles)
+      .where(and(eq(roles.id, id), orgId !== undefined ? eq(roles.organizationId, orgId) : undefined))
+      .limit(1);
 
     if (!role) throw new NotFoundException("Role not found");
 
     return this.attachPermissions(role);
   }
 
-  async create(dto: CreateRoleDto, ctx: AuditContext = {}) {
+  async create(dto: CreateRoleDto, orgId = 1, ctx: AuditContext = {}) {
     const [result] = await this.db.insert(roles).values({
+      organizationId: orgId,
       name: dto.name,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
@@ -99,20 +111,22 @@ export class RolesService {
     const newId = Number(result.insertId);
     await this.audit.log("admin.role.created", `role:${newId}`, ctx, { name: dto.name });
 
-    return this.findOne(newId);
+    return this.findOne(newId, orgId);
   }
 
-  async createMany(data: CreateRoleDto[]) {
+  async createMany(data: CreateRoleDto[], orgId = 1) {
     let created = 0;
     for (const item of data) {
+      // Unicite par (organization_id, name) : on verifie dans la meme org.
       const existing = await this.db
         .select({ id: roles.id })
         .from(roles)
-        .where(eq(roles.name, item.name))
+        .where(and(eq(roles.name, item.name), eq(roles.organizationId, orgId)))
         .limit(1);
 
       if (!existing.length) {
         await this.db.insert(roles).values({
+          organizationId: orgId,
           name: item.name,
           status: "true",
           createdAt: sql`CURRENT_TIMESTAMP`,
@@ -124,16 +138,32 @@ export class RolesService {
     return { count: created };
   }
 
-  async deleteMany(ids: number[], ctx: AuditContext = {}) {
-    for (const id of ids) {
-      await this.db.delete(roles).where(eq(roles.id, id));
+  async deleteMany(ids: number[], orgId: number, ctx: AuditContext = {}) {
+    // Soft delete (regle projet) + isolation par org : on ne desactive que les
+    // roles de l organisation appelante, et jamais un role systeme.
+    const targets = await this.db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(and(inArray(roles.id, ids), eq(roles.organizationId, orgId), eq(roles.isSystem, 0)));
+
+    const deletable = targets.map((r) => r.id);
+    if (deletable.length) {
+      await this.db
+        .update(roles)
+        .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(inArray(roles.id, deletable), eq(roles.organizationId, orgId)));
     }
-    await this.audit.log("admin.role.deleted", `roles:[${ids.join(",")}]`, ctx, { count: ids.length, ids });
-    return { count: ids.length };
+
+    await this.audit.log("admin.role.deleted", `roles:[${deletable.join(",")}]`, ctx, { count: deletable.length, ids: deletable });
+    return { count: deletable.length };
   }
 
-  async update(id: number, dto: UpdateRoleDto, ctx: AuditContext = {}) {
-    const [role] = await this.db.select({ id: roles.id, isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
+  async update(id: number, dto: UpdateRoleDto, orgId: number, ctx: AuditContext = {}) {
+    const [role] = await this.db
+      .select({ id: roles.id, isSystem: roles.isSystem })
+      .from(roles)
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)))
+      .limit(1);
     if (!role) throw new NotFoundException("Role not found");
     if (role.isSystem) throw new BadRequestException("System roles cannot be modified.");
 
@@ -142,21 +172,26 @@ export class RolesService {
     await this.db
       .update(roles)
       .set({ ...(name ? { name } : {}), updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(roles.id, id));
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)));
 
     await this.audit.log("admin.role.updated", `role:${id}`, ctx, { name });
 
     return { message: "Role Updated Successfully" };
   }
 
-  async remove(id: number, status: string, ctx: AuditContext = {}) {
-    const [role] = await this.db.select({ isSystem: roles.isSystem, name: roles.name }).from(roles).where(eq(roles.id, id)).limit(1);
-    if (role?.isSystem) throw new BadRequestException("System roles cannot be deleted.");
+  async remove(id: number, status: string, orgId: number, ctx: AuditContext = {}) {
+    const [role] = await this.db
+      .select({ isSystem: roles.isSystem, name: roles.name })
+      .from(roles)
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)))
+      .limit(1);
+    if (!role) throw new NotFoundException("Role not found");
+    if (role.isSystem) throw new BadRequestException("System roles cannot be deleted.");
 
     await this.db
       .update(roles)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(roles.id, id));
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)));
 
     await this.audit.log("admin.role.status_changed", `role:${id}`, ctx, { status, name: role?.name });
 

@@ -2,23 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Search, UserPlus, Mail, Briefcase, Home, AlertTriangle, CheckCircle2,
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
-  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet,
+  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature,
 } from "lucide-react";
 import { api, domusOnboardingUrl } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { setLeasePrefill } from "./reservationPrefill.js";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 const avatarTones = ["iris", "orange", "purple", "emerald", "ink"];
 let tenantCurrencyOptions = [];
 let tenantDefaultCurrencyId = "";
 // Dégradés des avatars de carte locataire (mêmes teintes que le CRM immobilier).
 const LETTER_TONES = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
-const onboardingStatusMeta = {
+export const onboardingStatusMeta = {
   sent: { label: "Non rempli", className: "warning" },
   draft: { label: "En remplissage", className: "warning" },
   submitted: { label: "Soumis", className: "success" },
@@ -26,7 +31,32 @@ const onboardingStatusMeta = {
   expired: { label: "Expire", className: "danger" },
 };
 
-const MARRIED_STATES = ["marié", "marie", "conjoint de fait", "union libre"];
+const MARRIED_STATES = ["married", "common_law"];
+// État civil : on stocke un CODE neutre en base (i18n-ready) et on affiche le libellé traduit.
+// Voir migration 0207. Les libellés FR sont les CLÉS i18n (t(label) traduit en EN).
+const MARITAL_LABELS = {
+  single: "Célibataire",
+  married: "Marié(e)",
+  common_law: "Conjoint de fait",
+  divorced: "Divorcé(e)",
+  widowed: "Veuf / Veuve",
+};
+// Anciennes valeurs FR/EN libres → code canonique (filet pour les fiches non migrées).
+const MARITAL_LEGACY_TO_CODE = {
+  "célibataire": "single", "celibataire": "single", "single": "single",
+  "marié": "married", "marie": "married", "married": "married",
+  "conjoint de fait": "common_law", "union libre": "common_law", "common_law": "common_law",
+  "divorcé": "divorced", "divorce": "divorced", "divorced": "divorced",
+  "veuf": "widowed", "veuve": "widowed", "widowed": "widowed",
+};
+function normalizeMaritalStatus(status) {
+  const key = String(status || "").trim().toLowerCase();
+  return MARITAL_LEGACY_TO_CODE[key] || status;
+}
+function labelForMarital(status) {
+  const code = normalizeMaritalStatus(status);
+  return MARITAL_LABELS[code] || status || "";
+}
 
 function tenantName(t) {
   const n = [t.firstName, t.lastName].filter(Boolean).join(" ").trim();
@@ -43,7 +73,7 @@ function isActive(t) {
 function normalize(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-function parseOnboardingData(record) {
+export function parseOnboardingData(record) {
   if (!record?.data) return {};
   if (typeof record.data === "object") return record.data;
   try {
@@ -52,7 +82,7 @@ function parseOnboardingData(record) {
     return {};
   }
 }
-function isPendingOnboarding(record, now = Date.now()) {
+export function isPendingOnboarding(record, now = Date.now()) {
   if (!record || record.status === "validated") return false;
   if (record.status !== "submitted" && record.expiresAt) {
     const expiry = new Date(record.expiresAt).getTime();
@@ -60,16 +90,28 @@ function isPendingOnboarding(record, now = Date.now()) {
   }
   return true;
 }
-function onboardingUrl(record) {
+// Statut EFFECTIF d'un dossier : un record "sent"/"draft" dont expiresAt est
+// depasse est en realite "expired" (le backend ne repasse pas toujours le flag).
+export function effectiveOnboardingStatus(record, now = Date.now()) {
+  if (!record) return "sent";
+  if (record.status === "validated") return "validated";
+  if (record.status === "submitted") return "submitted";
+  if (record.expiresAt) {
+    const expiry = new Date(record.expiresAt).getTime();
+    if (Number.isFinite(expiry) && expiry < now) return "expired";
+  }
+  return record.status || "sent";
+}
+export function onboardingUrl(record) {
   // Le backend renvoie le lien CRM ; on le réécrit vers la page publique Domus.
   return domusOnboardingUrl(record?.url || record?.onboardingUrl || "");
 }
-function onboardingDisplayName(record) {
+export function onboardingDisplayName(record) {
   const data = parseOnboardingData(record);
   return [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
     data.email || data.phone || record?.phone || "Dossier locataire";
 }
-function formatShortDate(value) {
+export function formatShortDate(value) {
   if (!value) return "-";
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return "-";
@@ -86,33 +128,6 @@ async function loadTenantsModule() {
     api.setting().catch(() => null),
   ]);
   return { tenants, onboarding, leases, units, currencies, setting };
-}
-
-// ── Liaison locataire → bail actif → unité (comme le CRM TenantsPanel) ──
-function tenantLeaseInfo(tenant, leases, units) {
-  const tenantLeases = leases.filter((l) => String(l.tenantId) === String(tenant.id));
-  const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0] || null;
-  const activeUnit = activeLease ? units.find((u) => String(u.id) === String(activeLease.unitId)) || null : null;
-  return { tenantLeases, activeLease, activeUnit };
-}
-
-function tenantBadge(tenant, tenantLeases, activeLease) {
-  const isLate = activeLease?.isOverdue || activeLease?.status === "late";
-  if (isLate) {
-    const d = activeLease?.overdueDays;
-    return { label: `En retard${d ? ` ${d}j` : ""}`, tone: "danger" };
-  }
-  const daysToEnd = activeLease?.endDate
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - Date.now()) / 86400000)
-    : null;
-  if (daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 60) return { label: "Bail à renouveler", tone: "warning" };
-  const isCompany = Boolean(tenant?.entityName) && /\b(sarl|sas|sa|sprl|entreprise|company|ltd|inc|group)\b/i.test(String(tenant.entityName));
-  if (isCompany) return { label: "Pro · Entreprise", tone: "brand" };
-  const years = activeLease?.startDate
-    ? Math.max(1, Math.floor((Date.now() - new Date(activeLease.startDate).getTime()) / (365 * 86400000)))
-    : 0;
-  if (years >= 3 || tenantLeases.length >= 2) return { label: `VIP · ${years || 3} ans`, tone: "success" };
-  return { label: `Standard · ${years || 1} an`, tone: "neutral" };
 }
 
 function unitKindIcon(kind) {
@@ -154,8 +169,10 @@ function DomusTenantMoneyField({ label, value, currencyId, onAmountChange, onCur
   );
 }
 
-export function Locataires() {
+export function Locataires({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
+  const confirm = useConfirm();
+  const toast = useToast();
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
   const dateRange = useDateRange();
   const tenants = useMemo(
@@ -174,11 +191,14 @@ export function Locataires() {
   tenantDefaultCurrencyId = currency.defaultCurrencyId;
 
   const [query, setQuery] = useState("");
+  const [onboardingStatus, setOnboardingStatus] = useState("online"); // online|expired|validated|all
   const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(null);
   const [linkModal, setLinkModal] = useState(null);
+  const [refreshOnLinkClose, setRefreshOnLinkClose] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [sendingId, setSendingId] = useState(null); // `${record.id}:sms|email` pendant l'envoi
 
   const view = useMemo(
     () => tenants.map((t) => ({ ...t, _name: tenantName(t), _initials: initials(tenantName(t)) })),
@@ -192,23 +212,36 @@ export function Locataires() {
       .some((v) => String(v || "").toLowerCase().includes(q)));
   }, [view, query]);
 
+  // Dossiers d'onboarding encore "en ligne" (ni validés, ni expirés) : sert au KPI,
+  // sinon le compteur affiche 4 alors qu'on ne voit que 3 dossiers en attente.
+  const pendingOnboarding = useMemo(() => onboarding.filter(isPendingOnboarding), [onboarding]);
+
+  // Cartes affichees : filtrees par le menu Statut (en ligne / expire / valide / tous),
+  // puis par la recherche texte.
   const filteredOnboarding = useMemo(() => {
     const q = normalize(query);
-    const pending = onboarding.filter(isPendingOnboarding);
-    if (!q) return pending;
-    return pending.filter((record) => {
+    return onboarding.filter((record) => {
+      const eff = effectiveOnboardingStatus(record);
+      if (onboardingStatus === "online" && !isPendingOnboarding(record)) return false;
+      if (onboardingStatus === "expired" && eff !== "expired") return false;
+      if (onboardingStatus === "validated" && eff !== "validated") return false;
+      if (!q) return true;
       const d = parseOnboardingData(record);
       return [d.firstName, d.lastName, d.email, d.phone, record.phone, record.status]
         .some((v) => normalize(v).includes(q));
     });
-  }, [onboarding, query]);
+  }, [onboarding, onboardingStatus, query]);
 
   const activeCount = view.filter(isActive).length;
   const occupants = view.reduce((s, t) => s + Number(t.occupantNumber || 0), 0);
   const salaried = view.filter((t) => /salar|fonction/i.test(String(t.professionalStatus || ""))).length;
 
-  if (loading) return <Loading />;
-  if (error) return <ApiError error={error} />;
+  // Bloquer uniquement au PREMIER chargement (data absente). Un reload en
+  // arriere-plan (event realtime "onboarding created" apres generation du lien)
+  // ne doit pas remonter la page : sinon la modale OnboardingLinkModal est
+  // demontee et revient vide -> l'utilisateur croit que le formulaire "se rouvre".
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ApiError error={error} />;
 
   const copyText = async (value) => {
     if (!value) return;
@@ -219,47 +252,77 @@ export function Locataires() {
     window.open(value, "_blank", "noopener,noreferrer");
   };
   const resendSms = async (record) => {
-    const d = parseOnboardingData(record);
-    const url = onboardingUrl(record);
-    const phone = d.phone || record.phone;
-    if (!phone || !url) return;
-    await api.sendOnboardingSms({
-      phone,
-      message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
-    });
+    setActionError("");
+    setSendingId(`${record.id}:sms`);
+    try {
+      await api.sendOnboardingSms(record.id);
+      await reload();
+      toast.success(t("SMS envoyé."));
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setSendingId(null);
+    }
   };
   const resendEmail = async (record) => {
-    const d = parseOnboardingData(record);
-    const url = onboardingUrl(record);
-    if (!d.email || !url) return;
-    await api.sendOnboardingEmail({
-      email: d.email,
-      url,
-      firstName: d.firstName || onboardingDisplayName(record),
-    });
+    setActionError("");
+    setSendingId(`${record.id}:email`);
+    try {
+      await api.sendOnboardingEmail(record.id);
+      await reload();
+      toast.success(t("Email envoyé."));
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setSendingId(null);
+    }
   };
   const deleteOnboarding = async (record) => {
-    if (!window.confirm("Supprimer ce dossier d'inscription ?")) return;
+    if (!(await confirm({
+      title: t("Supprimer le dossier"),
+      message: t("Supprimer ce dossier d'inscription ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     await api.deleteOnboarding(record.id);
     await reload();
   };
-  const validateOnboarding = async (record) => {
-    await api.validateOnboarding(record.id);
-    await reload();
+  // « Valider » n'engage plus en un clic : on ouvre la fiche pré-remplie pour
+  // que le gestionnaire revoie/corrige les données avant de créer le locataire.
+  const validateOnboarding = (record) => {
+    setActionError("");
+    const d = parseOnboardingData(record);
+    setModal({ ...emptyTenant, ...d, phone: d.phone || record.phone || "", _onboardingId: record.id, _validating: true });
+  };
+  const openLinkModal = () => {
+    setRefreshOnLinkClose(false);
+    setLinkModal({ phone: "", firstName: "", lastName: "", email: "" });
+  };
+  const closeLinkModal = () => {
+    setLinkModal(null);
+    if (refreshOnLinkClose) {
+      setRefreshOnLinkClose(false);
+      reload();
+    }
   };
   const handleDeleteTenant = async (tenant) => {
     const hasActiveLease = leases.some((l) => String(l.tenantId) === String(tenant.id) && l.status === "active");
     if (hasActiveLease) {
-      window.alert("Impossible : ce locataire a un bail actif. Resiliez d'abord le bail.");
+      toast.error(t("Impossible : ce locataire a un bail actif. Résiliez d'abord le bail."));
       return;
     }
-    if (!window.confirm(`Supprimer le locataire « ${tenant._name} » ?`)) return;
+    if (!(await confirm({
+      title: t("Supprimer le locataire"),
+      message: tf(t("Supprimer le locataire « {name} » ?"), { name: tenant._name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     try {
       await api.deleteTenant(tenant.id);
       setSelectedId(null);
       await reload();
     } catch (e) {
-      window.alert(e.message || String(e));
+      toast.error(e.message || String(e));
     }
   };
 
@@ -269,15 +332,26 @@ export function Locataires() {
     <>
       <div className="immo-header">
         <div>
-          <h1>Locataires</h1>
+          <h1>{t("Locataires")}</h1>
           <p>Annuaire des locataires, dossiers et soldes</p>
         </div>
         <div className="immo-header-actions">
           <label className="immo-search">
             <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, telephone, unite..." />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, unite...")} />
           </label>
-          <button className="immo-btn" onClick={() => setLinkModal({ phone: "", firstName: "", lastName: "", email: "" })}>
+          <select
+            className="immo-select"
+            value={onboardingStatus}
+            onChange={(e) => setOnboardingStatus(e.target.value)}
+            title="Filtrer les dossiers d'inscription"
+          >
+            <option value="online">Dossiers en ligne</option>
+            <option value="expired">Dossiers expires</option>
+            <option value="validated">Dossiers valides</option>
+            <option value="all">Tous les dossiers</option>
+          </select>
+          <button className="immo-btn" onClick={openLinkModal}>
             <UserRound size={16} /> Lien d'inscription
           </button>
           <button className="immo-btn primary" onClick={() => setModal({ ...emptyTenant })}>
@@ -287,13 +361,18 @@ export function Locataires() {
       </div>
 
       <MetricsGrid>
-        <Metric tone="brand" icon={<Users size={20} />} label="Locataires" value={view.length} helper={`${activeCount} actif(s)`} />
-        <Metric tone="green" icon={<Home size={20} />} label="Occupants au foyer" value={occupants} helper="personnes declarees" />
-        <Metric tone="amber" icon={<Clock size={20} />} label="Onboarding" value={onboarding.length}
-          valueColor={onboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
-        <Metric tone="brand" icon={<Briefcase size={20} />} label="Salaries / fonction." value={salaried} helper="revenu stable declare" />
+        <Metric tone="brand" icon={<Users size={20} />} label={t("Locataires")} value={view.length} helper={tf("{n} actif(s)", {n: activeCount})} />
+        <Metric tone="green" icon={<Home size={20} />} label={t("Occupants au foyer")} value={occupants} helper={t("personnes declarees")} />
+        <Metric tone="amber" icon={<Clock size={20} />} label={t("Onboarding")} value={pendingOnboarding.length}
+          valueColor={pendingOnboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
+        <Metric tone="brand" icon={<Briefcase size={20} />} label={t("Salaries / fonction.")} value={salaried} helper={t("revenu stable declare")} />
       </MetricsGrid>
 
+      {filteredOnboarding.length === 0 && onboardingStatus !== "online" && (
+        <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
+          Aucun dossier {onboardingStatus === "expired" ? "expire" : onboardingStatus === "validated" ? "valide" : ""} a afficher.
+        </p>
+      )}
       {filteredOnboarding.length > 0 && (
         <div className="domus-onboarding-strip">
           {filteredOnboarding.map((record, index) => (
@@ -301,6 +380,7 @@ export function Locataires() {
               key={`onboarding-${record.id}`}
               record={record}
               index={index}
+              sendingId={sendingId}
               onEdit={(r) => {
                 const d = parseOnboardingData(r);
                 setModal({ ...emptyTenant, ...d, phone: d.phone || r.phone || "", _onboardingId: r.id });
@@ -319,13 +399,13 @@ export function Locataires() {
       {view.length === 0 ? (
         <div className="immo-empty">
           <Users size={28} />
-          <h3>Aucun locataire</h3>
+          <h3>{t("Aucun locataire")}</h3>
           <p>Cliquez « Nouveau locataire » pour creer le premier dossier.</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="immo-empty">
           <Search size={26} />
-          <h3>Aucun resultat</h3>
+          <h3>{t("Aucun resultat")}</h3>
           <p>Aucun locataire ne correspond a « {query} ».</p>
         </div>
       ) : (
@@ -365,10 +445,12 @@ export function Locataires() {
       {selected && (
         <TenantDetailDrawer
           tenant={selected}
+          currency={currency}
           leaseInfo={tenantLeaseInfo(selected, leases, units)}
           onClose={() => setSelectedId(null)}
           onEdit={() => { setActionError(""); setModal(tenantToForm(selected)); }}
           onDelete={() => handleDeleteTenant(selected)}
+          onCreateLease={go ? () => { setLeasePrefill(null, null, selected.id); go("baux"); } : undefined}
         />
       )}
 
@@ -382,14 +464,26 @@ export function Locataires() {
             setSaving(true);
             setActionError("");
             try {
-              const saved = form._onboardingId
-                ? await api.validateOnboarding(form._onboardingId)
-                : form.id
-                  ? await api.updateTenant(form.id, tenantPayload(form))
-                  : await api.createTenant(tenantPayload(form));
+              let saved;
+              if (form._onboardingId) {
+                // On persiste d'abord les corrections du gestionnaire dans le
+                // dossier, puis on valide (qui crée le locataire depuis ce dossier).
+                await api.updateOnboarding(form._onboardingId, tenantPayload(form));
+                saved = await api.validateOnboarding(form._onboardingId);
+              } else if (form.id) {
+                saved = await api.updateTenant(form.id, tenantPayload(form));
+              } else {
+                saved = await api.createTenant(tenantPayload(form));
+              }
+              // Après validation, l'id du locataire créé est dans saved.customer ;
+              // sinon (create/update tenant) c'est saved.id / form.id.
+              const tenantId = (form._onboardingId ? saved?.customer?.id : saved?.id) || form.id;
+              if (form._idFile && tenantId) {
+                await api.uploadTenantIdDocument(tenantId, form._idFile);
+              }
               setModal(null);
               await reload();
-              if (saved?.id || form.id) setSelectedId(saved?.id || form.id);
+              if (tenantId) setSelectedId(tenantId);
             } catch (e) {
               setActionError(e.message || String(e));
             } finally {
@@ -402,8 +496,8 @@ export function Locataires() {
       {linkModal && (
         <OnboardingLinkModal
           value={linkModal}
-          onClose={() => setLinkModal(null)}
-          onGenerated={reload}
+          onClose={closeLinkModal}
+          onGenerated={() => setRefreshOnLinkClose(true)}
         />
       )}
     </>
@@ -421,27 +515,38 @@ function Info2({ icon: Icon, label, value }) {
 }
 
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
-function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
+function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const married = MARRIED_STATES.includes(String(tenant.maritalStatus || "").toLowerCase());
+  const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
   const { activeLease, activeUnit } = leaseInfo || {};
+
+  const labelFor = (opts, code) => {
+    const lbl = opts.find(([v]) => v === code)?.[1];
+    return lbl ? t(lbl) : (code || "—");
+  };
+  const salarySym = (() => {
+    const cur = tenant.salaryCurrencyId != null ? currency?.currencyById?.get(Number(tenant.salaryCurrencyId)) : null;
+    return cur?.symbol || currency?.defaultCurrencySymbol || "CDF";
+  })();
+  const money = (v) => (v != null && v !== "" ? `${salarySym} ${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}` : "—");
+  const childAges = parseChildAges(tenant.childAges);
 
   return (
     <>
       <div className="domus-drawer-scrim" onClick={onClose} />
-      <aside className="domus-drawer" role="dialog" aria-label={`Detail ${tenant._name}`}>
+      <aside className="domus-drawer" role="dialog" aria-label={tf(t("Detail {name}"), {name: tenant._name})}>
         <div className="domus-drawer-head">
-          <h3>Fiche locataire</h3>
+          <h3>{t("Fiche locataire")}</h3>
           <div className="domus-drawer-head-actions">
-            {onEdit && <button type="button" className="domus-drawer-iconbtn" onClick={onEdit} title="Modifier"><Pencil size={16} /></button>}
-            {onDelete && <button type="button" className="domus-drawer-iconbtn danger" onClick={onDelete} title="Supprimer"><Trash2 size={16} /></button>}
-            <button type="button" className="domus-drawer-close" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+            {onEdit && <button type="button" className="domus-drawer-iconbtn" onClick={onEdit} title={t("Modifier")}><Pencil size={16} /></button>}
+            {onDelete && <button type="button" className="domus-drawer-iconbtn danger" onClick={onDelete} title={t("Supprimer")}><Trash2 size={16} /></button>}
+            <button type="button" className="domus-drawer-close" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
           </div>
         </div>
         <div className="domus-drawer-body">
@@ -459,18 +564,39 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
           <div className="action-strip">
             {tenant.phone && <a className="btn" href={`tel:${tenant.phone}`}><Phone size={16} /> Appeler</a>}
             {tenant.email && <a className="btn" href={`mailto:${tenant.email}`}><Mail size={16} /> Email</a>}
+            {!activeLease && onCreateLease && (
+              <button type="button" className="btn btn-primary" onClick={onCreateLease}><FileSignature size={16} /> Creer le bail</button>
+            )}
           </div>
 
           <div className="info-grid">
-            <Info2 icon={Phone} label="Telephone" value={tenant.phone || "—"} />
-            <Info2 icon={Mail} label="Email" value={tenant.email || "—"} />
-            <Info2 icon={MapPin} label="Adresse" value={tenant.address || "—"} />
-            <Info2 icon={IdCard} label="Nationalite" value={tenant.nationality || "—"} />
-            <Info2 icon={Briefcase} label="Activite" value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
-            <Info2 icon={Building2} label="Employeur" value={tenant.entityName || "—"} />
-            <Info2 icon={Home} label="Foyer" value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
-            <Info2 icon={User} label="Etat civil" value={tenant.maritalStatus || "—"} />
+            <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
+            <Info2 icon={Phone} label={t("Telephone 2")} value={tenant.phone2 || "—"} />
+            <Info2 icon={Mail} label={t("Email")} value={tenant.email || "—"} />
+            <Info2 icon={MapPin} label={t("Adresse")} value={tenant.address || "—"} />
+            <Info2 icon={User} label={t("Sexe")} value={labelFor(SEX_OPTIONS, tenant.sex)} />
+            <Info2 icon={IdCard} label={t("Date de naissance")} value={dateOnly(tenant.birthDate) || "—"} />
+            <Info2 icon={IdCard} label={t("Nationalite")} value={tenant.nationality || "—"} />
+            <Info2 icon={Briefcase} label={t("Statut")} value={labelFor(PRO_OPTIONS, tenant.professionalStatus)} />
+            <Info2 icon={Briefcase} label={t("Activite")} value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
+            <Info2 icon={Building2} label={t("Employeur")} value={tenant.entityName || "—"} />
+            <Info2 icon={Wallet} label={t("Salaire mensuel")} value={money(tenant.monthlyPay)} />
+            <Info2 icon={Wallet} label={t("Autres revenus / mois")} value={money(tenant.otherMonthlyIncome)} />
+            <Info2 icon={Home} label={t("Foyer")} value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
+            {childAges.length > 0 && (
+              <Info2 icon={Home} label={t("Age des enfants")} value={childAges.join(" · ")} />
+            )}
+            <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus ? t(labelForMarital(tenant.maritalStatus)) : "—"} />
+            <Info2 icon={IdCard} label={t("Piece d'identite")} value={[tenant.idDocumentType, tenant.idNumber].filter(Boolean).join(" · ") || "—"} />
           </div>
+
+          {tenant.idDocumentName && (
+            <div className="action-strip" style={{ marginTop: 8 }}>
+              <a className="btn" href={api.tenantIdDocumentUrl(tenant.id)} target="_blank" rel="noreferrer">
+                <IdCard size={16} /> Voir la copie de la piece
+              </a>
+            </div>
+          )}
 
           {activeLease && (
             <div className="info-grid" style={{ marginTop: 8 }}>
@@ -490,9 +616,19 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
                 <span>{[tenant.partenairName, tenant.partenairNumber].filter(Boolean).join(" · ") || "Non renseigne"}</span>
               </div>
             )}
+            {(tenant.oldAddress || tenant.oldLessor || tenant.movingReason) && (
+              <div className="timeline-item done">
+                <b>{t("Historique logement")}</b>
+                <span>{[
+                  tenant.oldAddress && `${t("Ancienne adresse")} : ${tenant.oldAddress}`,
+                  tenant.oldLessor && `${t("Ancien bailleur")} : ${tenant.oldLessor}`,
+                  tenant.movingReason && `${t("Motif du déménagement")} : ${tenant.movingReason}`,
+                ].filter(Boolean).join(" — ")}</span>
+              </div>
+            )}
             <div className="timeline-item">
-              <b>Origine</b>
-              <span>{tenant.originProvince || "Province non renseignee"}</span>
+              <b>{t("Origine")}</b>
+              <span>{tenant.originProvince || t("Province non renseignee")}</span>
             </div>
           </div>
         </div>
@@ -502,9 +638,10 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
 }
 
 // ── Formulaire « Nouveau locataire » (même API que le CRM) ──────────────────
-function OnboardingCard({
+export function OnboardingCard({
   record,
   index,
+  sendingId,
   onEdit,
   onValidate,
   onDelete,
@@ -518,6 +655,10 @@ function OnboardingCard({
   const status = onboardingStatusMeta[record.status] || onboardingStatusMeta.sent;
   const phone = data.phone || record.phone;
   const tone = avatarTones[index % avatarTones.length];
+  const smsBusy = sendingId === `${record.id}:sms`;
+  const emailBusy = sendingId === `${record.id}:email`;
+  const smsLabel = smsBusy ? "Envoi..." : record.smsSentAt ? "Renvoyer SMS" : "Envoyer SMS";
+  const emailLabel = emailBusy ? "Envoi..." : record.emailSentAt ? "Renvoyer email" : "Envoyer email";
   return (
     <article className="domus-onboarding-card">
       <div className={`tenant-avatar ${tone}`}>{initials(name)}</div>
@@ -534,6 +675,21 @@ function OnboardingCard({
         <div className="domus-onboarding-line">
           <span><FileClock size={16} /> Inscription locataire</span>
         </div>
+        {(record.smsSentAt || record.emailSentAt) && (
+          <div className={`domus-onboarding-sent${record.smsStatus === "failed" || record.smsStatus === "undelivered" ? " failed" : ""}`}>
+            <CheckCircle2 size={13} />
+            <span>
+              {record.smsSentAt &&
+                (record.smsDeliveredAt
+                  ? `SMS livre le ${formatShortDate(record.smsDeliveredAt)}`
+                  : record.smsStatus === "failed" || record.smsStatus === "undelivered"
+                    ? "SMS non delivre"
+                    : `SMS transmis le ${formatShortDate(record.smsSentAt)}`)}
+              {record.smsSentAt && record.emailSentAt && " · "}
+              {record.emailSentAt && `Email transmis le ${formatShortDate(record.emailSentAt)}`}
+            </span>
+          </div>
+        )}
         <div className="domus-onboarding-line">
           <span>Expire {formatShortDate(record.expiresAt)}</span>
           <strong>{record.status === "submitted" ? "A valider" : "Non valide"}</strong>
@@ -545,8 +701,12 @@ function OnboardingCard({
           {record.status === "submitted" && (
             <button type="button" className="primary" onClick={() => onValidate(record)}><CheckCircle2 size={14} /> Valider</button>
           )}
-          <button type="button" onClick={() => onResendSms(record)}><MessageSquare size={14} /> Renvoyer SMS</button>
-          <button type="button" onClick={() => onResendEmail(record)}><Mail size={14} /> Renvoyer email</button>
+          <button type="button" disabled={smsBusy} onClick={() => onResendSms(record)}>
+            <MessageSquare size={14} /> {smsLabel}
+          </button>
+          <button type="button" disabled={emailBusy} onClick={() => onResendEmail(record)}>
+            <Mail size={14} /> {emailLabel}
+          </button>
           <button type="button" className="danger" onClick={() => onDelete(record)}><Trash2 size={14} /> Supprimer</button>
         </div>
       </div>
@@ -555,13 +715,14 @@ function OnboardingCard({
 }
 
 // ── Modale « Lien d'inscription » (génère un dossier d'onboarding) ──────────
-function OnboardingLinkModal({ value, onClose, onGenerated }) {
+export function OnboardingLinkModal({ value, onClose, onGenerated }) {
   const [form, setForm] = useState(value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
   const url = result ? domusOnboardingUrl(result.url || result.onboardingUrl || "") : "";
+  const phoneValid = isValidPhoneNumber(form.phone?.trim() || "");
 
   const generate = async () => {
     setBusy(true);
@@ -594,6 +755,9 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
         {!result ? (
           <FormSection icon={<UserRound size={14} />} title="Coordonnees du locataire">
             <DomusPhoneField label="Telephone" value={form.phone} onChange={(v) => set({ phone: v })} required />
+            {form.phone?.trim() && !phoneValid && (
+              <small className="api-error" style={{ display: "block", marginTop: -8 }}>Numero de telephone incomplet ou invalide.</small>
+            )}
             <div className="domus-property-form-grid">
               <DomusPropertyField label="Prenom" value={form.firstName} onChange={(v) => set({ firstName: v })} placeholder="Optionnel" />
               <DomusPropertyField label="Nom" value={form.lastName} onChange={(v) => set({ lastName: v })} placeholder="Optionnel" />
@@ -619,7 +783,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
         {!result ? (
           <>
             <button className="btn" onClick={onClose} disabled={busy}>Annuler</button>
-            <button className="btn btn-primary" onClick={generate} disabled={busy || !form.phone.trim()}>
+            <button className="btn btn-primary" onClick={generate} disabled={busy || !phoneValid}>
               {busy ? "Generation..." : "Generer le lien"}
             </button>
           </>
@@ -633,6 +797,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
 
 const emptyTenant = {
   firstName: "", lastName: "", email: "", phone: "", phone2: "", address: "",
+  id_document_type: "", id_number: "", _idFile: null,
   birth_date: "", sex: "M", nationality: "Congolaise", marital_status: "célibataire",
   contacted_person: "", contacted_person_phone_number: "",
   prossional_status: "salarie", main_activity: "", entity_name: "",
@@ -643,11 +808,11 @@ const emptyTenant = {
 };
 
 const SEX_OPTIONS = [["M", "Masculin"], ["F", "Feminin"]];
+// value = CODE canonique (stocké en base), text = libellé traduit. Mêmes codes que le CRM.
 const MARITAL_OPTIONS = [
-  ["célibataire", "Celibataire"], ["marié", "Marie(e)"], ["conjoint de fait", "Conjoint de fait"],
-  ["union libre", "Union libre"], ["divorcé", "Divorce(e)"], ["veuf", "Veuf/Veuve"],
+  ["single", t("Célibataire")], ["married", t("Marié(e)")], ["common_law", t("Conjoint de fait")],
+  ["divorced", t("Divorcé(e)")], ["widowed", t("Veuf / Veuve")],
 ];
-// Mêmes valeurs/libellés que le CRM (TenantFormModal) pour garder les données cohérentes.
 const PRO_OPTIONS = [
   ["salarie", "Salarié"], ["entrepreneur", "Entrepreneur"], ["commercant", "Commerçant"],
   ["independant", "Travailleur autonome / Indépendant"], ["pigiste", "Pigiste"],
@@ -684,7 +849,10 @@ function tenantToForm(t) {
     birth_date: dateOnly(t.birthDate),
     sex: t.sex || "M",
     nationality: t.nationality || "Congolaise",
-    marital_status: t.maritalStatus || "célibataire",
+    marital_status: t.maritalStatus ? normalizeMaritalStatus(t.maritalStatus) : "single",
+    id_document_type: t.idDocumentType || "",
+    id_number: t.idNumber || "",
+    _idDocumentName: t.idDocumentName || "",
     contacted_person: t.contactedPerson || "",
     contacted_person_phone_number: t.contactedPersonPhoneNumber || "",
     prossional_status: t.professionalStatus || "salarie",
@@ -706,8 +874,11 @@ function tenantToForm(t) {
 }
 
 function isMarried(status) {
-  return MARRIED_STATES.includes(String(status || "").toLowerCase());
+  return MARRIED_STATES.includes(normalizeMaritalStatus(status));
 }
+
+// Accès sûr : les dossiers d'inscription pré-remplis peuvent contenir des champs null.
+const s = (v) => String(v ?? "").trim();
 
 function canSaveTenant(f) {
   const required = [
@@ -717,7 +888,7 @@ function canSaveTenant(f) {
   ];
   if (required.some((v) => !String(v ?? "").trim())) return false;
   if (Number(f.occupant_number || 0) < 1) return false;
-  if (isMarried(f.marital_status) && (!f.partenair_name.trim() || !f.partenair_number.trim())) return false;
+  if (isMarried(f.marital_status) && (!s(f.partenair_name) || !s(f.partenair_number))) return false;
   const childN = Number(f.child_number || 0);
   if (childN > 0) {
     const ages = f.child_ages || [];
@@ -733,21 +904,23 @@ function tenantPayload(f) {
   const married = isMarried(f.marital_status);
   const childN = Number(f.child_number || 0);
   const payload = {
-    firstName: f.firstName.trim(),
-    lastName: f.lastName.trim(),
-    email: f.email.trim() || null,
-    phone: f.phone.trim(),
-    address: f.address.trim(),
+    firstName: s(f.firstName),
+    lastName: s(f.lastName),
+    email: s(f.email) || null,
+    phone: s(f.phone),
+    address: s(f.address),
     birth_date: f.birth_date,
     sex: f.sex,
-    nationality: f.nationality.trim(),
+    nationality: s(f.nationality),
     marital_status: f.marital_status,
-    phone2: f.phone2.trim() || null,
-    contacted_person: f.contacted_person.trim(),
-    contacted_person_phone_number: f.contacted_person_phone_number.trim(),
+    id_document_type: s(f.id_document_type) || null,
+    id_number: s(f.id_number) || null,
+    phone2: s(f.phone2) || null,
+    contacted_person: s(f.contacted_person),
+    contacted_person_phone_number: s(f.contacted_person_phone_number),
     prossional_status: f.prossional_status,
-    main_activity: f.main_activity.trim(),
-    entity_name: f.entity_name.trim(),
+    main_activity: s(f.main_activity),
+    entity_name: s(f.entity_name),
     contract_type: f.contract_type,
     occupant_number: Number(f.occupant_number || 1),
     child_number: childN > 0 ? childN : 0,
@@ -755,12 +928,12 @@ function tenantPayload(f) {
   if (f.monthly_pay !== "") payload.monthly_pay = Number(f.monthly_pay);
   if (f.salary_currency_id !== "") payload.salary_currency_id = Number(f.salary_currency_id);
   if (f.other_monthly_income !== "") payload.other_monthly_income = Number(f.other_monthly_income);
-  if (f.old_address.trim()) payload.old_address = f.old_address.trim();
-  if (f.old_lessor.trim()) payload.old_lessor = f.old_lessor.trim();
-  if (f.moving_reason.trim()) payload.moving_reason = f.moving_reason.trim();
+  if (s(f.old_address)) payload.old_address = s(f.old_address);
+  if (s(f.old_lessor)) payload.old_lessor = s(f.old_lessor);
+  if (s(f.moving_reason)) payload.moving_reason = s(f.moving_reason);
   if (married) {
-    payload.partenair_name = f.partenair_name.trim();
-    payload.partenair_number = f.partenair_number.trim();
+    payload.partenair_name = s(f.partenair_name);
+    payload.partenair_number = s(f.partenair_number);
   }
   if (childN > 0) {
     payload.child_age = (f.child_ages || []).slice(0, childN).map((a) => Number(a)).filter((n) => Number.isFinite(n));
@@ -769,6 +942,7 @@ function tenantPayload(f) {
 }
 
 function TenantModal({ value, busy, error, onClose, onSave }) {
+  const validating = !!value._validating;
   const [form, setForm] = useState(value);
   const set = (patch) => setForm((cur) => ({ ...cur, ...patch }));
   const married = isMarried(form.marital_status);
@@ -789,13 +963,19 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
 
   return (
     <Modal
-      title={value.id ? "Modifier le locataire" : "Nouveau locataire"}
-      subtitle={value.id ? "Mettre a jour le dossier locataire (meme API que le CRM)" : "Cree un dossier locataire (meme API que le CRM)"}
-      icon={value.id ? <Pencil size={20} /> : <UserPlus size={20} />}
+      title={validating ? "Valider l'inscription" : value.id ? "Modifier le locataire" : "Nouveau locataire"}
+      subtitle={validating ? "Verifiez et corrigez les informations avant de creer le locataire" : value.id ? "Mettre a jour le dossier locataire (meme API que le CRM)" : "Cree un dossier locataire (meme API que le CRM)"}
+      icon={validating ? <CheckCircle2 size={20} /> : value.id ? <Pencil size={20} /> : <UserPlus size={20} />}
       className="domus-property-modal"
       onClose={onClose}
     >
       <div className="domus-property-form">
+        {validating && (
+          <div className="domus-onboarding-notice" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", margin: "0 0 4px", borderRadius: 10, background: "rgba(79,70,229,0.08)", border: "1px solid rgba(79,70,229,0.2)" }}>
+            <Info size={16} style={{ marginTop: 2, flexShrink: 0, color: "#4f46e5" }} />
+            <span style={{ fontSize: 13, lineHeight: 1.4 }}>Un locataire actif sera cree dans votre annuaire a partir de ce dossier. Aucun bail n'est cree a cette etape — vous pourrez le creer ensuite depuis la fiche.</span>
+          </div>
+        )}
         <FormSection icon={<User size={14} />} title="Identite">
           <div className="domus-property-form-grid">
             <DomusPropertyField label="Prenom" value={form.firstName} onChange={(v) => set({ firstName: v })} required placeholder="ex. Jean" />
@@ -815,6 +995,27 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
               <DomusPhoneField label="Telephone du conjoint" value={form.partenair_number} onChange={(v) => set({ partenair_number: v })} required />
             </div>
           )}
+          <div className="domus-property-form-grid">
+            <DomusPropertyField label="Piece d'identite (type)" value={form.id_document_type} onChange={(v) => set({ id_document_type: v })} placeholder="ex. Carte d'electeur, Passeport" />
+            <DomusPropertyField label="N&deg; de la piece" value={form.id_number} onChange={(v) => set({ id_number: v })} placeholder="ex. CNI-0123456" />
+          </div>
+          <label className="domus-property-field">
+            <span>Copie de la piece (scan/photo)</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(e) => set({ _idFile: e.target.files?.[0] || null })}
+            />
+            {form._idFile
+              ? <small className="muted">Sera importee a l'enregistrement : {form._idFile.name}</small>
+              : form._idDocumentName
+                ? (
+                  <small className="muted">
+                    Copie actuelle : <a href={api.tenantIdDocumentUrl(form.id)} target="_blank" rel="noreferrer">{form._idDocumentName}</a>
+                  </small>
+                )
+                : <small className="muted">Aucune copie importee.</small>}
+          </label>
         </FormSection>
 
         <FormSection icon={<Phone size={14} />} title="Contact">
@@ -891,7 +1092,16 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
       </div>
 
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
-      <ModalActions busy={busy} disabled={!canSaveTenant(form)} onClose={onClose} onSave={() => onSave(form)} />
+      {validating ? (
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose} disabled={busy}>Annuler</button>
+          <button className="btn btn-primary" onClick={() => onSave(form)} disabled={busy || !canSaveTenant(form)}>
+            <CheckCircle2 size={16} /> {busy ? "Validation..." : "Valider et creer le locataire"}
+          </button>
+        </div>
+      ) : (
+        <ModalActions busy={busy} disabled={!canSaveTenant(form)} onClose={onClose} onSave={() => onSave(form)} />
+      )}
     </Modal>
   );
 }

@@ -7,6 +7,7 @@ import { api } from "./api";
 import { nextStrawCode } from "./id-gen";
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
+import { Autocomplete } from "./quickentry";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -299,6 +300,16 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
     }).catch(() => {});
   }, []);
 
+  // Mâles du cheptel (même espèce) éligibles pour lier la paillette à une
+  // fiche animal réelle — la saisie libre du nom reste possible/prioritaire
+  // pour la semence importée sans fiche (ex. taureau étranger).
+  const [sires, setSires] = React.useState([]);
+  React.useEffect(() => {
+    api.listAnimals().then((rows) => {
+      setSires((Array.isArray(rows) ? rows : []).filter((a) => a.sex === "M" && (!form.species || a.species === form.species)));
+    }).catch(() => {});
+  }, [form.species]);
+
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -311,6 +322,7 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
       }
       const payload = {
         code: form.code, sire_name: form.sire_name || form.sireName, sire_registration: form.sire_registration || form.sireRegistration || null,
+        sire_animal_id: form.sire_animal_id ? Number(form.sire_animal_id) : (form.sireAnimalId || null),
         species: form.species, breed: form.breed || null, country: form.country || null, region: form.region || null,
         supplier_id: form.supplier_id ? Number(form.supplier_id) : (form.supplierId || null),
         collection_center: form.collection_center || form.collectionCenter || null,
@@ -371,21 +383,44 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
           </select>
         </Field></Row>
 
-        <Row><Field label={lang === "fr" ? "Nom taureau / verrat" : "Sire name"} req>
-          <input className="input" value={form.sire_name || form.sireName || ""} onChange={(e) => set("sire_name", e.target.value)} placeholder="Holm Honest"/>
+        <Row><Field label={lang === "fr" ? "Animal du cheptel (optionnel)" : "Herd animal (optional)"}>
+          <Autocomplete
+            value={form.sire_animal_id || ""}
+            onChange={(v) => {
+              set("sire_animal_id", v || null);
+              const picked = sires.find((a) => String(a.id) === String(v));
+              if (picked) {
+                setForm((f) => ({
+                  ...f,
+                  sire_animal_id: v || null,
+                  sire_name: picked.name || picked.externalId || f.sire_name,
+                  breed: picked.race || f.breed,
+                }));
+              }
+            }}
+            placeholder={lang === "fr" ? "— saisie libre ci-dessous —" : "— free text below —"}
+            options={sires.map((a) => ({ value: a.id, label: a.name || a.externalId || `#${a.id}` }))}
+          />
         </Field>
-        <Field label={lang === "fr" ? "N° registre" : "Registration #"}>
-          <input className="input mono" value={form.sire_registration || form.sireRegistration || ""} onChange={(e) => set("sire_registration", e.target.value)}/>
+        <Field label={lang === "fr" ? "Nom taureau / verrat" : "Sire name"} req>
+          <input className="input" value={form.sire_name || form.sireName || ""} onChange={(e) => set("sire_name", e.target.value)} placeholder="Holm Honest"/>
         </Field></Row>
+
+        <Row><Field label={lang === "fr" ? "N° registre" : "Registration #"}>
+          <input className="input mono" value={form.sire_registration || form.sireRegistration || ""} onChange={(e) => set("sire_registration", e.target.value)}/>
+        </Field>
+        <div/></Row>
 
         <Row><Field label={lang === "fr" ? "Race" : "Breed"}>
           <input className="input" value={form.breed || ""} onChange={(e) => set("breed", e.target.value)} placeholder="Holstein"/>
         </Field>
         <Field label={lang === "fr" ? "Fournisseur" : "Supplier"}>
-          <select className="input" value={form.supplier_id || form.supplierId || ""} onChange={(e) => set("supplier_id", e.target.value)}>
-            <option value="">—</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <Autocomplete
+            value={form.supplier_id || form.supplierId || ""}
+            onChange={(v) => set("supplier_id", v)}
+            placeholder="—"
+            options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+          />
         </Field></Row>
 
         <Row><Field label={lang === "fr" ? "Pays" : "Country"}>

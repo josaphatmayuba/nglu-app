@@ -7,7 +7,10 @@ import { speciesById, t, SPECIES } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore } from "./shell";
 import { api } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
+import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
+import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
+import { MaterialLineChart } from "./material-charts.jsx";
 
 function formatLongDate(d, lang) {
   try {
@@ -15,6 +18,26 @@ function formatLongDate(d, lang) {
   } catch {
     return d.toISOString().slice(0, 10);
   }
+}
+
+function useCurrencyCatalog() {
+  const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        if (cancel) return;
+        const currencies = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        setState({
+          currencies,
+          defaultCurrencyId: defaultCurrencyId(setting.value, currencies),
+          fallbackSymbol: defaultSymbol(setting.value, currencies),
+        });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+  return state;
 }
 
 function deriveDashFinanceKpis(summary) {
@@ -35,6 +58,7 @@ function deriveDashAlerts(d, lang) {
     if (t.status !== "running" || !t.endDate || t.endDate < today) return;
     if (!t.withdrawalMilkHours && !t.withdrawalMeatDays && !t.withdrawalEggsDays) return;
     const a = aMap.get(t.animalId);
+    if (!isActiveLivestock(a)) return;
     out.push({
       id: `wd-${t.id}`, kind: "withdrawal", severity: "critical",
       animal: a?.name || a?.externalId || "—", animalId: a?.externalId || `#${a?.id}`,
@@ -55,13 +79,40 @@ function deriveDashAlerts(d, lang) {
       date: "—", icon: "wheat",
     });
   });
+  // Prêt à abattre / vente : animaux d'engraissement prêts ou en retard, groupés par bâtiment.
+  const slByBarn = new Map(); // barn -> { ready, overdue, species }
+  d.animals.forEach((a) => {
+    if (!isActiveLivestock(a)) return;
+    if (animalCategory(a) !== "engraissement") return;
+    const st = slaughterReadiness(a);
+    if (st !== "pret" && st !== "retard") return;
+    const barn = a.barn || (lang === "fr" ? "Sans bâtiment" : "No building");
+    if (!slByBarn.has(barn)) slByBarn.set(barn, { ready: 0, overdue: 0, species: a.species });
+    const g = slByBarn.get(barn);
+    g[st === "pret" ? "ready" : "overdue"] += animalQty(a);
+  });
+  slByBarn.forEach((g, barn) => {
+    const tot = g.ready + g.overdue;
+    if (tot <= 0) return;
+    out.push({
+      id: `slaughter-${barn}`, kind: "slaughter", severity: g.overdue > 0 ? "critical" : "high",
+      animal: barn, animalId: lang === "fr" ? "Engraissement" : "Fattening", species: g.species || "pig",
+      title: lang === "fr" ? `${tot} animal(aux) à abattre/vendre` : `${tot} animal(s) to slaughter/sell`,
+      subtitle: [
+        g.ready > 0 ? (lang === "fr" ? `${g.ready} prêt(s)` : `${g.ready} ready`) : null,
+        g.overdue > 0 ? (lang === "fr" ? `${g.overdue} en retard (coût net)` : `${g.overdue} overdue (net cost)`) : null,
+        barn,
+      ].filter(Boolean).join(" · "),
+      date: "—", icon: "cart",
+    });
+  });
   return out;
 }
 
 function useDashboardData() {
-  const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
+  const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], mortalityEvents: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
   const [reloadKey, setReloadKey] = React.useState(0);
-  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs"]);
+  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs", "mortalityEvents"]);
   React.useEffect(() => {
     let cancel = false;
     api.getDashboardSnapshot()
@@ -78,38 +129,172 @@ function useDashboardData() {
           aiInsights = [],
           finance = { months: [], revenue: [], expense: [], byCategory: [] },
           productionLogs = [],
+          mortalityEvents = [],
         } = snapshot || {};
-        const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs].every((x) => Array.isArray(x));
-        if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
+        // Le snapshot est rendu resilient cote backend (chaque source a un fallback []).
+        // On normalise ici par securite: une source absente devient [] sans bloquer le reste.
+        const arr = (x) => (Array.isArray(x) ? x : []);
+        setData({
+          animals: arr(animals), medicines: arr(medicines), sales: arr(sales), expenses: arr(expenses),
+          treatments: arr(treatments), repro: arr(repro), vaccinations: arr(vaccinations), aiInsights: arr(aiInsights),
+          productionLogs: arr(productionLogs), mortalityEvents: arr(mortalityEvents),
+          finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true,
+        });
       })
       .catch(() => {});
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
     const reload = () => setReloadKey((k) => k + 1);
-    const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created"];
+    const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created", "farmos:mortality-created"];
     events.forEach((e) => window.addEventListener(e, reload));
     return () => events.forEach((e) => window.removeEventListener(e, reload));
   }, []);
   return data;
 }
 
-function computeDashboardKpis(d, speciesFilter, lang, dateRange) {
+const DAY_MS = 86400000;
+
+function isoDateKey(value) {
+  if (!value) return null;
+  if (typeof value === "string") return value.slice(0, 10);
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+function firstDateKey(row, keys) {
+  for (const key of keys) {
+    const date = isoDateKey(row?.[key]);
+    if (date) return date;
+  }
+  return null;
+}
+
+function previousComparableRange(range) {
+  if (!range?.from || !range?.to || range.preset === "all") return null;
+  const from = new Date(`${range.from}T00:00:00`);
+  const to = new Date(`${range.to}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return null;
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / DAY_MS) + 1);
+  const prevTo = new Date(from.getTime() - DAY_MS);
+  const prevFrom = new Date(from.getTime() - days * DAY_MS);
+  return { from: isoDateKey(prevFrom), to: isoDateKey(prevTo) };
+}
+
+function percentDelta(current, previous) {
+  const c = Number(current);
+  const p = Number(previous);
+  if (!Number.isFinite(c) || !Number.isFinite(p)) return 0;
+  if (p === 0) return c === 0 ? 0 : 100;
+  return Math.round(((c - p) / Math.abs(p)) * 100);
+}
+
+function rawHeadQty(row) {
+  const n = Number(row?.count ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function eventHeadQty(row) {
+  const n = Number(row?.quantity ?? row?.count ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function saleHeadQty(row) {
+  const unit = String(row?.unit || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const weightUnits = new Set(["kg", "kilo", "kilos", "kilogram", "kilograms", "kilogramme", "kilogrammes", "g", "gram", "grams", "gramme", "grammes", "lb", "lbs", "livre", "livres", "t", "tonne", "tonnes"]);
+  return weightUnits.has(unit) ? 1 : eventHeadQty(row);
+}
+
+function animalStartDate(a) {
+  return firstDateKey(a, ["dateOfBirth", "date_of_birth", "dob", "createdAt", "created_at"]);
+}
+
+function animalExistedBy(a, cutoffIso) {
+  const start = animalStartDate(a);
+  return !start || !cutoffIso || start <= cutoffIso;
+}
+
+function addRemovedHeads(map, row, cutoffIso, dateKeys, qtyFn) {
+  const date = firstDateKey(row, dateKeys);
+  if (!date || !cutoffIso || date <= cutoffIso) return;
+  const animalId = row?.animalId ?? row?.animal_id;
+  if (animalId == null) return;
+  const key = String(animalId);
+  map.set(key, (map.get(key) || 0) + qtyFn(row));
+}
+
+function removedHeadsByAnimalAfter(sales, mortalityEvents, cutoffIso) {
+  const map = new Map();
+  (sales || []).forEach((s) => addRemovedHeads(map, s, cutoffIso, ["saleDate", "sale_date"], saleHeadQty));
+  (mortalityEvents || []).forEach((m) => addRemovedHeads(map, m, cutoffIso, ["eventDate", "event_date"], eventHeadQty));
+  return map;
+}
+
+function isSaleListedAnimal(a) {
+  return ["available_sale", "for_sale", "a_vendre"].includes(String(a?.status || "").trim().toLowerCase());
+}
+
+function livestockCountAt(animals, cutoffIso, removedHeadsByAnimal, predicate = () => true) {
+  return (animals || []).reduce((total, a) => {
+    if (!predicate(a) || !animalExistedBy(a, cutoffIso)) return total;
+    const removed = removedHeadsByAnimal.get(String(a.id)) || 0;
+    const current = isActiveLivestock(a) ? animalQty(a) : (removed > 0 && isSaleListedAnimal(a) ? rawHeadQty(a) : 0);
+    return total + current + removed;
+  }, 0);
+}
+
+function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyId) {
   if (!d.ready) return null;
   const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
-  const animals = filterSp(d.animals, (a) => a.species);
-  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
-  const total = animals.length;
-  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
-  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
+  const keepCurrency = (row) => !activeCurrencyId || String(rowCurrencyId(row) ?? activeCurrencyId) === String(activeCurrencyId);
+  const animals = filterSp(d.animals, (a) => a.species).filter(isActiveLivestock);
+  const animalById = new Map(d.animals.map((a) => [a.id, a]));
+  const keepActiveAnimalId = (animalId) => {
+    const a = animalById.get(animalId);
+    return isActiveLivestock(a) && (!speciesFilter || a?.species === speciesFilter);
+  };
+  // Quantité = champ count (1 ligne = plusieurs têtes possible), aligné sur l'occupation.
+  const sum = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
+  const sick = sum(animals.filter((a) => a.status && a.status !== "healthy"));
+  const total = sum(animals);
+  const females = animals.filter((a) => a.sex === "F");
+  const males = animals.filter((a) => a.sex === "M");
+  const female = sum(females);
+  const male = sum(males);
+  const femaleAdult = sum(females.filter(isAdultAnimal));
+  const maleAdult = sum(males.filter(isAdultAnimal));
+  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && keepCurrency(s) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && keepCurrency(e) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
   const expMonth = expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
   const lowStock = d.medicines.filter((m) => m.minQuantity != null && Number(m.quantity) < Number(m.minQuantity)).length;
-  const runningTreatments = d.treatments.filter((t) => t.status === "running").length;
+  const runningTreatments = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId)).length;
   const todayISO = new Date().toISOString().slice(0, 10);
-  const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
-  const activeRepro = d.repro.filter((e) => (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
-  return { total, sick, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
+  const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId) && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
+  const activeRepro = d.repro.filter((e) => keepActiveAnimalId(e.animalId) && e.eventType === "insemination" && e.outcome !== "success" && e.outcome !== "failed").length;
+  const previousRange = previousComparableRange(dateRange);
+  const previousRemoved = previousRange ? removedHeadsByAnimalAfter(d.sales, d.mortalityEvents, previousRange.to) : new Map();
+  const speciesPredicate = (a) => !speciesFilter || a?.species === speciesFilter;
+  const previousTotal = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, speciesPredicate) : total;
+  const previousFemale = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, (a) => speciesPredicate(a) && a?.sex === "F") : female;
+  const previousMale = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, (a) => speciesPredicate(a) && a?.sex === "M") : male;
+  const previousSales = previousRange
+    ? d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && keepCurrency(s) && inDateRange(s.saleDate || s.sale_date, previousRange))
+    : sales;
+  const previousExpenses = previousRange
+    ? d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && keepCurrency(e) && inDateRange(e.expenseDate || e.expense_date, previousRange))
+    : expenses;
+  const previousRevMonth = previousSales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
+  const previousExpMonth = previousExpenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
+  return {
+    total, sick, female, male, femaleAdult, maleAdult, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro,
+    deltaTotal: percentDelta(total, previousTotal),
+    deltaFemale: percentDelta(female, previousFemale),
+    deltaMale: percentDelta(male, previousMale),
+    deltaRevenue: percentDelta(revMonth, previousRevMonth),
+    deltaExpense: percentDelta(expMonth, previousExpMonth),
+  };
 }
 
 const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
@@ -117,7 +302,10 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const isAll = !species;
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const live = useDashboardData();
-  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange);
+  const currencyMeta = useCurrencyCatalog();
+  const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
+  const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
+  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange, activeCurrencyId);
   const fin = deriveDashFinanceKpis(live.finance);
   const ALERTS = deriveDashAlerts(live, lang);
   const aiFiltered = live.aiInsights.map((i) => ({
@@ -129,32 +317,44 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
 
   // KPI set (adapts). Values come from live API/DB data only.
   const liveKpis = k ? [
-    { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: [k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total], icon: "layers" },
+    { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: k.deltaTotal, trend: Array(12).fill(k.total), icon: "layers" },
+    { label: lang==="fr"?"Femelles":"Females", value: k.female.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", sublabel: k.female > 0 ? (lang==="fr"?`dont ${k.femaleAdult} adulte${k.femaleAdult>1?"s":""}`:`incl. ${k.femaleAdult} adult${k.femaleAdult>1?"s":""}`) : undefined, delta: k.deltaFemale, trend: Array(12).fill(k.female), icon: "heart", accent: "var(--pertinence-500)" },
+    { label: lang==="fr"?"Mâles":"Males",     value: k.male.toLocaleString("fr-CA"),   unit: lang==="fr"?"têtes":"head", sublabel: k.male > 0 ? (lang==="fr"?`dont ${k.maleAdult} adulte${k.maleAdult>1?"s":""}`:`incl. ${k.maleAdult} adult${k.maleAdult>1?"s":""}`) : undefined, delta: k.deltaMale, trend: Array(12).fill(k.male),   icon: "user",  accent: "var(--forest-700)" },
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
     { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
     { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
-    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
-    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
+    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaRevenue, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
+    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaExpense, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
     { label: lang==="fr"?"Stock faible":"Low stock", value: k.lowStock, unit: lang==="fr"?"réf.":"refs", delta: null, trend: [k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock], icon: "wheat", accent: k.lowStock > 0 ? "var(--rust-700)" : "var(--health-500)" },
     { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
   ] : null;
   const speciesKpis = !isAll && live.ready ? (() => {
-    const animalsSp = live.animals.filter((a) => a.species === species.id);
-    const sickSp = animalsSp.filter((a) => a.status === "sick").length;
+    const animalsSp = live.animals.filter((a) => a.species === species.id && isActiveLivestock(a));
+    const sumSp = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
+    const totalSp = sumSp(animalsSp);
+    const sickSp = sumSp(animalsSp.filter((a) => a.status === "sick"));
     const runningTreatmentsSp = live.treatments.filter((t) => {
       const a = live.animals.find((x) => x.id === t.animalId);
-      return a?.species === species.id && t.status === "running";
+      return a?.species === species.id && isActiveLivestock(a) && t.status === "running";
     }).length;
     const vaccUpcomingSp = live.vaccinations.filter((v) => v.species === species.id && v.status !== "done").length;
     const revSp = (live.sales || [])
-      .filter((s) => s.species === species.id && inDateRange(s.saleDate || s.sale_date, dateRange))
+      .filter((s) => s.species === species.id && (!activeCurrencyId || String(rowCurrencyId(s) ?? activeCurrencyId) === String(activeCurrencyId)) && inDateRange(s.saleDate || s.sale_date, dateRange))
       .reduce((sum, s) => sum + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
+    const femalesSp = animalsSp.filter((a) => a.sex === "F");
+    const malesSp = animalsSp.filter((a) => a.sex === "M");
+    const femaleSp = sumSp(femalesSp);
+    const maleSp = sumSp(malesSp);
+    const femaleAdultSp = sumSp(femalesSp.filter(isAdultAnimal));
+    const maleAdultSp = sumSp(malesSp.filter(isAdultAnimal));
     return [
-      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: animalsSp.length.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(animalsSp.length), icon: "layers", accent: species.accent },
+      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: totalSp.toLocaleString("fr-CA"), unit: species.countingUnit, delta: k.deltaTotal, trend: Array(12).fill(totalSp), icon: "layers", accent: species.accent },
+      { label: lang === "fr" ? "Femelles" : "Females", value: femaleSp.toLocaleString("fr-CA"), unit: species.countingUnit, sublabel: femaleSp > 0 ? (lang==="fr"?`dont ${femaleAdultSp} adulte${femaleAdultSp>1?"s":""}`:`incl. ${femaleAdultSp} adult${femaleAdultSp>1?"s":""}`) : undefined, delta: k.deltaFemale, trend: Array(12).fill(femaleSp), icon: "heart", accent: "var(--pertinence-500)" },
+      { label: lang === "fr" ? "Mâles" : "Males",     value: maleSp.toLocaleString("fr-CA"),   unit: species.countingUnit, sublabel: maleSp > 0 ? (lang==="fr"?`dont ${maleAdultSp} adulte${maleAdultSp>1?"s":""}`:`incl. ${maleAdultSp} adult${maleAdultSp>1?"s":""}`) : undefined, delta: k.deltaMale, trend: Array(12).fill(maleSp),   icon: "user",  accent: "var(--forest-700)" },
       { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },
-      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: "$", delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
+      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaRevenue, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
     ];
   })() : null;
   const kpis = isAll ? (liveKpis || []) : (speciesKpis || []);
@@ -169,12 +369,14 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     live.treatments.forEach((t) => {
       if (!t.endDate || t.endDate < todayISO) return;
       const a = aMap.get(t.animalId);
+      if (!isActiveLivestock(a)) return;
       if (speciesFilter && a?.species !== speciesFilter) return;
       items.push({ id: `t-${t.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Fin traitement · " : "Treatment end · ") + (t.medicineName || ""), target: a?.name || a?.externalId || "—", n: 1, due: t.endDate, status: t.endDate === todayISO ? "today" : "scheduled" });
     });
     live.repro.forEach((e) => {
       if (!e.expectedDueDate || e.expectedDueDate < todayISO) return;
       const a = aMap.get(e.animalId);
+      if (!isActiveLivestock(a)) return;
       if (speciesFilter && a?.species !== speciesFilter) return;
       items.push({ id: `r-${e.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Mise bas · " : "Birthing · ") + (a?.name || a?.externalId || "—"), target: a?.name || "—", n: 1, due: e.expectedDueDate, status: e.expectedDueDate === todayISO ? "today" : "scheduled" });
     });
@@ -253,14 +455,13 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
 // - finance: marge (rev - exp) / rev * 100, plafonnée [0..100]. 80 si rev=0.
 function computeFarmScore(live, speciesFilter, dateRange) {
   if (!live?.ready) return { sante: 0, prod: 0, finance: 0 };
-  const animals = (live.animals || []).filter((a) => !speciesFilter || a.species === speciesFilter);
-  const total = animals.length || 1;
-  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+  const animals = (live.animals || []).filter((a) => isActiveLivestock(a) && (!speciesFilter || a.species === speciesFilter));
+  const total = animals.reduce((s, a) => s + animalQty(a), 0) || 1;
+  const sick = animals.filter((a) => a.status && a.status !== "healthy").reduce((s, a) => s + animalQty(a), 0);
   const sante = Math.round(((total - sick) / total) * 100);
   const treatments = (live.treatments || []).filter((t) => {
-    if (!speciesFilter) return t.status === "running";
     const a = live.animals.find((x) => x.id === t.animalId);
-    return t.status === "running" && a?.species === speciesFilter;
+    return t.status === "running" && isActiveLivestock(a) && (!speciesFilter || a?.species === speciesFilter);
   });
   const prodPenalty = Math.min(80, Math.round((10 * treatments.length) / total));
   const prod = Math.max(0, 100 - prodPenalty);
@@ -268,7 +469,7 @@ function computeFarmScore(live, speciesFilter, dateRange) {
   const expenses = (live.expenses || []).filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const rev = sales.reduce((s, x) => s + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
   const exp = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
-  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 80;
+  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 0;
   return { sante, prod, finance };
 }
 
@@ -421,54 +622,36 @@ const ProductionPanel = ({ lang, species, live }) => {
 };
 
 const ProdChart = ({ series, lang, labels }) => {
-  const W = 720, H = 200, PAD_L = 36, PAD_B = 24, PAD_R = 12, PAD_T = 8;
-  const days = labels && labels.length ? labels : ["15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26"];
-  const seriesMaxes = series.map(s => Math.max(...s.data));
-  const seriesMins  = series.map(s => Math.min(...s.data));
+  const chartSeries = series.map((s) => ({
+    name: lang === "fr" ? s.name : (s.en || s.name),
+    data: s.data,
+    color: s.color,
+  }));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block", overflow: "visible" }}>
-      {/* gridlines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
-        <g key={i}>
-          <line x1={PAD_L} x2={W-PAD_R} y1={PAD_T + (H-PAD_T-PAD_B)*g} y2={PAD_T + (H-PAD_T-PAD_B)*g} stroke="var(--border-1)" strokeDasharray="2 4"/>
-          <text x={PAD_L - 6} y={PAD_T + (H-PAD_T-PAD_B)*g + 4} textAnchor="end" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{Math.round((1-g) * 100)}</text>
-        </g>
-      ))}
-      {/* x labels */}
-      {days.map((d, i) => (
-        <text key={i} x={PAD_L + (i/(days.length-1)) * (W-PAD_L-PAD_R)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{d}</text>
-      ))}
-      {/* series */}
-      {series.map((s, si) => {
-        const min = seriesMins[si], max = seriesMaxes[si], range = max - min || 1;
-        const pts = s.data.map((d, i) => ({
-          x: PAD_L + (i/(s.data.length-1)) * (W-PAD_L-PAD_R),
-          y: PAD_T + (H-PAD_T-PAD_B) * (1 - (d - min) / range),
-        }));
-        const path = "M" + pts.map(p => `${p.x},${p.y}`).join(" L");
-        const area = path + ` L${pts[pts.length-1].x},${H-PAD_B} L${pts[0].x},${H-PAD_B} Z`;
-        return (
-          <g key={si}>
-            <path d={area} fill={s.color} opacity={0.12}/>
-            <path d={path} stroke={s.color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-            {pts.map((p, i) => i === pts.length-1 && (
-              <g key={i}>
-                <circle cx={p.x} cy={p.y} r="4" fill={s.color} stroke="var(--paper)" strokeWidth="2"/>
-                <text x={p.x + 8} y={p.y - 6} fontSize="11" fontFamily="var(--font-mono)" fill={s.color}>{s.data[i].toLocaleString("fr-CA")}</text>
-              </g>
-            ))}
-          </g>
-        );
-      })}
-    </svg>
+    <MaterialLineChart
+      type="area"
+      height={220}
+      labels={labels}
+      series={chartSeries}
+      colors={chartSeries.map((s) => s.color)}
+      formatter={(v) => Number(v || 0).toLocaleString("fr-CA")}
+    />
   );
 };
 
 // ─── Species breakdown grid (when "all") ─────────────────────────────────
 const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
   // Replace static counts with live animal counts per species when available.
-  const liveCounts = live?.ready ? live.animals.reduce((acc, a) => { acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
-  const liveSick = live?.ready ? live.animals.reduce((acc, a) => { if (a.status && a.status !== "healthy") acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
+  const liveCounts = live?.ready ? live.animals.reduce((acc, a) => {
+    if (!isActiveLivestock(a)) return acc;
+    acc[a.species] = (acc[a.species] || 0) + animalQty(a);
+    return acc;
+  }, {}) : null;
+  const liveSick = live?.ready ? live.animals.reduce((acc, a) => {
+    if (!isActiveLivestock(a) || !a.status || a.status === "healthy") return acc;
+    acc[a.species] = (acc[a.species] || 0) + animalQty(a);
+    return acc;
+  }, {}) : null;
   return (
   <div className="card" style={{ padding: "16px 18px" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -669,7 +852,7 @@ const UpcomingPanel = ({ lang, vaccines, onAll }) => (
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {vaccines.map((v) => {
-        const sp = speciesById(v.species);
+        const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
         const dot = v.status === "overdue" ? "var(--rust-700)" : v.status === "today" ? "var(--wheat-500)" : "var(--ink-300)";
         return (
           <div key={v.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>

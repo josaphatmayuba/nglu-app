@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 import { errorHandler, successHandler } from "../../../../utils/functions";
+import { getAccessToken } from "../../../../utils/tokenStore";
 
 const initialState = {
   loading: false,
@@ -11,7 +12,8 @@ const initialState = {
 
 export const getSetting = createAsyncThunk("data/settingData", async () => {
   try {
-    const { data } = await axios.get(`setting`);
+    const hasToken = Boolean(getAccessToken() || localStorage.getItem("access-token"));
+    const { data } = await axios.get(hasToken ? "setting" : "setting/public");
     return successHandler(data);
   } catch (error) {
     return errorHandler(error);

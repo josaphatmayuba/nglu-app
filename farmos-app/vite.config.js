@@ -3,29 +3,37 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { versionDefine } from "../scripts/app-version.mjs";
 
-export default defineConfig({
+// Deux cibles de build pour la MEME app :
+//  - defaut        : base "/farmos/" (ongdngolu.org/farmos + avelomi.com/farmos, INCHANGE)
+//  - --mode avelomi: base "/" pour farmos.avelomi.com servi a la racine du sous-domaine
+//    (root nginx dedie html-farmos-avelomi-prod ; ne JAMAIS deployer ce build dans
+//    html-farmos-prod, il casserait les sous-chemins).
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/farmos/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      // L'app est servie sous /farmos/ par nginx; tout le scope PWA doit l'etre aussi.
-      base: "/farmos/",
-      scope: "/farmos/",
+      // L'app est servie sous BASE par nginx; tout le scope PWA doit l'etre aussi.
+      base: BASE,
+      scope: BASE,
       includeAssets: [
-        "farmos-icon.svg",
+        "farmos-logo.png",
+        "farmos-wordmark.png",
         "apple-touch-icon.png",
         "styles/app.css",
         "styles/farm-tokens.css",
         "styles/tokens.css",
       ],
       manifest: {
-        id: "/farmos/",
+        id: BASE,
         name: "FarmOS Pro · Élevage intelligent",
         short_name: "FarmOS",
         description: "Gestion de troupeau, traitements, alertes et reproduction.",
-        start_url: "/farmos/",
-        scope: "/farmos/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#FBF8F2",
@@ -36,7 +44,6 @@ export default defineConfig({
           { src: "farmos-icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "farmos-icon-512.png", sizes: "512x512", type: "image/png" },
           { src: "farmos-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-          { src: "farmos-icon.svg", sizes: "any", type: "image/svg+xml" },
         ],
       },
       workbox: {
@@ -46,7 +53,7 @@ export default defineConfig({
         // Limite a 5 Mo par fichier precache (utile pour les chunks TF.js).
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/farmos/index.html",
+        navigateFallback: BASE + "index.html",
         // Ne jamais intercepter les appels API : ils doivent toujours toucher le reseau.
         navigateFallbackDenylist: [/^\/api\//],
         // Offline data is handled by Dexie + outbox. Do not let Workbox
@@ -58,7 +65,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: "/farmos/",
+  base: BASE,
   define: {
     __BUILD_TS__: JSON.stringify(Date.now()),
     ...versionDefine(),
@@ -73,4 +80,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "farmos-assets",
   },
+  };
 });

@@ -13,6 +13,7 @@ import CommonDelete from "../../CommonUi/CommonDelete";
 import CreateDrawer from "../../CommonUi/CreateDrawer";
 import TableComponent from "../../CommonUi/TableComponent";
 import UserPrivateComponent from "../../PrivacyComponent/UserPrivateComponent";
+import { sanitizeHtml } from "../../../utils/sanitizeHtml";
 import AddCurrency from "./AddCurrency";
 import UpdateCurrency from "./UpdateCurrency";
 
@@ -53,7 +54,7 @@ export default function GetAllCurrency() {
       dataIndex: "currencySymbol",
       key: "currencySymbol",
       render: (symbol) => (
-        <span dangerouslySetInnerHTML={{ __html: symbol }}></span>
+        <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(symbol) }}></span>
       ),
 
       csvOff: true,

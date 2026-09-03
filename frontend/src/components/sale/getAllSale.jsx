@@ -6,6 +6,7 @@ import { loadAllSale, loadSingleSale } from "@/redux/rtk/features/sale/saleSlice
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { loadAllStaff } from "@/redux/rtk/features/user/userSlice";
 import { useDefaultCurrencySymbol } from "@/utils/useDefaultCurrency";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import moment from "moment";
@@ -245,19 +246,40 @@ const GetAllSale = () => {
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-ink-500 font-medium mb-1">Total facturé</div>
           <div className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
-            {fmtMoney(kpis.total, currencySymbol)}
+            <FormattedAmount
+              amount={kpis.total}
+              currency={{
+                currencyCode: companyInfo?.currency?.currencyCode,
+                currencyName: companyInfo?.currency?.currencyName,
+                currencySymbol: companyInfo?.currency?.currencySymbol,
+              }}
+            />
           </div>
         </div>
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-emerald-700 font-medium mb-1">Encaissé</div>
           <div className="text-lg md:text-2xl font-semibold text-emerald-700 tracking-tight truncate">
-            {fmtMoney(kpis.paid, currencySymbol)}
+            <FormattedAmount
+              amount={kpis.paid}
+              currency={{
+                currencyCode: companyInfo?.currency?.currencyCode,
+                currencyName: companyInfo?.currency?.currencyName,
+                currencySymbol: companyInfo?.currency?.currencySymbol,
+              }}
+            />
           </div>
         </div>
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-amber-700 font-medium mb-1">À recouvrer</div>
           <div className="text-lg md:text-2xl font-semibold text-amber-700 tracking-tight truncate">
-            {fmtMoney(kpis.due, currencySymbol)}
+            <FormattedAmount
+              amount={kpis.due}
+              currency={{
+                currencyCode: companyInfo?.currency?.currencyCode,
+                currencyName: companyInfo?.currency?.currencyName,
+                currencySymbol: companyInfo?.currency?.currencySymbol,
+              }}
+            />
           </div>
         </div>
       </div>
@@ -368,7 +390,15 @@ const GetAllSale = () => {
                       </span>
                     </td>
                     <td className={"px-4 py-3 text-right font-medium " + (status === "cancelled" ? "text-ink-400 line-through" : "text-ink-900")}>
-                      {fmtMoney(inv.totalAmount, inv.currencySymbol)}
+                      <FormattedAmount
+                        amount={inv.totalAmount}
+                        currency={{
+                          currencyCode: inv.currencyCode,
+                          currencyName: inv.currencyName,
+                          currencySymbol: inv.currencySymbol,
+                          ...inv.currency
+                        }}
+                      />
                     </td>
                     <td className="px-4 py-3 text-right relative invoice-menu-anchor">
                       <button

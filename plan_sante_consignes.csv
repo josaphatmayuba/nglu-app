@@ -1,0 +1,7 @@
+categorie,element,consigne,obligatoire
+Sante animale,Evaluation etat sanitaire,"Inspecter quotidiennement les animaux: reperer toux, diarrhee, lesions cutanees pour agir avant la contagion",oui
+Sante animale,Historique maladies recentes,"Analyser les pathologies des mois passes pour identifier les faiblesses recurrentes et adapter le plan de biosecurite",oui
+Sante animale,Registre des traitements veterinaires,"Noter chaque soin administre (date, numero animal, produit, dose). Document obligatoire pour respecter les delais d'attente avant abattage",oui
+Sante animale,Calendrier de vaccination,"Planifier et consigner toutes les vaccinations (croupe, charbon). Meilleur bouclier contre les epidemies mortelles",oui
+Sante animale,Programme de deparasitage,"Suivre un plan strict contre les vers internes et parasites externes (freinent la croissance, surtout porcs)",oui
+Sante animale,Taux de mortalite,"Calculer le % par stade (porcs, sevrage, chevres). Un pic signale une urgence sanitaire ou une faille d'elevage",oui

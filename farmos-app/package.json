@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:avelomi": "vite build --mode avelomi --outDir dist-avelomi",
     "preview": "vite preview --host 0.0.0.0",
     "icons": "node scripts/gen-pwa-icons.mjs",
     "cap:copy": "npm run build && npx cap copy",
@@ -25,9 +26,11 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@zxing/browser": "^0.2.0",
     "@zxing/library": "^0.22.0",
+    "apexcharts": "^5.15.0",
     "dexie": "^4.4.3",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
+    "react-apexcharts": "^2.1.0",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {

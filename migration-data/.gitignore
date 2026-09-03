@@ -1,0 +1,9 @@
+# Données legacy de migration : contiennent des données réelles (users, sessions,
+# clients…). NE JAMAIS committer les CSV ni le dump. Le manifest (schéma seul,
+# sans données) est conservé pour que l'app connaisse les tables/colonnes.
+*
+!.gitignore
+!export_tables_csv_schema/
+export_tables_csv_schema/*
+!export_tables_csv_schema/manifest.json
+!export_tables_csv_schema/schema_explication.md

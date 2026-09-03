@@ -4,7 +4,10 @@ import { BriefcaseBusiness, Download, Eye, Filter, LayoutGrid, List, Lock, MoreH
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import EditStaffModal from "./EditStaffModal";
+import ProjectAssignTab from "./ProjectAssignTab";
+import PropertyAssignTab from "./PropertyAssignTab";
 import RolesTab from "./RolesTab";
+import SpeciesAssignTab from "./SpeciesAssignTab";
 import SalariesPage from "./SalariesPage";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import { cleanCurrencySymbol } from "../propertyManagement/shared/format";
@@ -34,6 +37,9 @@ const TABS = [
   { key: "organigramme", label: "Postes & Départements" },
   { key: "performance", label: "Performance" },
   { key: "roles", label: "Rôles & Permissions" },
+  { key: "especes", label: "Espèces (FarmOS)" },
+  { key: "biens", label: "Biens (Domus)" },
+  { key: "chantiers", label: "Chantiers (BatiPro)" },
 ];
 
 function getInitials(user) {
@@ -62,9 +68,11 @@ function PlaceholderPanel({ label }) {
 function InfoRow({ label, value }) {
   if (!value) return null;
   return (
-    <div className="flex justify-between py-2 border-b border-ink-100 last:border-0">
-      <span className="text-xs text-ink-500">{label}</span>
-      <span className="text-xs font-medium text-ink-800 text-right max-w-[60%]">{value}</span>
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-3 py-2.5 border-b border-ink-100 last:border-0">
+      <span className="text-xs leading-5 text-ink-500">{label}</span>
+      <span className="min-w-0 break-words text-left text-xs font-medium leading-5 text-ink-800">
+        {value}
+      </span>
     </div>
   );
 }
@@ -80,7 +88,8 @@ function ViewStaffDrawer({ user, onClose }) {
       open={!!user}
       onClose={onClose}
       title="Profil employé"
-      width={400}
+      width="min(460px, 100vw)"
+      bodyStyle={{ padding: 24 }}
     >
       <div className="flex items-center gap-4 mb-6">
         <div
@@ -202,7 +211,7 @@ function CloseAccountModal({ user, onClose, onClosed }) {
   );
 }
 
-function buildTableColumns(onView, onEdit, onClose) {
+function buildTableColumns(onView, onEdit, onClose, currenciesList) {
   return [
     {
       title: "Nom",
@@ -273,6 +282,9 @@ export default function HrPanel() {
   const [statusFilter, setStatusFilter] = useState("all");
   const dispatch = useDispatch();
   const currenciesList = useSelector((state) => state.currency?.list) || [];
+  const permissionsList = useSelector((s) => s?.auth?.list) || [];
+  const canCreateStaff = permissionsList.includes("create-user");
+  const canExportStaff = permissionsList.includes("readAll-user");
   useEffect(() => { if (!currenciesList.length) dispatch(loadAllCurrency()); }, [dispatch, currenciesList.length]);
 
   function loadStaff() {
@@ -291,6 +303,18 @@ export default function HrPanel() {
   useEffect(() => { loadStaff(); }, []);
 
   const activeCount = staffList.filter((u) => u.status === "true").length;
+
+  // Masse salariale = somme des salaires courants des actifs, groupée par devise
+  const payrollByCurrency = staffList
+    .filter((u) => u.status === "true" && u.currentSalary != null)
+    .reduce((acc, u) => {
+      const key = u.currentSalaryCurrencyId ?? "none";
+      acc[key] = (acc[key] || 0) + Number(u.currentSalary);
+      return acc;
+    }, {});
+  const payrollLabel = Object.entries(payrollByCurrency)
+    .map(([cid, amt]) => fmtSalary(amt, cid === "none" ? null : Number(cid), currenciesList))
+    .join(" + ");
 
   const filteredStaff = staffList.filter((u) => {
     // Text search
@@ -369,20 +393,24 @@ export default function HrPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={exportCsv}
-            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
-            title="Exporter en CSV"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setNewStaff(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Nouvel employé</span>
-          </button>
+          {canExportStaff && (
+            <button
+              onClick={exportCsv}
+              className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+              title="Exporter en CSV"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
+          {canCreateStaff && (
+            <button
+              onClick={() => setNewStaff(true)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Nouvel employé</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -419,7 +447,9 @@ export default function HrPanel() {
             </svg>
           </div>
           <div className="text-xs text-ink-500 font-medium mb-1">Masse salariale</div>
-          <div className="text-lg md:text-xl font-semibold text-ink-900 tracking-tight">Voir Paie</div>
+          <div className="text-lg md:text-xl font-semibold text-ink-900 tracking-tight">
+            {staffLoading ? "…" : payrollLabel || "—"}
+          </div>
           <div className="mt-2 text-xs text-ink-400">Détail dans l&apos;onglet Paie</div>
         </div>
 
@@ -601,7 +631,7 @@ export default function HrPanel() {
               <Table
                 rowKey="id"
                 dataSource={filteredStaff}
-                columns={buildTableColumns(setViewingUser, setEditingUser, setClosingUser)}
+                columns={buildTableColumns(setViewingUser, setEditingUser, setClosingUser, currenciesList)}
                 loading={staffLoading}
                 pagination={{ pageSize: 20 }}
                 size="middle"
@@ -655,6 +685,12 @@ export default function HrPanel() {
       {activeTab === "performance" && <PlaceholderPanel label="Évaluation des performances" />}
 
       {activeTab === "roles" && <RolesTab />}
+
+      {activeTab === "especes" && <SpeciesAssignTab />}
+
+      {activeTab === "biens" && <PropertyAssignTab />}
+
+      {activeTab === "chantiers" && <ProjectAssignTab />}
 
       {/* ── Modals & Drawers ── */}
       <ViewStaffDrawer user={viewingUser} onClose={() => setViewingUser(null)} />

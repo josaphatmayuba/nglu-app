@@ -91,6 +91,12 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({ example: false, description: "Afficher dans la page publique de reservation" })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  availableForBooking?: boolean;
 }
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
@@ -173,6 +179,12 @@ export class CreateUnitDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({ example: false, description: "Afficher dans la page publique de reservation" })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  availableForBooking?: boolean;
 }
 
 export class UpdateUnitDto extends PartialType(CreateUnitDto) {}
@@ -255,6 +267,11 @@ export class CreateLeaseDto {
   @IsOptional()
   @IsString()
   terms?: string | null;
+
+  @ApiPropertyOptional({ example: "Kinshasa", description: "Ville de signature du contrat (Fait à ...)." })
+  @IsOptional()
+  @IsString()
+  signingCity?: string | null;
 
   @ApiPropertyOptional({ example: "active", default: "draft" })
   @IsOptional()
@@ -516,6 +533,16 @@ export class CreateTenantDto {
   @IsString()
   phone2?: string | null;
 
+  @ApiPropertyOptional({ example: "Carte d'électeur", description: "Type de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_document_type?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456", description: "Numéro de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_number?: string | null;
+
   @ApiProperty({ example: "Marie Dupont" })
   @IsString()
   @IsNotEmpty()
@@ -598,13 +625,13 @@ export class CreateTenantDto {
   occupant_number: number;
 
   @ApiPropertyOptional({ example: "Jeanne Dupont" })
-  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @ValidateIf((dto) => ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
   @IsString()
   @IsNotEmpty()
   partenair_name?: string | null;
 
   @ApiPropertyOptional({ example: "+243840000000" })
-  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @ValidateIf((dto) => ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
   @IsString()
   @IsNotEmpty()
   partenair_number?: string | null;
@@ -717,6 +744,16 @@ export class SaveTenantOnboardingDto {
   @IsOptional()
   @IsString()
   phone2?: string | null;
+
+  @ApiPropertyOptional({ example: "Carte d'électeur", description: "Type de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_document_type?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456", description: "Numéro de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_number?: string | null;
 
   @ApiPropertyOptional({ example: "Marie Dupont" })
   @IsOptional()
@@ -882,6 +919,11 @@ export class CreateMaintenanceCostDto {
   vendorName?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  supplierId?: number;
+
+  @IsOptional()
   @IsIn(["cash", "bank", "mobile_money", "cheque"])
   paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
 
@@ -896,4 +938,257 @@ export class CreateMaintenanceCostDto {
   @IsOptional()
   @IsString()
   receiptUrl?: string;
+}
+
+// ── Réservation temporaire type hôtel (courte durée, tarif par jour) ──────────
+export class CreateReservationDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1, description: "NULL = bien entier ; sinon une unité du bien." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  guestName: string;
+
+  @ApiPropertyOptional({ example: "+243812345678" })
+  @IsOptional()
+  @IsString()
+  guestPhone?: string | null;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  guestEmail?: string | null;
+
+  @ApiPropertyOptional({ example: 1, description: "Locataire déjà enregistré (facultatif)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tenantId?: number | null;
+
+  @ApiProperty({ example: "2026-07-01" })
+  @IsDateString()
+  checkIn: string;
+
+  @ApiProperty({ example: "2026-07-05" })
+  @IsDateString()
+  checkOut: string;
+
+  @ApiProperty({ example: 50, description: "Tarif par jour." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  dailyRate: number;
+
+  @ApiPropertyOptional({ example: 100, default: 0, description: "Caution encaissée à la réservation (info ; pas de compta ici)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  depositAmount?: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise. Par défaut celle du bien, puis appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "RES-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string | null;
+
+  @ApiPropertyOptional({ example: "ETE2026", description: "Code coupon a appliquer (baisse le total)." })
+  @IsOptional()
+  @IsString()
+  couponCode?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateReservationDto extends PartialType(CreateReservationDto) {}
+
+export class CreateCouponDto {
+  @ApiProperty({ example: "ETE2026" })
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @ApiProperty({ example: "percentage", enum: ["percentage", "fixed"] })
+  @IsIn(["percentage", "fixed"])
+  discountType: "percentage" | "fixed";
+
+  @ApiProperty({ example: 10, description: "% si percentage, montant en devise si fixed." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  discountValue: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise (remises fixed)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number | null;
+
+  @ApiPropertyOptional({ example: "2026-07-01" })
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string | null;
+
+  @ApiPropertyOptional({ example: "2026-08-31" })
+  @IsOptional()
+  @IsDateString()
+  validTo?: string | null;
+
+  @ApiPropertyOptional({ example: 100, description: "Quota d'usage (NULL = illimite)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxUses?: number | null;
+
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateCouponDto extends PartialType(CreateCouponDto) {}
+
+export class PublicReservationRequestDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1, description: "NULL = bien entier ; sinon une unite du bien." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  guestName: string;
+
+  @ApiPropertyOptional({ example: "+243812345678" })
+  @IsOptional()
+  @IsString()
+  guestPhone?: string | null;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  guestEmail?: string | null;
+
+  @ApiProperty({ example: "2026-07-01" })
+  @IsDateString()
+  checkIn: string;
+
+  @ApiProperty({ example: "2026-07-05" })
+  @IsDateString()
+  checkOut: string;
+
+  @ApiPropertyOptional({ example: "ETE2026" })
+  @IsOptional()
+  @IsString()
+  couponCode?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class PublicLeaseRequestDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean" })
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @ApiProperty({ example: "Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
+  @ApiProperty({ example: "+243812345678" })
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @ApiPropertyOptional({ example: "2026-08-01" })
+  @IsOptional()
+  @IsDateString()
+  desiredMoveIn?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  message?: string | null;
+}
+
+export class CheckOutReservationDto {
+  @ApiPropertyOptional({ example: "2026-07-05", description: "Date de comptabilisation de la recette. Défaut = aujourd'hui." })
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash", description: "cash → débit Caisse · bank/card/cheque → débit Banque." })
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @ApiPropertyOptional({ example: 1, description: "Compte de trésorerie encaisseur (sinon dérivé du moyen)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  paymentAccountId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
 }

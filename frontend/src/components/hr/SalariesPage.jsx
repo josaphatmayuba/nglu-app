@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
 import MoneyInput from "../Shared/MoneyInput";
+import FormattedAmount from "../Shared/FormattedAmount";
 import {
   addSalaryHistory,
   deleteSalaryHistory,
@@ -70,10 +71,13 @@ const SalariesPage = () => {
     return c ? cleanCurrencySymbol(c) : "";
   };
 
-  const fmtSalary = (amount, currencyId) => {
-    const code = currencyCodeFor(currencyId);
-    const n = Number(amount || 0).toLocaleString();
-    return code ? `${n} ${code}` : n;
+  const fmtSalary = (amount, currency) => {
+    return (
+      <FormattedAmount
+        amount={amount}
+        currency={currency}
+      />
+    );
   };
 
   return (
@@ -85,7 +89,7 @@ const SalariesPage = () => {
         pagination={{ total: total || 0 }}
         columns={[
           { title: "Employé", render: (_, record) => staffName(record.userId) },
-          { title: "Salaire", render: (_, r) => fmtSalary(r.salary, r.currencyId) },
+          { title: "Salaire", render: (_, r) => fmtSalary(r.salary, r.currency) },
           { title: "Début", dataIndex: "startDate" },
           { title: "Fin", dataIndex: "endDate" },
           { title: "Commentaire", dataIndex: "comment" },

@@ -1,10 +1,11 @@
 // SCRUM-247 — Contrats & signature (liste, détail, envoi, modèles).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarX, Check, Clock, Copy, Eye, FileCheck2, FilePen, FilePlus, Files, History,
   Printer, Search, Send, ShieldCheck, X, FileCheck,
 } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
   AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef, escapeHtml,
@@ -13,8 +14,11 @@ import {
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 
 async function loadContractsModule() {
   const [contracts, leases, templates] = await Promise.all([
@@ -54,6 +58,9 @@ export function Contrats() {
   const { data, loading, error, reload } = useApi(loadContractsModule, []);
   useRealtimeReload(reload, ["contracts", "leases"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
+  const promptDialog = usePrompt();
+  const toast = useToast();
 
   const contracts = useMemo(
     () => (Array.isArray(data?.contracts) ? data.contracts : []).filter((c) => contractInDateRange(c, dateRange)),
@@ -195,20 +202,39 @@ export function Contrats() {
   const copySigningLink = () => {
     const link = signingUrlFromContract(detail || selectedSummary, signingLinks);
     if (!link) {
-      window.alert("Envoyez d'abord le contrat pour obtenir un lien de signature.");
+      toast.error(t("Envoyez d'abord le contrat pour obtenir un lien de signature."));
       return;
     }
     navigator.clipboard.writeText(link).then(
-      () => {},
-      () => window.prompt("Copiez le lien de signature :", link),
+      () => toast.success(t("Lien de signature copié.")),
+      () => promptDialog({ title: t("Lien de signature"), label: t("Copiez le lien :"), defaultValue: link, readOnly: true, copyable: true }),
     );
+  };
+
+  // Renvoi manuel du message de bienvenue (contrat signé mais message jamais parti).
+  const handleSendWelcome = async () => {
+    if (!selectedId) return;
+    setBusy("welcome");
+    setActionError("");
+    try {
+      await api.sendContractWelcome(selectedId);
+      await reload();
+      await loadDetail(selectedId);
+    } catch (e) {
+      setActionError(e.message || "Impossible d'envoyer le message de bienvenue.");
+    } finally {
+      setBusy("");
+    }
   };
 
   const handleDelete = async () => {
     if (!selectedId) return;
-    const ok = window.confirm(
-      "Retirer ce contrat des vues actives ? (suppression logique — l'historique est conservé.)",
-    );
+    const ok = await confirm({
+      title: t("Retirer le contrat"),
+      message: t("Retirer ce contrat des vues actives ? (suppression logique — l'historique est conservé.)"),
+      confirmLabel: t("Retirer"),
+      danger: true,
+    });
     if (!ok) return;
     setBusy("delete");
     setActionError("");
@@ -246,7 +272,12 @@ export function Contrats() {
     }
   };
   const handleDeleteTemplate = async (t) => {
-    if (!window.confirm(`Supprimer le modèle « ${t.name} » ?`)) return;
+    if (!(await confirm({
+      title: "Supprimer le modèle",
+      message: `Supprimer le modèle « ${t.name} » ?`,
+      confirmLabel: "Supprimer",
+      danger: true,
+    }))) return;
     setBusy(`tpl-del-${t.id}`);
     setActionError("");
     try {
@@ -306,10 +337,10 @@ export function Contrats() {
       </div>
 
       <MetricsGrid>
-        <Metric tone="green" icon={<FileCheck2 size={20} />} label="Signés" value={metrics.signed} />
-        <Metric tone="amber" icon={<Clock size={20} />} label="En attente de signature" value={metrics.pending} />
-        <Metric tone="brand" icon={<FilePen size={20} />} label="Brouillons" value={metrics.draft} />
-        <Metric tone="red" icon={<CalendarX size={20} />} label="Baux expirent &lt; 30 j" value={metrics.expiring} />
+        <Metric tone="green" icon={<FileCheck2 size={20} />} label={t("Signés")} value={metrics.signed} />
+        <Metric tone="amber" icon={<Clock size={20} />} label={t("En attente de signature")} value={metrics.pending} />
+        <Metric tone="brand" icon={<FilePen size={20} />} label={t("Brouillons")} value={metrics.draft} />
+        <Metric tone="red" icon={<CalendarX size={20} />} label={t("Baux expirent < 30 j")} value={metrics.expiring} />
       </MetricsGrid>
 
       <div className="contrats-layout">
@@ -367,7 +398,7 @@ export function Contrats() {
                 </div>
                 <div className="contrats-detail-actions">
                   <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail)}>
+                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail, { onError: toast.error })}>
                     <Printer size={14} /> Imprimer
                   </button>
                   <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail)}>
@@ -386,6 +417,17 @@ export function Contrats() {
                       onClick={() => handleSend()}
                     >
                       <Send size={14} /> {detail?.status === "sent" || detail?.status === "viewed" ? "Renvoyer" : "Envoyer"}
+                    </button>
+                  )}
+                  {detail?.status === "signed" && !detail?.welcomeMessageSentAt && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={Boolean(busy)}
+                      onClick={handleSendWelcome}
+                      title="Envoyer le message de bienvenue (email + SMS) au locataire"
+                    >
+                      <Send size={14} /> Message de bienvenue
                     </button>
                   )}
                   {detail?.status === "draft" && (
@@ -421,7 +463,7 @@ export function Contrats() {
                   )}
                   <div className="contrats-paper-body">
                     {detail && hasHtmlMarkup(detail.contractContent) ? (
-                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: detail.contractContent }} />
+                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
                     ) : (
                       <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
                     )}
@@ -476,6 +518,13 @@ export function Contrats() {
                       Signé le {formatSignedAt(detail.signedAt)}
                     </p>
                   )}
+                  {detail?.status === "signed" && (
+                    <p style={{ fontSize: 12, marginTop: 4, color: detail?.welcomeMessageSentAt ? "#059669" : "#b45309" }}>
+                      {detail?.welcomeMessageSentAt
+                        ? `Message de bienvenue envoyé le ${formatSignedAt(detail.welcomeMessageSentAt)}`
+                        : "Message de bienvenue non envoyé — utilisez le bouton « Message de bienvenue »."}
+                    </p>
+                  )}
                 </div>
               </div>
               </div>
@@ -516,7 +565,7 @@ export function Contrats() {
             ))}
           </div>
           <p className="muted" style={{ fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM DU LOCATAIRE], [ADRESSE], [LOYER], etc.
+            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE], etc.
           </p>
         </aside>
       </div>
@@ -533,28 +582,18 @@ export function Contrats() {
                   <p>Depuis un bail actif</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setCreateOpen(false)} aria-label="Fermer"><X size={18} /></button>
+              <button type="button" onClick={() => setCreateOpen(false)} aria-label={t("Fermer")}><X size={18} /></button>
             </div>
             <div style={{ padding: "0 24px 20px" }}>
               <label className="domus-property-field">
                 <span>Bail associé <b>*</b></span>
-                <select value={createLeaseId} onChange={(e) => setCreateLeaseId(e.target.value)}>
-                  <option value="">Choisir un bail</option>
-                  {createLeaseOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}{o.hasContract ? " (contrat existant)" : ""}
-                    </option>
-                  ))}
-                </select>
+                <Autocomplete value={createLeaseId} onChange={setCreateLeaseId} placeholder="Choisir un bail"
+                  options={createLeaseOptions.map((o) => ({ value: o.id, label: `${o.label}${o.hasContract ? " (contrat existant)" : ""}` }))} />
               </label>
               <label className="domus-property-field" style={{ marginTop: 14 }}>
                 <span>Modèle (optionnel)</span>
-                <select value={createTemplateId} onChange={(e) => setCreateTemplateId(e.target.value)}>
-                  <option value="">Modèle actif par défaut</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}{t.isActive ? " · actif" : ""}</option>
-                  ))}
-                </select>
+                <Autocomplete value={createTemplateId} onChange={setCreateTemplateId} placeholder="Modèle actif par défaut"
+                  options={templates.map((t) => ({ value: t.id, label: `${t.name}${t.isActive ? " · actif" : ""}` }))} />
               </label>
               <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
                 Le contenu est généré automatiquement à partir du bail et du modèle.
@@ -590,14 +629,110 @@ const TEMPLATE_TYPE_OPTIONS = [
   ["short_term", "Bail court terme / saisonnier"],
 ];
 
+const CONTRACT_PLACEHOLDER_GROUPS = [
+  {
+    label: "Bailleur",
+    items: [
+      "NOM COMPLET DU BAILLEUR",
+      "ADRESSE DU BAILLEUR",
+      "TÉLÉPHONE DU BAILLEUR",
+      "EMAIL DU BAILLEUR",
+    ],
+  },
+  {
+    label: "Preneur",
+    items: [
+      "NOM COMPLET DU PRENEUR",
+      "ADRESSE DU PRENEUR",
+      "TÉLÉPHONE DU PRENEUR",
+      "EMAIL DU PRENEUR",
+      "TYPE DE PIÈCE D'IDENTITÉ",
+      "NUMÉRO DE PIÈCE D'IDENTITÉ",
+    ],
+  },
+  {
+    label: "Logement",
+    items: [
+      "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION",
+      "TYPE DE LOGEMENT",
+      "PROPRIÉTÉ",
+      "UNITÉ",
+      "RÉFÉRENCE BAIL",
+      "VILLE",
+    ],
+  },
+  {
+    label: "Dates",
+    items: [
+      "NUMÉRO DE MOIS",
+      "DURÉE DE BAIL EN MOIS",
+      "DATE DE DÉBUT DE BAIL",
+      "DATE DE DÉBUT DE BAIL JJ/MM/AAAA",
+      "DATE DE FIN DE BAIL",
+      "DATE DE FIN DE BAIL JJ/MM/AAAA",
+      "DATE DE SIGNATURE DE BAIL",
+      "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA",
+      "DATE DU JOUR",
+    ],
+  },
+  {
+    label: "Montants",
+    items: [
+      "MONTANT DU LOYER AVEC DEVISE",
+      "MONTANT DU LOYER",
+      "MONTANT GARANTIE AVEC DEVISE",
+      "MONTANT GARANTIE",
+      "NUMÉRO DE MOIS DE GARANTIE",
+      "DEVISE",
+      "SYMBOLE DE DEVISE",
+      "CODE DE DEVISE",
+    ],
+  },
+  {
+    label: "Notes / conditions (optionnel)",
+    items: [
+      "CONDITIONS PARTICULIÈRES",
+      "NOTES ÉTAT DES LIEUX",
+    ],
+  },
+];
+
+// Placeholders facultatifs : insérés dans une section conditionnelle {{#if}}...{{/if}}
+// pour que l'article disparaisse du contrat quand le champ du bail est vide.
+const OPTIONAL_PLACEHOLDERS = new Set(["CONDITIONS PARTICULIÈRES", "NOTES ÉTAT DES LIEUX"]);
+
 function TemplateModal({ value, busy, onClose, onSave }) {
   const [form, setForm] = useState(value);
   const [showPreview, setShowPreview] = useState(false);
+  const textareaRef = useRef(null);
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
   const canSave = form.name.trim() && form.body.trim() && form.type;
-  const previewHtml = hasHtmlMarkup(form.body)
-    ? form.body
-    : `<pre class="domus-contract-plain">${escapeHtml(form.body || "")}</pre>`;
+  const insertPlaceholder = (name) => {
+    const token = OPTIONAL_PLACEHOLDERS.has(name) ? `{{#if ${name}}}[${name}]{{/if}}` : `[${name}]`;
+    const textarea = textareaRef.current;
+    setShowPreview(false);
+    setForm((current) => {
+      const body = current.body || "";
+      const start = textarea ? textarea.selectionStart : body.length;
+      const end = textarea ? textarea.selectionEnd : body.length;
+      const insert = textarea ? token : `${body ? "\n" : ""}${token}`;
+      const nextBody = `${body.slice(0, start)}${insert}${body.slice(end)}`;
+      const nextCaret = start + insert.length;
+      requestAnimationFrame(() => {
+        const nextTextarea = textareaRef.current;
+        if (!nextTextarea) return;
+        nextTextarea.focus();
+        nextTextarea.setSelectionRange(nextCaret, nextCaret);
+      });
+      return { ...current, body: nextBody };
+    });
+  };
+  // Dans l'aperçu, on masque les balises de section {{#if ...}}/{{/if}} et on garde
+  // leur contenu (le rendu réel des blocs conditionnels est fait côté backend).
+  const previewBody = (form.body || "").replace(/\{\{\s*(#if\s+[^{}]+?|\/if)\s*\}\}/g, "");
+  const previewHtml = hasHtmlMarkup(previewBody)
+    ? previewBody
+    : `<pre class="domus-contract-plain">${escapeHtml(previewBody)}</pre>`;
   return (
     <div className="modal-layer">
       <div className="modal-scrim" onClick={() => !busy && onClose()} />
@@ -607,10 +742,10 @@ function TemplateModal({ value, busy, onClose, onSave }) {
             <span className="domus-modal-title-icon"><FilePen size={20} /></span>
             <div>
               <h2>{form.id ? "Modifier le modèle" : "Nouveau modèle"}</h2>
-              <p>Contenu du contrat avec placeholders (ex. [LOYER])</p>
+              <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER AVEC DEVISE])</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+          <button type="button" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
         </div>
         <div className="domus-template-form">
           <div className="domus-property-form-grid">
@@ -635,14 +770,34 @@ function TemplateModal({ value, busy, onClose, onSave }) {
               <Eye size={14} /> {showPreview ? "Éditer" : "Aperçu"}
             </button>
           </div>
+          <div className="domus-placeholder-panel" aria-label="Placeholders disponibles">
+            {CONTRACT_PLACEHOLDER_GROUPS.map((group) => (
+              <div className="domus-placeholder-group" key={group.label}>
+                <div className="domus-placeholder-label">{group.label}</div>
+                <div className="domus-placeholder-list">
+                  {group.items.map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => insertPlaceholder(item)}
+                      title={`Insérer [${item}]`}
+                    >
+                      [{item}]
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
           {showPreview ? (
-            <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }} />
           ) : (
             <textarea
+              ref={textareaRef}
               className="domus-template-body"
               value={form.body}
               onChange={(e) => set({ body: e.target.value })}
-              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM DU LOCATAIRE], [ADRESSE], [LOYER]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
+              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
             />
           )}
           <label className="domus-template-active">

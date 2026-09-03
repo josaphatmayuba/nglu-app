@@ -6,6 +6,7 @@ import { Button, Dropdown } from "antd";
 import { avatarColors, paymentMethodLabels } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
 import { initials } from "../../shared/tenants";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 
 const buildPageNumbers = (currentPage, totalPages) => {
   if (totalPages <= 5) return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -117,7 +118,16 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
                 </span>
               </span>
               <strong className={paymentStatus === "danger" ? "red-text" : ""}>
-                {compactMoney(payment.amount, payment.currencySymbol)}
+                <FormattedAmount
+                  amount={payment.amount}
+                  currency={{
+                    currencyCode: payment.currencyCode,
+                    currencyName: payment.currencyName,
+                    currencySymbol: payment.currencySymbol,
+                    ...payment.currency
+                  }}
+                  compact
+                />
               </strong>
               {paymentStatus === "danger" && (onQuickPay || onReminder) && (
                 <span style={{ display: "flex", justifyContent: "flex-end", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>

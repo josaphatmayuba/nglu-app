@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./app.jsx";
 import { bootstrapAuth } from "./auth.jsx";
+import { mountVersionBadge } from "./version-badge.js";
 import "./styles.css";
 
 bootstrapAuth().finally(() => {
@@ -10,4 +11,5 @@ bootstrapAuth().finally(() => {
       <App />
     </React.StrictMode>
   );
+  mountVersionBadge();
 });

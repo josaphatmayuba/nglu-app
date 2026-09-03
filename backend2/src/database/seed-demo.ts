@@ -8,12 +8,16 @@
 import "dotenv/config";
 import { connection } from "./seed.db";
 import { seedDemoRealEstate } from "./seeders/demo-real-estate.seeder";
+import { seedFarmosElevage } from "./seeders/farmos-elevage.seeder";
 
 async function main() {
   console.log("🎭 NgluERP — Demo Data Seeding\n");
 
   console.log("── Real Estate (properties / tenants / leases / payments / maintenance) ──");
   await seedDemoRealEstate();
+
+  console.log("\n── FarmOS élevage (animaux / œufs / consignes santé / personnel) ──");
+  await seedFarmosElevage();
 
   console.log("\n✅ Demo seeding complete!\n");
   await connection.end();

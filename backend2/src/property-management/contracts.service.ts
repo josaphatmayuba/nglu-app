@@ -1,19 +1,24 @@
 import * as crypto from "crypto";
-import { GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { desc, eq, ne, sql } from "drizzle-orm";
+import { BadRequestException, GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
   customers,
+  currencies,
+  emailTemplates,
   realEstateContractAuditLogs,
   realEstateContracts,
+  realEstateLeaseDocuments,
   realEstateLeases,
   realEstateProperties,
   realEstateUnits,
+  tenantDetails,
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { CompatService } from "../compat/compat.service";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -22,6 +27,7 @@ import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
+import { ObjectStorageService } from "./object-storage.service";
 
 type LeaseDetails = {
   leaseId: number;
@@ -29,9 +35,15 @@ type LeaseDetails = {
   startDate: Date | string | null;
   endDate: Date | string | null;
   rentAmount: string | null;
+  currencyId: number | null;
+  currencyCode: string | null;
+  currencyName: string | null;
+  currencySymbol: string | null;
   securityDeposit: string | null;
   billingCycle: string | null;
   terms: string | null;
+  moveInNotes: string | null;
+  signingCity: string | null;
   moveInMeterReading: string | null;
   propertyName: string | null;
   propertyType: string | null;
@@ -44,6 +56,8 @@ type LeaseDetails = {
   tenantEmail: string | null;
   tenantPhone: string | null;
   tenantAddress: string | null;
+  tenantIdDocumentType: string | null;
+  tenantIdNumber: string | null;
   tenantName: string;
 };
 
@@ -53,6 +67,9 @@ type CompanyInfo = {
   phone: string | null;
   email: string | null;
   landlordSignature: string | null;
+  // Identité du bailleur (réglages) — prioritaire sur le nom/téléphone de l'entreprise.
+  landlordName: string | null;
+  landlordPhone: string | null;
 };
 
 @Injectable()
@@ -65,14 +82,16 @@ export class ContractsService {
     private readonly emails: SystemEmailService,
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly sms: CompatService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
-  async createContract(dto: CreateContractDto, createdBy?: number) {
-    const lease = await this.getLeaseDetails(dto.leaseId);
-    const company = await this.getCompanyInfo();
-    const content = dto.contractContent ?? (await this.renderContent(lease, company, dto.templateId));
+  async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
+    const lease = await this.getLeaseDetails(dto.leaseId, orgId);
+    const company = await this.getCompanyInfo(orgId);
+    const content = dto.contractContent ?? (await this.renderContent(lease, company, orgId, dto.templateId));
 
     const [result] = await this.db.insert(realEstateContracts).values({
+      organizationId: orgId,
       leaseId: dto.leaseId,
       status: "draft",
       contractContent: content,
@@ -84,21 +103,21 @@ export class ContractsService {
     });
 
     const id = Number(result.insertId);
-    await this.log(id, "created", null, null, `Contract created for lease #${dto.leaseId}`);
+    await this.log(id, orgId, "created", null, null, `Contract created for lease #${dto.leaseId}`);
     await this.publishContractUpdate("created", id, dto.leaseId);
-    return this.getContract(id);
+    return this.getContract(id, orgId);
   }
 
   /**
    * Pick the active template (or one explicitly chosen) and render it.
    * If no template is found, fall back to the legacy hardcoded HTML so existing flows keep working.
    */
-  private async renderContent(lease: LeaseDetails, company: CompanyInfo, templateId?: number): Promise<string> {
-    let template = templateId ? await this.templates.getById(templateId).catch(() => null) : null;
+  private async renderContent(lease: LeaseDetails, company: CompanyInfo, orgId: number, templateId?: number): Promise<string> {
+    let template = templateId ? await this.templates.getById(templateId, orgId).catch(() => null) : null;
 
     if (!template) {
       const type = this.resolveTemplateType(lease.unitType, lease.propertyType);
-      template = await this.templates.getActiveByType(type);
+      template = await this.templates.getActiveByType(type, orgId);
     }
 
     if (!template) {
@@ -130,20 +149,22 @@ export class ContractsService {
     const numberOfMonths = rawMonths > 0 ? String(rawMonths) : "";
     const rentAmount = this.formatMoney(lease.rentAmount);
     const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const currency = this.currencyLabel(lease);
     const guaranteeMonths = this.guaranteeMonthsRaw(lease.rentAmount, lease.securityDeposit);
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ");
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
 
     return {
-      "NOM COMPLET DU BAILLEUR": company.companyName ?? "",
+      "NOM COMPLET DU BAILLEUR": company.landlordName || company.companyName || "",
       "ADRESSE DU BAILLEUR": company.address ?? "",
-      "TÉLÉPHONE DU BAILLEUR": company.phone ?? "",
+      "TÉLÉPHONE DU BAILLEUR": company.landlordPhone || company.phone || "",
       "EMAIL DU BAILLEUR": company.email ?? "",
       "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
       "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
-      "NUMÉRO DE PIÈCE D'IDENTITÉ": "", // collected outside of the lease form for now
+      "NUMÉRO DE PIÈCE D'IDENTITÉ": lease.tenantIdNumber ?? "",
+      "TYPE DE PIÈCE D'IDENTITÉ": lease.tenantIdDocumentType ?? "",
       "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION": rentalAddress,
       "TYPE DE LOGEMENT": destination,
       "PROPRIÉTÉ": lease.propertyName ?? "",
@@ -156,16 +177,23 @@ export class ContractsService {
       "DATE DE FIN DE BAIL": endDate,
       "DATE DE FIN DE BAIL JJ/MM/AAAA": endDate,
       "MONTANT DU LOYER": rentAmount,
+      "MONTANT DU LOYER AVEC DEVISE": this.formatMoneyWithCurrency(lease.rentAmount, lease),
       "MONTANT GARANTIE": securityDeposit,
+      "MONTANT GARANTIE AVEC DEVISE": this.formatMoneyWithCurrency(lease.securityDeposit, lease),
       "NUMÉRO DE MOIS DE GARANTIE": guaranteeMonths,
-      "VILLE": lease.propertyCity ?? "",
+      "DEVISE": currency,
+      "SYMBOLE DE DEVISE": lease.currencySymbol ?? "",
+      "CODE DE DEVISE": lease.currencyCode ?? "",
+      "VILLE": lease.signingCity || lease.propertyCity || "",
       "DATE DE SIGNATURE DE BAIL": today,
       "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA": today,
       "DATE DU JOUR": today,
+      "CONDITIONS PARTICULIÈRES": lease.terms ?? "",
+      "NOTES ÉTAT DES LIEUX": lease.moveInNotes ?? "",
     };
   }
 
-  async listContracts() {
+  async listContracts(orgId: number) {
     return this.db
       .select({
         id: realEstateContracts.id,
@@ -175,19 +203,20 @@ export class ContractsService {
         tenantName: realEstateContracts.tenantName,
         sentAt: realEstateContracts.sentAt,
         signedAt: realEstateContracts.signedAt,
+        welcomeMessageSentAt: realEstateContracts.welcomeMessageSentAt,
         createdAt: realEstateContracts.createdAt,
         signerToken: realEstateContracts.signerToken,
       })
       .from(realEstateContracts)
-      .where(ne(realEstateContracts.status, "deleted"))
+      .where(and(eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "deleted")))
       .orderBy(desc(realEstateContracts.id));
   }
 
-  async getContract(id: number) {
+  async getContract(id: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -198,7 +227,7 @@ export class ContractsService {
       .where(eq(realEstateContractAuditLogs.contractId, id))
       .orderBy(desc(realEstateContractAuditLogs.id));
 
-    const companyInfo = await this.getCompanyInfo();
+    const companyInfo = await this.getCompanyInfo(orgId);
 
     let createdByName: string | null = null;
     if (rows[0].createdBy) {
@@ -213,14 +242,14 @@ export class ContractsService {
       }
     }
 
-    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName, createdByName };
+    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.landlordName || companyInfo.companyName, createdByName };
   }
 
-  async sendContract(id: number) {
+  async sendContract(id: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -239,7 +268,7 @@ export class ContractsService {
         sentAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContracts.id, id));
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
@@ -255,13 +284,13 @@ export class ContractsService {
     // Also send the signing link by SMS to the tenant (best-effort).
     let tenantPhone: string | null = null;
     try {
-      const lease = await this.getLeaseDetails(contract.leaseId);
+      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
       tenantPhone = lease.tenantPhone ?? null;
     } catch {
       tenantPhone = null;
     }
     if (tenantPhone) {
-      const company = await this.getCompanyInfo();
+      const company = await this.getCompanyInfo(orgId);
       const companyName = company?.companyName || "votre gestionnaire";
       const greeting = contract.tenantName ? `Bonjour ${contract.tenantName}` : "Bonjour";
       const message =
@@ -275,9 +304,208 @@ export class ContractsService {
       }
     }
 
-    await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
+    await this.log(id, orgId, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
     return { message: "Contract sent.", id, signingUrl, token };
+  }
+
+  // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
+  // et on marque le contrat "signed" comme pour une signature électronique.
+  async markSignedManually(id: number, file: unknown, orgId: number, createdByName?: string | null) {
+    const rows = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    const contract = rows[0];
+    // Contrat déjà signé : on refuse seulement s'il a encore sa preuve attachée.
+    // Si le scan a été supprimé (signedDocumentId détaché), on autorise le ré-import.
+    if (contract.status === "signed" && contract.signedDocumentId) {
+      throw new GoneException("This contract has already been signed.");
+    }
+
+    const stored = await this.objectStorage.putDocument(
+      file as Parameters<ObjectStorageService["putDocument"]>[0],
+      `domus/leases/${orgId}/${contract.leaseId}/documents`,
+    );
+    const originalName = (file as { originalname?: string })?.originalname;
+    const [docResult] = await this.db.insert(realEstateLeaseDocuments).values({
+      organizationId: orgId,
+      leaseId: contract.leaseId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: originalName ? String(originalName).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      notes: "Bail signe a la main (papier)",
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const documentId = Number(docResult.insertId);
+
+    await this.db
+      .update(realEstateContracts)
+      .set({
+        status: "signed",
+        signedAt: sql`CURRENT_TIMESTAMP`,
+        signerToken: null,
+        signedDocumentId: documentId,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateContracts.id, id));
+
+    await this.log(
+      id,
+      orgId,
+      "signed",
+      null,
+      null,
+      `Signature papier importee${createdByName ? ` par ${createdByName}` : ""}`,
+    );
+    await this.publishContractUpdate("status_changed", id, contract.leaseId);
+
+    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort.
+    if (!contract.welcomeMessageSentAt) {
+      try {
+        await this.deliverWelcomeMessage(contract, orgId);
+      } catch (error) {
+        this.logger.warn(`Contract ${id} marked signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return this.getContract(id, orgId);
+  }
+
+  // Envoi manuel du message de bienvenue (bouton UI) : uniquement si le contrat
+  // est signé et que le message n'est jamais parti (échec de l'envoi automatique).
+  async sendWelcomeMessage(id: number, orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    const contract = rows[0];
+    if (contract.status !== "signed") {
+      throw new BadRequestException("Le contrat doit d'abord être signé pour envoyer le message de bienvenue.");
+    }
+    if (contract.welcomeMessageSentAt) {
+      throw new BadRequestException("Le message de bienvenue a déjà été envoyé à ce locataire.");
+    }
+
+    return this.deliverWelcomeMessage(contract, orgId);
+  }
+
+  /**
+   * Message de bienvenue au locataire après signature du bail : salutation avec le nom
+   * complet, confirmation que le contrat est signé, remerciement pour la confiance,
+   * adresse complète du logement et période de location. Envoyé par email ET SMS
+   * (même texte court, comme les autres messages Domus). Un template configurable
+   * "contract_signed" (Réglages → Messages) est prioritaire sur le texte par défaut.
+   */
+  private async deliverWelcomeMessage(
+    contract: { id: number; leaseId: number; tenantEmail: string | null; tenantName: string | null },
+    orgId: number,
+  ) {
+    const lease = await this.getLeaseDetails(contract.leaseId, orgId);
+    const company = await this.getCompanyInfo(orgId);
+    const companyName = company.companyName || company.landlordName || "Votre gestionnaire";
+    // Téléphone de contact : bailleur en priorité, sinon entreprise (même logique que les contrats).
+    const contactPhone = company.landlordPhone || company.phone || "";
+
+    const tenantName = lease.tenantName || contract.tenantName || "Locataire";
+    const reference = lease.reference ?? "";
+    const startDate = this.formatDate(lease.startDate);
+    const endDate = this.formatDate(lease.endDate);
+    const months = this.monthsBetween(lease.startDate, lease.endDate);
+    const duration = months > 0 ? `${months} mois` : "";
+    const address =
+      [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || lease.propertyName || "votre logement";
+    const unitPart = lease.unitName ? ` (${lease.unitName})` : "";
+    const rentDisplay = this.formatMoneyWithCurrency(lease.rentAmount, lease);
+
+    let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
+    let text =
+      `Bonjour ${tenantName}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
+      `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
+      `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
+      `Merci de votre confiance. ` +
+      `${contactPhone ? `Pour toute question, contactez-nous au ${contactPhone}. ` : ""}` +
+      `— ${companyName}`;
+
+    // Message configurable (Réglages → Messages) : si un template "contract_signed"
+    // actif existe, on l'utilise avec substitution des placeholders.
+    const tpl = await this.db
+      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.eventType, "contract_signed"), eq(emailTemplates.status, "true")))
+      .limit(1);
+    if (tpl.length) {
+      const fill = (s: string | null) =>
+        String(s || "")
+          .replace(/\{tenantName\}/g, tenantName)
+          .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
+          .replace(/\{reference\}/g, reference)
+          .replace(/\{amount\}/g, rentDisplay)
+          .replace(/\{address\}/g, `${address}${unitPart}`)
+          .replace(/\{startDate\}/g, startDate)
+          .replace(/\{endDate\}/g, endDate)
+          .replace(/\{duration\}/g, duration)
+          .replace(/\{contactPhone\}/g, contactPhone);
+      if (tpl[0].subject) subject = fill(tpl[0].subject);
+      if (tpl[0].body) text = fill(tpl[0].body);
+    }
+
+    const tenantEmail = lease.tenantEmail || contract.tenantEmail;
+    if (!tenantEmail && !lease.tenantPhone) {
+      throw new BadRequestException("Aucun email ni téléphone connu pour ce locataire.");
+    }
+
+    let emailSent = false;
+    if (tenantEmail) {
+      try {
+        await this.sendEmail(tenantEmail, subject, `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`, "contract_signed");
+        emailSent = true;
+      } catch (error) {
+        this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    let smsSent = false;
+    if (lease.tenantPhone) {
+      try {
+        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: text });
+        smsSent = Boolean(res?.success);
+        if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
+      } catch (error) {
+        this.logger.warn(`Welcome SMS error (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (!emailSent && !smsSent) {
+      throw new BadRequestException("Le message de bienvenue n'a pas pu être envoyé (email et SMS en échec).");
+    }
+
+    await this.db
+      .update(realEstateContracts)
+      .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateContracts.id, contract.id));
+
+    await this.log(
+      contract.id,
+      orgId,
+      "welcome_sent",
+      null,
+      null,
+      `Message de bienvenue envoye : ${[emailSent ? tenantEmail : null, smsSent ? `SMS ${lease.tenantPhone}` : null].filter(Boolean).join(" / ")}`,
+    );
+    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+
+    return { message: "Message de bienvenue envoyé.", emailSent, smsSent };
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {
@@ -291,7 +519,7 @@ export class ContractsService {
       await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     }
 
-    await this.log(contract.id, "viewed", ip, ua, null);
+    await this.log(contract.id, contract.organizationId, "viewed", ip, ua, null);
 
     return {
       id: contract.id,
@@ -303,7 +531,7 @@ export class ContractsService {
       sentAt: contract.sentAt,
       signedAt: contract.signedAt,
       createdAt: contract.createdAt,
-      companyInfo: await this.getCompanyInfo(),
+      companyInfo: await this.getCompanyInfo(contract.organizationId),
     };
   }
 
@@ -327,31 +555,25 @@ export class ContractsService {
       })
       .where(eq(realEstateContracts.id, contract.id));
 
-    await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+    await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
-    const signedContract = await this.getContract(contract.id);
+    const signedContract = await this.getContract(contract.id, contract.organizationId);
 
-    if (contract.tenantEmail) {
-      try {
-        await this.sendEmail(
-        contract.tenantEmail,
-        "Contrat signé — confirmation",
-        `<p>Bonjour ${contract.tenantName ?? ""},</p><p>Votre contrat a bien été signé électroniquement. Merci.</p>`,
-        "contract_signed",
-        );
-      } catch (error) {
-        this.logger.warn(`Contract ${contract.id} signed, but confirmation email failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
+    try {
+      await this.deliverWelcomeMessage(contract, contract.organizationId);
+    } catch (error) {
+      this.logger.warn(`Contract ${contract.id} signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return { message: "Contract signed successfully.", contract: signedContract };
   }
 
-  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, createdBy?: number) {
+  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, orgId: number, createdBy?: number) {
     const rows = await this.db
       .select()
       .from(realEstateLeases)
-      .where(eq(realEstateLeases.id, leaseId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -382,6 +604,7 @@ export class ContractsService {
     const rentAmount = dto.rentAmount != null ? String(dto.rentAmount) : current.rentAmount;
 
     const [insertResult] = await this.db.insert(realEstateLeases).values({
+      organizationId: orgId,
       reference,
       propertyId: current.propertyId,
       unitId: current.unitId,
@@ -395,6 +618,7 @@ export class ContractsService {
       moveInMeterReading: current.moveInMeterReading,
       moveInNotes: current.moveInNotes,
       terms: current.terms,
+      signingCity: current.signingCity,
       status: "active",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -406,19 +630,19 @@ export class ContractsService {
       await this.db
         .update(realEstateLeases)
         .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(realEstateLeases.id, leaseId));
+        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
     }
 
-    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, createdBy);
+    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, orgId, createdBy);
 
     return { lease: { id: newLeaseId, reference }, contract: newContract };
   }
 
-  async deleteContract(id: number) {
+  async deleteContract(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId })
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -426,7 +650,7 @@ export class ContractsService {
     await this.db
       .update(realEstateContracts)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateContracts.id, id));
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
     await this.publishContractUpdate("deleted", id, rows[0].leaseId);
     return { message: "Contract deleted." };
   }
@@ -476,7 +700,7 @@ export class ContractsService {
     return contract;
   }
 
-  private async getLeaseDetails(leaseId: number): Promise<LeaseDetails> {
+  private async getLeaseDetails(leaseId: number, orgId: number): Promise<LeaseDetails> {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
@@ -484,9 +708,15 @@ export class ContractsService {
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         rentAmount: realEstateLeases.rentAmount,
+        currencyId: realEstateLeases.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
         securityDeposit: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         terms: realEstateLeases.terms,
+        moveInNotes: realEstateLeases.moveInNotes,
+        signingCity: realEstateLeases.signingCity,
         moveInMeterReading: realEstateLeases.moveInMeterReading,
         propertyName: realEstateProperties.name,
         propertyType: realEstateProperties.propertyType,
@@ -499,12 +729,16 @@ export class ContractsService {
         tenantEmail: customers.email,
         tenantPhone: customers.phone,
         tenantAddress: customers.address,
+        tenantIdDocumentType: tenantDetails.idDocumentType,
+        tenantIdNumber: tenantDetails.idNumber,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
-      .where(eq(realEstateLeases.id, leaseId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -524,13 +758,14 @@ export class ContractsService {
     const duration = this.durationInMonths(lease.startDate, lease.endDate);
     const rentAmount = this.formatMoney(lease.rentAmount);
     const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const currency = this.currencyLabel(lease) || "USD";
     const guaranteeMonths = this.guaranteeMonths(lease.rentAmount, lease.securityDeposit);
-    const city = lease.propertyCity || "[VILLE]";
+    const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = company.companyName || "[NOM DU BAILLEUR]";
+    const landlordName = company.landlordName || company.companyName || "[NOM DU BAILLEUR]";
     const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
-    const landlordPhone = company.phone || "N/A";
+    const landlordPhone = company.landlordPhone || company.phone || "N/A";
     const landlordEmail = company.email || "N/A";
 
     const art = (num: string, title: string, body: string) =>
@@ -580,7 +815,7 @@ export class ContractsService {
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>
       <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Preneur (Locataire)</div>
-      <strong>${e(lease.tenantName)}</strong> &mdash; Pièce d&rsquo;identité n°&nbsp;<em>[NUMÉRO]</em><br>
+      <strong>${e(lease.tenantName)}</strong> &mdash; ${e(lease.tenantIdDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(lease.tenantIdNumber || "N/A")}</em><br>
       Adresse&nbsp;: ${e(lease.tenantAddress ?? "[ADRESSE DU PRENEUR]")}<br>
       Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
     </div>
@@ -607,13 +842,13 @@ export class ContractsService {
   ${art("4", "Loyer et Garantie Locative", `
     <p style="margin:0 0 10px;">
       <strong>4.1. Loyer&nbsp;:</strong> Le loyer mensuel est fixé à
-      <strong style="color:#1a237e;">${rentAmount} USD</strong>.
+      <strong style="color:#1a237e;">${rentAmount} ${e(currency)}</strong>.
       Conformément à la réglementation en RDC, le paiement s&rsquo;effectue en Francs Congolais (CDF)
       au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
     </p>
     <p style="margin:0;">
       <strong>4.2. Garantie Locative&nbsp;:</strong> Le Preneur verse ce jour une garantie de
-      <strong style="color:#1a237e;">${securityDeposit} USD</strong> correspondant à ${guaranteeMonths}.
+      <strong style="color:#1a237e;">${securityDeposit} ${e(currency)}</strong> correspondant à ${guaranteeMonths}.
       Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées
       ou réparations locatives. La garantie ne peut pas excéder <strong>trois (3) mois</strong> de loyer
       pour un usage résidentiel.
@@ -689,20 +924,28 @@ export class ContractsService {
       .replace(/'/g, "&#39;");
   }
 
-  private async getCompanyInfo(): Promise<CompanyInfo> {
-    const rows = await this.db
-      .select({
-        companyName: appSettings.companyName,
-        address: appSettings.address,
-        phone: appSettings.phone,
-        email: appSettings.email,
-        landlordSignature: appSettings.landlordSignature,
-      })
-      .from(appSettings)
-      .where(eq(appSettings.id, 1))
-      .limit(1);
+  private async getCompanyInfo(orgId = 1): Promise<CompanyInfo> {
+    const row = await readOrgAppSetting(this.db, orgId, {
+      companyName: appSettings.companyName,
+      address: appSettings.address,
+      phone: appSettings.phone,
+      email: appSettings.email,
+      landlordSignature: appSettings.landlordSignature,
+      landlordName: appSettings.landlordName,
+      landlordPhone: appSettings.landlordPhone,
+    });
 
-    return rows[0] ?? { companyName: null, address: null, phone: null, email: null, landlordSignature: null };
+    return (
+      (row as CompanyInfo) ?? {
+        companyName: null,
+        address: null,
+        phone: null,
+        email: null,
+        landlordSignature: null,
+        landlordName: null,
+        landlordPhone: null,
+      }
+    );
   }
 
   private formatDate(value: Date | string | null | undefined) {
@@ -724,6 +967,18 @@ export class ContractsService {
     return Number.isFinite(amount)
       ? amount.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : "0,00";
+  }
+
+  private formatMoneyWithCurrency(value: string | number | null | undefined, lease: LeaseDetails) {
+    const amount = this.formatMoney(value);
+    const currency = this.currencyLabel(lease);
+    return currency ? `${amount} ${currency}` : amount;
+  }
+
+  private currencyLabel(lease: Pick<LeaseDetails, "currencySymbol" | "currencyCode">) {
+    const symbol = String(lease.currencySymbol ?? "").trim();
+    const code = String(lease.currencyCode ?? "").trim();
+    return symbol || code;
   }
 
   private durationInMonths(start: Date | string | null | undefined, end: Date | string | null | undefined) {
@@ -794,8 +1049,9 @@ export class ContractsService {
     return labels[type] ?? type;
   }
 
-  private async log(contractId: number, event: string, ip: string | null, ua: string | null, details: string | null) {
+  private async log(contractId: number, orgId: number, event: string, ip: string | null, ua: string | null, details: string | null) {
     await this.db.insert(realEstateContractAuditLogs).values({
+      organizationId: orgId,
       contractId,
       event,
       ip: ip ?? null,

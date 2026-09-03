@@ -24,6 +24,56 @@ function setToken(t) {
   accessToken = t || null;
 }
 
+function displayNameFrom(data = {}) {
+  return (
+    [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
+    data.username ||
+    data.email ||
+    "Utilisateur"
+  );
+}
+
+function initialsFromName(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return "U";
+  const base = clean.includes("@") ? clean.split("@")[0] : clean;
+  const parts = base.split(/[\s._-]+/).filter(Boolean);
+  const chars = parts.length > 1 ? [parts[0][0], parts[parts.length - 1][0]] : [base[0]];
+  return chars.join("").toUpperCase().slice(0, 2) || "U";
+}
+
+function roleLabelFrom(role) {
+  const normalized = String(role || "").toLowerCase();
+  if (normalized.includes("manager") || normalized.includes("gestion")) return "Gestionnaire";
+  if (normalized.includes("admin")) return "Administrateur";
+  if (normalized.includes("customer") || normalized.includes("tenant")) return "Locataire";
+  return role || "Utilisateur";
+}
+
+function persistAuthProfile(data = {}) {
+  if (typeof localStorage === "undefined") return;
+  if (data.role) localStorage.setItem("role", data.role);
+  if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
+  if (data.id != null) localStorage.setItem("id", String(data.id));
+  if (data.email) localStorage.setItem("email", data.email);
+  localStorage.setItem("user", displayNameFrom(data));
+  localStorage.setItem("isLogged", "true");
+}
+
+function readAuthProfile() {
+  if (typeof localStorage === "undefined") {
+    return { displayName: "Utilisateur", initials: "U", role: "", roleLabel: "Utilisateur" };
+  }
+  const displayName = localStorage.getItem("user") || localStorage.getItem("email") || "Utilisateur";
+  const role = localStorage.getItem("role") || "";
+  return {
+    displayName,
+    initials: initialsFromName(displayName),
+    role,
+    roleLabel: roleLabelFrom(role),
+  };
+}
+
 // Restaure une session via le cookie refresh httpOnly. Renvoie le token ou null.
 export async function restoreSession() {
   try {
@@ -32,9 +82,10 @@ export async function restoreSession() {
     const data = await res.json();
     if (data?.token) {
       setToken(data.token);
-      if (data.role) localStorage.setItem("role", data.role);
-      if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
-      localStorage.setItem("isLogged", "true");
+      persistAuthProfile(data);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("domus:auth-changed"));
+      }
       return data.token;
     }
   } catch {}
@@ -86,6 +137,20 @@ export function useAuthToken() {
   return token;
 }
 
+export function useAuthUser() {
+  const [profile, setProfile] = useState(readAuthProfile);
+  useEffect(() => {
+    const refresh = () => setProfile(readAuthProfile());
+    window.addEventListener("domus:auth-changed", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("domus:auth-changed", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  return profile;
+}
+
 export function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -123,17 +188,7 @@ export function LoginScreen() {
       }
       try {
         setToken(data.token || ""); // SCRUM-119 — token en mémoire
-        if (data.role) localStorage.setItem("role", data.role);
-        if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
-        const display =
-          [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
-          data.username ||
-          data.email ||
-          "Utilisateur";
-        localStorage.setItem("user", display);
-        if (data.id != null) localStorage.setItem("id", String(data.id));
-        if (data.email) localStorage.setItem("email", data.email);
-        localStorage.setItem("isLogged", "true");
+        persistAuthProfile(data);
       } catch {}
       window.dispatchEvent(new CustomEvent("domus:auth-changed"));
     } catch (err) {

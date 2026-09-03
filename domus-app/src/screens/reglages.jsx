@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
-  MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard,
+  MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard, UserRound,
 } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import {
   DEVICE_MODES, useApi, decodeCurrencyText, cleanCurrencySymbol, buildCurrencyOptions,
   paymentMethodRows, PAYMENT_PRESETS, PAYMENT_PRESET_NAMES, PAYMENT_PRESET_BY_NAME,
 } from "../data.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { LandlordSignatureCard } from "./landlordSignature.jsx";
+import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 
 async function loadConfig() {
   // status=all → toutes les devises (actives + inactives) pour la liste « Devises supportees ».
@@ -55,42 +58,43 @@ export function Reglages({ device }) {
     <div className="settings-layout">
       <div className="immo-header">
         <div>
-          <h1>Reglages</h1>
-          <p>Devises, facturation et configuration du module</p>
+          <h1>{t("Reglages")}</h1>
+          <p>{t("Devises, facturation et configuration du module")}</p>
         </div>
       </div>
 
       <div className="settings-hero card">
         <div>
-          <span className="chip chip-iris"><Globe2 size={12} /> App locative</span>
-          <h3>Domus est connecte au CRM NgoluApp</h3>
-          <p>Devises, numerotation et parametres sont partages avec la session principale (meme API).</p>
+          <span className="chip chip-iris"><Globe2 size={12} /> {t("App locative")}</span>
+          <h3>{t("Domus est connecte au CRM NgoluApp")}</h3>
+          <p>{t("Devises, numerotation et parametres sont partages avec la session principale (meme API).")}</p>
         </div>
         <div className="settings-mini">
           <WalletCards size={20} />
-          <b>{activeMethods.length} moyen(s) de paiement</b>
-          <span>{activeMethods.map((m) => m.name).slice(0, 4).join(", ") || "Aucun configuré"}</span>
+          <b>{tf("{n} moyen(s) de paiement", {n: activeMethods.length})}</b>
+          <span>{activeMethods.map((m) => m.name).slice(0, 4).join(", ") || t("Aucun configuré")}</span>
         </div>
         <div className="settings-mini">
           <Smartphone size={20} />
-          <b>PWA / mobile</b>
-          <span>Device {device?.mode || "auto"}</span>
+          <b>{t("PWA / mobile")}</b>
+          <span>{tf("Device {mode}", {mode: device?.mode || "auto"})}</span>
         </div>
       </div>
 
-      <SettingsGroup label="Devises & facturation">
+      <SettingsGroup label={t("Devises & facturation")}>
         <CurrenciesCard initial={data?.currencies} onChanged={reload} />
         <PaymentMethodsCard initial={data?.paymentMethods} subAccounts={data?.subAccounts} onChanged={reload} />
         <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
       </SettingsGroup>
 
-      <SettingsGroup label="Contrats & communication" cols={2}>
+      <SettingsGroup label={t("Contrats & communication")} cols={2}>
+        <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
       </SettingsGroup>
 
       {device && (
-        <SettingsGroup label="Affichage & application">
+        <SettingsGroup label={t("Affichage & application")}>
           <section className="card settings-card device-settings-card">
             <h3><Smartphone size={17} /> Apercu device</h3>
             <div className="device-segmented">
@@ -104,7 +108,34 @@ export function Reglages({ device }) {
           </section>
         </SettingsGroup>
       )}
+
+      <SettingsGroup label="À propos">
+        <AboutCard />
+      </SettingsGroup>
     </div>
+  );
+}
+
+// Carte « À propos » — version applicative (source unique monorepo) + dernière mise à jour.
+function AboutCard() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(host) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
+  return (
+    <section className="card settings-card">
+      <h3>À propos</h3>
+      <div className="setting-row"><span>Version</span><b>v{base}</b></div>
+      <div className="setting-row"><span>Build</span><b>{build}</b></div>
+      <div className="setting-row"><span>Commit</span><b>{commit}</b></div>
+      <div className="setting-row"><span>Dernière mise à jour</span><b>{lastUpdate}</b></div>
+      <div className="setting-row"><span>Environnement</span><b>{env}</b></div>
+    </section>
   );
 }
 
@@ -434,6 +465,7 @@ function PaymentMethodEditor({ value, busy, onClose, onSave }) {
 const MESSAGE_EVENTS = [
   ["tenant_onboarding", "Inscription locataire"],
   ["lease_created", "Bail créé / signé"],
+  ["contract_signed", "Bienvenue / contrat signé"],
   ["payment_received", "Paiement reçu / quittance"],
   ["payment_reminder", "Rappel de loyer / retard"],
   ["custom", "Autre / personnalisé"],
@@ -464,6 +496,15 @@ const DEFAULT_MESSAGES = [
       "Consultez et signez votre contrat ici : {url}. Merci de votre confiance. — Votre gestionnaire",
   },
   {
+    name: "Bienvenue après signature",
+    eventType: "contract_signed",
+    subject: "Bienvenue ! Votre bail {reference} est signé et confirmé",
+    body:
+      "Bonjour {tenantName}, félicitations ! Votre contrat de bail {reference} est bien signé et confirmé. " +
+      "Bienvenue dans votre nouveau logement : {address}. Votre location court du {startDate} au {endDate} ({duration}). " +
+      "Merci de votre confiance. Pour toute question, contactez-nous au {contactPhone}. — Votre gestionnaire",
+  },
+  {
     name: "Quittance / paiement reçu",
     eventType: "payment_received",
     subject: "Paiement reçu — bail {reference}",
@@ -483,6 +524,7 @@ const DEFAULT_MESSAGES = [
 ];
 
 function MessagesCard() {
+  const confirm = useConfirm();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -520,7 +562,12 @@ function MessagesCard() {
     }
   };
   const remove = async (t) => {
-    if (!window.confirm(`Supprimer le message « ${t.name} » ?`)) return;
+    if (!(await confirm({
+      title: "Supprimer le message",
+      message: `Supprimer le message « ${t.name} » ?`,
+      confirmLabel: "Supprimer",
+      danger: true,
+    }))) return;
     try {
       await api.deleteMessageTemplate(t.id);
       await load();
@@ -563,7 +610,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »).
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise).
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
@@ -653,6 +700,51 @@ function MessageEditorModal({ value, busy, onClose, onSave }) {
   );
 }
 
+// Identité du bailleur pour les contrats — distincte du nom de l'entreprise
+// (remplace [NOM COMPLET DU BAILLEUR] / [TÉLÉPHONE DU BAILLEUR] à la génération).
+function LandlordInfoCard({ setting, onSaved }) {
+  const [name, setName] = useState(setting?.landlordName || "");
+  const [phone, setPhone] = useState(setting?.landlordPhone || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.updateSetting({ landlordName: name, landlordPhone: phone });
+      setMsg({ type: "ok", text: "Identite du bailleur enregistree." });
+      onSaved?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><UserRound size={17} /> {t("Identite du bailleur")}</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        {t("Nom et telephone utilises dans les contrats de bail. Si vide, le nom de l'entreprise est utilise.")}
+      </p>
+      <label className="domus-property-field">
+        <span>{t("Nom du bailleur")}</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={setting?.companyName || "ex. Jean Mukendi"} />
+      </label>
+      <DomusPhoneField label={t("Telephone du bailleur")} value={phone} onChange={setPhone} />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={save}>
+          {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
+        </button>
+        {msg && <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {msg.type === "ok" && <Check size={14} />}{msg.text}
+        </span>}
+      </div>
+    </section>
+  );
+}
+
 function NumberingCard({ setting, currencies, onSaved }) {
   const [form, setForm] = useState({
     invoicePrefix: setting?.invoicePrefix ?? "INV-",
@@ -733,6 +825,31 @@ function NumberingCard({ setting, currencies, onSaved }) {
           {msg.type === "ok" && <Check size={14} />}{msg.text}
         </span>}
       </div>
+
+      <AboutVersion />
     </section>
+  );
+}
+
+// À propos — version applicative (source unique du monorepo).
+function AboutVersion() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #eee" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 24, maxWidth: 480 }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>À propos</div>
+      <Row k="Version" v={`v${base}`} />
+      <Row k="Build" v={build} />
+      <Row k="Commit" v={commit} />
+      <Row k="Environnement" v={env} />
+    </div>
   );
 }

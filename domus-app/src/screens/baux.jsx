@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { t, tf } from "../i18n.js";
 import {
   Check,
   Copy,
@@ -14,6 +15,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Receipt,
   Search,
@@ -25,11 +27,15 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
-import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } from "../contractUtils.js";
+import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
-import { money, normalizeCurrencyModule, useApi } from "../data.js";
+import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
+import { takeLeasePrefill } from "./reservationPrefill.js";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -46,6 +52,7 @@ const emptyLease = {
   status: "active",
   terms: "",
   moveInNotes: "",
+  signingCity: "",
   taxApplyMode: "never",
   taxName: "",
   taxType: "percent",
@@ -105,12 +112,15 @@ function contractChip(contract, isExpired) {
   }
 }
 
-const fmtDate = (d) => (d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—");
+// timeZone UTC : les dates de bail sont stockées à minuit UTC ; sans ça, un
+// navigateur derrière UTC affiche la veille (03/06 au lieu de 04/06).
+const fmtDate = (d) => (d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "UTC" }) : "—");
 
 export function Baux({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadLeaseModule, []);
   useRealtimeReload(reload, ["leases", "properties", "units", "tenants", "contracts"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -132,6 +142,21 @@ export function Baux({ go } = {}) {
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
+
+  // Bouton « Créer un bail » depuis un bien : ouvre le formulaire pré-rempli.
+  useEffect(() => {
+    if (loading) return;
+    const prefill = takeLeasePrefill();
+    if (prefill) {
+      setLeaseModal({
+        ...emptyLease,
+        propertyId: prefill.propertyId || "",
+        unitId: prefill.unitId || "",
+        tenantId: prefill.tenantId || "",
+        currencyId: currency.defaultCurrencyId || "",
+      });
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fermer le menu « … » au clic en dehors ou sur Échap.
   useEffect(() => {
@@ -378,7 +403,7 @@ export function Baux({ go } = {}) {
                       }}
                       onCancelSend={() => {
                         setOpenMenuId(null);
-                        handleCancelContract(contract, setBusyAction, setActionError, reload);
+                        handleCancelContract(contract, setBusyAction, setActionError, reload, confirm);
                       }}
                       onPayments={() => {
                         go?.("loyers");
@@ -394,11 +419,11 @@ export function Baux({ go } = {}) {
                       }}
                       onRenew={() => {
                         setOpenMenuId(null);
-                        handleRenewLease(lease, setBusyAction, setActionError, reload);
+                        handleRenewLease(lease, setBusyAction, setActionError, reload, confirm);
                       }}
                       onDelete={() => {
                         setOpenMenuId(null);
-                        handleDeleteLease(lease, setBusyAction, setActionError, reload);
+                        handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm);
                       }}
                       onClose={() => setOpenMenuId(null)}
                     />
@@ -450,7 +475,7 @@ export function Baux({ go } = {}) {
               setLeaseModal(null);
               await reload();
             } catch (e) {
-              setActionError(e.message);
+              setActionError(t(e.message));
             } finally {
               setSaving(false);
             }
@@ -461,7 +486,11 @@ export function Baux({ go } = {}) {
         <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
       )}
       {contractPreview && (
-        <ContractPreviewModal contract={contractPreview} onClose={() => setContractPreview(null)} />
+        <ContractPreviewModal
+          contract={contractPreview}
+          onClose={() => setContractPreview(null)}
+          onSigned={(updated) => { setContractPreview(updated); reload(); }}
+        />
       )}
       {actionError && !leaseModal && <div className="domus-floating-error">{actionError}</div>}
     </>
@@ -517,6 +546,8 @@ function LeaseActionsMenu({
   onClose,
 }) {
   const disabled = Boolean(busy);
+  const toast = useToast();
+  const prompt = usePrompt();
   const copyReference = async () => {
     try {
       await navigator.clipboard?.writeText?.(info.reference.replace(/^#/, ""));
@@ -526,12 +557,13 @@ function LeaseActionsMenu({
   const copySigningLink = async () => {
     const link = signingUrlFromContract(contract);
     if (!link) {
-      window.alert("Envoyez d'abord le contrat pour obtenir un lien de signature.");
+      toast.error(t("Envoyez d'abord le contrat pour obtenir un lien de signature."));
     } else {
       try {
         await navigator.clipboard?.writeText?.(link);
+        toast.success(t("Lien de signature copié."));
       } catch {
-        window.prompt("Copiez le lien de signature :", link);
+        await prompt({ title: t("Lien de signature"), label: t("Copiez le lien :"), defaultValue: link, readOnly: true, copyable: true });
       }
     }
     onClose?.();
@@ -668,7 +700,7 @@ function DepositModal({ state, onClose, onDone }) {
           {mode === "collect" ? (
             <section className="domus-form-section">
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Montant</span>
+                <label className="immo-field"><span>Montant ({symbol})</span>
                   <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
                 <label className="immo-field"><span>Date</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -684,7 +716,7 @@ function DepositModal({ state, onClose, onDone }) {
             <section className="domus-form-section">
               <div className="immo-pay-row"><span>Caution détenue</span><strong>{money(held, symbol)}</strong></div>
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Retenue (dégâts)</span>
+                <label className="immo-field"><span>Retenue (dégâts) ({symbol})</span>
                   <input type="number" min="0" max={held} value={deduction} onChange={(e) => setDeduction(e.target.value)} /></label>
                 <label className="immo-field"><span>Date de restitution</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -754,7 +786,10 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 label="Propriete"
                 value={form.propertyId}
                 required
-                onChange={(propertyId) => set({ propertyId, unitId: "" })}
+                onChange={(propertyId) => {
+                  const property = properties.find((p) => String(p.id) === String(propertyId));
+                  set({ propertyId, unitId: "", ...(form.signingCity ? {} : { signingCity: property?.city || "" }) });
+                }}
                 options={properties.map((property) => [String(property.id), property.name || `Propriete #${property.id}`])}
               />
               <LeaseSelect
@@ -771,6 +806,12 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
               required
               onChange={(tenantId) => set({ tenantId })}
               options={tenants.map((tenant) => [String(tenant.id), tenantLabel(tenant)])}
+            />
+            <LeaseField
+              label="Ville de signature (Fait a ...)"
+              value={form.signingCity}
+              onChange={(signingCity) => set({ signingCity })}
+              placeholder="ex. Kinshasa"
             />
           </section>
 
@@ -900,10 +941,63 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
     ["Bien", info.propertyLabel],
     ["Debut", fmtDate(info.start)],
     ["Fin", fmtDate(info.end)],
-    ["Loyer", `${money(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
-    ["Depot", money(lease.securityDeposit || 0, lease.currencySymbol || "$")],
+    ["Loyer", `${moneyExact(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
+    ["Depot", moneyExact(lease.securityDeposit || 0, lease.currencySymbol || "$")],
     ["Statut", info.statusText],
   ];
+
+  const confirm = useConfirm();
+  const [documents, setDocuments] = useState([]);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  async function reloadDocuments() {
+    try {
+      setDocuments(await api.leaseDocuments(lease.id));
+    } catch (err) {
+      setDocError(err?.message || "Chargement des documents impossible.");
+    }
+  }
+
+  useEffect(() => {
+    reloadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lease.id]);
+
+  async function handleUploadDocument(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setDocBusy(true);
+    setDocError("");
+    try {
+      await api.uploadLeaseDocument(lease.id, file);
+      await reloadDocuments();
+    } catch (err) {
+      setDocError(err?.message || "Import du bail signe impossible.");
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function handleDeleteDocument(documentId) {
+    if (!(await confirm({
+      title: t("Supprimer le document"),
+      message: t("Supprimer ce document ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
+    setDocBusy(true);
+    setDocError("");
+    try {
+      await api.deleteLeaseDocument(documentId);
+      await reloadDocuments();
+    } catch (err) {
+      setDocError(err?.message || "Suppression impossible.");
+    } finally {
+      setDocBusy(false);
+    }
+  }
 
   return (
     <div className="modal-layer">
@@ -933,6 +1027,39 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
             {lease.moveInNotes && <p><strong>Notes d'entree</strong>{lease.moveInNotes}</p>}
           </div>
         )}
+        <div className="domus-detail-notes">
+          <p><strong>Bail signe a la main</strong></p>
+          {docError && <div className="domus-floating-error">{docError}</div>}
+          {documents.length > 0 && (
+            <ul className="domus-lease-documents">
+              {documents.map((doc) => (
+                <li key={doc.id}>
+                  <a href={api.leaseDocumentUrl(doc.id)} target="_blank" rel="noreferrer">
+                    <FileText size={14} /> {doc.originalName || `Document ${doc.id}`}
+                  </a>
+                  <button
+                    className="domus-lease-document-remove"
+                    disabled={docBusy}
+                    onClick={() => handleDeleteDocument(doc.id)}
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className="immo-btn">
+            <FilePlus size={15} /> Importer le bail signe (photo/scan/PDF)
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              style={{ display: "none" }}
+              disabled={docBusy}
+              onChange={handleUploadDocument}
+            />
+          </label>
+        </div>
         {go && (
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
@@ -944,7 +1071,11 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   );
 }
 
-function ContractPreviewModal({ contract, onClose }) {
+function ContractPreviewModal({ contract, onClose, onSigned }) {
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState("");
   const raw = contract.contractContent || "";
   // Texte brut (sans balises) → on préserve les sauts de ligne (articles séparés)
   // au lieu de tout coller. Sinon on rend le HTML tel quel.
@@ -952,6 +1083,30 @@ function ContractPreviewModal({ contract, onClose }) {
     ? (hasHtmlMarkup(raw) ? raw : `<pre class="domus-contract-plain">${escapeHtml(raw)}</pre>`)
     : "<p>Aucun contenu de contrat.</p>";
   const statusLabel = (CONTRACT_STATUS[contract.status] || {}).label || contract.status || "Contrat";
+  // Signé sans preuve attachée (scan supprimé) → on ré-affiche l'import.
+  const canMarkSigned = contract.status !== "signed" || !contract.signedDocumentId;
+
+  async function handleMarkSignedManually(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!(await confirm({
+      title: t("Signature manuscrite"),
+      message: t("Confirmer : le locataire a bien signé ce bail à la main sur papier ?"),
+      confirmLabel: t("Confirmer"),
+    }))) return;
+    setSignBusy(true);
+    setSignError("");
+    try {
+      const updated = await api.markContractSignedManually(contract.id, file);
+      onSigned?.(updated);
+    } catch (err) {
+      setSignError(err?.message || "Import de la signature impossible.");
+    } finally {
+      setSignBusy(false);
+    }
+  }
+
   return (
     <div className="modal-layer">
       <div className="modal-scrim" onClick={onClose} />
@@ -966,9 +1121,36 @@ function ContractPreviewModal({ contract, onClose }) {
           </div>
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
+        <div className="domus-contract-manual-sign">
+          <button type="button" className="immo-btn" onClick={() => openContractPrint(contract, { onError: toast.error })}>
+            <Printer size={15} /> Imprimer
+          </button>
+        </div>
+        {canMarkSigned && (
+          <div className="domus-contract-manual-sign">
+            {signError && <div className="domus-floating-error">{signError}</div>}
+            <label className="immo-btn">
+              <FileSignature size={15} /> Marquer signe a la main (importer le PDF/scan)
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                style={{ display: "none" }}
+                disabled={signBusy}
+                onChange={handleMarkSignedManually}
+              />
+            </label>
+          </div>
+        )}
+        {contract.signedDocumentId && (
+          <div className="domus-contract-manual-sign">
+            <a className="immo-btn" href={api.leaseDocumentUrl(contract.signedDocumentId)} target="_blank" rel="noreferrer">
+              <FileText size={15} /> Voir le bail signe importe
+            </a>
+          </div>
+        )}
         <div
           className="domus-contract-content"
-          dangerouslySetInnerHTML={{ __html: `${body}${contractSignaturesHtml(contract)}` }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
         />
       </div>
     </div>
@@ -992,10 +1174,7 @@ function LeaseSelect({ label, value, options, onChange, required = false }) {
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choisir</option>
-        {options.map(([val, text]) => <option key={val} value={val}>{text}</option>)}
-      </select>
+      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder="Choisir…" />
     </label>
   );
 }
@@ -1046,6 +1225,7 @@ function leaseToForm(lease) {
     status: lease.status || "active",
     terms: lease.terms || "",
     moveInNotes: lease.moveInNotes || "",
+    signingCity: lease.signingCity || "",
     taxApplyMode: lease.taxApplyMode || "never",
     taxName: lease.taxName || "",
     taxType: lease.taxType || "percent",
@@ -1067,6 +1247,7 @@ function leasePayload(form) {
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     terms: form.terms || null,
     moveInNotes: form.moveInNotes || null,
+    signingCity: form.signingCity || null,
     status: form.status || "active",
     taxApplyMode: form.taxApplyMode || "never",
     taxName: form.taxApplyMode === "auto" ? (form.taxName || null) : (form.taxName || null),
@@ -1109,7 +1290,7 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
   setActionError("");
   try {
     const contract = await ensureContract(lease, contractsByLease);
-    downloadSignedContractPdf(contract);
+    await downloadSignedContractPdf(contract);
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de telecharger le contrat.");
@@ -1118,8 +1299,12 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
   }
 }
 
-async function handleRenewLease(lease, setBusyAction, setActionError, reload) {
-  const ok = window.confirm(`Renouveler le bail ${lease.reference || lease.id} pour 12 mois ?`);
+async function handleRenewLease(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Renouveler le bail"),
+    message: tf(t("Renouveler le bail {ref} pour 12 mois ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Renouveler"),
+  });
   if (!ok) return;
   const startDate = addDaysISO(dateOnly(lease.endDate) || todayISO(), 1);
   const endDate = addMonthsISO(startDate, 12, -1);
@@ -1163,12 +1348,18 @@ async function handleResendContract(contract, setBusyAction, setActionError, rel
   }
 }
 
-async function handleCancelContract(contract, setBusyAction, setActionError, reload) {
+async function handleCancelContract(contract, setBusyAction, setActionError, reload, confirm) {
   if (!contract?.id) {
     setActionError("Aucun envoi à annuler.");
     return;
   }
-  const ok = window.confirm("Annuler l'envoi du contrat ? Le locataire ne pourra plus le signer via ce lien.");
+  const ok = await confirm({
+    title: t("Annuler l'envoi"),
+    message: t("Annuler l'envoi du contrat ? Le locataire ne pourra plus le signer via ce lien."),
+    confirmLabel: t("Annuler l'envoi"),
+    cancelLabel: t("Retour"),
+    danger: true,
+  });
   if (!ok) return;
   setBusyAction(`cancel-${contract.id}`);
   setActionError("");
@@ -1182,8 +1373,13 @@ async function handleCancelContract(contract, setBusyAction, setActionError, rel
   }
 }
 
-async function handleDeleteLease(lease, setBusyAction, setActionError, reload) {
-  const ok = window.confirm(`Resilier le bail ${lease.reference || lease.id} ?`);
+async function handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Résilier le bail"),
+    message: tf(t("Résilier le bail {ref} ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Résilier"),
+    danger: true,
+  });
   if (!ok) return;
   setBusyAction(`delete-${lease.id}`);
   setActionError("");

@@ -1,0 +1,56 @@
+import { Module } from "@nestjs/common";
+import { DatabaseModule } from "../database/database.module";
+import { LedgerModule } from "../ledger/ledger.module";
+import { ForecastController } from "./forecast.controller";
+import { ForecastLivestockService } from "./forecast-livestock.service";
+import { ForecastProductionService } from "./forecast-production.service";
+import { ForecastTrackingService } from "./forecast-tracking.service";
+import { ForecastService } from "./forecast.service";
+import { FORECAST_PRODUCERS } from "./forecast.types";
+import { BatiproScheduleProducer } from "./producers/batipro-schedule.producer";
+import { DomusRentProducer } from "./producers/domus-rent.producer";
+import { ExternalRefProducer } from "./producers/external-ref.producer";
+import { FarmosSalesTrendProducer } from "./producers/farmos-sales-trend.producer";
+import { HrPayrollProducer } from "./producers/hr-payroll.producer";
+import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
+import { PayablesProducer } from "./producers/payables.producer";
+import { SalesTrendProducer } from "./producers/sales-trend.producer";
+
+/**
+ * Module de prevision generique. Les producteurs (un par module/source)
+ * sont injectes en tableau via FORECAST_PRODUCERS : en ajouter un (HR,
+ * FarmOS, BatiPro) = l'ajouter ici, sans toucher le moteur.
+ */
+@Module({
+  imports: [DatabaseModule, LedgerModule],
+  controllers: [ForecastController],
+  providers: [
+    ForecastService,
+    ForecastTrackingService,
+    ForecastProductionService,
+    ForecastLivestockService,
+    DomusRentProducer,
+    LedgerOpeningProducer,
+    HrPayrollProducer,
+    PayablesProducer,
+    SalesTrendProducer,
+    ExternalRefProducer,
+    FarmosSalesTrendProducer,
+    BatiproScheduleProducer,
+    {
+      provide: FORECAST_PRODUCERS,
+      useFactory: (
+        domus: DomusRentProducer,
+        ledger: LedgerOpeningProducer,
+        hr: HrPayrollProducer,
+        payables: PayablesProducer,
+        salesTrend: SalesTrendProducer,
+        externalRef: ExternalRefProducer,
+        farmosSales: FarmosSalesTrendProducer,
+        batipro: BatiproScheduleProducer,
+      ) => [domus, ledger, hr, payables, salesTrend, externalRef, farmosSales, batipro],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer, ExternalRefProducer, FarmosSalesTrendProducer, BatiproScheduleProducer],
+    },
+  ],
+})
+export class ForecastModule {}

@@ -8,7 +8,28 @@ const whitelist = require('./whitelist');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://backend2:8001';
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme_in_prod';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PROD = ['production', 'prod'].includes(NODE_ENV.toLowerCase());
+const WEAK_JWT_SECRETS = new Set([
+  '',
+  'changeme',
+  'changeme_in_prod',
+  'jwt_secret_key',
+  'refresh_secret_key',
+  'hahahhoho',
+  'VIRVVIER',
+  'password',
+]);
+
+function jwtSecret() {
+  const value = (process.env.JWT_SECRET || '').trim();
+  if (IS_PROD && (WEAK_JWT_SECRETS.has(value) || value.length < 32)) {
+    throw new Error('JWT_SECRET must be set to a strong value in production.');
+  }
+  return value || 'jwt_secret_key';
+}
+
+const JWT_SECRET = jwtSecret();
 
 function bearerTokenFromRequest(req) {
   const authHeader = req.headers['authorization'];
@@ -56,6 +77,10 @@ app.use((req, res, next) => {
   const method = req.method;
   const path = req.path;
 
+  if (method === 'OPTIONS') {
+    return next();
+  }
+
   // Chercher une route autorisée dans la whitelist
   const allowed = whitelist.find((route) => {
     const methodOk = route.method === '*' || route.method === method;
@@ -101,10 +126,10 @@ app.use((req, res, next) => {
 // which is the secure default — the backend always sees a canonical
 // hostname and isn't influenced by Host-header attacks.
 // The backend reads X-Forwarded-Host (set by nginx) for public URLs.
-app.use(
-  createProxyMiddleware({
+const backendProxy = createProxyMiddleware({
     target: BACKEND_URL,
     changeOrigin: true,
+    ws: true,
     on: {
       error: (err, req, res) => {
         console.error('[PROXY ERROR]', err.message);
@@ -114,11 +139,15 @@ app.use(
         });
       },
     },
-  })
-);
+});
 
-app.listen(PORT, () => {
+app.use(backendProxy);
+
+const server = app.listen(PORT, () => {
   console.log(`Middleware actif sur le port ${PORT}`);
   console.log(`Proxy vers : ${BACKEND_URL}`);
   console.log(`Routes autorisées : ${whitelist.length}`);
 });
+if (typeof backendProxy.upgrade === 'function') {
+  server.on('upgrade', backendProxy.upgrade);
+}

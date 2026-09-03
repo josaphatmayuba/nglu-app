@@ -22,6 +22,19 @@ const DetailCustomer = () => {
   //dispatch
   const dispatch = useDispatch();
   const customer = useSelector((state) => state.customers.customer);
+  const saleInvoices = Array.isArray(customer?.saleInvoice)
+    ? customer.saleInvoice
+    : [];
+  const returnSaleInvoices = Array.isArray(customer?.returnSaleInvoice)
+    ? customer.returnSaleInvoice
+    : [];
+  const transactions = Array.isArray(customer?.allTransaction)
+    ? customer.allTransaction
+    : [];
+  const totalSaleInvoice = customer?.totalSaleInvoice ?? saleInvoices.length;
+  const totalReturnSaleInvoice =
+    customer?.totalReturnSaleInvoice ?? returnSaleInvoices.length;
+
   useEffect(() => {
     dispatch(loadSingleCustomer(id));
     return () => {
@@ -54,12 +67,12 @@ const DetailCustomer = () => {
                       <span className="inline-flex items-center gap-2">
                         Factures
                         <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink-100 px-1.5 text-xs text-ink-600">
-                          {customer?.totalSaleInvoice}
+                          {totalSaleInvoice}
                         </span>
                       </span>
                     }>
                     <CustomerInvoiceList
-                      list={customer?.saleInvoice}
+                      list={saleInvoices}
                       linkTo="/admin/sale"
                     />
                   </Tab>
@@ -69,16 +82,16 @@ const DetailCustomer = () => {
                       <span className="inline-flex items-center gap-2">
                         Retours
                         <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink-100 px-1.5 text-xs text-ink-600">
-                          {customer?.totalReturnSaleInvoice}
+                          {totalReturnSaleInvoice}
                         </span>
                       </span>
                     }>
                     <CustomerReturnInvoiceList
-                      list={customer?.returnSaleInvoice}
+                      list={returnSaleInvoices}
                     />
                   </Tab>
                   <Tab tabKey="transactions" label="Transactions">
-                    <CustomerTransactionList list={customer?.allTransaction} />
+                    <CustomerTransactionList list={transactions} />
                   </Tab>
                 </Tabs>
               </Card>

@@ -436,10 +436,13 @@ input, textarea, select { font-family: var(--font-sans); }
   --cols-3: repeat(3, 1fr);
   --cols-4: repeat(4, 1fr);
   --cols-5: repeat(5, 1fr);
-  --cols-main: 1fr 380px;       /* dashboard right column */
-  --cols-main-15: 1.5fr 1fr;    /* health page two-col */
-  --cols-main-cal: 1fr 360px;   /* calendar two-col */
-  --cols-main-detail: 1fr 480px;/* animals detail drawer */
+  /* minmax(0,…) sur la colonne fluide : sans ça, `1fr` garde min-width:auto et
+     le contenu large (tableaux) fait déborder la grille → le panneau latéral
+     sort de l'écran à droite (bug responsiveness fiche animal). */
+  --cols-main: minmax(0, 1fr) 380px;       /* dashboard right column */
+  --cols-main-15: minmax(0, 1.5fr) minmax(0, 1fr); /* health page two-col */
+  --cols-main-cal: minmax(0, 1fr) 360px;   /* calendar two-col */
+  --cols-main-detail: minmax(0, 1fr) 480px;/* animals detail drawer */
   --pad-page: 20px 24px 32px;
   --tap: 36px;
 }
@@ -449,7 +452,7 @@ input, textarea, select { font-family: var(--font-sans); }
   :root {
     --cols-5: repeat(3, 1fr);
     --cols-4: repeat(3, 1fr);
-    --cols-main-detail: 1fr 420px;
+    --cols-main-detail: minmax(0, 1fr) 420px;
     --pad-page: 18px 20px 28px;
   }
 }
@@ -473,6 +476,15 @@ input, textarea, select { font-family: var(--font-sans); }
   .species-pill { height: 40px; padding: 6px 14px; font-size: 13.5px; }
   .input { height: 42px; font-size: 15px; }   /* iOS won't zoom at ≥16px */
   .nav-item { padding: 12px 12px; font-size: 14.5px; }
+
+  /* Anti-débordement horizontal : sur mobile aucun contenu ne doit pousser la
+     page au-delà du viewport (sinon scroll horizontal + zone blanche à droite).
+     On borne la racine de l'app et on autorise les longues chaînes à casser. */
+  html, body, #root { max-width: 100vw; overflow-x: hidden; }
+  .card { max-width: 100%; }
+  /* Les valeurs mono longues (compteurs « 16 710 ») ne doivent pas élargir leur
+     conteneur grille (min-width:auto par défaut sur les flex/grid items). */
+  .mono, .tnum { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 540px) {
@@ -521,7 +533,7 @@ input, textarea, select { font-family: var(--font-sans); }
   --cols-main: 1fr !important;
   --cols-main-15: 1fr !important;
   --cols-main-cal: 1fr !important;
-  --cols-main-detail: 1fr 380px !important;
+  --cols-main-detail: minmax(0, 1fr) 380px !important;
   --pad-page: 18px 20px 28px !important;
   --tap: 40px !important;
 }

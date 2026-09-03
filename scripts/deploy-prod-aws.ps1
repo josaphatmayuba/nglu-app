@@ -138,7 +138,7 @@ if (Test-Path $localArchive) {
 }
 Push-Location $repoRoot
 try {
-  tar -czf $localArchive frontend/dist marketing-site/dist
+  tar -czf $localArchive frontend/dist marketing-site/dist docker-compose.prod.yml frontend/Dockerfile.prod nginx/nginx.frontend.conf
 }
 finally {
   Pop-Location
@@ -193,14 +193,50 @@ sudo find "$RemoteProdDir/frontend/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {}
 sudo find "$RemoteProdDir/marketing-site/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 sudo tar -xzf "$remoteArchive" -C "$RemoteProdDir"
 sudo chown -R "$User":"$User" "$RemoteProdDir/frontend/dist" "$RemoteProdDir/marketing-site/dist"
+sudo chown "$User":"$User" "$RemoteProdDir/docker-compose.prod.yml" "$RemoteProdDir/frontend/Dockerfile.prod" "$RemoteProdDir/nginx/nginx.frontend.conf"
 rm -f "$remoteArchive"
+
+ensure_static_dist() {
+  dir="$RemoteProdDir/`$1/dist"
+  label="`$1"
+  sudo mkdir -p "`$dir"
+  if [ ! -f "`$dir/index.html" ]; then
+    sudo tee "`$dir/index.html" >/dev/null <<HTML
+<!doctype html>
+<html lang="fr">
+  <head><meta charset="utf-8"><title>`$label non deploye</title></head>
+  <body>`$label non deploye.</body>
+</html>
+HTML
+  fi
+}
+
+for static_app in farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do
+  ensure_static_dist "`$static_app"
+done
+sudo chown -R "$User":"$User" \
+  "$RemoteProdDir/farmos-app/dist" \
+  "$RemoteProdDir/domus-app/dist" \
+  "$RemoteProdDir/journal-app/dist" \
+  "$RemoteProdDir/tickets-app/dist" \
+  "$RemoteProdDir/batipro-app/dist" \
+  "$RemoteProdDir/hr-app/dist" \
+  "$RemoteProdDir/comptabilite-app/dist" \
+  "$RemoteProdDir/migration-app/dist" \
+  "$RemoteProdDir/chat-app/dist"
 
 cd "$RemoteProdDir"
 FE_IMG="$ComposeProject-frontend"
+FE_CURRENT_IMAGE="`$(docker inspect -f '{{.Config.Image}}' nglu_prod_frontend 2>/dev/null || true)"
+FE_CURRENT_PROJECT="`$(docker inspect -f '{{with index .Config.Labels "com.docker.compose.project"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true)"
 
 # (#1) Tag the current working frontend image as a rollback point.
 FE_HAVE_PREV=0
-if docker image inspect "`$FE_IMG:latest" >/dev/null 2>&1; then
+if [ -n "`$FE_CURRENT_IMAGE" ] && docker image inspect "`$FE_CURRENT_IMAGE" >/dev/null 2>&1; then
+  docker tag "`$FE_CURRENT_IMAGE" "`$FE_IMG:previous"
+  FE_HAVE_PREV=1
+  echo "[remote] tagged current container image (`$FE_CURRENT_IMAGE) as `$FE_IMG:previous (rollback point)"
+elif docker image inspect "`$FE_IMG:latest" >/dev/null 2>&1; then
   docker tag "`$FE_IMG:latest" "`$FE_IMG:previous"
   FE_HAVE_PREV=1
   echo "[remote] tagged current frontend image as `$FE_IMG:previous (rollback point)"
@@ -214,6 +250,10 @@ if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile"
 fi
 
 echo "[remote] recreating prod frontend container..."
+if [ -n "`$FE_CURRENT_PROJECT" ] && [ "`$FE_CURRENT_PROJECT" != "$ComposeProject" ]; then
+  echo "[remote] existing nglu_prod_frontend belongs to compose project `$FE_CURRENT_PROJECT; replacing it under $ComposeProject"
+  docker rm -f nglu_prod_frontend
+fi
 docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
 
 check_web() {

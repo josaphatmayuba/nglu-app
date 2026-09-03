@@ -8,8 +8,12 @@ import { api } from "../api.js";
 import { filterLeases, filterPayments, filterTenants, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
+import { t } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { buildLeaseCards } from "./loyers.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useToast } from "../components/Dialog.jsx";
 
 const STORAGE_TENANT = "domus-portail-tenant-id";
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -27,7 +31,7 @@ function initials(name) {
 
 function formatGreeting(name) {
   const n = String(name || "").trim();
-  return n ? `Bonjour, ${n}` : "Bonjour";
+  return n ? `${t("Bonjour")}, ${n}` : t("Bonjour");
 }
 
 function monthLabel(dateLike) {
@@ -45,10 +49,10 @@ function daysUntil(dateLike) {
 }
 
 function dueChip(days) {
-  if (days == null) return { text: "Échéance à confirmer", chip: "chip-ink" };
-  if (days < 0) return { text: `en retard de ${Math.abs(days)} j`, chip: "chip-rose" };
-  if (days === 0) return { text: "dû aujourd'hui", chip: "chip-amber" };
-  return { text: `dû dans ${days} j`, chip: "chip-amber" };
+  if (days == null) return { text: t("Échéance à confirmer"), chip: "chip-ink" };
+  if (days < 0) return { text: `${t("en retard de")} ${Math.abs(days)} j`, chip: "chip-rose" };
+  if (days === 0) return { text: t("dû aujourd'hui"), chip: "chip-amber" };
+  return { text: `${t("dû dans")} ${days} j`, chip: "chip-amber" };
 }
 
 async function loadPortailModule() {
@@ -67,6 +71,7 @@ export function Portail({ go }) {
   const { data, loading, error, reload } = useApi(loadPortailModule, []);
   useRealtimeReload(reload, ["tenants", "leases", "payments", "contracts"]);
   const dateRange = useDateRange();
+  const toast = useToast();
 
   const tenants = useMemo(() => filterTenants(Array.isArray(data?.tenants) ? data.tenants : [], dateRange), [data?.tenants, dateRange]);
   const leases = useMemo(
@@ -186,7 +191,7 @@ export function Portail({ go }) {
       window.location.href = `tel:${phone}`;
       return;
     }
-    window.alert("Coordonnées du gestionnaire non configurées dans les réglages.");
+    toast.error(t("Coordonnées du gestionnaire non configurées dans les réglages."));
   };
 
   if (loading) return <Loading />;
@@ -200,16 +205,12 @@ export function Portail({ go }) {
   return (
     <>
       <div className="portail-preview-banner">
-        <span>Vue gestionnaire</span>
+        <span>{t("Vue gestionnaire")}</span>
         <label className="portail-tenant-pick">
-          <span className="muted" style={{ fontSize: 12 }}>Locataire</span>
+          <span className="muted" style={{ fontSize: 12 }}>{t("Locataire")}</span>
           <div className="portail-tenant-select">
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              {tenantOptions.length === 0 && <option value="">Aucun locataire</option>}
-              {tenantOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
+            <Autocomplete value={tenantId} onChange={setTenantId} placeholder={tenantOptions.length ? t("Choisir un locataire") : t("Aucun locataire")}
+              options={tenantOptions.map((o) => ({ value: o.id, label: o.label }))} />
             <ChevronDown size={16} aria-hidden />
           </div>
         </label>
@@ -217,7 +218,7 @@ export function Portail({ go }) {
 
       <div className="portail-hero grad-iris">
         <div>
-          <div className="portail-hero-eyebrow">Espace locataire</div>
+          <div className="portail-hero-eyebrow">{t("Espace locataire")}</div>
           <h1 className="portail-hero-title">{formatGreeting(name)}</h1>
           <div className="portail-hero-sub">{unit}</div>
         </div>
@@ -227,7 +228,7 @@ export function Portail({ go }) {
       {!activeLease ? (
         <div className="card" style={{ padding: 24, marginTop: 16 }}>
           <p className="muted" style={{ margin: 0, fontSize: 14 }}>
-            Ce locataire n&apos;a pas de bail sur la période sélectionnée. Choisissez « Tout » dans le filtre de dates ou un autre locataire.
+            {t(`Ce locataire n'a pas de bail sur la période sélectionnée. Choisissez « Tout » dans le filtre de dates ou un autre locataire.`)}
           </p>
         </div>
       ) : (
@@ -235,7 +236,7 @@ export function Portail({ go }) {
           <div className="portail-main-grid">
             <div className="card portail-rent-card">
               <div className="portail-rent-head">
-                <span className="kpi-label">Prochain loyer</span>
+                <span className="kpi-label">{t("Prochain loyer")}</span>
                 <span className={`chip ${due.chip}`}>{due.text}</span>
               </div>
               <div className="portail-rent-amount">
@@ -243,33 +244,33 @@ export function Portail({ go }) {
               </div>
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
                 {dueDate
-                  ? `Échéance ${parseDomusDate(dueDate)?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
-                  : "Date d'échéance non renseignée"}
-                {card?.status === "ok" && <span> · À jour</span>}
-                {card?.status === "pending" && <span> · Mois en cours à régler</span>}
-                {card?.status === "late" && <span style={{ color: "#be123c" }}> · Retard</span>}
+                  ? `${t("Échéance")} ${parseDomusDate(dueDate)?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
+                  : t("Date d'échéance non renseignée")}
+                {card?.status === "ok" && <span> · {t("À jour")}</span>}
+                {card?.status === "pending" && <span> · {t("Mois en cours à régler")}</span>}
+                {card?.status === "late" && <span style={{ color: "#be123c" }}> · {t("Retard")}</span>}
               </div>
               <button type="button" className="portail-pay-btn" onClick={payRent}>
-                <Smartphone size={16} /> Payer par mobile money
+                <Smartphone size={16} /> {t("Payer par mobile money")}
               </button>
             </div>
 
             <div className="card portail-help-card">
-              <h3 className="portail-card-title"><LifeBuoy size={16} color="var(--iris-500)" /> Aide</h3>
+              <h3 className="portail-card-title"><LifeBuoy size={16} color="var(--iris-500)" /> {t("Aide")}</h3>
               <button type="button" className="portail-outline-btn" onClick={() => go("maintenance")}>
-                <Wrench size={16} color="#d97706" /> Déclarer une panne
+                <Wrench size={16} color="#d97706" /> {t("Déclarer une panne")}
               </button>
               <button type="button" className="portail-outline-btn" onClick={contactManager}>
-                <MessageCircle size={16} color="var(--iris-500)" /> Contacter le gestionnaire
+                <MessageCircle size={16} color="var(--iris-500)" /> {t("Contacter le gestionnaire")}
               </button>
             </div>
           </div>
 
           <div className="portail-docs-grid">
             <div className="card portail-panel">
-              <h3 className="portail-card-title"><Folder size={16} /> Mes documents</h3>
+              <h3 className="portail-card-title"><Folder size={16} /> {t("Mes documents")}</h3>
               {documents.length === 0 && (
-                <p className="muted" style={{ fontSize: 13, margin: 0 }}>Aucun document pour cette période.</p>
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>{t("Aucun document pour cette période.")}</p>
               )}
               <div className="portail-doc-list">
                 {documents.map((doc) => (
@@ -295,9 +296,9 @@ export function Portail({ go }) {
             </div>
 
             <div className="card portail-panel">
-              <h3 className="portail-card-title"><History size={16} /> Historique</h3>
+              <h3 className="portail-card-title"><History size={16} /> {t("Historique")}</h3>
               {history.length === 0 && (
-                <p className="muted" style={{ fontSize: 13, margin: 0 }}>Aucun paiement sur la période.</p>
+                <p className="muted" style={{ fontSize: 13, margin: 0 }}>{t("Aucun paiement sur la période.")}</p>
               )}
               <div className="portail-hist-list">
                 {history.map((p) => (
@@ -330,15 +331,15 @@ function ContractPreviewModal({ contract, onClose }) {
           <div className="domus-modal-title">
             <span className="domus-modal-title-icon"><FileCheck size={20} /></span>
             <div>
-              <h2>Contrat de bail</h2>
-              <p>{contract.status || "Document"}</p>
+              <h2>{t("Contrat de bail")}</h2>
+              <p>{contract.status || t("Document")}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+          <button type="button" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
         </div>
         <div
           className="domus-contract-content"
-          dangerouslySetInnerHTML={{ __html: contract.contractContent || "<p>Aucun contenu de contrat.</p>" }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract.contractContent || `<p>${t("Aucun contenu de contrat.")}</p>`) }}
         />
       </div>
     </div>

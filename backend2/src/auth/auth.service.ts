@@ -1,14 +1,18 @@
-import { randomUUID } from "crypto";
-import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { randomBytes, randomUUID } from "crypto";
+import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { OAuth2Client } from "google-auth-library";
+import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { refreshTokens, roles, sessions, users } from "../database/schema";
+import { provisionOrgChartOfAccounts } from "../database/provisioning/chart-of-accounts";
+import { cloneRolesForOrg } from "../database/provisioning/org-roles";
+import { organizations, refreshTokens, roles, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
 
 const ACCESS_TTL_MS = 15 * 60 * 1000; // 15 min — must match expiresIn
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 d — must match expiresIn
@@ -26,6 +30,7 @@ export class AuthService {
   // In-memory tracker — resets on restart, acceptable for single-instance deployment.
   // Use Redis (INCR + EXPIRE) if multi-instance is needed in the future.
   private readonly loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+  private readonly googleClient = new OAuth2Client();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
@@ -135,11 +140,21 @@ export class AuthService {
     // SCRUM-112: block locked-out usernames before hitting the DB
     this.checkLockout(dto.username);
 
+    // L identifiant recu (`username`) peut etre un username (ERP ongdngolu) OU
+    // un email (site Avelomi qui envoie l email sous cette cle). On resout donc
+    // par username exact OU par email normalise (les emails sont stockes en
+    // trim().toLowerCase() a l inscription). Le username reste compare tel quel
+    // pour ne pas changer le comportement historique de l ERP.
+    const identifier = dto.username;
+    const emailCandidate = identifier.trim().toLowerCase();
+
     const [user] = await this.db
       .select({
         id: users.id,
         organizationId: users.organizationId,
         username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
         password: users.password,
         roleId: users.roleId,
         status: users.status,
@@ -150,7 +165,7 @@ export class AuthService {
         email: users.email,
       })
       .from(users)
-      .where(eq(users.username, dto.username))
+      .where(or(eq(users.username, identifier), eq(users.email, emailCandidate)))
       .limit(1);
 
     if (!user) {
@@ -214,6 +229,174 @@ export class AuthService {
     return { user: safe, role: role?.name ?? null, token: accessToken, refreshToken };
   }
 
+  async loginWithGoogle(credential: string, ctx: AuditContext = {}) {
+    if (!env.google.clientId) {
+      throw new BadRequestException("Connexion Google non configurée.");
+    }
+
+    let email = "";
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: env.google.clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.email || !payload.email_verified) {
+        throw new UnauthorizedException("Email Google non vérifié.");
+      }
+      email = payload.email.trim().toLowerCase();
+    } catch (error) {
+      await this.audit.log("auth.google.fail", null, ctx, { reason: "invalid_token" });
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException("Connexion Google invalide.");
+    }
+
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        username: users.username,
+        roleId: users.roleId,
+        status: users.status,
+        isLogin: users.isLogin,
+        totpEnabled: users.totpEnabled,
+        totpSecret: users.totpSecret,
+        refreshToken: users.refreshToken,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(or(eq(users.username, email), eq(users.email, email)))
+      .limit(1);
+
+    if (!user) {
+      await this.audit.log("auth.google.fail", email, ctx, { reason: "user_not_found" });
+      throw new UnauthorizedException("Aucun compte Avelomi n'est associé à cet email Google.");
+    }
+
+    if (user.status !== "true") {
+      await this.audit.log("auth.google.fail", email, { ...ctx, userId: user.id }, { reason: "account_disabled" });
+      throw new UnauthorizedException("Ce compte est désactivé. Contactez un administrateur.");
+    }
+
+    if (user.totpEnabled) {
+      const mfaToken = this.jwtService.sign(
+        { sub: user.id, mfa: true },
+        { secret: env.jwtSecret + MFA_TOKEN_SECRET_SUFFIX, expiresIn: "5m", algorithm: "HS256" },
+      );
+      await this.audit.log("auth.google.mfa_required", `user:${user.id}`, { ...ctx, userId: user.id });
+      return { requireMfa: true, mfaToken } as { requireMfa: true; mfaToken: string };
+    }
+
+    const [role] = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, user.roleId))
+      .limit(1);
+
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(user.id, role?.name, familyId, ctx);
+
+    await this.db
+      .update(users)
+      .set({ isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(users.id, user.id));
+
+    await this.audit.log("auth.google.ok", `user:${user.id}`, { ...ctx, userId: user.id }, { role: role?.name });
+
+    const { refreshToken: _refreshToken, isLogin: _isLogin, totpSecret: _totpSecret, ...safe } = user;
+    return { user: safe, role: role?.name ?? null, token: accessToken, refreshToken };
+  }
+
+  // ── P3 multi-tenant : inscription self-service d un client ────────────────
+  // Cree une organisation (status 'trial') + son 1er admin + seed le plan
+  // comptable canonique de l org, le tout dans UNE transaction atomique, puis
+  // connecte l utilisateur (JWT + refresh). Solo = org a 1 user (orgName = nom).
+  async register(dto: RegisterDto, ctx: AuditContext = {}) {
+    if (!dto.acceptedTerms) {
+      throw new BadRequestException("Vous devez accepter les conditions d utilisation.");
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const slug = dto.slug.trim().toLowerCase();
+    const orgName = dto.accountType === "org"
+      ? (dto.orgName?.trim() || "")
+      : `${dto.firstName} ${dto.lastName}`.trim();
+    if (dto.accountType === "org" && !orgName) {
+      throw new BadRequestException("Le nom de l organisation est requis.");
+    }
+
+    // Unicite email (= username de connexion) et slug, hors transaction (lecture).
+    const [emailTaken] = await this.db.select({ id: users.id }).from(users).where(eq(users.username, email)).limit(1);
+    if (emailTaken) throw new ConflictException("Un compte existe deja avec cet email.");
+    const [slugTaken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
+    if (slugTaken) throw new ConflictException("Cette adresse est deja utilisee.");
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const publicId = `org_${randomBytes(6).toString("hex")}`; // 12 hexa opaques
+
+    // Transaction atomique : org + roles + user + plan comptable. Tout ou rien.
+    const created = await this.db.transaction(async (tx) => {
+      const [orgRes] = await tx.insert(organizations).values({
+        publicId,
+        name: orgName,
+        slug,
+        status: "trial",
+        plan: dto.plan ?? "free",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+      const orgId = Number((orgRes as any).insertId);
+
+      // Phase 0 multi-tenant : la nouvelle org recoit SON propre jeu de roles +
+      // permissions (copie de l org modele). L admin pointe sur le role « admin »
+      // de SA propre org, pas celui partage de l org 1.
+      const adminRoleId = await cloneRolesForOrg(tx as unknown as Database, orgId);
+      if (!adminRoleId) throw new BadRequestException("Role admin introuvable dans l org modele (seed manquant).");
+
+      const [userRes] = await tx.insert(users).values({
+        organizationId: orgId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        username: email,
+        email,
+        phone: dto.phone ?? null,
+        password: passwordHash,
+        roleId: adminRoleId,
+        status: "true",
+        isLogin: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+      const userId = Number((userRes as any).insertId);
+
+      // Plan comptable canonique isole pour cette nouvelle org (memes IDs resolus
+      // par nom). Le handle tx garantit l atomicite avec l org + user.
+      await provisionOrgChartOfAccounts(tx as unknown as Database, orgId);
+
+      return { orgId, userId, adminRoleId };
+    });
+
+    await this.audit.log("auth.register.ok", `org:${created.orgId}`, { ...ctx, userId: created.userId }, {
+      slug, publicId, accountType: dto.accountType,
+    });
+
+    // Connexion immediate : JWT + refresh (nouvelle famille = 1er device).
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(created.userId, created.adminRoleId, "admin", created.orgId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(created.userId, "admin", familyId, ctx);
+
+    return {
+      token: accessToken,
+      refreshToken,
+      role: "admin",
+      user: { id: created.userId, firstName: dto.firstName, lastName: dto.lastName, email, organizationId: created.orgId },
+      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial", plan: dto.plan ?? "free" },
+    };
+  }
+
   /** Complete MFA login after TOTP/recovery verification. Exchanges mfaToken for full tokens. */
   verifyMfaToken(mfaToken: string): { sub: number; mfa: boolean } {
     let payload: { sub: number; mfa: boolean };
@@ -237,6 +420,9 @@ export class AuthService {
       .select({
         id: users.id,
         organizationId: users.organizationId,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
         roleId: users.roleId,
         status: users.status,
         password: users.password,
@@ -361,7 +547,7 @@ export class AuthService {
 
     // ── Valid (active, or rotated within grace = concurrent tab). Load user. ──
     const [user] = await this.db
-      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, status: users.status })
+      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, status: users.status, firstName: users.firstName, lastName: users.lastName, username: users.username, email: users.email })
       .from(users)
       .where(eq(users.id, row.userId))
       .limit(1);
@@ -401,6 +587,11 @@ export class AuthService {
       roleId: role?.id,
       role: role?.name ?? null,
       organizationId: user.organizationId,
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      email: user.email,
     };
   }
 

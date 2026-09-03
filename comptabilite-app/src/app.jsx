@@ -1,14 +1,10 @@
+// build: 3.92.2 (cache-bust redeploiement dev compta — onglet Previsionnel)
 import React from "react";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
-import { defaultSymbol } from "./currency.js";
-import {
-  fallback, journaux as fbJournaux, journalCaisse, ecritures as fbEcritures, planComptable,
-  types as fbTypes, grandLivreAccounts, grandLivre as fbGrandLivre, tresorerieComptes, tresorerieMvts,
-  tva as fbTva, tiers as fbTiers, immobilisations as fbImmo, analytiqueCards, analytiqueRows,
-  budgetLines, cashflowPlan, resultat as fbResultat, bilan as fbBilan, balanceGenerale, flux as fbFlux
-} from "./data.js";
+import { cleanCurrencySymbol, defaultSymbol } from "./currency.js";
+import { Forecast } from "./forecast.jsx";
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -70,6 +66,8 @@ function Icon({ name, className = "ic", style }) {
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "dashboard" },
   { section: "Saisie" },
+  { id: "saisie", label: "Saisie rapide", icon: "wallet" },
+  { id: "approbations", label: "Approbations", icon: "bellRing" },
   { id: "journaux", label: "Journaux", icon: "bookText" },
   { id: "ecritures", label: "Écritures", icon: "penLine" },
   { id: "types", label: "Types de transaction", icon: "shapes" },
@@ -79,14 +77,22 @@ const NAV = [
   { id: "tiers", label: "Tiers (clients/fourn.)", icon: "contact" },
   { section: "Trésorerie & immo." },
   { id: "tresorerie", label: "Trésorerie", icon: "landmark" },
+  { id: "change", label: "Change (devises)", icon: "landmark" },
   { id: "immo", label: "Immobilisations", icon: "warehouse" },
   { section: "Pilotage" },
   { id: "analytique", label: "Analytique (projets)", icon: "pieChart" },
   { id: "budget", label: "Budget", icon: "piggyBank" },
   { id: "capacite", label: "Plan de trésorerie", icon: "gauge" },
+  { id: "forecast", label: "Prévisionnel", icon: "gauge" },
+  { section: "Achats & stock" },
+  { id: "fournisseurs", label: "Fournisseurs", icon: "contact" },
+  { id: "achats", label: "Factures fournisseurs", icon: "receipt" },
+  { id: "stock", label: "Stock & entrepôts", icon: "warehouse" },
   { section: "États" },
   { id: "etats", label: "États financiers", icon: "barChart" },
   { id: "tva", label: "TVA & taxes", icon: "receipt" },
+  { section: "Système" },
+  { id: "parametres", label: "Paramètres", icon: "gauge" },
 ];
 const ITEMS = NAV.filter((n) => n.id);
 const TITLES = Object.fromEntries(ITEMS.map((n) => [n.id, n.label]));
@@ -99,13 +105,128 @@ let CUR = "CDF";
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
 const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
+// Principe SIFA : chaque montant garde SA devise, jamais de conversion ni de melange.
+// La devise est portee par la ligne (currencyCode renvoye par l'API) ; CUR = repli.
+const curOf = (row) => (row && (row.currencyCode || row.currencyId != null)) ? (row.currencyCode || "") : CUR;
+const mc = (v, row) => `${nf.format(Math.round(Number(v || 0)))} ${curOf(row) || CUR}`.trim();
 const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
-const dash = (v) => (v ? nf.format(v) : "—");
 const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
+const EMPTY_INCOME = { totalRevenue: 0, totalExpense: 0, profit: 0, revenue: [], expense: [], expenses: [] };
+const EMPTY_BALANCE = { match: true, totalAsset: 0, totalLiability: 0, totalEquity: 0, assets: [], liabilities: [], equity: [] };
+const EMPTY_TRIAL = { match: true, totalDebit: 0, totalCredit: 0, debits: [], credits: [] };
+const EMPTY_DATA = {
+  transactions: [],
+  accounts: [],
+  mainAccounts: [],
+  currencies: [],
+  trialBalance: EMPTY_TRIAL,
+  balanceSheet: EMPTY_BALANCE,
+  incomeStatement: EMPTY_INCOME,
+};
+const asArray = (value, key) => {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value[key])) return value[key];
+  return [];
+};
+const accountLabel = (a) => a.subAccount || a.name || a.account || "Compte";
+// Message clair quand le backend refuse l'action faute de permission (PermissionsGuard → 403).
+const permError = (e, action) => {
+  const msg = String(e?.message || e);
+  if (/\b403\b|Forbidden/i.test(msg)) return `Vous n'avez pas la permission de ${action}.`;
+  return msg;
+};
+const accountType = (a) => a.accountType || a.account?.type || a.type || "—";
+const accountText = (a) => `${accountLabel(a)} ${a.account || ""} ${accountType(a)}`.toLowerCase();
+const balanceOf = (a) => Number((a.balance ?? (Number(a.totalDebit || 0) - Number(a.totalCredit || 0))) || 0);
+const hasAny = (a, words) => words.some((w) => accountText(a).includes(w));
+const isTreasuryAccount = (a) => hasAny(a, ["banque", "bank", "caisse", "cash", "trésorerie", "tresorerie"]);
+const isReceivableAccount = (a) => hasAny(a, ["client", "customer", "receivable", "locataire", "tenant"]);
+const isPayableAccount = (a) => hasAny(a, ["fournisseur", "supplier", "payable", "dette"]);
+const isTaxAccount = (a) => hasAny(a, ["tva", "vat", "tax", "dgi"]);
+const isFixedAssetAccount = (a) => hasAny(a, ["immobil", "asset", "équipement", "equipement", "matériel", "materiel", "véhicule", "vehicule"]);
 
-// Toast léger — fait répondre tous les boutons sans endpoint dédié.
-const DEMO = "Action de démonstration — à connecter au backend.";
+// Toast léger.
+const DEMO = "Action à connecter au backend.";
 function notify(msg) { try { window.dispatchEvent(new CustomEvent("compta:toast", { detail: msg || DEMO })); } catch {} }
+
+// Export CSV réel côté client (pas d'endpoint requis) : rows = tableau d'objets, cols = [[clé,libellé]].
+function exportCsv(filename, cols, rows) {
+  if (!rows || !rows.length) { notify("Rien à exporter."); return; }
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = cols.map((c) => esc(c[1])).join(",");
+  const body = rows.map((r) => cols.map((c) => esc(typeof c[0] === "function" ? c[0](r) : r[c[0]])).join(",")).join("\n");
+  const csv = "﻿" + head + "\n" + body; // BOM pour Excel/accents
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* Pagination d'affichage : on ne rend que `step` lignes à la fois (évite de
+   rendre des centaines de lignes d'un coup → freeze UI). Même UX que le Grand livre.
+   `signature` = clé optionnelle : si elle change (filtres, données), on revient à `step`. */
+function usePaginated(list, step = 20, signature) {
+  const [visible, setVisible] = React.useState(step);
+  React.useEffect(() => { setVisible(step); }, [signature, step]);
+  const arr = Array.isArray(list) ? list : [];
+  return { shown: arr.slice(0, visible), total: arr.length, visible, more: () => setVisible((v) => v + step) };
+}
+/* Bouton « Afficher plus » réutilisable (rendu seulement s'il reste des lignes). */
+function ShowMore({ page, step = 20 }) {
+  if (!page || page.total <= page.visible) return null;
+  return (
+    <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+      <button className="btn btn-ghost" onClick={page.more}>Afficher plus ({page.total - page.visible} restantes)</button>
+    </div>
+  );
+}
+
+/* Autocomplete recherchable (remplace les <select> de listes de données).
+   options = [{ value, label }]. onChange reçoit la valeur. */
+function Autocomplete({ value, onChange, options, placeholder = "—", allowClear = true, style }) {
+  const norm = (options || []).map((o) => ({ value: o.value, label: o.label }));
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const wrapRef = React.useRef(null);
+  const selected = norm.find((o) => String(o.value) === String(value));
+  const display = open ? query : (selected ? selected.label : "");
+  const q = query.trim().toLowerCase();
+  const filtered = !open ? norm : (q ? norm.filter((o) => o.label.toLowerCase().includes(q)) : norm);
+  React.useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(""); } };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const pick = (o) => { onChange(o.value); setOpen(false); setQuery(""); };
+  return (
+    <div ref={wrapRef} style={{ position: "relative", ...style }}>
+      <input className="ac-input" autoComplete="off" placeholder={placeholder} value={display}
+        onFocus={() => { setQuery(""); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } else if (e.key === "Enter" && filtered.length) { e.preventDefault(); pick(filtered[0]); } }}
+        style={{ width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1, #d8d5cc)", fontSize: 13 }} />
+      {allowClear && value && !open && (
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); onChange(""); }} aria-label="effacer"
+          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: 0, cursor: "pointer", color: "var(--ink-500)", padding: 4, lineHeight: 1 }}>
+          <Icon name="x" style={{ width: 11, height: 11 }} />
+        </button>
+      )}
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", border: "1px solid var(--border-1, #d8d5cc)", borderRadius: 8, boxShadow: "0 8px 24px -8px rgba(14,36,24,0.18)", maxHeight: 240, overflowY: "auto", zIndex: 200 }}>
+          {filtered.length === 0 && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)" }}>—</div>}
+          {filtered.map((o) => (
+            <div key={o.value} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+              style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer", background: String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken, #f4f3ef)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent")}>
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function Toaster() {
   const [msg, setMsg] = React.useState(null);
   React.useEffect(() => {
@@ -122,6 +243,30 @@ function Toaster() {
 const txRev = (t) => /revenue|produit|vente|sales|don|subvention|loyer|rental|locatif/i.test(`${t.credit?.name || t.creditAccountName || ""}`);
 const txExp = (t) => /charge|expense|salaire|salary|achat|purchase|frais|cost|carburant|maintenance|fourniture/i.test(`${t.debit?.name || t.debitAccountName || ""}`);
 const monthKey = (d) => String(d || "").slice(0, 7);
+const DAY_MS = 86400000;
+const isoDate = (d) => d.toISOString().slice(0, 10);
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+function presetRange(preset) {
+  const today = startOfToday();
+  const end = isoDate(today);
+  if (preset === "all") return { from: "", to: "" };
+  if (preset === "today") return { from: end, to: end };
+  if (preset === "7d") return { from: isoDate(new Date(today.getTime() - 6 * DAY_MS)), to: end };
+  if (preset === "30d") return { from: isoDate(new Date(today.getTime() - 29 * DAY_MS)), to: end };
+  if (preset === "quarter") {
+    const q = Math.floor(today.getMonth() / 3) * 3;
+    return { from: isoDate(new Date(today.getFullYear(), q, 1)), to: end };
+  }
+  if (preset === "year") return { from: isoDate(new Date(today.getFullYear(), 0, 1)), to: end };
+  return { from: "", to: "" };
+}
+function defaultDateRange() {
+  return { preset: "custom", from: "2022-01-01", to: isoDate(startOfToday()) };
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -132,6 +277,24 @@ function useIsMobile() {
     return () => window.removeEventListener("resize", on);
   }, []);
   return m;
+}
+
+function DateRangeFilter({ value, onChange }) {
+  const current = value || defaultDateRange();
+  const presets = [["today", "Aujourd'hui"], ["7d", "7 j"], ["30d", "30 j"], ["quarter", "Trim."], ["year", "Annee"], ["all", "Tout"]];
+  const setPreset = (preset) => onChange({ preset, ...presetRange(preset) });
+  const setCustom = (patch) => onChange({ ...current, preset: "custom", ...patch });
+  return (
+    <div className="date-filter">
+      <div className="date-presets">
+        {presets.map(([id, label]) => (
+          <button key={id} type="button" className={`date-preset ${current.preset === id ? "active" : ""}`} onClick={() => setPreset(id)}>{label}</button>
+        ))}
+      </div>
+      <label><span>Du</span><input type="date" value={current.from || ""} onChange={(e) => setCustom({ from: e.target.value })} /></label>
+      <label><span>Au</span><input type="date" value={current.to || ""} onChange={(e) => setCustom({ to: e.target.value })} /></label>
+    </div>
+  );
 }
 
 /* ── Petits composants ─────────────────────────────────────────────────── */
@@ -159,6 +322,19 @@ function PageHead({ eyebrow, title, action, onAction, actionIcon = "plus", disab
 function Note({ icon = "lightbulb", children }) {
   return <div className="note blue"><Icon name={icon} /> <span>{children}</span></div>;
 }
+function EmptyState({ title = "Aucune donnée réelle disponible", detail = "Cet écran attend les données du backend.", action, onAction, icon = "info" }) {
+  return (
+    <div className="card pad" style={{ color: "var(--ink-600)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="row-ic" style={{ background: "var(--blue-100)", color: "var(--blue-600)" }}><Icon name={icon} /></span>
+          <div><div style={{ fontWeight: 700, color: "var(--ink-800)" }}>{title}</div><div className="muted">{detail}</div></div>
+        </div>
+        {action && <button className="btn btn-ghost" type="button" onClick={onAction}>{action}</button>}
+      </div>
+    </div>
+  );
+}
 
 /* ───────────────────────────────────────────────────────────────────────
    Shell
@@ -171,33 +347,52 @@ function AppShell() {
 
 function App() {
   const [route, setRoute] = React.useState("dashboard");
-  const [data, setData] = React.useState({ ...fallback });
+  const [data, setData] = React.useState(EMPTY_DATA);
   const [apiStatus, setApiStatus] = React.useState("local");
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyCode (ex. "USD")
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange());
   const isMobile = useIsMobile();
+  const dateParams = React.useMemo(() => ({
+    startDate: dateRange.from || undefined,
+    endDate: dateRange.to || undefined,
+  }), [dateRange.from, dateRange.to]);
 
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
-    Promise.allSettled([api.transactions(), api.accounts(), api.mainAccounts(), api.trialBalance(), api.balanceSheet(), api.incomeStatement(), api.setting(), api.currencies()])
-      .then(([tx, acc, ma, tb, bs, is, setting, currencies]) => {
-        const txs = tx.value?.getAllTransaction || (Array.isArray(tx.value) ? tx.value : null);
+    Promise.allSettled([
+      api.ledgerEntries({ ...dateParams, limit: 1000 }),
+      api.ledgerBalances(dateParams),
+      api.mainAccounts(),
+      api.ledgerTrialBalance(dateParams),
+      api.ledgerBalanceSheet(dateParams),
+      api.ledgerIncomeStatement(dateParams),
+      api.setting(),
+      api.currencies(),
+    ])
+      .then(([entries, balances, ma, tb, bs, is, setting, currencies]) => {
+        const txs = asArray(entries.value, "entries");
+        const accounts = asArray(balances.value, "balances");
+        const mainAccounts = asArray(ma.value, "getAllAccount");
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
         setData({
-          transactions: txs?.length ? txs : fallback.transactions,
-          accounts: Array.isArray(acc.value) && acc.value.length ? acc.value : fallback.accounts,
-          mainAccounts: Array.isArray(ma.value) && ma.value.length ? ma.value : fallback.mainAccounts,
-          trialBalance: tb.value || fallback.trialBalance,
-          balanceSheet: bs.value || fallback.balanceSheet,
-          incomeStatement: is.value || fallback.incomeStatement,
+          transactions: txs,
+          accounts,
+          mainAccounts,
+          currencies: curList || [],
+          defaultCurrencyId: setting.value?.currencyId ?? (curList && (curList[0]?.currencyId ?? curList[0]?.id)) ?? null,
+          trialBalance: tb.value || EMPTY_TRIAL,
+          balanceSheet: bs.value || EMPTY_BALANCE,
+          incomeStatement: is.value || EMPTY_INCOME,
         });
-        setApiStatus([tx, acc, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
+        setApiStatus([entries, balances, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
       })
       .catch(() => setApiStatus("local"));
-  }, []);
+  }, [dateParams]);
   React.useEffect(() => load(), [load]);
   const me = getUser();
   const myInitials = initialsOf(me.name);
@@ -209,10 +404,14 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      if (kind === "transaction") await api.createTransaction({
-        date: new Date(form.date).toISOString(), debitId: Number(form.debitId), creditId: Number(form.creditId),
-        particulars: form.particulars, amount: Number(form.amount), type: form.type || "transaction", relatedId: "0", status: "true",
-      });
+      if (kind === "transaction") {
+        if (!form.currencyId) { setError("La devise est obligatoire."); setBusy(false); return; }
+        await api.createTransaction({
+          date: new Date(form.date).toISOString(), debitId: Number(form.debitId), creditId: Number(form.creditId),
+          particulars: form.particulars, amount: Number(form.amount), currencyId: Number(form.currencyId),
+          type: form.type || "transaction", relatedId: "0", status: "true",
+        });
+      }
       if (kind === "account") await api.createAccount({ name: form.name, accountId: Number(form.accountId) });
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -220,27 +419,63 @@ function App() {
   }
 
   const newEntry = () => setModal({ kind: "transaction" });
+
+  // Filtre par devise (SIFA — on ne convertit jamais, on restreint l'affichage à une devise).
+  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyCode.
+  // On filtre par CODE devise (vrai filtre robuste, insensible aux écarts d'id legacy/orphelins).
+  const matchCur = React.useCallback(
+    (row) => !curFilter || String(row?.currencyCode ?? "") === curFilter,
+    [curFilter]
+  );
+  const fc = React.useMemo(() => {
+    if (!curFilter) return data;
+    const keepCur = (list) => (Array.isArray(list) ? list.filter(matchCur) : list);
+    // Recopie les champs *ByCurrency d'un rapport en les filtrant sur la devise choisie.
+    const filterReport = (rep) => {
+      if (!rep || typeof rep !== "object") return rep;
+      const out = { ...rep };
+      Object.keys(out).forEach((k) => { if (/byCurrency$/i.test(k)) out[k] = keepCur(out[k]); });
+      return out;
+    };
+    return {
+      ...data,
+      transactions: keepCur(data.transactions),
+      accounts: keepCur(data.accounts),
+      trialBalance: filterReport(data.trialBalance),
+      balanceSheet: filterReport(data.balanceSheet),
+      incomeStatement: filterReport(data.incomeStatement),
+    };
+  }, [data, curFilter, matchCur]);
+
   const views = {
-    dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
-    journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    types: <Types />,
-    grandlivre: <GrandLivre />,
-    plan: <Plan accounts={data.accounts} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
-    tiers: <Tiers />,
-    tresorerie: <Tresorerie />,
-    immo: <Immo />,
+    dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
+    journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
+    ecritures: <Ecritures curFilter={curFilter} dateRange={dateRange} onNew={newEntry} canMutate={canMutate} />,
+    saisie: <SaisieRapide save={save} busy={busy} currencies={data.currencies} defaultCurrencyId={data.defaultCurrencyId} canMutate={canMutate} />,
+    types: <Types canMutate={canMutate} accounts={data.accounts} />,
+    approbations: <Approbations canMutate={canMutate} />,
+    grandlivre: <GrandLivre curFilter={curFilter} dateRange={dateRange} />,
+    plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
+    tiers: <Tiers accounts={fc.accounts} />,
+    tresorerie: <Tresorerie accounts={fc.accounts} />,
+    change: <Change accounts={data.accounts} currencies={data.currencies} canMutate={canMutate} />,
+    immo: <Immo accounts={fc.accounts} />,
     analytique: <Analytique />,
     budget: <Budget />,
-    capacite: <Capacite />,
-    etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva />,
+    capacite: <Capacite accounts={fc.accounts} />,
+    forecast: <Forecast />,
+    fournisseurs: <Fournisseurs canMutate={canMutate} />,
+    achats: <Achats canMutate={canMutate} />,
+    stock: <Stock />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} tb={fc.trialBalance} curFilter={curFilter} />,
+    tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
+    parametres: <Parametres />,
   };
 
   return (
     <div className="app">
       <aside className="sidebar grad-dark">
-        <a className="brand" href="/comptabilite/">
+        <a className="brand" href={import.meta.env.BASE_URL}>
           <span className="brand-icon grad-accent"><Icon name="bookOpenCheck" /></span>
           <span className="brand-title font-display">Compta</span>
         </a>
@@ -266,7 +501,19 @@ function App() {
 
       <main className="main">
         <div className="content">
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
+              <Icon name="landmark" style={{ width: 14, height: 14 }} /> Devise
+              <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
+                <option value="">Toutes les devises</option>
+                {(data.currencies || []).map((c) => {
+                  const id = String(c.currencyId ?? c.id);
+                  const code = c.currencyCode || c.currencyName || cleanCurrencySymbol(c);
+                  return <option key={id} value={code}>{code}</option>;
+                })}
+              </select>
+            </label>
             <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Démo locale"}</span>
           </div>
           {error && <div className="inline-error">{error}</div>}
@@ -294,7 +541,7 @@ function App() {
         </div>
       )}
 
-      {modal && <RecordModal modal={modal} accounts={data.accounts} mainAccounts={data.mainAccounts} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      {modal && <RecordModal modal={modal} accounts={data.accounts} mainAccounts={data.mainAccounts} currencies={data.currencies} defaultCurrencyId={data.defaultCurrencyId} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
       <Toaster />
       <AiAssistant />
     </div>
@@ -302,11 +549,45 @@ function App() {
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
+function Parametres() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <>
+      <PageHead eyebrow="Système" title="Paramètres" />
+      <div className="card" style={{ maxWidth: 560, padding: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
+        <Row k="Version" v={`v${base}`} />
+        <Row k="Build" v={build} />
+        <Row k="Commit" v={commit} />
+        <Row k="Dernière mise à jour" v={lastUpdate} />
+        <Row k="Environnement" v={env} />
+      </div>
+    </>
+  );
+}
+
 function Dashboard({ is, transactions, go, onNew, canMutate }) {
   const txs = transactions || [];
-  const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.amount || 0), 0);
-  const exp = Math.abs(Number(is.totalExpense || 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.amount || 0), 0);
-  const profit = Number(is.profit ?? rev - exp);
+  const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.totalCredit || t.amount || 0), 0);
+  const exp = Math.abs(Number(is.totalExpenses ?? is.totalExpense ?? 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.totalDebit || t.amount || 0), 0);
+  const profit = Number(is.netIncome ?? is.profit ?? rev - exp);
+  // Par devise (SIFA) depuis le compte de résultat live ; repli mono-devise si absent.
+  const revByCur = is.revenueByCurrency || (rev ? [{ currencyId: null, currencyCode: CUR, total: rev }] : []);
+  const expByCur = is.expensesByCurrency || is.expenseByCurrency || (exp ? [{ currencyId: null, currencyCode: CUR, total: exp }] : []);
+  const profitByCur = netByCurrency(revByCur, expByCur);
   const brouillons = txs.filter((t) => /brouillon|draft|false/i.test(`${t.status ?? ""}`)).length;
   const MN = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
@@ -327,9 +608,9 @@ function Dashboard({ is, transactions, go, onNew, canMutate }) {
     <>
       <PageHead eyebrow={`Exercice ${now.getFullYear()}`} title="Comptabilité" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <KPI label="Produits" value={mM(rev)} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
-        <KPI label="Charges" value={mM(exp)} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
-        <KPI label="Résultat net" value={`${profit >= 0 ? "+" : "−"}${mM(Math.abs(profit))}`} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
+        <KPI label="Produits" value={<ByCur list={revByCur} />} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
+        <KPI label="Charges" value={<ByCur list={expByCur} />} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
+        <KPI label="Résultat net" value={<ByCur list={profitByCur} />} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
         <KPI label="Écritures" value={txs.length} sub={`${brouillons} brouillon(s)`} icon="penLine" />
       </div>
       <div className="g3">
@@ -377,25 +658,36 @@ function Todo({ icon, tone, title, sub, onClick }) {
 /* ── Journaux ──────────────────────────────────────────────────────────── */
 function Journaux({ transactions, onNew, canMutate }) {
   const txs = transactions || [];
-  const entree = (t) => ["CA", "BQ", "VE", "BU"].includes(t);
+  const codeFor = (t) => String(t.type || t.sourceModule || "OD").slice(0, 2).toUpperCase();
   const rows = txs.slice(0, 8).map((t) => ({
     date: String(t.date || "").slice(5).split("-").reverse().join("/"),
-    piece: t.type ? `${t.type}-${String(t.id).padStart(4, "0")}` : "—",
-    label: t.particulars, debit: entree(t.type) ? t.amount : null, credit: entree(t.type) ? null : t.amount,
+    piece: t.reference || `${codeFor(t)}-${String(t.id).padStart(4, "0")}`,
+    label: t.particulars,
+    debit: Number(t.totalDebit ?? t.amount ?? 0),
+    credit: Number(t.totalCredit ?? t.amount ?? 0),
+    currencyCode: t.currencyCode || CUR,
   }));
-  const list = rows.length ? rows : journalCaisse;
+  const list = rows;
   // Journaux agrégés en temps réel depuis les écritures.
   const JMETA = { CA: { name: "Caisse (CA)", icon: "coins", tone: "accent" }, BQ: { name: "Banque (BQ)", icon: "landmark", tone: "accent" }, VE: { name: "Ventes (VE)", icon: "trendingUp", tone: "emerald" }, AC: { name: "Achats (AC)", icon: "trendingDown", tone: "rose" }, OD: { name: "Opérations diverses (OD)", icon: "shuffle", tone: "ink" } };
   const agg = {};
-  txs.forEach((t) => { const k = JMETA[t.type] ? t.type : "OD"; (agg[k] = agg[k] || { count: 0, sum: 0 }).count++; agg[k].sum += Number(t.amount || 0); });
-  const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, sum: agg[k].sum }));
-  const cards = real.length ? real : fbJournaux.map((j) => ({ code: j.code, name: j.name, icon: j.icon, tone: j.tone, count: j.mvts, valStr: j.val }));
+  txs.forEach((t) => {
+    const k = JMETA[codeFor(t)] ? codeFor(t) : "OD";
+    const a = (agg[k] = agg[k] || { count: 0, byCur: new Map() });
+    a.count++;
+    const ck = String(t.currencyId ?? "null");
+    const acc = a.byCur.get(ck) || { currencyId: t.currencyId ?? null, currencyCode: t.currencyCode || CUR, total: 0 };
+    acc.total += Number(t.totalDebit ?? t.amount ?? 0);
+    a.byCur.set(ck, acc);
+  });
+  const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, byCur: [...agg[k].byCur.values()] }));
+  const cards = real;
   const toneBg = { emerald: "var(--emerald-100)", rose: "var(--rose-100)", ink: "var(--ink-100)" };
   const toneFg = { emerald: "var(--emerald-600)", rose: "var(--rose-600)", ink: "var(--ink-600)" };
   return (
     <>
       <PageHead eyebrow="Saisie" title="Journaux" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
-      <div className="g3" style={{ marginBottom: 18 }}>
+      {cards.length ? <div className="g3" style={{ marginBottom: 18 }}>
         {cards.map((j) => (
           <div className="card pad" key={j.code}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -403,10 +695,10 @@ function Journaux({ transactions, onNew, canMutate }) {
               <span style={{ fontWeight: 600, fontSize: 14 }}>{j.name}</span>
               <span className="chip ink" style={{ marginLeft: "auto" }}>{j.count} mvts</span>
             </div>
-            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}>{j.valStr || m(j.sum)}</b></div>
+            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}><ByCur list={j.byCur} /></b></div>
           </div>
         ))}
-      </div>
+      </div> : <div style={{ marginBottom: 18 }}><EmptyState title="Aucun journal alimenté" detail="Les journaux se rempliront avec les écritures du grand livre." action={canMutate ? "Créer une écriture" : undefined} onAction={onNew} /></div>}
       <div className="card pad table-card">
         <h3 className="block-title font-display">Dernières écritures — Journal de caisse</h3>
         <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div></div>
@@ -415,8 +707,9 @@ function Journaux({ transactions, onNew, canMutate }) {
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? `${nf.format(r.debit)} ${r.currencyCode}` : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? `${nf.format(r.credit)} ${r.currencyCode}` : <span className="muted">—</span>}</td></tr>
               ))}
+              {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -426,465 +719,2126 @@ function Journaux({ transactions, onNew, canMutate }) {
 }
 
 /* ── Écritures ─────────────────────────────────────────────────────────── */
-function Ecritures({ transactions, onNew, canMutate }) {
-  const rows = (transactions || []).map((t) => ({
-    date: String(t.date || "").slice(5).split("-").reverse().join("/"),
-    journal: t.type || "OD", label: t.particulars, amount: t.amount, status: t.status === "Brouillon" ? "Brouillon" : "Validée",
+function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
+  const [q, setQ] = React.useState("");
+  const [journal, setJournal] = React.useState(""); // = sourceModule côté serveur
+  const [statut, setStatut] = React.useState("");   // posted | pending
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
+  const [raw, setRaw] = React.useState(null);  // écritures chargées (page cumulée)
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const PAGE = 20;
+
+  // Pagination + filtres CÔTÉ SERVEUR (mêmes query params que le Grand livre).
+  const params = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: journal || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, journal, statut, minMt, maxMt]);
+
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
+    try {
+      setError("");
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setRaw((cur) => reset || cur === null ? data : [...cur, ...data]);
+    } catch (e) {
+      setError(String(e.message || e));
+      if (reset) setRaw([]);
+    } finally { setLoading(false); }
+  }, [params]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
+  const loadMore = () => fetchPage(raw?.length || 0, false);
+
+  const rows = (raw || []).map((t) => ({
+    date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
+    journal: String(t.sourceModule || t.type || "OD").slice(0, 12),
+    reference: t.reference || (t.id != null ? `#${t.id}` : ""),
+    label: t.particulars,
+    amount: Number(t.totalDebit ?? t.amount ?? 0),
+    currencyCode: t.currencyCode,
+    currencyId: t.currencyId,
+    status: /reversed/i.test(`${t.status ?? ""}`) ? "Contre-passée" : /pending|draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
-  const list = rows.length ? rows : fbEcritures;
+  rows.forEach((r) => { r.montant = mc(r.amount, r); });
+  // Modules réellement présents dans les pages chargées (pour le menu).
+  const journaux = Array.from(new Set((raw || []).map((t) => t.sourceModule).filter(Boolean))).sort();
+  const list = rows;
   return (
     <>
       <PageHead eyebrow="Saisie en partie double" title="Écritures" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="card pad" style={{ marginBottom: 18 }}>
-        <div className="section-head"><h3 className="font-display">Nouvelle écriture</h3><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Équilibrée</span></div>
-        <div className="g3" style={{ marginBottom: 12 }}>
-          <Field label="Date" value="05/06/2026" /><Field label="Journal" value="Caisse (CA)" /><Field label="Pièce" value="CA-0143" muted />
-        </div>
-        <Field label="Libellé" value="Encaissement loyer juin — Joseph Mwepu" block />
-        <div className="tbl-scroll" style={{ marginTop: 12 }}>
-          <table className="tbl num" style={{ minWidth: 560 }}>
-            <thead><tr><th>Compte</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th></tr></thead>
-            <tbody>
-              <tr><td><span className="chip accent-soft">521 · Caisse</span></td><td className="muted" style={{ fontVariantNumeric: "normal" }}>Encaissement loyer</td><td className="r pos">620 000</td><td className="r muted">—</td></tr>
-              <tr><td><span className="chip emerald-soft">706 · Produits locatifs</span></td><td className="muted" style={{ fontVariantNumeric: "normal" }}>Loyer juin LEASE-018</td><td className="r muted">—</td><td className="r neg">620 000</td></tr>
-            </tbody>
-            <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">620 000</td><td className="r">620 000</td></tr></tfoot>
-          </table>
-        </div>
+        <div className="section-head"><h3 className="font-display">Saisie réelle</h3><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Contrôle backend</span></div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Les montants affichés ci-dessous proviennent du grand livre. Les exemples de maquette ont été retirés pour éviter toute confusion avec la comptabilité réelle.</p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span className="pos" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" style={{ width: 16, height: 16 }} /> Débit = Crédit · l'écriture peut être enregistrée</span>
-          <div style={{ display: "flex", gap: 8 }}><button type="button" className="btn btn-ghost" style={{ height: 34 }} onClick={() => notify("Brouillon enregistré (démo).")}>Brouillon</button><button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="check" /> Enregistrer</button></div>
+          <span className="pos" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" style={{ width: 16, height: 16 }} /> Débit = Crédit validé côté API ledger.</span>
+          <button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Créer</button>
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures <span className="tiny" style={{ fontWeight: 400 }}>{raw ? `(${list.length} / ${total})` : ""}</span></h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
         <div className="searchbar">
-          <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
-          <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
-          <select className="select"><option>Tous statuts</option><option>Validée</option><option>Brouillon</option></select>
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={journal} onChange={(e) => setJournal(e.target.value)}>
+            <option value="">Tous journaux</option>
+            {journaux.map((j) => <option key={j} value={j}>{j}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="posted">Validée (posted)</option>
+            <option value="pending">Brouillon (pending)</option>
+          </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 620 }}>
             <thead><tr><th>Date</th><th>Journal</th><th>Libellé</th><th className="r">Montant</th><th className="r">Statut</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{nf.format(r.amount)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
+                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : r.status === "Contre-passée" ? "ink" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
+              {raw === null && <tr><td colSpan={5} className="muted">Chargement…</td></tr>}
+              {raw && list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
+        {raw && list.length < total && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - list.length} restantes)`}</button>
+          </div>
+        )}
       </div>
     </>
   );
 }
-function Field({ label, value, muted, block }) {
+/* ── Saisie rapide (cartes de types → montant + devise → enregistrer) ──────
+   Affiche chaque type de transaction actif en carte. Un clic ouvre un mini-modal
+   qui demande seulement le montant et la devise : le débit/crédit vient du type. */
+function SaisieRapide({ save, busy, currencies = [], defaultCurrencyId = null, canMutate }) {
+  const [types, setTypes] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [picked, setPicked] = React.useState(null); // type choisi (ouvre le mini-modal)
+
+  React.useEffect(() => {
+    api.transactionTypes()
+      .then((list) => setTypes((Array.isArray(list) ? list : []).filter((t) => t.isActive)))
+      .catch((e) => { setError(String(e.message || e)); setTypes([]); });
+  }, []);
+
   return (
-    <label style={{ display: "block", fontSize: 12, marginBottom: block ? 0 : undefined }}>
-      <span className="muted">{label}</span>
-      <div style={{ marginTop: 4, height: 38, borderRadius: 10, border: "1px solid var(--ink-200)", background: "#fff", display: "flex", alignItems: "center", padding: "0 12px", fontSize: 13, color: muted ? "var(--ink-400)" : "var(--ink-800)" }}>{value}</div>
-    </label>
+    <>
+      <PageHead eyebrow="Saisie · le plus rapide" title="Saisie rapide"
+        action="Rafraîchir" actionIcon="download"
+        onAction={() => { setTypes(null); api.transactionTypes().then((l) => setTypes((Array.isArray(l) ? l : []).filter((t) => t.isActive))).catch(() => setTypes([])); }} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {!canMutate && <div className="card pad muted tiny" style={{ marginBottom: 12 }}>Lecture seule (données démo) — la saisie nécessite la connexion API.</div>}
+
+      {types === null
+        ? <div className="card pad muted">Chargement des types…</div>
+        : types.length === 0
+          ? <div className="card pad muted">Aucun type de transaction actif. Créez-en un dans « Types de transaction ».</div>
+          : (
+            <div className="qa-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {types.map((t) => (
+                <button key={t.id} type="button" className="card pad qa-card"
+                  disabled={!canMutate}
+                  onClick={() => setPicked(t)}
+                  style={{ textAlign: "left", cursor: canMutate ? "pointer" : "not-allowed", border: "1px solid var(--ink-100, #e7e5df)", display: "flex", flexDirection: "column", gap: 6, minHeight: 92 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="brand-icon grad-accent" style={{ width: 28, height: 28 }}><Icon name="wallet" /></span>
+                    <span style={{ fontWeight: 600, lineHeight: 1.2 }}>{t.name}</span>
+                  </span>
+                  <span className="tiny muted" style={{ lineHeight: 1.3 }}>
+                    {(t.debitAccount?.name || "—")} → {(t.creditAccount?.name || "—")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+      {picked && (
+        <QuickEntryModal
+          type={picked}
+          busy={busy}
+          currencies={currencies}
+          defaultCurrencyId={defaultCurrencyId}
+          onClose={() => setPicked(null)}
+          onSave={async (form) => {
+            await save("transaction", {
+              date: new Date().toISOString(),
+              debitId: picked.debitAccount?.id ?? picked.debitAccountId,
+              creditId: picked.creditAccount?.id ?? picked.creditAccountId,
+              particulars: form.particulars || picked.name,
+              amount: form.amount,
+              currencyId: form.currencyId,
+              type: picked.name,
+            });
+            setPicked(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* Mini-modal : montant + devise (+ note optionnelle) pour un type donné. */
+function QuickEntryModal({ type, busy, currencies = [], defaultCurrencyId, onClose, onSave }) {
+  const [amount, setAmount] = React.useState("");
+  const [currencyId, setCurrencyId] = React.useState(defaultCurrencyId ? String(defaultCurrencyId) : "");
+  const [particulars, setParticulars] = React.useState("");
+  const [err, setErr] = React.useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    const amt = Number(amount);
+    if (!(amt > 0)) { setErr("Montant invalide."); return; }
+    if (!currencyId) { setErr("La devise est obligatoire."); return; }
+    onSave({ amount: amt, currencyId: Number(currencyId), particulars: particulars.trim() });
+  };
+
+  const curCodeSel = curCode(currencies, currencyId) || CUR;
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{type.name}</h2><p>Débit {type.debitAccount?.name || "—"} · Crédit {type.creditAccount?.name || "—"}</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field"><span>Devise *</span>
+            <Autocomplete value={currencyId} allowClear={false} placeholder="Choisir la devise…"
+              options={(currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }))}
+              onChange={setCurrencyId} />
+          </label>
+          <label className="field"><span>{`Montant (${curCodeSel})`} *</span>
+            <input required type="number" min="0" step="any" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          </label>
+          <label className="field"><span>Note (optionnel)</span>
+            <input type="text" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder={type.name} />
+          </label>
+        </div>
+        {err && <div className="login-error">{err}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn btn-accent grad-accent" disabled={busy || !currencyId}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 
 /* ── Types de transaction ──────────────────────────────────────────────── */
-function Types() {
+function Types({ canMutate, accounts = [] }) {
+  const [types, setTypes] = React.useState(null);
+  const [rules, setRules] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [editing, setEditing] = React.useState(null); // type SIFA en édition (objet) ou null
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [legacy, sifa] = await Promise.all([
+        api.transactionTypes().catch(() => []),
+        api.typeRules().catch(() => []),
+      ]);
+      setTypes(Array.isArray(legacy) ? legacy : []);
+      setRules(Array.isArray(sifa) ? sifa : []);
+    } catch (e) { setError(String(e.message || e)); setTypes([]); setRules([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const saveType = async (form) => {
+    setBusy(true);
+    try { await api.saveType(form); setEditing(null); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+  const removeType = async (type) => {
+    if (!window.confirm(`Désactiver le type « ${type} » ?`)) return;
+    setBusy(true);
+    try { await api.deleteType(type); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
-      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Nouveau type" onAction={() => notify()} />
-      <Note>Toute activité de l'entreprise est saisie via un <b>type de transaction</b>. Chaque type pré‑remplit automatiquement les comptes (débit/crédit), le journal et l'imputation analytique — loyers, dons, ventes, achats, salaires…</Note>
+      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action={canMutate ? "Nouveau type (SIFA)" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"} onAction={canMutate ? () => setEditing({ type: "", lines: [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }, { role: "credit", accountId: accounts[0]?.id || "", side: "CREDIT" }] }) : load} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {/* Types SIFA modernes (règles multi-lignes paramétrables). */}
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Types SIFA (règles multi-lignes) <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({rules ? rules.length : "..."})</span></h3><span className="tiny">Comptes par rôle métier · partie double</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 640 }}>
+            <thead><tr><th>Type</th><th>Lignes (rôle · compte · sens)</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {(rules || []).map((r) => (
+                <tr key={r.type}>
+                  <td style={{ fontWeight: 500 }}>{r.type}</td>
+                  <td className="tiny">{r.lines.map((l) => `${l.role}: ${l.accountName || `#${l.accountId}`} (${l.side})`).join(" · ")}</td>
+                  <td className="r">
+                    {canMutate ? <span style={{ display: "inline-flex", gap: 6 }}>
+                      <button className="btn-sm" disabled={busy} onClick={() => setEditing({ type: r.type, lines: r.lines.map((l) => ({ role: l.role, accountId: l.accountId, side: l.side })) })}>Éditer</button>
+                      <button className="btn-sm" disabled={busy} onClick={() => removeType(r.type)}>Suppr.</button>
+                    </span> : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {rules && rules.length === 0 && <tr><td colSpan={3} className="muted">Aucun type SIFA. Cliquez « Nouveau type (SIFA) » pour en créer un (ex. Dépense = Débit charge / Crédit caisse).</td></tr>}
+              {rules === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Un type SIFA génère des écritures en partie double : chaque ligne nomme un <b>rôle métier</b> (résolu en compte + sens). Les modules comptabilisent en fournissant les montants par rôle.</p>
+      </div>
+
+      {/* Types legacy (lecture seule, débit/crédit fixe). */}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({fbTypes.length} activités)</span></h3></div>
+        <div className="section-head"><h3 className="font-display">Types legacy <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3><span className="tiny">débit/crédit fixe · lecture</span></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 680 }}>
-            <thead><tr><th>Activité (type)</th><th>Sens</th><th>Compte débit</th><th>Compte crédit</th><th>Journal</th><th>Analytique</th></tr></thead>
+            <thead><tr><th>Activité (type)</th><th>Compte débit</th><th>Compte crédit</th><th>Statut</th><th>Description</th></tr></thead>
             <tbody>
-              {fbTypes.map((t, i) => (
-                <tr key={i}><td style={{ fontWeight: 500 }}>{t.name}</td><td><span className={`chip ${t.sens === "Entrée" ? "emerald-soft" : "rose-soft"}`}>{t.sens}</span></td><td>{t.debit}</td><td>{t.credit}</td><td>{t.journal}</td><td className="muted">{t.ana}</td></tr>
+              {(types || []).map((t) => (
+                <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.name}</td><td>{t.debitAccount?.name || "—"}</td><td>{t.creditAccount?.name || "—"}</td><td><span className={`chip ${t.isActive ? "emerald-soft" : "ink"}`}>{t.isActive ? "actif" : "inactif"}</span></td><td className="muted">{t.description || "—"}</td></tr>
+              ))}
+              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type legacy.</td></tr>}
+              {types === null && <tr><td colSpan={5} className="muted">Chargement...</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {editing && <TypeRuleModal initial={editing} accounts={accounts} busy={busy} onSave={saveType} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
+/* Modal d'édition d'un type SIFA : nom + N lignes (rôle / compte / sens). */
+function TypeRuleModal({ initial, accounts, busy, onSave, onClose }) {
+  const [type, setType] = React.useState(initial.type || "");
+  const [lines, setLines] = React.useState(initial.lines?.length ? initial.lines : [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
+  const addLine = () => setLines((ls) => [...ls, { role: "", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const delLine = (i) => setLines((ls) => ls.filter((_, j) => j !== i));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!type.trim()) return;
+    onSave({ type: type.trim(), lines: lines.map((l) => ({ role: l.role, accountId: Number(l.accountId), side: l.side, formula: "amount" })) });
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{initial.type ? "Modifier le type" : "Nouveau type (SIFA)"}</h2><p>Règles multi-lignes · partie double</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div style={{ padding: "0 4px" }}>
+          <label className="field"><span>Nom du type (identifiant)</span><input value={type} onChange={(e) => setType(e.target.value)} placeholder="ex. farm_expense" required disabled={!!initial.type} /></label>
+          <div style={{ marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "var(--ink-600)" }}>Lignes comptables</div>
+          {lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={{ flex: 1 }} placeholder="rôle (ex. cash)" value={l.role} onChange={(e) => setLine(i, "role", e.target.value)} required />
+              <Autocomplete style={{ flex: 1.4 }} value={l.accountId} onChange={(v) => setLine(i, "accountId", v)} placeholder="Compte…"
+                options={accounts.map((a) => ({ value: a.id, label: accountLabel(a) }))} />
+              <select style={{ width: 96 }} value={l.side} onChange={(e) => setLine(i, "side", e.target.value)}>
+                <option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option>
+              </select>
+              {lines.length > 1 && <button type="button" className="icon-btn" onClick={() => delLine(i)}><Icon name="x" /></button>}
+            </div>
+          ))}
+          <button type="button" className="link" onClick={addLine}><Icon name="plus" style={{ width: 13, height: 13 }} /> Ajouter une ligne</button>
+          <p className="tiny muted" style={{ marginTop: 8 }}>Au moins un Débit et un Crédit. Le rôle est l'identifiant métier (ex. expense, cash) que les modules fournissent à la saisie.</p>
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
+  );
+}
+
+/* ── Grand livre ───────────────────────────────────────────────────────── */
+/* ── Approbations (gate de dépense + workflow) ─────────────────────────── */
+const MODULE_LABELS = {
+  farmos_expense: "Dépense FarmOS",
+  payroll: "Paie (HR)",
+  purchase: "Facture d'achat",
+  maintenance: "Maintenance (immobilier)",
+};
+function Approbations({ canMutate }) {
+  const [pending, setPending] = React.useState(null);
+  const [reqs, setReqs] = React.useState([]);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [p, r] = await Promise.all([
+        api.pendingApprovals().catch(() => []),
+        api.approvalRequirements().catch(() => []),
+      ]);
+      setPending(Array.isArray(p) ? p : []);
+      setReqs(Array.isArray(r) ? r : []);
+    } catch (e) { setError(String(e.message || e)); setPending([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const decide = async (id, action) => {
+    const comment = window.prompt(action === "approve" ? "Commentaire d'approbation (optionnel) :" : "Motif du rejet :") ?? "";
+    if (action === "reject" && !comment) return;
+    setBusy(true);
+    try {
+      if (action === "approve") await api.approveInstance(id, comment);
+      else await api.rejectInstance(id, comment);
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Active/désactive le gate d'approbation d'un module (comptabilisation différée).
+  const toggleGate = async (sourceModule, isActive) => {
+    if (!window.confirm(isActive
+      ? `Activer l'approbation obligatoire pour « ${MODULE_LABELS[sourceModule] || sourceModule} » ? Les écritures seront différées jusqu'à validation.`
+      : `Désactiver l'approbation pour « ${MODULE_LABELS[sourceModule] || sourceModule} » ? Les écritures seront comptabilisées directement.`)) return;
+    setBusy(true);
+    try {
+      await api.setApprovalRequirement({ sourceModule, workflowKey: "exp_approval", isActive });
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Vue des 4 modules de dépense connus (état dérivé des requirements ; ignore les gates de test).
+  const gateState = Object.keys(MODULE_LABELS).map((mod) => {
+    const r = reqs.find((x) => x.sourceModule === mod);
+    return { sourceModule: mod, isActive: !!(r && r.isActive) };
+  });
+
+  return (
+    <>
+      <PageHead eyebrow="Gate de comptabilisation" title="Approbations" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Dépenses en attente d'approbation</h3><span className="tiny">{pending ? `${pending.length} en attente` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl num" style={{ minWidth: 640 }}>
+            <thead><tr><th>Soumis le</th><th>Module</th><th>Référence</th><th>Étape</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {(pending || []).map((i) => (
+                <tr key={i.id}>
+                  <td>{(i.createdAt || "").slice(0, 10)}</td>
+                  <td><span className="chip">{MODULE_LABELS[i.entityType] || i.entityType}</span></td>
+                  <td className="muted">#{i.entityId}</td>
+                  <td>étape {Number(i.currentStep) + 1}</td>
+                  <td className="r">
+                    {canMutate ? (
+                      <span style={{ display: "inline-flex", gap: 6 }}>
+                        <button className="btn-sm grad-accent" disabled={busy} onClick={() => decide(i.id, "approve")}>Approuver</button>
+                        <button className="btn-sm" disabled={busy} onClick={() => decide(i.id, "reject")}>Rejeter</button>
+                      </span>
+                    ) : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {pending && pending.length === 0 && <tr><td colSpan={5} className="muted">Aucune dépense en attente. 🎉</td></tr>}
+              {pending === null && <tr><td colSpan={5} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Modules sous approbation obligatoire</h3><span className="tiny">Gate de comptabilisation différée</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 480 }}>
+            <thead><tr><th>Module de dépense</th><th>Statut</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {gateState.map((g) => (
+                <tr key={g.sourceModule}>
+                  <td>{MODULE_LABELS[g.sourceModule]}</td>
+                  <td>{g.isActive ? <span className="chip pos">actif</span> : <span className="chip">inactif</span>}</td>
+                  <td className="r">
+                    {canMutate
+                      ? <button className={`btn-sm ${g.isActive ? "" : "grad-accent"}`} disabled={busy} onClick={() => toggleGate(g.sourceModule, !g.isActive)}>{g.isActive ? "Désactiver" : "Activer"}</button>
+                      : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> À la saisie, choisir le type suffit : l'écriture équilibrée est générée. Idéal pour les opérateurs non‑comptables (caisse, terrain).</p>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Gate actif = toute écriture du module est différée (mise en attente) jusqu'à approbation du workflow, puis comptabilisée. Gate inactif = comptabilisation directe.</p>
       </div>
     </>
   );
 }
 
-/* ── Grand livre ───────────────────────────────────────────────────────── */
-function GrandLivre() {
-  const [sel, setSel] = React.useState(0);
+function GrandLivre({ curFilter, dateRange }) {
+  const [allEntries, setAllEntries] = React.useState(null); // null = chargement
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
+  const [total, setTotal] = React.useState(0); // nb total d'écritures (côté serveur) pour « Afficher plus »
+  const [loading, setLoading] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const [module, setModule] = React.useState("");
+  const [statut, setStatut] = React.useState("");
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
+  const PAGE = 20;
+
+  // Pagination + filtres CÔTÉ SERVEUR (SQL) : on ne charge que PAGE lignes à la fois,
+  // filtrées sur tout le dataset (pas seulement la page affichée).
+  const params = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: module || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, module, statut, minMt, maxMt]);
+
+  // Récupère une page. reset=true remplace la liste (changement de filtre) ; sinon append.
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
+    try {
+      setError("");
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setAllEntries((cur) => reset || cur === null ? data : [...cur, ...data]);
+    } catch (e) {
+      setError(String(e.message || e));
+      if (reset) setAllEntries([]);
+    } finally { setLoading(false); }
+  }, [params]);
+
+  // Rechargement (page 0) à chaque changement de filtre, avec un léger debounce pour la recherche.
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
+
+  const load = React.useCallback(() => fetchPage(0, true), [fetchPage]);
+  const loadMore = () => fetchPage(allEntries?.length || 0, false);
+
+  const entries = allEntries; // déjà filtré/paginé côté serveur
+  const modules = React.useMemo(
+    () => Array.from(new Set((allEntries || []).map((e) => e.sourceModule).filter(Boolean))).sort(),
+    [allEntries]
+  );
+
+  const reverse = async ({ reason }) => {
+    if (!reason || !reverseId) return;
+    setBusy(true);
+    try {
+      const res = await api.reverseEntry(reverseId, reason);
+      // MAJ locale (pas de rechargement des ~1000 lignes → évite le freeze UI après submit) :
+      // l'écriture originale devient « contre-passée » (badge + bouton masqué). La ligne de
+      // contre-passation apparaîtra au prochain « Rafraîchir ».
+      const revId = res?.reversalEntryId ?? null;
+      setAllEntries((cur) => (cur || []).map((e) =>
+        e.id === reverseId ? { ...e, status: "reversed", reversedById: revId, reason } : e));
+      setReverseId(null);
+    }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const hasFilter = !!(q.trim() || curFilter || module || statut || minMt !== "" || maxMt !== "");
+
+  // Pas encore d'écriture moderne (ou API indispo) : ne pas afficher de démo comptable.
+  // (Uniquement si AUCUN filtre actif : un filtre qui ne matche rien doit garder la barre de filtres.)
+  if (allEntries && allEntries.length === 0 && !hasFilter) {
+    return (
+      <>
+        <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API grand livre indisponible.</b> <span className="tiny">{error}</span></div>}
+        <EmptyState title="Aucune écriture au grand livre" detail="Le journal des écritures affichera uniquement les écritures postées dans `/ledger`." action="Rafraîchir" onAction={load} icon="scrollText" />
+      </>
+    );
+  }
+
+  const fmt = (v) => nf.format(Number(v || 0));
   return (
     <>
-      <PageHead eyebrow="Détail par compte" title="Grand livre" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
-      <div className="segtabs">
-        {grandLivreAccounts.map((a, i) => <button key={a.code} className={`segtab ${i === sel ? "active grad-accent" : ""}`} onClick={() => setSel(i)}>{a.code} · {a.name}</button>)}
-      </div>
+      <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Compte 521 · Banque FC</h3><span className="tiny">Solde : <b className="num" style={{ color: "var(--ink-800)" }}>{`39 100 000 ${CUR}`}</b></span></div>
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div></div>
+        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} / ${total} écriture(s)` : "Chargement…"}</span></div>
+        <div className="searchbar">
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={module} onChange={(e) => setModule(e.target.value)}>
+            <option value="">Tous modules</option>
+            {modules.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="posted">posted</option>
+            <option value="pending">pending</option>
+            <option value="reversed">reversed (contre-passée)</option>
+          </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
+        </div>
         <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 640 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+          <table className="tbl num" style={{ minWidth: 720 }}>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {fbGrandLivre.map((r, i) => r.report
-                ? <tr key={i} className="grp"><td colSpan={5}>{r.label}</td><td className="r">{nf.format(r.solde)}</td></tr>
-                : <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td><td className="r">{nf.format(r.solde)}</td></tr>)}
+              {(entries || []).map((e) => (
+                <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
+                  <td>{(e.date || "").slice(0, 10)}</td>
+                  <td className="muted">{e.reference || `#${e.id}`}</td>
+                  <td style={{ fontVariantNumeric: "normal" }}>{e.particulars}</td>
+                  <td><span className="chip">{e.sourceModule || "—"}</span></td>
+                  <td className="r pos">{fmt(e.totalDebit)} {e.currencyCode || CUR}</td>
+                  <td className="r neg">{fmt(e.totalCredit)} {e.currencyCode || CUR}</td>
+                  <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
+                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => setReverseId(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
+                </tr>
+              ))}
+              {entries === null && <tr><td colSpan={8} className="muted">Chargement…</td></tr>}
+              {entries && entries.length === 0 && <tr><td colSpan={8} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
-            <tfoot><tr><td colSpan={3}>Totaux période</td><td className="r">9 240 000</td><td className="r">17 685 000</td><td className="r">39 100 000</td></tr></tfoot>
           </table>
         </div>
+        {entries && entries.length < total && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - entries.length} restantes)`}</button>
+          </div>
+        )}
       </div>
+      {reverseId != null && (
+        <FormModal
+          title="Contre-passer l'écriture"
+          subtitle={`Pièce #${reverseId} · partie double`}
+          fields={[{ key: "reason", label: "Motif de la contre-passation", type: "textarea", required: true }]}
+          submitLabel="Contre-passer"
+          busy={busy}
+          onSubmit={reverse}
+          onClose={() => setReverseId(null)}
+        />
+      )}
     </>
   );
 }
 
 /* ── Plan comptable ────────────────────────────────────────────────────── */
-function Plan({ accounts, canMutate, onNew }) {
+function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate, onNew }) {
+  // SIFA : pas de melange de devises. On affiche les totaux par devise.
+  const assetsCur = balanceSheet?.assetsByCurrency || [];
+  const liabCur = balanceSheet?.liabilitiesByCurrency || [];
+  const revCur = incomeStatement?.revenueByCurrency || [];
+  const expCur = incomeStatement?.expenseByCurrency || incomeStatement?.expensesByCurrency || [];
+  const page = usePaginated(accounts || [], 20, (accounts || []).length);
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actif" value={`62,4 M ${CUR}`} /><Mini label="Passif" value={`21,2 M ${CUR}`} />
-        <Mini label="Produits (cumul)" value={`134 M ${CUR}`} valueClass="pos" /><Mini label="Charges (cumul)" value={`98 M ${CUR}`} valueClass="neg" />
+        <Mini label="Actif" value={<ByCur list={assetsCur} />} />
+        <Mini label="Passif" value={<ByCur list={liabCur} />} />
+        <Mini label="Produits (cumul)" value={<ByCur list={revCur} />} valueClass="pos" />
+        <Mini label="Charges (cumul)" value={<ByCur list={expCur} />} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
             <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th className="r">Solde</th></tr></thead>
             <tbody>
-              {planComptable.map((g) => (
-                <React.Fragment key={g.grp}>
-                  <tr className="grp"><td colSpan={4}>{g.grp}</td></tr>
-                  {g.rows.map((r) => (
-                    <tr key={r.num}><td style={{ fontWeight: 500 }}>{r.num}</td><td style={{ fontVariantNumeric: "normal" }}>{r.name}</td><td><span className={`chip ${r.chip}`}>{r.type}</span></td><td className={`r ${r.pos ? "pos" : ""}`}>{r.solde}</td></tr>
-                  ))}
-                </React.Fragment>
+              {page.shown.map((a) => (
+                <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
+              {(!accounts || accounts.length === 0) && <tr><td colSpan={4} className="muted">Aucun sous-compte réel disponible.</td></tr>}
             </tbody>
+            <tfoot>
+              <tr><td colSpan={3}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td></tr>
+              {(trialBalance?.byCurrency || []).map((c) => (
+                <tr key={`tb-${c.currencyId ?? "x"}`}><td colSpan={3} className="muted">Débit / Crédit ({c.currencyCode || "—"})</td><td className="r">{nf.format(Number(c.totalDebit || 0))} / {nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+              ))}
+            </tfoot>
           </table>
         </div>
-        {accounts?.length > 4 && <p className="tiny" style={{ marginTop: 10 }}>{accounts.length} sous-comptes connectés à l'API.</p>}
+        <ShowMore page={page} />
+        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} ligne(s) (sous-compte × devise) connectées à l'API.</p>
       </div>
     </>
   );
 }
 
+/* Additionne plusieurs listes "par devise" en restant separe par devise (SIFA). */
+function sumByCurrency(...lists) {
+  const map = new Map();
+  lists.forEach((list) => (list || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total += Number(c.total || 0);
+    map.set(k, acc);
+  }));
+  return [...map.values()];
+}
+
+/* Resultat net par devise = produits − charges, devise par devise (SIFA, pas de conversion). */
+function netByCurrency(revByCur, expByCur) {
+  const map = new Map();
+  (revByCur || []).forEach((c) => map.set(String(c.currencyId ?? "null"), { currencyId: c.currencyId, currencyCode: c.currencyCode, total: Number(c.total || 0) }));
+  (expByCur || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total -= Number(c.total || 0);
+    map.set(k, acc);
+  });
+  return [...map.values()];
+}
+
+/* Totaux par devise (SIFA — jamais de conversion). Affiche une valeur par devise. */
+function ByCur({ list }) {
+  const arr = (list || []).filter((c) => Number(c.total || 0) !== 0);
+  if (arr.length === 0) return <>{nf.format(0)} {CUR}</>;
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
+      {arr.map((c) => <span key={c.currencyId ?? "x"}>{nf.format(Math.round(Number(c.total || 0)))} {c.currencyCode || CUR}</span>)}
+    </span>
+  );
+}
+
+/* Regroupe des comptes (balance + devise par ligne) en totaux par devise,
+   au format attendu par <ByCur>. SIFA : aucune conversion, une valeur par devise.
+   pick = fonction qui extrait le montant signé d'un compte (défaut: balanceOf). */
+function accBalByCur(rows, pick = balanceOf) {
+  const map = new Map();
+  (rows || []).forEach((a) => {
+    const k = String(a.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: a.currencyId ?? null, currencyCode: a.currencyCode || null, total: 0 };
+    acc.total += Number(pick(a) || 0);
+    map.set(k, acc);
+  });
+  return [...map.values()];
+}
+
 /* ── Tiers ─────────────────────────────────────────────────────────────── */
-function Tiers() {
-  const sum = (k) => fbTiers.reduce((s, r) => s + (r[k] || 0), 0);
+function Tiers({ accounts = [] }) {
+  const receivables = accounts.filter(isReceivableAccount);
+  const payables = accounts.filter(isPayableAccount);
+  const rows = [...receivables.map((a) => ({ ...a, family: "Créance" })), ...payables.map((a) => ({ ...a, family: "Dette" }))];
+  const page = usePaginated(rows, 20, rows.length);
+  // Totaux par devise (SIFA) : créances = soldes débiteurs, dettes = soldes créditeurs.
+  const receivableByCur = accBalByCur(receivables, (a) => Math.max(0, balanceOf(a)));
+  const payableByCur = accBalByCur(payables, (a) => Math.abs(Math.min(0, balanceOf(a))));
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
+        <div className="g4 kpis" style={{ marginBottom: 18 }}>
+          <Mini label="Créances clients" value={<ByCur list={receivableByCur} />} valueClass="pos" />
+          <Mini label="Dettes fournisseurs" value={<ByCur list={payableByCur} />} valueClass="neg" />
+          <Mini label="Comptes clients" value={receivables.length} />
+          <Mini label="Comptes fournisseurs" value={payables.length} />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes auxiliaires</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 620 }}>
+              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <ShowMore page={page} />
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" action="Relancer les impayés" actionIcon="bellRing" onAction={() => notify()} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Créances clients" value="2 150 000" valueClass="pos" />
-        <Mini label="Dont échu" value="640 000" tone="danger" valueClass="neg" />
-        <Mini label="Dettes fournisseurs" value="3 400 000" valueClass="neg" />
-        <Mini label="À payer < 30 j" value="1 900 000" />
-      </div>
-      <div className="card pad table-card">
-        <h3 className="block-title font-display">Balance âgée — clients</h3>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 640 }}>
-            <thead><tr><th>Tiers</th><th className="r">Total dû</th><th className="r">Non échu</th><th className="r">0–30 j</th><th className="r">30–60 j</th><th className="r">+60 j</th></tr></thead>
-            <tbody>
-              {fbTiers.map((t, i) => (
-                <tr key={i}><td style={{ fontWeight: 500 }}>{t.name}</td><td className="r">{nf.format(t.total)}</td><td className="r">{dash(t.nonEchu)}</td><td className="r" style={t.d30 ? { color: "var(--amber-600)" } : undefined}>{dash(t.d30)}</td><td className="r" style={t.d60 ? { color: "var(--amber-600)" } : undefined}>{dash(t.d60)}</td><td className="r" style={t.plus60 ? { color: "var(--rose-600)" } : undefined}>{dash(t.plus60)}</td></tr>
-              ))}
-            </tbody>
-            <tfoot><tr><td>Total</td><td className="r">{nf.format(sum("total"))}</td><td className="r">{nf.format(sum("nonEchu"))}</td><td className="r">{nf.format(sum("d30"))}</td><td className="r">{nf.format(sum("d60"))}</td><td className="r neg">{nf.format(sum("plus60"))}</td></tr></tfoot>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Le <b>lettrage</b> rapproche chaque facture de son paiement ; les soldes +60 j sont signalés pour relance.</p>
-      </div>
+      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
+      <EmptyState title="Aucun compte tiers mouvementé" detail="Connecté au grand livre : les créances (clients) et dettes (fournisseurs) s'afficheront dès qu'un sous-compte de tiers aura des écritures." icon="contact" />
     </>
+  );
+}
+
+/* ── Change (échange de devise — modèle bancaire) ──────────────────────────
+   Une opération enregistre les VRAIS montants des deux côtés (devise vendue /
+   devise reçue) + le taux réel + des frais optionnels. Aucune conversion estimée :
+   le backend pose 2-3 écritures liées via un sous-compte « Compte de change ». */
+function curCode(currencies, id) {
+  const c = (currencies || []).find((x) => (x.currencyId ?? x.id) === Number(id));
+  return c ? (cleanCurrencySymbol(c) || c.currencyCode || "") : "";
+}
+function Change({ accounts = [], currencies = [], canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [showNew, setShowNew] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  // Liste complete des sous-comptes (y compris ceux sans ecriture, absents des
+  // balances) pour alimenter les selecteurs du modal — ex. compte de frais de change.
+  const [allAccounts, setAllAccounts] = React.useState(null);
+
+  const load = React.useCallback(() => {
+    api.exchanges().then((r) => setRows(asArray(r, "exchanges"))).catch(() => setRows([]));
+  }, []);
+  React.useEffect(() => load(), [load]);
+  React.useEffect(() => {
+    api.accounts().then((r) => setAllAccounts(asArray(r, "getAllAccount"))).catch(() => setAllAccounts(null));
+  }, []);
+  // Comptes pour les selecteurs : liste complete si dispo, sinon repli sur les balances.
+  const modalAccounts = (allAccounts && allAccounts.length) ? allAccounts : accounts;
+
+  async function create(form) {
+    setBusy(true); setError("");
+    try {
+      await api.createExchange(form);
+      setShowNew(false); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  }
+  async function reverse(id) {
+    const reason = window.prompt("Motif d'annulation de cet échange ?");
+    if (!reason) return;
+    try { await api.reverseExchange(id, reason); load(); }
+    catch (err) { notify(err.message || String(err)); }
+  }
+
+  const list = rows || [];
+  const posted = list.filter((r) => r.status !== "reversed");
+  const code = (id) => curCode(currencies, id);
+
+  return (
+    <>
+      <PageHead eyebrow="Trésorerie · multi-devises" title="Change (devises)"
+        action={canMutate ? "Nouvel échange" : undefined} onAction={() => setShowNew(true)} disabled={!canMutate} />
+      <Note icon="lightbulb">
+        Comme une banque : on enregistre les <strong>montants réels des deux côtés</strong> (devise vendue → devise reçue),
+        le <strong>taux réel</strong> et les <strong>frais</strong>. Aucune valeur n'est estimée.
+      </Note>
+      <div className="g3" style={{ margin: "14px 0 18px" }}>
+        <Mini label="Échanges" value={posted.length} />
+        <Mini label="Annulés" value={list.length - posted.length} tone={list.length - posted.length ? "warn" : undefined} />
+        <Mini label="Source" value="Ledger" tone="info" />
+      </div>
+      {rows === null ? (
+        <div className="card pad muted">Chargement…</div>
+      ) : list.length === 0 ? (
+        <EmptyState title="Aucun échange de devise" detail="Enregistrez un achat/vente de devise (ex. USD → CDF) : les deux montants réels, le taux et les frais seront comptabilisés." icon="landmark"
+          action={canMutate ? "Nouvel échange" : undefined} onAction={() => setShowNew(true)} />
+      ) : (
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Opérations de change</h3><span className="tiny">Montants réels des deux côtés</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 720 }}>
+              <thead><tr><th>Date</th><th>Réf.</th><th className="r">Vendu</th><th></th><th className="r">Reçu</th><th className="r">Taux</th><th className="r">Frais</th><th>État</th><th></th></tr></thead>
+              <tbody>{list.map((r) => (
+                <tr key={r.id} style={r.status === "reversed" ? { opacity: 0.5, textDecoration: "line-through" } : undefined}>
+                  <td>{String(r.date || "").slice(0, 10)}</td>
+                  <td>{r.reference || r.note || "—"}</td>
+                  <td className="r neg">{nf.format(Number(r.fromAmount || 0))} <span className="chip">{code(r.fromCurrencyId)}</span></td>
+                  <td style={{ color: "var(--ink-500)" }}>→</td>
+                  <td className="r pos">{nf.format(Number(r.toAmount || 0))} <span className="chip">{code(r.toCurrencyId)}</span></td>
+                  <td className="r">{Number(r.rate || 0).toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</td>
+                  <td className="r">{Number(r.feeAmount || 0) > 0 ? `${nf.format(Number(r.feeAmount))} ${code(r.fromCurrencyId)}` : "—"}</td>
+                  <td>{r.status === "reversed" ? <span className="chip">annulé</span> : <span className="chip" style={{ background: "var(--blue-100)", color: "var(--blue-600)" }}>comptabilisé</span>}</td>
+                  <td>{canMutate && r.status !== "reversed" && <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => reverse(r.id)}>Annuler</button>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {showNew && <ExchangeModal accounts={modalAccounts} currencies={currencies} exchanges={list} busy={busy} error={error}
+        onSave={create} onClose={() => setShowNew(false)} />}
+    </>
+  );
+}
+
+/* Modal d'échange : saisie flexible (montant reçu OU taux), frais optionnels.
+   Devise déduite du sous-compte si renseignée, sinon sélecteur de devise. */
+function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, onClose }) {
+  const acctOpts = (accounts || []).map((a) => ({ value: String(a.id), label: `${accountLabel(a)}${a.currencyCode ? " · " + a.currencyCode : ""}` }));
+  const curOpts = (currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }));
+  // Pont de change = clearing/virement (exclut les comptes de frais).
+  const exchangeAccts = (accounts || []).filter((a) => /clearing|virement|compte de change/i.test(accountText(a)));
+  const feeAccts = (accounts || []).filter((a) => /frais|fee/i.test(accountText(a)));
+
+  // Référence générée automatiquement : CHG-AAAA-MM-NNN (N = séquence du mois).
+  const autoRef = React.useMemo(() => {
+    const d = new Date();
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const prefix = `CHG-${ym}-`;
+    const max = (exchanges || []).reduce((m, r) => {
+      const ref = String(r.reference || "");
+      if (!ref.startsWith(prefix)) return m;
+      const n = parseInt(ref.slice(prefix.length), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  }, [exchanges]);
+
+  const [f, setF] = React.useState({
+    date: new Date().toISOString().slice(0, 10), reference: autoRef, note: "",
+    fromCurrencyId: "", fromAccountId: "", fromAmount: "",
+    toCurrencyId: "", toAccountId: "", mode: "amount", toAmount: "", rate: "",
+    feeAmount: "", feeAccountId: feeAccts[0] ? String(feeAccts[0].id) : "",
+    fromExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
+    toExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
+  });
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  // Devise auto depuis le sous-compte choisi (si l'API la fournit).
+  const acctCur = (id) => { const a = (accounts || []).find((x) => String(x.id) === String(id)); return a && a.currencyId != null ? String(a.currencyId) : ""; };
+
+  const from = Number(f.fromAmount) || 0;
+  const rate = Number(f.rate) || 0;
+  const toAmt = Number(f.toAmount) || 0;
+  // Aperçu live : le 3ᵉ champ déduit (mêmes règles que le backend).
+  const previewTo = f.mode === "amount" ? toAmt : (from > 0 && rate > 0 ? from * rate : 0);
+  const previewRate = f.mode === "amount" ? (from > 0 && toAmt > 0 ? toAmt / from : 0) : rate;
+  const fromCode = curCode(currencies, f.fromCurrencyId) || "?";
+  const toCode = curCode(currencies, f.toCurrencyId) || "?";
+
+  function submit(e) {
+    e.preventDefault();
+    const body = {
+      date: new Date(f.date).toISOString(),
+      reference: f.reference || undefined, note: f.note || undefined,
+      fromCurrencyId: Number(f.fromCurrencyId), fromAccountId: Number(f.fromAccountId), fromAmount: from,
+      toCurrencyId: Number(f.toCurrencyId), toAccountId: Number(f.toAccountId),
+      fromExchangeAccountId: Number(f.fromExchangeAccountId), toExchangeAccountId: Number(f.toExchangeAccountId),
+    };
+    if (f.mode === "amount") body.toAmount = toAmt; else body.rate = rate;
+    if (Number(f.feeAmount) > 0) { body.feeAmount = Number(f.feeAmount); body.feeAccountId = Number(f.feeAccountId); }
+    onSave(body);
+  }
+  const valid = f.fromCurrencyId && f.toCurrencyId && f.fromCurrencyId !== f.toCurrencyId
+    && f.fromAccountId && f.toAccountId && from > 0 && f.fromExchangeAccountId && f.toExchangeAccountId
+    && (f.mode === "amount" ? toAmt > 0 : rate > 0)
+    && (!(Number(f.feeAmount) > 0) || f.feeAccountId);
+
+  const Field = ({ label, children }) => <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)" }}>{label}<div style={{ marginTop: 4 }}>{children}</div></label>;
+  const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1, #d8d5cc)", fontSize: 13 };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 680 }} onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">Nouvel échange de devise</h2><p>Vrais montants des deux côtés · taux réel</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="modal-body" style={{ display: "grid", gap: 12 }}>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Date"><input type="date" style={inp} value={f.date} onChange={(e) => set("date", e.target.value)} /></Field>
+            <Field label="Référence (auto)"><input style={{ ...inp, background: "var(--ink-50, #f4f3ef)", color: "var(--ink-500)" }} value={f.reference} readOnly title="Référence générée automatiquement" /></Field>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Devise vendue (sortie)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <Field label="Compte source"><Autocomplete value={f.fromAccountId} options={acctOpts} placeholder="Caisse/banque…" onChange={(v) => setF((s) => ({ ...s, fromAccountId: v, fromCurrencyId: acctCur(v) || s.fromCurrencyId }))} /></Field>
+            <Field label="Devise"><Autocomplete value={f.fromCurrencyId} options={curOpts} placeholder="USD…" onChange={(v) => set("fromCurrencyId", v)} /></Field>
+            <Field label="Montant sorti"><input type="number" step="0.01" min="0" style={inp} value={f.fromAmount} onChange={(e) => set("fromAmount", e.target.value)} /></Field>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Devise reçue (entrée)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Compte cible"><Autocomplete value={f.toAccountId} options={acctOpts} placeholder="Caisse/banque…" onChange={(v) => setF((s) => ({ ...s, toAccountId: v, toCurrencyId: acctCur(v) || s.toCurrencyId }))} /></Field>
+            <Field label="Devise"><Autocomplete value={f.toCurrencyId} options={curOpts} placeholder="CDF…" onChange={(v) => set("toCurrencyId", v)} /></Field>
+          </div>
+          <div className="segtabs" style={{ display: "inline-flex", gap: 4 }}>
+            <button type="button" className={`segtab ${f.mode === "amount" ? "active grad-accent" : ""}`} onClick={() => set("mode", "amount")}>Montant reçu</button>
+            <button type="button" className={`segtab ${f.mode === "rate" ? "active grad-accent" : ""}`} onClick={() => set("mode", "rate")}>Taux</button>
+          </div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {f.mode === "amount"
+              ? <Field label={`Montant reçu (${toCode})`}><input type="number" step="0.01" min="0" style={inp} value={f.toAmount} onChange={(e) => set("toAmount", e.target.value)} /></Field>
+              : <Field label={`Taux (1 ${fromCode} = ? ${toCode})`}><input type="number" step="0.000001" min="0" style={inp} value={f.rate} onChange={(e) => set("rate", e.target.value)} /></Field>}
+            <div style={{ alignSelf: "end", fontSize: 12.5, color: "var(--ink-600)", padding: "7px 0" }}>
+              {from > 0 && (previewTo > 0) ? <>≈ <strong>{nf.format(Math.round(previewTo))} {toCode}</strong> · taux <strong>{previewRate.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</strong></> : "Aperçu après saisie"}
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Frais (optionnel)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+            <Field label={`Frais (${fromCode})`}><input type="number" step="0.01" min="0" style={inp} value={f.feeAmount} onChange={(e) => set("feeAmount", e.target.value)} /></Field>
+            <Field label="Compte de frais"><Autocomplete value={f.feeAccountId} options={acctOpts} placeholder={feeAccts[0] ? "Frais de change…" : "Compte de charge…"} onChange={(v) => set("feeAccountId", v)} /></Field>
+          </div>
+
+          <details>
+            <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink-600)" }}>Comptes de change (pont)</summary>
+            <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+              <Field label="Compte de change (source)"><Autocomplete value={f.fromExchangeAccountId} options={acctOpts} onChange={(v) => set("fromExchangeAccountId", v)} /></Field>
+              <Field label="Compte de change (cible)"><Autocomplete value={f.toExchangeAccountId} options={acctOpts} onChange={(v) => set("toExchangeAccountId", v)} /></Field>
+            </div>
+          </details>
+
+          {f.fromCurrencyId && f.fromCurrencyId === f.toCurrencyId && <div className="note" style={{ color: "var(--danger-600, #b4232a)" }}>Les devises source et cible doivent être différentes.</div>}
+          {error && <div className="note" style={{ color: "var(--danger-600, #b4232a)" }}>{error}</div>}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy || !valid}>{busy ? "Enregistrement…" : "Comptabiliser l'échange"}</button></div>
+      </form>
+    </div>
   );
 }
 
 /* ── Trésorerie ────────────────────────────────────────────────────────── */
-function Tresorerie() {
+function Tresorerie({ accounts = [] }) {
+  const rows = accounts.filter(isTreasuryAccount);
+  const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="Solde trésorerie (par devise)" value={<ByCur list={totalByCur} />} />
+          <Mini label="Comptes suivis" value={rows.length} />
+          <Mini label="Source" value="Ledger" tone="info" />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes banque & caisse</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className="r pos">{mc(Number(a.totalDebit || 0), a)}</td><td className="r neg">{mc(Number(a.totalCredit || 0), a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <ShowMore page={page} />
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Caisse & banques" title="Trésorerie" action="Rapprocher" actionIcon="gitCompare" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        {tresorerieComptes.map((c) => (
-          <div className="card pad" key={c.name}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span className="row-ic" style={{ background: c.subTone === "emerald" ? "var(--emerald-100)" : "var(--blue-100)", color: c.subTone === "emerald" ? "var(--emerald-600)" : "var(--blue-600)" }}><Icon name={c.icon} /></span><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span></div>
-            <div className="font-display num" style={{ fontSize: 24, fontWeight: 700 }}>{c.val}</div>
-            <div className="tiny" style={c.subTone === "amber" ? { color: "var(--amber-600)" } : c.subTone === "emerald" ? { color: "var(--emerald-600)" } : undefined}>{c.sub}</div>
-          </div>
-        ))}
-      </div>
-      <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Mouvements — Banque FC</h3><span className="chip amber">3 non pointés</span></div>
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un mouvement…</div></div>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 600 }}>
-            <thead><tr><th>Date</th><th>Libellé</th><th className="r">Entrée</th><th className="r">Sortie</th><th className="r">Pointé</th></tr></thead>
-            <tbody>
-              {tresorerieMvts.map((m, i) => (
-                <tr key={i} style={!m.pointe ? { background: "rgba(255,251,235,.6)" } : undefined}><td>{m.date}</td><td style={{ fontVariantNumeric: "normal" }}>{m.label}</td><td className="r pos">{m.entree ? nf.format(m.entree) : <span className="muted">—</span>}</td><td className="r neg">{m.sortie ? nf.format(m.sortie) : <span className="muted">—</span>}</td><td className="r"><Icon name={m.pointe ? "checkCircle" : "circle"} style={{ width: 16, height: 16, color: m.pointe ? "var(--emerald-500)" : "var(--amber-400)", display: "inline" }} /></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
+      <EmptyState title="Aucun compte de trésorerie mouvementé" detail="Connecté au grand livre : les soldes banque/caisse s'afficheront dès qu'un sous-compte de trésorerie (Cash, Bank…) aura des écritures." icon="landmark" />
     </>
   );
 }
 
 /* ── Immobilisations ───────────────────────────────────────────────────── */
-function Immo() {
-  const sum = (k) => fbImmo.reduce((s, r) => s + r[k], 0);
+function Immo({ accounts = [] }) {
+  const rows = accounts.filter((a) => accountType(a) === "Asset" && isFixedAssetAccount(a) && !isTreasuryAccount(a));
+  const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="Valeur nette comptable (par devise)" value={<ByCur list={totalByCur} />} tone="info" />
+          <Mini label="Comptes immo." value={rows.length} />
+          <Mini label="Source" value="Ledger" />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes immobilisations</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <ShowMore page={page} />
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" action="Nouveau bien" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <Mini label="Valeur brute" value="41 700 000" /><Mini label="Amort. cumulés" value="23 000 000" valueClass="neg" />
-        <Mini label="Valeur nette (VNC)" value="18 700 000" valueClass="" tone="info" />
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <table className="tbl num" style={{ minWidth: 680 }}>
-          <thead><tr><th>Bien</th><th>Acquis</th><th className="r">Valeur brute</th><th>Durée</th><th className="r">Dotation/an</th><th className="r">Amort. cumulé</th><th className="r">VNC</th></tr></thead>
-          <tbody>
-            {fbImmo.map((b, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{b.name}</td><td>{b.an}</td><td className="r">{nf.format(b.brute)}</td><td>{b.duree}</td><td className="r">{nf.format(b.dot)}</td><td className="r neg">{nf.format(b.amort)}</td><td className="r" style={{ fontWeight: 600 }}>{nf.format(b.vnc)}</td></tr>
-            ))}
-          </tbody>
-          <tfoot><tr><td colSpan={2}>Total</td><td className="r">{nf.format(sum("brute"))}</td><td></td><td className="r">{nf.format(sum("dot"))}</td><td className="r">{nf.format(sum("amort"))}</td><td className="r">{nf.format(sum("vnc"))}</td></tr></tfoot>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Dotation d'amortissement passée automatiquement chaque mois (compte 681 → 28x).</p>
-      </div>
+      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
+      <EmptyState title="Aucune immobilisation au grand livre" detail="Connecté au grand livre : les comptes d'actif immobilisé s'afficheront dès qu'un sous-compte d'immobilisation aura des écritures (le registre détaillé amortissements viendra d'un module dédié)." icon="warehouse" />
     </>
   );
 }
 
-/* ── Analytique ────────────────────────────────────────────────────────── */
+/* ── Analytique (projets / financeurs) ─────────────────────────────────── */
 function Analytique() {
+  const [projects, setProjects] = React.useState(null);
+  const [reports, setReports] = React.useState({}); // id -> rapport
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
+  const [edit, setEdit] = React.useState(null);    // projet en cours d'édition
+  const [expense, setExpense] = React.useState(null); // projet pour lequel on saisit une dépense
+  const [accounts, setAccounts] = React.useState([]);   // sous-comptes (pour la dépense)
+  const [currencies, setCurrencies] = React.useState([]);
+  const [defCur, setDefCur] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.projects();
+      const arr = Array.isArray(list) ? list : [];
+      setProjects(arr);
+      const entries = await Promise.all(arr.map(async (p) => {
+        try { return [p.id, await api.projectReport(p.id)]; } catch { return [p.id, null]; }
+      }));
+      setReports(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setProjects([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  // Comptes + devises pour la saisie de dépense (best-effort, n'empêche pas l'écran).
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [acc, cur, set] = await Promise.allSettled([api.accounts(), api.currencies(), api.setting()]);
+        if (acc.status === "fulfilled") setAccounts(asArray(acc.value, "balances"));
+        const curList = cur.status === "fulfilled" ? (cur.value?.getAllCurrency || (Array.isArray(cur.value) ? cur.value : [])) : [];
+        setCurrencies(curList);
+        const sId = set.status === "fulfilled" ? set.value?.currencyId : null;
+        setDefCur(sId != null ? String(sId) : (curList[0] ? String(curList[0].currencyId ?? curList[0].id) : ""));
+      } catch { /* ignore : la saisie reste possible mais sans listes */ }
+    })();
+  }, []);
+
+  const expenseAccounts = accounts.filter((a) => accountType(a) === "Expense");
+  const treasuryAccounts = accounts.filter((a) => accountType(a) !== "Expense" && accountType(a) !== "Revenue");
+
+  const newProject = () => setShowNew(true);
+  const submitProject = async (form) => {
+    const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
+    setBusy(true);
+    try {
+      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount, currencyId: form.currencyId ? Number(form.currencyId) : undefined });
+      setShowNew(false);
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Modifier un projet (permission backend : update-transaction → 403 sinon).
+  const submitEdit = async (form) => {
+    setBusy(true); setError("");
+    try {
+      await api.updateProject(edit.id, {
+        name: form.name,
+        donor: form.donor || null,
+        budgetAmount: form.budget ? Number(String(form.budget).replace(/\s/g, "")) : null,
+        currencyId: form.currencyId ? Number(form.currencyId) : undefined,
+      });
+      setEdit(null);
+      await load();
+    } catch (e) { setError(permError(e, "modifier le projet")); }
+    finally { setBusy(false); }
+  };
+
+  // Ajouter une dépense au projet SANS modifier le projet
+  // (permission backend : create-transaction ; écriture portant project_id).
+  const submitExpense = async (form) => {
+    const amount = Number(String(form.amount).replace(/\s/g, ""));
+    if (!amount || amount <= 0) { setError("Le montant doit être positif."); return; }
+    if (!form.expenseId || !form.creditId) { setError("Choisir le compte de charge et le compte de trésorerie."); return; }
+    if (!form.currencyId) { setError("La devise est obligatoire."); return; }
+    setBusy(true); setError("");
+    try {
+      await api.createLedgerEntry({
+        date: new Date(form.date).toISOString(),
+        particulars: form.particulars || `Dépense projet : ${expense.name}`,
+        currencyId: Number(form.currencyId),
+        sourceModule: "comptabilite",
+        lines: [
+          // La charge porte le project_id → remonte dans le rapport analytique.
+          { accountId: Number(form.expenseId), side: "DEBIT", amount, projectId: expense.id },
+          { accountId: Number(form.creditId), side: "CREDIT", amount },
+        ],
+      });
+      setExpense(null);
+      await load();
+    } catch (e) { setError(permError(e, "ajouter une dépense")); }
+    finally { setBusy(false); }
+  };
+
+  const curOptions = currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyCode || c.currencyName || String(c.currencyId ?? c.id) }));
+
+  const projectModal = showNew && (
+    <FormModal
+      title="Nouveau projet"
+      subtitle="Axe analytique / financeur"
+      submitLabel="Créer le projet"
+      busy={busy}
+      onClose={() => setShowNew(false)}
+      onSubmit={submitProject}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true },
+        { key: "donor", label: "Financeur (optionnel)" },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curOptions: curOptions, curDefault: defCur },
+      ]}
+    />
+  );
+  const editModal = edit && (
+    <FormModal
+      title="Modifier le projet"
+      subtitle="Nom, financeur et budget"
+      submitLabel="Enregistrer"
+      busy={busy}
+      onClose={() => setEdit(null)}
+      onSubmit={submitEdit}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
+        { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          default: edit.budgetAmount != null ? String(edit.budgetAmount) : "",
+          curKey: "currencyId", curOptions: curOptions, curDefault: edit.currencyId != null ? String(edit.currencyId) : defCur },
+      ]}
+    />
+  );
+  const expenseModal = expense && (
+    <FormModal
+      title={`Dépense — ${expense.name}`}
+      subtitle="Écriture imputée au projet (n'altère pas le projet)"
+      submitLabel="Enregistrer la dépense"
+      busy={busy}
+      onClose={() => setExpense(null)}
+      onSubmit={submitExpense}
+      fields={[
+        { key: "date", label: "Date", type: "date", default: new Date().toISOString().slice(0, 10), required: true },
+        { key: "particulars", label: "Libellé", default: "" },
+        { key: "amount", label: "Montant", type: "money", required: true, placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curRequired: true, curOptions: curOptions, default: "", curDefault: defCur },
+        { key: "expenseId", label: "Compte de charge (débit)", type: "select", required: true,
+          options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+        { key: "creditId", label: "Payé depuis (caisse/banque)", type: "select", required: true,
+          options: treasuryAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+      ]}
+    />
+  );
+
+  // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
+  if (projects && projects.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Suivi par projet / financeur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
+        <EmptyState title="Aucun projet analytique" detail="Les rapports financeurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
+        {projectModal}
+        {editModal}
+        {expenseModal}
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Rapport bailleur" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Suivi par projet / financeur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {projects === null && <div className="card pad muted">Chargement…</div>}
       <div className="g3" style={{ marginBottom: 18 }}>
-        {analytiqueCards.map((c) => (
-          <div className={`card pad ${c.warn ? "warn" : ""}`} key={c.name}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span><span className={`chip ${c.chip}`}>{c.pct} %</span></div>
-            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {c.bailleur}</div>
-            <div className="bar"><span className={c.grad === "amber" ? "" : c.grad} style={{ width: `${c.pct}%`, background: c.grad === "amber" ? "var(--amber-500)" : undefined }} /></div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {c.depense}</span><span>Budget {c.budget}</span></div>
-          </div>
-        ))}
+        {(projects || []).map((p) => {
+          const r = reports[p.id];
+          const pct = r && r.consumptionPct != null ? r.consumptionPct : 0;
+          const warn = pct >= 90;
+          return (
+            <div className={`card pad ${warn ? "warn" : ""}`} key={p.id}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
+              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
+              {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
+              {/* SIFA : depense ventilee par devise (jamais d'addition inter-devises). */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 8, gap: 8 }} className="tiny num">
+                <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {(r && r.byCurrency && r.byCurrency.length)
+                    ? r.byCurrency.filter((b) => b.totalExpenses).map((b) => <span key={b.currencyId ?? "x"}>Dépensé {nf.format(b.totalExpenses)} {b.currencyCode || curCode(currencies, b.currencyId) || CUR}</span>)
+                    : <span>Dépensé 0 {curCode(currencies, p.currencyId) || CUR}</span>}
+                </span>
+                <span>Budget {r && r.budget ? `${nf.format(r.budget)} ${curCode(currencies, p.currencyId) || CUR}` : "—"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
+                <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div className="card pad table-card tbl-scroll">
-        <h3 className="block-title font-display">Produits & charges par axe analytique</h3>
+        <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Axe (projet / bailleur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
-            {analytiqueRows.map((r, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{r.axe}</td><td className="r pos">{dash(r.prod)}</td><td className="r neg">{nf.format(r.charge)}</td><td className="r" style={{ fontWeight: 600, color: r.solde < 0 ? "var(--rose-600)" : undefined }}>{signed(r.solde)}</td></tr>
-            ))}
+            {/* SIFA : une ligne par (projet, devise) — aucun melange inter-devises. */}
+            {(projects || []).flatMap((p) => {
+              const r = reports[p.id];
+              const cur = (r && r.byCurrency && r.byCurrency.length) ? r.byCurrency : [{ currencyId: p.currencyId, currencyCode: curCode(currencies, p.currencyId), totalRevenue: 0, totalExpenses: 0, net: 0 }];
+              return cur.map((b, i) => {
+                const prod = b.totalRevenue || 0, charge = b.totalExpenses || 0, solde = b.net || 0;
+                const code = b.currencyCode || curCode(currencies, b.currencyId) || CUR;
+                return <tr key={`${p.id}-${b.currencyId ?? i}`}><td style={{ fontWeight: 500 }}>{i === 0 ? <>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</> : ""}</td><td className="r pos">{prod ? `${nf.format(prod)} ${code}` : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)} {code}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)} {code}</td></tr>;
+              });
+            })}
           </tbody>
         </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chaque écriture porte un axe analytique (via le type de transaction) → reporting par bailleur/projet en un clic.</p>
+        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport financeur en temps réel.</p>
       </div>
+      {projectModal}
+      {editModal}
+      {expenseModal}
     </>
   );
 }
 
 /* ── Budget ────────────────────────────────────────────────────────────── */
 function Budget() {
+  const [budgets, setBudgets] = React.useState(null);
+  const [statuses, setStatuses] = React.useState({}); // id -> status live
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
+  const [projects, setProjects] = React.useState([]);
+  const [accounts, setAccounts] = React.useState([]);
+  const [currencies, setCurrencies] = React.useState([]);
+  const [defCur, setDefCur] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.budgets();
+      const arr = Array.isArray(list) ? list : [];
+      setBudgets(arr);
+      const entries = await Promise.all(arr.map(async (b) => {
+        try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
+      }));
+      setStatuses(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setBudgets([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  // Projets + comptes + devises pour le formulaire (best-effort, n'empêche pas l'écran).
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [proj, acc, cur, set] = await Promise.allSettled([api.projects(), api.accounts(), api.currencies(), api.setting()]);
+        if (proj.status === "fulfilled") setProjects(Array.isArray(proj.value) ? proj.value : []);
+        if (acc.status === "fulfilled") setAccounts(asArray(acc.value, "balances"));
+        const curList = cur.status === "fulfilled" ? (cur.value?.getAllCurrency || (Array.isArray(cur.value) ? cur.value : [])) : [];
+        setCurrencies(curList);
+        const sId = set.status === "fulfilled" ? set.value?.currencyId : null;
+        setDefCur(sId != null ? String(sId) : (curList[0] ? String(curList[0].currencyId ?? curList[0].id) : ""));
+      } catch { /* ignore : la création reste possible mais sans listes */ }
+    })();
+  }, []);
+
+  const expenseAccounts = accounts.filter((a) => accountType(a) === "Expense");
+  const curOptions = currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyCode || c.currencyName || String(c.currencyId ?? c.id) }));
+  const projectOptions = projects.map((p) => ({ value: String(p.id), label: p.name }));
+
+  const newBudget = () => setShowNew(true);
+  const submitBudget = async (form) => {
+    const plannedAmount = Number(String(form.plannedAmount || "").replace(/\s/g, ""));
+    if (!plannedAmount || plannedAmount <= 0) { setError("Le montant planifié doit être positif."); return; }
+    if (!form.accountId) { setError("Choisir un compte comptable pour la ligne budgétaire."); return; }
+    setBusy(true); setError("");
+    try {
+      const budget = await api.createBudget({
+        name: form.name,
+        projectId: form.projectId ? Number(form.projectId) : undefined,
+        currencyId: form.currencyId ? Number(form.currencyId) : undefined,
+      });
+      await api.addBudgetLine(budget.id, {
+        accountId: Number(form.accountId),
+        plannedAmount,
+        label: form.label || undefined,
+        projectId: form.projectId ? Number(form.projectId) : undefined,
+      });
+      setShowNew(false);
+      await load();
+    } catch (e) { setError(permError(e, "créer le budget")); }
+    finally { setBusy(false); }
+  };
+
+  const newBudgetModal = showNew && (
+    <FormModal
+      title="Nouveau budget"
+      subtitle="Budget lié à un projet + première ligne budgétaire"
+      submitLabel="Créer le budget"
+      busy={busy}
+      onClose={() => setShowNew(false)}
+      onSubmit={submitBudget}
+      fields={[
+        { key: "name", label: "Nom du budget", required: true },
+        { key: "projectId", label: "Projet lié (optionnel)", type: "select", options: projectOptions },
+        { key: "accountId", label: "Compte comptable (ligne budgétaire)", type: "select", required: true,
+          options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+        { key: "label", label: "Libellé de la ligne (optionnel)" },
+        { key: "plannedAmount", label: "Montant planifié", type: "money", required: true, placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curOptions: curOptions, default: "", curDefault: defCur },
+      ]}
+    />
+  );
+
+  // Pas de budget réel (ou API indispo) : ne pas afficher de fausses lignes.
+  if (budgets && budgets.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Suivi budgétaire" title="Budget vs réalisé" action="Nouveau budget" onAction={newBudget} disabled={busy} />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API budget indisponible.</b> <span className="tiny">{error}</span></div>}
+        <EmptyState title="Aucun budget réel" detail="Le suivi budgétaire utilise `/budget/:id/status-ledger` et s'affichera après création d'un budget avec lignes." action="Nouveau budget" onAction={newBudget} icon="piggyBank" />
+        {newBudgetModal}
+      </>
+    );
+  }
+
+  const fmt = (v) => nf.format(Number(v || 0));
   return (
     <>
-      <PageHead eyebrow="Suivi budgétaire 2026" title="Budget vs réalisé" action="Nouvelle ligne" onAction={() => notify()} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Budget total" value="160 000 000" /><Mini label="Réalisé" value="98 000 000" valueClass="" tone="info" />
-        <Mini label="Disponible" value="62 000 000" valueClass="pos" /><Mini label="Consommé" value="61 %" />
-      </div>
-      <div className="card pad">
-        <h3 className="block-title font-display">Lignes budgétaires</h3>
-        {budgetLines.map((b, i) => (
-          <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{b.name}</span><span className="num" style={b.warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{b.txt}</span></div>
-            <div className="bar"><span className={b.grad === "rose" ? "" : b.grad} style={{ width: `${b.pct}%`, background: b.grad === "rose" ? "var(--rose-500)" : undefined }} /></div>
+      <PageHead eyebrow="Suivi budgétaire · live grand livre" title="Budget vs réalisé" action="Nouveau budget" onAction={newBudget} disabled={busy} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {budgets === null && <div className="card pad muted">Chargement…</div>}
+      {(budgets || []).map((b) => {
+        const st = statuses[b.id];
+        const lines = (st && st.lines) || [];
+        return (
+          <div className="card pad" key={b.id} style={{ marginBottom: 16 }}>
+            <div className="section-head"><h3 className="font-display">{b.name}</h3><span className="tiny">{b.fiscalYear || b.period || ""}</span></div>
+            {lines.length === 0 && <p className="muted tiny">Aucune ligne budgétaire.</p>}
+            {lines.map((l, i) => {
+              const allocated = Number(l.allocated ?? l.allocatedAmount ?? l.planned ?? l.plannedAmount ?? 0);
+              const consumed = Number(l.consumed ?? l.consumedAmount ?? 0);
+              const pct = allocated > 0 ? Math.min(100, Math.round((consumed / allocated) * 100)) : 0;
+              const warn = pct >= 90;
+              return (
+                <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontWeight: 500 }}>{l.label || l.name || `Ligne ${i + 1}`}</span>
+                    <span className="num" style={warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{fmt(consumed)} / {fmt(allocated)} {CUR} · {pct}%</span>
+                  </div>
+                  <div className="bar"><span style={{ width: `${pct}%`, background: warn ? "var(--rose-500)" : undefined }} /></div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-        <p className="tiny" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}><Icon name="alertTriangle" style={{ width: 13, height: 13, color: "var(--rose-500)" }} /> « Fonctionnement & admin » à 94 % — proche du dépassement, à surveiller.</p>
-      </div>
+        );
+      })}
+      {newBudgetModal}
     </>
   );
 }
 
 /* ── Plan de trésorerie & capacité ─────────────────────────────────────── */
-function Capacite() {
+function Capacite({ accounts = [] }) {
+  const [budgets, setBudgets] = React.useState(null);
+  const [statuses, setStatuses] = React.useState({});
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.budgets();
+        const arr = Array.isArray(list) ? list : [];
+        setBudgets(arr);
+        const entries = await Promise.all(arr.map(async (b) => {
+          try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
+        }));
+        setStatuses(Object.fromEntries(entries));
+      } catch { setBudgets([]); }
+    })();
+  }, []);
+
+  const treasury = accounts.filter(isTreasuryAccount);
+  const payablesAcc = accounts.filter(isPayableAccount);
+  const receivablesAcc = accounts.filter(isReceivableAccount);
+
+  // Capacité PAR DEVISE (SIFA) : on ne soustrait jamais des devises différentes.
+  // Pour chaque devise présente : trésorerie, dettes, créances, disponible immédiat/projeté.
+  const cap = new Map(); // currencyId -> { code, cash, payables, receivables }
+  const bump = (a, field, val) => {
+    const k = String(a.currencyId ?? "null");
+    const row = cap.get(k) || { currencyId: a.currencyId ?? null, currencyCode: a.currencyCode || CUR, cash: 0, payables: 0, receivables: 0 };
+    row[field] += val;
+    cap.set(k, row);
+  };
+  treasury.forEach((a) => bump(a, "cash", balanceOf(a)));
+  payablesAcc.forEach((a) => bump(a, "payables", Math.abs(Math.min(0, balanceOf(a)))));
+  receivablesAcc.forEach((a) => bump(a, "receivables", Math.max(0, balanceOf(a))));
+  const caps = [...cap.values()].map((c) => ({ ...c, netNow: c.cash - c.payables, netProjected: c.cash + c.receivables - c.payables }));
+
+  // Totaux par devise pour les KPI (format <ByCur>).
+  const cashByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.cash }));
+  const payByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.payables }));
+  const recByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.receivables }));
+  const nowByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.netNow }));
+
+  if (!treasury.length && !payablesAcc.length && !receivablesAcc.length) {
+    return (
+      <>
+        <PageHead eyebrow="Disponibilité financière" title="Plan de trésorerie & capacité" />
+        <EmptyState title="Capacité non calculable" detail="Aucun compte de trésorerie, dette ou créance n'existe encore dans le grand livre." icon="gauge" />
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead eyebrow="« A-t-on l'argent pour un projet ? »" title="Plan de trésorerie & capacité" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
-      <div className="banner grad-emerald">
-        <div>
-          <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="gauge" /> Disponible réel — mobilisable sur fonds propres</div>
-          <div className="font-display num" style={{ fontSize: 30, fontWeight: 700 }}>{`17 278 000 ${CUR}`}</div>
-          <div style={{ fontSize: 12, opacity: .85 }}>après déduction des dettes à payer et des fonds bailleurs affectés</div>
-        </div>
-        <div style={{ textAlign: "right", fontSize: 12, opacity: .9 }}><span className="chip" style={{ background: "rgba(255,255,255,.2)", color: "#fff" }}><Icon name="check" style={{ width: 11, height: 11 }} /> Capacité pour un nouveau projet</span><div style={{ marginTop: 8 }}>+ 18,4 k$ en banque USD (non inclus)</div></div>
+      <PageHead eyebrow="Disponibilité financière · depuis le grand livre" title="Plan de trésorerie & capacité" />
+      <Note icon="lightbulb">Calculé <strong>par devise</strong> (principe SIFA) : aucune devise n'est convertie ni mélangée.</Note>
+      <div className="g4 kpis" style={{ margin: "14px 0 18px" }}>
+        <Mini label="Trésorerie (par devise)" value={<ByCur list={cashByCur} />} />
+        <Mini label="Dettes fournisseurs" value={<ByCur list={payByCur} />} valueClass="neg" />
+        <Mini label="Créances à encaisser" value={<ByCur list={recByCur} />} valueClass="pos" />
+        <Mini label="Disponible immédiat" value={<ByCur list={nowByCur} />} tone="info" />
       </div>
-      <div className="g2" style={{ marginBottom: 14 }}>
-        <div className="card pad">
-          <h3 className="block-title font-display">Du solde brut au disponible réel</h3>
-          <div className="stmt num">
-            <div className="ln"><span><Dot c="var(--blue-500)" /> Trésorerie (caisse + banques FC)</span><b>41 200 000</b></div>
-            <div className="ln"><span><Dot c="var(--rose-400)" /> − Dettes à payer (court terme)</span><b className="neg">−10 622 000</b></div>
-            <div className="ln"><span><Dot c="var(--amber-400)" /> − Fonds bailleurs affectés</span><b style={{ color: "var(--amber-700)" }}>−13 300 000</b></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}><Dot c="var(--emerald-500)" /> = Disponible réel (libre)</span><b className="pos">{`17 278 000 ${CUR}`}</b></div>
+      <div className="g2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14, marginBottom: 18 }}>
+        {caps.map((c) => (
+          <div key={c.currencyId ?? "x"} className="card pad">
+            <h3 className="block-title font-display">Capacité — {c.currencyCode}</h3>
+            <div className="stmt num">
+              <div className="ln"><span className="muted">Trésorerie disponible</span><span className={c.cash >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.cash))} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(Math.round(c.payables))} {c.currencyCode}</span></div>
+              <div className="ln bold"><span>= Disponible immédiat</span><span className={c.netNow >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.netNow))} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(Math.round(c.receivables))} {c.currencyCode}</span></div>
+              <div className="ln total" style={{ background: c.netProjected >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
+                <span style={{ color: c.netProjected >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Disponible projeté</span>
+                <span className={c.netProjected >= 0 ? "pos" : "neg"}>{signed(c.netProjected)} {c.currencyCode}</span>
+              </div>
+            </div>
           </div>
-          <p className="tiny" style={{ marginTop: 10 }}>Détail des dettes : fournisseurs 3,4 M · salaires & charges 5,0 M · TVA DGI 2,2 M.</p>
-        </div>
-        <div className="card pad">
-          <h3 className="block-title font-display">Répartition de la trésorerie</h3>
-          <div className="stack" style={{ marginBottom: 12 }}><span style={{ width: "42%", background: "var(--emerald-500)" }} /><span style={{ width: "32%", background: "var(--amber-400)" }} /><span style={{ width: "26%", background: "var(--rose-400)" }} /></div>
-          <div className="stmt num" style={{ display: "grid", gap: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--emerald-500)" /> Libre (mobilisable)</span><b>17 278 000</b></div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--amber-400)" /> Affecté à des projets bailleurs</span><span>13 300 000</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--rose-400)" /> Engagé (dettes à payer)</span><span>10 622 000</span></div>
-          </div>
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--ink-100)" }} className="stmt num">
-            <div className="ln"><span className="muted">Programme Kongo Central (reste)</span><span>2 900 000</span></div>
-            <div className="ln" style={{ borderBottom: 0 }}><span className="muted">Programme Kinshasa (reste)</span><span>10 400 000</span></div>
-          </div>
-        </div>
+        ))}
       </div>
-      <div className="card pad table-card" style={{ marginBottom: 14 }}>
-        <h3 className="block-title font-display">Plan de trésorerie prévisionnel <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(3 mois)</span></h3>
+      {budgets && budgets.length > 0 && (() => {
+        const remaining = Object.values(statuses).reduce((s, st) => {
+          if (!st || !Array.isArray(st.lines)) return s;
+          return s + st.lines.reduce((acc, l) => acc + Math.max(0, Number(l.allocated || 0) - Number(l.consumed || 0)), 0);
+        }, 0);
+        return (
+          <div className="card pad">
+            <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager (toutes lignes)</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
+              <span className="muted">Budget encore disponible</span>
+              <span className="pos">{nf.format(Math.round(remaining))} {CUR}</span>
+            </div>
+          </div>
+        );
+      })()}
+    </>
+  );
+}
+
+/* ── Fournisseurs (référentiel central des tiers, partagé BâtiPro/Domus/FarmOS) ── */
+const PARTY_TYPES = [
+  { id: "company", label: "Entreprise" },
+  { id: "individual", label: "Personne" },
+];
+const SUPPLIER_TYPES = [
+  { id: "general", label: "Général" },
+  { id: "construction", label: "Construction (BâtiPro)" },
+  { id: "real_estate", label: "Immobilier (Domus)" },
+  { id: "farm", label: "Ferme (FarmOS)" },
+  { id: "factory", label: "Usine" },
+];
+const partyLabel = (v) => PARTY_TYPES.find((p) => p.id === v)?.label || "Entreprise";
+const supplierTypeLabel = (v) => SUPPLIER_TYPES.find((s) => s.id === v)?.label || "Général";
+
+function Fournisseurs({ canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [editing, setEditing] = React.useState(null); // objet fournisseur (ou {} pour nouveau)
+  const [search, setSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.suppliers();
+      const arr = Array.isArray(list) ? list : (list?.getAllSupplier || list?.data || []);
+      setRows(Array.isArray(arr) ? arr : []);
+    } catch (e) { setError(String(e.message || e)); setRows([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const toggleStatus = async (s) => {
+    const next = String(s.status) === "true" ? "false" : "true";
+    if (next === "false" && !window.confirm(`Désactiver le fournisseur « ${s.name} » ?`)) return;
+    try { await api.setSupplierStatus(s.id, next); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+  };
+
+  const filtered = (rows || []).filter((s) => {
+    if (typeFilter && s.supplierType !== typeFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return [s.name, s.phone, s.email, s.contactPerson, s.rccm, s.nationalId].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+  const active = (rows || []).filter((s) => String(s.status) === "true");
+  const companies = active.filter((s) => (s.partyType || "company") === "company").length;
+  const persons = active.length - companies;
+  const page = usePaginated(filtered, 20, filtered.length);
+
+  return (
+    <>
+      <PageHead eyebrow="Référentiel central · partagé entre apps" title="Fournisseurs"
+        action={canMutate ? "Nouveau fournisseur" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"}
+        onAction={canMutate ? () => setEditing({}) : load} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Fournisseurs actifs" value={active.length} />
+        <Mini label="Entreprises" value={companies} />
+        <Mini label="Personnes" value={persons} />
+        <Mini label="Total (avec inactifs)" value={(rows || []).length} />
+      </div>
+      <div className="card pad" style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="input" style={{ flex: 1, minWidth: 200 }} placeholder="Rechercher (nom, téléphone, contact, RCCM…)" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className="select" style={{ height: 36 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="">Tous les domaines</option>
+          {SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Liste des fournisseurs</h3><span className="tiny">{rows ? `${filtered.length} fournisseur(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 620 }}>
-            <thead><tr><th>Mois</th><th className="r">Solde début</th><th className="r">Entrées prévues</th><th className="r">Sorties prévues</th><th className="r">Solde fin</th></tr></thead>
+          <table className="tbl" style={{ minWidth: 820 }}>
+            <thead><tr><th>Nom</th><th>Type</th><th>Domaine</th><th>Contact</th><th>Téléphone</th><th>Pièces légales</th><th className="r">Action</th></tr></thead>
             <tbody>
-              {cashflowPlan.map((m, i) => (
-                <tr key={i} style={m.warn ? { background: "rgba(255,251,235,.6)" } : undefined}><td style={{ fontWeight: 500 }}>{m.mois}</td><td className="r">{nf.format(m.debut)}</td><td className="r pos">+{nf.format(m.entrees)}</td><td className="r neg">−{nf.format(m.sorties)}</td><td className="r" style={{ fontWeight: 600, color: m.warn ? "var(--amber-700)" : undefined }}>{nf.format(m.fin)}</td></tr>
-              ))}
+              {page.shown.map((s) => {
+                const inactive = String(s.status) !== "true";
+                const isCompany = (s.partyType || "company") === "company";
+                return (
+                  <tr key={s.id} style={inactive ? { opacity: 0.5 } : undefined}>
+                    <td style={{ fontWeight: 500 }}>{s.name}{inactive && <span className="chip" style={{ marginLeft: 6 }}>inactif</span>}</td>
+                    <td><span className="chip">{isCompany ? "🏢 Entreprise" : "👤 Personne"}</span></td>
+                    <td className="muted">{supplierTypeLabel(s.supplierType)}</td>
+                    <td className="muted">{s.contactPerson || (isCompany ? "—" : s.name)}</td>
+                    <td className="muted">{s.phone || "—"}</td>
+                    <td className="tiny muted">{isCompany ? (s.rccm ? `RCCM ${s.rccm}` : "—") : (s.nationalId ? `ID ${s.nationalId}` : "—")}{s.taxId ? ` · NIF ${s.taxId}` : ""}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>
+                      {canMutate && <button className="btn-sm" onClick={() => setEditing(s)}>Modifier</button>}
+                      {canMutate && <button className="btn-sm" style={{ marginLeft: 6 }} onClick={() => toggleStatus(s)}>{inactive ? "Activer" : "Désactiver"}</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows && !filtered.length && <tr><td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>Aucun fournisseur.</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Entrées : loyers + tranches de subvention attendues · Sorties : salaires, fournisseurs, activités terrain.</p>
+        <ShowMore page={page} />
       </div>
-      <div className="card pad info">
-        <h3 className="block-title font-display" style={{ marginBottom: 8 }}><Icon name="lightbulb" style={{ color: "var(--blue-600)" }} /> Peut-on financer un nouveau projet ?</h3>
-        <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "grid", gap: 8, fontSize: 13, color: "var(--ink-700)" }}>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="checkCircle" style={{ width: 16, height: 16, color: "var(--emerald-600)", flex: "none", marginTop: 1 }} /> <span><b>~17,3 M {CUR}</b> mobilisables aujourd'hui sur fonds propres (sans toucher aux fonds bailleurs).</span></li>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="alertTriangle" style={{ width: 16, height: 16, color: "var(--amber-600)", flex: "none", marginTop: 1 }} /> <span>La trésorerie descend à <b>13,6 M en août</b> : éviter d'engager plus de ~12 M avant la subvention de septembre.</span></li>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="wallet" style={{ width: 16, height: 16, color: "var(--blue-600)", flex: "none", marginTop: 1 }} /> <span>Au-delà : prévoir un <b>financement bailleur</b> dédié — les fonds affectés (13,3 M) ne peuvent pas être détournés.</span></li>
-        </ul>
+      {editing && <SupplierModal initial={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+    </>
+  );
+}
+
+function SupplierModal({ initial, onClose, onSaved }) {
+  const [f, setF] = React.useState({
+    name: initial.name || "", partyType: initial.partyType || "company", supplierType: initial.supplierType || "general",
+    phone: initial.phone || "", email: initial.email || "", address: initial.address || "",
+    contactPerson: initial.contactPerson || "", rccm: initial.rccm || "", nationalId: initial.nationalId || "",
+    taxId: initial.taxId || "", paymentTerms: initial.paymentTerms || "", notes: initial.notes || "",
+  });
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const isCompany = f.partyType === "company";
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!f.name.trim()) { setError("Le nom est requis."); return; }
+    if (!f.phone.trim()) { setError("Le téléphone est requis."); return; }
+    setBusy(true); setError("");
+    // n'envoie que les champs renseignés (les optionnels vides → non transmis)
+    const body = { name: f.name.trim(), partyType: f.partyType, supplierType: f.supplierType, phone: f.phone.trim() };
+    ["email", "address", "contactPerson", "rccm", "nationalId", "taxId", "paymentTerms", "notes"].forEach((k) => { if (f[k]?.trim()) body[k] = f[k].trim(); });
+    try {
+      if (initial.id) await api.updateSupplier(initial.id, body);
+      else await api.createSupplier(body);
+      await onSaved();
+    } catch (e2) { setError(String(e2.message || e2)); setBusy(false); }
+  };
+
+  const Field = ({ label, children }) => <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)" }}>{label}<div style={{ marginTop: 4 }}>{children}</div></label>;
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{initial.id ? "Modifier le fournisseur" : "Nouveau fournisseur"}</h2><p>Référentiel central · réutilisé par BâtiPro, Domus, FarmOS</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="modal-body" style={{ display: "grid", gap: 12 }}>
+          <Field label="Type de tiers">
+            <div className="segtabs">
+              {PARTY_TYPES.map((p) => <button key={p.id} type="button" className={`segtab ${f.partyType === p.id ? "active grad-accent" : ""}`} onClick={() => set("partyType", p.id)}>{p.id === "company" ? "🏢 " : "👤 "}{p.label}</button>)}
+            </div>
+          </Field>
+          <Field label={isCompany ? "Nom de l'entreprise" : "Nom complet"}>
+            <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={isCompany ? "Ex : SARL Kintambo Matériaux" : "Ex : Jean Mukendi"} autoFocus />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Domaine"><select className="select" value={f.supplierType} onChange={(e) => set("supplierType", e.target.value)}>{SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+            <Field label="Téléphone"><input className="input" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+243…" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="E-mail"><input className="input" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="contact@…" /></Field>
+            <Field label={isCompany ? "Personne de contact" : "Téléphone secondaire (optionnel)"}><input className="input" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder={isCompany ? "Nom du contact" : "—"} /></Field>
+          </div>
+          <Field label="Adresse"><input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="Quartier, commune, ville" /></Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {isCompany
+              ? <Field label="RCCM"><input className="input" value={f.rccm} onChange={(e) => set("rccm", e.target.value)} placeholder="CD/KIN/RCCM/…" /></Field>
+              : <Field label="ID national"><input className="input" value={f.nationalId} onChange={(e) => set("nationalId", e.target.value)} placeholder="N° pièce d'identité" /></Field>}
+            <Field label="NIF (n° impôt)"><input className="input" value={f.taxId} onChange={(e) => set("taxId", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Conditions de paiement"><input className="input" value={f.paymentTerms} onChange={(e) => set("paymentTerms", e.target.value)} placeholder="Ex : 30 jours, comptant" /></Field>
+            <Field label="Notes"><input className="input" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
+  );
+}
+
+/* ── Achats / Factures fournisseurs ────────────────────────────────────── */
+function Achats({ canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [info, setInfo] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [list, agg] = await Promise.all([
+        api.purchaseInvoices().catch(() => []),
+        api.purchaseInvoicesInfo().catch(() => null),
+      ]);
+      // findAll renvoie { data, total } ou un tableau selon la version : on normalise.
+      const arr = Array.isArray(list) ? list : (list?.data || list?.rows || []);
+      setRows(Array.isArray(arr) ? arr : []);
+      setInfo(agg && agg._sum ? agg : null);
+    } catch (e) { setError(String(e.message || e)); setRows([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const approve = async (id) => {
+    const comment = window.prompt("Commentaire d'approbation (optionnel) :") ?? "";
+    setBusy(true);
+    try { await api.approvePurchaseInvoice(id, comment); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Totaux par devise (SIFA) : chaque facture porte sa devise (currencyId/currencyCode).
+  const invByCur = (pick) => {
+    const map = new Map();
+    (rows || []).forEach((r) => {
+      const k = String(r.currencyId ?? "null");
+      const acc = map.get(k) || { currencyId: r.currencyId ?? null, currencyCode: r.currencyCode || null, total: 0 };
+      acc.total += Number(pick(r) || 0);
+      map.set(k, acc);
+    });
+    return [...map.values()];
+  };
+  const amountByCur = invByCur((r) => r.totalAmount);
+  const paidByCur = invByCur((r) => r.paidAmount ?? (Number(r.totalAmount || 0) - Number(r.dueAmount || 0)));
+  const dueByCur = invByCur((r) => r.dueAmount);
+  const page = usePaginated(rows || [], 20, (rows || []).length);
+
+  return (
+    <>
+      <PageHead eyebrow="Comptes fournisseurs · gate purchase" title="Factures fournisseurs" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Factures" value={(rows || []).length} />
+        <Mini label="Total facturé (par devise)" value={<ByCur list={amountByCur} />} />
+        <Mini label="Payé (par devise)" value={<ByCur list={paidByCur} />} valueClass="pos" />
+        <Mini label="Reste dû (par devise)" value={<ByCur list={dueByCur} />} valueClass="neg" />
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Liste des factures d'achat</h3><span className="tiny">{rows ? `${rows.length} facture(s)` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl num" style={{ minWidth: 720 }}>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {page.shown.map((r) => (
+                <tr key={r.id}>
+                  <td>{String(r.date || "").slice(0, 10)}</td>
+                  <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
+                  <td style={{ fontWeight: 500 }}>{r.supplierName || `Fournisseur #${r.supplierId}`}</td>
+                  <td className="r">{mc(Number(r.totalAmount || 0), r)}</td>
+                  <td className={`r ${Number(r.dueAmount) > 0 ? "neg" : "pos"}`}>{mc(Number(r.dueAmount || 0), r)}</td>
+                  <td className="r">
+                    {canMutate
+                      ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => approve(r.id)}>Approuver</button>
+                      : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {rows && rows.length === 0 && <tr><td colSpan={7} className="muted">Aucune facture d'achat. Connecté à <code>/purchase-invoice</code>.</td></tr>}
+              {rows === null && <tr><td colSpan={7} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <ShowMore page={page} />
+        <p className="tiny muted" style={{ marginTop: 10 }}>Module gaté (sourceModule « purchase ») : l'approbation déclenche la comptabilisation de l'écriture différée via le workflow.</p>
       </div>
     </>
   );
 }
-function Dot({ c }) { return <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: c, marginRight: 8 }} />; }
 
-/* ── États financiers ──────────────────────────────────────────────────── */
-function Etats({ is, bs }) {
-  const [tab, setTab] = React.useState("resultat");
-  const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
-  const rev = Number(is.totalRevenue) || fbResultat.totalProduits;
-  const exp = Math.abs(Number(is.totalExpense)) || fbResultat.totalCharges;
-  const profit = Number(is.profit ?? rev - exp);
+/* ── Stock & entrepôts ─────────────────────────────────────────────────── */
+const ORDER_STATUS_FR = { draft: "Brouillon", ordered: "Commandé", received: "Reçu", cancelled: "Annulé" };
+function Stock() {
+  const [warehouses, setWarehouses] = React.useState(null);
+  const [stockByWh, setStockByWh] = React.useState({});
+  const [orders, setOrders] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [whs, ords] = await Promise.all([
+        api.warehouses(),
+        api.purchaseOrders().catch(() => []),
+      ]);
+      const arr = Array.isArray(whs) ? whs : (whs?.data || []);
+      setWarehouses(arr);
+      setOrders(Array.isArray(ords) ? ords : (ords?.data || []));
+      const entries = await Promise.all(arr.map(async (w) => {
+        try { return [w.id, await api.warehouseStock(w.id)]; } catch { return [w.id, []]; }
+      }));
+      setStockByWh(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setWarehouses([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  // Réception : récupère les lignes restant à recevoir et appelle receiveOrder.
+  const receive = async (orderId) => {
+    setBusy(true);
+    try {
+      const detail = await api.purchaseOrder(orderId);
+      const order = detail.order || detail;
+      const lines = (detail.lines || []).map((l) => ({
+        productId: l.productId,
+        purchaseOrderLineId: l.id,
+        quantity: Math.max(0, Number(l.quantity || 0) - Number(l.receivedQuantity || 0)),
+        unitCost: Number(l.unitPrice || 0),
+      })).filter((l) => l.quantity > 0);
+      if (!lines.length) { notify("Rien à recevoir (déjà tout reçu)."); return; }
+      await api.receiveOrder(orderId, { warehouseId: order.warehouseId, lines });
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  if (warehouses && warehouses.length === 0 && (!orders || orders.length === 0)) {
+    return (
+      <>
+        <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+        <EmptyState title="Aucun entrepôt ni commande" detail="Connecté à /procurement : les entrepôts, niveaux de stock et bons de commande s'afficheront après création." icon="warehouse" />
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead eyebrow="Exercice 2026 · au 30 juin" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {orders && orders.length > 0 && (
+        <div className="card pad table-card" style={{ marginBottom: 16 }}>
+          <div className="section-head"><h3 className="font-display">Bons de commande</h3><span className="tiny">{orders.length} commande(s)</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Réf.</th><th>Fournisseur</th><th>Statut</th><th className="r">Total</th><th className="r">Action</th></tr></thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="muted">{o.reference || `PO-${o.id}`}</td>
+                    <td>{o.supplierName || (o.supplierId ? `Fournisseur #${o.supplierId}` : "—")}</td>
+                    <td><span className={`chip ${o.status === "received" ? "pos" : o.status === "cancelled" ? "" : "ink"}`}>{ORDER_STATUS_FR[o.status] || o.status}</span></td>
+                    <td className="r">{mc(Number(o.totalAmount || 0), o)}</td>
+                    <td className="r">
+                      {o.status !== "received" && o.status !== "cancelled"
+                        ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => receive(o.id)}>Recevoir</button>
+                        : <span className="muted tiny">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="tiny muted" style={{ marginTop: 10 }}>Recevoir une commande crée les mouvements de stock et incrémente les quantités en entrepôt.</p>
+        </div>
+      )}
+
+      {warehouses === null && <div className="card pad muted">Chargement…</div>}
+      {(warehouses || []).map((w) => {
+        const stock = stockByWh[w.id] || [];
+        return (
+          <div className="card pad table-card" key={w.id} style={{ marginBottom: 16 }}>
+            <div className="section-head"><h3 className="font-display">{w.name}{w.code ? ` · ${w.code}` : ""}</h3><span className="tiny">{stock.length} référence(s)</span></div>
+            <div className="tbl-scroll">
+              <table className="tbl num" style={{ minWidth: 480 }}>
+                <thead><tr><th>Article</th><th className="r">Quantité</th><th>Unité</th></tr></thead>
+                <tbody>
+                  {stock.map((s, i) => (
+                    <tr key={s.id || i}><td style={{ fontWeight: 500 }}>{s.itemName || s.name || s.productName || `Article #${s.itemId || s.id}`}</td><td className="r">{nf.format(Number(s.quantity ?? s.qty ?? 0))}</td><td>{s.unit || "—"}</td></tr>
+                  ))}
+                  {stock.length === 0 && <tr><td colSpan={3} className="muted">Aucun mouvement de stock.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/* ── États financiers ──────────────────────────────────────────────────── */
+function Etats({ is, bs, tb, curFilter = "" }) {
+  const [tab, setTab] = React.useState("resultat");
+  const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
+  // États réels depuis le grand livre moderne.
+  // Filtre devise global (SIFA, sans conversion) : on restreint chaque liste du rapport
+  // — lignes ET totaux *ByCurrency — à la devise choisie. Les scalaires (totaux toutes
+  // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
+  const filterReport = React.useCallback((rep) => {
+    if (!rep || !curFilter) return rep;
+    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyCode ?? "") === curFilter) : l);
+    const out = { ...rep };
+    Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
+    return out;
+  }, [curFilter]);
+  const liveIs = React.useMemo(() => filterReport(is), [is, filterReport]);
+  const liveBs = React.useMemo(() => filterReport(bs), [bs, filterReport]);
+  const liveTb = React.useMemo(() => filterReport(tb), [tb, filterReport]);
+  const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
+  const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
+  const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);
+
+  // En mono-devise les scalaires (toutes devises) ne s'appliquent plus : on somme les byCurrency filtrés.
+  const sumBy = (list) => (Array.isArray(list) ? list.reduce((s, c) => s + Number(c.total ?? c.amount ?? 0), 0) : 0);
+  const rev = hasLiveIs ? (curFilter ? sumBy(liveIs.revenueByCurrency) : Number(liveIs.totalRevenue)) : 0;
+  const exp = hasLiveIs ? (curFilter ? sumBy(liveIs.expensesByCurrency) : Number(liveIs.totalExpenses)) : 0;
+  const profit = hasLiveIs ? (curFilter ? rev - exp : Number(liveIs.netIncome)) : 0;
+
+  // Export CSV de l'onglet courant (depuis le grand livre).
+  const exportCurrent = () => {
+    if (tab === "resultat" && hasLiveIs) {
+      const rows = [
+        ...liveIs.revenue.map((r) => ({ poste: r.subAccount || r.account, sens: "Produit", montant: r.amount })),
+        ...liveIs.expenses.map((r) => ({ poste: r.subAccount || r.account, sens: "Charge", montant: r.amount })),
+        { poste: "Résultat net", sens: profit >= 0 ? "Excédent" : "Déficit", montant: profit },
+      ];
+      exportCsv("compte-resultat.csv", [["poste", "Poste"], ["sens", "Sens"], ["montant", "Montant"]], rows);
+    } else if (tab === "bilan" && hasLiveBs) {
+      const rows = [
+        ...(liveBs.assets || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Actif", montant: r.amount })),
+        ...(liveBs.liabilities || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Passif", montant: r.amount })),
+        ...(liveBs.equity || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Capitaux", montant: r.amount })),
+      ];
+      exportCsv("bilan.csv", [["poste", "Poste"], ["classe", "Classe"], ["montant", "Montant"]], rows);
+    } else if (tab === "balance" && hasLiveTb) {
+      exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]],
+        [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })),
+         ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))]);
+    } else { notify("Rien à exporter sur cet onglet."); }
+  };
+  return (
+    <>
+      <PageHead eyebrow="Depuis le grand livre" title="États financiers" action="Exporter (CSV)" actionIcon="download" onAction={exportCurrent} ghost />
       <div className="segtabs">{tabs.map(([id, lbl]) => <button key={id} className={`segtab ${tab === id ? "active grad-accent" : ""}`} onClick={() => setTab(id)}>{lbl}</button>)}</div>
 
       {tab === "resultat" && (
-        <div className="card pad" style={{ maxWidth: 680 }}>
-          <h3 className="block-title font-display">Compte de résultat <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(cumul 2026)</span></h3>
+        hasLiveIs ? <div className="card pad" style={{ maxWidth: 680 }}>
+          <h3 className="block-title font-display">Compte de résultat</h3>
           <div className="stmt num">
-            {fbResultat.produits.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span className="pos">{nf.format(v)}</span></div>)}
-            <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
-            {fbResultat.charges.map(([l, v]) => <div className="ln" key={l} style={{ marginTop: 0 }}><span className="muted">{l}</span><span className="neg">{nf.format(v)}</span></div>)}
-            <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (excédent)</span><span className="pos">{signed(profit)} {CUR}</span></div>
+            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total produits</span><span className="pos"><ByCur list={liveIs.revenueByCurrency} /></span></div>
+            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}-${r.currencyId ?? "x"}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total charges</span><span className="neg"><ByCur list={liveIs.expensesByCurrency} /></span></div>
+            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (par devise)</span><span><ByCur list={netByCurrency(liveIs.revenueByCurrency, liveIs.expensesByCurrency)} /></span></div>
           </div>
-        </div>
+        </div> : <EmptyState title="Compte de résultat vide" detail="Aucune ligne produit/charge réelle n'est disponible dans le grand livre." icon="barChart" />
       )}
 
       {tab === "bilan" && (
-        <div className="card pad" style={{ maxWidth: 820 }}>
-          <h3 className="block-title font-display">Bilan <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3>
+        hasLiveBs ? <div className="card pad" style={{ maxWidth: 820 }}>
+          <h3 className="block-title font-display">Bilan</h3>
           <div className="g2">
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
-              <div className="stmt num">{fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(fbBilan.totalActif)} {CUR}</span></div></div>
+              <div className="stmt num">
+                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span><ByCur list={liveBs.assetsByCurrency} /></span></div>
+              </div>
             </div>
             <div>
-              <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif</div>
-              <div className="stmt num">{fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif</span><span>{nf.format(fbBilan.totalPassif)} {CUR}</span></div></div>
+              <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif + Capitaux propres</div>
+              <div className="stmt num">
+                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>),
+                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)]}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span><ByCur list={sumByCurrency(liveBs.liabilitiesByCurrency, liveBs.equityByCurrency)} /></span></div>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: 12 }}><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif</span></div>
-        </div>
+          <div style={{ marginTop: 12 }}>
+            {liveBs.balanced
+              ? <span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif + CP</span>
+              : <span className="chip" style={{ background: "var(--rose-50)", color: "var(--rose-600)" }}>Écart de bilan à vérifier</span>}
+          </div>
+        </div> : <EmptyState title="Bilan vide" detail="Aucune ligne bilan réelle n'est disponible dans le grand livre." icon="scale" />
       )}
 
       {tab === "balance" && (
-        <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Balance générale <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        hasLiveTb ? <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]], [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })), ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))])}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
-              <tbody>{balanceGenerale.map((r) => <tr key={r.num}><td style={{ fontWeight: 500 }}>{r.num}</td><td style={{ fontVariantNumeric: "normal" }}>{r.name}</td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>)}</tbody>
-              <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">160 050 000</td><td className="r">160 050 000</td></tr></tfoot>
+              <tbody>
+                {[...(liveTb.debits || []).map((r) => ({ ...r, debit: r.balance, credit: null })), ...(liveTb.credits || []).map((r) => ({ ...r, debit: null, credit: Math.abs(r.balance) }))].map((r) => (
+                  <tr key={`${r.id}-${r.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td className="r">{r.debit ? `${r.currencyCode || ""} ${nf.format(r.debit)}`.trim() : <span className="muted">—</span>}</td><td className="r">{r.credit ? `${r.currencyCode || ""} ${nf.format(r.credit)}`.trim() : <span className="muted">—</span>}</td></tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {(liveTb.byCurrency || []).map((c) => (
+                  <tr key={`tot-${c.currencyId ?? "x"}`}><td colSpan={2}>Totaux</td><td className="r">{`${c.currencyCode || ""} ${nf.format(Number(c.totalDebit || 0))}`.trim()}</td><td className="r">{`${c.currencyCode || ""} ${nf.format(Math.abs(Number(c.totalCredit || 0)))}`.trim()}</td></tr>
+                ))}
+              </tfoot>
             </table>
           </div>
-          <div style={{ marginTop: 12 }}><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Balance équilibrée · Total débit = Total crédit</span></div>
-        </div>
+          <div style={{ marginTop: 12 }}><span className={`chip ${liveTb.match ? "emerald" : "amber"}`}><Icon name={liveTb.match ? "check" : "alertTriangle"} style={{ width: 11, height: 11 }} /> {liveTb.match ? "Balance équilibrée" : "Balance à vérifier"}</span></div>
+        </div> : <EmptyState title="Balance générale vide" detail="Aucun solde réel n'est disponible dans `/ledger/trial-balance`." icon="barChart" />
       )}
 
-      {tab === "flux" && (
-        <div className="card pad" style={{ maxWidth: 680 }}>
-          <h3 className="block-title font-display">Tableau des flux de trésorerie <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(cumul 2026)</span></h3>
-          <div className="stmt num">
-            {fbFlux.map((s) => (
-              <React.Fragment key={s.sec}>
-                <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", margin: "10px 0 2px" }}>{s.sec}</div>
-                {s.rows.map(([l, v, c]) => <div className="ln" key={l}><span className="muted">{l}</span><span className={c}>{v}</span></div>)}
-                <div className="ln bold"><span>{s.total[0]}</span><span className={s.total[2]}>{s.total[1]}</span></div>
-              </React.Fragment>
-            ))}
-            <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Variation de trésorerie</span><span>+35 200 000</span></div>
-            <div className="ln" style={{ marginTop: 4 }}><span className="muted">Trésorerie d'ouverture</span><span>6 000 000</span></div>
-            <div className="ln bold"><span>Trésorerie de clôture</span><span>41 200 000</span></div>
+      {tab === "flux" && (() => {
+        // Flux de trésorerie (méthode indirecte simplifiée) à partir d'éléments réels :
+        // résultat net (compte de résultat) + position de trésorerie (bilan).
+        const treasury = hasLiveBs ? (liveBs.assets || []).filter((a) => /banque|bank|caisse|cash|trésor|tresor/i.test(a.subAccount || a.account || "")) : [];
+        const cashPos = treasury.reduce((s, a) => s + Number(a.amount || 0), 0);
+        if (!hasLiveIs && !treasury.length) {
+          return <EmptyState title="Flux de trésorerie indisponible" detail="Aucun résultat ni compte de trésorerie réel dans le grand livre pour construire le tableau des flux." icon="wallet" />;
+        }
+        return (
+          <div className="card pad" style={{ maxWidth: 680 }}>
+            <h3 className="block-title font-display">Flux de trésorerie (méthode indirecte)</h3>
+            <div className="stmt num">
+              <div className="ln bold"><span>Activités opérationnelles</span><span /></div>
+              <div className="ln"><span className="muted">Résultat net de l'exercice</span><span className={profit >= 0 ? "pos" : "neg"}>{nf.format(profit)} {CUR}</span></div>
+              <div className="ln bold" style={{ marginTop: 10 }}><span>Position de trésorerie</span><span /></div>
+              {treasury.length
+                ? treasury.map((a, i) => <div className="ln" key={i}><span className="muted">{a.subAccount || a.account}</span><span className={Number(a.amount) >= 0 ? "pos" : "neg"}>{nf.format(Number(a.amount || 0))} {a.currencyCode || CUR}</span></div>)
+                : <div className="ln"><span className="muted">Aucun compte de trésorerie</span><span className="muted">—</span></div>}
+              <div className="ln total" style={{ background: cashPos >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
+                <span style={{ color: cashPos >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Trésorerie de clôture</span>
+                <span className={cashPos >= 0 ? "pos" : "neg"}>{signed(cashPos)} {CUR}</span>
+              </div>
+            </div>
+            <p className="tiny muted" style={{ marginTop: 10 }}>Méthode indirecte simplifiée : résultat net + position de trésorerie du bilan. La variation période-à-période nécessitera un historique daté.</p>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 }
 
 /* ── TVA ───────────────────────────────────────────────────────────────── */
-function Tva() {
+function Tva({ accounts = [], canMutate = true }) {
+  const rows = accounts.filter(isTaxAccount);
+  const page = usePaginated(rows, 20, rows.length);
+  // Par devise (SIFA) : déductible = soldes débiteurs, collectée = soldes créditeurs.
+  const deductibleByCur = accBalByCur(rows, (a) => Math.max(0, balanceOf(a)));
+  const collectedByCur = accBalByCur(rows, (a) => Math.abs(Math.min(0, balanceOf(a))));
+  const netByCur = netByCurrency(collectedByCur, deductibleByCur);
+
+  // Taux de taxe paramétrables (réutilise l'API product-vat existante).
+  const [rates, setRates] = React.useState(null);
+  const [showNew, setShowNew] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const loadRates = React.useCallback(async () => {
+    try { const r = await api.taxRates(); setRates(Array.isArray(r) ? r : (r?.data || [])); }
+    catch (e) { setError(String(e.message || e)); setRates([]); }
+  }, []);
+  React.useEffect(() => { loadRates(); }, [loadRates]);
+  const createRate = async (form) => {
+    setBusy(true);
+    try { await api.createTaxRate({ title: form.title, percentage: Number(form.percentage) }); setShowNew(false); await loadRates(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const ratesPanel = (
+    <>
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Taux de taxe</h3>{canMutate && <button className="btn-sm grad-accent" onClick={() => setShowNew(true)}>+ Nouveau taux</button>}</div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 360 }}>
+            <thead><tr><th>Libellé</th><th className="r">Taux</th><th>Statut</th></tr></thead>
+            <tbody>
+              {(rates || []).map((t) => (
+                <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.title}</td><td className="r">{Number(t.percentage)} %</td><td><span className={`chip ${String(t.status) === "true" ? "emerald-soft" : "ink"}`}>{String(t.status) === "true" ? "actif" : "inactif"}</span></td></tr>
+              ))}
+              {rates && rates.length === 0 && <tr><td colSpan={3} className="muted">Aucun taux. Créez-en un (ex. TVA 16 %).</td></tr>}
+              {rates === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {showNew && <FormModal title="Nouveau taux de taxe" subtitle="TVA / autre taxe" submitLabel="Créer le taux" busy={busy}
+        onClose={() => setShowNew(false)} onSubmit={createRate}
+        fields={[{ key: "title", label: "Libellé (ex. TVA 16%)", required: true }, { key: "percentage", label: "Taux (%)", type: "number", required: true }]} />}
+    </>
+  );
+
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+        {ratesPanel}
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="TVA collectée (par devise)" value={<ByCur list={collectedByCur} />} valueClass="pos" />
+          <Mini label="TVA déductible (par devise)" value={<ByCur list={deductibleByCur} />} valueClass="neg" />
+          <Mini label="TVA nette (par devise)" value={<ByCur list={netByCur} />} tone="warn" />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes fiscaux</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <ShowMore page={page} />
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Déclaration · juin 2026" title="TVA & taxes" action="Préparer la déclaration" actionIcon="fileCheck" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <div className="card pad"><div className="kpi-label">TVA collectée (16 %)</div><div className="font-display num pos" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>3 632 000</div><div className="tiny">sur ventes / prestations</div></div>
-        <div className="card pad"><div className="kpi-label">TVA déductible</div><div className="font-display num neg" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>1 410 000</div><div className="tiny">sur achats</div></div>
-        <div className="card pad warn"><div className="kpi-label" style={{ color: "var(--amber-700)" }}>TVA à payer</div><div className="font-display num" style={{ fontSize: 22, fontWeight: 700, marginTop: 4, color: "var(--amber-700)" }}>2 222 000</div><div className="tiny" style={{ color: "var(--amber-600)" }}>échéance 15 juil. 2026</div></div>
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <h3 className="block-title font-display">Détail par taux</h3>
-        <table className="tbl num" style={{ minWidth: 520 }}>
-          <thead><tr><th>Taux</th><th className="r">Base HT</th><th className="r">TVA</th><th className="r">Sens</th></tr></thead>
-          <tbody>
-            {fbTva.map((t, i) => (
-              <tr key={i}><td style={{ fontVariantNumeric: "normal" }}>{t.taux}</td><td className="r">{nf.format(t.base)}</td><td className={`r ${t.cls || "muted"}`}>{t.tva ? nf.format(t.tva) : "—"}</td><td className="r"><span className={`chip ${t.chip}`}>{t.sens}</span></td></tr>
-            ))}
-          </tbody>
-          <tfoot><tr><td>Net à payer</td><td></td><td className="r" style={{ color: "var(--amber-700)" }}>2 222 000</td><td></td></tr></tfoot>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> TVA RDC à 16 %. Les dons/subventions sont exonérés. Déclaration mensuelle à la DGI.</p>
-      </div>
+      <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+      {ratesPanel}
+      <EmptyState title="Aucun compte de taxe mouvementé" detail="Connecté au grand livre : les soldes TVA collectée/déductible s'afficheront dès qu'un sous-compte de taxe aura des écritures. Les taux ci-dessus servent à paramétrer la taxe." icon="receipt" />
     </>
   );
 }
 
 /* ── Modal création (écriture / compte) ────────────────────────────────── */
-function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClose }) {
-  const [form, setForm] = React.useState(() => defaults(modal.kind, accounts, mainAccounts));
+function RecordModal({ modal, accounts, mainAccounts, currencies = [], defaultCurrencyId, busy, error, onSave, onClose }) {
+  const [form, setForm] = React.useState(() => defaults(modal.kind, accounts, mainAccounts, defaultCurrencyId));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const curCodeSel = curCode(currencies, form.currencyId) || CUR;
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
@@ -896,7 +2850,12 @@ function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClo
               <FField label="Libellé" value={form.particulars} onChange={(v) => set("particulars", v)} required />
               <FSelect label="Débit" value={form.debitId} onChange={(v) => set("debitId", v)} rows={accounts} />
               <FSelect label="Crédit" value={form.creditId} onChange={(v) => set("creditId", v)} rows={accounts} />
-              <FField label={`Montant (${CUR})`} type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
+              <label className="field"><span>Devise *</span>
+                <Autocomplete value={form.currencyId} allowClear={false} placeholder="Choisir la devise…"
+                  options={(currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }))}
+                  onChange={(v) => set("currencyId", v)} />
+              </label>
+              <FField label={`Montant (${curCodeSel})`} type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
               <FField label="Type / journal" value={form.type} onChange={(v) => set("type", v)} />
             </>
           )}
@@ -908,7 +2867,7 @@ function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClo
           )}
         </div>
         {error && <div className="login-error">{error}</div>}
-        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer"}</button></div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy || (modal.kind === "transaction" && !form.currencyId)}>{busy ? "Enregistrement…" : "Enregistrer"}</button></div>
       </form>
     </div>
   );
@@ -917,11 +2876,49 @@ function FField({ label, value, onChange, type = "text", required = false }) {
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 function FSelect({ label, value, onChange, rows }) {
-  return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>;
+  return <label className="field"><span>{label}</span>
+    <Autocomplete value={value} onChange={onChange} placeholder="Rechercher un compte…"
+      options={(rows || []).map((r) => ({ value: r.id, label: accountLabel(r) }))} />
+  </label>;
 }
-function defaults(kind, accounts, mainAccounts) {
+
+/* Modal générique (remplace window.prompt) : titre + champs configurables. */
+function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy, onSubmit, onClose }) {
+  const [form, setForm] = React.useState(() => {
+    const init = {};
+    for (const f of fields) {
+      init[f.key] = f.default ?? "";
+      if (f.type === "money" && f.curKey) init[f.curKey] = f.curDefault ?? "";
+    }
+    return init;
+  });
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (fields.some((f) => f.required && !String(form[f.key] ?? "").trim())) return;
+    onSubmit(form);
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{title}</h2><p>{subtitle || "Compta NgoluApp"}</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="form-grid">
+          {fields.map((f) => f.type === "textarea"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : f.type === "money"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><div className="money-row"><input type="number" placeholder={f.placeholder} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /><select value={form[f.curKey]} onChange={(e) => set(f.curKey, e.target.value)} required={f.curRequired}>{(f.curOptions || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div></label>
+            : f.type === "select"
+            ? <label className="field" key={f.key}><span>{f.label}</span><select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
+            : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : submitLabel}</button></div>
+      </form>
+    </div>
+  );
+}
+function defaults(kind, accounts, mainAccounts, defaultCurrencyId) {
   if (kind === "account") return { name: "", accountId: mainAccounts[0]?.id || 1 };
-  return { date: new Date().toISOString().slice(0, 10), particulars: "", debitId: accounts[0]?.id || 1, creditId: accounts[1]?.id || accounts[0]?.id || 2, amount: 0, type: "transaction" };
+  return { date: new Date().toISOString().slice(0, 10), particulars: "", debitId: accounts[0]?.id || 1, creditId: accounts[1]?.id || accounts[0]?.id || 2, amount: 0, type: "transaction", currencyId: defaultCurrencyId != null ? String(defaultCurrencyId) : "" };
 }
 
 export default AppShell;

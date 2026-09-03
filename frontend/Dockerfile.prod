@@ -2,13 +2,24 @@ FROM nginx:alpine
 # Build context is the REPO ROOT (see docker-compose.prod.yml).
 # CRM (admin SPA) — served under /crm -> /admin
 COPY frontend/dist/ /usr/share/nginx/html
-# Production marketing landing — baked into the image (no host bind mount).
+# Production marketing landing (ONG ongdngolu) — baked into the image.
 COPY marketing-site/dist/ /usr/share/nginx/html-marketing-prod
+# Avelomi product landing (SaaS vitrine) — baked too. Only Avelomi's nginx
+# config serves it at /; on ongdngolu it is present but unreferenced (inert).
+COPY avelomi-site/dist/ /usr/share/nginx/html-avelomi-prod
 # Production FarmOS SPA at /farmos/ — baked into the image.
 COPY farmos-app/dist/ /usr/share/nginx/html-farmos-prod
-# Production BatiPro / HR / Comptabilite SPAs.
+# Production product SPAs.
+COPY domus-app/dist/ /usr/share/nginx/html-domus-prod
+COPY journal-app/dist/ /usr/share/nginx/html-journal-prod
+COPY tickets-app/dist/ /usr/share/nginx/html-tickets-prod
 COPY batipro-app/dist/ /usr/share/nginx/html-batipro-prod
 COPY hr-app/dist/ /usr/share/nginx/html-hr-prod
 COPY comptabilite-app/dist/ /usr/share/nginx/html-comptabilite-prod
+COPY migration-app/dist/ /usr/share/nginx/html-migration-prod
+# Chat SPA at /chat/
+COPY chat-app/dist/ /usr/share/nginx/html-chat-prod
+# KodaTill SPA (caisse/POS) at /kodatill/
+COPY kodatill-app/dist/ /usr/share/nginx/html-kodatill-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)
 EXPOSE 80

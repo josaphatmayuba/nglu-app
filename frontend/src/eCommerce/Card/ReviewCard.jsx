@@ -1,6 +1,7 @@
 import { Image } from "antd";
 import ReactStars from "react-rating-star-with-type";
 import { timeAgo } from "../../utils/functions";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 export default function ReviewCard({ review }) {
   return (
     <div className='border-b p-2'>
@@ -38,7 +39,7 @@ export default function ReviewCard({ review }) {
           <p
             className=''
             dangerouslySetInnerHTML={{
-              __html: review?.reviewReply[0]?.comment,
+              __html: sanitizeHtml(review?.reviewReply[0]?.comment),
             }}
           />
         </div>

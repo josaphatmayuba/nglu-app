@@ -8,6 +8,7 @@ import { EditOutlined } from "@ant-design/icons";
 import { useEffect } from "react";
 import { CiBarcode } from "react-icons/ci";
 import { useDispatch, useSelector } from "react-redux";
+import defaultProductImage from "../../assets/images/default.jpg";
 import Card from "../../UI/Card";
 import PageHeader from "../../UI/PageHeader";
 import {
@@ -34,7 +35,17 @@ const GetAllProduct = () => {
     (state) => state.productSubCategories,
   );
   const handleOnError = (e) => {
-    e.target.src = "/images/default.jpg";
+    const image = e.currentTarget;
+
+    // Never retry the same broken fallback forever. In dev, `/images/default.jpg`
+    // used to resolve to the marketing SPA HTML, which caused an onError loop.
+    if (image.dataset.fallbackAttempted === "true") {
+      image.removeAttribute("src");
+      return;
+    }
+
+    image.dataset.fallbackAttempted = "true";
+    image.src = defaultProductImage;
   };
 
   const [pageConfig, setPageConfig] = useState({
@@ -62,7 +73,7 @@ const GetAllProduct = () => {
             className="absolute object-cover w-full h-full"
             alt="product"
             onError={handleOnError}
-            src={productThumbnailImageUrl || "/images/default.jpg"}
+            src={productThumbnailImageUrl || defaultProductImage}
           />
         </div>
       ),

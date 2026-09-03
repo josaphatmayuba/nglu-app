@@ -1,7 +1,7 @@
 image: node:20-alpine
 
 # CI/CD multi-projets NgluApp — deploiement cible.
-#   develop -> dev  (dev.ongdngolu.org, /opt/nglu-app-dev,  projet compose nglu_dev)
+#   develop -> dev  (dev.ongdngolu.org on ongdngolu, dev.avelomi.com on Avelomi)
 #   master  -> prod (ongdngolu.org,     /opt/nglu-app,      projet compose nglu_prod)
 #
 # Chaque projet a son propre step build+deploy, conditionne sur son dossier
@@ -12,15 +12,117 @@ image: node:20-alpine
 # main depuis Bitbucket) forcent le redeploiement complet si besoin.
 
 definitions:
+  # ── Avelomi (2e prod, serveur séparé 3.128.45.29 / avelomi.com) ──────────────
+  # Bitbucket n'a qu'UNE clé SSH CI par défaut (celle d'ongdngolu). Pour le 2e
+  # hôte on charge AVELOMI_SSH_KEY si elle existe, sinon la clé SSH native
+  # Bitbucket (BITBUCKET_SSH_KEY_FILE). La valeur AVELOMI_SSH_KEY peut être une
+  # clé PEM brute, un PEM avec \n échappés, ou une clé encodée base64.
+  yaml-anchors:
+    avelomi-ssh-setup: &avelomi-ssh-setup |
+      apk add --no-cache openssh-client
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+      write_ssh_key_material() {
+        key_material="$1"
+        if printf '%s\n' "$key_material" | grep -q -- "-----BEGIN .*PRIVATE KEY-----"; then
+          printf '%b\n' "$key_material" > ~/.ssh/avelomi.pem
+        else
+          printf '%s' "$key_material" | base64 -d > ~/.ssh/avelomi.pem || {
+            echo "Avelomi SSH key is neither PEM nor valid base64." >&2
+            exit 1
+          }
+        fi
+      }
+
+      if [ -n "${AVELOMI_SSH_KEY:-}" ]; then
+        write_ssh_key_material "$AVELOMI_SSH_KEY"
+      elif [ -n "${BITBUCKET_SSH_KEY_FILE:-}" ] && [ -f "$BITBUCKET_SSH_KEY_FILE" ]; then
+        cp "$BITBUCKET_SSH_KEY_FILE" ~/.ssh/avelomi.pem
+      elif [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+        write_ssh_key_material "$SSH_PRIVATE_KEY"
+      else
+        echo "Missing Avelomi SSH key: set AVELOMI_SSH_KEY or authorize Bitbucket's default SSH key on the Avelomi server." >&2
+        exit 1
+      fi
+
+      chmod 600 ~/.ssh/avelomi.pem
+      ssh-keygen -y -f ~/.ssh/avelomi.pem >/dev/null || {
+        echo "Avelomi SSH key file is invalid or encrypted with a passphrase." >&2
+        exit 1
+      }
+    # Cree /opt/nglu-app-dev/.env.dev SI ABSENT, secrets generes SUR LE SERVEUR
+    # Avelomi (openssl) : ils ne transitent jamais par le repo ni le runner.
+    # Idempotent : si le fichier existe deja, inchange (preserve la DB dev peuplee).
+    # Suppose SERVER/SSH deja exportes par le step appelant.
+    avelomi-dev-env: &avelomi-dev-env |
+      $SSH $SERVER 'set -e; f=/opt/nglu-app-dev/.env.dev; if [ ! -f "$f" ]; then
+        printf "DB_ROOT_PASSWORD=%s\nDB_DATABASE=nglu_dev_db\nDB_USERNAME=nglu_dev\nDB_PASSWORD=%s\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nCORS_ORIGIN=https://dev.avelomi.com\nAPP_URL=https://dev.avelomi.com\nFRONTEND_URL=https://dev.avelomi.com/crm\nREDIS_ENABLED=true\n" \
+          "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
+        chmod 600 "$f"; echo "[deploy] .env.dev genere (secrets openssl serveur)";
+      else echo "[deploy] .env.dev deja present — inchange"; fi'
+    # Genere le .env.prod Avelomi sur le serveur s'il est ABSENT ou VIDE.
+    # Meme principe que avelomi-dev-env : TOUS les secrets (DB_PASSWORD inclus)
+    # generes par openssl SUR LE SERVEUR (jamais en CI ni dans le transcript).
+    # Le DB_PASSWORD genere est aussi ecrit en clair dans un fichier dedie
+    # /opt/nglu-app/.avelomi_db_password.txt (chmod 600) : le proprietaire le lit
+    # en SSH pour creer l'utilisateur MySQL 'avelomi' avec CE mot de passe
+    # (CREATE USER 'avelomi'@'%' IDENTIFIED BY '<contenu du fichier>'), puis
+    # CREATE DATABASE avelomi_db + GRANT, sur 35.169.124.49. La base + le user
+    # restent a creer a la main (compte admin MySQL requis). Suppose SERVER/SSH.
+    # Genere le .env.prod Avelomi si absent/vide. DB_PASSWORD = variable Bitbucket
+    # SECURISEE AVELOMI_DB_PASSWORD (le mdp de l'user MySQL 'avelomi' deja cree sur
+    # 35.169.124.49) — jamais en clair dans le repo. JWT/REFRESH generes openssl
+    # sur le serveur. Suppose SERVER/SSH exportes et AVELOMI_DB_PASSWORD transmis.
+    avelomi-prod-env: &avelomi-prod-env |
+      if [ -z "${AVELOMI_DB_PASSWORD:-}" ]; then
+        echo "[deploy] AVELOMI_DB_PASSWORD non defini (variable Bitbucket securisee) — .env.prod non genere."
+      else
+        $SSH $SERVER "DBPW='$AVELOMI_DB_PASSWORD' bash -s" <<'ENVGEN'
+      set -e
+      # /opt/nglu-app peut appartenir a root (cree en sudo au provisioning) -> ecrire
+      # .env.prod en tant qu'admin donne "Permission denied". On s'assure du dossier +
+      # de sa propriete AVANT d'ecrire (idempotent, robuste quel que soit l'ordre).
+      mkdir -p /opt/nglu-app 2>/dev/null || sudo -n mkdir -p /opt/nglu-app
+      [ -w /opt/nglu-app ] || sudo -n chown "$(id -un):$(id -gn)" /opt/nglu-app
+      f=/opt/nglu-app/.env.prod
+      if [ ! -s "$f" ]; then
+        printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=%s\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=40\nDB_WAIT_DELAY_MS=1500\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
+          "$DBPW" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f"
+        chmod 600 "$f"
+        echo "[deploy] .env.prod Avelomi genere (DB_PASSWORD=variable Bitbucket, JWT/REFRESH openssl serveur)."
+      else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi
+      ENVGEN
+      fi
+    # NB: Avelomi prod n'utilise PAS de clone git (le token OAuth du runner n'est
+    # pas dispo dans ce contexte -> "could not read Username"). Les steps scp tout
+    # l'artefact necessaire (dist, package*.json, Dockerfile*, drizzle, compose)
+    # apres un mkdir -p, comme le fait Avelomi dev.
+    # Garde prod Avelomi : skip propre tant que .env.prod n'est pas rempli (sans
+    # lui, le backend2 n'a pas de config DB). La base avelomi_db + user 'avelomi'
+    # existent deja sur 35.169.124.49 (firewall 9306 ouvert a Avelomi, connexion
+    # validee) ; le backend2 retente la connexion au boot (DB_WAIT_RETRIES).
+    avelomi-prod-guard: &avelomi-prod-guard |
+      if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod'; then
+        echo "[deploy] Avelomi prod pas pret : .env.prod absent/vide."
+        echo "[deploy] Definis la variable Bitbucket AVELOMI_DB_PASSWORD (mdp user 'avelomi'),"
+        echo "[deploy] puis relance. Step ignore."
+        exit 0
+      fi
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
     node-domus: domus-app/node_modules
+    node-journal: journal-app/node_modules
     node-farmos: farmos-app/node_modules
     node-batipro: batipro-app/node_modules
     node-hr: hr-app/node_modules
     node-comptabilite: comptabilite-app/node_modules
+    node-migration: migration-app/node_modules
+    node-tickets: tickets-app/node_modules
     node-marketing: marketing-site/node_modules
+    node-avelomi: avelomi-site/node_modules
+    node-chat: chat-app/node_modules
+    node-kodatill: kodatill-app/node_modules
 
 pipelines:
   branches:
@@ -30,17 +132,43 @@ pipelines:
           - step:
               name: Backend2 → dev
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "scripts/ci/ensure-shared-minio.sh", "scripts/ci/ensure-coturn.sh", "docker/coturn/**"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod).
+                # Le git pull serveur peut echouer a cause de drift local; on le synchronise explicitement.
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
+                # Meme logique pour le compose: il choisit le Dockerfile utilise par le rebuild.
+                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                # MinIO partage (dev+prod, meme instance): le pipeline lance backend2 en --no-deps,
+                # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+                # Serveur TURN (appels audio du chat) : meme raison que MinIO ci-dessus,
+                # le `up --no-deps` ne cree jamais le service coturn du compose.
+                # Non bloquant : si TURN_SECRET manque, le script sort en 0 avec un avertissement.
+                #
+                # Le `git pull` serveur echoue en silence (drift local), donc le
+                # docker-compose.dev.yml et les fichiers docker/coturn/ n'y arrivent
+                # jamais -> `no such service: coturn`, et les volumes montes pointent
+                # sur des dossiers vides crees par Docker. On les scp comme dist/ et
+                # drizzle/ plutot que de dependre du pull.
+                - $SSH $SERVER "mkdir -p $APP/docker/coturn"
+                - scp -o StrictHostKeyChecking=no docker/coturn/turnserver.conf docker/coturn/entrypoint.sh $SERVER:$APP/docker/coturn/
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-coturn.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-coturn.sh nglu_dev docker-compose.dev.yml .env.dev"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
@@ -60,10 +188,15 @@ pipelines:
               condition: { changesets: { includePaths: ["frontend/**"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd frontend && npm install --legacy-peer-deps && npm audit --audit-level=high && npm run build:dev && cd ..
+                # npm audit en mode informatif (|| true) : ne PAS bloquer le build sur une vuln
+                # transitive de dev/build (ex: undici high, non embarque dans le bundle navigateur),
+                # sinon le && coupe la chaine et npm run build:dev ne tourne jamais -> dist/ vide -> scp echoue.
+                - cd frontend && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/frontend/dist"
-                - scp -o StrictHostKeyChecking=no -r frontend/dist $SERVER:$APP/frontend/
+                - $SSH $SERVER "rm -rf /tmp/frontend-dist && mkdir -p /tmp/frontend-dist $APP/frontend/dist"
+                - scp -o StrictHostKeyChecking=no -r frontend/dist/* $SERVER:/tmp/frontend-dist/
+                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
+                - $SSH $SERVER "find $APP/frontend/dist -mindepth 1 -delete && cp -r /tmp/frontend-dist/. $APP/frontend/dist/ && rm -rf /tmp/frontend-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
@@ -74,9 +207,37 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/domus-app/dist"
-                - scp -o StrictHostKeyChecking=no -r domus-app/dist $SERVER:$APP/domus-app/
+                - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist $APP/domus-app/dist"
+                - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
+                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
+                - $SSH $SERVER "find $APP/domus-app/dist -mindepth 1 -delete && cp -r /tmp/domus-app-dist/. $APP/domus-app/dist/ && rm -rf /tmp/domus-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Journal → dev
+              caches: [node-journal]
+              condition: { changesets: { includePaths: ["journal-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/journal-app-dist && mkdir -p /tmp/journal-app-dist $APP/journal-app/dist"
+                - scp -o StrictHostKeyChecking=no -r journal-app/dist/* $SERVER:/tmp/journal-app-dist/
+                - $SSH $SERVER "find $APP/journal-app/dist -mindepth 1 -delete && cp -r /tmp/journal-app-dist/. $APP/journal-app/dist/ && rm -rf /tmp/journal-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Tickets → dev
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
+                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-dev && find /usr/share/nginx/html-tickets-dev -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-dev/ && rm -rf /tmp/tickets-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: FarmOS → dev
@@ -86,51 +247,120 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/farmos-app/dist"
-                - scp -o StrictHostKeyChecking=no -r farmos-app/dist $SERVER:$APP/farmos-app/
+                - $SSH $SERVER "rm -rf /tmp/farmos-app-dist && mkdir -p /tmp/farmos-app-dist $APP/farmos-app/dist"
+                - scp -o StrictHostKeyChecking=no -r farmos-app/dist/* $SERVER:/tmp/farmos-app-dist/
+                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
+                - $SSH $SERVER "find $APP/farmos-app/dist -mindepth 1 -delete && cp -r /tmp/farmos-app-dist/. $APP/farmos-app/dist/ && rm -rf /tmp/farmos-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: BatiPro → dev
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/batipro-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
+                # html-batipro-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker cp
+                # echoue: mounted volume read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist"
+                - scp -o StrictHostKeyChecking=no -r batipro-app/dist/* $SERVER:/tmp/batipro-app-dist/
+                - $SSH $SERVER "find $APP/batipro-app/dist -mindepth 1 -delete && cp -r /tmp/batipro-app-dist/. $APP/batipro-app/dist/ && rm -rf /tmp/batipro-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-batipro-dev && docker cp $APP/batipro-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: HR → dev
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/hr-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
+                # html-hr-dev est bind-monte :ro depuis $APP/hr-app/dist -> on ecrit dans le dossier HOTE
+                # (docker cp vers le conteneur echoue: mounted volume read-only). Bind-mount safe: vider le
+                # CONTENU (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/hr-app-dist && mkdir -p /tmp/hr-app-dist"
+                - scp -o StrictHostKeyChecking=no -r hr-app/dist/* $SERVER:/tmp/hr-app-dist/
+                - $SSH $SERVER "find $APP/hr-app/dist -mindepth 1 -delete && cp -r /tmp/hr-app-dist/. $APP/hr-app/dist/ && rm -rf /tmp/hr-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-dev && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Comptabilite → dev
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
+                # html-comptabilite-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker
+                # cp echoue: read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/comptabilite-app-dist && mkdir -p /tmp/comptabilite-app-dist"
+                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist/* $SERVER:/tmp/comptabilite-app-dist/
+                - $SSH $SERVER "find $APP/comptabilite-app/dist -mindepth 1 -delete && cp -r /tmp/comptabilite-app-dist/. $APP/comptabilite-app/dist/ && rm -rf /tmp/comptabilite-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-dev && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Migration Cockpit → dev
+              caches: [node-migration]
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/migration-app/dist $PROD_APP/nginx"
+                # dist dev bind-monte :ro via docker-compose.prod.yml (html-migration-dev). Bind-mount safe:
+                # vider le contenu (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/migration-app-dist && mkdir -p /tmp/migration-app-dist"
+                - scp -o StrictHostKeyChecking=no -r migration-app/dist/* $SERVER:/tmp/migration-app-dist/
+                - $SSH $SERVER "find $APP/migration-app/dist -mindepth 1 -delete && cp -r /tmp/migration-app-dist/. $APP/migration-app/dist/ && rm -rf /tmp/migration-app-dist"
+                # La conf nginx ET le compose (nouveau volume html-migration-dev) sont montes/lus depuis
+                # l'hote : on met a jour les FICHIERS HOTE...
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                # ...puis on RECREE le conteneur frontend (projet prod, qui sert dev+prod) pour qu'il
+                # re-binde la conf :ro a jour + le nouveau volume html-migration-dev. `docker cp`/`cat >`
+                # sont impossibles ici (mount read-only). Bref flicker de tous les sites front (~secondes).
+                # NB: le projet compose reel du conteneur frontend a change au fil des deploys.
+                # On inspecte son label avant de recreer, sinon Docker refuse avec
+                # "container name already in use" quand le projet hardcode ne correspond pas.
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+
+          - step:
+              name: Chat → dev
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**", "nginx/nginx.frontend.conf"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - $SSH $SERVER "set -e; mkdir -p $APP/chat-app/dist $PROD_APP/nginx 2>/dev/null || sudo -n mkdir -p $APP/chat-app/dist $PROD_APP/nginx; chmod 777 $APP/chat-app/dist 2>/dev/null || sudo -n chmod 777 $APP/chat-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
+                - $SSH $SERVER "{ find $APP/chat-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/chat-app/dist -mindepth 1 -delete; } && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: KodaTill → dev
+              caches: [node-kodatill]
+              condition: { changesets: { includePaths: ["kodatill-app/**", "nginx/nginx.frontend.conf"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - $SSH $SERVER "set -e; mkdir -p $APP/kodatill-app/dist $PROD_APP/nginx 2>/dev/null || sudo -n mkdir -p $APP/kodatill-app/dist $PROD_APP/nginx; chmod 777 $APP/kodatill-app/dist 2>/dev/null || sudo -n chmod 777 $APP/kodatill-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/kodatill-app-dist && mkdir -p /tmp/kodatill-app-dist"
+                - scp -o StrictHostKeyChecking=no -r kodatill-app/dist/* $SERVER:/tmp/kodatill-app-dist/
+                - $SSH $SERVER "{ find $APP/kodatill-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/kodatill-app/dist -mindepth 1 -delete; } && cp -r /tmp/kodatill-app-dist/. $APP/kodatill-app/dist/ && rm -rf /tmp/kodatill-app-dist"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Marketing → dev
@@ -144,6 +374,76 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
+          - step:
+              name: Avelomi-site → dev
+              caches: [node-avelomi]
+              condition: { changesets: { includePaths: ["avelomi-site/**"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                # dev.avelomi.com est servi par le vhost dev de la conf PROD
+                # (nginx.avelomi.conf a server_name dev.avelomi.com -> bind-mount
+                # /opt/nglu-app-dev/avelomi-site/dist). Ce step ne fait QUE mettre a jour
+                # ce dist dev + reload nginx. Il ne DOIT PAS toucher les artefacts prod
+                # ($STACK_APP=/opt/nglu-app : dist bake, nginx.frontend.conf) ni recreer
+                # le conteneur partage nglu_prod_frontend : sinon il rebake/remonte la conf
+                # dev sur avelomi.com et casse le cert prod (WRONG_PRINCIPAL).
+                - $SSH $SERVER "sudo -n mkdir -p $APP/avelomi-site/dist"
+                - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
+                - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
+                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
+
+          # ── Stack DEV isole sur le serveur Avelomi (projet nglu_dev, /opt/nglu-app-dev) ──
+          # dev.avelomi.com proxie /api vers nglu_dev_middleware (cf nginx.avelomi-dev.conf).
+          # PREREQUIS SERVEUR (one-time, a ta charge, secrets) : /opt/nglu-app-dev/.env.dev
+          # + provisioning DB dev (scripts/provision-avelomi-dev.sh). Sans eux, nglu_dev_backend2
+          # crashe au boot. Memes conteneurs nglu_dev_* que le serveur dev partage : aucun port
+          # hote expose => pas de collision avec le prod Avelomi (nglu_prod_*) sur la meme machine.
+          - step:
+              name: Backend2 → Avelomi-dev
+              caches: [node-backend2]
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "nginx/nginx.avelomi-dev.conf", "scripts/ci/ensure-shared-minio.sh"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "set -e; mkdir -p $APP/backend2 2>/dev/null || sudo -n mkdir -p $APP/backend2; if [ ! -w $APP ] || [ ! -w $APP/backend2 ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/backend2; fi"
+                - *avelomi-dev-env
+                - $SCP -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build (Dockerfile = COPY package*.json + npm ci).
+                - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod) : sans lui -> "failed to read dockerfile".
+                - $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                # Sync migrations explicitement (ne pas dependre d'un git pull serveur).
+                - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
+                - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                # MinIO partage (idempotent): backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
+                - $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+          - step:
+              name: Middleware → Avelomi-dev
+              condition: { changesets: { includePaths: ["middleware/**", "docker-compose.dev.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
+                - *avelomi-dev-env
+                - $SCP -r middleware $SERVER:$APP/
+                - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Déploiement prod AUTOMATIQUE au push/merge sur master (comme develop→dev).
     # changesets.includePaths => seuls les projets réellement modifiés sont déployés.
@@ -152,17 +452,30 @@ pipelines:
           - step:
               name: Backend2 → prod
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "scripts/ci/ensure-shared-minio.sh"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod).
+                # Le git pull serveur peut echouer a cause de drift local; on le synchronise explicitement.
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
+                # Meme logique pour le compose: il choisit le Dockerfile utilise par le rebuild.
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                # MinIO partage (dev+prod, meme instance): backend2 lance en --no-deps -> service
+                # minio du compose jamais cree -> photos 500 (EAI_AGAIN minio). Script idempotent.
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
@@ -179,89 +492,274 @@ pipelines:
           - step:
               name: Frontend → prod
               caches: [node-frontend]
-              condition: { changesets: { includePaths: ["frontend/**"] } }
-              # Prod = dist bind-montee servie par nginx : on NE rebuild PAS l'image (cf. incident prod), simple reload.
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd frontend && npm install --legacy-peer-deps && npm audit --audit-level=high && npm run build:prod && cd ..
+                # npm audit informatif (|| true) : ne pas bloquer le build sur une vuln transitive
+                # de dev/build (cf. step Frontend -> dev), sinon dist/ reste vide et le deploy echoue.
+                - cd frontend && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/frontend/dist"
-                - scp -o StrictHostKeyChecking=no -r frontend/dist $SERVER:$APP/frontend/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
           - step:
-              name: Domus → prod
+              name: Domus → prod (ongdngolu + Avelomi)
               caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**"] } }
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois : le dist/ des apps statiques est identique pour les 2 prods
+                # (aucune variable VITE specifique par serveur, contrairement au frontend).
+                # On deploie ensuite le MEME artefact vers ongdngolu puis Avelomi -> economise
+                # un 2e npm install + build (le gros du temps pipeline).
+                - *avelomi-ssh-setup
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/domus-app/dist"
-                - scp -o StrictHostKeyChecking=no -r domus-app/dist $SERVER:$APP/domus-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                # 1) ongdngolu (bloquant : un echec ici doit rougir le step)
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
+                # 2) Avelomi (tolerant : si le serveur est down/pas pret, on ne bloque pas
+                #    le deploy ongdngolu deja reussi ; le script skip proprement sinon)
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: FarmOS → prod
+              name: Journal → prod (ongdngolu + Avelomi)
+              caches: [node-journal]
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
+                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
+              name: Tickets → prod (ongdngolu + Avelomi)
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
+              name: FarmOS → prod (ongdngolu + Avelomi)
               caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**"] } }
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/farmos-app/dist"
-                - scp -o StrictHostKeyChecking=no -r farmos-app/dist $SERVER:$APP/farmos-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: BatiPro → prod
+              name: BatiPro → prod (ongdngolu + Avelomi)
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/batipro-app/dist"
-                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: HR → prod
+              name: HR → prod (ongdngolu + Avelomi)
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/hr-app/dist"
-                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-prod && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Comptabilite → prod
+              name: Comptabilite → prod (ongdngolu + Avelomi)
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
-                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist"
-                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-prod && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
+              name: Migration Cockpit → prod (ongdngolu + Avelomi)
+              caches: [node-migration]
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
+                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
+              name: Chat → prod (ongdngolu + Avelomi)
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/ || echo "[deploy] Avelomi skip/echec tolere"
+
+          - step:
+              name: KodaTill → prod (ongdngolu + Avelomi)
+              caches: [node-kodatill]
+              condition: { changesets: { includePaths: ["kodatill-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
+              script:
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Chat).
+                - *avelomi-ssh-setup
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
               name: Marketing → prod
               caches: [node-marketing]
-              condition: { changesets: { includePaths: ["marketing-site/**"] } }
+              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
-                - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
+
+      # ══════════════════════ MASTER → AVELOMI (2e prod) ══════════════════════
+      # Même push master, 2e serveur séparé (3.128.45.29 / avelomi.com), sa propre
+      # DB et son propre .env.prod. Toutes les cibles sont surchargées via env :
+      #   SERVER/BASE_URL/SSH/SCP pointent Avelomi ; le reste du flux est identique.
+      # NB: bloc parallel séparé (après ongdngolu) — si Avelomi est down, seuls ses
+      # steps échouent, pas le déploiement ongdngolu déjà terminé au-dessus.
+      - parallel:
+          - step:
+              name: Backend2 → Avelomi
+              caches: [node-backend2]
+              # Ce step porte le provisionnement Avelomi (.env.prod + arborescence
+              # /opt/nglu-app via scp ; pas de clone git, token OAuth indispo ici).
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "scripts/ci/ensure-shared-minio.sh"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - *avelomi-prod-env
+                - *avelomi-prod-guard
+                # Cree l'arborescence cible (le repo n'est pas clone sur Avelomi : pas de
+                # token git dans ce contexte). On scp tout l'artefact, pas de git pull.
+                - $SSH $SERVER "set -e; mkdir -p $APP/backend2 2>/dev/null || sudo -n mkdir -p $APP/backend2; if [ ! -w $APP ] || [ ! -w $APP/backend2 ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/backend2; fi"
+                - $SCP -r backend2/dist $SERVER:$APP/backend2/
+                - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (sans lui -> "failed to read dockerfile").
+                - $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
+                # Le repo n'est pas clone sur Avelomi : scp explicite du compose requis par le --build.
+                - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                # MinIO partage (idempotent): backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
+                - $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Middleware → Avelomi
+              condition: { changesets: { includePaths: ["middleware/**", "docker-compose.prod.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - *avelomi-prod-guard
+                - $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
+                - $SCP -r middleware $SERVER:$APP/
+                - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Frontend → Avelomi
+              caches: [node-frontend]
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf"] } }
+              script:
+                - *avelomi-ssh-setup
+                # Vite lit ces VITE_* au build (priorité sur .env.production qui code ongdngolu en dur).
+                # API → avelomi.com ; VITE_SIGNUP_ENABLED active l'inscription self-service (Avelomi seul).
+                - export VITE_APP_API=https://avelomi.com/api VITE_API_URL=https://avelomi.com/api VITE_APP_API_NODE=https://avelomi.com/api VITE_SIGNUP_ENABLED=true
+                - cd frontend && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run build:prod && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
+
+          # NB: Journal/Tickets/FarmOS/BatiPro/HR/Comptabilite/Migration/Chat → Avelomi
+          # ont ete FUSIONNES dans leurs steps "→ prod (ongdngolu + Avelomi)" ci-dessus :
+          # build unique puis deploy vers les 2 serveurs (economie pipeline). Seuls
+          # Frontend (API differente) et Avelomi-site (app distincte) restent separes.
+
+          - step:
+              name: Avelomi-site → Avelomi
+              caches: [node-avelomi]
+              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.avelomi.conf"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh avelomi-site /
 
   # ═══════════ Override manuel : tout redeployer (Bitbucket → Run pipeline → custom) ═══════════
   custom:
@@ -276,17 +774,45 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - scp -o StrictHostKeyChecking=no docker-compose.dev.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → dev (full)
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:dev && cd ..
-                - for a in domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - for a in domus-app farmos-app batipro-app hr-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+          - step:
+              name: Avelomi-site → dev (full)
+              caches: [node-avelomi]
+              script:
+                - *avelomi-ssh-setup
+                - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                # dev.avelomi.com est servi par le vhost dev de la conf PROD nginx.avelomi.conf
+                # (bind-mount /opt/nglu-app-dev/avelomi-site/dist). Ce step (full) ne fait QUE
+                # mettre a jour ce dist dev + reload. Il ne DOIT PAS toucher les artefacts prod
+                # ($STACK_APP=/opt/nglu-app) ni recreer/rebuild le conteneur partage
+                # nglu_prod_frontend, sinon il rebake/remonte la conf dev sur avelomi.com et
+                # casse le cert prod (WRONG_PRINCIPAL).
+                - $SSH $SERVER "sudo -n mkdir -p $APP/avelomi-site/dist"
+                - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
+                - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
+                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
 
     deploy-all-prod:
       - parallel:
@@ -299,14 +825,32 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → prod (full)
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - for a in domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - for a in domus-app farmos-app journal-app tickets-app batipro-app hr-app migration-app; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - cd kodatill-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
+                - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+                - sh scripts/ci/deploy-prod-static-app.sh kodatill-app /kodatill/

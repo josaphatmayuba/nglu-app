@@ -2,6 +2,7 @@
 import React from "react";
 import { Icon } from "./icons";
 import { api } from "./api";
+import { AutocompleteDB, Autocomplete } from "./quickentry";
 
 // ─── Dossier vétérinaire complet (#2) ────────────────────────────────────────
 // Examen clinique enrichi + ordonnance (lignes médicament/dose/durée) + signature
@@ -176,16 +177,35 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
             </select>
           </Field>
           <Field label={lang === "fr" ? "Vétérinaire" : "Veterinarian"}>
-            <input value={form.vet} onChange={set("vet")} disabled={signed} placeholder="Dr…" style={inputStyle}/>
+            {signed
+              ? <input value={form.vet || ""} disabled placeholder="Dr…" style={inputStyle}/>
+              : <AutocompleteDB
+                  value={form.vet || ""}
+                  onChange={(v) => setForm((f) => ({ ...f, vet: v }))}
+                  useLabel noAdd lang={lang}
+                  category="staff:vet"
+                  placeholder={lang === "fr" ? "Rechercher un vétérinaire (RH)…" : "Search a vet (HR)…"}
+                  customFetch={() => api.listFarmosStaff("vétérinaire").then((rows) =>
+                    (rows || []).map((u) => ({
+                      id: u.id,
+                      valueFr: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`,
+                      valueEn: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`,
+                    }))
+                  )}
+                />}
           </Field>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Field label={lang === "fr" ? "Animal / lot" : "Animal / lot"}>
-            <select value={form.animal_id} onChange={set("animal_id")} disabled={signed} style={inputStyle}>
-              <option value="">{lang === "fr" ? "— (troupeau)" : "— (herd)"}</option>
-              {(animals || []).map((a) => <option key={a._pk || a.id} value={a._pk || a.id}>{a.name || a.id}</option>)}
-            </select>
+            {signed
+              ? <input value={(animals || []).find((a) => String(a._pk || a.id) === String(form.animal_id))?.name || (lang === "fr" ? "— (troupeau)" : "— (herd)")} disabled style={inputStyle}/>
+              : <Autocomplete
+                  value={form.animal_id || ""}
+                  onChange={(v) => setForm((f) => ({ ...f, animal_id: v }))}
+                  placeholder={lang === "fr" ? "— (troupeau)" : "— (herd)"}
+                  options={(animals || []).map((a) => ({ value: a._pk || a.id, label: a.name || a.id }))}
+                />}
           </Field>
           <Field label={lang === "fr" ? "Température °C" : "Temperature °C"}>
             <input type="number" step="0.1" value={form.temperature} onChange={set("temperature")} disabled={signed} style={inputStyle}/>
@@ -283,8 +303,8 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
               {lang === "fr" ? "Signé par " : "Signed by "}<strong>{exam.signedBy || exam.vet || "—"}</strong>
               {exam.signedAt ? ` · ${String(exam.signedAt).slice(0, 10)}` : ""}
             </div>
-            <button className="btn btn-sm" onClick={() => api.downloadVetExamPdf(exam._pk || exam.id).catch((e) => setErr(e.message))}>
-              <Icon name="download" size={12} color="var(--ink-700)"/>PDF
+            <button className="btn btn-sm" onClick={() => api.printVetExam(exam._pk || exam.id).catch((e) => setErr(e.message))}>
+              <Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Imprimer / PDF" : "Print / PDF"}
             </button>
           </div>
         ) : (
@@ -295,11 +315,25 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
 
         {!signed && (
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="btn" onClick={() => save(false)} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>
-              {lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+            <button
+              className="btn"
+              onClick={() => save(false)}
+              disabled={saving}
+              title={lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+              aria-label={lang === "fr" ? "Enregistrer (brouillon)" : "Save (draft)"}
+              style={{ flex: "0 0 auto", justifyContent: "center", padding: "10px 14px" }}
+            >
+              <Icon name="save" size={15} color="var(--ink-700)"/>
             </button>
-            <button className="btn btn-primary" onClick={() => save(true)} disabled={saving} style={{ flex: 1, justifyContent: "center" }}>
-              <Icon name="check" size={13} color="#FBF8F2"/>{lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+            <button
+              className="btn btn-primary"
+              onClick={() => save(true)}
+              disabled={saving}
+              title={lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+              aria-label={lang === "fr" ? "Signer & verrouiller" : "Sign & lock"}
+              style={{ flex: 1, justifyContent: "center", padding: "10px 14px" }}
+            >
+              <Icon name="check" size={15} color="#FBF8F2"/>
             </button>
           </div>
         )}
@@ -433,10 +467,14 @@ export const FarmosDocumentsSection = ({ lang, animals }) => {
         <select value={form.doc_type} onChange={(e) => setForm((f) => ({ ...f, doc_type: e.target.value }))} style={{ ...inputStyle, flex: 1 }}>
           {DOC_TYPES.map((d) => <option key={d.id} value={d.id}>{lang === "fr" ? d.fr : d.en}</option>)}
         </select>
-        <select value={form.animal_id} onChange={(e) => setForm((f) => ({ ...f, animal_id: e.target.value }))} style={{ ...inputStyle, flex: 1 }}>
-          <option value="">{lang === "fr" ? "— animal" : "— animal"}</option>
-          {(animals || []).map((a) => <option key={a._pk || a.id} value={a._pk || a.id}>{a.name || a.id}</option>)}
-        </select>
+        <div style={{ flex: 1 }}>
+          <Autocomplete
+            value={form.animal_id || ""}
+            onChange={(v) => setForm((f) => ({ ...f, animal_id: v }))}
+            placeholder={lang === "fr" ? "— animal" : "— animal"}
+            options={(animals || []).map((a) => ({ value: a._pk || a.id, label: a.name || a.id }))}
+          />
+        </div>
         <input type="date" value={form.issued_date} onChange={(e) => setForm((f) => ({ ...f, issued_date: e.target.value }))} style={inputStyle}/>
         <input ref={fileRef} type="file" style={{ fontSize: 12, flex: 1, minWidth: 140 }}/>
         <button className="btn btn-sm btn-primary" onClick={upload} disabled={busy}>

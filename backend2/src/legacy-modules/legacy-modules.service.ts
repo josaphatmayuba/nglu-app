@@ -31,6 +31,11 @@ type Config = {
   totalKey?: string;
   searchable?: string[];
   activeField?: "status" | "isActive";
+  // true si la table porte organization_id : on isole les lignes par
+  // organisation. Les resources sans ce flag n ont PAS encore de colonne org
+  // en base (voir migration a prevoir : quotes, manualPayments, adjustInvoices,
+  // emails, emailConfigs, announcements) et restent non isolees pour l instant.
+  orgScoped?: boolean;
 };
 
 @Injectable()
@@ -40,13 +45,13 @@ export class LegacyModulesService {
     "email-config": { table: emailConfigs, listKey: "getAllEmailConfig", totalKey: "totalEmailConfig", searchable: ["emailConfigName", "emailHost", "emailUser"] },
     email: { table: emails, listKey: "getAllEmail", totalKey: "totalEmail", searchable: ["emailConfigName", "to", "subject"] },
     "manual-payment": { table: manualPayments, listKey: "getAllManualPayment", totalKey: "totalManualPayment", searchable: ["note", "paymentStatus"] },
-    "payment-sale-invoice": { table: paymentSaleInvoices, listKey: "getAllPaymentSaleInvoice", totalKey: "totalPaymentSaleInvoice", searchable: ["note"] },
-    "payment-purchase-invoice": { table: paymentPurchaseInvoices, listKey: "getAllPaymentPurchaseInvoice", totalKey: "totalPaymentPurchaseInvoice", searchable: ["note"] },
+    "payment-sale-invoice": { table: paymentSaleInvoices, listKey: "getAllPaymentSaleInvoice", totalKey: "totalPaymentSaleInvoice", searchable: ["note"], orgScoped: true },
+    "payment-purchase-invoice": { table: paymentPurchaseInvoices, listKey: "getAllPaymentPurchaseInvoice", totalKey: "totalPaymentPurchaseInvoice", searchable: ["note"], orgScoped: true },
     "adjust-inventory": { table: adjustInvoices, listKey: "getAllAdjustInvoice", totalKey: "_count", searchable: ["note"] },
     quote: { table: quotes, listKey: "getAllQuote", totalKey: "totalQuote", searchable: ["quoteName", "note"] },
     "purchase-reorder-invoice": { table: purchaseReorderInvoices, listKey: "getAllPurchaseReorderInvoice", totalKey: "totalReorderInvoice", searchable: ["reorderInvoiceId"] },
-    "return-purchase-invoice": { table: returnPurchaseInvoices, listKey: "allPurchaseInvoice", totalKey: "aggregations", searchable: ["id", "invoiceMemoNo"] },
-    "return-sale-invoice": { table: returnSaleInvoices, listKey: "allSaleInvoice", totalKey: "aggregations", searchable: ["id", "invoiceMemoNo"] },
+    "return-purchase-invoice": { table: returnPurchaseInvoices, listKey: "allPurchaseInvoice", totalKey: "aggregations", searchable: ["id", "invoiceMemoNo"], orgScoped: true },
+    "return-sale-invoice": { table: returnSaleInvoices, listKey: "allSaleInvoice", totalKey: "aggregations", searchable: ["id", "invoiceMemoNo"], orgScoped: true },
     "product-product-attribute-value": {
       table: productProductAttributeValues,
       listKey: "getAllProductProductAttributeValue",
@@ -58,17 +63,23 @@ export class LegacyModulesService {
     "slider-images": { table: attachments, listKey: "getAllSliderImages", totalKey: "totalSliderImages", searchable: ["name"] },
     "product-image": { table: attachments, listKey: "getAllProductImage", totalKey: "totalProductImage", searchable: ["name"] },
     "customer-profile-image": { table: attachments, listKey: "getAllCustomerProfileImage", totalKey: "totalCustomerProfileImage", searchable: ["name"] },
-    "product-reports": { table: products, listKey: "getAllProduct", totalKey: "totalProduct", searchable: ["name", "sku"] },
+    "product-reports": { table: products, listKey: "getAllProduct", totalKey: "totalProduct", searchable: ["name", "sku"], orgScoped: true },
   };
 
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async list(resource: string, query: Record<string, string>) {
-    if (resource === "reorder-quantity") return this.reorderQuantity(query);
-    if (resource === "product-reports") return this.productReports(query);
+  // Filtre organisation applique uniquement aux resources org-scoped.
+  private orgFilter(cfg: Config, orgId: number) {
+    return cfg.orgScoped ? eq(cfg.table.organizationId, orgId) : undefined;
+  }
+
+  async list(resource: string, query: Record<string, string>, orgId: number) {
+    if (resource === "reorder-quantity") return this.reorderQuantity(query, orgId);
+    if (resource === "product-reports") return this.productReports(query, orgId);
 
     const cfg = this.config(resource);
     const table = cfg.table;
+    const orgClause = this.orgFilter(cfg, orgId);
 
     if (resource === "email" && query["emailConfigName"]) {
       const rows = await this.db.select().from(table).where(eq(table.emailConfigName, query["emailConfigName"])).orderBy(desc(table.id));
@@ -76,23 +87,23 @@ export class LegacyModulesService {
     }
 
     if (query["query"] === "all" || Object.keys(query).length === 0) {
-      const where = table.status ? eq(table.status, "true") : undefined;
+      const where = and(table.status ? eq(table.status, "true") : undefined, orgClause);
       const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id));
       if (query["query"] === "all") return rows;
       return this.wrap(resource, cfg, rows, rows.length);
     }
 
-    const where = this.whereClause(cfg, query);
+    const where = and(this.whereClause(cfg, query), orgClause);
     const { skip, limit } = this.pagination(query);
     const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
     const [{ count }] = await this.db.select({ count: sql<number>`count(*)` }).from(table).where(where);
     return this.wrap(resource, cfg, rows, Number(count));
   }
 
-  async findOne(resource: string, id: string) {
+  async findOne(resource: string, id: string, orgId: number) {
     const cfg = this.config(resource);
     const table = cfg.table;
-    const rows = await this.db.select().from(table).where(eq(table.id, id as any)).limit(1);
+    const rows = await this.db.select().from(table).where(and(eq(table.id, id as any), this.orgFilter(cfg, orgId))).limit(1);
     if (!rows.length) throw new NotFoundException(`${resource} not found.`);
 
     if (resource === "adjust-inventory") {
@@ -108,15 +119,16 @@ export class LegacyModulesService {
     return rows[0];
   }
 
-  async create(resource: string, body: Record<string, any>): Promise<any> {
+  async create(resource: string, body: Record<string, any>, orgId: number): Promise<any> {
     if (resource === "reorder-quantity") {
-      return this.create("purchase-reorder-invoice", body);
+      return this.create("purchase-reorder-invoice", body, orgId);
     }
 
     const cfg = this.config(resource);
     const values = this.prepareValues(resource, body);
     const payload: Record<string, any> = {
       ...values,
+      ...(cfg.orgScoped ? { organizationId: orgId } : {}),
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     };
@@ -131,65 +143,74 @@ export class LegacyModulesService {
       await this.insertChildren(quoteProducts, body.quoteProduct, { quoteId: id });
     }
 
-    return this.findOne(resource, String(id));
+    return this.findOne(resource, String(id), orgId);
   }
 
-  async update(resource: string, id: string, body: Record<string, any>) {
+  async update(resource: string, id: string, body: Record<string, any>, orgId: number) {
     const cfg = this.config(resource);
-    await this.ensureExists(cfg.table, id, resource);
+    await this.ensureExists(cfg, id, resource, orgId);
     await this.db
       .update(cfg.table)
       .set({ ...this.prepareValues(resource, body, true), updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(cfg.table.id, id as any));
-    return this.findOne(resource, id);
+      .where(and(eq(cfg.table.id, id as any), this.orgFilter(cfg, orgId)));
+    return this.findOne(resource, id, orgId);
   }
 
-  async patch(resource: string, id: string | null, body: Record<string, any>) {
+  async patch(resource: string, id: string | null, body: Record<string, any>, orgId: number) {
     if (resource === "manual-payment" && id === null) {
       return { message: "Manual payment updated successfully" };
     }
 
     if (resource === "manual-payment" && body.paymentStatus) {
-      return this.update(resource, String(id), body);
+      return this.update(resource, String(id), body, orgId);
     }
 
     const cfg = this.config(resource);
-    await this.ensureExists(cfg.table, String(id), resource);
+    await this.ensureExists(cfg, String(id), resource, orgId);
     await this.db
       .update(cfg.table)
       .set({ status: body.status ?? "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(cfg.table.id, id as any));
+      .where(and(eq(cfg.table.id, id as any), this.orgFilter(cfg, orgId)));
     return { message: `${resource} status updated successfully` };
   }
 
-  async delete(resource: string, id: string) {
+  async delete(resource: string, id: string, orgId: number) {
     const cfg = this.config(resource);
-    await this.ensureExists(cfg.table, id, resource);
-    await this.db.delete(cfg.table).where(eq(cfg.table.id, id as any));
+    await this.ensureExists(cfg, id, resource, orgId);
+    // Soft delete quand la table le supporte ; sinon DELETE physique (comportement historique).
+    if (cfg.table.status) {
+      await this.db
+        .update(cfg.table)
+        .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(eq(cfg.table.id, id as any), this.orgFilter(cfg, orgId)));
+    } else {
+      await this.db.delete(cfg.table).where(and(eq(cfg.table.id, id as any), this.orgFilter(cfg, orgId)));
+    }
     return { message: `${resource} deleted successfully` };
   }
 
-  async verifyManualPayment(id: string, body: Record<string, any>) {
-    return this.update("manual-payment", id, { ...body, paymentStatus: body.paymentStatus ?? "verified" });
+  async verifyManualPayment(id: string, body: Record<string, any>, orgId: number) {
+    return this.update("manual-payment", id, { ...body, paymentStatus: body.paymentStatus ?? "verified" }, orgId);
   }
 
-  private async reorderQuantity(query: Record<string, string>) {
+  private async reorderQuantity(query: Record<string, string>, orgId: number) {
     const { skip, limit } = this.pagination(query);
+    const reorderCond = sql`${products.reorderQuantity} IS NOT NULL AND ${products.productQuantity} <= ${products.reorderQuantity}`;
     const rows = await this.db
       .select()
       .from(products)
-      .where(sql`${products.reorderQuantity} IS NOT NULL AND ${products.productQuantity} <= ${products.reorderQuantity}`)
+      .where(and(reorderCond, eq(products.organizationId, orgId)))
       .orderBy(desc(products.id))
       .limit(limit)
       .offset(skip);
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
-      .where(sql`${products.reorderQuantity} IS NOT NULL AND ${products.productQuantity} <= ${products.reorderQuantity}`);
+      .where(and(reorderCond, eq(products.organizationId, orgId)));
     return { getAllReOderList: rows, _count: { id: Number(count) } };
   }
 
-  private async productReports(query: Record<string, string>) {
+  private async productReports(query: Record<string, string>, orgId: number) {
     const { skip, limit } = this.pagination(query);
 
     if (query["query"] === "top-selling-products") {
@@ -199,19 +220,21 @@ export class LegacyModulesService {
           totalQuantitySold: sql<number>`SUM(${saleInvoiceProducts.productQuantity})`,
         })
         .from(saleInvoiceProducts)
-        .innerJoin(saleInvoices, and(eq(saleInvoices.id, saleInvoiceProducts.invoiceId), eq(saleInvoices.status, "true")))
+        .innerJoin(saleInvoices, and(eq(saleInvoices.id, saleInvoiceProducts.invoiceId), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
         .groupBy(saleInvoiceProducts.productId)
         .orderBy(desc(sql`SUM(${saleInvoiceProducts.productQuantity})`))
         .limit(limit)
         .offset(skip);
 
       const ids = sold.map((row) => Number(row.productId)).filter(Boolean);
-      const rows = ids.length ? await this.db.select().from(products).where(inArray(products.id, ids as any)) : [];
+      const rows = ids.length
+        ? await this.db.select().from(products).where(and(inArray(products.id, ids as any), eq(products.organizationId, orgId)))
+        : [];
       const sorted = ids.map((id) => rows.find((row) => Number(row.id) === id)).filter(Boolean);
       return { getAllTopSellingProduct: sorted, totalTopSellingProduct: sorted.length };
     }
 
-    const rows = await this.db.select().from(products).orderBy(desc(products.id)).limit(limit).offset(skip);
+    const rows = await this.db.select().from(products).where(eq(products.organizationId, orgId)).orderBy(desc(products.id)).limit(limit).offset(skip);
     return { getAllNewProduct: rows, totalNewProduct: rows.length };
   }
 
@@ -279,8 +302,8 @@ export class LegacyModulesService {
     return clauses.length ? and(...clauses) : undefined;
   }
 
-  private async ensureExists(table: any, id: string, resource: string) {
-    const rows = await this.db.select({ id: table.id }).from(table).where(eq(table.id, id as any)).limit(1);
+  private async ensureExists(cfg: Config, id: string, resource: string, orgId: number) {
+    const rows = await this.db.select({ id: cfg.table.id }).from(cfg.table).where(and(eq(cfg.table.id, id as any), this.orgFilter(cfg, orgId))).limit(1);
     if (!rows.length) throw new NotFoundException(`${resource} not found.`);
   }
 

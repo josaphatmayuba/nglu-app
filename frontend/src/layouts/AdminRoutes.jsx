@@ -34,6 +34,7 @@ const PaymentRoutes = lazy(() => import("./AdminRoutes/PaymentRoutes"));
 const UomRoutes = lazy(() => import("./AdminRoutes/UomRoutes"));
 const CommonRoutes = lazy(() => import("./AdminRoutes/CommonRoutes"));
 const AccountingRoutes = lazy(() => import("./AdminRoutes/AccountingRoutes"));
+const SignatureRoutes = lazy(() => import("./AdminRoutes/SignatureRoutes"));
 
 export default function AdminRoutes() {
   return (
@@ -69,6 +70,7 @@ export default function AdminRoutes() {
         <UomRoutes />
         <CommonRoutes />
         <AccountingRoutes />
+        <SignatureRoutes />
       </Suspense>
     </>
   );

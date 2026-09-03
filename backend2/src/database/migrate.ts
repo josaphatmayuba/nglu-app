@@ -12,12 +12,10 @@ type JournalEntry = {
   breakpoints: boolean;
 };
 
-// Seuil d'auto-découverte : toute migration dont le numéro est >= à ce seuil est
-// considérée idempotente (CREATE TABLE IF NOT EXISTS / pattern SET+IF+PREPARE) et
-// rejouée au boot. Évite la liste codée en dur : une nouvelle migration >=0070
-// est donc appliquée automatiquement, même si le `when` du journal est en
-// désordre (drift connu 0080-0087) — plus aucun oubli possible.
-const OPERATIONAL_REPAIR_MIN_INDEX = 70;
+// Seuil d'auto-découverte : seules les migrations opérationnelles récentes sont
+// rejouées au boot. Rejouer tout depuis 0070 réexécutait aussi de grosses
+// migrations legacy/data-seed et gardait l'API hors ligne pendant le démarrage.
+const OPERATIONAL_REPAIR_MIN_INDEX = 175;
 
 // Numéro de migration extrait du tag (ex. "0088_hr_public_holidays" -> 88).
 function migrationIndex(tag: string): number {
@@ -50,16 +48,141 @@ async function main() {
     await migrate(db, { migrationsFolder: "./drizzle" });
     console.log("✔ Migrations complete.");
   } catch (err: any) {
-    // Ignore "table already exists" errors - these can occur in certain edge cases
-    // and don't prevent the application from running
-    if (err.code === 'ER_TABLE_EXISTS_ERROR' || err.errno === 1050) {
-      console.log("✔ Migrations complete (some tables already exist).");
+    // Schéma déjà à jour mais suivi __drizzle_migrations désynchronisé (ex. deux
+    // migrations partageant le même préfixe 0015 → le suivi se fige à la première,
+    // Drizzle rejoue la seconde et bute sur des objets déjà créés). Drizzle
+    // enveloppe l'erreur MySQL dans DrizzleQueryError : le code/errno réel est
+    // dans err.cause. On tolère les erreurs « déjà existe / dupliqué » à tous les
+    // niveaux pour éviter le crash-loop du conteneur (dev ET prod).
+    if (isAlreadyAppliedError(err)) {
+      console.log("✔ Migrations complete (schema already up to date — duplicate-object errors ignored).");
     } else {
       throw err;
     }
   }
+  // Filet de sécurité : sur une base NEUVE, migrate() de Drizzle s'arrête à la
+  // première migration qui bute sur un objet déjà présent (baseline) et NE rejoue
+  // PAS les suivantes → schéma incomplet (ex. table `organizations` absente). On
+  // applique donc ici toute migration du journal encore non enregistrée, statement
+  // par statement, en tolérant les pièges connus (voir applyMissingJournalMigrations).
+  await applyMissingJournalMigrations();
   await applyOperationalRepairs();
   await connection.end(); // pool.end() drains all connections
+}
+
+// Codes MySQL tolérés lors du rattrapage : objet déjà présent (schéma en avance)
+// ou erreurs de pur backfill de DONNÉES sans effet sur une base vide.
+const CATCHUP_TOLERATED_ERRNOS = new Set([
+  1050, 1060, 1061, 1062, 1826, 1005, // objets déjà existants / dupliqués
+  1091, 1146, // DROP objet inexistant / table absente (dépendance sautée)
+  1267, 1265, 1137, // mix collations / data truncated / temp table rouverte (backfill data)
+]);
+
+// Applique toute migration du journal Drizzle dont le hash n'est pas encore dans
+// __drizzle_migrations. Idempotent : ne touche pas ce qui est déjà appliqué.
+// Robuste aux pièges des fichiers .sql du repo qui font échouer migrate() :
+//   - "--> statement-breakpoint" inline en fin de ligne (0015),
+//   - ce même texte cité dans un commentaire (0135),
+//   - blocs multi-statements SET/PREPARE/EXECUTE (0098),
+//   - "ADD COLUMN IF NOT EXISTS" interdit en MySQL 8 (0160).
+async function applyMissingJournalMigrations() {
+  const entries = journalEntries();
+  const [appliedRows] = await connection.execute<MigrationStateRow[]>(
+    "select created_at from __drizzle_migrations",
+  );
+  const appliedWhen = new Set(appliedRows.map((r) => Number(r.created_at)));
+
+  const catchupConnection = await connection.getConnection();
+  let applied = 0;
+  try {
+    for (const entry of entries) {
+      if (appliedWhen.has(Number(entry.when))) continue;
+      const migrationPath = `./drizzle/${entry.tag}.sql`;
+      if (!existsSync(migrationPath)) continue;
+
+      // MySQL 8 ne supporte pas "ADD COLUMN IF NOT EXISTS" / "DROP COLUMN IF EXISTS" :
+      // on retire le "IF [NOT] EXISTS" au niveau colonne (l'erreur 1060/1091 éventuelle
+      // est tolérée ci-dessous).
+      const raw = readFileSync(migrationPath, "utf8")
+        .replace(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS/gi, "ADD COLUMN")
+        .replace(/DROP\s+COLUMN\s+IF\s+EXISTS/gi, "DROP COLUMN")
+        .replace(/ADD\s+IF\s+NOT\s+EXISTS/gi, "ADD")
+        .replace(/DROP\s+IF\s+EXISTS/gi, "DROP");
+
+      let hadFatal = false;
+      // Chaque bloc « breakpoint » peut contenir plusieurs statements séparés par ';'
+      // (ex. SET @sql:=…; PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s). Le
+      // pool n'active PAS multipleStatements (surface d'injection) : on ré-éclate donc
+      // chaque bloc en statements individuels via splitSqlStatements (respecte les quotes).
+      for (const block of splitBreakpointStatements(raw)) {
+        for (const statement of splitSqlStatements(block)) {
+          try {
+            await catchupConnection.query(statement);
+          } catch (stmtErr: any) {
+            if (CATCHUP_TOLERATED_ERRNOS.has(Number(stmtErr?.errno))) continue;
+            console.error(
+              `✖ Catch-up stopped at ${entry.tag} (errno ${stmtErr?.errno}): ${stmtErr?.sqlMessage ?? stmtErr?.message}`,
+            );
+            hadFatal = true;
+            break;
+          }
+        }
+        if (hadFatal) break;
+      }
+      if (hadFatal) break;
+
+      await connection.execute("insert into __drizzle_migrations (`hash`, `created_at`) values (?, ?)", [
+        migrationHash(entry.tag),
+        entry.when,
+      ]);
+      applied += 1;
+    }
+  } finally {
+    catchupConnection.release();
+  }
+  if (applied > 0) {
+    console.log(`✔ Catch-up applied ${applied} journal migration(s) that migrate() had skipped.`);
+  }
+}
+
+// Découpe un fichier .sql en statements sur le marqueur Drizzle. On ne coupe QUE
+// sur "--> statement-breakpoint" suivi d'une fin de ligne, jamais quand ce texte
+// apparaît au milieu d'une phrase de commentaire (ex. "... séparés par --> statement-breakpoint,").
+function splitBreakpointStatements(sqlText: string): string[] {
+  return sqlText
+    .split(/--> statement-breakpoint\s*\r?\n/)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0);
+}
+
+// Codes/errno MySQL signalant qu'un objet existe déjà ou est dupliqué : le
+// schéma est en avance sur le suivi des migrations, ce n'est pas une vraie panne.
+const ALREADY_APPLIED_CODES = new Set([
+  "ER_TABLE_EXISTS_ERROR", // 1050 CREATE TABLE
+  "ER_DUP_FIELDNAME", // 1060 ADD COLUMN déjà présent
+  "ER_DUP_KEYNAME", // 1061 index déjà présent
+  "ER_DUP_ENTRY", // 1062 clé unique dupliquée
+  "ER_FK_DUP_NAME", // 1826 contrainte FK déjà présente
+  "ER_CANT_CREATE_TABLE", // 1005 (souvent FK déjà existante)
+]);
+const ALREADY_APPLIED_ERRNOS = new Set([1050, 1060, 1061, 1062, 1826, 1005]);
+
+// Drizzle enveloppe l'erreur MySQL (DrizzleQueryError) : on déroule la chaîne
+// `cause` pour retrouver le code/errno réel à n'importe quelle profondeur.
+function isAlreadyAppliedError(err: unknown): boolean {
+  let current: any = err;
+  let depth = 0;
+  while (current && depth < 10) {
+    if (
+      (current.code && ALREADY_APPLIED_CODES.has(current.code)) ||
+      (current.errno && ALREADY_APPLIED_ERRNOS.has(Number(current.errno)))
+    ) {
+      return true;
+    }
+    current = current.cause;
+    depth += 1;
+  }
+  return false;
 }
 
 async function baselineExistingDatabase() {
@@ -211,7 +334,13 @@ async function applyOperationalRepairs() {
 function splitSqlStatements(sqlText: string) {
   const source = sqlText
     .split(/\r?\n/)
-    .filter((line) => !line.trim().startsWith("--> statement-breakpoint"))
+    // Retire les breakpoints Drizzle ET les commentaires pleine ligne `--`.
+    // Une apostrophe dans un commentaire (ex. "d'approbation") cassait sinon le
+    // suivi des quotes ci-dessous -> ER_PARSE_ERROR (cf. 0106/0108).
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith("--> statement-breakpoint") && !t.startsWith("--");
+    })
     .join("\n");
   const statements: string[] = [];
   let current = "";

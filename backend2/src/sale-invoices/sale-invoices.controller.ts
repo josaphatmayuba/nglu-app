@@ -49,40 +49,40 @@ export class SaleInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get hold invoices" })
   @Get("hold")
-  findHold() {
-    return this.saleInvoicesService.findHold();
+  findHold(@CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findHold(orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get invoices by customerId query param" })
   @Get("customer")
-  findByCustomerQuery(@Query("customerId", ParseIntPipe) customerId: number) {
-    return this.saleInvoicesService.findByCustomer(customerId);
+  findByCustomerQuery(@Query("customerId", ParseIntPipe) customerId: number, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findByCustomer(customerId, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get invoices for a specific customer" })
   @Get("customer/:id")
-  findByCustomer(@Param("id", ParseIntPipe) customerId: number) {
-    return this.saleInvoicesService.findByCustomer(customerId);
+  findByCustomer(@Param("id", ParseIntPipe) customerId: number, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findByCustomer(customerId, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Create payment for sale invoice" })
   @Post("payment-sale-invoice")
-  createPayment(@Body() body: CreatePaymentSaleInvoiceDto) {
-    return this.saleInvoicesService.createPayment(body);
+  createPayment(@Body() body: CreatePaymentSaleInvoiceDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.createPayment(body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get all sale invoice payments" })
   @Get("payment-sale-invoice")
-  findAllPayments(@Query() query: Record<string, string>) {
-    return this.saleInvoicesService.findAllPayments(query);
+  findAllPayments(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findAllPayments(query, orgId);
   }
 
   @ApiBearerAuth()
@@ -97,24 +97,24 @@ export class SaleInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update sale invoice" })
   @Put(":id")
-  update(@Param("id") id: string, @Body() body: UpdateSaleInvoiceDto) {
-    return this.saleInvoicesService.update(id, body);
+  update(@Param("id") id: string, @Body() body: UpdateSaleInvoiceDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.update(id, body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update hold status" })
   @Put("hold/:id")
-  updateHold(@Param("id") id: string, @Body() body: UpdateHoldDto) {
-    return this.saleInvoicesService.updateHold(id, body);
+  updateHold(@Param("id") id: string, @Body() body: UpdateHoldDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.updateHold(id, body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update order status" })
   @Patch("order")
-  updateOrderStatus(@Body() body: UpdateOrderStatusDto) {
-    return this.saleInvoicesService.updateOrderStatus(body);
+  updateOrderStatus(@Body() body: UpdateOrderStatusDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.updateOrderStatus(body, orgId);
   }
 
   @ApiBearerAuth()

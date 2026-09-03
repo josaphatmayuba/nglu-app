@@ -32,16 +32,16 @@ docker compose up -d
 docker logs stalwart-mail --tail 80
 ```
 
-4. Open the setup wizard:
+4. Open the setup wizard from the server, or through an SSH tunnel:
 
 ```txt
-http://mail.ongdngolu.org:8088/admin
+http://127.0.0.1:8088/admin
 ```
 
-If DNS is not ready yet:
+Example SSH tunnel from your workstation:
 
-```txt
-http://SERVER_IP:8088/admin
+```bash
+ssh -L 8088:127.0.0.1:8088 ubuntu@SERVER_IP
 ```
 
 ## Lightsail DNS
@@ -57,17 +57,16 @@ TXT   _dmarc  v=DMARC1; p=none; rua=mailto:postmaster@ongdngolu.org
 
 ## Lightsail Firewall
 
-Open:
+Open publicly:
 
 ```txt
 25/tcp    SMTP inbound
 465/tcp   SMTPS
 587/tcp   SMTP submission
 993/tcp   IMAPS
-8088/tcp  temporary setup/admin only
 ```
 
-After HTTPS/admin is configured safely, remove public access to `8088`.
+Keep public access to `8088` closed. The admin listener should stay bound to `127.0.0.1`; use the SSH tunnel above for direct access, or put it behind HTTPS plus VPN/IP allowlisting if browser admin access is required.
 
 ## CRM SMTP Settings
 

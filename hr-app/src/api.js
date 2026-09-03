@@ -39,6 +39,12 @@ async function jsonFetch(path, init = {}, retried = false) {
 export const api = {
   setting: () => jsonFetch("/setting"),
   currencies: () => jsonFetch("/currency?query=all"),
+  // Prévisionnel (module forecast backend2) — scope "hr" : masse salariale projetée.
+  forecastCashFlow: ({ horizon, mode, scope = "hr", adjust } = {}) =>
+    jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`),
+  forecastVariance: ({ scope = "hr" } = {}) => jsonFetch(`/forecast/variance?scope=${scope}`),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "hr" } = {}) =>
+    jsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),
   roles: () => jsonFetch("/role?query=all"),
   users: () => jsonFetch("/user?query=all"),
   overview: () => jsonFetch("/hr/staff-overview"),
@@ -56,7 +62,19 @@ export const api = {
   // Téléchargement authentifié (un <a href> ne porte pas le JWT -> 401).
   downloadAuth: async (path, filename) => {
     const res = await fetch(`${API_ROOT}${path}`, { headers: { ...authHeaders() } });
-    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // Récupère le message explicite du backend (JSON) au lieu d'un "API 400" brut.
+      let msg = `API ${res.status} ${res.statusText}`;
+      try {
+        const body = await res.clone().json();
+        if (body?.message) {
+          msg = body.message === "This document has no content to render."
+            ? "Ce document n'a pas de contenu à générer (aucun modèle/HTML enregistré)."
+            : body.message;
+        }
+      } catch { /* corps non-JSON : on garde le message générique */ }
+      throw new Error(msg);
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -66,6 +84,7 @@ export const api = {
   },
   payrollSummary: (period) => jsonFetch(`/hr/payrolls/summary${period ? `?period=${period}` : ""}`),
   generatePayroll: (userId, period) => jsonFetch(`/hr/payrolls/generate?userId=${userId}${period ? `&period=${period}` : ""}`),
+  generateMonthPayrolls: (period) => jsonFetch("/hr/payrolls/generate-month", { method: "POST", body: JSON.stringify(period ? { period } : {}) }),
   hrProjects: () => jsonFetch("/hr/projects?query=all"),
   hrProjectReport: () => jsonFetch("/hr/projects/report"),
   hrProjectAssignments: () => jsonFetch("/hr/project-assignments?query=all"),
@@ -83,6 +102,7 @@ export const api = {
   createUser: (body) => jsonFetch("/user/register", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id, body) => jsonFetch(`/user/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   closeUser: (id, body) => jsonFetch(`/user/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  createDepartment: (body) => jsonFetch("/department", { method: "POST", body: JSON.stringify(body) }),
   createDesignation: (body) => jsonFetch("/designation", { method: "POST", body: JSON.stringify(body) }),
   createShift: (body) => jsonFetch("/shift", { method: "POST", body: JSON.stringify(body) }),
   createAward: (body) => jsonFetch("/award", { method: "POST", body: JSON.stringify(body) }),

@@ -5,7 +5,9 @@ import { Icon, AnimalGlyph, Brand } from "./icons";
 import { SPECIES, t } from "./data";
 import { api, adaptAnimal } from "./api";
 import { clearAuth } from "./auth.jsx";
+import { clearAllCaches } from "./offline-db";
 import { NetStatusPill } from "./offline-status";
+import { animalQty, isActiveLivestock } from "./animal-category";
 
 const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
@@ -13,6 +15,7 @@ const NAV = [
   { id: "animals",   icon: "layers",    labelKey: "animals" },
   { id: "buildings", icon: "grid",      labelKey: "buildings" },
   { id: "health",    icon: "pulse",     labelKey: "health" },
+  { id: "operations",icon: "scissors",  labelKey: "operations" },
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
   { id: "feed",      icon: "wheat",     labelKey: "feed" },
   { id: "medicines", icon: "pill",      labelKey: "medicines" },
@@ -23,13 +26,55 @@ const NAV = [
   { id: "pos",       icon: "cart",      labelKey: "pos" },
   { id: "sales-management", icon: "settings", labelKey: "salesManagement" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
+  { id: "profitability", icon: "chart", labelKey: "profitability" },
+  { id: "forecast",  icon: "activity",  labelKey: "forecast" },
+  { id: "simulator", icon: "chart",     labelKey: "simulator" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
 ];
 
 const NAV_SECONDARY = [
+  { id: "tasks",     icon: "list",      labelKey: "tasks" },
+  { id: "field-notes", icon: "location", labelKey: "fieldNotes" },
   { id: "employees", icon: "users",     labelKey: "employees" },
   { id: "settings",  icon: "settings",  labelKey: "settings" },
 ];
+
+// 3 modes UI (prompt design ferme/vét) : filtrent la nav principale selon le
+// profil. "all" = tout afficher (comportement historique, défaut). Le mode est
+// purement visuel/local — il ne remplace pas les permissions backend (rôles).
+const FARMOS_MODES = {
+  all: { fr: "Tout", en: "All", icon: "grid", nav: null },
+  breeder: {
+    fr: "Éleveur", en: "Breeder", icon: "leaf",
+    nav: ["dashboard", "identification", "animals", "buildings", "health", "calendar", "feed", "repro", "production", "alerts"],
+  },
+  vet: {
+    fr: "Vétérinaire", en: "Vet", icon: "pulse",
+    nav: ["dashboard", "animals", "health", "calendar", "medicines", "repro", "semen-bank", "alerts"],
+  },
+  manager: {
+    fr: "Gestionnaire", en: "Manager", icon: "coins",
+    nav: ["dashboard", "animals", "buildings", "production", "pos", "sales-management", "finances", "profitability", "forecast", "simulator", "reports", "alerts"],
+  },
+};
+const FARMOS_MODE_ORDER = ["all", "breeder", "vet", "manager"];
+
+function readFarmosMode() {
+  try {
+    const m = localStorage.getItem("farmos_mode");
+    return m && FARMOS_MODES[m] ? m : "all";
+  } catch { return "all"; }
+}
+function writeFarmosMode(m) {
+  try { localStorage.setItem("farmos_mode", m); } catch { /* ignore */ }
+}
+// Filtre la liste NAV selon le mode (ordre de NAV préservé).
+function navForMode(mode) {
+  const def = FARMOS_MODES[mode];
+  if (!def || !def.nav) return NAV;
+  const allow = new Set(def.nav);
+  return NAV.filter((n) => allow.has(n.id));
+}
 
 function readCurrentUser() {
   try {
@@ -54,9 +99,15 @@ function readCurrentUser() {
 const UserChip = ({ showLabels, lang }) => {
   const [u, setU] = React.useState(readCurrentUser);
   React.useEffect(() => {
-    const onStorage = () => setU(readCurrentUser());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const refresh = () => setU(readCurrentUser());
+    // `storage` ne se déclenche pas dans l'onglet courant : on écoute aussi
+    // l'événement applicatif émis au login / à la restauration de session.
+    window.addEventListener("storage", refresh);
+    window.addEventListener("farmos:auth-changed", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("farmos:auth-changed", refresh);
+    };
   }, []);
   if (!u) {
     return (
@@ -81,6 +132,9 @@ const UserChip = ({ showLabels, lang }) => {
   }
   const logout = () => {
     clearAuth(); // SCRUM-119 — purge le token mémoire + les métadonnées localStorage
+    // Purge aussi le miroir IndexedDB : sur un appareil partagé, les données
+    // de l'utilisateur précédent ne doivent pas rester lisibles par le suivant.
+    clearAllCaches().catch(() => {});
     window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
   };
   return (
@@ -113,6 +167,15 @@ const UserChip = ({ showLabels, lang }) => {
 const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarStyle, enabledSpecies }) => {
   const showLabels = sidebarStyle !== "icons";
   const width = showLabels ? 248 : 64;
+  const [mode, setMode] = React.useState(readFarmosMode);
+  const changeMode = React.useCallback((m) => {
+    setMode(m);
+    writeFarmosMode(m);
+    // Si l'écran actif n'est plus visible dans ce mode, revenir au dashboard.
+    const nav = navForMode(m);
+    if (!nav.some((n) => n.id === active)) onNav("dashboard");
+  }, [active, onNav]);
+  const navItems = navForMode(mode);
   const [animals, setAnimals] = React.useState([]);
   React.useEffect(() => {
     let cancel = false;
@@ -137,7 +200,7 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
     }}>
       {/* Brand */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: showLabels ? "18px 18px 16px" : "18px 12px 16px", justifyContent: showLabels ? "flex-start" : "center" }}>
-        <Brand size={28} color="#ECF1EC" accent="#D7AA45"/>
+        <Brand size={32} onDark/>
         {showLabels && (
           <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
             <span style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 17, letterSpacing: "-0.015em" }}>
@@ -150,9 +213,40 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
         )}
       </div>
 
+      {/* Mode selector (Éleveur / Vét / Gestionnaire / Tout) */}
+      {showLabels ? (
+        <div style={{ padding: "0 14px 4px" }}>
+          <div className="overline" style={{ color: "rgba(236,241,236,0.42)", marginBottom: 6 }}>{lang === "fr" ? "Mode" : "Mode"}</div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {FARMOS_MODE_ORDER.map((m) => {
+              const md = FARMOS_MODES[m];
+              const on = mode === m;
+              return (
+                <button key={m} onClick={() => changeMode(m)} title={lang === "fr" ? md.fr : md.en}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 999, cursor: "pointer",
+                    border: on ? "1px solid #D7AA45" : "1px solid rgba(236,241,236,0.18)",
+                    background: on ? "rgba(215,170,69,0.16)" : "transparent",
+                    color: on ? "#D7AA45" : "rgba(236,241,236,0.7)", fontSize: 11, fontWeight: 600 }}>
+                  <Icon name={md.icon} size={12} color={on ? "#D7AA45" : "rgba(236,241,236,0.55)"}/>
+                  {lang === "fr" ? md.fr : md.en}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: "0 8px 4px", display: "flex", justifyContent: "center" }}>
+          <button onClick={() => changeMode(FARMOS_MODE_ORDER[(FARMOS_MODE_ORDER.indexOf(mode) + 1) % FARMOS_MODE_ORDER.length])}
+            title={lang === "fr" ? FARMOS_MODES[mode].fr : FARMOS_MODES[mode].en}
+            style={{ background: "transparent", border: "1px solid rgba(236,241,236,0.18)", borderRadius: 8, padding: 8, cursor: "pointer", display: "flex" }}>
+            <Icon name={FARMOS_MODES[mode].icon} size={16} color="#D7AA45"/>
+          </button>
+        </div>
+      )}
+
       {/* Primary nav */}
       <nav style={{ padding: showLabels ? "8px 10px" : "8px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
-        {NAV.map((n) => {
+        {navItems.map((n) => {
           const isActive = active === n.id;
           return (
             <button key={n.id} className={`nav-item ${isActive ? "active" : ""}`}
@@ -533,7 +627,7 @@ const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter,
 
     {right || (
       <>
-        {!compact && <NetStatusPill lang={lang}/>}
+        <NetStatusPill lang={lang} compact={compact}/>
         {!compact && (
           <button className="btn btn-ghost" style={{ height: 32, width: 32, padding: 0, justifyContent: "center", position: "relative", flexShrink: 0 }}>
             <Icon name="bell" size={16} color="var(--ink-700)"/>
@@ -567,11 +661,12 @@ function deriveSpeciesCounts(animals) {
   const counts = {};
   const sick = {};
   (animals || []).forEach((a) => {
+    if (!isActiveLivestock(a)) return;
     const sp = a.species;
     if (!sp) return;
-    const n = Number(a.count) > 0 ? Number(a.count) : 1;
+    const n = animalQty(a);
     counts[sp] = (counts[sp] || 0) + n;
-    if (a.status && a.status !== "healthy") sick[sp] = (sick[sp] || 0) + 1;
+    if (a.status && a.status !== "healthy") sick[sp] = (sick[sp] || 0) + n;
   });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   return { counts, sick, total };

@@ -16,6 +16,7 @@ import {
   loadContracts,
   sendContract,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 
 const STATUS_COLOR = {
   draft: "default",
@@ -41,6 +42,12 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const safeImageSrc = (value = "") => {
+  const src = String(value || "").trim();
+  if (/^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(src)) return src;
+  return "";
+};
+
 const formatSignedAt = (value) => {
   if (!value) return "Non signé";
   const date = new Date(value);
@@ -56,7 +63,7 @@ const hasHtmlMarkup = (value = "") => /<\/?[a-z][\s\S]*>/i.test(String(value));
 const contractContentHtml = (value = "") => {
   const content = String(value || "");
   return hasHtmlMarkup(content)
-    ? content
+    ? sanitizeHtml(content)
     : `<pre class="plain-contract-content">${escapeHtml(content)}</pre>`;
 };
 
@@ -64,8 +71,9 @@ const contractPrintHtml = (contract) => {
   const company = contract?.companyInfo || {};
   const landlordName = contract?.landlordName || company.companyName || "Bailleur";
   const signedAt = formatSignedAt(contract?.signedAt);
-  const tenantSignature = contract?.signatureData
-    ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
+  const tenantSignatureSrc = safeImageSrc(contract?.signatureData);
+  const tenantSignature = tenantSignatureSrc
+    ? `<img class="signature-image" src="${tenantSignatureSrc}" alt="Signature du locataire" />`
     : `<div class="signature-line">Signature non disponible</div>`;
   const landlordSignature = `<div class="typed-signature">${escapeHtml(landlordName)}</div>`;
 
@@ -378,7 +386,7 @@ export default function ContractsTab({ leases }) {
             }}
           >
             {hasHtmlMarkup(previewContract?.contractContent) ? (
-              <div dangerouslySetInnerHTML={{ __html: previewContract?.contractContent || "" }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContract?.contractContent || "") }} />
             ) : (
               <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
                 {previewContract?.contractContent}
@@ -409,10 +417,10 @@ export default function ContractsTab({ leases }) {
               <div>
                 <strong>Signature du locataire</strong>
                 <div style={{ marginTop: 10 }}>
-                  {previewContract?.signatureData ? (
+                  {safeImageSrc(previewContract?.signatureData) ? (
                     <img
                       alt="Signature du locataire"
-                      src={previewContract.signatureData}
+                      src={safeImageSrc(previewContract.signatureData)}
                       style={{ border: "1px solid #d1d5db", maxHeight: 120, maxWidth: 320, padding: 8 }}
                     />
                   ) : (

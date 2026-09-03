@@ -30,6 +30,7 @@ window.addEventListener("load", () => {
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
+// Re-trigger CI frontend build (le step precedent a echoue de maniere transitoire).
 axios.defaults.baseURL = import.meta.env.VITE_APP_API;
 axios.interceptors.request.use(async (config) => {
   const query = getQuery();

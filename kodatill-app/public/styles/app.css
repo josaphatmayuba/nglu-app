@@ -1,0 +1,39 @@
+/* KodaTill — tokens alignes sur le mockup de reference
+   (mockup/KodaTill/KodaTill.html) : palette ink/kp/acc, fond #eceae4,
+   Inter (texte) + Space Grotesk (titres, .font-display). Les NOMS de
+   variables restent inchanges (compat avec tout le code React existant,
+   qui les consomme deja massivement) — seules les VALEURS sont corrigees. */
+/* Bande tuiles categories caisse : scroll horizontal tactile conserve,
+   scrollbar native masquee (fine ligne vide/grise en mobile qui donnait
+   l'impression d'une bande coupee — bug signale avec capture). */
+.kt-cat-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.kt-cat-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+:root {
+  --bg-app: #eceae4;
+  --paper: #ffffff;
+  --fg-1: #0f172a;
+  --fg-2: #334155;
+  --fg-3: #64748b;
+  --border-1: #e2e8f0;
+  --border-2: #e2e8f0;
+  --oxblood-50: #fef2f2;
+  --oxblood-800: #dc2626;
+  --teal-500: #2c8a91;
+  --teal-600: #1f6d75;
+  --teal-700: #1b575f;
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+}
+
+html { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-app); }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button { font-family: inherit; }
+.input { font-family: inherit; }
+.font-display { font-family: var(--font-display); }

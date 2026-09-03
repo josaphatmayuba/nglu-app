@@ -20,14 +20,20 @@ module.exports = [
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
-  { method: 'POST', prefix: '/googlelogin/login',             auth: false },
+  { method: 'POST', prefix: '/auth/google/login',             auth: false },
 
   // ── Server-Sent Events (JWT requis) ───────────
   { method: 'GET',  prefix: '/events/me',                      auth: true  },
 
+  // Socket.IO transport path. Auth is enforced by backend2 ChatGateway from
+  // the Socket.IO handshake payload; the HTTP polling endpoint itself must be
+  // public so the namespace connection can be established.
+  { method: '*',    prefix: '/socket.io',                       auth: false },
+
   // ── Health & config (public) ───────────────────
   { method: 'GET',  prefix: '/health',                        auth: false },
-  { method: 'GET',  prefix: '/setting',                       auth: false },
+  { method: 'GET',  prefix: '/setting/public',                auth: false },
+  { method: 'GET',  prefix: '/setting',                       auth: true  },
   { method: 'POST', prefix: '/setting',                       auth: true  },
   { method: 'PUT',  prefix: '/setting',                       auth: true  },
 
@@ -69,7 +75,12 @@ module.exports = [
 
   // ── Onboarding locataire (public) ──────────────
   { method: '*',    prefix: '/tenant-onboarding',             auth: false },
+  // Enquête de prélocation Québec (public, token opaque fait autorisation).
+  // Doit rester déclarée AVANT le catch-all '/property-management' auth:true.
+  { method: '*',    prefix: '/tenant-prescreening',           auth: false },
   { method: '*',    prefix: '/property-management/contracts/sign', auth: false },
+  { method: '*',    prefix: '/property-management/public',     auth: false },
+  { method: '*',    prefix: '/batipro/public',                 auth: false }, // portail sous-traitant (token opaque)
 
   // ── Routes protégées (JWT requis) ──────────────
   { method: '*',    prefix: '/dashboard',                     auth: true  },
@@ -103,14 +114,43 @@ module.exports = [
   { method: '*',    prefix: '/supplier',                      auth: true  },
   { method: '*',    prefix: '/customer',                      auth: true  },
   { method: '*',    prefix: '/customer-profile-image',        auth: true  },
+  { method: '*',    prefix: '/ledger',                        auth: true  },
+  { method: '*',    prefix: '/forecast',                      auth: true  }, // prévisionnel (cash-flow, variance, production)
+  { method: '*',    prefix: '/workflow',                      auth: true  },
+  { method: '*',    prefix: '/budget',                        auth: true  },
+  { method: '*',    prefix: '/procurement',                   auth: true  },
+  { method: '*',    prefix: '/documents',                     auth: true  },
+  { method: '*',    prefix: '/projects',                      auth: true  },
+
+  // ── Signatures manuscrites ─────────────────────
+  // Le lien envoye est ouvert sans compte : le token de l'URL fait autorisation.
+  // Route publique declaree AVANT la route admin (prefixes distincts, mais on
+  // garde l'ordre specifique -> general impose par ce fichier).
+  { method: '*',    prefix: '/public/signature',              auth: false },
+  { method: '*',    prefix: '/signature-requests',            auth: true  },
+  { method: '*',    prefix: '/vaccine-registry',              auth: true  },
   { method: '*',    prefix: '/transaction',                   auth: true  },
   { method: '*',    prefix: '/transaction-type',              auth: true  },
   { method: '*',    prefix: '/uom',                           auth: true  },
   { method: '*',    prefix: '/weight-unit',                   auth: true  },
   { method: '*',    prefix: '/dimension-unit',                auth: true  },
   { method: '*',    prefix: '/property-management',           auth: true  },
+  { method: '*',    prefix: '/journal-entreprise',             auth: true  },
+  { method: '*',    prefix: '/discussions',                    auth: true  },
+  { method: '*',    prefix: '/chat',                           auth: true  },
   { method: '*',    prefix: '/farmos',                         auth: true  },
   { method: '*',    prefix: '/batipro',                       auth: true  },
+  // SCRUM-296 : menu + commande QR consultes sans compte par le client final
+  // (scan de table). Meme pattern que /batipro/public plus haut : entree
+  // publique DECLAREE AVANT le catch-all '/kodatill' generique, car ce fichier
+  // utilise whitelist.find() (index.js) qui retourne la PREMIERE entree dont
+  // le prefixe correspond — l'ordre du tableau fait donc foi, pas une notion
+  // de specificite. Autorisation portee par orgSlug/qrToken resolus cote
+  // backend2, jamais par le JWT.
+  { method: '*',    prefix: '/kodatill/public',                 auth: false },
+  { method: '*',    prefix: '/kodatill',                       auth: true  },
+  // Migration Cockpit — lecture seule (GET uniquement), JWT requis.
+  { method: 'GET',  prefix: '/migration',                     auth: true  },
   { method: '*',    prefix: '/currency',                      auth: true  },
   { method: '*',    prefix: '/account',                       auth: true  },
   { method: '*',    prefix: '/sub-accounts',                  auth: true  },
@@ -130,6 +170,8 @@ module.exports = [
   { method: '*',    prefix: '/files',                         auth: true  },
   // Notification preferences
   { method: '*',    prefix: '/notification-preferences',   auth: true  },
+  // Console proprietaire plateforme (super_owner) — garde backend SuperOwnerGuard
+  { method: '*',    prefix: '/organizations',                auth: true  },
   // Audit logs (admin read-only)
   { method: 'GET',  prefix: '/audit-log',                  auth: true  },
   // Templates (SCRUM-146)
@@ -149,4 +191,6 @@ module.exports = [
   { method: '*',    prefix: '/shift',                         auth: true  },
   // Reports
   { method: '*',    prefix: '/report',                        auth: true  },
+  // Bot WhatsApp (Baileys) — reserve super_owner, garde backend SuperOwnerGuard
+  { method: '*',    prefix: '/whatsapp',                      auth: true  },
 ];

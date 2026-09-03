@@ -5,22 +5,27 @@ import { versionDefine } from "../scripts/app-version.mjs";
 
 // Domus — gestion locative (spin-off du module property-management).
 // Servie sous /domus/ par nginx, comme FarmOS l'est sous /farmos/.
-export default defineConfig({
+// Deux cibles de build pour la MEME app :
+//  - defaut        : base "/domus/" (ongdngolu.org/domus + avelomi.com/domus, INCHANGE)
+//  - --mode avelomi: base "/" pour le sous-domaine avelomi (root nginx dedie html-domus-avelomi-*)
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/domus/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      base: "/domus/",
-      scope: "/domus/",
+      base: BASE,
+      scope: BASE,
       includeAssets: ["domus-icon.svg", "apple-touch-icon.png"],
       manifest: {
-        id: "/domus/",
+        id: BASE,
         name: "Domus · Gestion locative",
         short_name: "Domus",
         description: "Biens, baux, loyers (mobile money) et maintenance.",
-        start_url: "/domus/",
-        scope: "/domus/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#e8ecf5",
@@ -39,7 +44,7 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/domus/index.html",
+        navigateFallback: BASE + "index.html",
         // La navigation ne doit jamais retomber sur l'API.
         navigateFallbackDenylist: [/^\/api\//],
         // Lecture hors ligne : on garde la dernière réponse connue des GET API.
@@ -62,7 +67,7 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  base: "/domus/",
+  base: BASE,
   define: { __BUILD_TS__: JSON.stringify(Date.now()), ...versionDefine() },
   server: {
     proxy: {
@@ -74,4 +79,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "domus-assets",
   },
+};
 });

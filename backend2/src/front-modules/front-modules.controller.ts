@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
   ColorDto,
@@ -25,6 +26,12 @@ import {
 } from "./dto/front-modules.dto";
 import { FrontModulesService } from "./front-modules.service";
 
+const PUBLIC_FRONT_RESOURCES = new Set(["product-color"]);
+
+function PublicListGuard(path: string): MethodDecorator {
+  return PUBLIC_FRONT_RESOURCES.has(path) ? () => undefined : UseGuards(JwtAuthGuard);
+}
+
 function crudController(path: string, tag: string, dto: any) {
   @ApiTags(tag)
   @ApiBearerAuth()
@@ -34,43 +41,46 @@ function crudController(path: string, tag: string, dto: any) {
 
     @Get()
     @UseGuards(JwtAuthGuard)
-    list(@Query() query: Record<string, string>) {
-      return this.service.list(path, query);
+    list(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+      return this.service.list(path, query, orgId);
     }
 
     @Get("public")
+    @PublicListGuard(path)
     publicList(@Query() query: Record<string, string>) {
-      return this.service.list(path, { ...query, query: "all" });
+      // Route publique reservee aux referentiels globaux non org-scoped
+      // (product-color) : orgId=0 est inutilise pour ces tables.
+      return this.service.list(path, { ...query, query: "all" }, 0);
     }
 
     @Get(":id")
     @UseGuards(JwtAuthGuard)
-    findOne(@Param("id", ParseIntPipe) id: number) {
-      return this.service.findOne(path, id);
+    findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+      return this.service.findOne(path, id, orgId);
     }
 
     @Post()
     @UseGuards(JwtAuthGuard)
-    create(@Body() body: typeof dto | Array<typeof dto>, @Query() query: Record<string, string>) {
-      return this.service.create(path, body as any, query);
+    create(@Body() body: typeof dto | Array<typeof dto>, @Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+      return this.service.create(path, body as any, orgId, query);
     }
 
     @Put(":id")
     @UseGuards(JwtAuthGuard)
-    update(@Param("id", ParseIntPipe) id: number, @Body() body: typeof dto) {
-      return this.service.update(path, id, body as any);
+    update(@Param("id", ParseIntPipe) id: number, @Body() body: typeof dto, @CurrentOrg() orgId: number) {
+      return this.service.update(path, id, body as any, orgId);
     }
 
     @Patch(":id")
     @UseGuards(JwtAuthGuard)
-    patch(@Param("id", ParseIntPipe) id: number, @Body() body: GenericStatusDto) {
-      return this.service.patchStatus(path, id, body.status ?? "false");
+    patch(@Param("id", ParseIntPipe) id: number, @Body() body: GenericStatusDto, @CurrentOrg() orgId: number) {
+      return this.service.patchStatus(path, id, orgId, body.status ?? "false");
     }
 
     @Delete(":id")
     @UseGuards(JwtAuthGuard)
-    delete(@Param("id", ParseIntPipe) id: number) {
-      return this.service.delete(path, id);
+    delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+      return this.service.delete(path, id, orgId);
     }
   }
 

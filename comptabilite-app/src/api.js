@@ -35,6 +35,15 @@ async function jsonFetch(path, init = {}, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
+function withQuery(path, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value));
+  });
+  const suffix = qs.toString();
+  return suffix ? `${path}${path.includes("?") ? "&" : "?"}${suffix}` : path;
+}
+
 export const api = {
   setting: () => jsonFetch("/setting"),
   currencies: () => jsonFetch("/currency?query=all"),
@@ -45,5 +54,77 @@ export const api = {
   balanceSheet: () => jsonFetch("/account?query=bs"),
   incomeStatement: () => jsonFetch("/account?query=is"),
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
-  createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) })
+  createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
+  transactionTypes: () => jsonFetch("/transaction-type"),
+  // ── Types SIFA (règles multi-lignes paramétrables) ───────────────────
+  typeRules: () => jsonFetch("/ledger/type-rules"),
+  saveType: (body) => jsonFetch("/ledger/type-rules", { method: "POST", body: JSON.stringify(body) }),
+  deleteType: (type) => jsonFetch(`/ledger/type-rules/${encodeURIComponent(type)}/delete`, { method: "POST" }),
+
+  // ── Grand livre moderne (partie double) ──────────────────────────────
+  ledgerEntries: (params) => jsonFetch(withQuery("/ledger", params)),
+  ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
+  ledgerBalances: (params) => jsonFetch(withQuery("/ledger/balances", params)),
+  ledgerAccount: (accountId) => jsonFetch(`/ledger/account/${accountId}`),
+  ledgerTrialBalance: (params) => jsonFetch(withQuery("/ledger/trial-balance", params)),
+  ledgerIncomeStatement: (params) => jsonFetch(withQuery("/ledger/income-statement", params)),
+  ledgerBalanceSheet: (params) => jsonFetch(withQuery("/ledger/balance-sheet", params)),
+  ledgerPeriods: () => jsonFetch("/ledger/periods"),
+
+  // ── Échange de devise (modèle bancaire : vrais montants + taux réel) ──
+  exchanges: () => jsonFetch("/ledger/exchanges"),
+  exchange: (id) => jsonFetch(`/ledger/exchanges/${id}`),
+  createExchange: (body) => jsonFetch("/ledger/exchanges", { method: "POST", body: JSON.stringify(body) }),
+  reverseExchange: (id, reason) => jsonFetch(`/ledger/exchanges/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
+
+  // ── Projets / Bailleurs (analytique) ─────────────────────────────────
+  projects: () => jsonFetch("/projects"),
+  createProject: (body) => jsonFetch("/projects", { method: "POST", body: JSON.stringify(body) }),
+  updateProject: (id, body) => jsonFetch(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  projectReport: (id) => jsonFetch(`/projects/${id}/report`),
+  createLedgerEntry: (body) => jsonFetch("/ledger", { method: "POST", body: JSON.stringify(body) }),
+  reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
+
+  // ── Approbations (gate + workflow) ───────────────────────────────────
+  approvalRequirements: () => jsonFetch("/ledger/approval-requirements"),
+  setApprovalRequirement: (body) => jsonFetch("/ledger/approval-requirements", { method: "POST", body: JSON.stringify(body) }),
+  pendingApprovals: () => jsonFetch("/workflow/instances?status=pending"),
+  approveInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+  rejectInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
+
+  // ── Taux de taxe (réutilise l'API product-vat existante) ─────────────
+  taxRates: () => jsonFetch("/product-vat"),
+  createTaxRate: (body) => jsonFetch("/product-vat", { method: "POST", body: JSON.stringify(body) }),
+  updateTaxRate: (id, body) => jsonFetch(`/product-vat/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  // ── Prévisionnel (cash-flow projeté, par mois × devise) ──────────────
+  forecastCashFlow: (params) => jsonFetch(withQuery("/forecast/cash-flow", params)),
+  forecastSnapshot: (params) => jsonFetch(withQuery("/forecast/snapshot", params), { method: "POST" }),
+  forecastVariance: (params) => jsonFetch(withQuery("/forecast/variance", params)),
+  forecastProduction: (params) => jsonFetch(withQuery("/forecast/production", params)),
+
+  // ── Budget (live depuis le grand livre) ──────────────────────────────
+  budgets: () => jsonFetch("/budget"),
+  budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
+  createBudget: (body) => jsonFetch("/budget", { method: "POST", body: JSON.stringify(body) }),
+  addBudgetLine: (budgetId, body) => jsonFetch(`/budget/${budgetId}/lines`, { method: "POST", body: JSON.stringify(body) }),
+
+  // ── Fournisseurs (référentiel central des tiers — partagé entre apps) ─
+  suppliers: (params) => jsonFetch(withQuery("/supplier", { query: "all", ...(params || {}) })),
+  createSupplier: (body) => jsonFetch("/supplier", { method: "POST", body: JSON.stringify(body) }),
+  updateSupplier: (id, body) => jsonFetch(`/supplier/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  setSupplierStatus: (id, status) => jsonFetch(`/supplier/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  // ── Achats / Factures fournisseurs (purchase-invoices) ───────────────
+  purchaseInvoices: () => jsonFetch("/purchase-invoice"),
+  purchaseInvoicesInfo: () => jsonFetch("/purchase-invoice?query=info"),
+  approvePurchaseInvoice: (id, comment) => jsonFetch(`/purchase-invoice/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+
+  // ── Procurement / Stock (entrepôts, mouvements, commandes) ───────────
+  warehouses: () => jsonFetch("/procurement/warehouses"),
+  warehouseStock: (id) => jsonFetch(`/procurement/warehouses/${id}/stock`),
+  purchaseOrders: () => jsonFetch("/procurement/orders"),
+  purchaseOrder: (id) => jsonFetch(`/procurement/orders/${id}`),
+  setOrderStatus: (id, status) => jsonFetch(`/procurement/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  receiveOrder: (id, body) => jsonFetch(`/procurement/orders/${id}/receive`, { method: "POST", body: JSON.stringify(body || {}) })
 };

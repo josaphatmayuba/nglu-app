@@ -1,9 +1,11 @@
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
+
 export default function ProductDetails({ description }) {
   return (
     <div className="productDescription">
       <h1 className="text-xl font-medium p-2">Product Details</h1>
       <div className="bg-white p-5">
-        {<p dangerouslySetInnerHTML={{ __html: description }}></p> || (
+        {description ? <p dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }}></p> : (
           <>
             Mini Data Cable Set Storage Box 60w Quick Charge Multi Function Data
             Cable Mobile Phone Holder Storage Box • 60W Quick Charge :Charge

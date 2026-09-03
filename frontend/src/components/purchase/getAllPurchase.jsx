@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { loadSuppliers } from "@/redux/rtk/features/supplier/supplierSlice";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 import { DatePicker, Modal } from "antd";
 import dayjs from "dayjs";
 import moment from "moment";
@@ -110,7 +111,17 @@ const GetAllPurchase = () => {
       title: "Total Amount",
       dataIndex: "totalAmount",
       key: "totalAmount",
-      render: (totalAmount) => totalAmount.toFixed(2),
+      render: (totalAmount, row) => (
+        <FormattedAmount
+          amount={totalAmount}
+          currency={{
+            currencyCode: row.currencyCode,
+            currencyName: row.currencyName,
+            currencySymbol: row.currencySymbol,
+            ...row.currency
+          }}
+        />
+      ),
     },
 
     {
@@ -118,21 +129,51 @@ const GetAllPurchase = () => {
       title: "Paid",
       dataIndex: "paidAmount",
       key: "paidAmount",
-      render: (paidAmount) => paidAmount.toFixed(2),
+      render: (paidAmount, row) => (
+        <FormattedAmount
+          amount={paidAmount}
+          currency={{
+            currencyCode: row.currencyCode,
+            currencyName: row.currencyName,
+            currencySymbol: row.currencySymbol,
+            ...row.currency
+          }}
+        />
+      ),
     },
     {
       id: 6,
       title: "Due",
       dataIndex: "dueAmount",
       key: "dueAmount",
-      render: (dueAmount) => dueAmount.toFixed(2),
+      render: (dueAmount, row) => (
+        <FormattedAmount
+          amount={dueAmount}
+          currency={{
+            currencyCode: row.currencyCode,
+            currencyName: row.currencyName,
+            currencySymbol: row.currencySymbol,
+            ...row.currency
+          }}
+        />
+      ),
     },
     {
       id: 4,
       title: "Tax",
       dataIndex: "totalTax",
       key: "totalTax",
-      render: (totalTax) => totalTax.toFixed(2),
+      render: (totalTax, row) => (
+        <FormattedAmount
+          amount={totalTax}
+          currency={{
+            currencyCode: row.currencyCode,
+            currencyName: row.currencyName,
+            currencySymbol: row.currencySymbol,
+            ...row.currency
+          }}
+        />
+      ),
     },
     //Update Supplier Name here
 

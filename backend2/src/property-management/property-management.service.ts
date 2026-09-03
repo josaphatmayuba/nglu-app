@@ -1,10 +1,10 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { createHash, randomBytes } from "crypto";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { join } from "path";
-import { and, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -13,10 +13,16 @@ import {
   customers,
   emailTemplates,
   realEstateContracts,
+  realEstateLeaseDocuments,
   realEstateLeases,
   realEstateMaintenanceCosts,
+  realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
   realEstateProperties,
+  realEstatePropertyPhotos,
+  realEstateReservations,
+  realEstateCoupons,
+  realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
   realEstateUnits,
@@ -29,11 +35,16 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
-import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
+import { WhatsappService } from "../whatsapp/whatsapp.service";
+import { LedgerService } from "../ledger/ledger.service";
+import { ProjectsService } from "../projects/projects.service";
+import { WorkflowService } from "../workflow/workflow.service";
+import { InvalidPhoneNumberError, normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -51,7 +62,15 @@ import {
   UpdateMaintenanceDto,
   UpdatePropertyDto,
   UpdateUnitDto,
+  CreateReservationDto,
+  UpdateReservationDto,
+  CheckOutReservationDto,
+  CreateCouponDto,
+  UpdateCouponDto,
+  PublicReservationRequestDto,
+  PublicLeaseRequestDto,
 } from "./dto/property-management.dto";
+import { ObjectStorageService } from "./object-storage.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -72,7 +91,26 @@ export class PropertyManagementService {
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly emails: SystemEmailService,
     private readonly sms: CompatService,
+    private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
+    private readonly projects: ProjectsService,
+    private readonly objectStorage: ObjectStorageService,
+    private readonly whatsapp: WhatsappService,
   ) {}
+
+  /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
+  async approveMaintenanceCost(costId: number, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "maintenance" && i.entityId === String(costId),
+    );
+    if (!inst) throw new BadRequestException("Aucune instance d'approbation en attente pour ce cout.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("maintenance", String(costId), orgId, userId);
+    }
+    return { costId, approval: result };
+  }
 
   async dashboard(orgId: number) {
     const [properties] = await this.db
@@ -172,6 +210,9 @@ export class PropertyManagementService {
         nationality: tenantDetails.nationality,
         maritalStatus: tenantDetails.maritalStatus,
         originProvince: tenantDetails.originProvince,
+        idDocumentType: tenantDetails.idDocumentType,
+        idNumber: tenantDetails.idNumber,
+        idDocumentName: tenantDetails.idDocumentName,
         phone2: tenantDetails.phone2,
         contactedPerson: tenantDetails.contactedPerson,
         contactedPersonPhoneNumber: tenantDetails.contactedPersonPhoneNumber,
@@ -228,6 +269,8 @@ export class PropertyManagementService {
     if (input.nationality !== undefined) detail.nationality = input.nationality;
     if (input.marital_status !== undefined) detail.maritalStatus = input.marital_status;
     if (input.origin_province !== undefined) detail.originProvince = input.origin_province ?? "";
+    if (input.id_document_type !== undefined) detail.idDocumentType = input.id_document_type ?? null;
+    if (input.id_number !== undefined) detail.idNumber = input.id_number ?? null;
     if (input.phone2 !== undefined) detail.phone2 = input.phone2 ?? null;
     if (input.contacted_person !== undefined) detail.contactedPerson = input.contacted_person;
     if (input.contacted_person_phone_number !== undefined) detail.contactedPersonPhoneNumber = input.contacted_person_phone_number;
@@ -265,6 +308,8 @@ export class PropertyManagementService {
         nationality: input.nationality ?? "",
         maritalStatus: input.marital_status ?? "",
         originProvince: input.origin_province ?? "",
+        idDocumentType: input.id_document_type ?? null,
+        idNumber: input.id_number ?? null,
         phone2: input.phone2 ?? null,
         contactedPerson: input.contacted_person ?? "",
         contactedPersonPhoneNumber: input.contacted_person_phone_number ?? "",
@@ -296,9 +341,9 @@ export class PropertyManagementService {
     return this.findTenant(id, orgId);
   }
 
-  async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
+  async generateTenantOnboarding(input: GenerateTenantOnboardingDto, orgId: number) {
     // SCRUM-229 — store the phone identifier in canonical E.164.
-    const phoneE164 = normalizePhoneE164Strict(input.phone);
+    const phoneE164 = this.normalizePhoneOrBadRequest(input.phone);
     const token = randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
@@ -310,6 +355,7 @@ export class PropertyManagementService {
     });
 
     const [result] = await this.db.insert(tenantOnboardings).values({
+      organizationId: orgId,
       phone: phoneE164,
       tokenHash,
       token,
@@ -330,41 +376,144 @@ export class PropertyManagementService {
     return response;
   }
 
-  async sendOnboardingEmail(input: { email: string; url: string; firstName?: string | null }) {
-    if (!input?.email || !input?.url) {
-      throw new BadRequestException("email and url are required.");
+  /**
+   * Envoie (ou renvoie) le SMS de lien d'inscription pour un dossier onboarding
+   * existant, puis trace `sms_sent_at` afin que le frontend sache distinguer
+   * "Envoyer" de "Renvoyer" (le dossier n'a jamais reçu de SMS avant ce champ).
+   */
+  async sendOnboardingSms(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    const data = this.parseOnboardingData(onboarding.data);
+    const phone = data.phone || onboarding.phone;
+    if (!phone) {
+      throw new BadRequestException("Aucun numero de telephone pour ce dossier d'inscription.");
     }
-    const [company] = await this.db
-      .select({ name: appSettings.companyName })
-      .from(appSettings)
-      .limit(1);
-    const companyName = company?.name || "votre gestionnaire";
-    const greeting = input.firstName ? `Bonjour ${input.firstName}` : "Bonjour";
+    const url = onboarding.token ? this.onboardingUrl(onboarding.token) : null;
+    if (!url) {
+      throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
+    }
+
+    const result = await this.sms.sendSms({
+      phone,
+      message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
+      // Option A : Twilio rappellera cet endpoint public signe pour tracer la
+      // livraison reelle (voir handleSmsStatusCallback).
+      statusCallback: `${env.appUrl.replace(/\/$/, "")}/api/tenant-onboarding/sms-status`,
+    });
+    if (!result?.success) {
+      throw new BadRequestException(result?.message || "Impossible d'envoyer le SMS.");
+    }
+
+    await this.db
+      .update(tenantOnboardings)
+      .set({
+        smsSentAt: sql`CURRENT_TIMESTAMP`,
+        smsSid: result.sid ?? null,
+        smsStatus: result.status ?? "queued",
+        smsDeliveredAt: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantOnboardings.id, id));
+
+    return this.adminOnboardingResponse(await this.findOnboarding(id));
+  }
+
+  /**
+   * Envoie (ou renvoie) l'email de lien d'inscription pour un dossier onboarding
+   * existant, puis trace `email_sent_at` (voir sendOnboardingSms ci-dessus).
+   */
+  async sendOnboardingEmail(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    const data = this.parseOnboardingData(onboarding.data);
+    const email = data.email;
+    if (!email) {
+      throw new BadRequestException("Aucun email pour ce dossier d'inscription.");
+    }
+    const url = onboarding.token ? this.onboardingUrl(onboarding.token) : null;
+    if (!url) {
+      throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
+    }
+
+    const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    const greeting = data.firstName ? `Bonjour ${data.firstName}` : "Bonjour";
     const html =
       `<p>${greeting},</p>` +
       `<p>Voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien :</p>` +
-      `<p><a href="${input.url}">${input.url}</a></p>` +
+      `<p><a href="${url}">${url}</a></p>` +
       `<p>Merci de le compléter dès que possible.</p>` +
       `<p>Cordialement,<br>${companyName}</p>`;
     try {
       await this.emails.send({
-        to: input.email,
+        to: email,
         subject: "Votre lien d'inscription locataire",
         html,
         type: "form_link",
         relatedType: "tenant-onboarding",
       });
-      return { success: true, message: "Email envoyé." };
     } catch (error) {
       this.logger.warn(
-        `Onboarding link email error to ${input.email}: ${error instanceof Error ? error.message : String(error)}`,
+        `Onboarding link email error to ${email}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return { success: false, message: "Impossible d'envoyer l'email." };
+      throw new BadRequestException("Impossible d'envoyer l'email.");
+    }
+
+    await this.db
+      .update(tenantOnboardings)
+      .set({ emailSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tenantOnboardings.id, id));
+
+    return this.adminOnboardingResponse(await this.findOnboarding(id));
+  }
+
+  /**
+   * Webhook public appele par Twilio (StatusCallback, option A) a chaque
+   * changement de statut d'un SMS. Relie le message au dossier via sms_sid et
+   * met a jour sms_status / sms_delivered_at. Endpoint public => on valide la
+   * signature X-Twilio-Signature avant toute ecriture.
+   */
+  async handleSmsStatusCallback(fullUrl: string, signature: string, body: Record<string, any>) {
+    if (!this.isValidTwilioSignature(fullUrl, signature, body)) {
+      throw new UnauthorizedException("Invalid Twilio signature.");
+    }
+    const sid = body?.MessageSid || body?.SmsSid;
+    const status = String(body?.MessageStatus || body?.SmsStatus || "").toLowerCase();
+    if (!sid || !status) return { ok: true };
+
+    const patch: Record<string, any> = {
+      smsStatus: status,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    };
+    if (status === "delivered") {
+      patch.smsDeliveredAt = sql`CURRENT_TIMESTAMP`;
+    }
+    await this.db
+      .update(tenantOnboardings)
+      .set(patch)
+      .where(eq(tenantOnboardings.smsSid, String(sid)));
+    return { ok: true };
+  }
+
+  // Signature Twilio: HMAC-SHA1(authToken, url + concat des params POST tries
+  // par cle) encode en base64, compare a X-Twilio-Signature.
+  private isValidTwilioSignature(url: string, signature: string, params: Record<string, any>) {
+    const authToken = env.twilio.authToken;
+    if (!authToken || !signature) return false;
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => acc + key + String(params[key] ?? ""), url);
+    const expected = createHmac("sha1", authToken).update(Buffer.from(data, "utf-8")).digest("base64");
+    try {
+      const a = Buffer.from(expected);
+      const b = Buffer.from(signature);
+      return a.length === b.length && timingSafeEqual(a, b);
+    } catch {
+      return false;
     }
   }
 
 
-  async onboardingList() {
+  async onboardingList(orgId: number) {
     const rows = await this.db
       .select({
         id: tenantOnboardings.id,
@@ -376,18 +525,29 @@ export class PropertyManagementService {
         submittedAt: tenantOnboardings.submittedAt,
         validatedAt: tenantOnboardings.validatedAt,
         customerId: tenantOnboardings.customerId,
+        smsSentAt: tenantOnboardings.smsSentAt,
+        emailSentAt: tenantOnboardings.emailSentAt,
+        smsStatus: tenantOnboardings.smsStatus,
+        smsDeliveredAt: tenantOnboardings.smsDeliveredAt,
         createdAt: tenantOnboardings.createdAt,
         updatedAt: tenantOnboardings.updatedAt,
       })
       .from(tenantOnboardings)
-      .where(ne(tenantOnboardings.status, "deleted"))
+      .where(and(ne(tenantOnboardings.status, "deleted"), eq(tenantOnboardings.organizationId, orgId)))
       .orderBy(desc(tenantOnboardings.id));
 
     return rows.map((row) => this.adminOnboardingResponse(row));
   }
 
-  async deleteOnboarding(id: number) {
-    const onboarding = await this.findOnboarding(id);
+  async deleteOnboarding(id: number, orgId: number) {
+    const [onboarding] = await this.db
+      .select({ id: tenantOnboardings.id, status: tenantOnboardings.status })
+      .from(tenantOnboardings)
+      .where(and(eq(tenantOnboardings.id, id), eq(tenantOnboardings.organizationId, orgId)))
+      .limit(1);
+    if (!onboarding) {
+      throw new NotFoundException("Onboarding not found");
+    }
     if (onboarding.status === "validated") {
       throw new BadRequestException(
         "Impossible de supprimer : ce dossier est validé et lié à un locataire.",
@@ -396,7 +556,7 @@ export class PropertyManagementService {
     await this.db
       .update(tenantOnboardings)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(tenantOnboardings.id, id));
+      .where(and(eq(tenantOnboardings.id, id), eq(tenantOnboardings.organizationId, orgId)));
     await this.publishOnboardingUpdate("deleted", id);
     return { message: "Dossier d'inscription supprimé." };
   }
@@ -417,10 +577,24 @@ export class PropertyManagementService {
         const cleaned = normalizePhoneE164(next[f]);
         next[f] = cleaned ?? next[f];
       } else {
-        next[f] = normalizePhoneE164Strict(next[f]);
+        next[f] = this.normalizePhoneOrBadRequest(next[f]);
       }
     }
     return next as T;
+  }
+
+  // SCRUM-229 — un numéro invalide est une erreur de saisie utilisateur (400),
+  // pas une panne serveur : InvalidPhoneNumberError n'est pas une HttpException
+  // et remontait sinon en 500 générique côté client.
+  private normalizePhoneOrBadRequest(raw: string): string {
+    try {
+      return normalizePhoneE164Strict(raw);
+    } catch (err) {
+      if (err instanceof InvalidPhoneNumberError) {
+        throw new BadRequestException(`Numero de telephone invalide : "${raw}"`);
+      }
+      throw err;
+    }
   }
 
   async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {
@@ -471,10 +645,7 @@ export class PropertyManagementService {
       })
       .from(currencies)
       .where(eq(currencies.status, "true"));
-    const [setting] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
+    const setting = await readOrgAppSetting(this.db, 1, { currencyId: appSettings.currencyId });
     return {
       id: onboarding.id,
       phone: onboarding.phone,
@@ -482,7 +653,7 @@ export class PropertyManagementService {
       data: this.parseOnboardingData(onboarding.data),
       expiresAt: onboarding.expiresAt,
       currencies: activeCurrencies,
-      defaultCurrencyId: setting?.currencyId ?? null,
+      defaultCurrencyId: (setting?.currencyId as number | null) ?? null,
     };
   }
 
@@ -553,6 +724,8 @@ export class PropertyManagementService {
         nationality: input.nationality,
         maritalStatus: input.marital_status,
         originProvince: input.origin_province ?? "",
+        idDocumentType: input.id_document_type ?? null,
+        idNumber: input.id_number ?? null,
         phone2: input.phone2 ?? null,
         contactedPerson: input.contacted_person,
         contactedPersonPhoneNumber: input.contacted_person_phone_number,
@@ -586,7 +759,30 @@ export class PropertyManagementService {
     return this.findTenant(customerId, orgId);
   }
 
-  async properties(orgId: number) {
+  // ── Helpers RBAC par bien (Domus, Phase 2) ───────────────────────────────
+  // Filtre DIRECT sur l id du bien (table real_estate_properties). "all" => pas
+  // de filtre ; liste vide => aucun resultat.
+  private propertyDirectFilter(column: any, scope: "all" | number[]) {
+    if (scope === "all") return undefined;
+    return scope.length ? inArray(column, scope) : sql`1 = 0`;
+  }
+
+  // Filtre VIA une colonne property_id (baux : property_id direct). Les lignes
+  // sans property_id restent visibles (fail-open).
+  private propertyViaColumnFilter(propertyIdColumn: any, scope: "all" | number[]) {
+    if (scope === "all") return undefined;
+    if (!scope.length) return sql`1 = 0`;
+    return inArray(propertyIdColumn, scope);
+  }
+
+  private ensurePropertyInScope(propertyId: number, scope: "all" | number[]) {
+    if (scope !== "all" && !scope.includes(propertyId)) {
+      throw new NotFoundException("Property not found.");
+    }
+  }
+
+  async properties(orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyDirectFilter(realEstateProperties.id, propertyScope);
     const rows = await this.db
       .select({
         id: realEstateProperties.id,
@@ -604,6 +800,7 @@ export class PropertyManagementService {
         defaultRent: realEstateProperties.defaultRent,
         currencyId: realEstateProperties.currencyId,
         description: realEstateProperties.description,
+        availableForBooking: realEstateProperties.availableForBooking,
         createdAt: realEstateProperties.createdAt,
         updatedAt: realEstateProperties.updatedAt,
         unitsCount: sql<number>`count(${realEstateUnits.id})`,
@@ -613,16 +810,389 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
-      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId)))
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId), scopeFilter))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
     return rows.map((row) => ({ ...row, unitsCount: Number(row.unitsCount) }));
   }
 
+  async propertyPhotos(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
+    const scopeFilter = this.propertyDirectFilter(realEstatePropertyPhotos.propertyId, propertyScope);
+    const rows = await this.db
+      .select({
+        id: realEstatePropertyPhotos.id,
+        organizationId: realEstatePropertyPhotos.organizationId,
+        propertyId: realEstatePropertyPhotos.propertyId,
+        unitId: realEstatePropertyPhotos.unitId,
+        bucket: realEstatePropertyPhotos.bucket,
+        objectKey: realEstatePropertyPhotos.objectKey,
+        originalName: realEstatePropertyPhotos.originalName,
+        mimeType: realEstatePropertyPhotos.mimeType,
+        sizeBytes: realEstatePropertyPhotos.sizeBytes,
+        isPrimary: realEstatePropertyPhotos.isPrimary,
+        sortOrder: realEstatePropertyPhotos.sortOrder,
+        createdAt: realEstatePropertyPhotos.createdAt,
+      })
+      .from(realEstatePropertyPhotos)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyPhotos.propertyId))
+      .where(and(
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        propertyId ? eq(realEstatePropertyPhotos.propertyId, propertyId) : undefined,
+        scopeFilter,
+      ))
+      .orderBy(desc(realEstatePropertyPhotos.isPrimary), realEstatePropertyPhotos.sortOrder, desc(realEstatePropertyPhotos.id));
+
+    return rows.map((row) => this.propertyPhotoResponse(row));
+  }
+
+  async uploadPropertyPhoto(
+    propertyId: number,
+    file: any,
+    orgId: number,
+    propertyScope: "all" | number[] = "all",
+    unitId?: number | null,
+  ) {
+    await this.ensureActiveProperty(propertyId, orgId);
+    this.ensurePropertyInScope(propertyId, propertyScope);
+    const photoUnitId = unitId != null && Number.isFinite(unitId) && unitId > 0 ? Number(unitId) : null;
+    if (photoUnitId != null) {
+      await this.ensureActiveUnitInProperty(photoUnitId, propertyId, orgId);
+    }
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(realEstatePropertyPhotos)
+      .where(and(
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.propertyId, propertyId),
+        this.photoUnitFilter(photoUnitId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+      ));
+    const count = Number(countRow?.count || 0);
+    const stored = await this.objectStorage.putImage(
+      file,
+      photoUnitId != null ? `domus/properties/${orgId}/${propertyId}/units/${photoUnitId}` : `domus/properties/${orgId}/${propertyId}`,
+    );
+    const [result] = await this.db.insert(realEstatePropertyPhotos).values({
+      organizationId: orgId,
+      propertyId,
+      unitId: photoUnitId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      isPrimary: count === 0 ? 1 : 0,
+      sortOrder: count,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    await this.publishPropertyUpdate("updated", propertyId, { propertyId });
+    const photo = await this.findPropertyPhoto(Number(result.insertId), orgId, propertyScope);
+    return this.propertyPhotoResponse(photo);
+  }
+
+  async deletePropertyPhoto(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const photo = await this.findPropertyPhoto(photoId, orgId, propertyScope);
+    await this.objectStorage.deleteObject(photo.objectKey);
+    await this.db
+      .update(realEstatePropertyPhotos)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyPhotos.id, photoId), eq(realEstatePropertyPhotos.organizationId, orgId)));
+
+    if (Number(photo.isPrimary) === 1) {
+      const [next] = await this.db
+        .select({ id: realEstatePropertyPhotos.id })
+        .from(realEstatePropertyPhotos)
+        .where(and(
+          eq(realEstatePropertyPhotos.organizationId, orgId),
+          eq(realEstatePropertyPhotos.propertyId, photo.propertyId),
+          this.photoUnitFilter(photo.unitId),
+          eq(realEstatePropertyPhotos.isActive, 1),
+        ))
+        .orderBy(realEstatePropertyPhotos.sortOrder, desc(realEstatePropertyPhotos.id))
+        .limit(1);
+      if (next) {
+        await this.db
+          .update(realEstatePropertyPhotos)
+          .set({ isPrimary: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstatePropertyPhotos.id, next.id));
+      }
+    }
+
+    await this.publishPropertyUpdate("updated", photo.propertyId, { propertyId: photo.propertyId });
+    return { message: "Photo supprimee." };
+  }
+
+  async propertyPhotoFile(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const photo = await this.findPropertyPhoto(photoId, orgId, propertyScope);
+    const object = await this.objectStorage.getObject(photo.objectKey);
+    return {
+      ...object,
+      originalName: photo.originalName || `property-photo-${photo.id}`,
+      mimeType: photo.mimeType,
+    };
+  }
+
+  async publicPropertyPhotoFile(photoId: number, orgId = 1) {
+    return this.propertyPhotoFile(photoId, orgId, "all");
+  }
+
+  async publicCatalog(orgId = 1) {
+    const [properties, units, photos, setting, currencyRows] = await Promise.all([
+      this.properties(orgId, "all"),
+      this.units(orgId),
+      this.propertyPhotos(orgId, "all"),
+      readOrgAppSetting(this.db, orgId, {
+        companyName: appSettings.companyName,
+        tagLine: appSettings.tagLine,
+        address: appSettings.address,
+        phone: appSettings.phone,
+        email: appSettings.email,
+        website: appSettings.website,
+        currencyId: appSettings.currencyId,
+      }),
+      this.db
+        .select({
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          status: currencies.status,
+        })
+        .from(currencies)
+        .where(ne(currencies.status, "false")),
+    ]);
+
+    const photosByProperty = new Map<number, any[]>();
+    const photosByUnit = new Map<number, any[]>();
+    for (const photo of photos) {
+      const publicPhoto = this.publicPhotoResponse(photo);
+      if (photo.unitId != null) {
+        const unitId = Number(photo.unitId);
+        if (!photosByUnit.has(unitId)) photosByUnit.set(unitId, []);
+        photosByUnit.get(unitId)!.push(publicPhoto);
+      } else {
+        const propertyId = Number(photo.propertyId);
+        if (!photosByProperty.has(propertyId)) photosByProperty.set(propertyId, []);
+        photosByProperty.get(propertyId)!.push(publicPhoto);
+      }
+    }
+
+    const bookableUnits = units.filter((unit) => Number(unit.availableForBooking) === 1);
+    const propsWithUnits = new Set(units.map((unit) => Number(unit.propertyId)));
+    const propertyById = new Map(properties.map((property) => [Number(property.id), property]));
+    const stays = [
+      ...properties
+        .filter((property) => !propsWithUnits.has(Number(property.id)) && Number(property.availableForBooking) === 1)
+        .map((property) => this.publicStayFromProperty(property, photosByProperty.get(Number(property.id)) || [], setting?.currencyId as number | null | undefined)),
+      ...bookableUnits.map((unit) => {
+        const property = propertyById.get(Number(unit.propertyId));
+        return this.publicStayFromUnit(unit, property, photosByUnit.get(Number(unit.id)) || [], setting?.currencyId as number | null | undefined);
+      }),
+    ].filter(Boolean);
+
+    return {
+      settings: {
+        companyName: setting?.companyName || "Domus",
+        tagLine: setting?.tagLine || "Logements disponibles a la reservation",
+        address: setting?.address || null,
+        phone: setting?.phone || null,
+        email: setting?.email || null,
+        website: setting?.website || null,
+        currencyId: setting?.currencyId || null,
+      },
+      currencies: currencyRows,
+      stays,
+    };
+  }
+
+  async publicStay(key: string, orgId = 1) {
+    const catalog = await this.publicCatalog(orgId);
+    const stay = catalog.stays.find((item: any) => item.key === key);
+    if (!stay) throw new NotFoundException("Bien introuvable.");
+    return { ...catalog, stay };
+  }
+
+  async createPublicReservation(input: PublicReservationRequestDto, orgId = 1) {
+    const stay = await this.resolvePublicStayForRequest(input.propertyId, input.unitId ?? null, orgId);
+    return this.createReservation({
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      guestName: input.guestName,
+      guestPhone: input.guestPhone ?? null,
+      guestEmail: input.guestEmail ?? null,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      dailyRate: stay.dailyRate,
+      depositAmount: 0,
+      currencyId: stay.currencyId ?? undefined,
+      couponCode: input.couponCode ?? null,
+      notes: [input.notes, "Demande recue depuis la vitrine publique Domus"].filter(Boolean).join("\n"),
+    }, orgId, "all");
+  }
+
+  async createPublicLeaseRequest(input: PublicLeaseRequestDto, orgId = 1) {
+    const stay = await this.resolvePublicStayForRequest(input.propertyId, input.unitId ?? null, orgId);
+    const phone = normalizePhoneE164(input.phone) || input.phone;
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const data = JSON.stringify({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email ?? null,
+      phone,
+      desiredMoveIn: input.desiredMoveIn ?? null,
+      message: input.message ?? null,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      listingKey: stay.key,
+      listingTitle: stay.title,
+      source: "domus-public-listing",
+    });
+    const [result] = await this.db.insert(tenantOnboardings).values({
+      organizationId: orgId,
+      phone,
+      tokenHash: this.hashToken(token),
+      token,
+      status: "submitted",
+      data,
+      expiresAt,
+      submittedAt: sql`CURRENT_TIMESTAMP`,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const id = Number((result as any).insertId);
+    await this.publishOnboardingUpdate("created", id);
+    return {
+      id,
+      status: "submitted",
+      message: "Votre demande de bail a ete envoyee. Nous vous contacterons pour finaliser le dossier.",
+    };
+  }
+
+  private publicPhotoResponse(photo: { id: number; propertyId: number; unitId?: number | null; isPrimary?: boolean | number; sortOrder?: number }) {
+    return {
+      id: Number(photo.id),
+      propertyId: Number(photo.propertyId),
+      unitId: photo.unitId == null ? null : Number(photo.unitId),
+      isPrimary: photo.isPrimary === true || Number(photo.isPrimary) === 1,
+      sortOrder: Number(photo.sortOrder || 0),
+      url: `/api/property-management/public/photos/${photo.id}/file`,
+    };
+  }
+
+  private publicDailyRate(monthly: string | number | null | undefined) {
+    const n = Number(monthly || 0);
+    return Number.isFinite(n) ? Math.round((n / 30) * 100) / 100 : 0;
+  }
+
+  private publicCover(photos: any[]) {
+    return photos.find((photo) => photo.isPrimary) || photos[0] || null;
+  }
+
+  private publicStayFromProperty(property: any, photos: any[], defaultCurrencyId?: number | null) {
+    return {
+      key: `p-${property.id}`,
+      propertyId: Number(property.id),
+      unitId: null,
+      title: property.name || `Bien ${property.id}`,
+      propertyName: property.name || `Bien ${property.id}`,
+      type: property.propertyType || "Bien entier",
+      city: property.city || "",
+      country: property.country || "",
+      address: [property.address, property.city].filter(Boolean).join(", ") || "Adresse sur demande",
+      bedrooms: Number(property.bedrooms || 0),
+      bathrooms: Number(property.bathrooms || 0),
+      parkingSpaces: Number(property.parkingSpaces || 0),
+      floors: Number(property.floors || 0),
+      area: null,
+      dailyRate: this.publicDailyRate(property.defaultRent),
+      monthlyRent: Number(property.defaultRent || 0),
+      currencyId: property.currencyId || defaultCurrencyId || null,
+      description: property.description || "",
+      amenities: "",
+      photos,
+      cover: this.publicCover(photos),
+      bookingMode: "property",
+    };
+  }
+
+  private publicStayFromUnit(unit: any, property: any, photos: any[], defaultCurrencyId?: number | null) {
+    if (!property) return null;
+    return {
+      key: `u-${unit.id}`,
+      propertyId: Number(unit.propertyId),
+      unitId: Number(unit.id),
+      title: unit.name || `Unite ${unit.id}`,
+      propertyName: property.name || unit.propertyName || `Bien ${unit.propertyId}`,
+      type: unit.unitType || property.propertyType || "Logement",
+      city: property.city || "",
+      country: property.country || "",
+      address: [property.address, property.city].filter(Boolean).join(", ") || "Adresse sur demande",
+      bedrooms: Number(unit.bedrooms || 0),
+      bathrooms: Number(unit.bathrooms || 0),
+      parkingSpaces: Number(property.parkingSpaces || 0),
+      floors: Number(property.floors || 0),
+      area: Number(unit.area || 0),
+      dailyRate: this.publicDailyRate(unit.monthlyRent || property.defaultRent),
+      monthlyRent: Number(unit.monthlyRent || property.defaultRent || 0),
+      currencyId: unit.currencyId || property.currencyId || defaultCurrencyId || null,
+      description: unit.description || property.description || "",
+      amenities: unit.amenities || "",
+      photos,
+      cover: this.publicCover(photos),
+      bookingMode: "unit",
+    };
+  }
+
+  private async resolvePublicStayForRequest(propertyId: number, unitId: number | null, orgId: number) {
+    await this.ensureActiveProperty(propertyId, orgId);
+    const [property] = await this.db
+      .select()
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.id, propertyId),
+        eq(realEstateProperties.organizationId, orgId),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ))
+      .limit(1);
+    if (!property) throw new NotFoundException("Bien introuvable.");
+    let unit: any = null;
+    if (unitId != null) {
+      const rows = await this.db
+        .select()
+        .from(realEstateUnits)
+        .where(and(
+          eq(realEstateUnits.id, unitId),
+          eq(realEstateUnits.propertyId, propertyId),
+          eq(realEstateUnits.organizationId, orgId),
+          ne(realEstateUnits.status, "false"),
+          eq(realEstateUnits.isActive, 1),
+        ))
+        .limit(1);
+      if (!rows.length) throw new BadRequestException("Cette unite n'appartient pas au bien selectionne.");
+      unit = rows[0];
+    }
+    const stay = unit
+      ? this.publicStayFromUnit(unit, property, [], property.currencyId)
+      : this.publicStayFromProperty(property, [], property.currencyId);
+    if (!stay || !stay.dailyRate) {
+      throw new BadRequestException("Ce bien n'a pas de tarif public disponible.");
+    }
+    return stay;
+  }
+
   async createProperty(input: CreatePropertyDto, orgId: number) {
     const code = input.code?.trim() || (await this.nextPropertyCode());
-    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
@@ -641,6 +1211,7 @@ export class PropertyManagementService {
       defaultRent: this.money(input.defaultRent),
       currencyId,
       description: input.description ?? null,
+      availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -673,6 +1244,7 @@ export class PropertyManagementService {
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
+        ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateProperties.id, id), eq(realEstateProperties.organizationId, orgId)));
@@ -732,6 +1304,7 @@ export class PropertyManagementService {
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
+        availableForBooking: realEstateUnits.availableForBooking,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
         propertyIsActive: realEstateProperties.isActive,
@@ -751,7 +1324,7 @@ export class PropertyManagementService {
 
   async createUnit(input: CreateUnitDto, orgId: number) {
     await this.ensureActiveProperty(input.propertyId, orgId);
-    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
@@ -770,6 +1343,7 @@ export class PropertyManagementService {
       securityDeposit: this.money(input.securityDeposit),
       amenities: input.amenities ?? null,
       description: input.description ?? null,
+      availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -801,6 +1375,7 @@ export class PropertyManagementService {
           "amenities",
           "description",
         ]),
+        ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
         ...(input.area !== undefined ? { area: this.money(input.area) } : {}),
         ...(input.monthlyRent !== undefined ? { monthlyRent: this.money(input.monthlyRent) } : {}),
         ...(input.securityDeposit !== undefined ? { securityDeposit: this.money(input.securityDeposit) } : {}),
@@ -834,8 +1409,10 @@ export class PropertyManagementService {
     return { message: "Unit deleted successfully." };
   }
 
-  leases(orgId: number) {
-    return this.leaseQuery()
+  // RBAC bien : filtre direct sur le property_id du bail.
+  async leases(orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyViaColumnFilter(realEstateLeases.propertyId, propertyScope);
+    const rows = await this.leaseQuery()
       .where(and(
         ne(realEstateLeases.status, "cancelled"),
         ne(leaseProperty.status, "false"),
@@ -843,13 +1420,24 @@ export class PropertyManagementService {
         ne(leaseUnit.status, "false"),
         eq(leaseUnit.isActive, 1),
         eq(realEstateLeases.organizationId, orgId),
+        scopeFilter,
       ))
       .orderBy(desc(realEstateLeases.id));
+    return this.withOverdueStats(rows);
   }
 
   async createLease(input: CreateLeaseDto, orgId: number) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId, orgId);
-    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency());
+    if ((input.status ?? "draft") === "active") {
+      await this.assertNoLeaseOverlap(
+        orgId,
+        input.propertyId,
+        input.unitId,
+        this.requiredDate(input.startDate),
+        this.date(input.endDate),
+      );
+    }
+    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
     const [result] = await this.db.insert(realEstateLeases).values({
       organizationId: orgId,
       reference: input.reference || `LEASE-${Date.now()}`,
@@ -869,6 +1457,7 @@ export class PropertyManagementService {
           : null,
       moveInNotes: input.moveInNotes ?? null,
       terms: input.terms ?? null,
+      signingCity: input.signingCity ?? null,
       status: input.status ?? "draft",
       taxName: input.taxName ?? null,
       taxType: input.taxType ?? null,
@@ -899,6 +1488,28 @@ export class PropertyManagementService {
       orgId,
     );
 
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
+
+    // Double location : si le bail résultant est "active", vérifier qu'aucun
+    // autre bail actif ne chevauche ses dates sur la même unité.
+    const resultingStatus = input.status ?? current.status;
+    if (resultingStatus === "active") {
+      const resultingStart =
+        input.startDate !== undefined ? this.requiredDate(input.startDate) : (current.startDate as string);
+      const resultingEnd =
+        input.endDate !== undefined ? this.date(input.endDate) : ((current.endDate as string | null) ?? null);
+      await this.assertNoLeaseOverlap(
+        orgId,
+        input.propertyId ?? current.propertyId,
+        input.unitId ?? current.unitId,
+        resultingStart,
+        resultingEnd,
+        id,
+      );
+    }
+
     await this.db
       .update(realEstateLeases)
       .set({
@@ -910,11 +1521,15 @@ export class PropertyManagementService {
           "billingCycle",
           "moveInNotes",
           "terms",
+          "signingCity",
           "status",
           "taxName",
           "taxType",
           "taxApplyMode",
         ]),
+        ...(input.currencyId !== undefined && input.currencyId !== null
+          ? { currencyId: input.currencyId }
+          : {}),
         ...(input.startDate !== undefined ? { startDate: this.requiredDate(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: this.date(input.endDate) } : {}),
         ...(input.nextInvoiceDate !== undefined ? { nextInvoiceDate: this.date(input.nextInvoiceDate) } : {}),
@@ -960,11 +1575,11 @@ export class PropertyManagementService {
     return { message: "Lease deleted successfully." };
   }
 
-  payments(orgId: number) {
-    return this.paymentQuery(undefined, orgId).orderBy(desc(realEstateRentPayments.id));
+  payments(orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
   }
 
-  private paymentQuery(id?: number, orgId?: number) {
+  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all") {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -1000,6 +1615,10 @@ export class PropertyManagementService {
         eq(paymentUnit.isActive, 1),
         ...(id ? [eq(realEstateRentPayments.id, id)] : []),
         ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
+        // RBAC bien : loyers du bien (via le bail). "all" => pas de filtre.
+        ...(propertyScope !== "all"
+          ? [propertyScope.length ? inArray(paymentLease.propertyId, propertyScope) : sql`1 = 0`]
+          : []),
       ));
   }
 
@@ -1008,7 +1627,7 @@ export class PropertyManagementService {
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
     await this.ensureLeaseContractSigned(input.leaseId);
-    const rentPaymentType = await this.getRentPaymentType();
+    const rentPaymentType = await this.getRentPaymentType(orgId);
     // Le compte débité (où arrive l'argent) dépend du moyen de paiement :
     // Espèces → Cash, Bancaire/Carte/Chèque → Banque, Mobile money → Mobile Money.
     const debitId = input.paymentAccountId
@@ -1019,9 +1638,10 @@ export class PropertyManagementService {
     const paymentCurrencyId =
       (input as any).currencyId
       ?? (lease as any).currencyId
-      ?? (await this.resolveDefaultCurrency());
+      ?? (await this.resolveDefaultCurrency(orgId));
 
     const [transactionResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId: rentPaymentType.creditAccountId,
@@ -1059,9 +1679,10 @@ export class PropertyManagementService {
 
     // Comptabilisation de la part de taxe (type dédié "Real Estate Tax").
     if (taxAmt != null && taxAmt > 0) {
-      const taxType = await this.getRealEstateTaxTypeOptional();
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
       if (taxType) {
         await this.db.insert(transactions).values({
+          organizationId: orgId,
           date: new Date(input.paymentDate),
           debitId: taxType.debitAccountId,
           creditId: taxType.creditAccountId,
@@ -1076,6 +1697,35 @@ export class PropertyManagementService {
         });
       }
     }
+
+    // Ecriture comptable moderne (partie double) via LedgerService — dual-write,
+    // idempotent par paiement. Loyer + part de taxe regroupes dans une ecriture.
+    const rentLines = [
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+    ];
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
+      if (taxType) {
+        rentLines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `RENT-${paymentId}`,
+        particulars: input.notes || `Payment for rent — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: paymentCurrencyId ?? undefined,
+        idempotencyKey: `rent-payment:${paymentId}`,
+        lines: rentLines,
+      },
+      orgId,
+    );
 
     await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
@@ -1097,7 +1747,7 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateSecurityDeposits.id));
   }
 
-  private async getTransactionTypeByName(name: string) {
+  private async getTransactionTypeByName(name: string, orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1105,7 +1755,7 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
     if (!rows.length) throw new BadRequestException(`Transaction type "${name}" is missing.`);
     return rows[0];
@@ -1138,11 +1788,12 @@ export class PropertyManagementService {
     // Comptes résolus directement (robuste même si les types ne sont pas seedés).
     const bank = this.isBankMethod(input.method);
     const debitId = bank ? 2 : 1; // 2=Bank, 1=Cash
-    const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const currencyId =
-      (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+      (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
 
     const [txResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId,
@@ -1171,11 +1822,30 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    await this.publishPaymentUpdate("created", Number(depResult.insertId), {
+    const depositId = Number(depResult.insertId);
+    // Ecriture moderne (dual-write) : caution recue, debit Caisse/Banque / credit passif.
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `DEPOSIT-${depositId}`,
+        particulars: input.notes || `Caution reçue — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: currencyId ?? undefined,
+        idempotencyKey: `deposit-receipt:${depositId}`,
+        lines: [
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Caution reçue" },
+          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: "Tenant Deposits" },
+        ],
+      },
+      orgId,
+    );
+
+    await this.publishPaymentUpdate("created", depositId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
-    return this.findDeposit(Number(depResult.insertId));
+    return this.findDeposit(depositId);
   }
 
   async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number) {
@@ -1199,13 +1869,14 @@ export class PropertyManagementService {
 
     // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
-    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const refundCredit = this.isBankMethod(input.returnMethod) ? 2 : 1; // 2=Bank, 1=Cash
-    const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
 
     let returnTransactionId: number | null = null;
     if (returned > 0) {
       const [txResult] = await this.db.insert(transactions).values({
+        organizationId: orgId,
         date: new Date(input.returnDate),
         debitId: tenantDeposits,
         creditId: refundCredit,
@@ -1223,8 +1894,9 @@ export class PropertyManagementService {
     // Retenue pour dégâts : le passif est soldé (débit) contre un revenu/compensation
     // de maintenance (crédit Maintenance expense → réduit la charge).
     if (deduction > 0) {
-      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance");
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance", orgId);
       await this.db.insert(transactions).values({
+        organizationId: orgId,
         date: new Date(input.returnDate),
         debitId: tenantDeposits,
         creditId: maintenance,
@@ -1253,6 +1925,38 @@ export class PropertyManagementService {
       })
       .where(eq(realEstateSecurityDeposits.id, deposit.id));
 
+    // Ecriture moderne (dual-write) : restitution caution. Le passif soldé (débit)
+    // = part rendue (crédit caisse/banque) + retenue (crédit maintenance). Equilibree.
+    const returnLines: Array<{ accountId: number; side: "DEBIT" | "CREDIT"; amount: number; description?: string }> = [];
+    if (returned > 0) {
+      returnLines.push(
+        { accountId: tenantDeposits, side: "DEBIT", amount: returned, description: "Solde passif caution (restitution)" },
+        { accountId: refundCredit, side: "CREDIT", amount: returned, description: input.notes || "Caution restituée" },
+      );
+    }
+    if (deduction > 0) {
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance", orgId);
+      returnLines.push(
+        { accountId: tenantDeposits, side: "DEBIT", amount: deduction, description: "Solde passif caution (retenue)" },
+        { accountId: maintenance, side: "CREDIT", amount: deduction, description: input.deductionReason || "Retenue sur caution (dégâts)" },
+      );
+    }
+    if (returnLines.length >= 2) {
+      await this.ledger.post(
+        {
+          date: new Date(input.returnDate),
+          reference: `DEPOSIT-RET-${deposit.id}`,
+          particulars: `Restitution caution — bail ${lease.reference || lease.id}`,
+          sourceModule: "rent",
+          relatedId: String(lease.id),
+          currencyId: currencyId ?? undefined,
+          idempotencyKey: `deposit-return:${deposit.id}`,
+          lines: returnLines,
+        },
+        orgId,
+      );
+    }
+
     await this.publishPaymentUpdate("updated", deposit.id, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
@@ -1269,22 +1973,652 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  private async getOrCreateLiabilitySubAccount(name: string) {
-    return this.getOrCreateSubAccount(name, 2); // 2 = Liability
+  // ─── Réservation temporaire type hôtel (courte durée, tarif par jour) ────────
+  // Un client occupe un bien entier OU une unité sur une plage de dates.
+  // Indépendant du bail longue durée. Recette comptabilisée au check-out.
+
+  async reservations(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
+    const scopeFilter = this.propertyDirectFilter(realEstateReservations.propertyId, propertyScope);
+    return this.db
+      .select()
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+        propertyId ? eq(realEstateReservations.propertyId, propertyId) : undefined,
+        scopeFilter,
+      ))
+      .orderBy(desc(realEstateReservations.id));
   }
 
-  private async getOrCreateExpenseSubAccount(name: string) {
-    return this.getOrCreateSubAccount(name, 6); // 6 = Expense
+  async findReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const rows = await this.db
+      .select()
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.id, id),
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Réservation introuvable.");
+    this.ensurePropertyInScope(rows[0].propertyId, propertyScope);
+    return rows[0];
   }
 
-  private async getOrCreateSubAccount(name: string, accountId: number): Promise<number> {
+  // Nombre de jours facturés entre deux dates (borne à 1 minimum).
+  private reservationDays(checkIn: string, checkOut: string) {
+    const start = this.parseDateOnly(checkIn);
+    const end = this.parseDateOnly(checkOut);
+    const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
+    return Math.max(1, diff);
+  }
+
+  // Rejette la double location : un même bien+unité ne peut avoir deux baux
+  // "active" dont les périodes se chevauchent. Un end_date NULL = bail à durée
+  // indéterminée (occupe jusqu'à +infini), traité via COALESCE('9999-12-31').
+  // [startA, endA) et [startB, endB) se chevauchent si startA < endB ET endA > startB.
+  private async assertNoLeaseOverlap(
+    orgId: number,
+    propertyId: number,
+    unitId: number,
+    startDate: string,
+    endDate: string | null,
+    excludeId?: number,
+  ) {
+    const FAR = "9999-12-31";
+    const newEnd = endDate ?? FAR;
+    const rows = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(
+        eq(realEstateLeases.organizationId, orgId),
+        eq(realEstateLeases.propertyId, propertyId),
+        eq(realEstateLeases.unitId, unitId),
+        eq(realEstateLeases.status, "active"),
+        lt(realEstateLeases.startDate, newEnd),
+        sql`COALESCE(${realEstateLeases.endDate}, ${FAR}) > ${startDate}`,
+        excludeId ? ne(realEstateLeases.id, excludeId) : undefined,
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        "Un bail actif couvre déjà cette unité sur cette période (double location interdite).",
+      );
+    }
+  }
+
+  // Rejette tout chevauchement de dates sur le même bien+unité pour une
+  // réservation active non annulée/soldée. [checkIn, checkOut) se chevauchent si
+  // existing.check_in < new.check_out ET existing.check_out > new.check_in.
+  private async assertNoOverlap(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+    excludeId?: number,
+  ) {
+    const rows = await this.db
+      .select({ id: realEstateReservations.id })
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+        eq(realEstateReservations.propertyId, propertyId),
+        unitId == null ? isNull(realEstateReservations.unitId) : eq(realEstateReservations.unitId, unitId),
+        inArray(realEstateReservations.status, ["pending", "confirmed", "checked_in"]),
+        lt(realEstateReservations.checkIn, checkOut),
+        sql`${realEstateReservations.checkOut} > ${checkIn}`,
+        excludeId ? ne(realEstateReservations.id, excludeId) : undefined,
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        "Ces dates chevauchent une réservation existante.",
+      );
+    }
+  }
+
+  // Rejette une réservation dont les dates chevauchent un bail longue durée
+  // ACTIF sur le même bien/unité. Un bail est toujours rattaché à une unité
+  // (lease.unit_id NOT NULL) : réserver le bien entier entre en conflit avec
+  // n'importe quel bail actif du bien ; réserver une unité, avec le bail de
+  // cette unité. Bail ouvert (end_date NULL) = occupe indéfiniment.
+  private async assertNoLeaseConflict(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+  ) {
+    const rows = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(
+        eq(realEstateLeases.organizationId, orgId),
+        eq(realEstateLeases.status, "active"),
+        eq(realEstateLeases.propertyId, propertyId),
+        unitId == null ? undefined : eq(realEstateLeases.unitId, unitId),
+        lt(realEstateLeases.startDate, checkOut),
+        or(isNull(realEstateLeases.endDate), sql`${realEstateLeases.endDate} > ${checkIn}`),
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        "Ce bien est loué sur cette période.",
+      );
+    }
+  }
+
+  private async nextReservationReference(orgId: number) {
+    const [row] = await this.db
+      .select({ id: realEstateReservations.id })
+      .from(realEstateReservations)
+      .where(eq(realEstateReservations.organizationId, orgId))
+      .orderBy(desc(realEstateReservations.id))
+      .limit(1);
+    const next = (Number(row?.id) || 0) + 1;
+    return `RES-${String(next).padStart(4, "0")}`;
+  }
+
+  async createReservation(input: CreateReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    this.ensurePropertyInScope(input.propertyId, propertyScope);
+    if (input.unitId != null) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+    if (this.parseDateOnly(input.checkOut) <= this.parseDateOnly(input.checkIn)) {
+      throw new BadRequestException("La date de départ doit être postérieure à l'arrivée.");
+    }
+    await this.assertNoOverlap(orgId, input.propertyId, input.unitId ?? null, input.checkIn, input.checkOut);
+    await this.assertNoLeaseConflict(orgId, input.propertyId, input.unitId ?? null, input.checkIn, input.checkOut);
+
+    const days = this.reservationDays(input.checkIn, input.checkOut);
+    const dailyRate = Number(input.dailyRate) || 0;
+    const gross = Math.round(days * dailyRate * 100) / 100;
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
+
+    // Coupon facultatif : la remise baisse le total NET comptabilisé au check-out.
+    let couponId: number | null = null;
+    let discount = 0;
+    if (input.couponCode?.trim()) {
+      const coupon = await this.resolveCoupon(input.couponCode, orgId, input.checkIn, currencyId ?? null);
+      couponId = Number(coupon.id);
+      discount = this.couponDiscount(coupon, gross);
+    }
+    const total = Math.max(0, Math.round((gross - discount) * 100) / 100);
+
+    const [result] = await this.db.insert(realEstateReservations).values({
+      organizationId: orgId,
+      reference: input.reference?.trim() || (await this.nextReservationReference(orgId)),
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      guestName: input.guestName,
+      guestPhone: input.guestPhone ?? null,
+      guestEmail: input.guestEmail ?? null,
+      tenantId: input.tenantId ?? null,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      days,
+      dailyRate: this.money(dailyRate),
+      couponId,
+      discountAmount: this.money(discount),
+      totalAmount: this.money(total),
+      currencyId: currencyId ?? null,
+      depositAmount: this.money(input.depositAmount),
+      status: "pending",
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    if (couponId != null) {
+      await this.bumpCouponUsage(couponId);
+    }
+    const id = Number(result.insertId);
+    await this.publishPaymentUpdate("created", id, { propertyId: input.propertyId, unitId: input.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  async updateReservation(id: number, input: UpdateReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (["checked_out", "cancelled"].includes(reservation.status)) {
+      throw new BadRequestException("Une réservation soldée ou annulée n'est plus modifiable.");
+    }
+    if (input.unitId != null) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const checkIn = input.checkIn ?? reservation.checkIn;
+    const checkOut = input.checkOut ?? reservation.checkOut;
+    const propertyId = input.propertyId ?? reservation.propertyId;
+    const unitId = input.unitId !== undefined ? (input.unitId ?? null) : reservation.unitId;
+    if (input.propertyId != null && input.propertyId !== reservation.propertyId) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+      this.ensurePropertyInScope(input.propertyId, propertyScope);
+    }
+    if (this.parseDateOnly(checkOut) <= this.parseDateOnly(checkIn)) {
+      throw new BadRequestException("La date de départ doit être postérieure à l'arrivée.");
+    }
+    await this.assertNoOverlap(orgId, propertyId, unitId, checkIn, checkOut, id);
+    await this.assertNoLeaseConflict(orgId, propertyId, unitId, checkIn, checkOut);
+
+    const days = this.reservationDays(checkIn, checkOut);
+    const dailyRate = input.dailyRate != null ? Number(input.dailyRate) : Number(reservation.dailyRate);
+    const gross = Math.round(days * dailyRate * 100) / 100;
+    const currencyId = input.currencyId ?? reservation.currencyId;
+
+    // Coupon : code fourni non vide → (ré)applique ; chaîne vide → retire ; absent
+    // → conserve l'existant mais recalcule la remise sur le nouveau brut.
+    let couponId: number | null = reservation.couponId ?? null;
+    let discount = Number(reservation.discountAmount) || 0;
+    if (input.couponCode !== undefined) {
+      if (input.couponCode?.trim()) {
+        const coupon = await this.resolveCoupon(input.couponCode, orgId, checkIn, currencyId ?? null);
+        if (Number(coupon.id) !== reservation.couponId) {
+          await this.bumpCouponUsage(Number(coupon.id));
+        }
+        couponId = Number(coupon.id);
+        discount = this.couponDiscount(coupon, gross);
+      } else {
+        couponId = null;
+        discount = 0;
+      }
+    } else if (couponId != null) {
+      const [coupon] = await this.db
+        .select()
+        .from(realEstateCoupons)
+        .where(eq(realEstateCoupons.id, couponId))
+        .limit(1);
+      discount = coupon ? this.couponDiscount(coupon, gross) : 0;
+    }
+    const total = Math.max(0, Math.round((gross - discount) * 100) / 100);
+
+    await this.db
+      .update(realEstateReservations)
+      .set({
+        propertyId,
+        unitId,
+        guestName: input.guestName ?? reservation.guestName,
+        guestPhone: input.guestPhone !== undefined ? input.guestPhone : reservation.guestPhone,
+        guestEmail: input.guestEmail !== undefined ? input.guestEmail : reservation.guestEmail,
+        tenantId: input.tenantId !== undefined ? (input.tenantId ?? null) : reservation.tenantId,
+        checkIn,
+        checkOut,
+        days,
+        dailyRate: this.money(dailyRate),
+        couponId,
+        discountAmount: this.money(discount),
+        totalAmount: this.money(total),
+        currencyId,
+        depositAmount: input.depositAmount != null ? this.money(input.depositAmount) : reservation.depositAmount,
+        notes: input.notes !== undefined ? input.notes : reservation.notes,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId, unitId: unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  // Transitions de statut : pending → confirmed → checked_in → checked_out.
+  private async setReservationStatus(
+    id: number,
+    from: string[],
+    to: string,
+    orgId: number,
+    propertyScope: "all" | number[],
+  ) {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (!from.includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+    await this.db
+      .update(realEstateReservations)
+      .set({ status: to, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  confirmReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending"], "confirmed", orgId, propertyScope);
+  }
+
+  checkInReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending", "confirmed"], "checked_in", orgId, propertyScope);
+  }
+
+  cancelReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending", "confirmed", "checked_in"], "cancelled", orgId, propertyScope);
+  }
+
+  // Comptabilise la recette d'un séjour (débit Caisse/Banque, crédit « Short-term
+  // Rental Revenue ») via le ledger + la table plate transactions (dual-write), en
+  // devise. Utilisé au paiement anticipé (payReservation) et au check-out.
+  private async recordReservationPayment(
+    reservation: { id: number; reference: string; guestName: string; totalAmount: unknown; currencyId: number | null; transactionId: number | null },
+    input: CheckOutReservationDto,
+    orgId: number,
+    idempotencyKey: string,
+  ): Promise<number | null> {
+    const amount = Number(reservation.totalAmount) || 0;
+    const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+    const currencyId = reservation.currencyId ?? (await this.resolveDefaultCurrency(orgId));
+    let transactionId: number | null = reservation.transactionId ?? null;
+
+    if (amount > 0) {
+      const debitId = input.paymentAccountId ?? (this.isBankMethod(input.method) ? 2 : 1); // 2=Bank, 1=Cash
+      const revenueId = await this.getOrCreateSubAccount("Short-term Rental Revenue", 5, orgId); // 5 = Revenue
+      const particulars = input.notes || `Séjour ${reservation.reference} — ${reservation.guestName}`;
+
+      const [txResult] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: new Date(paymentDate),
+        debitId,
+        creditId: revenueId,
+        particulars,
+        amount,
+        currencyId: currencyId ?? null,
+        type: this.isBankMethod(input.method) ? "BNQ - Short-term Rental" : "CAI - Short-term Rental",
+        relatedId: String(reservation.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      transactionId = Number(txResult.insertId);
+
+      await this.ledger.post(
+        {
+          date: new Date(paymentDate),
+          reference: `RES-${reservation.id}`,
+          particulars,
+          sourceModule: "rent",
+          relatedId: String(reservation.id),
+          currencyId: currencyId ?? undefined,
+          idempotencyKey,
+          lines: [
+            { accountId: debitId, side: "DEBIT", amount, description: particulars },
+            { accountId: revenueId, side: "CREDIT", amount, description: "Short-term Rental Revenue" },
+          ],
+        },
+        orgId,
+      );
+    }
+
+    return transactionId;
+  }
+
+  // Paiement anticipé (avant le check-out) : comptabilise la recette sans changer
+  // le statut de la réservation, pour ne pas confondre paiement et sortie physique.
+  async payReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.paidAt) {
+      throw new BadRequestException("Réservation déjà payée.");
+    }
+    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+
+    const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+    const transactionId = await this.recordReservationPayment(reservation, input, orgId, `reservation-payment:${reservation.id}`);
+
+    await this.db
+      .update(realEstateReservations)
+      .set({ paidAt: paymentDate, transactionId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  // Check-out : marque la sortie physique. Si la réservation n'a pas déjà été
+  // payée à l'avance (payReservation), comptabilise aussi la recette ici.
+  async checkOutReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.status === "checked_out") {
+      throw new BadRequestException("Réservation déjà soldée.");
+    }
+    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+
+    let transactionId: number | null = reservation.transactionId ?? null;
+    let paidAt: string | null = reservation.paidAt ?? null;
+
+    if (!paidAt) {
+      const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+      transactionId = await this.recordReservationPayment(reservation, input, orgId, `reservation-checkout:${reservation.id}`);
+      paidAt = paymentDate;
+    }
+
+    await this.db
+      .update(realEstateReservations)
+      .set({ status: "checked_out", transactionId, paidAt, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  async deleteReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.status === "checked_out") {
+      throw new BadRequestException("Impossible de supprimer une réservation soldée.");
+    }
+    await this.db
+      .update(realEstateReservations)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+    await this.publishPaymentUpdate("deleted", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return { message: "Réservation supprimée." };
+  }
+
+  // ── Coupons de réduction (réservations temporaires) ─────────────────────────
+
+  listCoupons(orgId: number) {
+    return this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.isActive, 1)))
+      .orderBy(desc(realEstateCoupons.id));
+  }
+
+  private normalizeCouponCode(code: string) {
+    return code.trim().toUpperCase();
+  }
+
+  async createCoupon(input: CreateCouponDto, orgId: number) {
+    const code = this.normalizeCouponCode(input.code);
+    if (!code) {
+      throw new BadRequestException("Le code coupon est obligatoire.");
+    }
+    const [existing] = await this.db
+      .select({ id: realEstateCoupons.id })
+      .from(realEstateCoupons)
+      .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.code, code)))
+      .limit(1);
+    if (existing) {
+      throw new BadRequestException(`Le code « ${code} » existe déjà.`);
+    }
+    const [result] = await this.db.insert(realEstateCoupons).values({
+      organizationId: orgId,
+      code,
+      description: input.description ?? null,
+      discountType: input.discountType,
+      discountValue: this.money(input.discountValue),
+      currencyId: input.currencyId ?? null,
+      validFrom: input.validFrom ?? null,
+      validTo: input.validTo ?? null,
+      maxUses: input.maxUses ?? null,
+      usedCount: 0,
+      isActive: input.isActive === false ? 0 : 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return this.findCoupon(Number(result.insertId), orgId);
+  }
+
+  private async findCoupon(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(
+        eq(realEstateCoupons.id, id),
+        eq(realEstateCoupons.organizationId, orgId),
+        eq(realEstateCoupons.isActive, 1),
+      ))
+      .limit(1);
+    if (!row) {
+      throw new NotFoundException("Coupon introuvable.");
+    }
+    return row;
+  }
+
+  async updateCoupon(id: number, input: UpdateCouponDto, orgId: number) {
+    const coupon = await this.findCoupon(id, orgId);
+    const code = input.code != null ? this.normalizeCouponCode(input.code) : coupon.code;
+    if (code !== coupon.code) {
+      const [dup] = await this.db
+        .select({ id: realEstateCoupons.id })
+        .from(realEstateCoupons)
+        .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.code, code)))
+        .limit(1);
+      if (dup) {
+        throw new BadRequestException(`Le code « ${code} » existe déjà.`);
+      }
+    }
+    await this.db
+      .update(realEstateCoupons)
+      .set({
+        code,
+        description: input.description !== undefined ? input.description : coupon.description,
+        discountType: input.discountType ?? coupon.discountType,
+        discountValue: input.discountValue != null ? this.money(input.discountValue) : coupon.discountValue,
+        currencyId: input.currencyId !== undefined ? input.currencyId : coupon.currencyId,
+        validFrom: input.validFrom !== undefined ? input.validFrom : coupon.validFrom,
+        validTo: input.validTo !== undefined ? input.validTo : coupon.validTo,
+        maxUses: input.maxUses !== undefined ? input.maxUses : coupon.maxUses,
+        isActive: input.isActive != null ? (input.isActive ? 1 : 0) : coupon.isActive,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateCoupons.id, id));
+    return this.findCoupon(id, orgId);
+  }
+
+  async deleteCoupon(id: number, orgId: number) {
+    await this.findCoupon(id, orgId);
+    await this.db
+      .update(realEstateCoupons)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateCoupons.id, id));
+    return { message: "Coupon désactivé." };
+  }
+
+  // Valide un code coupon pour une date/devise donnée. Retourne le coupon ou lève.
+  private async resolveCoupon(code: string, orgId: number, onDate: string, currencyId: number | null) {
+    const normalized = this.normalizeCouponCode(code);
+    const [coupon] = await this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(
+        eq(realEstateCoupons.organizationId, orgId),
+        eq(realEstateCoupons.code, normalized),
+        eq(realEstateCoupons.isActive, 1),
+      ))
+      .limit(1);
+    if (!coupon) {
+      throw new BadRequestException(`Coupon « ${normalized} » invalide ou inactif.`);
+    }
+    if (coupon.validFrom && onDate < coupon.validFrom) {
+      throw new BadRequestException(`Le coupon « ${normalized} » n'est pas encore valide.`);
+    }
+    if (coupon.validTo && onDate > coupon.validTo) {
+      throw new BadRequestException(`Le coupon « ${normalized} » a expiré.`);
+    }
+    if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
+      throw new BadRequestException(`Le coupon « ${normalized} » a atteint son quota d'utilisation.`);
+    }
+    if (
+      coupon.discountType === "fixed" &&
+      coupon.currencyId != null &&
+      currencyId != null &&
+      Number(coupon.currencyId) !== Number(currencyId)
+    ) {
+      throw new BadRequestException(`Le coupon « ${normalized} » ne s'applique pas à cette devise.`);
+    }
+    return coupon;
+  }
+
+  // Calcule la remise (bornée au brut) d'un coupon sur un montant brut.
+  private couponDiscount(coupon: typeof realEstateCoupons.$inferSelect, gross: number) {
+    const value = Number(coupon.discountValue) || 0;
+    const raw = coupon.discountType === "percentage" ? (gross * value) / 100 : value;
+    return Math.min(gross, Math.max(0, Math.round(raw * 100) / 100));
+  }
+
+  // Endpoint public de validation : renvoie la remise/net pour un aperçu UI.
+  async validateCoupon(code: string, gross: number, orgId: number, currencyId?: number | null) {
+    const onDate = this.formatDateOnly(new Date());
+    const coupon = await this.resolveCoupon(code, orgId, onDate, currencyId ?? null);
+    const discount = this.couponDiscount(coupon, Number(gross) || 0);
+    return {
+      couponId: Number(coupon.id),
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: Number(coupon.discountValue),
+      discountAmount: discount,
+      net: Math.max(0, (Number(gross) || 0) - discount),
+    };
+  }
+
+  private async bumpCouponUsage(couponId: number) {
+    await this.db
+      .update(realEstateCoupons)
+      .set({ usedCount: sql`${realEstateCoupons.usedCount} + 1`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateCoupons.id, couponId));
+  }
+
+  // Disponibilité : true si aucune réservation active ne chevauche la plage.
+  async checkReservationAvailability(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+    propertyScope: "all" | number[] = "all",
+  ) {
+    this.ensurePropertyInScope(propertyId, propertyScope);
+    try {
+      await this.assertNoOverlap(orgId, propertyId, unitId, checkIn, checkOut);
+      await this.assertNoLeaseConflict(orgId, propertyId, unitId, checkIn, checkOut);
+      return { available: true };
+    } catch (err) {
+      return { available: false, reason: (err as any)?.message || "Indisponible" };
+    }
+  }
+
+  private async getOrCreateLiabilitySubAccount(name: string, orgId: number) {
+    return this.getOrCreateSubAccount(name, 2, orgId); // 2 = Liability
+  }
+
+  private async getOrCreateExpenseSubAccount(name: string, orgId: number) {
+    return this.getOrCreateSubAccount(name, 6, orgId); // 6 = Expense
+  }
+
+  private async getOrCreateSubAccount(name: string, accountId: number, orgId: number): Promise<number> {
+    // Recherche ET creation scopees a l org (isolation P2) : un meme libelle
+    // (ex "Maintenance") peut exister dans plusieurs organisations.
     const existing = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(eq(subAccounts.name, name))
+      .where(and(eq(subAccounts.name, name), eq(subAccounts.organizationId, orgId)))
       .limit(1);
     if (existing.length) return existing[0].id;
     const [result] = await this.db.insert(subAccounts).values({
+      organizationId: orgId,
       name,
       accountId,
       status: "true",
@@ -1404,13 +2738,20 @@ export class PropertyManagementService {
         scheduledDate: realEstateMaintenanceRequests.scheduledDate,
         estimatedCost: realEstateMaintenanceRequests.estimatedCost,
         currencyId: realEstateMaintenanceRequests.currencyId,
+        // Somme des coûts réels déjà saisis pour ce ticket, dans SA devise (SIFA : pas de mélange).
+        spentCost: sql<string>`coalesce((select sum(${realEstateMaintenanceCosts.amount}) from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 and (${realEstateMaintenanceCosts.currencyId} = ${realEstateMaintenanceRequests.currencyId} or ${realEstateMaintenanceCosts.currencyId} is null)), 0)`,
+        // Dépense réelle groupée PAR devise (SIFA : pas de somme inter-devises) : [{ currencyId, symbol, amount }].
+        spentByCurrency: sql<string>`coalesce((select json_arrayagg(json_object('currencyId', mc.currencyId, 'symbol', cur.currencySymbol, 'amount', mc.total)) from (select coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId}) as currencyId, sum(${realEstateMaintenanceCosts.amount}) as total from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 group by coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId})) mc left join ${currencies} cur on cur.id = mc.currencyId), json_array())`,
         assigneeId: realEstateMaintenanceRequests.assigneeId,
         assigneeFirstName: maintenanceAssignee.firstName,
         assigneeLastName: maintenanceAssignee.lastName,
         assigneeUsername: maintenanceAssignee.username,
         description: realEstateMaintenanceRequests.description,
+        projectId: realEstateMaintenanceRequests.projectId,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
+        createdAt: realEstateMaintenanceRequests.createdAt,
+        updatedAt: realEstateMaintenanceRequests.updatedAt,
       })
       .from(realEstateMaintenanceRequests)
       .leftJoin(maintenanceProperty, eq(maintenanceProperty.id, realEstateMaintenanceRequests.propertyId))
@@ -1445,11 +2786,40 @@ export class PropertyManagementService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findMaintenance(Number(result.insertId));
+    const ticketId = Number(result.insertId);
+
+    // Un chantier de travaux = un projet analytique. On cree (ou reutilise, via le
+    // registre partage source_system=maintenance) un projet et on lie le ticket.
+    try {
+      const proj = await this.projects.create(
+        {
+          name: `Travaux: ${input.title}`,
+          code: `MNT-${ticketId}`,
+          budgetAmount: input.estimatedCost ? Number(input.estimatedCost) : undefined,
+          currencyId: input.currencyId ?? undefined,
+          sourceSystem: "maintenance",
+          externalRef: String(ticketId),
+        },
+        orgId,
+        userId,
+      );
+      await this.db
+        .update(realEstateMaintenanceRequests)
+        .set({ projectId: proj.id })
+        .where(eq(realEstateMaintenanceRequests.id, ticketId));
+    } catch (err) {
+      this.logger.warn(`createMaintenance: liaison projet ignoree: ${(err as Error).message}`);
+    }
+    const created = await this.findMaintenance(ticketId);
+    this.notifyMaintenanceStatus(created, created.status).catch((err) =>
+      this.logger.warn(`notifyMaintenanceStatus: envoi WhatsApp ignore: ${(err as Error).message}`),
+    );
+    return created;
   }
 
   async updateMaintenance(id: number, input: UpdateMaintenanceDto, orgId: number) {
     await this.ensureOrgOwned(realEstateMaintenanceRequests, id, orgId, "Maintenance request not found.");
+    const previousStatus = input.status !== undefined ? (await this.findMaintenance(id, orgId)).status : undefined;
     if (input.propertyId !== undefined) {
       await this.ensureActiveProperty(input.propertyId, orgId);
     }
@@ -1465,7 +2835,54 @@ export class PropertyManagementService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId)));
-    return this.findMaintenance(id);
+    const updated = await this.findMaintenance(id);
+    if (input.status !== undefined && input.status !== previousStatus) {
+      this.notifyMaintenanceStatus(updated, input.status).catch((err) =>
+        this.logger.warn(`notifyMaintenanceStatus: envoi WhatsApp ignore: ${(err as Error).message}`),
+      );
+    }
+    return updated;
+  }
+
+  /** SCRUM: notifie un groupe WhatsApp a chaque etape du cycle de vie d'un ticket de maintenance Domus. */
+  private async notifyMaintenanceStatus(ticket: any, status: string) {
+    const groupJid = process.env.WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID;
+    if (!groupJid) return;
+    if (this.whatsapp.getStatus() !== "connected") return;
+    const label =
+      status === "done" ? "Maintenance terminee"
+      : status === "in_progress" ? "Maintenance en cours"
+      : status === "open" ? "Nouveau ticket de maintenance"
+      : `Maintenance - statut: ${status}`;
+    const lines = [
+      label,
+      `Ticket: ${ticket.title || `#${ticket.id}`}`,
+      ticket.propertyName ? `Propriete: ${ticket.propertyName}` : null,
+      ticket.unitName ? `Unite: ${ticket.unitName}` : null,
+    ].filter(Boolean);
+    const caption = lines.join("\n");
+
+    // A la resolution, joindre la photo "apres travaux" la plus recente du ticket
+    // (repli sur la derniere photo dispo tous types confondus) ; sinon comportement
+    // texte inchange.
+    if (status === "done") {
+      const photo = await this.latestMaintenancePhoto(ticket.id, ticket.organizationId).catch(() => null);
+      if (photo) {
+        try {
+          const object = await this.objectStorage.getObject(photo.objectKey);
+          const chunks: Buffer[] = [];
+          for await (const chunk of object.body) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          await this.whatsapp.sendImage(groupJid, Buffer.concat(chunks), caption);
+          return;
+        } catch (err) {
+          this.logger.warn(`notifyMaintenanceStatus: envoi image ignore, repli texte: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    await this.whatsapp.sendMessage(groupJid, caption);
   }
 
   async deleteMaintenance(id: number, orgId: number) {
@@ -1485,6 +2902,66 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) throw new NotFoundException("Property not found.");
     return rows[0];
+  }
+
+  private async findPropertyPhoto(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyDirectFilter(realEstatePropertyPhotos.propertyId, propertyScope);
+    const rows = await this.db
+      .select({
+        id: realEstatePropertyPhotos.id,
+        organizationId: realEstatePropertyPhotos.organizationId,
+        propertyId: realEstatePropertyPhotos.propertyId,
+        unitId: realEstatePropertyPhotos.unitId,
+        bucket: realEstatePropertyPhotos.bucket,
+        objectKey: realEstatePropertyPhotos.objectKey,
+        originalName: realEstatePropertyPhotos.originalName,
+        mimeType: realEstatePropertyPhotos.mimeType,
+        sizeBytes: realEstatePropertyPhotos.sizeBytes,
+        isPrimary: realEstatePropertyPhotos.isPrimary,
+        sortOrder: realEstatePropertyPhotos.sortOrder,
+        createdAt: realEstatePropertyPhotos.createdAt,
+      })
+      .from(realEstatePropertyPhotos)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyPhotos.propertyId))
+      .where(and(
+        eq(realEstatePropertyPhotos.id, photoId),
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        scopeFilter,
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Photo introuvable.");
+    return rows[0];
+  }
+
+  private photoUnitFilter(unitId?: number | null) {
+    return unitId == null ? isNull(realEstatePropertyPhotos.unitId) : eq(realEstatePropertyPhotos.unitId, unitId);
+  }
+
+  private propertyPhotoResponse(row: {
+    id: number;
+    propertyId: number;
+    unitId?: number | null;
+    originalName?: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    isPrimary: number;
+    sortOrder: number;
+    createdAt?: Date | string | null;
+  }) {
+    return {
+      id: row.id,
+      propertyId: row.propertyId,
+      unitId: row.unitId ?? null,
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      sizeBytes: Number(row.sizeBytes || 0),
+      isPrimary: Number(row.isPrimary) === 1,
+      sortOrder: Number(row.sortOrder || 0),
+      createdAt: row.createdAt,
+    };
   }
 
   private async nextPropertyCode() {
@@ -1517,6 +2994,7 @@ export class PropertyManagementService {
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
+        availableForBooking: realEstateUnits.availableForBooking,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
       })
@@ -1547,7 +3025,175 @@ export class PropertyManagementService {
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
-    return rows[0];
+    const [enriched] = await this.withOverdueStats(rows);
+    return enriched;
+  }
+
+  async leaseDocuments(leaseId: number, orgId: number) {
+    await this.findLease(leaseId);
+    return this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(and(
+        eq(realEstateLeaseDocuments.leaseId, leaseId),
+        eq(realEstateLeaseDocuments.organizationId, orgId),
+        eq(realEstateLeaseDocuments.isActive, 1),
+      ))
+      .orderBy(desc(realEstateLeaseDocuments.id));
+  }
+
+  async uploadLeaseDocument(leaseId: number, file: any, orgId: number, notes?: string | null) {
+    await this.findLease(leaseId);
+    const stored = await this.objectStorage.putDocument(file, `domus/leases/${orgId}/${leaseId}/documents`);
+
+    const [result] = await this.db.insert(realEstateLeaseDocuments).values({
+      organizationId: orgId,
+      leaseId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      notes: notes ? String(notes).slice(0, 500) : null,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const [doc] = await this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(eq(realEstateLeaseDocuments.id, Number(result.insertId)))
+      .limit(1);
+    return doc;
+  }
+
+  async findLeaseDocument(documentId: number, orgId: number) {
+    const [doc] = await this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(and(
+        eq(realEstateLeaseDocuments.id, documentId),
+        eq(realEstateLeaseDocuments.organizationId, orgId),
+        eq(realEstateLeaseDocuments.isActive, 1),
+      ))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Document not found.");
+    return doc;
+  }
+
+  async deleteLeaseDocument(documentId: number, orgId: number) {
+    const doc = await this.findLeaseDocument(documentId, orgId);
+    await this.objectStorage.deleteObject(doc.objectKey);
+    await this.db
+      .update(realEstateLeaseDocuments)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateLeaseDocuments.id, documentId), eq(realEstateLeaseDocuments.organizationId, orgId)));
+    // Un contrat peut référencer ce document comme preuve de signature papier
+    // (signedDocumentId) : on détache la référence, sinon l'UI garde un bouton
+    // « Voir le bail signé importé » qui pointe vers un document supprimé (404).
+    const linkedContracts = await this.db
+      .select({ id: realEstateContracts.id })
+      .from(realEstateContracts)
+      .where(and(
+        eq(realEstateContracts.signedDocumentId, documentId),
+        eq(realEstateContracts.organizationId, orgId),
+      ));
+    if (linkedContracts.length) {
+      await this.db
+        .update(realEstateContracts)
+        .set({ signedDocumentId: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(
+          eq(realEstateContracts.signedDocumentId, documentId),
+          eq(realEstateContracts.organizationId, orgId),
+        ));
+      for (const contract of linkedContracts) {
+        await this.realtimeData.publishDataUpdated({
+          entity: "contract",
+          action: "updated",
+          entityId: contract.id,
+          scope: { module: "propertyManagement" },
+        });
+      }
+    }
+    return { message: "Document supprime." };
+  }
+
+  async leaseDocumentFile(documentId: number, orgId: number) {
+    const doc = await this.findLeaseDocument(documentId, orgId);
+    const object = await this.objectStorage.getObject(doc.objectKey);
+    return {
+      ...object,
+      originalName: doc.originalName || `lease-document-${doc.id}`,
+      mimeType: doc.mimeType,
+    };
+  }
+
+  // ── Copie de la pièce d'identité du locataire (MinIO, une copie par locataire) ──
+  private async tenantIdDocumentRow(tenantId: number) {
+    const [row] = await this.db
+      .select({
+        idDocumentKey: tenantDetails.idDocumentKey,
+        idDocumentMime: tenantDetails.idDocumentMime,
+        idDocumentName: tenantDetails.idDocumentName,
+      })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, tenantId))
+      .limit(1);
+    return row;
+  }
+
+  async uploadTenantIdDocument(tenantId: number, file: any, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const current = await this.tenantIdDocumentRow(tenantId);
+    if (!current) throw new NotFoundException("Fiche locataire incomplete.");
+    const stored = await this.objectStorage.putDocument(file, `domus/tenants/${orgId}/${tenantId}/id-document`);
+    if (current.idDocumentKey) {
+      // Remplacement : on efface l ancienne copie du stockage objet.
+      await this.objectStorage.deleteObject(current.idDocumentKey).catch(() => undefined);
+    }
+    await this.db
+      .update(tenantDetails)
+      .set({
+        idDocumentBucket: stored.bucket,
+        idDocumentKey: stored.objectKey,
+        idDocumentMime: stored.mimeType,
+        idDocumentName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantDetails.customerId, tenantId));
+    return this.findTenant(tenantId, orgId);
+  }
+
+  async tenantIdDocumentFile(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const row = await this.tenantIdDocumentRow(tenantId);
+    if (!row?.idDocumentKey) throw new NotFoundException("Aucune copie de piece d identite.");
+    const object = await this.objectStorage.getObject(row.idDocumentKey);
+    return {
+      ...object,
+      originalName: row.idDocumentName || `piece-identite-${tenantId}`,
+      mimeType: row.idDocumentMime,
+    };
+  }
+
+  async deleteTenantIdDocument(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const row = await this.tenantIdDocumentRow(tenantId);
+    if (row?.idDocumentKey) {
+      await this.objectStorage.deleteObject(row.idDocumentKey).catch(() => undefined);
+    }
+    await this.db
+      .update(tenantDetails)
+      .set({
+        idDocumentBucket: null,
+        idDocumentKey: null,
+        idDocumentMime: null,
+        idDocumentName: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantDetails.customerId, tenantId));
+    return { message: "Copie de la piece supprimee." };
   }
 
   async findPayment(id: number) {
@@ -1568,8 +3214,14 @@ export class PropertyManagementService {
   async listMaintenanceCosts(ticketId: number, orgId: number) {
     await this.findMaintenance(ticketId, orgId);
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(realEstateMaintenanceCosts),
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(realEstateMaintenanceCosts)
+      .leftJoin(currencies, eq(currencies.id, realEstateMaintenanceCosts.currencyId))
       .where(and(eq(realEstateMaintenanceCosts.ticketId, ticketId), eq(realEstateMaintenanceCosts.isActive, 1)))
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
@@ -1578,16 +3230,25 @@ export class PropertyManagementService {
 
   private saveReceiptFile(file: any, publicApiBase?: string): string | null {
     if (!file?.buffer) return null;
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-    const ext = (file.originalname?.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "") || "bin";
-    const name = `receipt-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    writeFileSync(join(this.uploadDir, name), file.buffer);
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+      prefix: "receipt",
+      maxBytes: 5 * 1024 * 1024,
+    });
     const base = publicApiBase ?? "";
     return `${base}/uploads/${name}`;
   }
 
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.findMaintenance(ticketId, orgId);
+
+    // Projet analytique du chantier (pour ventiler la depense au grand livre).
+    const [ticket] = await this.db
+      .select({ projectId: realEstateMaintenanceRequests.projectId })
+      .from(realEstateMaintenanceRequests)
+      .where(eq(realEstateMaintenanceRequests.id, ticketId))
+      .limit(1);
+    const projectId = ticket?.projectId ?? null;
 
     const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
 
@@ -1598,24 +3259,28 @@ export class PropertyManagementService {
       amount: String(input.amount),
       currencyId: input.currencyId ?? null,
       vendorName: input.vendorName ?? null,
+      supplierId: input.supplierId ?? null,
       paymentMethod: input.paymentMethod ?? "cash",
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,
       receiptUrl,
+      projectId,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
     // Auto-create accounting transaction
     const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    // Sous-compte "Maintenance" de CETTE org (isolation P2).
     const maintenanceSubAccount = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(eq(subAccounts.name, "Maintenance"))
+      .where(and(eq(subAccounts.name, "Maintenance"), eq(subAccounts.organizationId, orgId)))
       .limit(1);
     const debitId = maintenanceSubAccount[0]?.id ?? 12;
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: input.paymentDate ? new Date(input.paymentDate) : sql`CURRENT_TIMESTAMP` as any,
       debitId,
       creditId,
@@ -1629,26 +3294,261 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    const maintenanceCostId = Number((result as any).insertId);
+    // Ecriture moderne (dual-write) : depense maintenance, debit charge / credit caisse.
+    await this.ledger.post(
+      {
+        date: input.paymentDate ? new Date(input.paymentDate) : undefined,
+        reference: `MAINT-${maintenanceCostId}`,
+        particulars: `${input.type === "labour" ? "Labour" : "Service"}: ${input.description}${input.vendorName ? ` — ${input.vendorName}` : ""}`,
+        sourceModule: "maintenance",
+        relatedId: String(maintenanceCostId),
+        currencyId: input.currencyId ?? undefined,
+        idempotencyKey: `maintenance-cost:${maintenanceCostId}`,
+        lines: [
+          // La charge porte le projet du chantier (ventilation analytique).
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense", projectId: projectId ?? undefined },
+          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+        ],
+      },
+      orgId,
+    );
+
+    // Soumet le cout de maintenance au circuit d'approbation (effectif si gate).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "maintenance", entityId: String(maintenanceCostId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit maintenance approval skipped:", (err as Error).message);
+    }
+
     return this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(eq(realEstateMaintenanceCosts.id, Number((result as any).insertId)))
+      .where(eq(realEstateMaintenanceCosts.id, maintenanceCostId))
       .limit(1)
       .then((rows) => rows[0]);
   }
 
-  async deleteMaintenanceCost(costId: number) {
+  async deleteMaintenanceCost(costId: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.isActive, 1)))
+      .where(and(
+        eq(realEstateMaintenanceCosts.id, costId),
+        eq(realEstateMaintenanceCosts.isActive, 1),
+        eq(realEstateMaintenanceCosts.organizationId, orgId),
+      ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
     await this.db
       .update(realEstateMaintenanceCosts)
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateMaintenanceCosts.id, costId));
+      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────
+
+  private static readonly MAINTENANCE_PHOTO_TYPES = ["before", "after", "invoice"] as const;
+
+  private normalizeMaintenancePhotoType(value: unknown): "before" | "after" | "invoice" {
+    const v = String(value ?? "").trim().toLowerCase();
+    return (PropertyManagementService.MAINTENANCE_PHOTO_TYPES as readonly string[]).includes(v)
+      ? (v as "before" | "after" | "invoice")
+      : "before";
+  }
+
+  async maintenancePhotos(ticketId: number, orgId: number) {
+    await this.findMaintenance(ticketId, orgId);
+    const rows = await this.db
+      .select({
+        id: realEstateMaintenancePhotos.id,
+        organizationId: realEstateMaintenancePhotos.organizationId,
+        ticketId: realEstateMaintenancePhotos.ticketId,
+        photoType: realEstateMaintenancePhotos.photoType,
+        bucket: realEstateMaintenancePhotos.bucket,
+        objectKey: realEstateMaintenancePhotos.objectKey,
+        originalName: realEstateMaintenancePhotos.originalName,
+        mimeType: realEstateMaintenancePhotos.mimeType,
+        sizeBytes: realEstateMaintenancePhotos.sizeBytes,
+        isPrimary: realEstateMaintenancePhotos.isPrimary,
+        sortOrder: realEstateMaintenancePhotos.sortOrder,
+        createdAt: realEstateMaintenancePhotos.createdAt,
+      })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), realEstateMaintenancePhotos.sortOrder, desc(realEstateMaintenancePhotos.id));
+
+    return rows.map((row) => this.maintenancePhotoResponse(row));
+  }
+
+  async uploadMaintenancePhoto(ticketId: number, file: any, orgId: number, photoType?: string) {
+    await this.findMaintenance(ticketId, orgId);
+    const type = this.normalizeMaintenancePhotoType(photoType);
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ));
+    const count = Number(countRow?.count || 0);
+    const stored = await this.objectStorage.putImage(file, `domus/maintenance/${orgId}/${ticketId}`);
+    const [result] = await this.db.insert(realEstateMaintenancePhotos).values({
+      organizationId: orgId,
+      ticketId,
+      photoType: type,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      isPrimary: count === 0 ? 1 : 0,
+      sortOrder: count,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const photo = await this.findMaintenancePhoto(Number(result.insertId), orgId);
+    return this.maintenancePhotoResponse(photo);
+  }
+
+  async deleteMaintenancePhoto(photoId: number, orgId: number) {
+    const photo = await this.findMaintenancePhoto(photoId, orgId);
+    await this.objectStorage.deleteObject(photo.objectKey);
+    await this.db
+      .update(realEstateMaintenancePhotos)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMaintenancePhotos.id, photoId), eq(realEstateMaintenancePhotos.organizationId, orgId)));
+
+    if (Number(photo.isPrimary) === 1) {
+      const [next] = await this.db
+        .select({ id: realEstateMaintenancePhotos.id })
+        .from(realEstateMaintenancePhotos)
+        .where(and(
+          eq(realEstateMaintenancePhotos.organizationId, orgId),
+          eq(realEstateMaintenancePhotos.ticketId, photo.ticketId),
+          eq(realEstateMaintenancePhotos.isActive, 1),
+        ))
+        .orderBy(realEstateMaintenancePhotos.sortOrder, desc(realEstateMaintenancePhotos.id))
+        .limit(1);
+      if (next) {
+        await this.db
+          .update(realEstateMaintenancePhotos)
+          .set({ isPrimary: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateMaintenancePhotos.id, next.id));
+      }
+    }
+
+    return { message: "Photo supprimee." };
+  }
+
+  async maintenancePhotoFile(photoId: number, orgId: number) {
+    const photo = await this.findMaintenancePhoto(photoId, orgId);
+    const object = await this.objectStorage.getObject(photo.objectKey);
+    return {
+      ...object,
+      originalName: photo.originalName || `maintenance-photo-${photo.id}`,
+      mimeType: photo.mimeType,
+    };
+  }
+
+  private async findMaintenancePhoto(photoId: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        id: realEstateMaintenancePhotos.id,
+        organizationId: realEstateMaintenancePhotos.organizationId,
+        ticketId: realEstateMaintenancePhotos.ticketId,
+        photoType: realEstateMaintenancePhotos.photoType,
+        bucket: realEstateMaintenancePhotos.bucket,
+        objectKey: realEstateMaintenancePhotos.objectKey,
+        originalName: realEstateMaintenancePhotos.originalName,
+        mimeType: realEstateMaintenancePhotos.mimeType,
+        sizeBytes: realEstateMaintenancePhotos.sizeBytes,
+        isPrimary: realEstateMaintenancePhotos.isPrimary,
+        sortOrder: realEstateMaintenancePhotos.sortOrder,
+        createdAt: realEstateMaintenancePhotos.createdAt,
+      })
+      .from(realEstateMaintenancePhotos)
+      .where(and(
+        eq(realEstateMaintenancePhotos.id, photoId),
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Photo introuvable.");
+    return rows[0];
+  }
+
+  private maintenancePhotoResponse(row: {
+    id: number;
+    ticketId: number;
+    photoType?: string | null;
+    originalName?: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    isPrimary: number;
+    sortOrder: number;
+    createdAt?: Date | string | null;
+  }) {
+    return {
+      id: row.id,
+      ticketId: row.ticketId,
+      photoType: row.photoType || "before",
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      sizeBytes: Number(row.sizeBytes || 0),
+      isPrimary: Number(row.isPrimary) === 1,
+      sortOrder: Number(row.sortOrder || 0),
+      createdAt: row.createdAt,
+    };
+  }
+
+  /**
+   * Photo pour l'envoi WhatsApp a la resolution du ticket : priorite a la photo
+   * "after" (etat apres travaux) la plus recente, sinon repli sur la derniere
+   * photo disponible tous types confondus (comportement historique).
+   */
+  private async latestMaintenancePhoto(ticketId: number, orgId: number) {
+    const base = () =>
+      this.db
+        .select({
+          id: realEstateMaintenancePhotos.id,
+          objectKey: realEstateMaintenancePhotos.objectKey,
+          mimeType: realEstateMaintenancePhotos.mimeType,
+        })
+        .from(realEstateMaintenancePhotos);
+
+    const [afterRow] = await base()
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+        eq(realEstateMaintenancePhotos.photoType, "after"),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), desc(realEstateMaintenancePhotos.id))
+      .limit(1);
+    if (afterRow) return afterRow;
+
+    const [anyRow] = await base()
+      .where(and(
+        eq(realEstateMaintenancePhotos.organizationId, orgId),
+        eq(realEstateMaintenancePhotos.ticketId, ticketId),
+        eq(realEstateMaintenancePhotos.isActive, 1),
+      ))
+      .orderBy(desc(realEstateMaintenancePhotos.isPrimary), desc(realEstateMaintenancePhotos.id))
+      .limit(1);
+    return anyRow ?? null;
   }
 
   private async findTenant(id: number, orgId: number) {
@@ -1664,7 +3564,7 @@ export class PropertyManagementService {
   }
 
   private adminOnboardingResponse(onboarding: any) {
-    const { tokenHash: _tokenHash, token, ...payload } = onboarding;
+    const { tokenHash: _tokenHash, token, smsSid: _smsSid, ...payload } = onboarding;
     return {
       ...payload,
       url: token ? this.onboardingUrl(token) : null,
@@ -1689,6 +3589,7 @@ export class PropertyManagementService {
         moveInMeterReading: realEstateLeases.moveInMeterReading,
         moveInNotes: realEstateLeases.moveInNotes,
         terms: realEstateLeases.terms,
+        signingCity: realEstateLeases.signingCity,
         status: realEstateLeases.status,
         taxName: realEstateLeases.taxName,
         taxType: realEstateLeases.taxType,
@@ -1708,6 +3609,113 @@ export class PropertyManagementService {
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
+  }
+
+  // Retard historique par bail (badge "Mauvais payeur" côté front) :
+  // dérive les échéances mensuelles (billingCycle) depuis startDate jusqu'à
+  // aujourd'hui (bornées à endDate), rapproche par ordre chronologique avec
+  // les paiements du bail, délai de grâce 5 jours. Batch les paiements par
+  // leaseId en une seule requête (pas de N+1).
+  private static readonly OVERDUE_GRACE_DAYS = 5;
+
+  private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
+    rows: T[],
+  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean }>> {
+    if (!rows.length) return [];
+    const leaseIds = rows.map((r) => r.id);
+    const payments = await this.db
+      .select({
+        leaseId: realEstateRentPayments.leaseId,
+        paymentDate: realEstateRentPayments.paymentDate,
+      })
+      .from(realEstateRentPayments)
+      .where(inArray(realEstateRentPayments.leaseId, leaseIds))
+      .orderBy(realEstateRentPayments.paymentDate);
+
+    const paymentsByLease = new Map<number, string[]>();
+    for (const p of payments) {
+      const list = paymentsByLease.get(p.leaseId) ?? [];
+      list.push(p.paymentDate);
+      paymentsByLease.set(p.leaseId, list);
+    }
+
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    return rows.map((row) => {
+      const stats = this.computeLeaseOverdueStats(
+        row.startDate,
+        row.endDate,
+        row.billingCycle,
+        paymentsByLease.get(row.id) ?? [],
+        today,
+      );
+      return { ...row, ...stats };
+    });
+  }
+
+  // Dérive les échéances mensuelles depuis startDate jusqu'à today (bornées à
+  // endDate si présent) et rapproche avec les paiements par ordre chronologique :
+  // une échéance est couverte par le 1er paiement non encore consommé dont la
+  // paymentDate correspond au mois de l'échéance. Retard si payé >5j après
+  // l'échéance, ou dépassée de >5j et toujours non couverte.
+  private computeLeaseOverdueStats(
+    startDate: string,
+    endDate: string | null,
+    billingCycle: string | null,
+    paymentDates: string[],
+    today: Date,
+  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean } {
+    const start = this.parseDateOnly(startDate);
+    const boundary = endDate ? this.parseDateOnly(endDate) : null;
+    const payments = paymentDates.map((d) => this.parseDateOnly(d));
+    const usedPaymentIndexes = new Set<number>();
+
+    let dueCount = 0;
+    let lateCount = 0;
+    let isOverdue = false;
+    // Chaque échéance est ancrée sur `start` + N cycles (et non chaînée sur la
+    // date précédente) pour éviter que le clamp fin-de-mois (ex. 31 -> 28 en
+    // février) ne fige les échéances suivantes sur le jour raboté.
+    let period = 0;
+    let dueDate = start;
+
+    while (dueDate.getTime() <= today.getTime() && (!boundary || dueDate.getTime() <= boundary.getTime())) {
+      dueCount += 1;
+
+      // 1er paiement non consommé du même mois/année que l'échéance.
+      const matchIndex = payments.findIndex(
+        (p, idx) =>
+          !usedPaymentIndexes.has(idx) &&
+          p.getUTCFullYear() === dueDate.getUTCFullYear() &&
+          p.getUTCMonth() === dueDate.getUTCMonth(),
+      );
+
+      if (matchIndex >= 0) {
+        usedPaymentIndexes.add(matchIndex);
+        const paidAt = payments[matchIndex];
+        const graceLimit = new Date(dueDate.getTime());
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        if (paidAt.getTime() > graceLimit.getTime()) {
+          lateCount += 1;
+        }
+      } else {
+        const graceLimit = new Date(dueDate.getTime());
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        if (today.getTime() > graceLimit.getTime()) {
+          lateCount += 1;
+          isOverdue = true;
+        }
+      }
+
+      period += 1;
+      dueDate = this.addBillingCycle(start, billingCycle, period);
+    }
+
+    return {
+      lateCount,
+      dueCount,
+      lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
+      isOverdue,
+    };
   }
 
   private async getLeaseOrThrow(id: number, orgId: number) {
@@ -1777,7 +3785,7 @@ export class PropertyManagementService {
     return Number((result as any).insertId);
   }
 
-  private async getRealEstateTaxTypeOptional() {
+  private async getRealEstateTaxTypeOptional(orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1785,12 +3793,12 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, "Real Estate Tax"), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, "Real Estate Tax"), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
     return rows[0] || null;
   }
 
-  private async getRentPaymentType() {
+  private async getRentPaymentType(orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1798,7 +3806,7 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, "Rent Payment"), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, "Rent Payment"), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
@@ -1839,7 +3847,13 @@ export class PropertyManagementService {
   }
 
   private async ensureCustomerEmailAvailable(email: string) {
-    const rows = await this.db.select({ id: customers.id }).from(customers).where(eq(customers.email, email)).limit(1);
+    // On ignore les locataires soft-deletes (status='false') : un email libere
+    // par une suppression logique doit pouvoir etre reutilise.
+    const rows = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.email, email), eq(customers.status, "true")))
+      .limit(1);
     if (rows.length) {
       throw new BadRequestException("Customer email already exists.");
     }
@@ -1990,7 +4004,10 @@ export class PropertyManagementService {
   }
 
   private isCoupleStatus(value: string) {
-    return ["marié", "marie", "conjoint de fait", "union libre"].includes(value.trim().toLowerCase());
+    // Codes canoniques (voir migration 0207) ; on tolère les anciennes valeurs FR legacy par sécurité.
+    return ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(
+      String(value ?? "").trim().toLowerCase(),
+    );
   }
 
   private usernameFromEmail(email?: string | null) {
@@ -2037,6 +4054,26 @@ export class PropertyManagementService {
     }
   }
 
+  private async ensureActiveUnitInProperty(id: number, propertyId: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateUnits.id })
+      .from(realEstateUnits)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
+      .where(and(
+        eq(realEstateUnits.id, id),
+        eq(realEstateUnits.propertyId, propertyId),
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) {
+      throw new BadRequestException("Cette unite n'appartient pas au bien selectionne.");
+    }
+  }
+
   private async ensureOrgOwned(table: any, id: number, orgId: number, message: string) {
     const rows = await this.db
       .select({ id: table.id })
@@ -2058,12 +4095,9 @@ export class PropertyManagementService {
   // Returns the appSetting's currencyId or null if no row exists yet.
   // Used as fallback when a transaction is created without an explicit
   // currencyId (legacy clients).
-  private async resolveDefaultCurrency(): Promise<number | null> {
-    const [row] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
-    return row?.currencyId ?? null;
+  private async resolveDefaultCurrency(orgId = 1): Promise<number | null> {
+    const row = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+    return (row?.currencyId as number | null) ?? null;
   }
 
   private money(value: number | undefined | null) {
@@ -2089,14 +4123,22 @@ export class PropertyManagementService {
     return value.toISOString().slice(0, 10);
   }
 
-  private addBillingCycle(value: Date, billingCycle?: string | null, direction = 1) {
+  private addBillingCycle(value: Date, billingCycle?: string | null, periods = 1) {
     const next = new Date(value.getTime());
     const normalized = String(billingCycle || "monthly").toLowerCase();
     const months =
       normalized === "yearly" || normalized === "annual" ? 12 :
       normalized === "quarterly" ? 3 :
       1;
-    next.setUTCMonth(next.getUTCMonth() + months * direction);
+    // On fixe le jour à 1 avant le décalage de mois pour éviter le débordement
+    // (ex. 31 janv + 1 mois -> 3 mars) puis on cale sur le jour d'origine borné
+    // au dernier jour du mois cible (28/29/30). Sans ça, les échéances d'un bail
+    // dont startDate tombe en fin de mois dérivent et faussent lateCount/dueCount.
+    const day = next.getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + months * periods);
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
     return next;
   }
 
@@ -2153,5 +4195,60 @@ export class PropertyManagementService {
       entityId,
       scope: {},
     });
+  }
+
+  // ── Affectation par bien (RBAC par bien, Domus, Phase 2) ──────────────────
+  // Affecte/lit les biens d un utilisateur (real_estate_property_assignments).
+  // Concerne N IMPORTE QUEL user, independamment du role et du poste.
+
+  // Toutes les affectations actives de l org : map userId -> propertyId[].
+  async listAllPropertyAssignments(orgId: number) {
+    const rows = await this.db
+      .select({ userId: realEstatePropertyAssignments.userId, propertyId: realEstatePropertyAssignments.propertyId })
+      .from(realEstatePropertyAssignments)
+      .where(and(eq(realEstatePropertyAssignments.organizationId, orgId), eq(realEstatePropertyAssignments.isActive, 1)));
+    const byUser: Record<number, number[]> = {};
+    for (const r of rows) (byUser[r.userId] ??= []).push(r.propertyId);
+    return byUser;
+  }
+
+  async listPropertyAssignments(userId: number, orgId: number) {
+    return this.db
+      .select({ id: realEstatePropertyAssignments.id, propertyId: realEstatePropertyAssignments.propertyId })
+      .from(realEstatePropertyAssignments)
+      .where(and(
+        eq(realEstatePropertyAssignments.userId, userId),
+        eq(realEstatePropertyAssignments.organizationId, orgId),
+        eq(realEstatePropertyAssignments.isActive, 1),
+      ));
+  }
+
+  // Remplace l ensemble des biens d un user (set complet). Soft-delete des
+  // retires, reactivation/insert des nouveaux (idempotent).
+  async setPropertyAssignments(userId: number, propertyIds: number[], orgId: number) {
+    const wanted = Array.from(new Set(propertyIds.filter((id) => Number.isInteger(id) && id > 0)));
+
+    const existing = await this.db
+      .select({ id: realEstatePropertyAssignments.id, propertyId: realEstatePropertyAssignments.propertyId, isActive: realEstatePropertyAssignments.isActive })
+      .from(realEstatePropertyAssignments)
+      .where(and(eq(realEstatePropertyAssignments.userId, userId), eq(realEstatePropertyAssignments.organizationId, orgId)));
+    const byProperty = new Map(existing.map((row) => [row.propertyId, row]));
+
+    for (const row of existing) {
+      if (row.isActive === 1 && !wanted.includes(row.propertyId)) {
+        await this.db.update(realEstatePropertyAssignments).set({ isActive: 0 }).where(eq(realEstatePropertyAssignments.id, row.id));
+      }
+    }
+    for (const pid of wanted) {
+      const row = byProperty.get(pid);
+      if (row) {
+        if (row.isActive !== 1) {
+          await this.db.update(realEstatePropertyAssignments).set({ isActive: 1 }).where(eq(realEstatePropertyAssignments.id, row.id));
+        }
+      } else {
+        await this.db.insert(realEstatePropertyAssignments).values({ userId, propertyId: pid, organizationId: orgId, isActive: 1 });
+      }
+    }
+    return this.listPropertyAssignments(userId, orgId);
   }
 }

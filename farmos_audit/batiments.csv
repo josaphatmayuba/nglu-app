@@ -1,0 +1,7 @@
+name,species,type,capacity,zone,notes,pos_x,pos_y
+Batiment Bovins Kiselele,cow,enclos,30,Zone Kiselele,"Bovins (vaches, veau) — Zone Kiselele",8,12
+Batiment Porcs Kiselele,pig,porcherie,80,Zone Kiselele,"Porcs adultes, jeunes et moyens — Zone Kiselele",55,12
+Batiment Caprins Kasangulu,goat,enclos,50,Zone Kasangulu,Chevres — Zone Kasangulu,8,12
+Batiment Porcs Kasangulu,pig,porcherie,80,Zone Kasangulu,Porcs affectes par infection — Zone Kasangulu,55,12
+Poulailler 1,chicken,poulailler,1700,Zone Kasangulu,Poulailler principal — Zone Kasangulu,8,55
+Poulailler 2,chicken,poulailler,20,Zone Kasangulu,Poulailler secondaire — Zone Kasangulu,40,55

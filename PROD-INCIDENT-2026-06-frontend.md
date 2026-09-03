@@ -58,3 +58,21 @@ Vérif : `/` 200, `/admin/` 200. ✅
    (voir `MIGRATION-PROD-DOMUS.md`).
 3. S'assurer que le **script de déploiement prod** recrée toujours le frontend avec `-p nglu_prod`
    pour éviter que la régression se reproduise.
+
+## 5. Règle durable après correction
+
+Les apps statiques de production servies par `nglu_prod_frontend` doivent suivre le même modèle :
+
+1. builder le `dist` ;
+2. envoyer une archive sur le serveur ;
+3. prendre le lock `/tmp/nglu-prod-deploy.lock` ;
+4. remplacer le contenu de `/opt/nglu-app/<app>/dist` ;
+5. taguer l'image courante en `nglu_prod-frontend:previous` ;
+6. rebuild l'image `nglu_prod-frontend` via `frontend/Dockerfile.prod` ;
+7. recréer uniquement `nglu_prod_frontend` sous le projet compose `nglu_prod` ;
+8. tester `nginx -t` + routes HTTP ;
+9. rollback vers `nglu_prod-frontend:previous` si le smoke test échoue.
+
+Ne plus utiliser `docker cp` directement dans le conteneur live comme chemin normal de prod : ce n'est pas durable si le conteneur est recréé et ça ne donne pas de rollback fiable.
+
+Quand `docker compose ... up -d --force-recreate --no-deps frontend` remplace `nglu_prod_frontend`, Docker arrête et supprime l'ancien conteneur avant de créer le nouveau. Il ne peut pas garder deux conteneurs actifs avec le même `container_name`. L'ancienne image reste disponible via le tag `nglu_prod-frontend:previous` pour rollback ; les images/layers non tagués peuvent rester sur disque jusqu'à un prune manuel.

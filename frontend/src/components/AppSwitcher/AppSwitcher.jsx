@@ -31,11 +31,17 @@ import {
   Layers,
   HardHat,
   KeyRound,
+  BookOpen,
+  DatabaseZap,
+  Ticket,
+  Store,
 } from "lucide-react";
+import kodatillIcon from "../../assets/images/kodatill-icon.svg";
 
 const AVAILABLE_APPS = [
   { key: "dashboard", name: "Tableau de bord", path: "/admin/dashboard", icon: LayoutDashboard, gradient: "from-brand-500 to-brand-700" },
   { key: "pos", name: "Point de Vente", path: "/admin/pos", icon: ShoppingCart, gradient: "from-orange-400 to-orange-600" },
+  { key: "kodatill", name: "KodaTill", path: "/kodatill/", icon: Store, image: kodatillIcon, gradient: "from-teal-600 to-teal-800", external: true },
   { key: "products", name: "Produits", path: "/admin/product", icon: Package, gradient: "from-emerald-400 to-emerald-600" },
   { key: "sale", name: "Ventes", path: "/admin/sale", icon: FileText, gradient: "from-violet-400 to-violet-600" },
   { key: "customer", name: "Clients", path: "/admin/customer", icon: Users, gradient: "from-sky-400 to-sky-600" },
@@ -45,7 +51,11 @@ const AVAILABLE_APPS = [
   { key: "farmos", name: "FarmOS", path: "/farmos/", icon: Layers, gradient: "from-green-500 to-emerald-700", external: true },
   { key: "batipro", name: "BatiPro", path: "/batipro/", icon: HardHat, gradient: "from-blue-700 to-amber-500", external: true },
   { key: "domus", name: "Domus", path: "/domus/", icon: KeyRound, gradient: "from-indigo-500 to-violet-700", external: true },
+  { key: "journal", name: "Journal", path: "/journal/", icon: BookOpen, gradient: "from-indigo-600 to-blue-700", external: true },
+  { key: "chat", name: "Chat", path: "/chat/", icon: MessageCircle, gradient: "from-violet-600 to-indigo-700", external: true },
+  { key: "tickets", name: "Tickets", path: "/tickets/", icon: Ticket, gradient: "from-rose-500 to-pink-700", external: true },
   { key: "accounting", name: "Comptabilite", path: "/comptabilite/", icon: Wallet, gradient: "from-blue-600 to-sky-500", external: true },
+  { key: "migration", name: "Migration", path: "/migration/", icon: DatabaseZap, gradient: "from-cyan-600 to-teal-700", external: true },
   { key: "reports", name: "Rapports", path: "/admin/reports", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
   { key: "settings", name: "Paramètres", path: "/admin/app-settings", icon: Settings, gradient: "from-zinc-500 to-zinc-700" },
 ];
@@ -59,7 +69,7 @@ const SOON_APPS = [
   { key: "documents", name: "Documents", icon: Folder, gradient: "from-yellow-400 to-yellow-600", badge: "SOON" },
   { key: "signature", name: "Signature", icon: PenTool, gradient: "from-fuchsia-400 to-fuchsia-600", badge: "SOON" },
   { key: "ai", name: "Assistant IA", icon: Sparkles, gradient: "from-slate-700 to-slate-900", badge: "NEW" },
-  { key: "discussion", name: "Discussion", icon: MessageCircle, gradient: "from-green-400 to-green-600", badge: "SOON" },
+  { key: "discussion", name: "Discussion", icon: MessageCircle, gradient: "from-green-400 to-green-600", badge: "BETA" },
   { key: "inventory", name: "Inventaire", icon: Boxes, gradient: "from-stone-500 to-stone-700", badge: "SOON" },
   { key: "planning", name: "Planning", icon: CalendarClock, gradient: "from-orange-500 to-red-500", badge: "SOON" },
   { key: "maintenance", name: "Maintenance", icon: Wrench, gradient: "from-zinc-500 to-zinc-700", badge: "SOON" },
@@ -160,9 +170,13 @@ export default function AppSwitcher({ open, onClose }) {
                       className="group flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-ink-50 transition"
                     >
                       <div
-                        className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${app.gradient} flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}
+                        className={`w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden ${app.image ? "" : `bg-gradient-to-br ${app.gradient}`} flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}
                       >
-                        <Icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                        {app.image ? (
+                          <img src={app.image} alt={app.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                        )}
                       </div>
                       <span className="text-xs md:text-sm text-ink-700 text-center font-medium">
                         {app.name}

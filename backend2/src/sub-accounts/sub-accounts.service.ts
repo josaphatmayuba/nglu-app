@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { subAccounts } from "../database/schema";
 import type { Database } from "../database/types";
@@ -8,7 +8,7 @@ import type { Database } from "../database/types";
 export class SubAccountsService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async findAll() {
+  async findAll(org: number) {
     return this.db
       .select({
         id: subAccounts.id,
@@ -19,7 +19,7 @@ export class SubAccountsService {
         updatedAt: subAccounts.updatedAt,
       })
       .from(subAccounts)
-      .where(eq(subAccounts.status, "true"))
+      .where(and(eq(subAccounts.status, "true"), eq(subAccounts.organizationId, org)))
       .orderBy(asc(subAccounts.name));
   }
 }

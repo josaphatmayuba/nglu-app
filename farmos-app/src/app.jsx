@@ -11,9 +11,13 @@ import { Identification } from "./identification";
 import { QuickEntryDrawer, Toast } from "./quickentry";
 import {
   HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
-  AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
+  AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, FieldNotesScreen, EmployeesScreen, SettingsScreen, ForecastScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
+import { FeedStockScreen } from "./feed.jsx";
+import { SimulatorScreen } from "./simulator";
+import { OperationsScreen } from "./operations.jsx";
+import { ProfitabilityScreen } from "./profitability.jsx";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
@@ -62,16 +66,20 @@ const ROUTE_SLUGS = {
   repro: "reproduction",
   "semen-bank": "banque-semence",
   production: "production",
+  operations: "interventions",
   alerts: "alertes",
   pos: "pos",
   "sales-management": "gestion-vente",
   finances: "finances",
+  profitability: "rentabilite",
   reports: "rapports",
   employees: "employes",
   settings: "parametres",
 };
 const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
-const BASE = "/farmos/";
+// Base injectee par vite : "/farmos/" (defaut) ou "/" (build --mode avelomi,
+// servi a la racine de farmos.avelomi.com). Ne pas re-hardcoder "/farmos/".
+const BASE = import.meta.env.BASE_URL;
 function routeFromLocation() {
   if (typeof window === "undefined") return "dashboard";
   const p = window.location.pathname || "";
@@ -93,7 +101,19 @@ function AppShell() {
     try { return localStorage.getItem("farmos-lang") || "fr"; } catch { return "fr"; }
   });
   const token = useAuthToken();
-  if (!token) return <LoginScreen lang={lang}/>;
+  // Hors ligne au retour dans l'app : le token mémoire est vide (jamais
+  // persisté, SCRUM-119) et le refresh via cookie a échoué faute de réseau
+  // (restoreSession() jette isNetworkError, voir auth.jsx/api.js). On ne
+  // renvoie PAS vers le login dans ce cas : `isLogged` prouve qu'une session
+  // a déjà réussi sur cet appareil, donc on affiche l'app en mode dégradé
+  // (lecture cache) plutôt que de forcer une reconnexion impossible hors ligne.
+  const hadSession = (() => {
+    try { return localStorage.getItem("isLogged") === "true"; } catch { return false; }
+  })();
+  if (!token) {
+    if (typeof navigator !== "undefined" && navigator.onLine === false && hadSession) return <App/>;
+    return <LoginScreen lang={lang}/>;
+  }
   return <App/>;
 }
 
@@ -118,6 +138,7 @@ function App() {
   const [entry, setEntry] = React.useState({ open: false, tab: "animal" });
   const [toast, setToast] = React.useState(null);
   const [mobileNav, setMobileNav] = React.useState(false);
+  const [actionsOpen, setActionsOpen] = React.useState(false);
   const layoutMode = useLayoutMode(tweaks.deviceMode);
   const isMobile = layoutMode === "mobile";
   const isTablet = layoutMode === "tablet";
@@ -179,11 +200,17 @@ function App() {
     repro:      { title: t(lang, "repro"),      subtitle: lang === "fr" ? "Chaleurs, gestations, mises bas" : "Heats, gestations, births", breadcrumb: lang === "fr" ? "FERME · REPRODUCTION" : "FARM · REPRODUCTION" },
     "semen-bank": { title: lang === "fr" ? "Banque de semence" : "Semen bank", subtitle: lang === "fr" ? "Paillettes IA & historique" : "AI straws & history",       breadcrumb: lang === "fr" ? "FERME · BANQUE SEMENCE" : "FARM · SEMEN BANK" },
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
+    operations: { title: lang === "fr" ? "Interventions" : "Operations", subtitle: lang === "fr" ? "Castration, tonte, écornage, boucle…" : "Castration, shearing, dehorning, tagging…", breadcrumb: lang === "fr" ? "FERME · INTERVENTIONS" : "FARM · OPERATIONS" },
     alerts:     { title: t(lang, "alerts"),     subtitle: lang === "fr" ? "Alertes intelligentes" : "Smart alerts",            breadcrumb: lang === "fr" ? "FERME · ALERTES" : "FARM · ALERTS" },
     pos:        { title: t(lang, "pos"),        subtitle: lang === "fr" ? "Ventes FarmOS" : "FarmOS sales",                    breadcrumb: lang === "fr" ? "FERME · POS" : "FARM · POS" },
     "sales-management": { title: t(lang, "salesManagement"), subtitle: lang === "fr" ? "Produits vendables et prix POS" : "Sellable products and POS prices", breadcrumb: lang === "fr" ? "FERME · GESTION DE VENTE" : "FARM · SALES MANAGEMENT" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
+    profitability: { title: t(lang, "profitability"), subtitle: lang === "fr" ? "Rentabilité par animal & par lot" : "Profitability per animal & per lot", breadcrumb: lang === "fr" ? "FERME · RENTABILITÉ" : "FARM · PROFITABILITY" },
+    forecast:   { title: t(lang, "forecast"),   subtitle: lang === "fr" ? "Ventes élevage & production projetées" : "Projected livestock sales & production", breadcrumb: lang === "fr" ? "FERME · PRÉVISIONNEL" : "FARM · FORECAST" },
+    simulator:  { title: t(lang, "simulator"),  subtitle: lang === "fr" ? "Simulation business & projection cheptel" : "Business simulation & herd projection", breadcrumb: lang === "fr" ? "FERME · SIMULATEUR" : "FARM · SIMULATOR" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
+    tasks:      { title: t(lang, "tasks"),      subtitle: lang === "fr" ? "Tâches assignées à l'équipe" : "Tasks assigned to the team", breadcrumb: lang === "fr" ? "FERME · TÂCHES" : "FARM · TASKS" },
+    "field-notes": { title: t(lang, "fieldNotes"), subtitle: lang === "fr" ? "Observations terrain géolocalisées" : "Geolocated field observations", breadcrumb: lang === "fr" ? "FERME · NOTES TERRAIN" : "FARM · FIELD NOTES" },
     employees:  { title: t(lang, "employees"),  subtitle: lang === "fr" ? "Équipe & présences" : "Team & shifts",               breadcrumb: lang === "fr" ? "FERME · ÉQUIPE" : "FARM · TEAM" },
     settings:   { title: t(lang, "settings"),   subtitle: lang === "fr" ? "Paramètres & permissions" : "Settings & permissions", breadcrumb: lang === "fr" ? "FERME · PARAMÈTRES" : "FARM · SETTINGS" },
   };
@@ -199,18 +226,24 @@ function App() {
       case "health":     return <HealthScreen {...props}/>;
       case "calendar":   return <CalendarScreen {...props}/>;
       case "stock":      return <StockScreen {...props}/>;
-      case "feed":       return <StockScreen {...props} kindFilter="feed"/>;
+      case "feed":       return <FeedStockScreen {...props}/>;
       case "medicines":  return <StockScreen {...props} kindFilter="med"/>;
       case "repro":      return <ReproScreen {...props}/>;
       case "semen-bank": return <SemenBankScreen {...props}/>;
       case "production": return <ProductionScreen {...props}/>;
+      case "operations": return <OperationsScreen {...props}/>;
       case "alerts":     return <AlertsScreen {...props}/>;
       case "pos":        return <PosScreen {...props}/>;
       case "sales-management": return <SalesManagementScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
+      case "profitability": return <ProfitabilityScreen {...props}/>;
+      case "forecast":   return <ForecastScreen {...props}/>;
+      case "simulator":  return <SimulatorScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
+      case "tasks":      return <TasksScreen {...props}/>;
+      case "field-notes": return <FieldNotesScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
-      case "settings":   return <SettingsScreen {...props}/>;
+      case "settings":   return <SettingsScreen {...props} tweaks={tweaks} setTweak={setTweak}/>;
       default:           return <Dashboard {...props}/>;
     }
   };
@@ -261,8 +294,16 @@ function App() {
             </div>
           </div>
 
-          {isMobile && <MobileTabBar route={route} onNav={setRoute} onPlus={() => openEntry("animal")} lang={lang}/>}
+          {isMobile && <MobileTabBar route={route} onNav={setRoute} onPlus={() => setActionsOpen(true)} lang={lang}/>}
         </main>
+
+        {actionsOpen && (
+          <QuickActionsSheet
+            lang={lang}
+            onClose={() => setActionsOpen(false)}
+            onPick={(tab) => { setActionsOpen(false); openEntry(tab); }}
+          />
+        )}
 
         <QuickEntryDrawer
           open={entry.open}
@@ -277,7 +318,8 @@ function App() {
 
         {toast && <Toast message={toast.message} severity={toast.severity} onClose={() => setToast(null)}/>}
       </div>
-      <FarmTweaks tweaks={tweaks} setTweak={setTweak}/>
+      {/* Panneau Tweaks (⚙ flottant) désactivé : options visuelles déplacées
+          dans l'écran Paramètres (carte « Apparence »). */}
       <PwaUpdateBanner lang={tweaks.lang}/>
       <PwaInstallBanner lang={tweaks.lang}/>
       <AiAssistant/>
@@ -330,6 +372,41 @@ const MobileTabBar = ({ route, onNav, onPlus, lang }) => {
         );
       })}
     </nav>
+  );
+};
+
+// Bottom sheet d'actions rapides (ouvert par le bouton + du tab bar mobile).
+// Chaque action ouvre le bon onglet de saisie rapide — adapté au travail terrain
+// (une main) : grandes cibles tactiles, peu de texte.
+const QuickActionsSheet = ({ lang, onClose, onPick }) => {
+  const actions = [
+    { tab: "animal",     icon: "layers",      fr: "Nouvel animal",  en: "New animal",  bg: "var(--forest-50)",  fg: "var(--forest-700)" },
+    { tab: "health",     icon: "pill",        fr: "Traitement",     en: "Treatment",   bg: "var(--clay-50, #f6ece2)", fg: "var(--clay-700)" },
+    { tab: "production", icon: "chart",       fr: "Production",     en: "Production",  bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "repro",      icon: "fingerprint", fr: "Reproduction",   en: "Reproduction",bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "stock",      icon: "package",     fr: "Stock",          en: "Stock",       bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "death",      icon: "alert",       fr: "Mortalité",      en: "Mortality",   bg: "var(--rust-50, #f7e9e4)", fg: "var(--oxblood-700)" },
+  ];
+  return (
+    <div onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", zIndex: 1200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--paper)", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "14px 16px calc(16px + env(safe-area-inset-bottom))", boxShadow: "0 -8px 30px -8px rgba(0,0,0,0.3)" }}>
+        <div style={{ width: 40, height: 4, borderRadius: 999, background: "var(--border-2)", margin: "0 auto 14px" }}/>
+        <div style={{ fontSize: 12, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 12 }}>
+          {lang === "fr" ? "Action rapide" : "Quick action"}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {actions.map((a) => (
+            <button key={a.tab} onClick={() => onPick(a.tab)}
+              style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, border: "1px solid var(--border-1)", background: a.bg, color: a.fg, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
+              <Icon name={a.icon} size={20} color={a.fg}/>
+              <span>{lang === "fr" ? a.fr : a.en}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 

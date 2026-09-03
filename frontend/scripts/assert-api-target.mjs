@@ -13,7 +13,10 @@ const targets = {
     forbidden: "https://ongdngolu.org/api",
   },
   production: {
-    required: "https://ongdngolu.org/api",
+    // Multi-prod : la cible prod n'est plus forcément ongdngolu. Si VITE_APP_API
+    // est fourni au build (ex: Avelomi → https://avelomi.com/api), on valide CETTE
+    // valeur ; sinon on garde le défaut ongdngolu (comportement historique).
+    required: process.env.VITE_APP_API || "https://ongdngolu.org/api",
     forbidden: "https://dev.ongdngolu.org/api",
   },
 };

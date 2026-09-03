@@ -1,0 +1,413 @@
+name: Deploy dev
+
+# Traduction de bitbucket-pipelines.yml (branche develop -> dev).
+#   develop -> dev.ongdngolu.org (16.54.167.125) + dev.avelomi.com (3.128.45.29)
+# Chaque app a son propre job, conditionne sur son dossier : toucher domus-app/
+# ne redeploie QUE Domus (equivalent de changesets.includePaths).
+#
+# Declenchable a la main (workflow_dispatch) avec deploy_all=true pour forcer
+# le redeploiement complet, equivalent du pipeline custom "deploy-all-dev".
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: Tout redeployer en ignorant les filtres de chemins
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  ONGD_SERVER: admin@16.54.167.125
+  AVELOMI_SERVER: admin@3.128.45.29
+  APP: /opt/nglu-app-dev
+  PROD_APP: /opt/nglu-app
+
+jobs:
+  # Calcule quels projets ont change. `deploy_all` force tout a true.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend2: ${{ steps.decide.outputs.backend2 }}
+      middleware: ${{ steps.decide.outputs.middleware }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+      domus: ${{ steps.decide.outputs.domus }}
+      journal: ${{ steps.decide.outputs.journal }}
+      tickets: ${{ steps.decide.outputs.tickets }}
+      farmos: ${{ steps.decide.outputs.farmos }}
+      batipro: ${{ steps.decide.outputs.batipro }}
+      hr: ${{ steps.decide.outputs.hr }}
+      comptabilite: ${{ steps.decide.outputs.comptabilite }}
+      migration: ${{ steps.decide.outputs.migration }}
+      chat: ${{ steps.decide.outputs.chat }}
+      kodatill: ${{ steps.decide.outputs.kodatill }}
+      marketing: ${{ steps.decide.outputs.marketing }}
+      avelomi_site: ${{ steps.decide.outputs.avelomi_site }}
+      # Matrice des apps statiques reduite aux seules apps modifiees, pour que
+      # le workflow n'affiche pas de jobs vides (parite avec les
+      # changesets.includePaths de Bitbucket, ou une etape non concernee
+      # n'existe tout simplement pas).
+      static_matrix: ${{ steps.decide.outputs.static_matrix }}
+      static_any: ${{ steps.decide.outputs.static_any }}
+    steps:
+      # fetch-depth: 0 obligatoire ici : paths-filter compare deux commits et
+      # echoue sur un clone shallow ("fatal: shallow file has changed since we
+      # read it"). Les autres jobs gardent le checkout shallow par defaut.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Sans base explicite, paths-filter cherche le merge-base avec `main`
+          # (son defaut interne) : ce repo n'a pas de branche `main` (master/develop
+          # seulement) -> "No merge base found" -> comparaison directe qui marque
+          # TOUT comme modifie. `HEAD^` n'est PAS un refspec valide pour le
+          # `git fetch` interne de l'action (fatal: invalid refspec) -> on donne le
+          # vrai SHA d'avant-push fourni par GitHub. Sur workflow_dispatch (pas de
+          # "before"), retombe sur HEAD~1.
+          base: ${{ github.event.before || 'HEAD~1' }}
+          filters: |
+            backend2:
+              - 'backend2/**'
+              - 'docker-compose.dev.yml'
+              - 'scripts/ci/ensure-shared-minio.sh'
+              - 'scripts/ci/ensure-coturn.sh'
+              - 'docker/coturn/**'
+            middleware:
+              - 'middleware/**'
+              - 'docker-compose.dev.yml'
+            frontend:
+              - 'frontend/**'
+            domus:
+              - 'domus-app/**'
+            journal:
+              - 'journal-app/**'
+            tickets:
+              - 'tickets-app/**'
+            farmos:
+              - 'farmos-app/**'
+            batipro:
+              - 'batipro-app/**'
+              - 'nginx/nginx.frontend.conf'
+            hr:
+              - 'hr-app/**'
+              - 'nginx/nginx.frontend.conf'
+            comptabilite:
+              - 'comptabilite-app/**'
+              - 'nginx/nginx.frontend.conf'
+            migration:
+              - 'migration-app/**'
+              - 'nginx/nginx.frontend.conf'
+            chat:
+              - 'chat-app/**'
+              - 'nginx/nginx.frontend.conf'
+            kodatill:
+              - 'kodatill-app/**'
+              - 'nginx/nginx.frontend.conf'
+            marketing:
+              - 'marketing-site/**'
+            avelomi_site:
+              - 'avelomi-site/**'
+      - id: decide
+        env:
+          ALL: ${{ inputs.deploy_all }}
+          FILTER: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          set -euo pipefail
+          for k in backend2 middleware frontend domus journal tickets farmos \
+                   batipro hr comptabilite migration chat kodatill marketing avelomi_site; do
+            if [ "$ALL" = "true" ]; then
+              echo "$k=true" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=true"
+            else
+              v=$(printf '%s' "$FILTER" | jq -r --arg k "$k" '.[$k] // "false"')
+              echo "$k=$v" >> "$GITHUB_OUTPUT"
+              eval "flag_$k=$v"
+            fi
+          done
+
+          # Definition des apps statiques (source unique : le job static-dev
+          # consomme cette matrice au lieu de la redeclarer). `conf` = l'app
+          # embarque une conf nginx a resynchroniser.
+          all_static='[
+            {"app":"frontend",         "flag":"frontend",     "build":"build:dev"},
+            {"app":"domus-app",        "flag":"domus",        "build":"build"},
+            {"app":"journal-app",      "flag":"journal",      "build":"build"},
+            {"app":"farmos-app",       "flag":"farmos",       "build":"build"},
+            {"app":"batipro-app",      "flag":"batipro",      "build":"build",     "conf":true},
+            {"app":"hr-app",           "flag":"hr",           "build":"build",     "conf":true},
+            {"app":"comptabilite-app", "flag":"comptabilite", "build":"build:dev", "conf":true},
+            {"app":"chat-app",         "flag":"chat",         "build":"build:dev", "conf":true},
+            {"app":"kodatill-app",     "flag":"kodatill",     "build":"build:dev", "conf":true}
+          ]'
+
+          # Ne garde que les apps dont le flag vaut true.
+          selected='[]'
+          for row in $(printf '%s' "$all_static" | jq -c '.[]'); do
+            f=$(printf '%s' "$row" | jq -r '.flag')
+            eval "v=\${flag_$f}"
+            if [ "$v" = "true" ]; then
+              selected=$(printf '%s' "$selected" | jq -c --argjson r "$row" '. + [$r]')
+            fi
+          done
+
+          count=$(printf '%s' "$selected" | jq 'length')
+          echo "static_matrix=$(printf '%s' "$selected" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "static_any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "static_any=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ───────────────────────────── Backend2 → dev ─────────────────────────────
+  backend2-dev:
+    needs: changes
+    if: needs.changes.outputs.backend2 == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: backend2/package-lock.json }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - name: Build
+        run: cd backend2 && npm ci && npm audit --audit-level=critical && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
+          $SCP -r backend2/dist $SERVER:$APP/backend2/
+          # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+          # Sans ce scp, toute nouvelle dependance manque dans le conteneur -> MODULE_NOT_FOUND.
+          $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+          $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+          # Migrations synchronisees explicitement : ne pas dependre du git pull
+          # serveur qui peut echouer en silence (drift local).
+          $SCP -r backend2/drizzle $SERVER:$APP/backend2/
+          $SCP docker-compose.dev.yml $SERVER:$APP/
+          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+          # MinIO partage : backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
+          $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+          $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+          # Coturn (appels audio du chat) : meme raison, non bloquant.
+          $SSH $SERVER "mkdir -p $APP/docker/coturn"
+          $SCP docker/coturn/turnserver.conf docker/coturn/entrypoint.sh $SERVER:$APP/docker/coturn/
+          $SCP scripts/ci/ensure-coturn.sh $SERVER:$APP/
+          $SSH $SERVER "cd $APP && sh ensure-coturn.sh nglu_dev docker-compose.dev.yml .env.dev"
+          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+  middleware-dev:
+    needs: changes
+    if: needs.changes.outputs.middleware == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
+          $SCP -r middleware $SERVER:$APP/
+          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+  # ─────────────── Apps statiques → dev (bind-mount dist sur l'hote) ───────────────
+  # Toutes suivent le meme flux : build -> scp vers /tmp -> vider le CONTENU du
+  # dist bind-monte (inode preserve : un `scp -r dist` cree un inode orphelin et
+  # l'ancien build reste servi) -> copier -> reload nginx.
+  static-dev:
+    needs: changes
+    runs-on: ubuntu-latest
+    # Matrice calculee par le job `changes` : elle ne contient QUE les apps
+    # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
+    # par etape (`steps.gate`) devient inutile : un job present est un job a faire.
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.static_matrix) }}
+    if: needs.changes.outputs.static_any == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - name: Build
+        # npm audit informatif (|| true) : ne PAS bloquer sur une vuln transitive de
+        # build, sinon dist/ reste vide et le deploy echoue.
+        run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run ${{ matrix.build }}
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+          A: ${{ matrix.app }}
+          SYNC_CONF: ${{ matrix.conf }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "mkdir -p $APP/$A/dist $PROD_APP/nginx"
+          $SSH $SERVER "rm -rf /tmp/$A-dist && mkdir -p /tmp/$A-dist"
+          $SCP -r "$A"/dist/* $SERVER:/tmp/$A-dist/
+          $SSH $SERVER "find $APP/$A/dist -mindepth 1 -delete && cp -r /tmp/$A-dist/. $APP/$A/dist/ && rm -rf /tmp/$A-dist"
+          if [ "${SYNC_CONF:-}" = "true" ]; then
+            $SCP nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+          fi
+          $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+  # Tickets : pas de bind-mount hote, on copie dans le conteneur nginx.
+  tickets-dev:
+    needs: changes
+    if: needs.changes.outputs.tickets == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - run: cd tickets-app && npm install --legacy-peer-deps && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
+          $SCP -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+          $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-dev && find /usr/share/nginx/html-tickets-dev -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-dev/ && rm -rf /tmp/tickets-app-dist"
+          $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+  # Migration Cockpit : nouveau volume html-migration-dev -> il faut RECREER le
+  # conteneur frontend (conf montee :ro, `docker cp` impossible).
+  migration-dev:
+    needs: changes
+    if: needs.changes.outputs.migration == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - run: cd migration-app && npm install --legacy-peer-deps && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "mkdir -p $APP/migration-app/dist $PROD_APP/nginx"
+          $SSH $SERVER "rm -rf /tmp/migration-app-dist && mkdir -p /tmp/migration-app-dist"
+          $SCP -r migration-app/dist/* $SERVER:/tmp/migration-app-dist/
+          $SSH $SERVER "find $APP/migration-app/dist -mindepth 1 -delete && cp -r /tmp/migration-app-dist/. $APP/migration-app/dist/ && rm -rf /tmp/migration-app-dist"
+          $SCP nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+          $SCP docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+          # Le projet compose reel du conteneur frontend a change au fil des deploys :
+          # on lit son label avant de recreer, sinon "container name already in use".
+          $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+          $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+
+  marketing-dev:
+    needs: changes
+    if: needs.changes.outputs.marketing == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - run: cd marketing-site && npm install --legacy-peer-deps && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
+          $SCP -r marketing-site/dist $SERVER:$APP/marketing-site/
+          $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+  # ───────────────────── Serveur Avelomi (2e hote) → dev ─────────────────────
+  avelomi-site-dev:
+    needs: changes
+    if: needs.changes.outputs.avelomi_site == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
+      - run: cd avelomi-site && npm install --legacy-peer-deps && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
+          # dev.avelomi.com est servi par le vhost dev de la conf PROD nginx.avelomi.conf.
+          # Ce job ne met a jour QUE ce dist dev + reload. Il ne DOIT PAS toucher les
+          # artefacts prod ni recreer nglu_prod_frontend : sinon la conf dev est remontee
+          # sur avelomi.com et casse le cert prod (WRONG_PRINCIPAL).
+          $SSH $SERVER "sudo -n mkdir -p $APP/avelomi-site/dist"
+          $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
+          $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
+          $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+          $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
+
+  backend2-avelomi-dev:
+    needs: changes
+    if: needs.changes.outputs.backend2 == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: backend2/package-lock.json }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
+      - run: cd backend2 && npm ci && npm audit --audit-level=critical && npm run build
+      - name: Deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "set -e; mkdir -p $APP/backend2 2>/dev/null || sudo -n mkdir -p $APP/backend2; if [ ! -w $APP ] || [ ! -w $APP/backend2 ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/backend2; fi"
+          # .env.dev genere SUR LE SERVEUR (openssl) s'il est absent : les secrets ne
+          # transitent jamais par le repo ni le runner. Idempotent (preserve la DB dev).
+          $SSH $SERVER 'set -e; f=/opt/nglu-app-dev/.env.dev; if [ ! -f "$f" ]; then
+            printf "DB_ROOT_PASSWORD=%s\nDB_DATABASE=nglu_dev_db\nDB_USERNAME=nglu_dev\nDB_PASSWORD=%s\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nCORS_ORIGIN=https://dev.avelomi.com\nAPP_URL=https://dev.avelomi.com\nFRONTEND_URL=https://dev.avelomi.com/crm\nREDIS_ENABLED=true\n" \
+              "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
+            chmod 600 "$f"; echo "[deploy] .env.dev genere (secrets openssl serveur)";
+          else echo "[deploy] .env.dev deja present - inchange"; fi'
+          $SCP -r backend2/dist $SERVER:$APP/backend2/
+          $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+          $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
+          $SCP -r backend2/drizzle $SERVER:$APP/backend2/
+          $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
+          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+          $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+          $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
+          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+  middleware-avelomi-dev:
+    needs: changes
+    if: needs.changes.outputs.middleware == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
+      - name: Deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
+          $SCP -r middleware $SERVER:$APP/
+          $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
+          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"

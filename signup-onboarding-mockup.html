@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inscription & Onboarding — Nglu Cloud</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --ink: #18181b;
+      --ink-2: #52525b;
+      --ink-3: #a1a1aa;
+      --line: #e4e4e7;
+      --line-2: #f4f4f5;
+      --brand: #4f46e5;
+      --brand-d: #4338ca;
+      --brand-50: #eef2ff;
+      --brand-100: #e0e7ff;
+      --ok: #16a34a;
+      --warn: #b45309;
+      --err: #dc2626;
+      --radius: 14px;
+      --shadow-sm: 0 1px 2px rgba(24,24,27,0.04), 0 1px 3px rgba(24,24,27,0.06);
+      --shadow-md: 0 4px 6px -1px rgba(24,24,27,0.06), 0 2px 4px -2px rgba(24,24,27,0.05);
+      --shadow-lg: 0 10px 30px -10px rgba(24,24,27,0.15), 0 4px 8px -4px rgba(24,24,27,0.08);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink); line-height: 1.55; min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== Page d'inscription ===== */
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2.5rem 1rem; }
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-lg);
+      max-width: 460px; width: 100%; overflow: hidden;
+    }
+    .auth-header { padding: 2.2rem 2.5rem 0.5rem; text-align: center; }
+    .logo { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .logo .accent { color: var(--brand); }
+    .logo-sub { font-size: 0.78rem; color: var(--ink-3); font-weight: 500; }
+
+    .steps-bar { display: flex; gap: 0.4rem; padding: 0 2.5rem; margin: 1.6rem 0 0.6rem; }
+    .step-seg { flex: 1; height: 4px; border-radius: 99px; background: var(--line); transition: background 0.35s ease; }
+    .step-seg.done { background: var(--brand); }
+    .step-label { padding: 0 2.5rem; font-size: 0.8rem; color: var(--ink-3); font-weight: 500; margin-bottom: 1.2rem; }
+
+    .auth-body { padding: 0.6rem 2.5rem 2rem; }
+    .form-group { margin-bottom: 1.25rem; }
+    .label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--ink); margin-bottom: 0.45rem; }
+    .input {
+      width: 100%; padding: 0.72rem 0.9rem; border: 1px solid var(--line); border-radius: 10px;
+      font-size: 0.95rem; font-family: inherit; color: var(--ink); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .input::placeholder { color: var(--ink-3); }
+    .input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3.5px rgba(79,70,229,0.12); }
+    .input.error { border-color: var(--err); }
+    select.input { cursor: pointer; }
+    .field-error { color: var(--err); font-size: 0.8rem; margin-top: 0.35rem; display: none; }
+    .field-error.show { display: block; }
+    .hint { font-size: 0.8rem; color: var(--ink-3); margin-top: 0.35rem; }
+
+    .slug-row { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+    .slug-row:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3.5px rgba(79,70,229,0.12); }
+    .slug-prefix { padding: 0.72rem 0.45rem 0.72rem 0.9rem; background: var(--line-2); color: var(--ink-2); font-size: 0.9rem; white-space: nowrap; }
+    .slug-row .input { border: none; box-shadow: none; padding-left: 0.3rem; }
+
+    .type-toggle { display: flex; gap: 0.7rem; margin-bottom: 1.4rem; }
+    .type-btn {
+      flex: 1; padding: 1.1rem 0.8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+      cursor: pointer; text-align: center; transition: all 0.15s;
+    }
+    .type-btn:hover { border-color: var(--brand-100); }
+    .type-btn.active { border-color: var(--brand); background: var(--brand-50); box-shadow: 0 0 0 1px var(--brand); }
+    .type-btn .ico { font-size: 1.5rem; line-height: 1; }
+    .type-btn .tit { font-weight: 600; font-size: 0.88rem; margin-top: 0.4rem; }
+    .type-btn .des { font-size: 0.74rem; color: var(--ink-3); margin-top: 0.1rem; }
+
+    .btn { padding: 0.8rem 1.2rem; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.92rem; font-family: inherit; transition: all 0.15s; }
+    .btn-primary { background: var(--brand); color: white; width: 100%; box-shadow: var(--shadow-sm); }
+    .btn-primary:hover { background: var(--brand-d); box-shadow: var(--shadow-md); }
+    .btn-primary:active { transform: translateY(1px); }
+    .btn-ghost { background: var(--surface); color: var(--ink-2); border: 1px solid var(--line); }
+    .btn-ghost:hover { background: var(--line-2); color: var(--ink); }
+    .btn-row { display: flex; gap: 0.7rem; margin-top: 0.5rem; }
+    .btn-row .btn-ghost { flex: 0 0 auto; }
+    .btn-row .btn-primary { flex: 1; }
+
+    .auth-foot { padding: 1.2rem 2.5rem; background: var(--line-2); text-align: center; font-size: 0.85rem; color: var(--ink-2); border-top: 1px solid var(--line); }
+    .auth-foot a { color: var(--brand); text-decoration: none; font-weight: 600; }
+    .auth-foot a:hover { text-decoration: underline; }
+
+    .password-strength { height: 4px; border-radius: 99px; background: var(--line); margin-top: 0.5rem; overflow: hidden; }
+    .password-strength-bar { height: 100%; width: 0; border-radius: 99px; transition: all 0.3s; }
+
+    /* ===== Écran de succès / onboarding ===== */
+    .success-card { text-align: center; padding: 2.8rem 2.5rem; }
+    .success-icon { font-size: 3.4rem; margin-bottom: 1rem; line-height: 1; }
+    .success-card h2 { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .success-card p { color: var(--ink-2); margin-bottom: 1.5rem; }
+    .workspace-url {
+      background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: 12px; padding: 0.85rem;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.92rem; color: var(--brand-d); font-weight: 600;
+      margin-bottom: 1.5rem; word-break: break-all;
+    }
+    .apps-preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; margin: 1.5rem 0; }
+    .app-chip { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 0.4rem; transition: border-color 0.15s; }
+    .app-chip:hover { border-color: var(--brand-100); }
+    .app-chip .ico { font-size: 1.4rem; line-height: 1; }
+    .app-chip .nm { font-size: 0.74rem; font-weight: 600; color: var(--ink-2); margin-top: 0.3rem; }
+
+    /* ===== Espace client (après onboarding) ===== */
+    #view-workspace { display: none; }
+    .ws-app { display: flex; min-height: 100vh; background: var(--bg); }
+    .ws-side { width: 244px; background: var(--surface); border-right: 1px solid var(--line); color: var(--ink); padding: 1.5rem 0.9rem; }
+    .ws-brand { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; padding: 0 0.5rem; }
+    .ws-brand .accent { color: var(--brand); }
+    .ws-side-sub { font-size: 0.7rem; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 0.5rem; margin-bottom: 1.8rem; margin-top: 0.15rem; }
+    .ws-nav { display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.7rem; border-radius: 9px; color: var(--ink-2); cursor: pointer; margin-bottom: 0.15rem; font-size: 0.9rem; font-weight: 500; transition: background 0.12s, color 0.12s; }
+    .ws-nav:hover { background: var(--line-2); color: var(--ink); }
+    .ws-nav.active { background: var(--brand-50); color: var(--brand-d); font-weight: 600; }
+    .ws-main { flex: 1; padding: 2.2rem 2.5rem; }
+    .ws-banner { background: #fffbeb; border: 1px solid #fde68a; color: var(--warn); border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1.8rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .ws-title { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.3rem; }
+    .ws-sub { color: var(--ink-2); margin-bottom: 2rem; }
+    .ws-main h3 { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); margin-bottom: 1rem; }
+    .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px,1fr)); gap: 1rem; }
+    .mod-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem 1rem; text-align: center; cursor: pointer; transition: all 0.18s; box-shadow: var(--shadow-sm); }
+    .mod-card:hover { border-color: var(--brand-100); transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    .mod-card .ico { font-size: 1.9rem; line-height: 1; }
+    .mod-card .nm { font-weight: 600; margin-top: 0.5rem; font-size: 0.9rem; }
+    .toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: var(--ink); color: white; padding: 0.85rem 1.4rem; border-radius: 12px; font-size: 0.9rem; box-shadow: var(--shadow-lg); z-index: 3000; display: none; }
+    .toast.show { display: block; animation: pop 0.2s; }
+    @keyframes pop { from { transform: translateX(-50%) translateY(10px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+    @media (max-width: 600px) {
+      .auth-header, .auth-body, .auth-foot { padding-left: 1.5rem; padding-right: 1.5rem; }
+      .steps-bar, .step-label { padding-left: 1.5rem; padding-right: 1.5rem; }
+      .apps-preview { grid-template-columns: repeat(2, 1fr); }
+      .ws-main { padding: 1.4rem; }
+      .ws-side { width: 64px; padding: 1rem 0.5rem; }
+      .ws-nav span, .ws-brand, .ws-side-sub { font-size: 0; }
+      .ws-nav { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============ VUE INSCRIPTION ============ -->
+  <div id="view-signup" class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="logo">Nglu<span class="accent"> Cloud</span></div>
+        <div class="logo-sub">Votre suite de gestion d'entreprise</div>
+      </div>
+
+      <div class="steps-bar">
+        <div class="step-seg done" id="seg-1"></div>
+        <div class="step-seg" id="seg-2"></div>
+        <div class="step-seg" id="seg-3"></div>
+      </div>
+      <div class="step-label" id="step-label">Étape 1 sur 3 — Votre compte</div>
+
+      <div class="auth-body">
+        <!-- ÉTAPE 1 : compte -->
+        <div id="step-1">
+          <div class="form-group">
+            <label class="label">Nom complet *</label>
+            <input type="text" class="input" id="f-name" placeholder="Marie Dupont">
+            <div class="field-error" id="e-name">Veuillez entrer votre nom.</div>
+          </div>
+          <div class="form-group">
+            <label class="label">Email *</label>
+            <input type="email" class="input" id="f-email" placeholder="marie@exemple.com">
+            <div class="field-error" id="e-email">Email invalide ou déjà utilisé.</div>
+          </div>
+          <div class="form-group">
+            <label class="label">Mot de passe *</label>
+            <input type="password" class="input" id="f-password" placeholder="Au moins 8 caractères" oninput="checkPassword()">
+            <div class="password-strength"><div class="password-strength-bar" id="pwd-bar"></div></div>
+            <div class="field-error" id="e-password">Au moins 8 caractères.</div>
+          </div>
+          <button class="btn btn-primary" onclick="goStep(2)">Continuer →</button>
+        </div>
+
+        <!-- ÉTAPE 2 : type + organisation -->
+        <div id="step-2" style="display:none;">
+          <div class="type-toggle">
+            <div class="type-btn active" id="type-org" onclick="setType('org')">
+              <div class="ico">🏢</div><div class="tit">Une entreprise</div><div class="des">Équipe, plusieurs utilisateurs</div>
+            </div>
+            <div class="type-btn" id="type-solo" onclick="setType('solo')">
+              <div class="ico">👤</div><div class="tit">Moi seul</div><div class="des">Usage individuel</div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="label" id="org-label">Nom de l'entreprise *</label>
+            <input type="text" class="input" id="f-org" placeholder="Ferme du Soleil" oninput="syncSlug()">
+            <div class="field-error" id="e-org">Indiquez un nom.</div>
+          </div>
+          <div class="form-group">
+            <label class="label">Adresse de votre espace</label>
+            <div class="slug-row">
+              <input type="text" class="input" id="f-slug" placeholder="ferme-du-soleil" oninput="validateSlug()" style="padding-left:0.9rem;">
+              <span class="slug-prefix" style="border-left:1px solid var(--line);border-right:none;">.nglu.cloud</span>
+            </div>
+            <div class="hint" id="slug-hint">Identifiant unique de votre espace.</div>
+            <div class="field-error" id="e-slug">Cette adresse est déjà prise.</div>
+          </div>
+          <div class="form-group">
+            <label class="label">Secteur d'activité</label>
+            <select class="input" id="f-sector">
+              <option value="agri">Agriculture / Élevage</option>
+              <option value="immo">Immobilier</option>
+              <option value="btp">Construction / BTP</option>
+              <option value="commerce">Commerce / Vente</option>
+              <option value="autre">Autre</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-ghost" onclick="goStep(1)">← Retour</button>
+            <button class="btn btn-primary" onclick="goStep(3)">Continuer →</button>
+          </div>
+        </div>
+
+        <!-- ÉTAPE 3 : confirmation -->
+        <div id="step-3" style="display:none;">
+          <div class="form-group">
+            <label class="label">Téléphone (RDC par défaut)</label>
+            <input type="tel" class="input" id="f-phone" placeholder="+243 ...">
+            <div class="hint">Pour sécuriser votre compte (optionnel).</div>
+          </div>
+          <div style="background:#f5f3ff;border-radius:10px;padding:1rem;margin-bottom:1.2rem;">
+            <div style="font-weight:600;margin-bottom:0.5rem;">Récapitulatif</div>
+            <div style="font-size:0.88rem;color:#555;line-height:1.8;" id="summary"></div>
+          </div>
+          <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;color:#555;margin-bottom:1.2rem;cursor:pointer;">
+            <input type="checkbox" id="f-terms" style="margin-top:0.2rem;">
+            <span>J'accepte les conditions d'utilisation et la politique de confidentialité.</span>
+          </label>
+          <div class="field-error" id="e-terms" style="margin-bottom:1rem;">Vous devez accepter les conditions.</div>
+          <div class="btn-row">
+            <button class="btn btn-ghost" onclick="goStep(2)">← Retour</button>
+            <button class="btn btn-primary" onclick="submitSignup()">Créer mon espace 🚀</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-foot">
+        Déjà un compte ? <a href="#" onclick="showToast('→ Redirection vers la page de connexion');return false;">Se connecter</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VUE SUCCÈS / ONBOARDING ============ -->
+  <div id="view-success" class="auth-wrap" style="display:none;">
+    <div class="auth-card">
+      <div class="success-card">
+        <div class="success-icon">🎉</div>
+        <h2>Bienvenue, <span id="welcome-name">Marie</span> !</h2>
+        <p>Votre espace <strong id="welcome-org">Ferme du Soleil</strong> est prêt.</p>
+        <div class="workspace-url" id="welcome-url">ferme-du-soleil.nglu.cloud</div>
+        <p style="font-size:0.85rem;">Toutes les applications sont activées dans votre espace :</p>
+        <div class="apps-preview">
+          <div class="app-chip"><div class="ico">🐄</div><div class="nm">FarmOS</div></div>
+          <div class="app-chip"><div class="ico">💰</div><div class="nm">Compta</div></div>
+          <div class="app-chip"><div class="ico">🏠</div><div class="nm">Domus</div></div>
+          <div class="app-chip"><div class="ico">🏗️</div><div class="nm">BâtiPro</div></div>
+          <div class="app-chip"><div class="ico">👥</div><div class="nm">RH</div></div>
+          <div class="app-chip"><div class="ico">📊</div><div class="nm">Stats</div></div>
+        </div>
+        <button class="btn btn-primary" onclick="enterWorkspace()">Entrer dans mon espace →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VUE ESPACE CLIENT ============ -->
+  <div id="view-workspace">
+    <div class="ws-app">
+      <div class="ws-side">
+        <div class="ws-brand" id="ws-brand">Ferme du Soleil</div>
+        <div class="ws-side-sub">Votre espace</div>
+        <div class="ws-nav active">📊 <span>Accueil</span></div>
+        <div class="ws-nav" onclick="openMod('FarmOS')">🐄 <span>FarmOS</span></div>
+        <div class="ws-nav" onclick="openMod('Comptabilité')">💰 <span>Comptabilité</span></div>
+        <div class="ws-nav" onclick="openMod('Domus')">🏠 <span>Domus</span></div>
+        <div class="ws-nav" onclick="openMod('BâtiPro')">🏗️ <span>BâtiPro</span></div>
+        <div class="ws-nav" onclick="openMod('RH')">👥 <span>RH</span></div>
+        <div class="ws-nav" onclick="openMod('Paramètres')">⚙️ <span>Paramètres</span></div>
+      </div>
+      <div class="ws-main">
+        <div class="ws-banner">
+          <span>⏳ <strong>Période d'essai</strong> — 14 jours restants. Activez votre abonnement à tout moment.</span>
+          <button class="btn btn-primary" style="width:auto;padding:0.5rem 1rem;" onclick="showToast('→ Page d\'abonnement (mockup)')">Voir les offres</button>
+        </div>
+        <div class="ws-title">Bonjour, <span id="ws-admin">Marie</span> 👋</div>
+        <div class="ws-sub">Vous gérez <strong id="ws-org">Ferme du Soleil</strong>. Vos données sont isolées — vous ne voyez que celles de votre organisation.</div>
+        <h3 style="margin-bottom:1rem;">Vos applications</h3>
+        <div class="mod-grid">
+          <div class="mod-card" onclick="openMod('FarmOS')"><div class="ico">🐄</div><div class="nm">FarmOS</div></div>
+          <div class="mod-card" onclick="openMod('Comptabilité')"><div class="ico">💰</div><div class="nm">Comptabilité</div></div>
+          <div class="mod-card" onclick="openMod('Domus')"><div class="ico">🏠</div><div class="nm">Domus</div></div>
+          <div class="mod-card" onclick="openMod('BâtiPro')"><div class="ico">🏗️</div><div class="nm">BâtiPro</div></div>
+          <div class="mod-card" onclick="openMod('RH')"><div class="ico">👥</div><div class="nm">RH</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===== État =====
+    let accountType = "org";
+    let takenSlugs = ["demo", "test", "ferme-bellevue", "admin"];
+    let data = {};
+
+    // ===== Navigation entre étapes =====
+    function goStep(n) {
+      // Validation avant d'avancer
+      if (n === 2 && !validateStep1()) return;
+      if (n === 3 && !validateStep2()) return;
+
+      [1,2,3].forEach(i => document.getElementById("step-"+i).style.display = "none");
+      document.getElementById("step-"+n).style.display = "block";
+      for (let i=1;i<=3;i++) {
+        document.getElementById("seg-"+i).classList.toggle("done", i <= n);
+      }
+      const labels = {1:"Votre compte", 2:"Votre organisation", 3:"Confirmation"};
+      document.getElementById("step-label").textContent = `Étape ${n} sur 3 — ${labels[n]}`;
+      if (n === 3) buildSummary();
+    }
+
+    // ===== Validation =====
+    function showErr(id, show) { document.getElementById("e-"+id).classList.toggle("show", show); document.getElementById("f-"+id)?.classList.toggle("error", show); }
+
+    function validateStep1() {
+      let ok = true;
+      const name = document.getElementById("f-name").value.trim();
+      const email = document.getElementById("f-email").value.trim();
+      const pwd = document.getElementById("f-password").value;
+      showErr("name", !name); if (!name) ok = false;
+      const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+      showErr("email", !emailOk); if (!emailOk) ok = false;
+      showErr("password", pwd.length < 8); if (pwd.length < 8) ok = false;
+      if (ok) { data.name = name; data.email = email; }
+      return ok;
+    }
+
+    function validateStep2() {
+      let ok = true;
+      if (accountType === "org") {
+        const org = document.getElementById("f-org").value.trim();
+        showErr("org", !org); if (!org) ok = false;
+        data.org = org;
+      } else {
+        data.org = data.name; // solo: org = nom de la personne
+      }
+      const slug = document.getElementById("f-slug").value.trim();
+      const slugTaken = takenSlugs.includes(slug);
+      showErr("slug", slugTaken); if (slugTaken) ok = false;
+      if (ok) { data.slug = slug || slugify(data.org); data.sector = document.getElementById("f-sector").value; }
+      return ok;
+    }
+
+    // ===== Type compte =====
+    function setType(t) {
+      accountType = t;
+      document.getElementById("type-org").classList.toggle("active", t==="org");
+      document.getElementById("type-solo").classList.toggle("active", t==="solo");
+      const orgGroup = document.getElementById("f-org").closest(".form-group");
+      if (t === "solo") {
+        orgGroup.style.display = "none";
+        document.getElementById("org-label").textContent = "";
+      } else {
+        orgGroup.style.display = "block";
+        document.getElementById("org-label").textContent = "Nom de l'entreprise *";
+      }
+    }
+
+    // ===== Slug =====
+    function slugify(s) { return s.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""); }
+    function syncSlug() {
+      const org = document.getElementById("f-org").value;
+      document.getElementById("f-slug").value = slugify(org);
+      validateSlug();
+    }
+    function validateSlug() {
+      const slug = document.getElementById("f-slug").value.trim();
+      const taken = takenSlugs.includes(slug);
+      document.getElementById("slug-hint").textContent = slug
+        ? (taken ? "❌ Adresse déjà prise" : `✓ Disponible : ${slug}.nglu.cloud`)
+        : "Identifiant unique de votre espace.";
+      document.getElementById("slug-hint").style.color = slug ? (taken ? "#e63946" : "#28a745") : "#888";
+    }
+
+    // ===== Force du mot de passe =====
+    function checkPassword() {
+      const pwd = document.getElementById("f-password").value;
+      let score = 0;
+      if (pwd.length >= 8) score++;
+      if (/[A-Z]/.test(pwd)) score++;
+      if (/[0-9]/.test(pwd)) score++;
+      if (/[^A-Za-z0-9]/.test(pwd)) score++;
+      const bar = document.getElementById("pwd-bar");
+      const pct = (score / 4) * 100;
+      const colors = ["#e63946", "#f4a261", "#e9c46a", "#28a745"];
+      bar.style.width = pct + "%";
+      bar.style.background = colors[Math.max(0, score-1)] || "#eee";
+    }
+
+    // ===== Récapitulatif =====
+    function buildSummary() {
+      const sectorNames = { agri:"Agriculture / Élevage", immo:"Immobilier", btp:"Construction / BTP", commerce:"Commerce / Vente", autre:"Autre" };
+      document.getElementById("summary").innerHTML = `
+        <div>👤 ${data.name} — ${data.email}</div>
+        <div>${accountType === "org" ? "🏢" : "👤"} ${data.org} ${accountType==="solo" ? "(compte individuel)" : ""}</div>
+        <div>🔗 ${data.slug}.nglu.cloud</div>
+        <div>🏷️ ${sectorNames[data.sector] || data.sector}</div>
+        <div style="margin-top:0.4rem;color:#5b3cc4;font-weight:600;">✓ Toutes les apps activées · Essai gratuit 14 jours</div>
+      `;
+    }
+
+    // ===== Soumission =====
+    // API_BASE : meme origine en prod (servi sous le domaine), surchargeable pour les tests.
+    const API_BASE = (window.NGLU_API_BASE || "/api");
+
+    async function submitSignup() {
+      if (!document.getElementById("f-terms").checked) {
+        document.getElementById("e-terms").classList.add("show");
+        return;
+      }
+      const btn = document.querySelector('#step-3 .btn-primary');
+      const original = btn ? btn.textContent : "";
+      if (btn) { btn.disabled = true; btn.textContent = "Création en cours…"; }
+
+      // Nom complet -> firstName / lastName (1er mot = prenom, reste = nom).
+      const parts = (data.name || "").trim().split(/\s+/);
+      const firstName = parts.shift() || data.name;
+      const lastName = parts.join(" ") || firstName;
+      const payload = {
+        firstName,
+        lastName,
+        email: data.email,
+        password: document.getElementById("f-password").value,
+        accountType,
+        orgName: accountType === "org" ? data.org : undefined,
+        slug: data.slug,
+        sector: data.sector,
+        phone: document.getElementById("f-phone").value || undefined,
+        acceptedTerms: true,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include", // recoit le cookie refresh
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // 409 = email/slug deja pris ; 400 = validation. Message backend si dispo.
+          const msg = body.message || "La création a échoué. Vérifiez vos informations.";
+          if (res.status === 409 && /adresse/i.test(msg)) {
+            goStep(2);
+            document.getElementById("e-slug").textContent = msg;
+            document.getElementById("e-slug").classList.add("show");
+          } else {
+            showToast("⚠️ " + (Array.isArray(msg) ? msg[0] : msg));
+          }
+          return;
+        }
+        // Succes : le token est en mémoire applicative (pas localStorage) ; le cookie
+        // refresh est posé par le backend. On affiche l'écran de bienvenue.
+        window.__nglu_token = body.token;
+        const org = body.organization || {};
+        document.getElementById("welcome-name").textContent = firstName;
+        document.getElementById("welcome-org").textContent = org.name || data.org;
+        document.getElementById("welcome-url").textContent = (org.slug || data.slug) + ".nglu.cloud";
+        document.getElementById("view-signup").style.display = "none";
+        document.getElementById("view-success").style.display = "flex";
+      } catch (e) {
+        showToast("⚠️ Réseau indisponible. Réessayez.");
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = original; }
+      }
+    }
+
+    // ===== Onboarding → espace =====
+    // En prod le client est deja connecte (cookie refresh + token en memoire) :
+    // on le redirige vers son espace applicatif. Si l'app cible n'est pas servie
+    // (ex: ouverture du fichier en local), on retombe sur l'apercu mockup.
+    function enterWorkspace() {
+      const target = window.NGLU_WORKSPACE_URL || "/";
+      if (window.location.protocol.startsWith("http")) {
+        window.location.href = target;
+        return;
+      }
+      document.getElementById("ws-brand").innerHTML = data.org;
+      document.getElementById("ws-org").textContent = data.org;
+      document.getElementById("ws-admin").textContent = data.name.split(" ")[0];
+      document.getElementById("view-success").style.display = "none";
+      document.getElementById("view-workspace").style.display = "block";
+    }
+
+    function openMod(name) { showToast(`Ouverture de ${name} — données isolées de ${data.org || "votre org"}`); }
+
+    // ===== Toast =====
+    let toastTimer;
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+    }
+  </script>
+</body>
+</html>

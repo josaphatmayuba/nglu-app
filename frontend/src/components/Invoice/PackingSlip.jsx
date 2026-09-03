@@ -4,6 +4,7 @@ import React, { forwardRef, Fragment, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useReactToPrint } from "react-to-print";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 
 const PrintToPdf = forwardRef(({ data, invoiceData }, ref) => {
   return (
@@ -141,7 +142,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData }, ref) => {
 
           <div className='text-center'>
             <hr />
-            <p dangerouslySetInnerHTML={{ __html: invoiceData?.footer }}></p>
+            <p dangerouslySetInnerHTML={{ __html: sanitizeHtml(invoiceData?.footer) }}></p>
           </div>
         </div>
       </div>

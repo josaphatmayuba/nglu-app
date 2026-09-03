@@ -27,16 +27,35 @@ function setToken(t) {
 }
 
 // Restaure une session via le cookie refresh httpOnly. Renvoie le token ou null.
+// SCRUM-119 — si le fetch échoue faute de réseau (pas de réponse serveur), on ne
+// doit PAS traiter ça comme une session invalide : on jette une erreur taguée
+// `.isNetworkError` pour que l'appelant (api.js) garde la session et réessaie
+// plus tard, au lieu de déconnecter l'utilisateur juste parce qu'il est hors ligne.
 export async function restoreSession() {
+  let res;
   try {
-    const res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });
+    res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });
+  } catch (err) {
+    const netErr = new Error("network unavailable during refresh");
+    netErr.isNetworkError = true;
+    throw netErr;
+  }
+  try {
     if (!res.ok) return null;
     const data = await res.json();
     if (data?.token) {
       setToken(data.token);
       if (data.role) localStorage.setItem("role", data.role);
       if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
+      // Le refresh-token expose désormais firstName/lastName/username/email/id :
+      // on les stocke comme le login formulaire pour que le UserChip affiche
+      // l'utilisateur (sinon « Non connecté » alors qu'on est connecté).
+      const display = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || data.username || data.email || "";
+      if (display) localStorage.setItem("user", display);
+      if (data.id != null) localStorage.setItem("id", String(data.id));
+      if (data.email) localStorage.setItem("email", data.email);
       localStorage.setItem("isLogged", "true");
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
       return data.token;
     }
   } catch {}
@@ -59,7 +78,12 @@ export async function bootstrapAuth() {
       }
     }
   } catch {}
-  if (!accessToken) await restoreSession();
+  // Hors ligne au boot : restoreSession() jette (isNetworkError). On garde
+  // simplement l'utilisateur non connecté pour l'instant, sans le traiter
+  // comme une session invalide — il retentera dès que le réseau revient.
+  if (!accessToken) {
+    try { await restoreSession(); } catch {}
+  }
 }
 
 export function clearAuth() {
@@ -148,15 +172,14 @@ export function LoginScreen({ lang = "fr" }) {
       padding: 24, fontFamily: "var(--font-sans, system-ui)",
     }}>
       <form onSubmit={submit} style={{
-        width: "100%", maxWidth: 380, background: "var(--paper, #FBF8F2)",
+        width: "min(380px, 100%)", boxSizing: "border-box", background: "var(--paper, #FBF8F2)",
         borderRadius: 14, padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Brand size={48} color="#0E2418" accent="#D7AA45"/>
-          <div style={{ fontFamily: "var(--font-display, Georgia)", fontWeight: 500, fontSize: 22, color: "var(--ink-950, #0E2418)" }}>
-            FarmOS<span style={{ color: "#D7AA45" }}> Pro</span>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <Brand size={64}/>
+          {/* Wordmark officiel (image) au lieu du texte CSS, pour rester fidèle à la charte. */}
+          <img src={`${import.meta.env.BASE_URL}farmos-wordmark.png`} alt="FarmOS" style={{ height: 26, width: "auto", display: "block" }}/>
           <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", textAlign: "center" }}>
             {lang === "fr" ? "Connecte-toi pour accéder à l'élevage" : "Sign in to access your herd"}
           </div>
@@ -227,7 +250,7 @@ export function LoginScreen({ lang = "fr" }) {
 }
 
 const inputStyle = {
-  width: "100%", padding: "10px 12px", borderRadius: 6,
+  width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6,
   border: "1px solid var(--border-2, #d8c8a8)", background: "var(--paper, #fff)",
   fontSize: 14, fontFamily: "inherit", outline: "none",
 };

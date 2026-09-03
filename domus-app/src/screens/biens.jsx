@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
+import { t, tf } from "../i18n.js";
 import {
   AlertTriangle,
   Bath,
   BedDouble,
   Building2,
+  Camera,
   Check,
   CreditCard,
   DollarSign,
@@ -13,6 +15,7 @@ import {
   Home,
   Info,
   Layers,
+  ChevronLeft,
   List,
   Map as MapIcon,
   MapPin,
@@ -22,17 +25,22 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Upload,
   UserPlus,
   Users,
   Wallet,
+  Wrench,
   X,
 } from "lucide-react";
 import { api } from "../api.js";
+import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 
 const TYPES = ["Tous", "Appartement", "Maison", "Bureau", "Commerce"];
 const TYPE_MAP = {
@@ -88,6 +96,7 @@ const emptyUnit = {
   bathrooms: 1,
   area: 0,
   monthlyRent: 0,
+  availableForBooking: false,
   securityDeposit: 0,
   amenities: "",
   description: "",
@@ -97,6 +106,7 @@ export function Biens({ go }) {
   const { data, loading, error, reload } = useApi(loadPropertiesModule, []);
   useRealtimeReload(reload, ["properties", "units", "leases", "payments"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
   const [type, setType] = useState("Tous");
   const [view, setView] = useState("grid");
   const [query, setQuery] = useState(() => {
@@ -111,10 +121,33 @@ export function Biens({ go }) {
   const [filters, setFilters] = useState({ city: "", minRent: "", maxRent: "", minBedrooms: "", minArea: "" });
   const [propertyModal, setPropertyModal] = useState(null);
   const [unitModal, setUnitModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  // Navigation deux niveaux : null = liste d'immeubles, id = detail d'un immeuble (ses unites).
+  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
 
   const properties = useMemo(() => filterProperties(data?.properties || []).map(normalizeProperty), [data]);
+  const photosByProperty = useMemo(() => {
+    const grouped = new Map();
+    (data?.propertyPhotos || []).forEach((photo) => {
+      if (photo.unitId != null) return;
+      const propertyId = Number(photo.propertyId);
+      if (!grouped.has(propertyId)) grouped.set(propertyId, []);
+      grouped.get(propertyId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+    });
+    return grouped;
+  }, [data?.propertyPhotos]);
+  const photosByUnit = useMemo(() => {
+    const grouped = new Map();
+    (data?.propertyPhotos || []).forEach((photo) => {
+      if (photo.unitId == null) return;
+      const unitId = Number(photo.unitId);
+      if (!grouped.has(unitId)) grouped.set(unitId, []);
+      grouped.get(unitId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+    });
+    return grouped;
+  }, [data?.propertyPhotos]);
   const leases = useMemo(
     () => filterLeases(data?.leases || [], dateRange),
     [data?.leases, dateRange],
@@ -127,26 +160,73 @@ export function Biens({ go }) {
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const leaseStatusByUnit = useMemo(() => buildLeaseStatusByUnit(leases, paymentsRaw), [leases, paymentsRaw]);
   const units = useMemo(
-    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, index)),
-    [data, leaseStatusByUnit, properties],
+    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, photosByUnit, index)),
+    [data, leaseStatusByUnit, photosByUnit, properties],
   );
   const payments = useMemo(() => paymentsRaw.slice(0, 6).map(normalizePayment), [paymentsRaw]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return units.filter((property) => {
-      if (type !== "Tous" && property.type !== type) return false;
-      if (filters.city && !property.city.toLowerCase().includes(filters.city.toLowerCase())) return false;
-      if (filters.minRent && property.rentValue < Number(filters.minRent)) return false;
-      if (filters.maxRent && property.rentValue > Number(filters.maxRent)) return false;
-      if (filters.minBedrooms && property.beds < Number(filters.minBedrooms)) return false;
-      if (filters.minArea && property.areaValue < Number(filters.minArea)) return false;
-      if (!q) return true;
-      return `${property.name} ${property.address} ${property.tenant} ${property.code}`
-        .toLowerCase()
-        .includes(q);
+  // Niveau 1 : une carte par IMMEUBLE, agregeant ses unites (adresse portee par l'immeuble).
+  const unitsByProperty = useMemo(() => {
+    const grouped = new Map();
+    units.forEach((unit) => {
+      const key = Number(unit.propertyId);
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(unit);
     });
-  }, [filters, query, type, units]);
+    return grouped;
+  }, [units]);
+
+  const propertyCards = useMemo(() => properties.map((property) => {
+    const own = unitsByProperty.get(Number(property.id)) || [];
+    const occupied = own.filter((u) => u.rawStatus === "occupied");
+    const late = own.filter((u) => u.paymentStatus === "late");
+    const photos = photosByProperty.get(Number(property.id)) || [];
+    const rentByCurrency = groupAmountsByCurrency(
+      occupied,
+      (u) => u.rentValue,
+      currency.defaultCurrencySymbol,
+    );
+    return {
+      raw: property.raw || property,
+      id: Number(property.id),
+      name: property.name,
+      code: property.code,
+      address: property.address,
+      city: property.city,
+      type: TYPE_MAP[String(property.propertyType || "").toLowerCase()] || "Appartement",
+      unitsCount: own.length,
+      occupiedCount: occupied.length,
+      lateCount: late.length,
+      rentByCurrency,
+      coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
+      units: own,
+    };
+  }), [properties, unitsByProperty, photosByProperty, currency.defaultCurrencySymbol]);
+
+  const filteredProperties = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // Criteres portes par les unites : un immeuble est retenu s'il a AU MOINS une unite conforme.
+    const hasUnitCriteria = filters.minRent || filters.maxRent || filters.minBedrooms || filters.minArea;
+    const unitMatches = (u) => {
+      if (filters.minRent && u.rentValue < Number(filters.minRent)) return false;
+      if (filters.maxRent && u.rentValue > Number(filters.maxRent)) return false;
+      if (filters.minBedrooms && u.beds < Number(filters.minBedrooms)) return false;
+      if (filters.minArea && u.areaValue < Number(filters.minArea)) return false;
+      return true;
+    };
+    return propertyCards.filter((card) => {
+      if (type !== "Tous" && card.type !== type) return false;
+      if (filters.city && !card.city.toLowerCase().includes(filters.city.toLowerCase())) return false;
+      if (hasUnitCriteria && !card.units.some(unitMatches)) return false;
+      if (!q) return true;
+      return `${card.name} ${card.address} ${card.code}`.toLowerCase().includes(q);
+    });
+  }, [propertyCards, type, filters, query]);
+
+  const selectedProperty = useMemo(
+    () => (selectedPropertyId == null ? null : propertyCards.find((c) => c.id === Number(selectedPropertyId)) || null),
+    [selectedPropertyId, propertyCards],
+  );
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
@@ -202,13 +282,111 @@ export function Biens({ go }) {
     }
   }
 
+  // Clic sur une carte immeuble : 1 seule unite -> ouvre l'unite ; sinon -> detail immeuble (niveau 2).
+  function openPropertyCard(card) {
+    if (card.unitsCount === 1) {
+      setDetailModal(card.units[0]);
+      return;
+    }
+    setSelectedPropertyId(card.id);
+  }
+
+  // Ouvre le formulaire IMMEUBLE (PropertyModal) = le seul qui porte l'adresse/ville/pays.
+  function editProperty(card) {
+    setPropertyModal(propertyToForm(card));
+  }
+
+  async function removeProperty(card) {
+    if (!(await confirm({
+      title: t("Supprimer l'immeuble"),
+      message: tf(t("Supprimer l'immeuble {name} et le retirer de la liste ?"), { name: card.name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.deleteProperty(card.id);
+      if (Number(selectedPropertyId) === card.id) setSelectedPropertyId(null);
+      await reload();
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Carte propriete sans lot -> ouvrir l'ajout d'un lot pre-rempli ; sinon editer le lot.
+  function editCard(row) {
+    if (row?.isEmptyProperty) {
+      setUnitModal({ ...emptyUnit, propertyId: String(row.propertyId || "") });
+      return;
+    }
+    setUnitModal(unitToForm(row));
+  }
+
   async function removeUnit(row) {
-    if (!window.confirm(`Supprimer ${row.name} ?`)) return;
+    if (row?.isEmptyProperty) return; // pas de lot a supprimer
+    if (!(await confirm({
+      title: t("Supprimer le lot"),
+      message: tf(t("Supprimer {name} ?"), { name: row.name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setActionError("");
     try {
       await api.deleteUnit(row.unitId);
       await reload();
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadDetailPhoto(file) {
+    const propertyId = Number(detailModal?.propertyId);
+    const unitId = detailModal?.isEmptyProperty ? null : Number(detailModal?.unitId);
+    if (!file || !propertyId) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.uploadPropertyPhoto(propertyId, file, Number.isFinite(unitId) ? unitId : null);
+      await reload();
+      const nextPhotos = await api.propertyPhotosForProperty(propertyId);
+      const targetPhotos = nextPhotos.filter((photo) => {
+        if (detailModal?.isEmptyProperty) return photo.unitId == null;
+        return Number(photo.unitId) === Number(detailModal?.unitId);
+      });
+      setDetailModal((current) => current ? {
+        ...current,
+        photos: targetPhotos.map((photo) => ({ ...photo, url: api.propertyPhotoUrl(photo.id) })),
+      } : current);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteDetailPhoto(photoId) {
+    if (!photoId) return;
+    if (!(await confirm({
+      title: t("Supprimer la photo"),
+      message: t("Supprimer cette photo ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.deletePropertyPhoto(photoId);
+      await reload();
+      setDetailModal((current) => current ? {
+        ...current,
+        photos: (current.photos || []).filter((photo) => Number(photo.id) !== Number(photoId)),
+      } : current);
     } catch (e) {
       setActionError(e.message);
     } finally {
@@ -281,34 +459,46 @@ export function Biens({ go }) {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {selectedProperty ? (
+        <PropertyUnitsView
+          property={selectedProperty}
+          onBack={() => setSelectedPropertyId(null)}
+          onEditProperty={() => editProperty(selectedProperty)}
+          onAddUnit={() => setUnitModal({ ...emptyUnit, propertyId: String(selectedProperty.id) })}
+          onOpenUnit={setDetailModal}
+          onEditUnit={editCard}
+          onDeleteUnit={removeUnit}
+          go={go}
+        />
+      ) : filteredProperties.length === 0 ? (
         <div className="card empty-state">
           <div className="brand-logo" style={{ margin: "0 auto 14px" }}><Building2 size={18} color="#fff" /></div>
           <div style={{ fontWeight: 650 }}>Aucune propriete</div>
           <p className="muted" style={{ fontSize: 13 }}>Aucune donnee API ne correspond aux filtres actifs.</p>
-          <button className="btn btn-primary" onClick={() => setUnitModal({ ...emptyUnit, propertyId: properties[0]?.id || "" })}>
-            <Plus size={16} /> Ajouter une propriete
+          <button className="btn btn-primary" onClick={() => setPropertyModal({ ...emptyProperty, currencyId: currency.defaultCurrencyId || "" })}>
+            <Plus size={16} /> Nouvelle propriete
           </button>
         </div>
       ) : view === "list" ? (
-        <PropertyTable
-          rows={filtered}
-          onEdit={(row) => setUnitModal(unitToForm(row))}
-          onDelete={removeUnit}
-          go={go}
+        <PropertyGroupTable
+          rows={filteredProperties}
+          onOpen={openPropertyCard}
+          onEdit={editProperty}
+          onDelete={removeProperty}
+          fallbackSymbol={currency.defaultCurrencySymbol}
         />
       ) : view === "map" ? (
-        <PropertyMap rows={filtered} />
+        <PropertyMap rows={filteredProperties} />
       ) : (
         <div className="immo-property-grid">
-          {filtered.map((property, index) => (
-            <PropertyCard
-              key={property.unitId}
-              property={property}
-              index={index}
-              onEdit={() => setUnitModal(unitToForm(property))}
-              onDelete={() => removeUnit(property)}
-              go={go}
+          {filteredProperties.map((card) => (
+            <PropertyGroupCard
+              key={card.id}
+              card={card}
+              onOpen={() => openPropertyCard(card)}
+              onEdit={() => editProperty(card)}
+              onDelete={() => removeProperty(card)}
+              fallbackSymbol={currency.defaultCurrencySymbol}
             />
           ))}
         </div>
@@ -340,23 +530,164 @@ export function Biens({ go }) {
           onSave={saveUnit}
         />
       )}
+
+      {detailModal && (
+        <PropertyDetailModal
+          property={detailModal}
+          busy={busy}
+          error={actionError}
+          onClose={() => setDetailModal(null)}
+          onUploadPhoto={uploadDetailPhoto}
+          onDeletePhoto={deleteDetailPhoto}
+          onEdit={() => {
+            const current = detailModal;
+            setDetailModal(null);
+            editCard(current);
+          }}
+          go={go}
+        />
+      )}
     </section>
   );
 }
 
 async function loadPropertiesModule() {
-  const [properties, units, payments, leases, currencies, setting] = await Promise.all([
+  const [properties, units, payments, leases, currencies, setting, propertyPhotos] = await Promise.all([
     api.properties(),
     api.units(),
     api.payments(),
     api.leases(),
     api.currencies(),
     api.setting(),
+    api.propertyPhotos(),
   ]);
-  return { properties, units, payments, leases, currencies, setting };
+  return { properties, units, payments, leases, currencies, setting, propertyPhotos };
 }
 
-function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
+// Niveau 1 : carte d'un IMMEUBLE (groupe). Le corps ouvre le detail/l'unite ;
+// le menu "..." expose "Modifier l'immeuble" (adresse) meme pour un immeuble a 1 unite.
+function PropertyGroupCard({ card, onOpen, onEdit, onDelete, fallbackSymbol }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const watermark = card.type === "Maison" ? <Home size={48} /> : <Building2 size={48} />;
+  const mediaClass = card.lateCount > 0 ? "late" : card.occupiedCount > 0 ? "leased" : "available";
+  const handle = (action) => {
+    setMenuOpen(false);
+    if (action === "edit") onEdit?.();
+    if (action === "delete") onDelete?.();
+  };
+  return (
+    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
+      <div className={`immo-property-media${card.coverPhoto ? " has-photo" : ""}`}>
+        {card.coverPhoto ? <img className="immo-property-photo" src={card.coverPhoto.url} alt={card.name} /> : null}
+        <span className="immo-status-chip">{card.unitsCount} unite{card.unitsCount > 1 ? "s" : ""}</span>
+        <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
+        {menuOpen && (
+          <div className="property-menu immo-property-context-menu" onClick={(e) => e.stopPropagation()}>
+            <div className="immo-menu-head">
+              <strong>{card.name}</strong>
+              <span>{card.code}</span>
+            </div>
+            <button className="highlight" onClick={() => handle("edit")}><Edit3 size={16} /> Modifier l'immeuble</button>
+            <div className="immo-menu-separator" />
+            <button className="danger" onClick={() => handle("delete")}><Trash2 size={16} /> Supprimer l'immeuble</button>
+          </div>
+        )}
+        {!card.coverPhoto && <span className="immo-property-watermark">{watermark}</span>}
+        <span className="immo-property-code">{card.type}</span>
+      </div>
+      <div className="immo-property-body">
+        <h3>{card.name}</h3>
+        <p>{card.address}</p>
+        <div className="immo-property-meta">
+          <span><Building2 size={15} /> {card.unitsCount} unite{card.unitsCount > 1 ? "s" : ""}</span>
+          <span><Users size={15} /> {card.occupiedCount} louee{card.occupiedCount > 1 ? "s" : ""}</span>
+          {card.lateCount > 0 && <span style={{ color: "#dc2626" }}><AlertTriangle size={15} /> {card.lateCount}</span>}
+        </div>
+        <div className="immo-property-footer">
+          <div className="immo-property-tenant">
+            <span className="immo-progress" style={{ width: 90 }}>
+              <span style={{ width: `${card.unitsCount ? Math.round((card.occupiedCount / card.unitsCount) * 100) : 0}%` }} />
+            </span>
+          </div>
+          <div className="immo-property-rent">
+            <strong><MoneyStack rows={card.rentByCurrency} fallbackSymbol={fallbackSymbol} emptyText="0" /></strong>
+            <span>/mois</span>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PropertyGroupTable({ rows, onOpen, onEdit, onDelete, fallbackSymbol }) {
+  return (
+    <div className="immo-property-list-table">
+      <table>
+        <thead>
+          <tr><th>Immeuble</th><th>Type</th><th>Ville</th><th>Unites</th><th>Louees</th><th>Loyer</th><th /></tr>
+        </thead>
+        <tbody>
+          {rows.map((card) => (
+            <tr key={card.id} onClick={() => onOpen?.(card)}>
+              <td><b>{card.name}</b><div className="muted">{card.address}</div></td>
+              <td>{card.type}</td>
+              <td>{card.city || "-"}</td>
+              <td>{card.unitsCount}</td>
+              <td>{card.occupiedCount}{card.lateCount > 0 ? <span className="muted"> ({card.lateCount} retard)</span> : null}</td>
+              <td><MoneyStack rows={card.rentByCurrency} fallbackSymbol={fallbackSymbol} emptyText="0" /><span className="muted"> /mois</span></td>
+              <td className="row-actions">
+                <button title="Modifier l'immeuble" onClick={(e) => { e.stopPropagation(); onEdit(card); }}><Edit3 size={15} /></button>
+                <button title="Supprimer l'immeuble" onClick={(e) => { e.stopPropagation(); onDelete(card); }}><Trash2 size={15} /></button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Niveau 2 : detail d'un immeuble = en-tete (adresse + bouton Modifier l'immeuble) + grille de ses unites.
+function PropertyUnitsView({ property, onBack, onEditProperty, onAddUnit, onOpenUnit, onEditUnit, onDeleteUnit, go }) {
+  return (
+    <div className="immo-property-units-view">
+      <div className="immo-property-units-head card">
+        <button className="immo-btn" onClick={onBack}><ChevronLeft size={16} /> Retour</button>
+        <div className="immo-property-units-title">
+          <h3>{property.name}</h3>
+          <p><MapPin size={14} /> {property.address}</p>
+        </div>
+        <div className="immo-property-units-actions">
+          <button className="immo-btn" onClick={onAddUnit}><Plus size={16} /> Ajouter une unite</button>
+          <button className="immo-btn primary" onClick={onEditProperty}><Edit3 size={16} /> Modifier l'immeuble</button>
+        </div>
+      </div>
+      {property.units.length === 0 ? (
+        <div className="card empty-state">
+          <div style={{ fontWeight: 650 }}>Aucune unite</div>
+          <p className="muted" style={{ fontSize: 13 }}>Ajoutez une premiere unite a cet immeuble.</p>
+          <button className="btn btn-primary" onClick={onAddUnit}><Plus size={16} /> Ajouter une unite</button>
+        </div>
+      ) : (
+        <div className="immo-property-grid">
+          {property.units.map((unit, index) => (
+            <PropertyCard
+              key={unit.unitId}
+              property={unit}
+              index={index}
+              onOpen={() => onOpenUnit(unit)}
+              onEdit={() => onEditUnit(unit)}
+              onDelete={() => onDeleteUnit(unit)}
+              go={go}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasTenant = property.rawStatus === "occupied" && property.tenant && property.tenant !== "A assigner";
   const mediaClass = property.paymentStatus === "late"
@@ -379,21 +710,25 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
     if (action === "assign") go?.("locataires");
     if (action === "payments") go?.("loyers");
     if (action === "lease") go?.("baux");
+    if (action === "reserve") { setReservationPrefill(property.propertyId || property.id); go?.("reservations"); }
     if (action === "delete") onDelete?.();
   };
 
   return (
-    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`}>
-      <div className="immo-property-media">
-        <span className={`immo-status-chip ${statusClass}`}>{property.status}</span>
-        <button className="immo-icon-button" title="Options" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></button>
+    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
+      <div className={`immo-property-media${property.coverPhoto ? " has-photo" : ""}`}>
+        {property.coverPhoto ? <img className="immo-property-photo" src={property.coverPhoto.url} alt={property.name} /> : null}
+        <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? "Sans lot" : property.status}</span>
+        <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
-          <div className="property-menu immo-property-context-menu">
+          <div className="property-menu immo-property-context-menu" onClick={(e) => e.stopPropagation()}>
             <div className={`immo-menu-head ${hasTenant ? "pendingSignature" : ""}`}>
               <strong>{property.name}</strong>
               <span>{property.code}</span>
             </div>
             <button className="highlight" onClick={() => handleMenuAction("edit")}><Edit3 size={16} /> Modifier l'unite</button>
+            <div className="immo-menu-separator" />
+            <button onClick={() => handleMenuAction("reserve")}><BedDouble size={16} /> Réserver (courte durée)</button>
             {!hasTenant && (
               <>
                 <div className="immo-menu-separator" />
@@ -411,7 +746,7 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
             <button className="danger" onClick={() => handleMenuAction("delete")}><Trash2 size={16} /> Supprimer</button>
           </div>
         )}
-        <span className="immo-property-watermark">{watermark}</span>
+        {!property.coverPhoto && <span className="immo-property-watermark">{watermark}</span>}
         <span className="immo-property-code">{property.type} - {property.code}</span>
       </div>
       <div className="immo-property-body">
@@ -434,7 +769,7 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
   );
 }
 
-function PropertyTable({ rows, onEdit, onDelete, go }) {
+function PropertyTable({ rows, onOpen, onEdit, onDelete, go }) {
   return (
     <div className="immo-property-list-table">
       <table>
@@ -443,7 +778,7 @@ function PropertyTable({ rows, onEdit, onDelete, go }) {
         </thead>
         <tbody>
           {rows.map((property) => (
-            <tr key={property.unitId}>
+            <tr key={property.unitId} onClick={() => onOpen?.(property)}>
               <td><b>{property.name}</b><div className="muted">{property.address}</div></td>
               <td>{property.type} - {property.code}</td>
               <td>{property.tenant}</td>
@@ -451,9 +786,9 @@ function PropertyTable({ rows, onEdit, onDelete, go }) {
               <td><b>{property.rent}</b><span className="muted"> /mois</span></td>
               <td><StatusPill status={property.status} /></td>
               <td className="row-actions">
-                <button title="Modifier" onClick={() => onEdit(property)}><Edit3 size={15} /></button>
-                <button title="Paiements" onClick={() => go?.("loyers")}>$</button>
-                <button title="Supprimer" onClick={() => onDelete(property)}><Trash2 size={15} /></button>
+                <button title="Modifier" onClick={(e) => { e.stopPropagation(); onEdit(property); }}><Edit3 size={15} /></button>
+                <button title="Paiements" onClick={(e) => { e.stopPropagation(); go?.("loyers"); }}>$</button>
+                <button title="Supprimer" onClick={(e) => { e.stopPropagation(); onDelete(property); }}><Trash2 size={15} /></button>
               </td>
             </tr>
           ))}
@@ -471,11 +806,126 @@ function PropertyMap({ rows }) {
       <span>{rows.length} proprietes filtrees</span>
       <div className="map-dot-grid">
         {rows.slice(0, 12).map((row, index) => (
-          <span key={row.unitId} style={{ left: `${10 + ((index * 17) % 78)}%`, top: `${18 + ((index * 23) % 64)}%` }}>
+          <span key={row.id ?? row.unitId} style={{ left: `${10 + ((index * 17) % 78)}%`, top: `${18 + ((index * 23) % 64)}%` }}>
             {row.code}
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, onDeletePhoto, onEdit, go }) {
+  const photos = Array.isArray(property.photos) ? property.photos : [];
+  const cover = photos[0];
+  return (
+    <Modal
+      title={property.name}
+      subtitle={`${property.type} - ${property.code}`}
+      icon={property.type === "Maison" ? <Home size={20} /> : <Building2 size={20} />}
+      className="domus-property-detail-modal"
+      onClose={onClose}
+    >
+      <div className="domus-property-detail">
+        <section className="domus-detail-gallery">
+          <div className={`domus-detail-hero${cover ? " has-photo" : ""}`}>
+            {cover ? <img src={cover.url} alt={property.name} /> : (
+              <div className="domus-detail-empty-photo">
+                <Camera size={34} />
+                <span>Aucune photo</span>
+              </div>
+            )}
+          </div>
+          <div className="domus-photo-strip">
+            {photos.map((photo) => (
+              <div className="domus-photo-thumb" key={photo.id}>
+                <img src={photo.url} alt={photo.originalName || property.name} />
+                <button type="button" onClick={() => onDeletePhoto(photo.id)} disabled={busy} title="Supprimer la photo">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            <label className="domus-photo-add">
+              <Upload size={16} />
+              <span>Ajouter</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) onUploadPhoto(file);
+                }}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="domus-property-detail-summary">
+          <div>
+            <h3>{property.name}</h3>
+            <p>{property.address}</p>
+          </div>
+          <StatusPill status={property.status} />
+        </section>
+
+        <div className="domus-property-detail-grid">
+          <DetailLine label="Type" value={property.type} />
+          <DetailLine label="Code" value={property.code} />
+          <DetailLine label="Locataire" value={property.tenant} />
+          <DetailLine label="Loyer" value={`${property.rent} /mois`} />
+          <DetailLine label="Chambres" value={property.beds || "0"} />
+          <DetailLine label="Salles de bain" value={property.baths || "0"} />
+          <DetailLine label="Surface" value={property.area} />
+          <DetailLine label="Etages" value={property.floors ?? "-"} />
+          <DetailLine label="Parking" value={property.parkingSpaces ?? "0"} />
+          <DetailLine label="Ville" value={property.city || "-"} />
+        </div>
+
+        {(property.description || property.unitDescription || property.amenities) && (
+          <div className="domus-property-detail-notes">
+            {property.description && <p><strong>Description bien</strong>{property.description}</p>}
+            {property.unitDescription && <p><strong>Description unite</strong>{property.unitDescription}</p>}
+            {property.amenities && <p><strong>Equipements</strong>{property.amenities}</p>}
+          </div>
+        )}
+
+        {error && <div className="api-error">{error}</div>}
+      </div>
+      <div className="domus-modal-footer">
+        <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Fermer</button>
+        <div>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}
+            disabled={busy}
+          ><BedDouble size={14} /> Réserver</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setLeasePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("baux"); }}
+            disabled={busy}
+          ><FileText size={14} /> Créer un bail</button>
+          <button className="domus-modal-draft" onClick={() => go?.("loyers")} disabled={busy}><DollarSign size={14} /> Loyers</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setMaintenancePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("maintenance"); }}
+            disabled={busy}
+          ><Wrench size={14} /> Declarer un probleme</button>
+          <button className="domus-modal-submit" onClick={onEdit} disabled={busy}>
+            <Edit3 size={14} /> Modifier
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DetailLine({ label, value }) {
+  return (
+    <div className="domus-property-detail-line">
+      <span>{label}</span>
+      <strong>{value ?? "-"}</strong>
     </div>
   );
 }
@@ -603,6 +1053,14 @@ function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurren
             <DomusPropertyField label="Places de parking" type="number" value={form.parkingSpaces} onChange={(parkingSpaces) => set({ parkingSpaces })} />
           </div>
           <DomusPropertyField label="Description" value={form.description} onChange={(description) => set({ description })} placeholder="Notes, equipements, particularites du bien..." textarea />
+          <label className="domus-checkbox-row">
+            <input
+              type="checkbox"
+              checked={!!form.availableForBooking}
+              onChange={(e) => set({ availableForBooking: e.target.checked })}
+            />
+            <span>Visible sur la page publique de reservation</span>
+          </label>
         </FormSection>
 
         <FormSection icon={<Wallet size={14} />} title="Informations financieres">
@@ -766,6 +1224,14 @@ function UnitModal({ value, properties, currencyOptions = [], defaultCurrencyId 
         <Field label="Equipements" value={form.amenities} onChange={(amenities) => setForm({ ...form, amenities })} />
         <Field label="Description" value={form.description} onChange={(description) => setForm({ ...form, description })} />
       </div>
+      <label className="domus-checkbox-row">
+        <input
+          type="checkbox"
+          checked={!!form.availableForBooking}
+          onChange={(e) => setForm({ ...form, availableForBooking: e.target.checked })}
+        />
+        <span>Visible sur la page publique de reservation</span>
+      </label>
       {error && <div className="api-error">{error}</div>}
       <ModalActions busy={busy} onClose={onClose} onSave={() => onSave(form)} disabled={!form.propertyId || !form.name} />
     </Modal>
@@ -820,9 +1286,7 @@ export function DomusPropertySelect({ label, value, options, onChange, required 
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-        {options.map(([val, text]) => <option key={val} value={val}>{text}</option>)}
-      </select>
+      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder="Choisir…" />
     </label>
   );
 }
@@ -919,6 +1383,7 @@ function StatusPill({ status }) {
 function normalizeProperty(property) {
   return {
     ...property,
+    raw: property,
     id: Number(property.id),
     name: property.name || `Propriete #${property.id}`,
     code: property.code || `P-${property.id}`,
@@ -927,8 +1392,47 @@ function normalizeProperty(property) {
   };
 }
 
-function normalizeUnit(unit, properties, leaseStatusByUnit, index) {
+// Carte "propriete sans lot" : meme forme qu'un lot mais sans unitId, pour inviter a ajouter un lot.
+function normalizeEmptyProperty(property, photosByProperty = new Map()) {
+  const rawType = String(property.propertyType || "").toLowerCase();
+  const photos = photosByProperty.get(Number(property.id)) || [];
+  return {
+    raw: property,
+    isEmptyProperty: true,
+    unitId: `prop-${property.id}`,
+    propertyId: property.id,
+    currencyId: property.currencyId,
+    code: property.code || `P-${property.id}`,
+    type: TYPE_MAP[rawType] || "Appartement",
+    status: "Libre",
+    rawStatus: "vacant",
+    paymentStatus: "ok",
+    name: property.name || `Propriete #${property.id}`,
+    address: property.address || "Adresse non renseignee",
+    city: property.city || "",
+    country: property.country || "",
+    floors: property.floors,
+    parkingSpaces: property.parkingSpaces,
+    marketValue: property.marketValue,
+    defaultRent: property.defaultRent,
+    description: property.description || "",
+    photos,
+    coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
+    beds: 0,
+    baths: 0,
+    areaValue: 0,
+    area: "0.00m2",
+    tenant: "A assigner",
+    initials: "NA",
+    avatar: AVATARS[Number(property.id) % AVATARS.length],
+    rentValue: Number(property.defaultRent || 0),
+    rent: money(Number(property.defaultRent || 0), "$"),
+  };
+}
+
+function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = new Map(), index) {
   const owner = properties.find((p) => Number(p.id) === Number(unit.propertyId)) || {};
+  const photos = photosByProperty.get(Number(unit.id)) || [];
   const rawType = String(unit.unitType || owner.propertyType || "").toLowerCase();
   const type = TYPE_MAP[rawType] || "Appartement";
   const rawStatus = String(unit.status || "").toLowerCase();
@@ -957,6 +1461,16 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, index) {
     name: owner.name || unit.propertyName || `Propriete #${unit.propertyId}`,
     address: [unit.propertyAddress || owner.address, owner.city].filter(Boolean).join(" - ") || "Adresse non renseignee",
     city: owner.city || "",
+    country: owner.country || "",
+    floors: owner.floors,
+    parkingSpaces: owner.parkingSpaces,
+    marketValue: owner.marketValue,
+    defaultRent: owner.defaultRent,
+    description: owner.description || "",
+    unitDescription: unit.description || "",
+    amenities: unit.amenities || "",
+    photos,
+    coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
     beds: Number(unit.bedrooms || 0),
     baths: Number(unit.bathrooms || 0),
     areaValue,
@@ -1092,6 +1606,31 @@ function unitPayload(form) {
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     amenities: form.amenities || null,
     description: form.description || null,
+    availableForBooking: !!form.availableForBooking,
+  };
+}
+
+// Rouvre un immeuble existant dans PropertyModal (le seul formulaire qui porte l'adresse).
+function propertyToForm(property) {
+  const raw = property?.raw || property || {};
+  return {
+    ...emptyProperty,
+    id: raw.id,
+    name: raw.name || "",
+    code: raw.code || "",
+    propertyType: raw.propertyType || "building",
+    status: raw.status || "available",
+    address: raw.address || "",
+    city: raw.city || "",
+    country: raw.country || "RDC",
+    floors: raw.floors ?? 1,
+    parkingSpaces: raw.parkingSpaces ?? 0,
+    marketValue: raw.marketValue ?? 0,
+    defaultRent: raw.defaultRent ?? 0,
+    currencyId: raw.currencyId || "",
+    description: raw.description || "",
+    addUnitsNow: false,
+    units: [],
   };
 }
 
@@ -1113,6 +1652,7 @@ function unitToForm(row) {
     currencyId: unit.currencyId || row.currencyId || "",
     amenities: unit.amenities || "",
     description: unit.description || "",
+    availableForBooking: !!unit.availableForBooking,
   };
 }
 

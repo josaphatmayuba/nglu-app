@@ -1,4 +1,4 @@
-import { GitCommitHorizontal, Info, Tag } from "lucide-react";
+import { Clock, GitCommitHorizontal, Info, Tag } from "lucide-react";
 
 // ── Parse CHANGELOG.md sections ──────────────────────────────────────────────
 function parseChangelog(raw) {
@@ -50,6 +50,10 @@ export default function AboutPanel() {
   const buildVersion = import.meta.env.VITE_APP_BUILD_VERSION || "—";
   const commit = import.meta.env.VITE_APP_COMMIT || "—";
   const changelogRaw = import.meta.env.VITE_APP_CHANGELOG || "";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
 
   const sections = parseChangelog(changelogRaw);
 
@@ -71,7 +75,7 @@ export default function AboutPanel() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="bg-ink-50 rounded-lg p-3">
             <div className="text-xs text-ink-500 font-medium mb-1">Version de base</div>
             <div className="text-sm font-mono font-semibold text-ink-900">{baseVersion}</div>
@@ -85,6 +89,12 @@ export default function AboutPanel() {
               <GitCommitHorizontal className="w-3 h-3" /> Commit
             </div>
             <div className="text-sm font-mono font-semibold text-ink-900">{commit}</div>
+          </div>
+          <div className="bg-ink-50 rounded-lg p-3">
+            <div className="text-xs text-ink-500 font-medium mb-1 flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Dernière mise à jour
+            </div>
+            <div className="text-sm font-semibold text-ink-900">{lastUpdate}</div>
           </div>
         </div>
       </div>

@@ -1,7 +1,30 @@
-import { Checkbox, Input, Modal, Spin, Tooltip } from "antd";
+import { Checkbox, Input, Modal, Select, Spin, Tooltip } from "antd";
 import axios from "axios";
 import { Plus, Save, Shield } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+// Portee par departement : limite les modules (permission.type) affiches dans
+// la grille. "all" = tous les modules (cas Directeur General / Directeur, ou
+// gestion transverse). Liste fixe cote front (Phase 1) — modifiable ici sans
+// migration. Les types proviennent de permissions.seeder.ts.
+const ALL_SCOPE = "all";
+const DEPARTMENT_MODULE_TYPES = {
+  comptabilite: ["account", "settings", "reporting"],
+  farmos: ["account", "inventory", "reporting"],
+  rh: ["user"],
+  domus: ["account", "settings"],
+  batipro: ["account", "purchase", "settings"],
+  ventes: ["sales", "inventory", "purchase"],
+};
+const DEPARTMENT_OPTIONS = [
+  { value: ALL_SCOPE, label: "Tous les départements" },
+  { value: "comptabilite", label: "Comptabilité" },
+  { value: "farmos", label: "FarmOS" },
+  { value: "rh", label: "RH" },
+  { value: "domus", label: "Domus" },
+  { value: "batipro", label: "BatiPro" },
+  { value: "ventes", label: "Ventes" },
+];
 
 function extractResource(permName) {
   return permName.replace(/^(create|readAll|read|update|delete)-/, "");
@@ -30,6 +53,70 @@ const ACTION_LABELS = {
   delete: "Supprimer",
 };
 
+// Libelles FR des modules (resource). Fallback = nom brut capitalize si absent.
+const RESOURCE_LABELS = {
+  account: "Comptes",
+  adjust: "Ajustements",
+  announcement: "Annonces",
+  attribute: "Attributs",
+  award: "Récompenses",
+  awardHistory: "Historique récompenses",
+  color: "Couleurs",
+  contractTemplate: "Modèles de contrat",
+  currency: "Devises",
+  customer: "Clients",
+  dashboard: "Tableau de bord",
+  department: "Départements",
+  designation: "Postes",
+  designationHistory: "Historique postes",
+  dimensionUnit: "Unités de dimension",
+  discount: "Remises",
+  education: "Formations",
+  email: "E-mails",
+  emailConfig: "Configuration e-mail",
+  employmentStatus: "Statuts d'emploi",
+  manualPayment: "Paiements manuels",
+  manufacturer: "Fabricants",
+  message: "Messages",
+  meta: "Méta",
+  pageSize: "Format de page",
+  paymentMethod: "Moyens de paiement",
+  paymentPurchaseInvoice: "Paiement facture d'achat",
+  paymentSaleInvoice: "Paiement facture de vente",
+  permission: "Permissions",
+  product: "Produits",
+  productAttribute: "Attributs produit",
+  productAttributeValue: "Valeurs d'attribut",
+  productBrand: "Marques produit",
+  productCategory: "Catégories produit",
+  productProductAttributeValue: "Liaison attribut produit",
+  productReports: "Rapports produit",
+  productSubCategory: "Sous-catégories produit",
+  propertyManagement: "Gestion immobilière",
+  purchaseInvoice: "Factures d'achat",
+  purchaseReorderInvoice: "Réappro. achat",
+  quote: "Devis",
+  reorderQuantity: "Quantité de réappro.",
+  returnPurchaseInvoice: "Retour facture d'achat",
+  returnSaleInvoice: "Retour facture de vente",
+  role: "Rôles",
+  rolePermission: "Permissions de rôle",
+  saleInvoice: "Factures de vente",
+  salaryHistory: "Historique salaires",
+  setting: "Paramètres",
+  shift: "Horaires",
+  supplier: "Fournisseurs",
+  termsAndCondition: "Conditions générales",
+  transaction: "Transactions",
+  transactionType: "Types de transaction",
+  transfer: "Transferts",
+  uom: "Unités de mesure",
+  user: "Utilisateurs",
+  vat: "TVA",
+  warehouse: "Entrepôts",
+  wightUnit: "Unités de poids",
+};
+
 export default function RolesTab() {
   const [roles, setRoles] = useState([]);
   const [allPerms, setAllPerms] = useState([]);
@@ -42,6 +129,7 @@ export default function RolesTab() {
   const [addRoleOpen, setAddRoleOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [addingRole, setAddingRole] = useState(false);
+  const [deptScope, setDeptScope] = useState(ALL_SCOPE);
 
   useEffect(() => {
     setLoading(true);
@@ -118,7 +206,15 @@ export default function RolesTab() {
     }
   }
 
-  const grouped = useMemo(() => groupByResource(allPerms), [allPerms]);
+  // Filtre par departement : ne garde que les permissions dont le type
+  // appartient au departement choisi. "all" = aucun filtre (toute la grille).
+  const scopedPerms = useMemo(() => {
+    if (deptScope === ALL_SCOPE) return allPerms;
+    const allowed = new Set(DEPARTMENT_MODULE_TYPES[deptScope] ?? []);
+    return allPerms.filter((p) => allowed.has(p.type));
+  }, [allPerms, deptScope]);
+
+  const grouped = useMemo(() => groupByResource(scopedPerms), [scopedPerms]);
   const resourceKeys = Object.keys(grouped).sort();
 
   if (loading) {
@@ -177,8 +273,20 @@ export default function RolesTab() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="font-semibold text-ink-800">{selectedRole.name}</h3>
-                <p className="text-xs text-ink-400 mt-0.5">{checkedIds.size} permission(s) accordée(s)</p>
+                <p className="text-xs text-ink-400 mt-0.5">
+                  {checkedIds.size} permission(s) accordée(s)
+                  {deptScope !== ALL_SCOPE && " — affichage filtré par département"}
+                </p>
               </div>
+              <div className="flex items-center gap-3">
+                <Select
+                  size="small"
+                  value={deptScope}
+                  onChange={setDeptScope}
+                  options={DEPARTMENT_OPTIONS}
+                  style={{ minWidth: 180 }}
+                  className="text-xs"
+                />
               <button
                 onClick={savePermissions}
                 disabled={saving}
@@ -191,9 +299,15 @@ export default function RolesTab() {
                 <Save className="w-3.5 h-3.5" />
                 {saving ? "Sauvegarde..." : saveDone ? "Sauvegardé ✓" : "Sauvegarder"}
               </button>
+              </div>
             </div>
 
             <div className="space-y-3 overflow-y-auto max-h-[55vh] pr-1">
+              {resourceKeys.length === 0 && (
+                <div className="text-center text-ink-400 text-sm py-10">
+                  Aucun module pour ce département.
+                </div>
+              )}
               {resourceKeys.map((resource) => {
                 const perms = grouped[resource];
                 const allChecked = perms.every((p) => checkedIds.has(p.id));
@@ -207,7 +321,7 @@ export default function RolesTab() {
                         onChange={(e) => toggleGroup(perms, e.target.checked)}
                       />
                       <span className="text-xs font-semibold text-ink-700 capitalize">
-                        {resource}
+                        {RESOURCE_LABELS[resource] ?? resource}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-3 pl-6">

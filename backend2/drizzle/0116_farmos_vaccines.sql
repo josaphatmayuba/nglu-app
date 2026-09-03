@@ -1,0 +1,38 @@
+-- Idempotent. Base de donnees de vaccins ANIMAUX (elevage / veterinaire) pour FarmOS.
+-- Specs cliniques + securite sanitaire + logistique + tracabilite (lien source).
+-- Commentaires sans apostrophe (piege splitSqlStatements).
+CREATE TABLE IF NOT EXISTS `farmos_vaccines` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `organization_id` bigint NOT NULL DEFAULT 1,
+  `name` varchar(255) NOT NULL,
+  `commercial_names` varchar(512) NULL,
+  `manufacturer` varchar(255) NULL,
+  `species` varchar(255) NULL,
+  `target_diseases` varchar(512) NULL,
+  `vaccine_type` varchar(128) NULL,
+  `dose` varchar(255) NULL,
+  `route` varchar(128) NULL,
+  `primo_age` varchar(128) NULL,
+  `booster_schedule` varchar(512) NULL,
+  `protection_duration` varchar(128) NULL,
+  `treatment_duration` varchar(255) NULL,
+  `withdrawal_meat` varchar(128) NULL,
+  `withdrawal_milk` varchar(128) NULL,
+  `withdrawal_eggs` varchar(128) NULL,
+  `side_effects` text NULL,
+  `contraindications` text NULL,
+  `precautions` text NULL,
+  `storage` varchar(255) NULL,
+  `packaging` varchar(255) NULL,
+  `source_url` varchar(512) NULL,
+  `registration_no` varchar(128) NULL,
+  `notes` text NULL,
+  `is_seed` tinyint NOT NULL DEFAULT 0,
+  `is_active` tinyint NOT NULL DEFAULT 1,
+  `created_by` bigint NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_vaccine_org_name` (`organization_id`, `name`),
+  KEY `idx_vaccine_species` (`species`)
+);

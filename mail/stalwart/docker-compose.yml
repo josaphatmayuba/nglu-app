@@ -6,11 +6,11 @@ services:
     env_file:
       - .env
     environment:
-      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-http://mail.ongdngolu.org:8088}
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-https://mail.ongdngolu.org}
       STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}
     ports:
-      # Temporary admin/setup listener. Disable it after HTTPS is configured.
-      - "${STALWART_ADMIN_PORT:-8088}:8080"
+      # Admin/setup listener: localhost-only by default. Put HTTPS/VPN/reverse proxy in front if remote access is required.
+      - "${STALWART_ADMIN_BIND:-127.0.0.1}:${STALWART_ADMIN_PORT:-8088}:8080"
       # Mail protocols.
       - "25:25"
       - "465:465"

@@ -2,10 +2,14 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { and, count, desc, eq, inArray, like, or, sql, sum } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
-import { customers, transactions } from "../database/schema";
+import { customers, returnSaleInvoices, saleInvoices, subAccounts, transactions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { CreateCustomerDto, CustomerQueryDto, UpdateCustomerDto } from "./dto/customer.dto";
+
+const debitAccount = alias(subAccounts, "customerDebitAccount");
+const creditAccount = alias(subAccounts, "customerCreditAccount");
 
 @Injectable()
 export class CustomersService {
@@ -77,11 +81,15 @@ export class CustomersService {
       throw new NotFoundException("Customer not found.");
     }
 
-    const totals = await this.customerTotals(id);
+    const [totals, details] = await Promise.all([
+      this.customerTotals(id, orgId),
+      this.customerDetails(id, orgId),
+    ]);
 
     return {
       ...rows[0],
       ...totals,
+      ...details,
     };
   }
 
@@ -171,7 +179,7 @@ export class CustomersService {
     const enriched = await Promise.all(
       rows.map(async (customer) => ({
         ...customer,
-        ...(await this.customerTotals(customer.id)),
+        ...(await this.customerTotals(customer.id, orgId)),
       })),
     );
 
@@ -218,8 +226,8 @@ export class CustomersService {
       .from(customers);
   }
 
-  private async customerTotals(customerId: number) {
-    const relatedIds = await this.saleRelatedIds(customerId);
+  private async customerTotals(customerId: number, orgId: number) {
+    const relatedIds = await this.saleRelatedIds(customerId, orgId);
 
     if (!relatedIds.length) {
       return {
@@ -233,10 +241,14 @@ export class CustomersService {
       };
     }
 
-    const [saleDebit] = await this.totalByRelated(relatedIds, "sale", "debitId", 4);
-    const [saleCredit] = await this.totalByRelated(relatedIds, "sale", "creditId", 4);
-    const [returnCredit] = await this.totalByRelated(relatedIds, "sale_return", "creditId", 4);
-    const [returnDebit] = await this.totalByRelated(relatedIds, "sale_return", "debitId", 4);
+    const [saleDebit] = await this.totalByRelated(relatedIds, "sale", "debitId", 4, orgId);
+    const [saleCredit] = await this.totalByRelated(relatedIds, "sale", "creditId", 4, orgId);
+    const [returnCredit] = await this.totalByRelated(relatedIds, "sale_return", "creditId", 4, orgId);
+    const [returnDebit] = await this.totalByRelated(relatedIds, "sale_return", "debitId", 4, orgId);
+    const [returnInvoiceCount] = await this.db
+      .select({ total: count(returnSaleInvoices.id) })
+      .from(returnSaleInvoices)
+      .where(and(eq(returnSaleInvoices.organizationId, orgId), inArray(returnSaleInvoices.saleInvoiceId, relatedIds)));
     const totalAmount = this.round(Number(saleDebit.total ?? 0));
     const totalPaidAmount = this.round(Number(saleCredit.total ?? 0));
     const totalReturnAmount = this.round(Number(returnCredit.total ?? 0));
@@ -249,24 +261,145 @@ export class CustomersService {
       instantPaidReturnAmount,
       dueAmount: this.round(totalAmount - totalReturnAmount - totalPaidAmount + instantPaidReturnAmount),
       totalSaleInvoice: relatedIds.length,
-      totalReturnSaleInvoice: 0,
+      totalReturnSaleInvoice: Number(returnInvoiceCount.total ?? 0),
     };
   }
 
-  private async saleRelatedIds(customerId: number) {
-    const rows = await this.db.execute(sql`
-      select id from saleInvoice where customerId = ${customerId} and status = 'true'
-    `);
-    const result = Array.isArray(rows) ? rows[0] : rows;
-    return (result as unknown as Array<{ id: number }>).map((row) => String(row.id));
+  private async customerDetails(customerId: number, orgId: number) {
+    const saleInvoice = await this.customerSaleInvoices(customerId, orgId);
+    const relatedIds = saleInvoice.map((invoice) => String(invoice.id));
+
+    if (!relatedIds.length) {
+      return {
+        saleInvoice,
+        returnSaleInvoice: [],
+        allTransaction: [],
+      };
+    }
+
+    const [returnSaleInvoice, allTransaction] = await Promise.all([
+      this.customerReturnSaleInvoices(relatedIds, orgId),
+      this.customerTransactions(relatedIds, orgId),
+    ]);
+
+    return {
+      saleInvoice,
+      returnSaleInvoice,
+      allTransaction,
+    };
   }
 
-  private totalByRelated(relatedIds: string[], type: string, side: "debitId" | "creditId", accountId: number) {
+  private customerSaleInvoices(customerId: number, orgId: number) {
+    return this.db
+      .select({
+        id: saleInvoices.id,
+        date: saleInvoices.date,
+        invoiceMemoNo: saleInvoices.invoiceMemoNo,
+        totalAmount: saleInvoices.totalAmount,
+        totalTaxAmount: saleInvoices.totalTaxAmount,
+        totalDiscountAmount: saleInvoices.totalDiscountAmount,
+        paidAmount: saleInvoices.paidAmount,
+        dueAmount: saleInvoices.dueAmount,
+        profit: saleInvoices.profit,
+        customerId: saleInvoices.customerId,
+        currencyId: saleInvoices.currencyId,
+        userId: saleInvoices.userId,
+        note: saleInvoices.note,
+        dueDate: saleInvoices.dueDate,
+        isHold: saleInvoices.isHold,
+        orderStatus: saleInvoices.orderStatus,
+        createdAt: saleInvoices.createdAt,
+        updatedAt: saleInvoices.updatedAt,
+        user: {
+          id: users.id,
+          username: users.username,
+        },
+      })
+      .from(saleInvoices)
+      .leftJoin(users, eq(users.id, saleInvoices.userId))
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")))
+      .orderBy(desc(saleInvoices.createdAt));
+  }
+
+  private customerReturnSaleInvoices(relatedIds: string[], orgId: number) {
+    return this.db
+      .select({
+        id: returnSaleInvoices.id,
+        date: returnSaleInvoices.date,
+        totalAmount: returnSaleInvoices.totalAmount,
+        instantReturnAmount: returnSaleInvoices.instantReturnAmount,
+        tax: returnSaleInvoices.tax,
+        note: returnSaleInvoices.note,
+        saleInvoiceId: returnSaleInvoices.saleInvoiceId,
+        invoiceMemoNo: returnSaleInvoices.invoiceMemoNo,
+        createdAt: returnSaleInvoices.createdAt,
+        updatedAt: returnSaleInvoices.updatedAt,
+      })
+      .from(returnSaleInvoices)
+      .where(and(eq(returnSaleInvoices.organizationId, orgId), inArray(returnSaleInvoices.saleInvoiceId, relatedIds)))
+      .orderBy(desc(returnSaleInvoices.createdAt));
+  }
+
+  private customerTransactions(relatedIds: string[], orgId: number) {
+    return this.db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        debitId: transactions.debitId,
+        creditId: transactions.creditId,
+        particulars: transactions.particulars,
+        amount: transactions.amount,
+        currencyId: transactions.currencyId,
+        type: transactions.type,
+        relatedId: transactions.relatedId,
+        status: transactions.status,
+        createdAt: transactions.createdAt,
+        updatedAt: transactions.updatedAt,
+        debit: {
+          id: debitAccount.id,
+          name: debitAccount.name,
+        },
+        credit: {
+          id: creditAccount.id,
+          name: creditAccount.name,
+        },
+      })
+      .from(transactions)
+      .leftJoin(debitAccount, eq(debitAccount.id, transactions.debitId))
+      .leftJoin(creditAccount, eq(creditAccount.id, transactions.creditId))
+      .where(
+        and(
+          eq(transactions.organizationId, orgId),
+          eq(transactions.status, "true"),
+          inArray(transactions.type, ["sale", "sale_return"]),
+          inArray(transactions.relatedId, relatedIds),
+        ),
+      )
+      .orderBy(desc(transactions.id));
+  }
+
+  private async saleRelatedIds(customerId: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: saleInvoices.id })
+      .from(saleInvoices)
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")));
+
+    return rows.map((row) => String(row.id));
+  }
+
+  private totalByRelated(
+    relatedIds: string[],
+    type: string,
+    side: "debitId" | "creditId",
+    accountId: number,
+    orgId: number,
+  ) {
     return this.db
       .select({ total: sum(transactions.amount) })
       .from(transactions)
       .where(
         and(
+          eq(transactions.organizationId, orgId),
           eq(transactions.type, type),
           eq(transactions.status, "true"),
           inArray(transactions.relatedId, relatedIds),

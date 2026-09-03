@@ -10,7 +10,9 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-password}
       MYSQL_USER: ${DB_USERNAME:-nglu_user}
     ports:
-      - "3306:3306"
+      # Lié à la loopback : accessible seulement depuis l'hôte (SSH tunnel),
+      # jamais depuis Internet. Les conteneurs se parlent via le réseau Docker.
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -31,6 +33,41 @@ services:
       retries: 10
     networks:
       - nglu_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: nglu_minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nglu_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nglu_minio_password_change_me}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - nglu_network
+
+  # coturn - serveur TURN/STUN pour les appels audio du chat.
+  # Indispensable sur les reseaux mobiles RDC (NAT symetrique) : sans relais TURN,
+  # une part importante des appels WebRTC n'arrive jamais a s'etablir.
+  # network_mode: host est requis - coturn alloue dynamiquement des ports media
+  # et ne fonctionne pas correctement derriere le NAT de Docker.
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    container_name: nglu_coturn
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_REALM: ${TURN_REALM:-nglu.chat}
+    entrypoint: ["/bin/sh", "/opt/entrypoint.sh"]
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./docker/coturn/entrypoint.sh:/opt/entrypoint.sh:ro
 
   # Backend - Laravel API (deprecated, historical only).
   # Not started by default. Use:
@@ -106,10 +143,17 @@ services:
       IMAP_PASS: ${IMAP_PASS:-}
       IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
       IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
-      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      # Internal-only Stalwart admin/JMAP endpoint. Never use public mail.ongdngolu.org:8088.
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-}
       STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
       STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
       STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-nglu_minio}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-nglu_minio_password_change_me}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-nglu-files}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
     ports:
       - "8001:8001"
     volumes:
@@ -118,6 +162,7 @@ services:
     depends_on:
       - mysql
       - redis
+      - minio
     networks:
       - nglu_network
     command: npm run docker:dev
@@ -134,6 +179,9 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      # vite.config.js importe ../scripts/app-version.mjs (dossier scripts/ racine du repo).
+      # Le mount ./frontend:/app n'inclut pas ce parent -> on le monte explicitement en RO.
+      - ./scripts:/scripts:ro
     environment:
       VITE_APP_API: ${VITE_APP_API:-http://localhost:8001}
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
@@ -183,7 +231,8 @@ services:
       PMA_ROOT_PASSWORD: ${DB_PASSWORD:-root}
       PMA_PORT: 3306
     ports:
-      - "8080:80"
+      # Admin DB : jamais exposé sur Internet, accès via tunnel SSH uniquement.
+      - "127.0.0.1:8080:80"
     depends_on:
       - mysql
     networks:
@@ -191,6 +240,7 @@ services:
 
 volumes:
   mysql_data:
+  minio_data:
 
 networks:
   nglu_network:

@@ -1,4 +1,9 @@
 FROM node:20-alpine
+
+# Plus de génération PDF serveur : les rapports HTML sont imprimés côté navigateur.
+# backend2 n'embarque pas chromium/puppeteer : image légère, plus d'OOM au build.
+# Note CI: docker-compose.dev.yml and docker-compose.prod.yml both build this file.
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

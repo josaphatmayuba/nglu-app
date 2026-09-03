@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MedTrace RDC — Reconnaissance & traçabilité des médicaments · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a'},
+        mt:{50:'#eef6f3',100:'#d7ece3',200:'#b0d9c8',300:'#7dbfa6',400:'#479c80',500:'#2a7f63',600:'#1f6650',700:'#1a5342',800:'#123a2e',900:'#0b2921',950:'#061b16'},
+        acc:{400:'#38bdf8',500:'#0ea5e9',600:'#0284c7'},
+        warn:{400:'#fbbf24',500:'#f59e0b',600:'#d97706'},
+        dang:{400:'#f87171',500:'#ef4444',600:'#dc2626'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#eceae4;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-teal{background:linear-gradient(150deg,#123a2e 0%,#0b2921 60%,#061b16 100%);}
+    .grad-leaf{background:linear-gradient(135deg,#479c80,#1f6650);}
+    .card{background:#fff;border:1px solid #e4e2da;border-radius:16px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;animation:fadein .25s ease;}
+    .bo-sub{display:none;}.bo-sub.active{display:block;animation:fadein .25s ease;}
+    @keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+    .nav-active{background:rgba(255,255,255,.12)!important;color:#fff!important;}
+    .nav-active [data-lucide]{color:#7dbfa6!important;}
+    .tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;font-weight:600;text-align:left;padding:10px 14px;border-bottom:1px solid #e2e8f0;background:#f8fafc;white-space:nowrap;}
+    .tbl td{padding:11px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    .tbl tr:hover td{background:#f7faf9;}
+    .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:10px;padding:8px 14px;cursor:pointer;border:1px solid transparent;transition:.15s;}
+    .btn-teal{background:#123a2e;color:#fff;}.btn-teal:hover{background:#1a5342;}
+    .btn-acc{background:#0ea5e9;color:#fff;}.btn-acc:hover{background:#0284c7;}
+    .btn-ghost{border-color:#dcd9cf;background:#fff;color:#334155;}.btn-ghost:hover{background:#f1f5f9;}
+    .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:8px;}
+    .field{width:100%;border:1px solid #dcd9cf;border-radius:10px;padding:9px 12px;font-size:13px;background:#fff;outline:none;}
+    .field:focus{border-color:#2a7f63;box-shadow:0 0 0 3px rgba(42,127,99,.13);}
+    .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    #switcher{position:fixed;top:0;left:0;right:0;z-index:90;background:#061b16;color:#cbd5e1;display:flex;align-items:center;gap:4px;padding:8px 12px;overflow-x:auto;}
+    .sw{font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;color:#94a3b8;}
+    .sw.sw-active{background:#0ea5e9;color:#fff;}
+    body{padding-top:46px;}
+    #toasts{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99;display:flex;flex-direction:column;gap:8px;align-items:center;width:max-content;max-width:92vw;}
+    .toast{background:#0f172a;color:#fff;font-size:13px;font-weight:500;padding:10px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,.35);display:flex;align-items:center;gap:8px;animation:fadein .2s ease;}
+    #bo-sidebar{display:none;}
+    @media(min-width:1024px){
+      #bo-sidebar{display:flex;position:fixed;top:46px;left:0;bottom:0;width:232px;flex-direction:column;z-index:40;}
+      #bo-main{margin-left:232px;}
+    }
+    .phone{width:min(400px,100%);margin:0 auto;background:#061b16;border-radius:42px;padding:10px;box-shadow:0 25px 60px rgba(2,6,23,.35);}
+    .phone-screen{background:#f6f4ef;border-radius:34px;overflow:hidden;height:780px;display:flex;flex-direction:column;position:relative;}
+    .scanbox{position:relative;border-radius:20px;overflow:hidden;background:#000;height:260px;}
+    .scan-line{position:absolute;left:8%;right:8%;height:2px;background:linear-gradient(90deg,transparent,#38bdf8,transparent);animation:scan 2.2s ease-in-out infinite;}
+    @keyframes scan{0%{top:14%;}50%{top:82%;}100%{top:14%;}}
+    .frame-corner{position:absolute;width:26px;height:26px;border-color:#38bdf8;}
+    .badge-status{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.02em;}
+    #overlay{position:fixed;inset:0;background:rgba(4,15,12,.55);backdrop-filter:blur(3px);z-index:96;display:none;align-items:center;justify-content:center;padding:18px;}
+    #overlay.open{display:flex;}
+    #modal{background:#fff;width:100%;max-width:560px;border-radius:20px;max-height:88vh;overflow-y:auto;animation:slideup .22s ease;}
+    @keyframes slideup{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+    .src-tag{font-size:10.5px;color:#0284c7;background:#eff9ff;border:1px solid #cdeeff;padding:2px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600;cursor:pointer;text-decoration:none;}
+    .src-tag:hover{background:#dff2ff;border-color:#8fd8ff;}
+    /* boîte de médicament dessinée en CSS */
+    .medbox{border-radius:8px;position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.12);flex:none;}
+    .medbox::before{content:'';position:absolute;top:0;left:0;right:0;height:32%;background:rgba(255,255,255,.16);}
+    .medbox::after{content:'';position:absolute;left:8%;right:8%;bottom:10%;height:26%;background:rgba(255,255,255,.92);border-radius:3px;}
+    .medbox .mb-txt{position:absolute;left:10%;right:10%;bottom:12%;height:22%;display:flex;flex-direction:column;justify-content:center;gap:2px;z-index:1;}
+    .medbox .mb-txt b{font-size:9px;line-height:1;color:#123a2e;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .medbox .mb-txt span{font-size:6.5px;line-height:1;color:#1f6650;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .medbox .mb-cross{position:absolute;top:6%;right:8%;color:rgba(255,255,255,.85);}
+    .gallery-thumb{border-radius:10px;overflow:hidden;cursor:pointer;border:1px solid #e4e2da;transition:.15s;}
+    .gallery-thumb:hover{border-color:#479c80;transform:translateY(-1px);}
+    .section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#1f6650;display:flex;align-items:center;gap:6px;}
+  </style>
+</head>
+<body>
+
+<!-- ================= SWITCHER ================= -->
+<div id="switcher">
+  <span class="text-[11px] font-bold text-white/80 pl-1 pr-2 font-display">MedTrace RDC</span>
+  <div class="sw sw-active" data-view="v-scan" onclick="goView(this,'v-scan')"><i data-lucide="scan-barcode" class="w-3.5 h-3.5"></i>Scan mobile</div>
+  <div class="sw" data-view="v-fiche" onclick="goView(this,'v-fiche')"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>Fiche produit</div>
+  <div class="sw" data-view="v-search" onclick="goView(this,'v-search')"><i data-lucide="search" class="w-3.5 h-3.5"></i>Recherche</div>
+  <div class="sw" data-view="v-bo" onclick="goView(this,'v-bo')"><i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>Back-office</div>
+</div>
+
+<div id="toasts"></div>
+
+<!-- overlay modal générique -->
+<div id="overlay" onclick="if(event.target===this) closeModal()">
+  <div id="modal"></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- VUE 1 — SCAN MOBILE                                            -->
+<!-- ============================================================ -->
+<div class="view active" id="v-scan">
+  <div class="max-w-6xl mx-auto px-4 py-8 grid lg:grid-cols-2 gap-10 items-start">
+    <div>
+      <span class="chip bg-mt-100 text-mt-700"><i data-lucide="stethoscope" class="w-3 h-3"></i>Application publique</span>
+      <h1 class="font-display text-2xl font-bold mt-3 text-ink-900">Scanner un médicament</h1>
+      <p class="text-sm text-ink-500 mt-1 max-w-md">Lecture des codes EAN, UPC, GTIN et GS1 DataMatrix. Sans code-barres disponible, la recherche manuelle reste possible.</p>
+
+      <div class="phone mt-6">
+        <div class="phone-screen">
+          <div class="grad-teal text-white px-5 pt-5 pb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="pill" class="w-5 h-5 text-mt-300"></i>
+              <span class="font-display font-semibold text-sm">MedTrace</span>
+            </div>
+            <i data-lucide="user-circle" class="w-5 h-5 text-white/70"></i>
+          </div>
+          <div class="px-4 pt-4 pb-2 flex-1 overflow-y-auto">
+            <div class="scanbox">
+              <div class="scan-line"></div>
+              <div class="frame-corner border-t-2 border-l-2 top-4 left-4 rounded-tl-lg"></div>
+              <div class="frame-corner border-t-2 border-r-2 top-4 right-4 rounded-tr-lg"></div>
+              <div class="frame-corner border-b-2 border-l-2 bottom-4 left-4 rounded-bl-lg"></div>
+              <div class="frame-corner border-b-2 border-r-2 bottom-4 right-4 rounded-br-lg"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <img src="https://barcode.tec-it.com/barcode.ashx?data=06151234567890&code=EAN13&dpi=120&backcolor=%23000000&color=%23ffffff" class="h-16 opacity-90" alt="code-barres"/>
+              </div>
+              <div class="absolute bottom-3 left-0 right-0 text-center text-[11px] text-white/70">Placez le code-barres dans le cadre</div>
+            </div>
+            <div class="flex items-center justify-center gap-3 mt-3">
+              <button class="btn btn-ghost btn-xs" onclick="toast('Flash activé')"><i data-lucide="flashlight" class="w-3.5 h-3.5"></i>Flash</button>
+              <button class="btn btn-acc btn-xs" onclick="openScanResult()"><i data-lucide="check" class="w-3.5 h-3.5"></i>Simuler un scan</button>
+              <button class="btn btn-ghost btn-xs" onclick="goView(document.querySelector('[data-view=v-search]'),'v-search')"><i data-lucide="keyboard" class="w-3.5 h-3.5"></i>Saisie manuelle</button>
+            </div>
+
+            <div class="mt-5">
+              <div class="section-title"><i data-lucide="history" class="w-3.5 h-3.5"></i>Récemment scannés</div>
+              <div class="mt-2 space-y-2">
+                <div class="card p-3 flex items-center gap-3 cursor-pointer" onclick="openScanResult()">
+                  <div class="w-9 h-9 rounded-lg bg-mt-100 flex items-center justify-center"><i data-lucide="pill" class="w-4 h-4 text-mt-700"></i></div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[13px] font-semibold truncate">Paracétamol 500 mg — Comprimés</p>
+                    <p class="text-[11px] text-ink-500">Boîte de 20 · Laboratoire Congopharm</p>
+                  </div>
+                  <span class="badge-status bg-emerald-100 text-emerald-700">Reconnu</span>
+                </div>
+                <div class="card p-3 flex items-center gap-3 cursor-pointer opacity-90">
+                  <div class="w-9 h-9 rounded-lg bg-ink-100 flex items-center justify-center"><i data-lucide="help-circle" class="w-4 h-4 text-ink-500"></i></div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[13px] font-semibold truncate">Code 06198877210034</p>
+                    <p class="text-[11px] text-ink-500">Aucune correspondance trouvée</p>
+                  </div>
+                  <span class="badge-status bg-amber-100 text-amber-700">Inconnu</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-ink-100 bg-white px-2 py-2 flex justify-around">
+            <div class="flex flex-col items-center gap-0.5 text-mt-700"><i data-lucide="scan-barcode" class="w-4.5 h-4.5"></i><span class="text-[10px] font-semibold">Scanner</span></div>
+            <div class="flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="search" class="w-4.5 h-4.5"></i><span class="text-[10px]">Recherche</span></div>
+            <div class="flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="bell" class="w-4.5 h-4.5"></i><span class="text-[10px]">Alertes</span></div>
+            <div class="flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="user" class="w-4.5 h-4.5"></i><span class="text-[10px]">Profil</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="card p-5">
+        <div class="section-title"><i data-lucide="workflow" class="w-3.5 h-3.5"></i>Fonctionnement</div>
+        <div class="mt-3 space-y-2 text-[13px] text-ink-600">
+          <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-mt-600 text-white text-[11px] font-bold flex items-center justify-center flex-none">1</span>Scan du code EAN / UPC / GTIN / GS1 DataMatrix</div>
+          <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-mt-600 text-white text-[11px] font-bold flex items-center justify-center flex-none">2</span>Recherche dans la base et identification</div>
+          <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-mt-600 text-white text-[11px] font-bold flex items-center justify-center flex-none">3</span>Affichage de la fiche produit détaillée</div>
+          <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-mt-600 text-white text-[11px] font-bold flex items-center justify-center flex-none">4</span>Lecture ou saisie du lot et vérification de l'expiration</div>
+        </div>
+      </div>
+      <div class="card p-5 border-amber-200 bg-amber-50/40">
+        <div class="section-title text-amber-700"><i data-lucide="triangle-alert" class="w-3.5 h-3.5"></i>Produit non reconnu ?</div>
+        <p class="text-[13px] text-ink-600 mt-2">L'utilisateur peut rechercher par nom, prendre des photos de l'emballage et proposer l'association du code. Le nouveau code est soumis à validation par un pharmacien ou une autorité compétente avant de devenir officiel.</p>
+        <button class="btn btn-ghost btn-xs mt-3" onclick="openSubmitProduct()"><i data-lucide="upload" class="w-3.5 h-3.5"></i>Proposer un produit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- VUE 2 — FICHE PRODUIT                                          -->
+<!-- ============================================================ -->
+<div class="view" id="v-fiche">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="flex items-center gap-2 text-[12px] text-ink-500 mb-4">
+      <i data-lucide="arrow-left" class="w-3.5 h-3.5 cursor-pointer" onclick="goView(document.querySelector('[data-view=v-scan]'),'v-scan')"></i>
+      <span class="cursor-pointer" onclick="goView(document.querySelector('[data-view=v-scan]'),'v-scan')">Scanner</span>
+      <i data-lucide="chevron-right" class="w-3 h-3"></i><span class="text-ink-800 font-medium">Fiche produit</span>
+    </div>
+
+    <div class="card p-5 flex flex-wrap sm:flex-nowrap items-start gap-4">
+      <div class="medbox w-16 h-16" style="background:linear-gradient(150deg,#2a7f63,#123a2e);" onclick="openGallery()">
+        <i data-lucide="plus" class="w-3.5 h-3.5 mb-cross"></i>
+        <div class="mb-txt"><b>AMOXICILLINE</b><span>500 mg · x16</span></div>
+      </div>
+      <div class="flex-1 min-w-0">
+        <h1 class="font-display text-lg sm:text-xl font-bold text-ink-900 leading-tight">Amoxicilline 500 mg</h1>
+        <div class="flex items-center gap-2 flex-wrap mt-1.5">
+          <span class="badge-status bg-emerald-100 text-emerald-700">Autorisé RDC</span>
+          <span class="badge-status bg-sky-100 text-sky-700">Code-barres validé</span>
+        </div>
+        <p class="text-[13px] text-ink-500 mt-2">Gélules · Boîte de 16 · Laboratoire Pharmakina · GTIN 06151239981276</p>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          <span class="chip bg-ink-100 text-ink-700"><i data-lucide="tag" class="w-3 h-3"></i>Antibiotique</span>
+          <span class="chip bg-ink-100 text-ink-700"><i data-lucide="file-badge" class="w-3 h-3"></i>Autorisation N° DPM-2019-0421</span>
+        </div>
+      </div>
+      <button class="btn btn-teal btn-xs flex-none w-full sm:w-auto justify-center" onclick="toast('Fiche exportée (PDF)')"><i data-lucide="printer" class="w-3.5 h-3.5"></i>Imprimer</button>
+    </div>
+
+    <div class="card p-4 mt-3 border-amber-300 bg-amber-50/50 flex items-start gap-3">
+      <i data-lucide="megaphone" class="w-4 h-4 text-amber-600 flex-none mt-0.5"></i>
+      <div class="flex-1 min-w-0">
+        <p class="text-[13px] font-semibold text-amber-800">Information importante — alerte de sécurité active</p>
+        <p class="text-[12.5px] text-ink-600 mt-1">Amoxicilline : des recommandations pour contribuer à garantir la couverture des besoins des patients, dans un contexte de tension d'approvisionnement.</p>
+        <p class="text-[11px] text-ink-400 mt-1">CIS 60424338 · Applicable à toutes les présentations d'amoxicilline</p>
+        <a href="https://base-donnees-publique.medicaments.gouv.fr/medicament/60424338/extrait" target="_blank" rel="noopener" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : ANSM — Base de données publique des médicaments (France)<i data-lucide="external-link" class="w-3 h-3"></i></a>
+      </div>
+      <span class="badge-status bg-amber-200 text-amber-800 flex-none">Active</span>
+    </div>
+
+    <div class="card p-3 mt-3 bg-ink-50 border-ink-200 flex items-center gap-2 text-[12px] text-ink-500">
+      <i data-lucide="globe" class="w-3.5 h-3.5 flex-none"></i>
+      Les sections Description, Mode d'emploi, Contre-indications, Avertissements, Effets indésirables et Conservation ci-dessous sont importées de bases officielles <b class="text-ink-700">françaises (ANSM)</b>.
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-4 mt-4">
+      <div class="card p-4 md:col-span-2 space-y-5">
+        <div>
+          <div class="section-title"><i data-lucide="images" class="w-3.5 h-3.5"></i>Emballage</div>
+          <div class="mt-2 grid grid-cols-4 gap-2 max-w-xs">
+            <div class="gallery-thumb aspect-square medbox" style="background:linear-gradient(150deg,#2a7f63,#123a2e);" onclick="openGallery()"><i data-lucide="plus" class="w-3 h-3 mb-cross"></i></div>
+            <div class="gallery-thumb aspect-square flex items-center justify-center bg-ink-100" onclick="openGallery()"><i data-lucide="scan-barcode" class="w-5 h-5 text-ink-400"></i></div>
+            <div class="gallery-thumb aspect-square flex items-center justify-center bg-ink-100" onclick="openGallery()"><i data-lucide="file-text" class="w-5 h-5 text-ink-400"></i></div>
+            <div class="gallery-thumb aspect-square flex items-center justify-center bg-ink-50 text-ink-400 text-[10px] font-semibold" onclick="openSubmitProduct()">+ Ajouter</div>
+          </div>
+          <p class="text-[11px] text-ink-400 mt-1.5">Photos transmises par le fabricant ou lors d'un signalement terrain.</p>
+        </div>
+        <div>
+          <div class="section-title"><i data-lucide="info" class="w-3.5 h-3.5"></i>Description</div>
+          <p class="text-[13px] text-ink-600 mt-2">Ce médicament contient de l'amoxicilline, un antibiotique de la famille des pénicillines. Il est utilisé pour traiter certaines infections bactériennes sensibles à cette substance.</p>
+          <a href="https://base-donnees-publique.medicaments.gouv.fr/" target="_blank" rel="noopener" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : ANSM — RCP<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+        <div>
+          <div class="section-title"><i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i>Mode d'emploi</div>
+          <p class="text-[13px] text-ink-600 mt-2">Avaler la gélule entière avec un verre d'eau, de préférence au cours d'un repas. Respecter la dose et l'intervalle entre les prises indiqués par le professionnel de santé ou la notice.</p>
+          <a href="#" onclick="return sourceStub(event,'Notice patient — Pharmakina')" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : Notice patient — Pharmakina<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+        <div>
+          <div class="section-title text-dang-600"><i data-lucide="ban" class="w-3.5 h-3.5"></i>Contre-indications</div>
+          <ul class="text-[13px] text-ink-600 mt-2 list-disc pl-4 space-y-1">
+            <li>Allergie connue aux pénicillines ou aux céphalosporines</li>
+            <li>Antécédent de réaction allergique sévère à un antibiotique bêta-lactamine</li>
+          </ul>
+          <a href="https://base-donnees-publique.medicaments.gouv.fr/" target="_blank" rel="noopener" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : ANSM — RCP §4.3<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+        <div>
+          <div class="section-title text-amber-700"><i data-lucide="triangle-alert" class="w-3.5 h-3.5"></i>Avertissements</div>
+          <p class="text-[13px] text-ink-600 mt-2">Arrêter le traitement et consulter immédiatement en cas d'éruption cutanée, de gonflement ou de difficulté à respirer.</p>
+          <a href="https://base-donnees-publique.medicaments.gouv.fr/" target="_blank" rel="noopener" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : ANSM — RCP §4.4<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+        <div>
+          <div class="section-title"><i data-lucide="activity" class="w-3.5 h-3.5"></i>Effets indésirables</div>
+          <div class="mt-2 flex flex-wrap gap-2 text-[12px]">
+            <span class="chip bg-amber-50 text-amber-700 border border-amber-200">Fréquents : nausées, diarrhée</span>
+            <span class="chip bg-red-50 text-red-700 border border-red-200">Rares : réaction allergique grave</span>
+          </div>
+          <a href="https://base-donnees-publique.medicaments.gouv.fr/" target="_blank" rel="noopener" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : ANSM — RCP §4.8<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+        <div>
+          <div class="section-title"><i data-lucide="snowflake" class="w-3.5 h-3.5"></i>Conservation</div>
+          <p class="text-[13px] text-ink-600 mt-2">À conserver à une température inférieure à 25°C, à l'abri de l'humidité. Ne pas congeler.</p>
+          <a href="#" onclick="return sourceStub(event,'Notice patient — Pharmakina')" class="src-tag mt-2"><i data-lucide="link" class="w-3 h-3"></i>Source : Notice patient — Pharmakina<i data-lucide="external-link" class="w-3 h-3"></i></a>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <div class="card p-4">
+          <div class="section-title"><i data-lucide="boxes" class="w-3.5 h-3.5"></i>Lots enregistrés</div>
+          <div class="mt-3 space-y-2">
+            <div class="flex items-center justify-between text-[12.5px]">
+              <div><p class="font-semibold">Lot AMX-2026-B</p><p class="text-ink-500 text-[11px]">Exp. 12/2027</p></div>
+              <span class="badge-status bg-emerald-100 text-emerald-700">Disponible</span>
+            </div>
+            <div class="flex items-center justify-between text-[12.5px]">
+              <div><p class="font-semibold">Lot AMX-2025-A</p><p class="text-ink-500 text-[11px]">Exp. 09/2026</p></div>
+              <span class="badge-status bg-amber-100 text-amber-700">Proche expiration</span>
+            </div>
+          </div>
+        </div>
+        <div class="card p-4">
+          <div class="section-title"><i data-lucide="shield-check" class="w-3.5 h-3.5"></i>Vérification</div>
+          <div class="mt-2 space-y-1.5 text-[12.5px] text-ink-600">
+            <div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>Produit reconnu</div>
+            <div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>Autorisé en RDC</div>
+            <div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-600"></i>Code-barres validé</div>
+            <div class="flex items-center gap-2"><i data-lucide="circle-dashed" class="w-3.5 h-3.5 text-ink-400"></i>Numéro de série non vérifié</div>
+          </div>
+          <p class="text-[11px] text-ink-400 mt-2">La reconnaissance du code ne garantit pas à elle seule l'authenticité du produit.</p>
+        </div>
+        <button class="btn btn-ghost btn-xs w-full justify-center" onclick="toast('Lien source ouvert')"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>Consulter la source officielle</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- VUE 3 — RECHERCHE MANUELLE                                     -->
+<!-- ============================================================ -->
+<div class="view" id="v-search">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="font-display text-xl font-bold text-ink-900">Recherche manuelle</h1>
+    <p class="text-sm text-ink-500 mt-1">Recherchez un médicament même sans code-barres disponible.</p>
+
+    <div class="card p-4 mt-4">
+      <div class="grid sm:grid-cols-2 md:grid-cols-5 gap-2">
+        <input class="field md:col-span-2" placeholder="Nom commercial ou DCI" value="Paracétamol">
+        <input class="field" placeholder="Dosage">
+        <select class="field"><option>Toute forme</option><option>Comprimé</option><option>Gélule</option><option>Sirop</option><option>Injectable</option></select>
+        <button class="btn btn-teal justify-center" onclick="toast('Recherche effectuée')"><i data-lucide="search" class="w-3.5 h-3.5"></i>Rechercher</button>
+      </div>
+    </div>
+
+    <div class="mt-4 space-y-2">
+      <div class="card p-4 flex items-center gap-3 cursor-pointer" onclick="goView(document.querySelector('[data-view=v-fiche]'),'v-fiche')">
+        <div class="medbox w-10 h-10" style="background:linear-gradient(150deg,#0ea5e9,#0369a1);"><div class="mb-txt"><b>PARACETAMOL</b><span>500 · x20</span></div></div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13.5px] font-semibold">Paracétamol 500 mg — Comprimés</p>
+          <p class="text-[12px] text-ink-500">Boîte de 20 · Congopharm · GTIN 06151234567890</p>
+        </div>
+        <span class="badge-status bg-emerald-100 text-emerald-700">Autorisé</span>
+      </div>
+      <div class="card p-4 flex items-center gap-3 cursor-pointer" onclick="goView(document.querySelector('[data-view=v-fiche]'),'v-fiche')">
+        <div class="medbox w-10 h-10" style="background:linear-gradient(150deg,#f59e0b,#b45309);"><div class="mb-txt"><b>PARACETAMOL</b><span>1000 · x16</span></div></div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13.5px] font-semibold">Paracétamol 1000 mg — Comprimés effervescents</p>
+          <p class="text-[12px] text-ink-500">Tube de 16 · Laboratoire X · Code-barres non renseigné</p>
+        </div>
+        <span class="badge-status bg-ink-100 text-ink-600">Sans code</span>
+      </div>
+      <div class="card p-4 flex items-center gap-3 cursor-pointer opacity-80">
+        <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-none"><i data-lucide="octagon-x" class="w-5 h-5 text-red-500"></i></div>
+        <div class="flex-1 min-w-0">
+          <p class="text-[13.5px] font-semibold">Paracétamol sirop 120 mg/5ml — Lot rappelé</p>
+          <p class="text-[12px] text-ink-500">Flacon 100ml · Rappel du 04/2026 — défaut qualité</p>
+        </div>
+        <span class="badge-status bg-red-100 text-red-700">Rappelé</span>
+      </div>
+    </div>
+
+    <div class="card p-4 mt-5 flex items-center justify-between gap-4">
+      <div>
+        <p class="text-[13px] font-semibold">Produit introuvable dans la base ?</p>
+        <p class="text-[12px] text-ink-500">Proposez le produit avec photos de l'emballage pour validation.</p>
+      </div>
+      <button class="btn btn-acc btn-xs flex-none" onclick="openSubmitProduct()"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Proposer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- VUE 4 — BACK-OFFICE (pharmacien / distributeur)                -->
+<!-- ============================================================ -->
+<div class="view" id="v-bo">
+  <div id="bo-sidebar" class="grad-teal text-white">
+    <div class="px-5 py-4 flex items-center gap-2 border-b border-white/10">
+      <i data-lucide="pill" class="w-5 h-5 text-mt-300"></i><span class="font-display font-semibold text-sm">MedTrace Pro</span>
+    </div>
+    <nav class="flex-1 px-3 py-4 space-y-1 text-[13px]">
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg nav-active cursor-pointer" onclick="goBoSub('bo-dashboard')"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Tableau de bord</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="book-marked" class="w-4 h-4"></i>Catalogue</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="package-plus" class="w-4 h-4"></i>Réception & lots</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="warehouse" class="w-4 h-4"></i>Stock par lot</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="bell-ring" class="w-4 h-4"></i>Alertes</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="badge-check" class="w-4 h-4"></i>Validations</div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5"><i data-lucide="file-text" class="w-4 h-4"></i>Documents</div>
+      <div class="pt-2 mt-2 border-t border-white/10"></div>
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-white/70 cursor-pointer hover:bg-white/5" onclick="goBoSub('bo-imports')"><i data-lucide="database" class="w-4 h-4"></i>Imports référentiel</div>
+    </nav>
+    <div class="px-4 py-3 border-t border-white/10 flex items-center gap-2 text-[12px] text-white/70">
+      <i data-lucide="user-circle" class="w-4 h-4"></i>Pharm. J. Mayuba
+    </div>
+  </div>
+
+  <div id="bo-main" class="px-4 lg:px-8 py-6">
+    <div class="max-w-6xl mx-auto bo-sub active" id="bo-dashboard">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 class="font-display text-xl font-bold text-ink-900">Tableau de bord</h1>
+          <p class="text-sm text-ink-500">Pharmacie Centrale — Kinshasa/Gombe</p>
+        </div>
+        <button class="btn btn-acc" onclick="openReceive()"><i data-lucide="package-plus" class="w-3.5 h-3.5"></i>Enregistrer une réception</button>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+        <div class="card p-4">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-ink-500 uppercase">Produits catalogués</span><i data-lucide="book-marked" class="w-4 h-4 text-mt-600"></i></div>
+          <p class="font-display text-2xl font-bold mt-1">1 284</p>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-ink-500 uppercase">Lots en stock</span><i data-lucide="boxes" class="w-4 h-4 text-mt-600"></i></div>
+          <p class="font-display text-2xl font-bold mt-1">3 512</p>
+        </div>
+        <div class="card p-4 border-amber-200">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-amber-700 uppercase">Proches expiration</span><i data-lucide="clock-alert" class="w-4 h-4 text-amber-500"></i></div>
+          <p class="font-display text-2xl font-bold mt-1 text-amber-600">27</p>
+        </div>
+        <div class="card p-4 border-red-200">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-red-700 uppercase">Expirés / rappelés</span><i data-lucide="octagon-alert" class="w-4 h-4 text-red-500"></i></div>
+          <p class="font-display text-2xl font-bold mt-1 text-red-600">6</p>
+        </div>
+      </div>
+
+      <div class="card mt-5">
+        <div class="flex items-center justify-between px-4 pt-4 pb-2">
+          <div class="section-title"><i data-lucide="boxes" class="w-3.5 h-3.5"></i>Lots récents</div>
+          <button class="btn btn-ghost btn-xs" onclick="toast('Filtre appliqué')"><i data-lucide="filter" class="w-3.5 h-3.5"></i>Filtrer</button>
+        </div>
+        <div class="scrollx">
+          <table class="tbl w-full">
+            <thead><tr><th>Produit</th><th>Lot</th><th>Fournisseur</th><th>Réception</th><th>Expiration</th><th>Qté dispo</th><th>Statut</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="font-medium">Amoxicilline 500 mg</td><td>AMX-2026-B</td><td>Pharmakina</td><td>03/02/2026</td><td>12/2027</td><td>240</td>
+                <td><span class="badge-status bg-emerald-100 text-emerald-700">Disponible</span></td>
+                <td><button class="btn btn-ghost btn-xs" onclick="openLot()">Détails</button></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Paracétamol sirop 120mg/5ml</td><td>PCT-S-2025-C</td><td>Congopharm</td><td>18/01/2026</td><td>08/2026</td><td>58</td>
+                <td><span class="badge-status bg-amber-100 text-amber-700">Proche expiration</span></td>
+                <td><button class="btn btn-ghost btn-xs" onclick="openLot()">Détails</button></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Amoxicilline 500 mg</td><td>AMX-2025-A</td><td>Pharmakina</td><td>02/06/2025</td><td>09/2026</td><td>15</td>
+                <td><span class="badge-status bg-amber-100 text-amber-700">Proche expiration</span></td>
+                <td><button class="btn btn-ghost btn-xs" onclick="openLot()">Détails</button></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Ampicilline 250 mg injectable</td><td>AMP-2024-F</td><td>Distributeur Kivu Santé</td><td>11/09/2024</td><td>03/2026</td><td>0</td>
+                <td><span class="badge-status bg-red-100 text-red-700">Expiré</span></td>
+                <td><button class="btn btn-ghost btn-xs" onclick="openLot()">Détails</button></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Paracétamol sirop 120mg/5ml</td><td>PCT-S-2025-B</td><td>Congopharm</td><td>14/12/2025</td><td>—</td><td>0</td>
+                <td><span class="badge-status bg-red-100 text-red-700">Rappelé</span></td>
+                <td><button class="btn btn-ghost btn-xs" onclick="openLot()">Détails</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-4 mt-5">
+        <div class="card p-4">
+          <div class="section-title text-amber-700"><i data-lucide="bell-ring" class="w-3.5 h-3.5"></i>Alertes actives</div>
+          <div class="mt-3 space-y-2">
+            <div class="flex items-start gap-2 text-[12.5px]"><i data-lucide="octagon-alert" class="w-4 h-4 text-red-500 flex-none mt-0.5"></i><div><span class="font-semibold">Rappel fournisseur</span> — Paracétamol sirop lot PCT-S-2025-B, défaut qualité signalé par Congopharm.</div></div>
+            <div class="flex items-start gap-2 text-[12.5px]"><i data-lucide="clock-alert" class="w-4 h-4 text-amber-500 flex-none mt-0.5"></i><div>27 lots expirent dans les 60 prochains jours.</div></div>
+            <div class="flex items-start gap-2 text-[12.5px]"><i data-lucide="help-circle" class="w-4 h-4 text-ink-400 flex-none mt-0.5"></i><div>4 produits scannés non reconnus en attente de validation.</div></div>
+          </div>
+        </div>
+        <div class="card p-4">
+          <div class="section-title"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i>Validations en attente</div>
+          <div class="mt-3 space-y-2">
+            <div class="flex items-center justify-between text-[12.5px]">
+              <div><p class="font-semibold">Ibuprofène 400 mg — nouveau code proposé</p><p class="text-ink-500 text-[11px]">Soumis par Pharmacie Bandal · 30/07/2026</p></div>
+              <button class="btn btn-teal btn-xs" onclick="toast('Produit validé')">Valider</button>
+            </div>
+            <div class="flex items-center justify-between text-[12.5px]">
+              <div><p class="font-semibold">Vitamine C 500 mg — sans code, association demandée</p><p class="text-ink-500 text-[11px]">Soumis par Grossiste Kin Distrib · 29/07/2026</p></div>
+              <button class="btn btn-teal btn-xs" onclick="toast('Produit validé')">Valider</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto bo-sub" id="bo-imports">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 class="font-display text-xl font-bold text-ink-900">Imports référentiel</h1>
+          <p class="text-sm text-ink-500">Bases pharmaceutiques officielles (spécialités, présentations, compositions, alertes)</p>
+        </div>
+        <button class="btn btn-acc" onclick="toast('Import lancé')"><i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>Lancer un import</button>
+      </div>
+
+      <div class="card p-4 mt-4 bg-sky-50/60 border-sky-200 flex items-start gap-3">
+        <i data-lucide="globe" class="w-4 h-4 text-sky-600 flex-none mt-0.5"></i>
+        <p class="text-[12.5px] text-ink-600">Les données importées d'un autre pays (ex: ANSM France) alimentent la fiche produit mais sont toujours affichées avec leur pays d'origine. Elles ne créent <b>jamais</b> automatiquement une autorisation de commercialisation en RDC — le statut réglementaire congolais reste géré séparément dans le module Validations.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+        <div class="card p-4">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-ink-500 uppercase">Sources actives</span><i data-lucide="database" class="w-4 h-4 text-mt-600"></i></div>
+          <p class="font-display text-2xl font-bold mt-1">3</p>
+          <p class="text-[11px] text-ink-400">ANSM (FR), Santé Canada, OMS</p>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-ink-500 uppercase">Dernier import</span><i data-lucide="clock" class="w-4 h-4 text-mt-600"></i></div>
+          <p class="font-display text-2xl font-bold mt-1">31/07</p>
+          <p class="text-[11px] text-ink-400">Fichier spécialités ANSM</p>
+        </div>
+        <div class="card p-4">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-ink-500 uppercase">Lignes ajoutées</span><i data-lucide="plus-circle" class="w-4 h-4 text-emerald-600"></i></div>
+          <p class="font-display text-2xl font-bold mt-1 text-emerald-600">184</p>
+        </div>
+        <div class="card p-4 border-red-200">
+          <div class="flex items-center justify-between"><span class="text-[11px] font-semibold text-red-700 uppercase">Lignes rejetées</span><i data-lucide="octagon-x" class="w-4 h-4 text-red-500"></i></div>
+          <p class="font-display text-2xl font-bold mt-1 text-red-600">7</p>
+        </div>
+      </div>
+
+      <div class="card mt-4">
+        <div class="section-title px-4 pt-4 pb-2"><i data-lucide="history" class="w-3.5 h-3.5"></i>Historique des imports</div>
+        <div class="scrollx">
+          <table class="tbl w-full">
+            <thead><tr><th>Fichier</th><th>Source</th><th>Pays</th><th>Date import</th><th>Ajoutées</th><th>Modifiées</th><th>Rejetées</th><th>Statut</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="font-medium">Spécialités — export mensuel</td><td>ANSM</td><td>France</td><td>31/07/2026 08:12</td><td class="text-emerald-600">142</td><td class="text-sky-600">38</td><td class="text-red-600">4</td>
+                <td><span class="badge-status bg-emerald-100 text-emerald-700">Terminé</span></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Présentations (CIP13)</td><td>ANSM</td><td>France</td><td>31/07/2026 08:14</td><td class="text-emerald-600">31</td><td class="text-sky-600">12</td><td class="text-red-600">2</td>
+                <td><span class="badge-status bg-emerald-100 text-emerald-700">Terminé</span></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Alertes de sécurité</td><td>ANSM</td><td>France</td><td>31/07/2026 08:15</td><td class="text-emerald-600">3</td><td class="text-sky-600">0</td><td class="text-red-600">0</td>
+                <td><span class="badge-status bg-emerald-100 text-emerald-700">Terminé</span></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Compositions / substances</td><td>Santé Canada</td><td>Canada</td><td>28/07/2026 22:03</td><td class="text-emerald-600">8</td><td class="text-sky-600">1</td><td class="text-red-600">1</td>
+                <td><span class="badge-status bg-amber-100 text-amber-700">Terminé avec erreurs</span></td>
+              </tr>
+              <tr>
+                <td class="font-medium">Spécialités — export hebdo</td><td>OMS</td><td>International</td><td>24/07/2026 03:40</td><td>—</td><td>—</td><td>—</td>
+                <td><span class="badge-status bg-red-100 text-red-700">Échoué</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  lucide.createIcons();
+
+  function goView(el, id){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.sw').forEach(s=>s.classList.remove('sw-active'));
+    el.classList.add('sw-active');
+    window.scrollTo({top:0,behavior:'smooth'});
+    lucide.createIcons();
+  }
+
+  function toast(msg){
+    const t=document.createElement('div');
+    t.className='toast';
+    t.innerHTML=`<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>${msg}`;
+    document.getElementById('toasts').appendChild(t);
+    lucide.createIcons();
+    setTimeout(()=>t.remove(),2600);
+  }
+
+  function openModal(html){
+    document.getElementById('modal').innerHTML = html;
+    document.getElementById('overlay').classList.add('open');
+    lucide.createIcons();
+  }
+  function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+
+  function goBoSub(id){
+    document.querySelectorAll('.bo-sub').forEach(v=>v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('#bo-sidebar nav > div').forEach(n=>n.classList.remove('nav-active'));
+    event.currentTarget.classList.add('nav-active');
+    lucide.createIcons();
+  }
+
+  function sourceStub(e, label){
+    e.preventDefault();
+    toast('Ouverture du document source : ' + label);
+    return false;
+  }
+
+  function openScanResult(){
+    goView(document.querySelector('[data-view=v-fiche]'),'v-fiche');
+  }
+
+  function openGallery(){
+    openModal(`
+      <div class="p-5 border-b border-ink-100 flex items-center justify-between">
+        <h3 class="font-display font-bold text-base">Photos de l'emballage</h3>
+        <i data-lucide="x" class="w-4 h-4 cursor-pointer text-ink-400" onclick="closeModal()"></i>
+      </div>
+      <div class="p-5 grid grid-cols-2 gap-3">
+        <div class="medbox aspect-square" style="background:linear-gradient(150deg,#2a7f63,#123a2e);"><i data-lucide="plus" class="w-4 h-4 mb-cross"></i><div class="mb-txt"><b>AMOXICILLINE</b><span>500 mg · x16</span></div></div>
+        <div class="rounded-xl bg-ink-900 aspect-square flex items-center justify-center">
+          <img src="https://barcode.tec-it.com/barcode.ashx?data=06151239981276&code=EAN13&dpi=110&backcolor=%23000000&color=%23ffffff" class="h-14" alt="code-barres">
+        </div>
+        <div class="rounded-xl bg-ink-100 aspect-square flex flex-col items-center justify-center text-ink-400 gap-1">
+          <i data-lucide="file-text" class="w-6 h-6"></i><span class="text-[10px]">Notice (verso)</span>
+        </div>
+        <div class="rounded-xl border-2 border-dashed border-ink-200 aspect-square flex flex-col items-center justify-center text-ink-400 gap-1 cursor-pointer" onclick="closeModal();openSubmitProduct()">
+          <i data-lucide="camera" class="w-6 h-6"></i><span class="text-[10px]">Ajouter une photo</span>
+        </div>
+      </div>
+      <div class="px-5 pb-5 text-[11px] text-ink-400">Photos transmises par Laboratoire Pharmakina lors de l'enregistrement du produit.</div>
+    `);
+  }
+
+  function openSubmitProduct(){
+    openModal(`
+      <div class="p-5 border-b border-ink-100 flex items-center justify-between">
+        <h3 class="font-display font-bold text-base">Proposer un nouveau produit</h3>
+        <i data-lucide="x" class="w-4 h-4 cursor-pointer text-ink-400" onclick="closeModal()"></i>
+      </div>
+      <div class="p-5 space-y-3">
+        <div><label class="text-[11px] font-semibold text-ink-500">Nom commercial</label><input class="field mt-1" placeholder="Ex: Doliprane 500 mg"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-[11px] font-semibold text-ink-500">Principe actif</label><input class="field mt-1" placeholder="Ex: Paracétamol"></div>
+          <div><label class="text-[11px] font-semibold text-ink-500">Dosage</label><input class="field mt-1" placeholder="Ex: 500 mg"></div>
+        </div>
+        <div><label class="text-[11px] font-semibold text-ink-500">Code-barres (optionnel)</label><input class="field mt-1" placeholder="EAN / GTIN si disponible"></div>
+        <div class="border-2 border-dashed border-ink-200 rounded-xl p-6 text-center text-ink-400">
+          <i data-lucide="camera" class="w-6 h-6 mx-auto mb-1"></i>
+          <p class="text-[12px]">Ajouter des photos de l'emballage</p>
+        </div>
+      </div>
+      <div class="p-5 border-t border-ink-100 flex justify-end gap-2">
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-acc" onclick="closeModal();toast('Produit soumis pour validation')"><i data-lucide="send" class="w-3.5 h-3.5"></i>Soumettre</button>
+      </div>
+    `);
+  }
+
+  function openReceive(){
+    openModal(`
+      <div class="p-5 border-b border-ink-100 flex items-center justify-between">
+        <h3 class="font-display font-bold text-base">Enregistrer une réception</h3>
+        <i data-lucide="x" class="w-4 h-4 cursor-pointer text-ink-400" onclick="closeModal()"></i>
+      </div>
+      <div class="p-5 space-y-3">
+        <div><label class="text-[11px] font-semibold text-ink-500">Produit</label><input class="field mt-1" placeholder="Rechercher un produit du catalogue"></div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-[11px] font-semibold text-ink-500">N° de lot</label><input class="field mt-1" placeholder="Ex: AMX-2026-C"></div>
+          <div><label class="text-[11px] font-semibold text-ink-500">Fournisseur</label><input class="field mt-1" placeholder="Ex: Pharmakina"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-[11px] font-semibold text-ink-500">Date de fabrication</label><input type="date" class="field mt-1"></div>
+          <div><label class="text-[11px] font-semibold text-ink-500">Date d'expiration</label><input type="date" class="field mt-1"></div>
+        </div>
+        <div><label class="text-[11px] font-semibold text-ink-500">Quantité reçue</label><input type="number" class="field mt-1" placeholder="Ex: 200"></div>
+        <button class="btn btn-ghost btn-xs"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i>Scanner le GS1 DataMatrix pour préremplir</button>
+      </div>
+      <div class="p-5 border-t border-ink-100 flex justify-end gap-2">
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-teal" onclick="closeModal();toast('Lot enregistré')"><i data-lucide="check" class="w-3.5 h-3.5"></i>Enregistrer le lot</button>
+      </div>
+    `);
+  }
+
+  function openLot(){
+    openModal(`
+      <div class="p-5 border-b border-ink-100 flex items-center justify-between">
+        <h3 class="font-display font-bold text-base">Détail du lot</h3>
+        <i data-lucide="x" class="w-4 h-4 cursor-pointer text-ink-400" onclick="closeModal()"></i>
+      </div>
+      <div class="p-5 space-y-2 text-[13px]">
+        <div class="flex justify-between"><span class="text-ink-500">Produit</span><span class="font-semibold">Amoxicilline 500 mg</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Lot</span><span class="font-semibold">AMX-2026-B</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Fabrication</span><span>02/2026</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Expiration</span><span>12/2027</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Fournisseur</span><span>Pharmakina</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Quantité disponible</span><span>240</span></div>
+        <div class="flex justify-between"><span class="text-ink-500">Statut</span><span class="badge-status bg-emerald-100 text-emerald-700">Disponible</span></div>
+      </div>
+      <div class="p-5 border-t border-ink-100 flex justify-end gap-2">
+        <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+        <button class="btn btn-teal" onclick="closeModal();toast('Statut mis à jour')">Mettre en quarantaine</button>
+      </div>
+    `);
+  }
+</script>
+</body>
+</html>

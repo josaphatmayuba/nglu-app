@@ -24,6 +24,18 @@ export class CreateTransactionDto {
   @IsNumber()
   amount: number;
 
+  @ApiPropertyOptional({ example: 1, description: "Devise de la transaction (currency.id)" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  currencyId?: number | null;
+
+  @ApiPropertyOptional({ example: 1, description: "Projet/chantier analytique (projects.id) — ecrit aussi au grand livre" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  projectId?: number | null;
+
   @ApiPropertyOptional({ example: "transaction" })
   @IsOptional()
   @IsString()

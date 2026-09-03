@@ -23,6 +23,7 @@ import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
 import { MfaService } from "./mfa.service";
 import { PasswordResetService } from "./password-reset.service";
 import { Throttle } from "@nestjs/throttler";
@@ -33,6 +34,10 @@ class MfaLoginDto {
   @IsString() @IsNotEmpty() mfaToken: string;
   @IsString() @IsNotEmpty() code: string;
   useRecovery?: boolean;
+}
+
+class GoogleLoginDto {
+  @IsString() @IsNotEmpty() credential: string;
 }
 
 class MfaVerifyDto {
@@ -66,6 +71,31 @@ const REFRESH_COOKIE_OPTS = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
+// Avelomi apps live on sub-domains (farmos/compta/domus/batipro/rh.avelomi.com)
+// and must SHARE the refresh cookie. A host-only cookie (the default) posted on
+// one sub-domain is invisible to the others -> re-login everywhere. We therefore
+// widen the cookie to Domain=.avelomi.com, but ONLY when the request Host ends
+// with avelomi.com. Every other host (ongdngolu.org, dev, raw IP, localhost…)
+// keeps the exact current host-only behaviour — no cross-project impact.
+function cookieDomainFor(req: Request): string | undefined {
+  const host = String((req.headers as Record<string, string>).host || "")
+    .split(":")[0]
+    .toLowerCase();
+  if (host === "avelomi.com" || host.endsWith(".avelomi.com")) return ".avelomi.com";
+  return undefined; // host-only, unchanged for ongdngolu.org & co.
+}
+
+function setRefreshCookie(req: Request, res: Response, token: string): void {
+  const domain = cookieDomainFor(req);
+  res.cookie("refreshToken", token, domain ? { ...REFRESH_COOKIE_OPTS, domain } : REFRESH_COOKIE_OPTS);
+}
+
+function clearRefreshCookie(req: Request, res: Response): void {
+  const domain = cookieDomainFor(req);
+  // The clear must target the same domain the cookie was set with, else it lingers.
+  res.clearCookie("refreshToken", domain ? { path: "/", domain } : { path: "/" });
+}
+
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
@@ -93,9 +123,46 @@ export class AuthController {
 
     const { refreshToken, user, role, token } = loginResult;
 
-    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
+    setRefreshCookie(req, res, refreshToken);
 
     return { ...user, role, token };
+  }
+
+  @ApiOperation({ summary: "Login with Google identity token" })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: "Google account is invalid or not linked to an Avelomi user" })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Post("google/login")
+  @HttpCode(200)
+  async googleLogin(@Body() body: GoogleLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const loginResult = await this.authService.loginWithGoogle(body.credential, ctx);
+    if ("requireMfa" in loginResult) {
+      return loginResult;
+    }
+
+    const { refreshToken, user, role, token } = loginResult;
+    setRefreshCookie(req, res, refreshToken);
+    return { ...user, role, token };
+  }
+
+  @ApiOperation({ summary: "Inscription self-service (cree une organisation + son 1er admin)" })
+  @ApiOkResponse({ description: "Organisation creee, utilisateur connecte" })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Post("register")
+  @HttpCode(201)
+  async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const result = await this.authService.register(body, ctx);
+    setRefreshCookie(req, res, result.refreshToken);
+    const { refreshToken: _omit, ...safe } = result;
+    return safe;
   }
 
   @ApiOperation({ summary: "Logout" })
@@ -104,14 +171,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(200)
-  async logout(@Body("id") id: number, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
     const ctx = {
-      userId: id,
+      userId,
       ip: (req as unknown as { ip: string }).ip,
       userAgent: (req.headers as Record<string, string>)["user-agent"],
     };
-    res.clearCookie("refreshToken", { path: "/" });
-    return this.authService.logout(id, ctx);
+    clearRefreshCookie(req, res);
+    return this.authService.logout(userId, ctx);
   }
 
   @ApiOperation({ summary: "Refresh access token using httpOnly cookie (rotates the refresh token)" })
@@ -127,7 +195,7 @@ export class AuthController {
     };
     // SCRUM-121: rotation — the service returns a fresh refresh token we re-set as the cookie.
     const { refreshToken, ...rest } = await this.authService.refreshAccessToken(token, ctx);
-    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
+    setRefreshCookie(req, res, refreshToken);
     return rest;
   }
 
@@ -160,7 +228,7 @@ export class AuthController {
     const currentFamily = this.authService.familyFromRefreshToken(
       (req.cookies as Record<string, string>)["refreshToken"],
     );
-    if (currentFamily === id) res.clearCookie("refreshToken", { path: "/" });
+    if (currentFamily === id) clearRefreshCookie(req, res);
     return result;
   }
 
@@ -254,7 +322,7 @@ export class AuthController {
 
     const { refreshToken, user, role, token } = await this.authService.completeMfaLogin(body.mfaToken, ctx);
 
-    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
+    setRefreshCookie(req, res, refreshToken);
 
     return { ...user, role, token };
   }

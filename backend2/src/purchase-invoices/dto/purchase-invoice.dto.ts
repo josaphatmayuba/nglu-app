@@ -63,6 +63,12 @@ export class CreatePurchaseInvoiceDto {
   @Min(1)
   supplierId: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the company's appSetting.currencyId when omitted." })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ type: [PurchaseInvoiceProductItemDto] })
   @IsOptional()
   @IsArray()

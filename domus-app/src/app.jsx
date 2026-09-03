@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
+  ShieldCheck,
 } from "lucide-react";
-import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
+import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
 import { outboxCount } from "./outbox.js";
 import { t, useLang } from "./i18n.js";
@@ -14,17 +15,26 @@ import { Locataires } from "./screens/locataires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Baux } from "./screens/baux.jsx";
+import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
+import { Onboarding } from "./screens/onboarding.jsx";
+import { Prescreening } from "./screens/prescreening.jsx";
+import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
-import { Placeholder } from "./screens/placeholder.jsx";
+import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
+import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
+import { DialogProvider } from "./components/Dialog.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 
 const NAV = [
-  { sec: "Pilotage", items: [{ key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard }] },
+  { sec: "Pilotage", items: [
+    { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+    { key: "previsionnel", label: "Prévisionnel", icon: TrendingUp },
+  ] },
   { sec: "Patrimoine", items: [
     { key: "biens", label: "Propriétés", icon: Building },
     { key: "carte", label: "Carte des propriétés", icon: MapPin },
@@ -32,7 +42,9 @@ const NAV = [
   ] },
   { sec: "Locatif", items: [
     { key: "baux", label: "Baux", icon: FileSignature },
+    { key: "reservations", label: "Réservations", icon: BedDouble },
     { key: "contrats", label: "Contrats & signature", icon: FileCheck2 },
+    { key: "prescreening", label: "Enquête de prélocation", icon: ShieldCheck },
     { key: "onboarding", label: "Onboarding locataire", icon: UserPlus },
     { key: "loyers", label: "Loyers & paiements", icon: Wallet },
     { key: "paiement", label: "Paiement & quittance", icon: Smartphone },
@@ -46,16 +58,19 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["baux", "contrats", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
+  previsionnel: () => <Forecast />,
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
-  locataires: (_nav, device) => <Locataires device={device} />,
+  locataires: (nav, device) => <Locataires go={nav} device={device} />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
+  reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
-  onboarding: (_nav, device) => <Placeholder title="Onboarding locataire" story="SCRUM-246" device={device} />,
+  prescreening: (nav) => <Prescreening go={nav} />,
+  onboarding: (nav) => <Onboarding go={nav} />,
   loyers: (nav, device) => <Loyers go={nav} device={device} />,
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
   maintenance: (_nav, device) => <Maintenance device={device} />,
@@ -90,24 +105,79 @@ function useOnboardingRoute() {
   return token;
 }
 
+// Route publique de l'enquête de prélocation (/domus/prescreening/candidature?token=...) —
+// sans auth, même principe que useOnboardingRoute. Tolère un ancien lien par
+// hash (#/prescreening?token=) par robustesse.
+function usePrescreeningRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/prescreening\/candidature\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/prescreening(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
+function usePublicReservationsRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, hash } = window.location;
+    const match = (pathname || "").match(/\/public(?:\/([^/?#]+))?\/?$/);
+    if (match) return decodeURIComponent(match[1] || "");
+    const hashMatch = (hash || "").match(/^#\/public(?:\/([^/?#]+))?$/);
+    if (hashMatch) return decodeURIComponent(hashMatch[1] || "");
+    return null;
+  };
+  const [key, setKey] = useState(read);
+  useEffect(() => {
+    const on = () => setKey(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return key;
+}
+
 export default function App() {
   const token = useAuthToken();
   const onboardingToken = useOnboardingRoute();
+  const prescreeningToken = usePrescreeningRoute();
+  const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
   const device = useDeviceMode();
   const realtimeOnline = useRealtimeStatus();
   const [lang, setLang] = useLang();
+  const authUser = useAuthUser();
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token || onboardingToken !== null) return undefined;
+    if (!token || onboardingToken !== null || prescreeningToken !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token, onboardingToken]);
+  }, [token, onboardingToken, prescreeningToken]);
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
+  if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
+  if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;
 
@@ -121,6 +191,7 @@ export default function App() {
 
   return (
     <DateRangeProvider>
+    <DialogProvider>
     <div className="shell" data-layout={device.mode} data-mobile={device.isMobile ? "true" : "false"}>
       <aside className="sidebar">
         <div className="brand">
@@ -141,10 +212,12 @@ export default function App() {
           </div>
         ))}
         <div className="sidebar-user">
-          <div className="avatar">AK</div>
-          <div style={{ fontSize: 12, lineHeight: 1.2 }}>
-            <div style={{ fontWeight: 500 }}>A. Kalala</div>
-            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>{t("Gestionnaire")}</div>
+          <div className="avatar">{authUser.initials}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.2, minWidth: 0, flex: "1 1 auto" }}>
+            <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {authUser.displayName}
+            </div>
+            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>{t(authUser.roleLabel)}</div>
           </div>
           <button className="lang-toggle" style={{ marginLeft: "auto" }} title="Langue / Language"
             onClick={() => setLang(lang === "fr" ? "en" : "fr")}>
@@ -172,7 +245,7 @@ export default function App() {
             <span className="mh-title">{t(TITLES[view])}</span>
           </div>
           <RealtimePill online={realtimeOnline} compact />
-          <div className="avatar">AK</div>
+          <div className="avatar">{authUser.initials}</div>
         </div>
 
         <div className="content">{ScreenEl}</div>
@@ -212,6 +285,7 @@ export default function App() {
       </div>
       <AiAssistant />
     </div>
+    </DialogProvider>
     </DateRangeProvider>
   );
 }

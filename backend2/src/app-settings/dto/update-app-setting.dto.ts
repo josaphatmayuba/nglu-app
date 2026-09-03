@@ -19,6 +19,8 @@ export class UpdateAppSettingDto {
   @ApiPropertyOptional({ description: "Set to 'true' to clear the logo" }) @IsOptional() @IsString() clearLogo?: string;
   @ApiPropertyOptional({ description: "Landlord signature image as data URL (PNG/JPG base64)" }) @IsOptional() @IsString() landlordSignature?: string;
   @ApiPropertyOptional({ description: "Set to 'true' to clear the landlord signature" }) @IsOptional() @IsString() clearLandlordSignature?: string;
+  @ApiPropertyOptional({ description: "Nom du bailleur pour les contrats (distinct du nom de l'entreprise)" }) @IsOptional() @IsString() landlordName?: string;
+  @ApiPropertyOptional({ description: "Téléphone du bailleur pour les contrats" }) @IsOptional() @IsString() landlordPhone?: string;
   @ApiPropertyOptional({ example: "INV-" }) @IsOptional() @IsString() invoicePrefix?: string;
   @ApiPropertyOptional({ example: "LEASE-" }) @IsOptional() @IsString() leasePrefix?: string;
   @ApiPropertyOptional({ example: 16 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() defaultVatRate?: number;

@@ -11,9 +11,15 @@ const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
+const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
 const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
 const inFlightReads = new Map();
 let requestQueue = Promise.resolve();
+
+const buildQuery = (params) => {
+  const q = Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  return q ? `?${q}` : "";
+};
 
 function authHeaders() {
   const token = getToken(); // SCRUM-119 — token en mémoire
@@ -41,8 +47,15 @@ async function doJsonFetch(path, init = {}, retried = false) {
     // sur l'écran de login (useAuthToken réagit à 'farmos:auth-changed').
     if (res.status === 401 && typeof window !== "undefined") {
       if (!retried) {
-        const token = await restoreSession();
-        if (token) return doJsonFetch(path, init, true);
+        try {
+          const token = await restoreSession();
+          if (token) return doJsonFetch(path, init, true);
+        } catch (err) {
+          // Hors ligne : le 401 vient probablement d'un token expiré qu'on ne
+          // peut pas rafraîchir sans réseau. On NE déconnecte PAS — on laisse
+          // remonter l'erreur pour que l'appelant retombe sur le cache/l'outbox.
+          if (err?.isNetworkError) throw err;
+        }
       }
       clearAuth();
       window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
@@ -55,6 +68,40 @@ async function doJsonFetch(path, init = {}, retried = false) {
 
 async function jsonFetch(path, init = {}) {
   return enqueueRequest(() => doJsonFetch(path, init));
+}
+
+async function doGlobalJsonFetch(path, init = {}, retried = false) {
+  const res = await fetch(`${API_ROOT}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      if (!retried) {
+        try {
+          const token = await restoreSession();
+          if (token) return doGlobalJsonFetch(path, init, true);
+        } catch (err) {
+          // Hors ligne : ne pas déconnecter, laisser remonter l'erreur réseau.
+          if (err?.isNetworkError) throw err;
+        }
+      }
+      clearAuth();
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
+    }
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function globalJsonFetch(path, init = {}) {
+  return enqueueRequest(() => doGlobalJsonFetch(path, init));
 }
 
 // Télécharge un binaire (PDF / fichier) en portant le token via header (pas en
@@ -70,6 +117,28 @@ async function downloadBlob(path, fallbackName = "download") {
   a.href = url; a.download = m ? m[1] : fallbackName;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Ouvre un rapport HTML serveur dans une fenêtre d'impression (remplace les PDF
+// serveur). La fenêtre est ouverte AVANT le fetch pour ne pas être bloquée
+// comme pop-up, avec un placeholder pendant le chargement.
+async function printServerHtml(path) {
+  const w = window.open("", "_blank");
+  if (!w) { throw new Error("Autorisez les pop-ups pour imprimer le rapport."); }
+  w.document.write('<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#666;margin:40px">Chargement du rapport…</body></html>');
+  w.document.close();
+  try {
+    const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
+    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    let html = await res.text();
+    if (!/window\.print/.test(html)) {
+      html = html.replace(/<\/body>/i, '<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script></body>');
+    }
+    w.document.open(); w.document.write(html); w.document.close();
+  } catch (e) {
+    w.close();
+    throw e;
+  }
 }
 
 
@@ -104,7 +173,8 @@ const KIND_INVALIDATES = {
   deleteExpense:          ["expenses"],
   createSale:             ["sales"],
   deleteSale:             ["sales"],
-  createReproductionEvent:["reproductionEvents", "semenStraws"],
+  createReproductionEvent:["reproductionEvents", "semenStraws", "animals"],
+  updateReproductionEvent:["reproductionEvents"],
   deleteReproductionEvent:["reproductionEvents"],
   createProductionLog:    ["productionLogs"],
   deleteProductionLog:    ["productionLogs"],
@@ -114,7 +184,14 @@ const KIND_INVALIDATES = {
   signVetExam:            ["vetExams"],
   deleteVetExam:          ["vetExams"],
   createMortalityEvent:   ["mortalityEvents", "animals"],
+  createBatchAdjustment:  ["animals", "batchAdjustments"],
+  createBatchTransfer:    ["animals", "batchAdjustments"],
+  createBatchSplit:       ["animals", "batchAdjustments"],
+  createWeighing:         ["weighings", "animals"],
+  deleteWeighing:         ["weighings"],
   createFarmosStaff:      ["staff"],
+  updateFarmosStaff:      ["staff"],
+  setFarmosStaffStatus:   ["staff"],
   createSemenStraw:       ["semenStraws"],
   updateSemenStraw:       ["semenStraws"],
   deleteSemenStraw:       ["semenStraws"],
@@ -123,7 +200,25 @@ const KIND_INVALIDATES = {
   createPrice:            ["priceList"],
   updatePrice:            ["priceList"],
   deletePrice:            ["priceList"],
+  unlistAnimalSale:       ["animals", "priceList"],
   createDisease:          ["diseases"],
+  updateDisease:          ["diseases"],
+  deleteDisease:          ["diseases"],
+  linkDiseaseMedicine:    ["diseases", "medicines"],
+  unlinkDiseaseMedicine:  ["diseases", "medicines"],
+  declareAnimalIllness:   ["animals", "animalStatusHistory"],
+  declareAnimalRecovery:  ["animals", "animalStatusHistory", "treatments"],
+  addHealthObservation:   ["animals", "healthObservations"],
+  createOperation:        ["operations", "expenses", "animals"],
+  bulkCreateOperations:   ["operations", "expenses", "animals"],
+  updateOperation:        ["operations", "animals"],
+  deleteOperation:        ["operations", "expenses"],
+  createFeedLot:          ["feedMovements", "feedLots", "medicines", "expenses"],
+  deleteFeedLot:          ["feedMovements", "feedLots", "medicines"],
+  createFeedMovement:     ["feedMovements", "medicines", "expenses"],
+  createFeedMovementsBulk:["feedMovements", "medicines", "expenses"],
+  deleteFeedMovement:     ["feedMovements", "medicines"],
+  recomputeFeedStock:     ["medicines"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -205,6 +300,21 @@ async function jsonMutate(kind, path, init = {}) {
 }
 
 export const api = {
+  getAppSetting: () => globalJsonFetch("/setting"),
+  listCurrencies: () => globalJsonFetch("/currency?query=all"),
+  // Taux de change reels saisis en compta (module ledger). Best-effort : peut
+  // renvoyer 403 si l'utilisateur n'a pas la permission compta (gere par l'appelant).
+  listLedgerExchanges: (limit = 200) => globalJsonFetch(`/ledger/exchanges?limit=${limit}`),
+  // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
+  listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
+  // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "farmos".
+  forecastCashFlow: ({ horizon, mode, scope = "farmos", adjust, species, lookback } = {}) =>
+    globalJsonFetch(`/forecast/cash-flow${buildQuery({ horizon, mode, scope, adjust, species, lookback })}`),
+  forecastProduction: ({ horizon, species, lookback } = {}) => globalJsonFetch(`/forecast/production${buildQuery({ horizon, species, lookback })}`),
+  forecastLivestock: ({ horizon, species, lookback } = {}) => globalJsonFetch(`/forecast/livestock${buildQuery({ horizon, species, lookback })}`),
+  forecastVariance: ({ scope = "farmos" } = {}) => globalJsonFetch(`/forecast/variance?scope=${scope}`),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "farmos" } = {}) =>
+    globalJsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
@@ -212,7 +322,12 @@ export const api = {
   createPrice: (body) => jsonMutate("createPrice", "/prices", { method: "POST", body: JSON.stringify(body) }),
   updatePrice: (id, body) => jsonMutate("updatePrice", `/prices/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deletePrice: (id) => jsonMutate("deletePrice", `/prices/${id}`, { method: "DELETE" }),
+  unlistAnimalFromSale: (id) => mutate({ kind: "unlistAnimalSale", method: "DELETE", path: `/animals/${id}/listing` }),
   listAnimals:    cachedList("animals", "/animals"),
+  // Fetch réseau direct (pas de cache stale-while-revalidate) — pour les
+  // écrans qui ont besoin de la liste à jour immédiatement (ex. sélection
+  // d'un lot destination dans un transfert).
+  listAnimalsFresh: () => jsonFetch("/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),
   listDiseases:   (species) => cachedList("diseases", `/diseases${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),
@@ -222,6 +337,10 @@ export const api = {
   createAnimal:    (body) => mutate({ kind: "createAnimal", method: "POST", path: "/animals", body,
                        optimistic: { table: "animals", row: { id: tempId("a"), ...body, _pending: true } } }),
   updateAnimal:    (id, body) => mutate({ kind: "updateAnimal", method: "PATCH", path: `/animals/${id}`, body }),
+  // Import CSV en masse (COMP-P1-001) — action en ligne uniquement (pas offline).
+  importAnimals:   (rows, dryRun = false) => jsonFetch("/animals/import", { method: "POST", body: JSON.stringify({ rows, dryRun }) }),
+  // Import CSV de pesées (COMP-P2-014)
+  importWeighings: (rows, dryRun = false) => jsonFetch("/weighings/import", { method: "POST", body: JSON.stringify({ rows, dryRun }) }),
   createTreatment: (body) => mutate({ kind: "createTreatment", method: "POST", path: "/treatments", body,
                        optimistic: { table: "treatments", row: { id: tempId("t"), ...body, _pending: true } } }),
   createSale:      (body) => mutate({ kind: "createSale", method: "POST", path: "/sales", body,
@@ -230,7 +349,9 @@ export const api = {
                        optimistic: { table: "expenses", row: { id: tempId("e"), ...body, _pending: true } } }),
   createReproductionEvent: (body) => mutate({ kind: "createReproductionEvent", method: "POST", path: "/reproduction-events", body,
                        optimistic: { table: "reproductionEvents", row: { id: tempId("r"), ...body, _pending: true } } }),
+  updateReproductionEvent: (id, body) => mutate({ kind: "updateReproductionEvent", method: "PATCH", path: `/reproduction-events/${id}`, body }),
   listProductionLogs: cachedList("productionLogs", "/production-logs"),
+  getEggStock: () => jsonFetch("/egg-stock"),
   listVaccinations: cachedList("vaccinations", "/vaccinations"),
   listAiInsights: cachedList("aiInsights", "/ai-insights"),
   listFeedForecasts: cachedList("feedForecasts", "/feed-forecasts"),
@@ -239,6 +360,16 @@ export const api = {
   updateMedicine: (id, body) => mutate({ kind: "updateMedicine", method: "PATCH", path: `/medicines/${id}`, body }),
   consumeMedicine: (id, quantity) => mutate({ kind: "consumeMedicine", method: "POST", path: `/medicines/${id}/consume`, body: { quantity } }),
   createVaccination: (body) => mutate({ kind: "createVaccination", method: "POST", path: "/vaccinations", body }),
+  listVaccines: (species) => jsonFetch(`/vaccines${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  getVaccine: (id) => jsonFetch(`/vaccines/${id}`),
+  createVaccine: (body) => jsonFetch("/vaccines", { method: "POST", body: JSON.stringify(body) }),
+  // Projets/bailleurs (axe analytique) — endpoint racine /api/projects (hors /farmos).
+  listProjects: async () => {
+    const root = (NATIVE ? API_HOST : "") + "/api/projects";
+    const res = await fetch(root, { headers: { ...authHeaders() } });
+    if (!res.ok) return [];
+    return res.json();
+  },
   listVetExams: cachedList("vetExams", "/vet-exams"),
   getVetExam: (id) => jsonFetch(`/vet-exams/${id}`),
   createVetExam: (body) => mutate({ kind: "createVetExam", method: "POST", path: "/vet-exams", body }),
@@ -250,17 +381,111 @@ export const api = {
   createDocument: (body) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(body) }),
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
   downloadDocument: (id, name) => downloadBlob(`/documents/${id}/download`, name || `document-${id}`),
-  downloadVetExamPdf: (id) => downloadBlob(`/vet-exams/${id}/pdf`, `dossier-vet-${id}.pdf`),
-  downloadFinancePdf: () => downloadBlob(`/reports/finance/pdf`, `rentabilite.pdf`),
+  // Impression navigateur (le pdf-service serveur est supprimé) : on récupère le
+  // HTML du rapport et on l'ouvre dans une fenêtre qui déclenche window.print().
+  printVetExam: (id) => printServerHtml(`/vet-exams/${id}/html`),
+  printFinanceReport: () => printServerHtml(`/reports/finance/html`),
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
+  getMortalityStats: () => jsonFetch("/mortality-events/stats"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
+  createBatchAdjustment: (body) => mutate({ kind: "createBatchAdjustment", method: "POST", path: "/batch-adjustments", body }),
+  listBatchAdjustments: (animalId) => jsonFetch(`/animals/${animalId}/batch-adjustments`),
+  listAnimalStatusHistory: (animalId) => jsonFetch(`/animals/${animalId}/status-history`),
+  // Episode santé (SCRUM) : déclaration maladie/quarantaine, guérison, suivi.
+  getAnimalHealthEpisode: (animalId) => jsonFetch(`/animals/${animalId}/health-episode`),
+  declareAnimalIllness: (animalId, body) => mutate({ kind: "declareAnimalIllness", method: "POST", path: `/animals/${animalId}/health-declare`, body }),
+  declareAnimalRecovery: (animalId, body) => mutate({ kind: "declareAnimalRecovery", method: "POST", path: `/animals/${animalId}/health-heal`, body }),
+  addHealthObservation: (animalId, body) => mutate({ kind: "addHealthObservation", method: "POST", path: `/animals/${animalId}/health-observations`, body }),
+  listHealthObservations: (animalId) => jsonFetch(`/animals/${animalId}/health-observations`),
+  createBatchTransfer: (body) => mutate({ kind: "createBatchTransfer", method: "POST", path: "/batch-transfers", body }),
+  createBatchSplit: (body) => mutate({ kind: "createBatchSplit", method: "POST", path: "/batch-splits", body }),
+  // Pesées : fetch réseau direct (le filtre animal_id est côté serveur), mais
+  // on fusionne avec le miroir local (pesées en attente dans l'outbox) pour
+  // qu'une pesée saisie hors-ligne / avec un raté réseau reste visible au
+  // lieu de disparaître tant que la sync n'est pas passée.
+  listWeighings: async (animalId) => {
+    let fresh = [];
+    try {
+      fresh = await jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`);
+    } catch (e) {
+      if (!navigator.onLine) fresh = null; else throw e;
+    }
+    let local = [];
+    try { local = await readCache("weighings"); } catch { local = []; }
+    if (Array.isArray(fresh)) {
+      // Ne remplace que les lignes de cet animal (ou tout, si liste globale) —
+      // ne pas écraser le miroir d'autres animaux avec une réponse filtrée.
+      const keep = local.filter((w) => w._pending || (animalId && Number(w.animalId ?? w.animal_id) !== Number(animalId)));
+      await replaceCache("weighings", [...keep, ...fresh]);
+      local = [...keep, ...fresh];
+    }
+    const pending = (local || []).filter((w) => w._pending && (!animalId || Number(w.animalId ?? w.animal_id) === Number(animalId)));
+    if (fresh == null) {
+      // Hors-ligne sans réseau du tout : sert uniquement le miroir local.
+      return animalId ? local.filter((w) => Number(w.animalId ?? w.animal_id) === Number(animalId)) : local;
+    }
+    return [...fresh, ...pending];
+  },
+  createWeighing: (body) => mutate({ kind: "createWeighing", method: "POST", path: "/weighings", body,
+                       optimistic: { table: "weighings", row: { id: tempId("w"), animalId: body.animal_id, weighDate: body.weigh_date, weight: body.weight, weightUnit: body.weight_unit || "kg", ...body } } }),
+  deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
+  getBenchmarks: () => jsonFetch("/benchmarks"),
+  // Rentabilité (P&L) par animal / lot — Phase 3. Calcul SQL à la volée
+  // (jamais depuis un snapshot pour l'affichage temps réel).
+  getProfitabilitySummary: (params = {}) => jsonFetch(`/profitability/summary${buildQuery(params)}`),
+  getProfitabilityByLot: (params = {}) => jsonFetch(`/profitability/by-lot${buildQuery(params)}`),
+  getProfitabilityByAnimal: (params = {}) => jsonFetch(`/profitability/by-animal${buildQuery(params)}`),
+  getProfitabilityAnimalTimeline: (animalId) => jsonFetch(`/profitability/animal/${animalId}`),
+  getProfitabilityCostDrivers: (params = {}) => jsonFetch(`/profitability/cost-drivers${buildQuery(params)}`),
+  createProfitabilitySnapshot: (body) => jsonFetch("/profitability/snapshot", { method: "POST", body: JSON.stringify(body) }),
+  listProfitabilitySnapshots: (params = {}) => jsonFetch(`/profitability/snapshots${buildQuery(params)}`),
+  // CSV via blob (token en header) — jamais un <a href>, qui renverrait 401.
+  exportProfitabilityCsv: (params = {}) => downloadBlob(`/profitability/export${buildQuery(params)}`, `rentabilite-${new Date().toISOString().slice(0, 10)}.csv`),
+  // Fermes
+  listFarms: () => jsonFetch("/farms"),
+  createFarm: (body) => jsonFetch("/farms", { method: "POST", body: JSON.stringify(body) }),
+  updateFarm: (id, body) => jsonFetch(`/farms/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteFarm: (id) => jsonFetch(`/farms/${id}`, { method: "DELETE" }),
+  // Zones
+  listZones: () => jsonFetch("/zones"),
+  createZone: (body) => jsonFetch("/zones", { method: "POST", body: JSON.stringify(body) }),
+  updateZone: (id, body) => jsonFetch(`/zones/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteZone: (id) => jsonFetch(`/zones/${id}`, { method: "DELETE" }),
+  // Tâches équipe (COMP-P1-010)
+  listTasks: (params = {}) => jsonFetch(`/tasks${buildQuery(params)}`),
+  createTask: (body) => jsonFetch("/tasks", { method: "POST", body: JSON.stringify(body) }),
+  updateTask: (id, body) => jsonFetch(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteTask: (id) => jsonFetch(`/tasks/${id}`, { method: "DELETE" }),
+  // Notes terrain GPS (COMP-P1-009)
+  listFieldNotes: () => jsonFetch("/field-notes"),
+  createFieldNote: (body) => jsonFetch("/field-notes", { method: "POST", body: JSON.stringify(body) }),
+  deleteFieldNote: (id) => jsonFetch(`/field-notes/${id}`, { method: "DELETE" }),
+  // Rapports custom sauvegardés (COMP-P2-017)
+  listSavedReports: () => jsonFetch("/saved-reports"),
+  createSavedReport: (body) => jsonFetch("/saved-reports", { method: "POST", body: JSON.stringify(body) }),
+  deleteSavedReport: (id) => jsonFetch(`/saved-reports/${id}`, { method: "DELETE" }),
   // Bâtiments
-  listBuildings: (species) => jsonFetch(`/buildings${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
   updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),
+  // Box (loges/emplacements) — box libre : N animaux de n'importe quel lot via box_id
+  listBoxes: (buildingId) => jsonFetch(`/boxes${buildQuery({ building_id: buildingId })}`),
+  createBox: (body) => jsonFetch("/boxes", { method: "POST", body: JSON.stringify(body) }),
+  generateBoxes: (body) => jsonFetch("/boxes/generate", { method: "POST", body: JSON.stringify(body) }),
+  updateBox: (id, body) => jsonFetch(`/boxes/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBox: (id) => jsonFetch(`/boxes/${id}`, { method: "DELETE" }),
+  deleteBoxes: (ids) => jsonFetch("/boxes/delete-batch", { method: "POST", body: JSON.stringify({ ids }) }),
+  assignAnimalsToBox: (body) => jsonFetch("/boxes/assign", { method: "POST", body: JSON.stringify(body) }),
+  declareBoxDisease: (boxId, body) => jsonFetch(`/boxes/${boxId}/declare-disease`, { method: "POST", body: JSON.stringify(body) }),
+  getBoxContext: (boxId) => jsonFetch(`/boxes/${boxId}/context`),
+  // Éléments de terrain (décor du plan)
+  listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),
+  createLandFeature: (body) => jsonFetch("/land-features", { method: "POST", body: JSON.stringify(body) }),
+  updateLandFeature: (id, body) => jsonFetch(`/land-features/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteLandFeature: (id) => jsonFetch(`/land-features/${id}`, { method: "DELETE" }),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
   deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),
@@ -273,8 +498,17 @@ export const api = {
   createLookup: (body) => jsonMutate("createLookup", "/lookups", { method: "POST", body: JSON.stringify(body) }),
   deleteLookup: (id) => jsonMutate("deleteLookup", `/lookups/${id}`, { method: "DELETE" }),
   createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
+  updateDisease: (id, body) => jsonMutate("updateDisease", `/diseases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteDisease: (id) => jsonMutate("deleteDisease", `/diseases/${id}`, { method: "DELETE" }),
+  suggestDisease: (species, description) => jsonFetch("/diseases/suggest", { method: "POST", body: JSON.stringify({ species, description }) }),
+  listDiseaseMedicines: (diseaseId) => jsonFetch(`/diseases/${diseaseId}/medicines`),
+  linkDiseaseMedicine: (diseaseId, body) => jsonMutate("linkDiseaseMedicine", `/diseases/${diseaseId}/medicines`, { method: "POST", body: JSON.stringify(body) }),
+  unlinkDiseaseMedicine: (diseaseId, medicineId) => jsonMutate("unlinkDiseaseMedicine", `/diseases/${diseaseId}/medicines/${medicineId}`, { method: "DELETE" }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
+  listAssignableRoles: () => jsonFetch("/staff/roles"),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),
+  updateFarmosStaff: (id, body) => mutate({ kind: "updateFarmosStaff", method: "PUT", path: `/staff/${id}`, body }),
+  setFarmosStaffStatus: (id, body) => mutate({ kind: "setFarmosStaffStatus", method: "PATCH", path: `/staff/${id}/status`, body }),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
   listAnimalsWithPhotos: (perAnimal = 3) => jsonFetch(`/animals-with-photos?perAnimal=${perAnimal}`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),
@@ -289,6 +523,58 @@ export const api = {
   listBreedingMales: (species) => jsonFetch(`/breeding-males${species ? `?species=${encodeURIComponent(species)}` : ""}`),
   // Suggestion pour pré-remplir le formulaire d'IA
   suggestBreeding: (animalId, mode) => jsonFetch(`/breeding-suggestion/${animalId}${mode ? `?mode=${mode}` : ""}`),
+  // Opérations zootechniques (Phase 2) : catalogue + journal + saisie terrain optimiste.
+  listOperationTypes: (species) => jsonFetch(`/operation-types${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  createOperationType: (body) => jsonMutate("createOperationType", "/operation-types", { method: "POST", body: JSON.stringify(body) }),
+  updateOperationType: (id, body) => jsonMutate("updateOperationType", `/operation-types/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteOperationType: (id) => jsonMutate("deleteOperationType", `/operation-types/${id}`, { method: "DELETE" }),
+  bootstrapOperationTypes: () => jsonMutate("bootstrapOperationTypes", "/operation-types/bootstrap", { method: "POST" }),
+  listOperations: cachedList("operations", "/operations"),
+  getOperation: (id) => jsonFetch(`/operations/${id}`),
+  createOperation: (body) => mutate({ kind: "createOperation", method: "POST", path: "/operations", body,
+                       optimistic: { table: "operations", row: { id: tempId("op"), animalId: body.animal_id, operationCode: body.operation_code, operationDate: body.operation_date, ...body, _pending: true } } }),
+  bulkCreateOperations: (body) => mutate({ kind: "bulkCreateOperations", method: "POST", path: "/operations/bulk", body }),
+  updateOperation: (id, body) => mutate({ kind: "updateOperation", method: "PATCH", path: `/operations/${id}`, body }),
+  deleteOperation: (id) => mutate({ kind: "deleteOperation", method: "DELETE", path: `/operations/${id}` }),
+  listAnimalOperations: (animalId) => jsonFetch(`/animals/${animalId}/operations`),
+  // ─── Stock aliment (Phase 1) ─────────────────────────────────────────
+  listFeedReferences: cachedList("medicines", "/feed/references"),
+  listFeedLots: (medicineId) => jsonFetch(`/feed/lots${medicineId ? `?medicineId=${medicineId}` : ""}`),
+  createFeedLot: (body) => mutate({ kind: "createFeedLot", method: "POST", path: "/feed/lots", body,
+                       optimistic: { table: "feedLots", row: { id: tempId("fl"), medicineId: body.medicine_id, receivedDate: body.received_date, quantityIn: body.quantity_in, quantityRemaining: body.quantity_in, ...body, _pending: true } } }),
+  deleteFeedLot: (id) => mutate({ kind: "deleteFeedLot", method: "DELETE", path: `/feed/lots/${id}` }),
+  // Mouvements : fetch réseau direct + fusion avec le miroir local (mouvements
+  // en attente dans l'outbox), même pattern que listWeighings (commit b91ed4d3)
+  // pour qu'une distribution saisie hors-ligne / avec un raté réseau reste
+  // visible au lieu de disparaître tant que la sync n'est pas passée.
+  listFeedMovements: async (filters = {}) => {
+    const query = buildQuery(filters);
+    let fresh = [];
+    try {
+      fresh = await jsonFetch(`/feed/movements${query}`);
+    } catch (e) {
+      if (!navigator.onLine) fresh = null; else throw e;
+    }
+    let local = [];
+    try { local = await readCache("feedMovements"); } catch { local = []; }
+    if (Array.isArray(fresh)) {
+      const keep = local.filter((m) => m._pending);
+      await replaceCache("feedMovements", [...keep, ...fresh]);
+      local = [...keep, ...fresh];
+    }
+    const pending = (local || []).filter((m) => m._pending);
+    if (fresh == null) {
+      return local;
+    }
+    return [...fresh, ...pending];
+  },
+  createFeedMovement: (body) => mutate({ kind: "createFeedMovement", method: "POST", path: "/feed/movements", body,
+                       optimistic: { table: "feedMovements", row: { id: tempId("fm"), medicineId: body.medicine_id, movementType: body.movement_type || "out", movementDate: body.movement_date, quantity: body.quantity, buildingId: body.building_id ?? null, ...body, _pending: true } } }),
+  createFeedMovementsBulk: (movements) => mutate({ kind: "createFeedMovementsBulk", method: "POST", path: "/feed/movements/bulk", body: { movements } }),
+  deleteFeedMovement: (id) => mutate({ kind: "deleteFeedMovement", method: "DELETE", path: `/feed/movements/${id}` }),
+  feedStock: () => jsonFetch("/feed/stock"),
+  feedAlerts: () => jsonFetch("/feed/alerts"),
+  recomputeFeedStock: () => mutate({ kind: "recomputeFeedStock", method: "POST", path: "/feed/recompute" }),
 };
 
 export function fileToDataUrl(file) {
@@ -329,6 +615,7 @@ export function adaptSaleAsTransaction(row, lang = "fr") {
     label: `${row.buyer || "—"}${product ? ` · ${REV_CATEGORY_FR[product] || product}` : ""}`,
     amount: `+${amount.toLocaleString("fr-CA")}`,
     rawAmount: amount,
+    currencyId: row.currencyId ?? row.currency_id ?? null,
     category: REV_CATEGORY_FR[product] || product || "Revenu",
     species: sp || null,
   };
@@ -347,13 +634,14 @@ export function adaptExpenseAsTransaction(row, lang = "fr") {
     label: row.description || row.supplier || "Dépense",
     amount: `−${amount.toLocaleString("fr-CA")}`,
     rawAmount: -amount,
+    currencyId: row.currencyId ?? row.currency_id ?? null,
     category: EXP_CATEGORY_FR[row.category] || row.category || "Dépense",
     species: null,
   };
 }
 
 // Reproduction event row → mockup gestation shape used by ReproScreen.
-const GESTATION_DAYS_BY_SPECIES = { cow: 283, pig: 114, goat: 152, sheep: 152, rabbit: 31, chicken: 21, duck: 28, turkey: 28, fish: 30 };
+export const GESTATION_DAYS_BY_SPECIES = { cow: 283, pig: 114, goat: 152, sheep: 152, rabbit: 31, chicken: 21, duck: 28, turkey: 28, fish: 30 };
 
 export function adaptReproEvent(row, animalById) {
   const evDate = row.eventDate || row.event_date;
@@ -372,11 +660,19 @@ export function adaptReproEvent(row, animalById) {
     _pk: row.id,
     animal: a?.name || a?.externalId || a?.external_id || "—",
     species: a?.species || null,
+    animalStatus: a?.status || null,
     start: evDate ? String(evDate).slice(0, 10) : "—",
     due: due ? String(due).slice(0, 10) : "—",
     day,
     total,
     ai: row.notes || (row.eventType ?? row.event_type) || "",
+    eventType: row.eventType ?? row.event_type ?? "",
+    outcome: row.outcome ?? "",
+    motherName: a?.name || a?.externalId || a?.external_id || null,
+    partner: row.partnerExternalId ?? row.partner_external_id ?? null,
+    stillborn: row.stillbornCount ?? row.stillborn_count ?? null,
+    mummified: row.mummifiedCount ?? row.mummified_count ?? null,
+    weaned: row.weanedCount ?? row.weaned_count ?? null,
     soon: due && total > 0 && day >= total * 0.95,
     complete,
     offspring,
@@ -397,6 +693,7 @@ export function adaptMedicine(row) {
     unit: row.unit,
     min,
     supplier: row.supplier,
+    supplierId: row.supplierId ?? row.supplier_id ?? null,
     expiry: exp ? String(exp).slice(0, 10) : "—",
     species: parseSpeciesList(row.species),
     lowStock: min != null && qty < min,
@@ -428,8 +725,11 @@ export function adaptTreatment(row, animalById, diseaseById) {
   return {
     id: `T-${row.id}`,
     _pk: row.id,
-    species: a?.species || null,
-    animal: a?.name || a?.externalId || a?.external_id || "—",
+    // L'espece/le nom viennent du JOIN backend (animal_*) pour rester corrects
+    // meme si l'animal a ete soft-delete ; fallback sur l'animal local en cache.
+    species: row.animalSpecies ?? a?.species ?? null,
+    animalStatus: row.animalStatus ?? a?.status ?? null,
+    animal: row.animalName || row.animalExternalId || a?.name || a?.externalId || a?.external_id || "—",
     med: row.medicineName || row.medicine_name || "—",
     reason: d ? (d.nameFr || d.name_fr) : "—",
     dosage: row.dosage,
@@ -459,10 +759,17 @@ export function adaptAnimal(row) {
     sex: row.sex,
     dob: dob ? String(dob).slice(0, 10) : null,
     weight: row.weight != null ? Number(row.weight) : null,
+    weightUnit: row.weightUnit ?? row.weight_unit ?? "kg",
     count: row.count != null ? Number(row.count) : null,
     lot: row.lot,
     barn: row.barn,
+    buildingId: row.buildingId ?? row.building_id ?? null,
+    boxId: row.boxId ?? row.box_id ?? null,
+    zoneId: row.zoneId ?? row.zone_id ?? null,
     status: row.status || "healthy",
+    motherId: row.motherId ?? row.mother_id ?? null,
+    fatherId: row.fatherId ?? row.father_id ?? null,
+    estimatedValue: (row.estimatedValue ?? row.estimated_value) != null ? Number(row.estimatedValue ?? row.estimated_value) : null,
     lastEvent: last,
     withdrawal: wUntil
       ? { until: String(wUntil).slice(0, 10), kind: wKind, med: null }

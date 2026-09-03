@@ -1,9 +1,10 @@
-import { Inject, Injectable, NotFoundException, Logger } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { OAuth2Client } from "google-auth-library";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -21,6 +22,7 @@ import type { Database } from "../database/types";
 @Injectable()
 export class CompatService {
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+  private readonly googleClient = new OAuth2Client();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
@@ -28,9 +30,8 @@ export class CompatService {
   ) {}
 
   async googleLogin(body: Record<string, any>) {
-    const profile = this.decodeGoogleCredential(body.credential);
-    const googleId = profile.sub || body.googleId;
-    if (!googleId) throw new NotFoundException("Google profile not found.");
+    const profile = await this.verifyGoogleCredential(body.credential);
+    const googleId = profile.sub;
 
     const existing = await this.db.select().from(customers).where(eq(customers.googleId, googleId)).limit(1);
     const customer = existing[0] ?? (await this.createGoogleCustomer(profile, googleId));
@@ -47,12 +48,12 @@ export class CompatService {
   }
 
   async uploadFiles(files: any[], body: Record<string, any>) {
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
     const saved = (files ?? []).map((file) => {
-      const extension = file.originalname.split(".").pop() || "bin";
-      const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
-      writeFileSync(join(this.uploadDir, name), file.buffer);
-      return name;
+      return saveValidatedUploadFile(file, this.uploadDir, {
+        allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+        prefix: "compat",
+        maxBytes: 5 * 1024 * 1024,
+      }).name;
     });
 
     if (body.index !== undefined || body.linkUrl !== undefined) {
@@ -96,6 +97,12 @@ export class CompatService {
       }
       params.set("To", body.phone);
       params.set("Body", body.message || body.text || "Message de NgoluApp");
+      // Option A : StatusCallback par message. Twilio rappellera cette URL a
+      // chaque changement de statut (sent/delivered/failed) pour tracer la
+      // livraison reelle. L'appelant fournit l'URL publique (endpoint signe).
+      if (body.statusCallback) {
+        params.set("StatusCallback", String(body.statusCallback));
+      }
 
       const credentials = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
       const res = await fetch(
@@ -114,7 +121,17 @@ export class CompatService {
         this.logger.error(`SMS failed to ${body.phone}: ${data?.message}`);
         return { success: false, message: data?.message || "SMS delivery failed." };
       }
-      return { success: true, sid: data.sid };
+      // Un 2xx ne garantit pas l'acceptation : Twilio peut renvoyer un statut
+      // d'echec (failed/undelivered) ou un error_code. On ne declare un succes
+      // que si le message a bien ete pris en charge (queued/accepted/sending/sent/delivered).
+      const status = String(data?.status || "").toLowerCase();
+      if (data?.error_code || status === "failed" || status === "undelivered") {
+        this.logger.error(
+          `SMS rejected by Twilio to ${body.phone}: status=${status || "?"} error_code=${data?.error_code ?? "?"} ${data?.error_message ?? ""}`,
+        );
+        return { success: false, message: data?.error_message || "SMS delivery failed." };
+      }
+      return { success: true, sid: data.sid, status: data.status };
     } catch (error) {
       this.logger.error(`SMS failed to ${body.phone}: ${error instanceof Error ? error.message : String(error)}`);
       return { success: false, message: "SMS delivery failed." };
@@ -205,9 +222,23 @@ export class CompatService {
     return customer;
   }
 
-  private decodeGoogleCredential(credential?: string) {
-    if (!credential || !credential.includes(".")) return {};
-    const payload = credential.split(".")[1];
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  private async verifyGoogleCredential(credential?: string) {
+    if (!credential) throw new UnauthorizedException("Connexion Google invalide.");
+    if (!env.google.clientId) throw new BadRequestException("Connexion Google non configuree.");
+
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: env.google.clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.sub || (payload.email && !payload.email_verified)) {
+        throw new UnauthorizedException("Connexion Google invalide.");
+      }
+      return payload;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException("Connexion Google invalide.");
+    }
   }
 }

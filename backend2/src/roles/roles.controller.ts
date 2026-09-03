@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger"
 import { Throttle } from "@nestjs/throttler";
 import { Request } from "express";
 import type { AuditContext } from "../audit/audit.service";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
@@ -42,36 +43,36 @@ export class RolesController {
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "count", required: false, type: Number })
   @Get()
-  findAll(@Query() query: Record<string, string>) {
-    return this.rolesService.findAll(query);
+  findAll(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.rolesService.findAll(query, orgId);
   }
 
   @ApiOperation({ summary: "Get single role by ID" })
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.rolesService.findOne(id);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.rolesService.findOne(id, orgId);
   }
 
   @ApiOperation({ summary: "Create role (or query=createmany / query=deletemany)" })
   @ApiQuery({ name: "query", required: false, enum: ["createmany", "deletemany"] })
   @Post()
   @HttpCode(201)
-  create(@Body() body: unknown, @Query("query") query: string | undefined, @Req() req: Request) {
-    if (query === "deletemany") return this.rolesService.deleteMany(body as number[], auditCtx(req));
-    if (query === "createmany") return this.rolesService.createMany(body as CreateRoleDto[]);
-    return this.rolesService.create(body as CreateRoleDto, auditCtx(req));
+  create(@Body() body: unknown, @Query("query") query: string | undefined, @Req() req: Request, @CurrentOrg() orgId: number) {
+    if (query === "deletemany") return this.rolesService.deleteMany(body as number[], orgId, auditCtx(req));
+    if (query === "createmany") return this.rolesService.createMany(body as CreateRoleDto[], orgId);
+    return this.rolesService.create(body as CreateRoleDto, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Update role" })
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto, @Req() req: Request) {
-    return this.rolesService.update(id, body, auditCtx(req));
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.rolesService.update(id, body, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Soft delete role (update status)" })
   @Patch(":id")
   @HttpCode(200)
-  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request) {
-    return this.rolesService.remove(id, status, auditCtx(req));
+  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.rolesService.remove(id, status, orgId, auditCtx(req));
   }
 }

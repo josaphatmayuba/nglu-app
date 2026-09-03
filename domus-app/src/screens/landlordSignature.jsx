@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Check, FileSignature, Image as ImageIcon, PenLine, Save, Trash2, Type, Upload } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import {
   SIGNATURE_TYPES, CURSIVE_FONTS, buildEidasDataUrl, fileToDataUrl,
   generateCursiveSignature, loadCursiveFonts,
 } from "../landlordSignature.js";
+import { useConfirm } from "../components/Dialog.jsx";
 
 export function LandlordSignatureCard({ setting, onSaved }) {
-  const companyName = setting?.companyName || "Le Bailleur";
+  const confirm = useConfirm();
+  const companyName = setting?.landlordName || setting?.companyName || "Le Bailleur";
   const stored = setting?.landlordSignature || null;
 
   const [type, setType] = useState("image");
@@ -86,7 +89,7 @@ export function LandlordSignatureCard({ setting, onSaved }) {
       setPreview(await fileToDataUrl(file));
       setMsg(null);
     } catch {
-      setMsg({ type: "err", text: "Impossible de lire l'image." });
+      setMsg({ type: "err", text: t("Impossible de lire l'image.") });
     }
     e.target.value = "";
   };
@@ -103,33 +106,38 @@ export function LandlordSignatureCard({ setting, onSaved }) {
     } else dataUrl = preview;
 
     if (!dataUrl) {
-      setMsg({ type: "err", text: "Aucune signature à enregistrer." });
+      setMsg({ type: "err", text: t("Aucune signature à enregistrer.") });
       return;
     }
     setBusy(true);
     setMsg(null);
     try {
       await api.updateSetting({ landlordSignature: dataUrl });
-      setMsg({ type: "ok", text: "Signature du bailleur enregistrée." });
+      setMsg({ type: "ok", text: t("Signature du bailleur enregistrée.") });
       setPreview(null);
       onSaved?.();
     } catch (err) {
-      setMsg({ type: "err", text: err.message || "Échec de l'enregistrement." });
+      setMsg({ type: "err", text: err.message || t("Échec de l'enregistrement.") });
     } finally {
       setBusy(false);
     }
   };
 
   const clearStored = async () => {
-    if (!window.confirm("Effacer la signature actuelle ? Le cachet textuel par défaut sera utilisé.")) return;
+    if (!(await confirm({
+      title: t("Effacer la signature"),
+      message: t("Effacer la signature actuelle ? Le cachet textuel par défaut sera utilisé."),
+      confirmLabel: t("Effacer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setMsg(null);
     try {
       await api.updateSetting({ clearLandlordSignature: "true" });
-      setMsg({ type: "ok", text: "Signature effacée." });
+      setMsg({ type: "ok", text: t("Signature effacée.") });
       onSaved?.();
     } catch (err) {
-      setMsg({ type: "err", text: err.message || "Échec." });
+      setMsg({ type: "err", text: err.message || t("Échec.") });
     } finally {
       setBusy(false);
     }
@@ -137,20 +145,20 @@ export function LandlordSignatureCard({ setting, onSaved }) {
 
   return (
     <section className="card settings-card landlord-sig-card">
-      <h3><Building2 size={17} /> Signature du bailleur</h3>
+      <h3><Building2 size={17} /> {t("Signature du bailleur")}</h3>
       <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
-        Signature par défaut sur tous les contrats (aperçu, impression, PDF). Partagée avec le CRM.
+        {t("Signature par défaut sur tous les contrats (aperçu, impression, PDF). Partagée avec le CRM.")}
       </p>
 
       {stored && (
         <div className="landlord-sig-current">
-          <img src={stored} alt="Signature actuelle" />
+          <img src={stored} alt={t("Signature actuelle")} />
           <div style={{ flex: 1 }}>
-            <strong style={{ fontSize: 13 }}>Signature actuelle</strong>
-            <div className="muted" style={{ fontSize: 11 }}>Utilisée sur les contrats signés.</div>
+            <strong style={{ fontSize: 13 }}>{t("Signature actuelle")}</strong>
+            <div className="muted" style={{ fontSize: 11 }}>{t("Utilisée sur les contrats signés.")}</div>
           </div>
           <button type="button" className="btn btn-sm" style={{ color: "#be123c" }} disabled={busy} onClick={clearStored}>
-            <Trash2 size={14} /> Effacer
+            <Trash2 size={14} /> {t("Effacer")}
           </button>
         </div>
       )}
@@ -174,9 +182,9 @@ export function LandlordSignatureCard({ setting, onSaved }) {
 
       {type === "eidas" && eidasPreview && (
         <div className="landlord-sig-preview-box">
-          <img src={eidasPreview} alt="Cachet eIDAS" style={{ maxWidth: "100%" }} />
+          <img src={eidasPreview} alt={t("Cachet eIDAS")} style={{ maxWidth: "100%" }} />
           <p className="muted" style={{ fontSize: 11, margin: "8px 0 0" }}>
-            Cachet visuel (non qualifié eIDAS légalement). Valeur probatoire avec horodatage contrat.
+            {t("Cachet visuel (non qualifié eIDAS légalement). Valeur probatoire avec horodatage contrat.")}
           </p>
         </div>
       )}
@@ -196,18 +204,18 @@ export function LandlordSignatureCard({ setting, onSaved }) {
             onTouchMove={draw}
             onTouchEnd={endDraw}
           />
-          <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={clearCanvas}>Effacer le tracé</button>
+          <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={clearCanvas}>{t("Effacer le tracé")}</button>
         </div>
       )}
 
       {type === "cursif" && (
         <>
           <label className="domus-property-field">
-            <span>Texte</span>
+            <span>{t("Texte")}</span>
             <input value={cursiveText} onChange={(e) => setCursiveText(e.target.value)} maxLength={48} />
           </label>
           <label className="domus-property-field">
-            <span>Police</span>
+            <span>{t("Police")}</span>
             <select value={cursiveFont} onChange={(e) => setCursiveFont(e.target.value)}>
               {CURSIVE_FONTS.map((f) => (
                 <option key={f.name} value={f.name}>{f.name} — {f.sample}</option>
@@ -222,20 +230,20 @@ export function LandlordSignatureCard({ setting, onSaved }) {
 
       {type === "image" && (
         <label className="landlord-sig-upload btn">
-          <Upload size={16} /> Choisir PNG / JPG
+          <Upload size={16} /> {t("Choisir PNG / JPG")}
           <input type="file" accept="image/png,image/jpeg" hidden onChange={onFile} />
         </label>
       )}
 
       {preview && type !== "eidas" && (
         <div className="landlord-sig-preview-box" style={{ marginTop: 10 }}>
-          <img src={preview} alt="Aperçu" style={{ maxHeight: 80 }} />
+          <img src={preview} alt={t("Aperçu")} style={{ maxHeight: 80 }} />
         </div>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
         <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>
-          {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
+          {busy ? t("Enregistrement...") : <><Save size={15} /> {t("Enregistrer")}</>}
         </button>
         {msg && (
           <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>

@@ -38,7 +38,7 @@ body {
 .btn { height:40px; padding:0 14px; border-radius:8px; border:1px solid var(--border);
   background:#fff; font-size:13px; font-weight:600; display:inline-flex; align-items:center;
   gap:8px; cursor:pointer; color:var(--ink-700); font-family:inherit; white-space:nowrap; }
-.btn:hover { background:var(--ink-50); }
+.btn:hover { background:var(--ink-100); border-color:var(--ink-300); color:var(--ink-800); }
 .btn-primary { background:var(--grad-iris); color:#fff; border:none; }
 .btn-primary:hover { filter:brightness(1.05); }
 
@@ -311,6 +311,41 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .ticket-card p { margin:0; color:var(--ink-500); font-size:12px; }
 .ticket-meta { display:grid; gap:6px; margin-top:12px; color:var(--ink-600); font-size:12px; }
 .ticket-meta span { display:flex; align-items:center; gap:6px; }
+.maintenance-toolbar { align-items:center; display:flex; justify-content:space-between; gap:12px; margin:18px 0 16px; flex-wrap:wrap; }
+.maintenance-kanban { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:start; }
+.maintenance-column { background:#fff; border:1px solid var(--ink-100); border-top:3px solid #e5e7eb; border-radius:8px; min-height:220px; overflow:visible; }
+.maintenance-column-head { align-items:center; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; padding:12px 14px; }
+.maintenance-column-head span { align-items:center; color:var(--ink-800); display:flex; font-size:14px; font-weight:800; gap:8px; }
+.maintenance-column-head i { border-radius:999px; display:inline-block; height:8px; width:8px; }
+.maintenance-column-head b { align-items:center; background:#f8fafc; border:1px solid #e2e8f0; border-radius:999px; color:#475569; display:flex; font-size:12px; height:24px; justify-content:center; min-width:24px; padding:0 8px; }
+.maintenance-column-body { display:flex; flex-direction:column; gap:10px; padding:12px; }
+.maintenance-ticket { margin:0; position:relative; }
+.maintenance-ticket.urgent { border-color:#fecaca; }
+.maintenance-ticket.done h3 { color:#64748b; text-decoration:line-through; }
+.maintenance-description { margin-top:8px !important; }
+.maintenance-card-actions { align-items:center; display:flex; gap:6px; position:relative; }
+.maintenance-menu { position:relative; }
+.maintenance-menu-btn { align-items:center; background:#fff; border:1px solid #e5e7eb; border-radius:8px; color:#64748b; cursor:pointer; display:flex; height:28px; justify-content:center; width:28px; }
+.maintenance-menu-btn:hover { background:#f8fafc; color:#111827; }
+.maintenance-menu-pop { background:#fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 18px 40px -24px rgba(15,23,42,.45); display:grid; min-width:190px; padding:6px; position:absolute; right:0; top:34px; z-index:80; }
+.maintenance-menu-pop button { align-items:center; background:transparent; border:0; border-radius:7px; color:#334155; cursor:pointer; display:flex; font:inherit; font-size:13px; gap:8px; justify-content:flex-start; padding:8px 10px; text-align:left; }
+.maintenance-menu-pop button:hover { background:#f8fafc; }
+.maintenance-menu-pop button.danger, .immo-link.danger { color:#dc2626; }
+.maintenance-next { justify-content:center; margin-top:10px; width:100%; }
+.maintenance-list { display:grid; gap:10px; }
+.maintenance-calendar { display:grid; gap:14px; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.maintenance-day { padding:14px; }
+.maintenance-day .panel-title { align-items:center; display:flex; gap:8px; }
+.maintenance-day button { background:#fff; border:1px solid #e5e7eb; border-radius:8px; cursor:pointer; display:grid; gap:5px; margin-top:10px; padding:10px; text-align:left; width:100%; }
+.maintenance-day button:hover { border-color:#c7d2fe; box-shadow:0 10px 28px -24px rgba(79,70,229,.6); }
+.maintenance-day strong { color:var(--ink-900); font-size:14px; }
+.maintenance-day small { color:var(--ink-500); }
+.maintenance-empty, .maintenance-empty-col { color:var(--ink-500); font-size:13px; padding:16px; text-align:center; }
+.maintenance-summary-card { margin-top:16px; padding:16px; }
+.maintenance-cost-list { display:grid; gap:8px; }
+.maintenance-cost-list div { border:1px solid #e5e7eb; border-radius:8px; display:flex; justify-content:space-between; gap:12px; padding:10px 12px; }
+.maintenance-cost-list strong { color:#111827; font-size:13px; }
+.maintenance-cost-list span { color:#64748b; font-size:13px; text-align:right; }
 .ops-score { display:flex; justify-content:space-between; align-items:end; font-size:12px; color:var(--ink-500); }
 .ops-score b { font-size:28px; color:var(--ink-900); font-family:'Space Grotesk',sans-serif; }
 .ops-track { height:8px; border-radius:999px; background:var(--ink-100); overflow:hidden; margin:12px 0 16px; }
@@ -468,6 +503,9 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-money-input input { padding:0 12px; }
 .domus-money-input select { border-left:1px solid #e4e4e7; color:#4f46e5; font-weight:800; padding:0 8px; text-align:center; }
 .domus-money-input input:focus, .domus-money-input select:focus { border:0; box-shadow:none; }
+.domus-checkbox-row { align-items:center; cursor:pointer; display:flex; gap:10px; padding:2px 0; }
+.domus-checkbox-row input[type=checkbox] { accent-color:#4f46e5; cursor:pointer; height:16px; width:16px; flex:none; }
+.domus-checkbox-row span { color:#3f3f46; font-size:13px; font-weight:500; }
 .domus-radio-cards { display:grid; gap:8px; grid-template-columns:repeat(3,minmax(0,1fr)); }
 .domus-radio-cards button { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:8px; color:#3f3f46; cursor:pointer; display:flex; font:500 13px 'Inter',sans-serif; gap:10px; height:44px; padding:0 14px; transition:border-color .15s, box-shadow .15s, background .15s; }
 .domus-radio-cards button:hover { background:#fafafa; border-color:#c7d2fe; }
@@ -600,6 +638,9 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-btn:hover { background:#fafafa; }
 .immo-btn.primary { background:#4f46e5; border-color:#4f46e5; color:#fff; box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(79,70,229,.20); padding:0 16px; }
 .immo-btn.primary:hover { background:#4338ca; border-color:#4338ca; }
+.immo-select { height:38px; border-radius:9px; border:1px solid #e4e4e7; background:#fff; color:#3f3f46; font:inherit; font-size:14px; font-weight:600; padding:0 12px; cursor:pointer; }
+.immo-select:hover { background:#fafafa; }
+.immo-select:focus { outline:2px solid #c7d2fe; outline-offset:1px; }
 
 .immo-metrics-grid { display:grid; gap:16px; grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:26px; }
 .immo-metric-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; min-height:150px; padding:22px; }
@@ -628,9 +669,34 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-filter-group button.active, .immo-view-switch button.active { background:#eef2ff; border-color:#e0e7ff; color:#4f46e5; }
 
 .immo-property-grid { display:grid; gap:18px; grid-template-columns:repeat(3,minmax(0,1fr)); }
-.immo-property-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; min-width:0; overflow:hidden; }
+/* Niveau 2 : en-tete d'un immeuble (drill-down des unites) */
+.immo-property-units-view { display:flex; flex-direction:column; gap:16px; }
+.immo-property-units-head {
+  position:relative; overflow:hidden;
+  display:flex; align-items:center; flex-wrap:wrap; gap:16px 20px;
+  padding:18px 20px 18px 24px; border-radius:14px;
+}
+.immo-property-units-head::before {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--grad-iris);
+}
+.immo-property-units-head > .immo-btn { flex:0 0 auto; }
+.immo-property-units-title { flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.immo-property-units-title h3 { margin:0; font-size:19px; font-weight:750; color:var(--ink-900); letter-spacing:-.01em; }
+.immo-property-units-title p { margin:0; font-size:13.5px; display:inline-flex; align-items:center; gap:6px; color:#64748b; }
+.immo-property-units-actions { flex:0 0 auto; display:flex; align-items:center; gap:10px; margin-left:auto; }
+@media (max-width:640px) {
+  .immo-property-units-head { padding:16px; }
+  .immo-property-units-actions { width:100%; margin-left:0; }
+  .immo-property-units-actions .immo-btn { flex:1; }
+}
+
+.immo-property-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; cursor:pointer; min-width:0; overflow:hidden; }
+.immo-property-card:hover { border-color:#c7d2fe; box-shadow:0 14px 34px -28px rgba(15,23,42,.65); }
 .immo-property-card.menu-open { overflow:visible; }
 .immo-property-media { height:160px; overflow:hidden; position:relative; background:linear-gradient(135deg,#34d399 0%,#0f9f8a 100%); }
+.immo-property-photo { height:100%; inset:0; object-fit:cover; position:absolute; width:100%; }
+.immo-property-media::after { background:linear-gradient(180deg,rgba(15,23,42,.18),rgba(15,23,42,.28)); content:""; inset:0; opacity:0; pointer-events:none; position:absolute; }
+.immo-property-media.has-photo::after { opacity:1; }
 .immo-property-card.menu-open .immo-property-media { overflow:visible; }
 /* Loué / occupé = bleu (distinct du vert « Libre/disponible »). */
 .immo-property-card.leased .immo-property-media { background:linear-gradient(135deg,#38bdf8 0%,#2563eb 100%); }
@@ -640,8 +706,8 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-status-chip::before { background:currentColor; border-radius:999px; content:""; height:6px; width:6px; }
 .immo-status-chip.late { color:#dc2626; } .immo-status-chip.maintenance { color:#d97706; }
 .immo-icon-button { align-items:center; background:#fff; border:0; border-radius:8px; color:#52525b; display:flex; height:32px; justify-content:center; position:absolute; right:14px; top:14px; width:32px; z-index:2; cursor:pointer; }
-.immo-property-watermark { color:rgba(255,255,255,.55); left:50%; position:absolute; top:50%; transform:translate(-50%,-50%); }
-.immo-property-code { bottom:16px; color:#fff; font-size:12px; font-weight:800; left:14px; letter-spacing:.04em; position:absolute; text-transform:uppercase; }
+.immo-property-watermark { color:rgba(255,255,255,.55); left:50%; position:absolute; top:50%; transform:translate(-50%,-50%); z-index:1; }
+.immo-property-code { bottom:16px; color:#fff; font-size:12px; font-weight:800; left:14px; letter-spacing:.04em; position:absolute; text-transform:uppercase; z-index:2; }
 .immo-property-body { padding:18px; }
 .immo-property-body h3 { color:#09090b; font-size:16px; font-weight:800; margin:0 0 4px; }
 .immo-property-body p { color:#71717a; font-size:13px; margin:0; }
@@ -653,6 +719,32 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-property-rent { align-items:baseline; display:inline-flex; flex-shrink:0; gap:3px; text-align:right; }
 .immo-property-rent strong { color:#09090b; font-size:14px; font-weight:800; }
 .immo-property-rent span { color:#71717a; font-size:10px; }
+
+.domus-property-detail-modal { width:min(860px,100%); max-height:min(90vh,820px); padding:0; border-radius:14px; overflow:auto; }
+.domus-property-detail-modal .modal-head { border-bottom:1px solid #f4f4f5; margin:0; padding:20px 24px 16px; position:sticky; top:0; background:#fff; z-index:3; }
+.domus-property-detail { display:flex; flex-direction:column; gap:18px; padding:20px 24px 0; }
+.domus-detail-gallery { display:flex; flex-direction:column; gap:10px; }
+.domus-detail-hero { align-items:center; background:linear-gradient(135deg,#34d399,#0f9f8a); border-radius:12px; display:flex; height:280px; justify-content:center; overflow:hidden; }
+.domus-detail-hero.has-photo { background:#0f172a; }
+.domus-detail-hero img { height:100%; object-fit:cover; width:100%; }
+.domus-detail-empty-photo { align-items:center; color:rgba(255,255,255,.82); display:flex; flex-direction:column; font-size:13px; font-weight:700; gap:8px; }
+.domus-photo-strip { display:flex; gap:10px; overflow-x:auto; padding-bottom:2px; }
+.domus-photo-thumb { border:1px solid #e4e4e7; border-radius:9px; flex:none; height:72px; overflow:hidden; position:relative; width:96px; }
+.domus-photo-thumb img { height:100%; object-fit:cover; width:100%; }
+.domus-photo-thumb button { align-items:center; background:rgba(255,255,255,.92); border:0; border-radius:7px; color:#dc2626; cursor:pointer; display:flex; height:24px; justify-content:center; position:absolute; right:5px; top:5px; width:24px; }
+.domus-photo-add { align-items:center; border:1px dashed #c7d2fe; border-radius:9px; color:#4f46e5; cursor:pointer; display:flex; flex:none; flex-direction:column; font-size:12px; font-weight:700; gap:4px; height:72px; justify-content:center; width:96px; }
+.domus-photo-add input { display:none; }
+.domus-photo-add:hover { background:#eef2ff; }
+.domus-property-detail-summary { align-items:flex-start; display:flex; gap:12px; justify-content:space-between; }
+.domus-property-detail-summary h3 { color:#09090b; font-size:20px; font-weight:800; margin:0 0 4px; }
+.domus-property-detail-summary p { color:#71717a; font-size:13px; margin:0; }
+.domus-property-detail-grid { display:grid; gap:10px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.domus-property-detail-line { border:1px solid #f1f1f4; border-radius:9px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; }
+.domus-property-detail-line span { color:#71717a; font-size:11px; font-weight:700; text-transform:uppercase; }
+.domus-property-detail-line strong { color:#18181b; font-size:14px; overflow-wrap:anywhere; }
+.domus-property-detail-notes { background:#fafafa; border:1px solid #e4e4e7; border-radius:10px; display:flex; flex-direction:column; gap:10px; padding:12px; }
+.domus-property-detail-notes p { color:#3f3f46; display:flex; flex-direction:column; font-size:13px; gap:4px; line-height:1.45; margin:0; }
+.domus-property-detail-notes strong { color:#18181b; font-size:12px; }
 
 .immo-property-context-menu {
   background:#fff;
@@ -854,13 +946,24 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .contrats-template-actions button.danger { color:#dc2626; }
 .contrats-template-actions button.danger:hover:not(:disabled) { background:#fef2f2; }
 .contrats-template-actions button:disabled { opacity:.5; cursor:default; }
-.domus-template-modal { width:min(720px,96vw); max-height:92vh; display:flex; flex-direction:column; }
+.domus-template-modal { width:min(820px,96vw); max-height:92vh; display:flex; flex-direction:column; }
 .domus-template-form { padding:0 24px 8px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
 .domus-template-body { min-height:240px; font-family:"Courier New", ui-monospace, monospace; font-size:12.5px; line-height:1.55; resize:vertical; white-space:pre; }
 .domus-template-active { display:flex; align-items:center; gap:8px; font-size:13px; color:#3f3f46; cursor:pointer; }
 .domus-template-active input { width:16px; height:16px; }
 .domus-template-body-head { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:13px; font-weight:600; color:#3f3f46; }
 .domus-template-body-head em { font-weight:400; color:#94a3b8; font-style:normal; font-size:12px; }
+.domus-placeholder-panel { border:1px solid #e4e4e7; border-radius:10px; background:#fafafa; display:flex; flex-direction:column; gap:9px; max-height:168px; overflow:auto; padding:10px; }
+.domus-placeholder-group { display:grid; grid-template-columns:86px minmax(0,1fr); gap:8px; align-items:start; }
+.domus-placeholder-label { color:#71717a; font-size:11px; font-weight:800; letter-spacing:.06em; line-height:26px; text-transform:uppercase; }
+.domus-placeholder-list { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.domus-placeholder-list button { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#4f46e5; cursor:pointer; display:inline-flex; font:700 11px/1.25 "Inter",sans-serif; max-width:100%; min-height:26px; padding:5px 8px; text-align:left; white-space:normal; word-break:break-word; }
+.domus-placeholder-list button:hover { background:#eef2ff; border-color:#c7d2fe; color:#3730a3; }
+.domus-placeholder-list button:focus-visible { border-color:#4f46e5; box-shadow:0 0 0 3px #e0e7ff; outline:none; }
+@media (max-width:640px) {
+  .domus-placeholder-group { grid-template-columns:1fr; gap:5px; }
+  .domus-placeholder-label { line-height:1.2; }
+}
 .domus-template-preview { min-height:240px; max-height:46vh; overflow-y:auto; border:1px solid #e4e4e7; border-radius:10px; padding:16px 18px; background:#fff; line-height:1.6; font-size:13px; }
 .domus-template-preview .domus-contract-plain { white-space:pre-wrap; font-family:"Courier New", ui-monospace, monospace; font-size:12.5px; line-height:1.65; margin:0; }
 .immo-generate-button { align-items:center; background:#eef2ff; border:0; border-radius:7px; color:#4f46e5; cursor:pointer; display:inline-flex; font-size:12px; font-weight:800; gap:6px; padding:5px 9px; }
@@ -927,6 +1030,13 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-detail-notes { border-top:1px solid #f4f4f5; display:grid; gap:12px; padding:18px 24px 24px; }
 .domus-detail-notes p { color:#3f3f46; display:grid; font-size:14px; gap:6px; line-height:1.5; margin:0; }
 .domus-detail-notes strong { color:#18181b; font-size:12px; text-transform:uppercase; }
+.domus-lease-documents { display:grid; gap:8px; list-style:none; margin:0; padding:0; }
+.domus-lease-documents li { align-items:center; background:#fafafa; border:1px solid #e4e4e7; border-radius:8px; display:flex; gap:8px; justify-content:space-between; padding:8px 10px; }
+.domus-lease-documents a { align-items:center; color:#3f3f46; display:inline-flex; gap:6px; font-size:13px; overflow:hidden; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.domus-lease-documents a:hover { color:#4f46e5; }
+.domus-lease-document-remove { align-items:center; background:none; border:none; border-radius:6px; color:#a1a1aa; cursor:pointer; display:inline-flex; height:26px; justify-content:center; width:26px; }
+.domus-contract-manual-sign { border-top:1px solid #f4f4f5; padding:14px 24px; }
+.domus-lease-document-remove:hover { background:#fef2f2; color:#dc2626; }
 .domus-contract-preview { max-width:860px; width:min(860px,calc(100vw - 32px)); }
 .domus-contract-content { background:#fafafa; border-top:1px solid #f4f4f5; color:#18181b; line-height:1.55; max-height:65vh; overflow:auto; padding:24px; }
 .domus-contract-content h1, .domus-contract-content h2, .domus-contract-content h3 { color:#09090b; }
@@ -1122,12 +1232,84 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-onboarding-line{align-items:center;color:#27272a;display:flex;font-size:14px;gap:10px;justify-content:space-between;margin-bottom:12px;}
 .domus-onboarding-line span{align-items:center;display:inline-flex;gap:9px;min-width:0;}
 .domus-onboarding-line strong{color:#000;font-size:14px;white-space:nowrap;}
+.domus-onboarding-sent{align-items:center;color:#16a34a;display:flex;font-size:13px;font-weight:600;gap:6px;margin:-4px 0 12px;}
+.domus-onboarding-sent svg{flex:none;}
+.domus-onboarding-sent.failed{color:#dc2626;}
 .domus-onboarding-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 .domus-onboarding-actions button{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:7px;color:#27272a;cursor:pointer;display:inline-flex;font-family:inherit;font-size:14px;font-weight:700;gap:6px;min-height:34px;padding:7px 11px;}
 .domus-onboarding-actions button:hover{background:#fafafa;border-color:#d4d4d8;}
 .domus-onboarding-actions button.primary{background:#4f46e5;border-color:#4f46e5;color:#fff;}
 .domus-onboarding-actions button.danger{border-color:#fecaca;color:#dc2626;}
 .shell[data-layout="mobile"] .domus-onboarding-card{padding:18px;}.shell[data-layout="mobile"] .domus-onboarding-strip{grid-template-columns:1fr;}
+
+/* ── Sélecteur de vue + vue cartes/liste (maquette Onboarding) ── */
+.domus-onboarding-section-head{align-items:center;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin:12px 0 14px;}
+.domus-view-switch{background:#f4f4f6;border:1px solid #e4e4e7;border-radius:9px;display:inline-flex;gap:2px;padding:3px;}
+.domus-view-switch button{align-items:center;background:transparent;border:none;border-radius:6px;color:#52525b;cursor:pointer;display:inline-flex;font-family:inherit;font-size:13px;font-weight:700;gap:6px;padding:6px 11px;}
+.domus-view-switch button.active{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);color:#4f46e5;}
+.domus-view-switch button svg{flex:none;}
+
+.domus-onboarding-summary-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin:0 0 16px;}
+.domus-onboarding-summary{background:#fff;border:1px solid #e4e4e7;border-radius:14px;display:flex;flex-direction:column;gap:16px;padding:20px 22px;}
+.domus-onboarding-summary.ready{background:#fdfdff;border-color:#fcd34d;}
+.domus-onboarding-summary-head{align-items:flex-start;display:flex;gap:14px;}
+.domus-onboarding-summary-head .tenant-avatar{font-size:14px;height:42px;min-width:42px;width:42px;}
+.domus-onboarding-summary-id{flex:1;min-width:0;}
+.domus-onboarding-summary-id h3{color:#09090b;font-size:18px;font-weight:800;line-height:1.2;margin:2px 0 3px;overflow-wrap:anywhere;}
+.domus-onboarding-summary-id p{color:#71717a;font-size:13px;margin:0;}
+.domus-onboarding-progress{display:grid;gap:6px;grid-template-columns:repeat(4,1fr);}
+.domus-onboarding-progress span{background:#e4e4e7;border-radius:5px;height:8px;}
+.domus-onboarding-progress span.done{background:#10b981;}
+.domus-onboarding-validate{align-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;color:#fff;cursor:pointer;display:inline-flex;font-family:inherit;font-size:15px;font-weight:800;gap:8px;justify-content:center;padding:12px;}
+.domus-onboarding-validate:hover{filter:brightness(1.05);}
+.domus-onboarding-summary-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.domus-onboarding-summary-actions button{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:8px;color:#27272a;cursor:pointer;display:inline-flex;height:34px;justify-content:center;padding:0;width:34px;}
+.domus-icon-badge{align-items:center;display:inline-flex;position:relative;}
+.domus-icon-badge-check{background:#16a34a;border-radius:999px;bottom:-3px;color:#fff;padding:1px;position:absolute;right:-4px;}
+.domus-onboarding-summary-actions button:hover{background:#fafafa;border-color:#d4d4d8;}
+.domus-onboarding-summary-actions button:disabled{cursor:default;opacity:.6;}
+.domus-onboarding-summary-actions button.danger{border-color:#fecaca;color:#dc2626;}
+.domus-onboarding-summary-foot{align-items:center;color:#71717a;display:flex;font-size:13px;justify-content:space-between;}
+.domus-onboarding-summary-quick{display:flex;gap:6px;}
+.domus-onboarding-summary-quick button,.domus-onboarding-list-actions button{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:7px;color:#3f3f46;cursor:pointer;display:inline-flex;gap:5px;justify-content:center;min-height:30px;padding:5px 9px;}
+.domus-onboarding-summary-quick button:hover,.domus-onboarding-list-actions button:hover{background:#fafafa;}
+.domus-onboarding-list-actions button.primary{background:#4f46e5;border-color:#4f46e5;color:#fff;font-family:inherit;font-size:13px;font-weight:700;}
+.domus-onboarding-list-actions button.danger{border-color:#fecaca;color:#dc2626;}
+.domus-onboarding-list-actions button:disabled{cursor:default;opacity:.6;}
+
+.domus-onboarding-list-wrap{overflow-x:auto;padding:6px;}
+.domus-onboarding-list{border-collapse:collapse;width:100%;}
+.domus-onboarding-list th{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.05em;padding:10px 12px;text-align:left;text-transform:uppercase;}
+.domus-onboarding-list td{border-top:1px solid #f0f0f3;font-size:14px;padding:12px;vertical-align:middle;}
+.domus-onboarding-list td .domus-onboarding-progress{min-width:120px;}
+.domus-onboarding-list-name{align-items:center;display:flex;gap:11px;}
+.domus-onboarding-list-name strong{color:#18181b;display:block;font-size:14px;}
+.domus-onboarding-list-name small{color:#a1a1aa;font-size:12px;}
+.domus-onboarding-list-actions{display:flex;gap:6px;}
+.tenant-avatar.sm{font-size:12px;height:34px;min-width:34px;width:34px;}
+.shell[data-layout="mobile"] .domus-onboarding-summary-grid{grid-template-columns:1fr;}
+.shell[data-layout="mobile"] .domus-view-switch button span{display:none;}
+
+/* ── Écran interne Onboarding (SCRUM-246) ── */
+.immo-eyebrow{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.08em;margin:0 0 2px;text-transform:uppercase;}
+.domus-onboarding-top{align-items:stretch;display:grid;gap:14px;grid-template-columns:2fr 1fr;margin:0 0 8px;}
+.domus-onboarding-invite,.domus-onboarding-stats{padding:22px 24px;}
+.domus-onboarding-invite h3,.domus-onboarding-stats h3{align-items:center;display:flex;font-size:15px;font-weight:700;gap:8px;margin:0 0 8px;}
+.domus-onboarding-invite h3 svg,.domus-onboarding-stats h3 svg{color:#4f46e5;}
+.domus-onboarding-steps{display:grid;gap:8px;grid-template-columns:repeat(4,1fr);margin:16px 0;}
+.domus-onboarding-step{align-items:center;background:#f4f4f5;border-radius:9px;color:#3f3f46;display:flex;flex-direction:column;font-size:12px;font-weight:600;gap:5px;justify-content:center;padding:12px 6px;text-align:center;}
+.domus-onboarding-step svg{color:#4f46e5;}
+.domus-onboarding-invite-actions{align-items:center;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.domus-onboarding-stats ul{display:flex;flex-direction:column;gap:10px;list-style:none;margin:6px 0 0;padding:0;}
+.domus-onboarding-stats li{align-items:center;display:flex;font-size:14px;justify-content:space-between;}
+.domus-onboarding-stats li span{color:#71717a;}
+.domus-onboarding-stats li strong{font-weight:800;}
+.domus-onboarding-stats li strong.amber{color:#d97706;}
+.domus-onboarding-stats li strong.green{color:#059669;}
+.domus-onboarding-section-title{font-size:15px;font-weight:700;margin:22px 0 12px;}
+.domus-empty{align-items:center;background:var(--surface);border:1px dashed var(--border);border-radius:10px;color:#71717a;display:flex;flex-direction:column;gap:12px;padding:40px 20px;text-align:center;}
+.domus-empty svg{color:#a1a1aa;}
+.shell[data-layout="mobile"] .domus-onboarding-top{grid-template-columns:1fr;}
 
 /* ── Page publique d'inscription locataire (Domus, hors auth) ── */
 .onb-page{background:radial-gradient(1200px 600px at 50% -200px,#e0e7ff 0%,transparent 60%),linear-gradient(180deg,#eef1fb 0%,#f5f7fc 100%);min-height:100vh;padding:32px 16px 132px;display:flex;justify-content:center;align-items:flex-start;}
@@ -1191,3 +1373,255 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
   .onb-save-status{flex-basis:100%;margin:0 0 4px;}
   .onb-actions .btn{flex:1;}
 }
+
+@media (max-width:640px){
+  .domus-property-detail-modal .modal-head, .domus-property-detail, .domus-property-detail-modal .domus-modal-footer { padding-left:18px; padding-right:18px; }
+  .domus-detail-hero { height:220px; }
+  .domus-property-detail-grid { grid-template-columns:1fr; }
+  .domus-property-detail-summary { flex-direction:column; }
+}
+
+@media (max-width:1180px) {
+  .maintenance-kanban, .maintenance-calendar { grid-template-columns:1fr; }
+  .maintenance-toolbar { align-items:stretch; flex-direction:column; }
+  .maintenance-toolbar .immo-filter-group,
+  .maintenance-toolbar .immo-view-switch { width:100%; }
+}
+
+/* ---- Réservations : galerie type Airbnb ---- */
+.reserve-searchbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:#fff; border:1px solid var(--border); border-radius:14px; padding:10px 16px;
+  box-shadow:0 10px 28px -22px rgba(15,23,42,.45); margin-bottom:18px; }
+.reserve-daterange { display:flex; flex-direction:column; gap:2px; }
+.reserve-daterange span { font-size:11px; font-weight:600; color:var(--ink-500); }
+.reserve-daterange input { height:34px; border:1px solid var(--border); border-radius:8px;
+  padding:0 10px; font:500 13px 'Inter',sans-serif; color:var(--ink-800); }
+.reserve-search-hint { font-size:12px; color:var(--ink-500); margin-left:auto; }
+
+.reserve-gallery { display:grid; gap:20px; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); }
+.reserve-card { cursor:pointer; display:flex; flex-direction:column; gap:10px;
+  border-radius:14px; transition:transform .12s ease; outline:none; }
+.reserve-card:hover { transform:translateY(-2px); }
+.reserve-card:focus-visible .reserve-card-media { box-shadow:0 0 0 3px var(--iris-400); }
+.reserve-card-media { position:relative; aspect-ratio:20/19; overflow:hidden; border-radius:14px;
+  background:linear-gradient(135deg,#34d399 0%,#0f9f8a 100%); }
+.reserve-card-media img { width:100%; height:100%; object-fit:cover; display:block; }
+.reserve-card-noimg { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#fff; opacity:.85; }
+.reserve-card-badge { position:absolute; top:10px; left:10px; background:rgba(255,255,255,.94);
+  color:var(--ink-800); font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; }
+.reserve-card-body { display:flex; flex-direction:column; gap:3px; }
+.reserve-card-title { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.reserve-card-title h3 { font-size:15px; font-weight:700; color:var(--ink-900); margin:0; }
+.reserve-card-type { font-size:12px; color:var(--ink-500); white-space:nowrap; }
+.reserve-card-addr, .reserve-card-owner { display:flex; align-items:center; gap:5px;
+  font-size:12.5px; color:var(--ink-500); margin:0; }
+.reserve-card-specs { display:flex; gap:12px; margin-top:2px; }
+.reserve-card-specs span { display:flex; align-items:center; gap:4px; font-size:12.5px; color:var(--ink-600); }
+.reserve-card-price { margin-top:4px; font-size:13px; color:var(--ink-500); }
+.reserve-card-price b { font-size:15px; color:var(--ink-900); }
+
+@media (max-width:640px) {
+  .reserve-gallery { grid-template-columns:1fr 1fr; gap:14px; }
+  .reserve-search-hint { margin-left:0; width:100%; }
+}
+
+/* ---- Fiche détail type Airbnb ---- */
+.stay-detail-modal { max-width:960px; width:96vw; padding:0; }
+.stay-detail-modal .modal-head { border-bottom:1px solid #f4f4f5; margin:0; padding:20px 24px 16px; position:sticky; top:0; background:#fff; z-index:3; }
+.stay-detail { display:grid; grid-template-columns:1.5fr 1fr; gap:22px; padding:4px 20px 20px; }
+.stay-detail-left { min-width:0; }
+.stay-gallery-main { aspect-ratio:16/10; border-radius:14px; overflow:hidden;
+  background:linear-gradient(135deg,#34d399 0%,#0f9f8a 100%); }
+.stay-gallery-main img { width:100%; height:100%; object-fit:cover; display:block; }
+.stay-gallery-noimg { width:100%; height:100%; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:8px; color:#fff; opacity:.85; font-size:13px; }
+.stay-gallery-thumbs { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.stay-gallery-thumbs button { width:64px; height:52px; border-radius:8px; overflow:hidden; padding:0;
+  border:2px solid transparent; background:none; cursor:pointer; }
+.stay-gallery-thumbs button.active { border-color:var(--iris-500); }
+.stay-gallery-thumbs img { width:100%; height:100%; object-fit:cover; }
+.stay-detail-addr, .stay-detail-owner { display:flex; align-items:center; gap:6px;
+  font-size:13.5px; color:var(--ink-600); margin:14px 0 4px; }
+.stay-detail-specs { display:flex; gap:16px; margin:10px 0; }
+.stay-detail-specs span { display:flex; align-items:center; gap:6px; font-size:13.5px; color:var(--ink-700); }
+.stay-detail-desc { font-size:13.5px; color:var(--ink-600); line-height:1.5; margin:8px 0 0; }
+
+.stay-booking { border:1px solid var(--border); border-radius:14px; padding:16px;
+  align-self:start; box-shadow:0 10px 28px -22px rgba(15,23,42,.45); }
+.stay-booking-price { margin-bottom:12px; font-size:14px; color:var(--ink-500); }
+.stay-booking-price b { font-size:20px; color:var(--ink-900); }
+.stay-booking-total { display:flex; justify-content:space-between; align-items:center;
+  margin:10px 0; padding:10px 0; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+  font-size:13px; color:var(--ink-600); }
+.stay-booking-total b { font-size:16px; color:var(--ink-900); }
+.stay-booking-guest { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+.stay-booking-cta { width:100%; justify-content:center; margin-top:14px; height:44px; }
+.stay-booking-note { font-size:11.5px; color:var(--ink-500); text-align:center; margin:8px 0 0; }
+.reserve-total { display:flex; flex-direction:column; gap:7px; margin:10px 0; padding:10px 0;
+  border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+.reserve-total div { display:flex; justify-content:space-between; align-items:center; gap:12px;
+  font-size:13px; color:var(--ink-600); }
+.reserve-total b { color:var(--ink-900); font-size:14px; white-space:nowrap; }
+.reserve-total .net { padding-top:7px; border-top:1px dashed #e4e4e7; font-weight:700; }
+.reserve-total .net b { font-size:17px; }
+.reserve-coupon { display:flex; flex-direction:column; gap:6px; }
+.reserve-coupon-input { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; }
+.reserve-coupon-input .immo-btn { height:40px; white-space:nowrap; }
+.reserve-coupon-error { margin:0; padding:8px 10px; font-size:12px; }
+.reserve-coupon-preview { display:flex; justify-content:space-between; align-items:center; gap:10px;
+  background:#ecfdf5; border:1px solid #bbf7d0; border-radius:8px; color:#047857; font-size:12px; padding:8px 10px; }
+.reserve-coupon-preview b { color:#065f46; white-space:nowrap; }
+.coupon-panel h2 { color:var(--ink-900); font-size:18px; margin:0 0 3px; }
+.coupon-panel p { color:var(--ink-500); font-size:13px; margin:0; }
+.coupon-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+.coupon-card h3 { margin-bottom:4px; }
+
+@media (max-width:820px) {
+  .stay-detail { grid-template-columns:1fr; }
+  .reserve-coupon-input { grid-template-columns:1fr; }
+  .reserve-coupon-input .immo-btn { justify-content:center; width:100%; }
+}
+
+/* ---- Vitrine publique Domus : catalogue type Airbnb ---- */
+.public-stays-page { min-height:100vh; background:#f7f8fb; color:#111827; padding:0 24px 48px; }
+.public-topbar { max-width:1180px; margin:0 auto; height:68px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.public-brand { display:inline-flex; align-items:center; gap:10px; color:#111827; text-decoration:none; }
+.public-brand span { width:36px; height:36px; border-radius:8px; background:#111827; color:#fff; display:flex; align-items:center; justify-content:center; }
+.public-brand strong { font-size:17px; }
+.public-contact { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.public-contact a { display:inline-flex; align-items:center; gap:6px; color:#475569; text-decoration:none; font-size:13px; font-weight:600; }
+.public-hero { max-width:1180px; margin:16px auto 24px; min-height:310px; border-radius:18px; padding:42px; display:grid; grid-template-columns:minmax(0,1fr) 390px; gap:34px; align-items:end; color:#fff; background:linear-gradient(180deg,rgba(17,24,39,.12),rgba(17,24,39,.72)),url("https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80") center/cover; }
+.public-eyebrow { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:800; text-transform:uppercase; }
+.public-hero h1 { font-family:'Space Grotesk','Inter',sans-serif; font-size:46px; line-height:1.02; max-width:650px; margin:12px 0; }
+.public-hero p { max-width:560px; color:rgba(255,255,255,.9); line-height:1.55; margin:0; }
+.public-hero-search { background:#fff; border-radius:12px; padding:12px; display:grid; gap:10px; box-shadow:0 22px 60px -32px rgba(15,23,42,.7); }
+.public-hero-search label { height:44px; display:flex; align-items:center; gap:8px; border:1px solid #e5e7eb; border-radius:8px; padding:0 12px; color:#64748b; }
+.public-hero-search input, .public-hero-search select { width:100%; border:0; outline:0; background:#fff; color:#111827; font:500 14px 'Inter',sans-serif; }
+.public-hero-search select { height:44px; border:1px solid #e5e7eb; border-radius:8px; padding:0 12px; }
+.public-stay-grid { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(255px,1fr)); gap:24px; }
+.public-stay-card { cursor:pointer; display:flex; flex-direction:column; gap:12px; outline:0; }
+.public-stay-card:focus-visible .public-stay-media { box-shadow:0 0 0 3px #111827; }
+.public-stay-media { position:relative; aspect-ratio:4/3; border-radius:14px; overflow:hidden; background:#e5e7eb; }
+.public-stay-media img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .18s ease; }
+.public-stay-card:hover img { transform:scale(1.03); }
+.public-stay-media div { width:100%; height:100%; display:grid; place-items:center; color:#94a3b8; }
+.public-stay-media span { position:absolute; top:10px; left:10px; border-radius:999px; background:rgba(255,255,255,.94); color:#111827; font-size:11px; font-weight:800; padding:5px 10px; }
+.public-stay-body { display:grid; gap:6px; }
+.public-stay-title { display:flex; justify-content:space-between; align-items:start; gap:10px; }
+.public-stay-title h2 { font-size:16px; line-height:1.25; margin:0; }
+.public-stay-title b { font-size:13px; white-space:nowrap; }
+.public-stay-prices { display:grid; gap:2px; text-align:right; }
+.public-stay-prices b { font-size:13px; white-space:nowrap; }
+.public-stay-prices span { color:#64748b; font-size:11.5px; white-space:nowrap; }
+.public-stay-body p { display:flex; align-items:center; gap:5px; color:#64748b; font-size:13px; margin:0; }
+.public-stay-location { color:#64748b; font-size:13px; margin:0; }
+.public-stay-specs { display:flex; flex-wrap:wrap; gap:10px; color:#475569; font-size:12.5px; }
+.public-stay-specs span { display:inline-flex; align-items:center; gap:4px; }
+.public-empty, .public-state { max-width:520px; margin:12vh auto 0; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:28px; text-align:center; color:#475569; }
+.public-state { display:grid; place-items:center; gap:10px; }
+.public-state h1 { color:#111827; margin:0; }
+.public-back { max-width:1180px; margin:8px auto 18px; display:flex; align-items:center; gap:7px; border:0; background:transparent; color:#475569; font:700 13px 'Inter',sans-serif; cursor:pointer; padding:0; }
+.public-detail-head { max-width:1180px; margin:0 auto 16px; display:flex; justify-content:space-between; gap:20px; align-items:flex-end; }
+.public-detail-head h1 { font-family:'Space Grotesk','Inter',sans-serif; font-size:34px; line-height:1.12; margin:0 0 8px; }
+
+/* ── Enquête de prélocation (écran interne gestionnaire) ── */
+.domus-prescreening-row { display:block; width:100%; text-align:left; padding:14px 16px; cursor:pointer; font:inherit; color:inherit; }
+.domus-prescreening-row:hover { border-color:#c7d2fe; }
+.domus-prescreening-row.active { border-color:#4f46e5; box-shadow:0 0 0 1px #4f46e5; }
+.domus-prescreening-detail { display:flex; flex-direction:column; gap:14px; }
+.domus-prescreening-detail .card { padding:18px 20px; }
+.domus-prescreening-decision h3 { display:flex; align-items:center; gap:8px; margin:0 0 12px; }
+.domus-alert-banner { display:flex; gap:10px; align-items:flex-start; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; color:#92400e; font-size:12.5px; font-weight:600; line-height:1.5; padding:12px 14px; margin-bottom:14px; }
+.domus-alert-banner svg { flex:none; margin-top:1px; color:#d97706; }
+.domus-btn-danger { border-color:#fecaca !important; color:#dc2626 !important; }
+.domus-btn-danger:hover { background:#fef2f2 !important; }
+.public-detail-head p { display:flex; align-items:center; gap:6px; color:#64748b; margin:0; }
+.public-detail-price { text-align:right; }
+.public-detail-price b { display:block; font-size:24px; }
+.public-detail-price span { color:#64748b; font-size:13px; }
+.public-detail-price-monthly { display:block; margin-top:4px; }
+.public-detail-layout { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:28px; align-items:start; }
+.public-detail-gallery { aspect-ratio:16/10; border-radius:16px; overflow:hidden; background:#e5e7eb; }
+.public-detail-gallery img { width:100%; height:100%; object-fit:cover; display:block; }
+.public-detail-gallery div { width:100%; height:100%; display:flex; align-items:center; justify-content:center; gap:8px; color:#94a3b8; }
+.public-thumbs { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.public-thumbs button { width:74px; height:58px; border-radius:8px; border:2px solid transparent; overflow:hidden; padding:0; background:#fff; cursor:pointer; }
+.public-thumbs button.active { border-color:#111827; }
+.public-thumbs img { width:100%; height:100%; object-fit:cover; display:block; }
+.lightbox-overlay { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.92); display:flex; align-items:center; justify-content:center; }
+.lightbox-overlay img { max-width:90vw; max-height:88vh; object-fit:contain; border-radius:8px; box-shadow:0 8px 48px #000; }
+.lightbox-close { position:absolute; top:16px; right:20px; background:rgba(255,255,255,0.12); border:none; color:#fff; cursor:pointer; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; }
+.lightbox-close:hover { background:rgba(255,255,255,0.25); }
+.lightbox-nav { position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.12); border:none; color:#fff; cursor:pointer; border-radius:50%; width:52px; height:52px; display:flex; align-items:center; justify-content:center; }
+.lightbox-nav:hover { background:rgba(255,255,255,0.25); }
+.lightbox-prev { left:16px; }
+.lightbox-next { right:16px; }
+.lightbox-counter { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); color:#fff; background:rgba(0,0,0,0.5); padding:4px 14px; border-radius:20px; font-size:14px; }
+.public-detail-section { margin-top:22px; padding-top:22px; border-top:1px solid #e5e7eb; }
+.public-detail-section h2 { font-size:20px; margin:0 0 12px; }
+.public-detail-section p { color:#475569; line-height:1.58; }
+.public-feature-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.public-feature-grid span { min-height:42px; display:flex; align-items:center; gap:8px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; padding:10px 12px; color:#334155; font-weight:650; font-size:13px; }
+.public-action-panel { position:sticky; top:18px; display:grid; gap:14px; }
+.public-panel-card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 18px 48px -36px rgba(15,23,42,.7); padding:18px; display:grid; gap:12px; }
+.public-panel-card.secondary { background:#fbfcff; }
+.public-panel-card.success { text-align:center; place-items:center; color:#047857; background:#ecfdf5; border-color:#bbf7d0; }
+.public-panel-card h2 { display:flex; align-items:center; gap:8px; margin:0; color:#111827; font-size:18px; }
+.public-form-grid { display:grid; gap:10px; }
+.public-form-grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.public-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.public-field span, .public-panel-card .domus-property-field span { color:#334155; font-size:12px; font-weight:700; }
+.public-field input, .public-field textarea, .public-panel-card .domus-property-field input { width:100%; border:1px solid #e5e7eb; border-radius:8px; background:#fff; color:#111827; font:500 14px 'Inter',sans-serif; outline:0; }
+.public-field input, .public-panel-card .domus-property-field input { height:40px; padding:0 11px; }
+.public-field textarea { min-height:76px; padding:10px 11px; resize:vertical; }
+.public-field input:focus, .public-field textarea:focus, .public-panel-card .domus-property-field input:focus { border-color:#111827; box-shadow:0 0 0 3px rgba(17,24,39,.08); }
+.public-btn { height:40px; border:1px solid #d1d5db; border-radius:8px; background:#fff; color:#111827; display:inline-flex; align-items:center; justify-content:center; gap:8px; font:800 13px 'Inter',sans-serif; cursor:pointer; padding:0 14px; }
+.public-btn:hover { background:#f8fafc; }
+.public-btn.primary { background:#111827; border-color:#111827; color:#fff; }
+.public-btn:disabled { opacity:.55; cursor:not-allowed; }
+.public-btn.wide { width:100%; }
+.public-total { border-top:1px solid #e5e7eb; border-bottom:1px solid #e5e7eb; padding:10px 0; display:grid; gap:7px; }
+.public-total div { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; color:#475569; }
+.public-total div:last-child { color:#111827; font-weight:800; }
+.public-availability { border-radius:8px; padding:9px 10px; font-size:12px; font-weight:800; }
+.public-availability.ok { background:#ecfdf5; color:#047857; border:1px solid #bbf7d0; }
+.public-availability.ko, .public-form-error { background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; border-radius:8px; padding:9px 10px; font-size:12px; font-weight:800; }
+.public-coupon-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; }
+.public-secure { display:flex; align-items:center; justify-content:center; gap:6px; color:#64748b; font-size:11.5px; margin:0; }
+
+@media (max-width:900px) {
+  .public-stays-page { padding:0 14px 32px; }
+  .public-topbar { height:auto; padding:14px 0; align-items:flex-start; }
+  .public-contact { justify-content:flex-end; }
+  .public-hero { grid-template-columns:1fr; min-height:420px; padding:28px 20px; border-radius:14px; }
+  .public-hero h1 { font-size:34px; }
+  .public-detail-head { align-items:flex-start; flex-direction:column; }
+  .public-detail-price { text-align:left; }
+  .public-detail-layout { grid-template-columns:1fr; }
+  .public-action-panel { position:static; }
+}
+
+@media (max-width:560px) {
+  .public-contact { display:none; }
+  .public-stay-grid { grid-template-columns:1fr; gap:18px; }
+  .public-feature-grid, .public-form-grid.two, .public-coupon-row { grid-template-columns:1fr; }
+  .public-detail-head h1 { font-size:28px; }
+}
+
+/* ── Dialogs applicatifs (confirm/prompt/toast) — remplacent window.confirm/alert/prompt ── */
+.btn-danger { background:#dc2626; color:#fff; border:none; }
+.btn-danger:hover { background:#b91c1c; }
+.domus-confirm-modal, .domus-prompt-modal { max-width:440px; }
+.domus-dialog-message { margin:0; padding:4px 24px 8px; color:#334155; font-size:14px; line-height:1.5; }
+.domus-dialog-body { padding:8px 24px 4px; }
+.domus-dialog-label { display:block; font-size:13px; font-weight:600; color:#475569; margin-bottom:6px; }
+.domus-dialog-input-row { display:flex; gap:8px; }
+.domus-dialog-input-row input { flex:1; padding:9px 11px; border:1px solid #e2e8f0; border-radius:9px; font-size:14px; }
+.domus-dialog-input-row input:focus { outline:none; border-color:#7c3aed; box-shadow:0 0 0 3px rgba(124,58,237,.12); }
+
+.domus-toast-host { position:fixed; z-index:1000; right:18px; bottom:18px; display:flex; flex-direction:column; gap:10px; max-width:min(92vw,380px); }
+.domus-toast { display:flex; align-items:center; gap:9px; padding:11px 14px; border-radius:11px; font-size:14px; line-height:1.35; color:#fff; box-shadow:0 12px 30px -10px rgba(15,23,42,.5); cursor:pointer; animation:immo-pop .16s ease; }
+.domus-toast span { flex:1; }
+.domus-toast-info { background:#1e293b; }
+.domus-toast-success { background:#16a34a; }
+.domus-toast-error { background:#dc2626; }

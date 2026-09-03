@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { permissions, rolePermissions } from "../database/schema";
+import { permissions, rolePermissions, roles } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimePermissionsPublisher } from "../realtime/realtime-permissions-publisher.service";
 import { CreateRolePermissionDto } from "./dto/role-permission.dto";
@@ -16,6 +16,14 @@ export class RolePermissionsService {
   async upsert(dto: CreateRolePermissionDto) {
     const { roleId, permissionId: incoming } = dto;
 
+    // Org du role parent (Phase 0 multi-tenant) : denormalisee sur rolePermission.
+    const [parentRole] = await this.db
+      .select({ organizationId: roles.organizationId })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1);
+    const orgId = parentRole?.organizationId ?? 1;
+
     // Add missing
     for (const permId of incoming) {
       const found = await this.db
@@ -26,6 +34,7 @@ export class RolePermissionsService {
 
       if (!found.length) {
         await this.db.insert(rolePermissions).values({
+          organizationId: orgId,
           roleId,
           permissionId: permId,
           createdAt: sql`CURRENT_TIMESTAMP`,
