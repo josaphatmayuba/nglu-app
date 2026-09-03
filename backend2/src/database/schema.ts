@@ -698,6 +698,149 @@ export const tenantOnboardings = mysqlTable("tenant_onboardings", {
   updatedAt: timestamp("updated_at"),
 });
 
+// ---------------------------------------------------------------------------
+// Domus — enquête de prélocation (Québec)
+// Module volontairement séparé de tenantOnboardings (flux RDC actuel) : cycle de
+// vie, consentements et rétention légale propres.
+// ---------------------------------------------------------------------------
+
+// Réglages Domus par organisation : une seule ligne par org (unique).
+// countryCode pilote le jeu de règles légales, prescreeningEnabled active le module.
+export const domusOrgSettings = mysqlTable("domus_org_settings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull().unique(),
+  countryCode: varchar("country_code", { length: 2 }).default("CD").notNull(),
+  prescreeningEnabled: boolean("prescreening_enabled").default(false).notNull(),
+  prescreeningRuleset: varchar("prescreening_ruleset", { length: 20 }).default("qc"),
+  retentionMonthsRejected: int("retention_months_rejected").default(6).notNull(),
+  defaultConsentTextVersion: varchar("default_consent_text_version", { length: 20 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Dossier candidat. tokenHash = hash du lien public envoyé par SMS/email.
+// decision + decisionReasonCode tracent l'issue et sa justification (exigence
+// CDPDJ pour un refus). retentionUntil/purgedAt pilotent la purge des refus.
+export const tenantPrescreenings = mysqlTable("tenant_prescreenings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }),
+  unitId: bigint("unit_id", { mode: "number" }),
+  reference: varchar("reference", { length: 50 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  token: varchar("token", { length: 128 }),
+  status: varchar("status", { length: 50 }).default("sent").notNull(),
+  phone: varchar("phone", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  firstName: varchar("first_name", { length: 255 }),
+  lastName: varchar("last_name", { length: 255 }),
+  isAdult: boolean("is_adult").default(false).notNull(),
+  currentAddress: varchar("current_address", { length: 255 }),
+  currentCity: varchar("current_city", { length: 255 }),
+  currentPostalCode: varchar("current_postal_code", { length: 10 }),
+  desiredMoveInDate: date("desired_move_in_date", { mode: "string" }),
+  occupantCount: int("occupant_count"),
+  hasPets: boolean("has_pets"),
+  petsDescription: varchar("pets_description", { length: 255 }),
+  smoker: boolean("smoker"),
+  employmentStatus: varchar("employment_status", { length: 50 }),
+  employerName: varchar("employer_name", { length: 255 }),
+  employerContact: varchar("employer_contact", { length: 255 }),
+  jobTitle: varchar("job_title", { length: 255 }),
+  employmentStartDate: date("employment_start_date", { mode: "string" }),
+  monthlyIncome: decimal("monthly_income", { precision: 15, scale: 2 }),
+  otherMonthlyIncome: decimal("other_monthly_income", { precision: 15, scale: 2 }),
+  incomeCurrencyId: bigint("income_currency_id", { mode: "number" }),
+  incomeProofType: varchar("income_proof_type", { length: 50 }),
+  rentToIncomeRatio: decimal("rent_to_income_ratio", { precision: 5, scale: 2 }),
+  decision: varchar("decision", { length: 20 }),
+  decisionReasonCode: varchar("decision_reason_code", { length: 50 }),
+  decisionNote: text("decision_note"),
+  decidedByUserId: bigint("decided_by_user_id", { mode: "number" }),
+  decidedAt: timestamp("decided_at"),
+  retentionUntil: date("retention_until", { mode: "string" }),
+  purgedAt: timestamp("purged_at"),
+  onboardingId: bigint("onboarding_id", { mode: "number" }),
+  createdByUserId: bigint("created_by_user_id", { mode: "number" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  submittedAt: timestamp("submitted_at"),
+  smsSentAt: timestamp("sms_sent_at"),
+  emailSentAt: timestamp("email_sent_at"),
+  smsSid: varchar("sms_sid", { length: 64 }),
+  smsStatus: varchar("sms_status", { length: 32 }),
+  smsDeliveredAt: timestamp("sms_delivered_at"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Preuve de consentement. consentTextSnapshot fige le texte exact affiché au
+// moment du clic : sans ce snapshot la preuve ne vaut rien si le texte évolue.
+export const tenantPrescreeningConsents = mysqlTable("tenant_prescreening_consents", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  prescreeningId: bigint("prescreening_id", { mode: "number" }).notNull(),
+  consentType: varchar("consent_type", { length: 50 }).notNull(),
+  granted: boolean("granted").notNull(),
+  consentTextVersion: varchar("consent_text_version", { length: 20 }).notNull(),
+  consentTextSnapshot: text("consent_text_snapshot").notNull(),
+  grantedAt: timestamp("granted_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: varchar("user_agent", { length: 255 }),
+  locale: varchar("locale", { length: 10 }).default("fr-CA"),
+  createdAt: timestamp("created_at"),
+});
+
+// Références de propriétaires antérieurs + suivi de la prise de contact.
+// Suppression logique via status (règle soft delete du projet).
+export const tenantPrescreeningReferences = mysqlTable("tenant_prescreening_references", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  prescreeningId: bigint("prescreening_id", { mode: "number" }).notNull(),
+  landlordName: varchar("landlord_name", { length: 255 }),
+  landlordPhone: varchar("landlord_phone", { length: 255 }),
+  landlordEmail: varchar("landlord_email", { length: 255 }),
+  propertyAddress: varchar("property_address", { length: 255 }),
+  tenancyStartDate: date("tenancy_start_date", { mode: "string" }),
+  tenancyEndDate: date("tenancy_end_date", { mode: "string" }),
+  monthlyRent: decimal("monthly_rent", { precision: 15, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  contactStatus: varchar("contact_status", { length: 30 }).default("not_contacted").notNull(),
+  contactedAt: timestamp("contacted_at"),
+  contactedByUserId: bigint("contacted_by_user_id", { mode: "number" }),
+  feedbackOutcome: varchar("feedback_outcome", { length: 30 }),
+  feedbackNote: text("feedback_note"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Catalogue des textes de consentement. organizationId NULL = texte par défaut
+// global réutilisable par toute organisation ; renseigné = surcharge par org.
+export const prescreeningConsentTexts = mysqlTable(
+  "prescreening_consent_texts",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }),
+    version: varchar("version", { length: 20 }).notNull(),
+    locale: varchar("locale", { length: 10 }).default("fr-CA").notNull(),
+    consentType: varchar("consent_type", { length: 50 }).notNull(),
+    body: text("body").notNull(),
+    effectiveFrom: date("effective_from", { mode: "string" }),
+    status: varchar("status", { length: 10 }).default("true").notNull(),
+    createdAt: timestamp("created_at"),
+    updatedAt: timestamp("updated_at"),
+  },
+  (table) => ({
+    versionUnique: unique("uq_prescreening_consent_texts_version").on(
+      table.version,
+      table.locale,
+      table.consentType,
+    ),
+  }),
+);
+
 export const paymentMethods = mysqlTable("paymentMethod", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

@@ -16,16 +16,29 @@ import { PropertyManagementService } from "./property-management.service";
 import { ObjectStorageService } from "./object-storage.service";
 import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
+import { TenantPrescreeningController } from "./prescreening/tenant-prescreening.controller";
+import { TenantPrescreeningPublicController } from "./prescreening/tenant-prescreening-public.controller";
+import { TenantPrescreeningService } from "./prescreening/tenant-prescreening.service";
 
 @Module({
   imports: [DatabaseModule, SystemEmailModule, CompatModule, LedgerModule, WorkflowModule, ProjectsModule],
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,
+    TenantPrescreeningPublicController,
     PropertyManagementPublicController,
     PropertyManagementController,
+    TenantPrescreeningController,
     ContractTemplatesController,
   ],
-  providers: [PropertyManagementService, ObjectStorageService, ContractsService, ContractTemplatesService, RentReminderService, DomusPropertyGuard],
+  providers: [
+    PropertyManagementService,
+    ObjectStorageService,
+    ContractsService,
+    ContractTemplatesService,
+    RentReminderService,
+    DomusPropertyGuard,
+    TenantPrescreeningService,
+  ],
 })
 export class PropertyManagementModule {}

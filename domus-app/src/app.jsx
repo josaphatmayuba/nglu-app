@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
+  ShieldCheck,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -19,8 +20,10 @@ import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
 import { Onboarding } from "./screens/onboarding.jsx";
+import { Prescreening } from "./screens/prescreening.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
+import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
@@ -41,6 +44,7 @@ const NAV = [
     { key: "baux", label: "Baux", icon: FileSignature },
     { key: "reservations", label: "Réservations", icon: BedDouble },
     { key: "contrats", label: "Contrats & signature", icon: FileCheck2 },
+    { key: "prescreening", label: "Enquête de prélocation", icon: ShieldCheck },
     { key: "onboarding", label: "Onboarding locataire", icon: UserPlus },
     { key: "loyers", label: "Loyers & paiements", icon: Wallet },
     { key: "paiement", label: "Paiement & quittance", icon: Smartphone },
@@ -54,7 +58,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "baux", "reservations", "contrats", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -65,6 +69,7 @@ const SCREENS = {
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
+  prescreening: (nav) => <Prescreening go={nav} />,
   onboarding: (nav) => <Onboarding go={nav} />,
   loyers: (nav, device) => <Loyers go={nav} device={device} />,
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
@@ -84,6 +89,33 @@ function useOnboardingRoute() {
       return new URLSearchParams(search || "").get("token") || "";
     }
     const m = (hash || "").match(/^#\/onboarding(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
+// Route publique de l'enquête de prélocation (/domus/prescreening/candidature?token=...) —
+// sans auth, même principe que useOnboardingRoute. Tolère un ancien lien par
+// hash (#/prescreening?token=) par robustesse.
+function usePrescreeningRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/prescreening\/candidature\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/prescreening(?:\?(.*))?$/);
     if (m) return new URLSearchParams(m[1] || "").get("token") || "";
     return null;
   };
@@ -126,6 +158,7 @@ function usePublicReservationsRoute() {
 export default function App() {
   const token = useAuthToken();
   const onboardingToken = useOnboardingRoute();
+  const prescreeningToken = usePrescreeningRoute();
   const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -136,13 +169,14 @@ export default function App() {
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token || onboardingToken !== null) return undefined;
+    if (!token || onboardingToken !== null || prescreeningToken !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token, onboardingToken]);
+  }, [token, onboardingToken, prescreeningToken]);
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
+  if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
   if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;

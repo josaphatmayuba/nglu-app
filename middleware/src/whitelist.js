@@ -75,6 +75,9 @@ module.exports = [
 
   // ── Onboarding locataire (public) ──────────────
   { method: '*',    prefix: '/tenant-onboarding',             auth: false },
+  // Enquête de prélocation Québec (public, token opaque fait autorisation).
+  // Doit rester déclarée AVANT le catch-all '/property-management' auth:true.
+  { method: '*',    prefix: '/tenant-prescreening',           auth: false },
   { method: '*',    prefix: '/property-management/contracts/sign', auth: false },
   { method: '*',    prefix: '/property-management/public',     auth: false },
   { method: '*',    prefix: '/batipro/public',                 auth: false }, // portail sous-traitant (token opaque)

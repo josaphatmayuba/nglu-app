@@ -259,6 +259,18 @@ export const api = {
   updateContractTemplate: (id, b) => put(`/contract-templates/${id}`, b),
   activateContractTemplate: (id) => patch(`/contract-templates/${id}/activate`),
   deleteContractTemplate: (id) => del(`/contract-templates/${id}`),
+
+  // Enquête de prélocation (Québec) — dossier interne du gestionnaire (JWT).
+  prescreenings: (status) => get(`/prescreenings${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  prescreening: (id) => get(`/prescreenings/${id}`),
+  createPrescreeningInvite: (b) => post("/prescreenings/invite", b),
+  addPrescreeningReference: (id, b) => post(`/prescreenings/${id}/references`, b),
+  updatePrescreeningReferenceContact: (id, refId, b) => post(`/prescreenings/${id}/references/${refId}/contact`, b),
+  decidePrescreening: (id, b) => post(`/prescreenings/${id}/decision`, b),
+  markPrescreeningCreditCheck: (id) => post(`/prescreenings/${id}/credit-check/mark`),
+  convertPrescreeningToOnboarding: (id) => post(`/prescreenings/${id}/convert-to-onboarding`),
+  purgePrescreening: (id) => post(`/prescreenings/${id}/purge`),
+  prescreeningConsentTexts: () => get("/prescreenings/consent-texts"),
 };
 
 // ── Onboarding public (page locataire Domus, sans authentification) ──
@@ -276,6 +288,22 @@ export function domusOnboardingUrl(backendUrl) {
     return `${u.origin}${ONBOARDING_PATH}?token=${encodeURIComponent(token)}`;
   } catch {
     return backendUrl || "";
+  }
+}
+
+// Même principe pour l'enquête de prélocation (Québec) : URL propre Domus
+// sous /domus/prescreening/candidature?token=... (deep-link mobile à préserver).
+export const PRESCREENING_PATH = `${import.meta.env.BASE_URL}prescreening/candidature`;
+export function domusPrescreeningUrl(backendUrlOrToken) {
+  if (!backendUrlOrToken) return "";
+  try {
+    const u = new URL(backendUrlOrToken);
+    const token = u.searchParams.get("token");
+    if (!token) return backendUrlOrToken || "";
+    return `${u.origin}${PRESCREENING_PATH}?token=${encodeURIComponent(token)}`;
+  } catch {
+    // Pas une URL absolue : on suppose que c'est déjà un token brut.
+    return `${window.location.origin}${PRESCREENING_PATH}?token=${encodeURIComponent(backendUrlOrToken)}`;
   }
 }
 
@@ -300,6 +328,17 @@ export const publicApi = {
     publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
   submitOnboarding: (token, values) =>
     publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
+  prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),
+  savePrescreening: (token, values) =>
+    publicFetch(`/tenant-prescreening/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+  recordPrescreeningConsent: (token, consentType, granted) =>
+    publicFetch(`/tenant-prescreening/consent?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify({ consentType, granted }) }),
+  submitPrescreening: (token) =>
+    publicFetch(`/tenant-prescreening/submit?token=${encodeURIComponent(token)}`, { method: "POST" }),
+  prescreeningConsentText: (version, locale, consentType) =>
+    publicFetch(`/tenant-prescreening/consent-text?version=${encodeURIComponent(version)}&locale=${encodeURIComponent(locale)}&consentType=${encodeURIComponent(consentType)}`),
   stays: () => publicFetch("/property-management/public/stays"),
   stay: (key) => publicFetch(`/property-management/public/stays/${encodeURIComponent(key)}`),
   publicPhotoUrl: (photoId) => `${API_ROOT}/property-management/public/photos/${encodeURIComponent(photoId)}/file`,
