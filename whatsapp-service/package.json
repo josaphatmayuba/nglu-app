@@ -1,0 +1,33 @@
+{
+  "name": "nglu-whatsapp-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microservice HTTP autonome pour le bot WhatsApp (Baileys) — isole de backend2 pour proteger la session longue-duree des redemarrages frequents de l'API principale.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@nestjs/common": "^11.1.24",
+    "@nestjs/core": "^11.1.24",
+    "@nestjs/platform-express": "^11.1.24",
+    "baileys": "^6.7.24",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.4",
+    "qrcode": "^1.5.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.21",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.19",
+    "@types/qrcode": "^1.5.6",
+    "typescript": "^5.7.2"
+  }
+}

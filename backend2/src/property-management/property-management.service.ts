@@ -40,7 +40,7 @@ import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
-import { WhatsappService } from "../whatsapp/whatsapp.service";
+import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -95,7 +95,7 @@ export class PropertyManagementService {
     private readonly workflow: WorkflowService,
     private readonly projects: ProjectsService,
     private readonly objectStorage: ObjectStorageService,
-    private readonly whatsapp: WhatsappService,
+    private readonly whatsapp: WhatsappClientService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -2848,7 +2848,7 @@ export class PropertyManagementService {
   private async notifyMaintenanceStatus(ticket: any, status: string) {
     const groupJid = process.env.WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID;
     if (!groupJid) return;
-    if (this.whatsapp.getStatus() !== "connected") return;
+    if ((await this.whatsapp.getStatus()) !== "connected") return;
     const label =
       status === "done" ? "Maintenance terminee"
       : status === "in_progress" ? "Maintenance en cours"

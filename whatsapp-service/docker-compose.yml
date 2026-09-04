@@ -1,0 +1,17 @@
+services:
+  whatsapp-service:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8090}:8090"
+    environment:
+      PORT: 8090
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-true}
+      WHATSAPP_SERVICE_SECRET: ${WHATSAPP_SERVICE_SECRET}
+      WHATSAPP_AUTH_DIR: /app/storage/whatsapp-auth
+    volumes:
+      - whatsapp_auth:/app/storage/whatsapp-auth
+
+volumes:
+  whatsapp_auth:
+    name: whatsapp_auth

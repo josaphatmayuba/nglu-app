@@ -191,6 +191,4 @@ module.exports = [
   { method: '*',    prefix: '/shift',                         auth: true  },
   // Reports
   { method: '*',    prefix: '/report',                        auth: true  },
-  // Bot WhatsApp (Baileys) — reserve super_owner, garde backend SuperOwnerGuard
-  { method: '*',    prefix: '/whatsapp',                      auth: true  },
 ];
