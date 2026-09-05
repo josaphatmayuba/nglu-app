@@ -65,10 +65,25 @@ export function PwaUpdateBanner({ lang = "fr" }) {
   );
 }
 
+function detectManualHint() {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent || "";
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  const isSafari = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(ua);
+  const isFirefox = /firefox|fxios/i.test(ua);
+  if (isIOS) return "ios-safari";
+  if (isSafari) return "desktop-safari";
+  if (isFirefox) return "firefox";
+  return null;
+}
+
 // Hook réutilisable pour déclencher l'invite d'installation depuis un bouton
 // custom (ex: page login), sans passer par la bannière PwaInstallBanner.
+// Safari (iOS/macOS) et Firefox ne déclenchent jamais beforeinstallprompt :
+// manualHint indique quelle instruction manuelle afficher à la place.
 export function useInstallPrompt() {
   const [deferred, setDeferred] = React.useState(null);
+  const [manualHint] = React.useState(detectManualHint);
 
   React.useEffect(() => {
     const h = (e) => { e.preventDefault(); setDeferred(e); };
@@ -84,7 +99,7 @@ export function useInstallPrompt() {
     return choice?.outcome === "accepted";
   }, [deferred]);
 
-  return { canInstall: !!deferred, promptInstall };
+  return { canInstall: !!deferred, promptInstall, manualHint };
 }
 
 const btn = (primary) => ({
