@@ -1,5 +1,7 @@
 import React from "react";
+import { useInstallPrompt } from "./pwa";
 
+const IS_IOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
 const NATIVE = typeof window !== "undefined" &&
   (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.COMPTABILITE_API_HOST) || "https://dev.ongdngolu.org";
@@ -98,6 +100,8 @@ export function LoginScreen() {
       setSubmitting(false);
     }
   }
+  const { canInstall, promptInstall } = useInstallPrompt();
+  const [iosHint, setIosHint] = React.useState(false);
   return (
     <main className="login-page">
       <form className="login-card" onSubmit={submit}>
@@ -109,6 +113,12 @@ export function LoginScreen() {
         {error && <div className="login-error">{error}</div>}
         <button className="btn btn-accent grad-accent" disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
         <a href="/admin/">Retour au CRM</a>
+        {(canInstall || IS_IOS) && (
+          <button type="button" className="btn" onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}>
+            Installer l'application
+          </button>
+        )}
+        {iosHint && <p style={{ fontSize: 12, textAlign: "center" }}>Safari : bouton Partager puis « Sur l'écran d'accueil ».</p>}
       </form>
     </main>
   );

@@ -1,7 +1,10 @@
 // Domus auth is shared with the CRM and FarmOS through the same localStorage
 // keys. The main key is `access-token`.
 import React, { useEffect, useState } from "react";
-import { Building2, Eye, EyeOff } from "lucide-react";
+import { Building2, Eye, EyeOff, Download } from "lucide-react";
+import { useInstallPrompt } from "./pwa";
+
+const IS_IOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -203,6 +206,9 @@ export function LoginScreen() {
     (!mfaToken && (!username.trim() || !password)) ||
     (mfaToken && mfaCode.length < 6);
 
+  const { canInstall, promptInstall } = useInstallPrompt();
+  const [iosHint, setIosHint] = useState(false);
+
   return (
     <div style={pageStyle}>
       <form onSubmit={submit} className="card" style={formStyle}>
@@ -292,6 +298,22 @@ export function LoginScreen() {
             Ouvrir le CRM
           </a>
         </div>
+
+        {(canInstall || IS_IOS) && (
+          <button
+            type="button"
+            onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}
+            style={installButtonStyle}
+          >
+            <Download size={14} />
+            Installer l'application
+          </button>
+        )}
+        {iosHint && (
+          <div className="muted" style={{ fontSize: 11.5, textAlign: "center" }}>
+            Safari : bouton Partager puis « Sur l'écran d'accueil ».
+          </div>
+        )}
       </form>
     </div>
   );
@@ -355,6 +377,22 @@ const iconButtonStyle = {
   color: "var(--ink-500)",
   display: "grid",
   placeItems: "center",
+  cursor: "pointer",
+};
+
+const installButtonStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  width: "100%",
+  height: 36,
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  background: "transparent",
+  color: "var(--ink-500)",
+  fontSize: 12.5,
+  fontWeight: 600,
   cursor: "pointer",
 };
 

@@ -65,6 +65,28 @@ export function PwaUpdateBanner({ lang = "fr" }) {
   );
 }
 
+// Hook réutilisable pour déclencher l'invite d'installation depuis un bouton
+// custom (ex: page login), sans passer par la bannière PwaInstallBanner.
+export function useInstallPrompt() {
+  const [deferred, setDeferred] = React.useState(null);
+
+  React.useEffect(() => {
+    const h = (e) => { e.preventDefault(); setDeferred(e); };
+    window.addEventListener("beforeinstallprompt", h);
+    return () => window.removeEventListener("beforeinstallprompt", h);
+  }, []);
+
+  const promptInstall = React.useCallback(async () => {
+    if (!deferred) return false;
+    deferred.prompt();
+    const choice = await deferred.userChoice;
+    setDeferred(null);
+    return choice?.outcome === "accepted";
+  }, [deferred]);
+
+  return { canInstall: !!deferred, promptInstall };
+}
+
 const btn = (primary) => ({
   background: primary ? "#D7AA45" : "transparent",
   color: primary ? "#0E2418" : "#ECF1EC",
