@@ -1,7 +1,11 @@
 import React from "react";
 import { useInstallPrompt } from "./pwa";
 
-const IS_IOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+const MANUAL_HINT_TEXT = {
+  "ios-safari": "Safari : bouton Partager puis « Sur l'écran d'accueil ».",
+  "desktop-safari": "Safari : menu Fichier puis « Ajouter au Dock ».",
+  "firefox": "Firefox ne propose pas encore l'installation PWA — utilise Chrome ou Edge.",
+};
 const NATIVE =
   typeof window !== "undefined" &&
   (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
@@ -115,8 +119,8 @@ export function LoginScreen() {
     }
   };
 
-  const { canInstall, promptInstall } = useInstallPrompt();
-  const [iosHint, setIosHint] = React.useState(false);
+  const { canInstall, promptInstall, manualHint } = useInstallPrompt();
+  const [showHint, setShowHint] = React.useState(false);
 
   return (
     <main className="login-page">
@@ -135,12 +139,14 @@ export function LoginScreen() {
         {error && <div className="login-error">{error}</div>}
         <button className="btn btn-amber grad-amber" disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
         <a href="/admin/">Retour au CRM</a>
-        {(canInstall || IS_IOS) && (
-          <button type="button" className="btn" onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}>
-            Installer l'application
-          </button>
+        <button type="button" className="btn" onClick={() => (canInstall ? promptInstall() : setShowHint((v) => !v))}>
+          Installer l'application
+        </button>
+        {showHint && !canInstall && (
+          <p style={{ fontSize: 12, textAlign: "center" }}>
+            {MANUAL_HINT_TEXT[manualHint] || "Utilise le menu de ton navigateur pour installer ou ajouter cette page à l'écran d'accueil."}
+          </p>
         )}
-        {iosHint && <p style={{ fontSize: 12, textAlign: "center" }}>Safari : bouton Partager puis « Sur l'écran d'accueil ».</p>}
       </form>
     </main>
   );

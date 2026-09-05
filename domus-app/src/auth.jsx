@@ -4,7 +4,11 @@ import React, { useEffect, useState } from "react";
 import { Building2, Eye, EyeOff, Download } from "lucide-react";
 import { useInstallPrompt } from "./pwa";
 
-const IS_IOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+const MANUAL_HINT_TEXT = {
+  "ios-safari": "Safari : bouton Partager puis « Sur l'écran d'accueil ».",
+  "desktop-safari": "Safari : menu Fichier puis « Ajouter au Dock ».",
+  "firefox": "Firefox ne propose pas encore l'installation PWA — utilise Chrome ou Edge.",
+};
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -206,8 +210,8 @@ export function LoginScreen() {
     (!mfaToken && (!username.trim() || !password)) ||
     (mfaToken && mfaCode.length < 6);
 
-  const { canInstall, promptInstall } = useInstallPrompt();
-  const [iosHint, setIosHint] = useState(false);
+  const { canInstall, promptInstall, manualHint } = useInstallPrompt();
+  const [showHint, setShowHint] = useState(false);
 
   return (
     <div style={pageStyle}>
@@ -299,19 +303,17 @@ export function LoginScreen() {
           </a>
         </div>
 
-        {(canInstall || IS_IOS) && (
-          <button
-            type="button"
-            onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}
-            style={installButtonStyle}
-          >
-            <Download size={14} />
-            Installer l'application
-          </button>
-        )}
-        {iosHint && (
+        <button
+          type="button"
+          onClick={() => (canInstall ? promptInstall() : setShowHint((v) => !v))}
+          style={installButtonStyle}
+        >
+          <Download size={14} />
+          Installer l'application
+        </button>
+        {showHint && !canInstall && (
           <div className="muted" style={{ fontSize: 11.5, textAlign: "center" }}>
-            Safari : bouton Partager puis « Sur l'écran d'accueil ».
+            {MANUAL_HINT_TEXT[manualHint] || "Utilise le menu de ton navigateur pour installer ou ajouter cette page à l'écran d'accueil."}
           </div>
         )}
       </form>

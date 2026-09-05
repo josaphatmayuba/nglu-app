@@ -8,7 +8,11 @@ import React from "react";
 import { Icon, Brand } from "./icons";
 import { useInstallPrompt } from "./pwa";
 
-const IS_IOS = typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+const MANUAL_HINT_TEXT = {
+  "ios-safari": { fr: "Safari : bouton Partager puis « Sur l'écran d'accueil ».", en: "Share button, then \"Add to Home Screen\"." },
+  "desktop-safari": { fr: "Safari : menu Fichier puis « Ajouter au Dock ».", en: "File menu, then \"Add to Dock\"." },
+  "firefox": { fr: "Firefox ne propose pas encore l'installation PWA — utilise Chrome ou Edge.", en: "Firefox doesn't support PWA install yet — use Chrome or Edge." },
+};
 
 const NATIVE = typeof window !== "undefined" && (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
@@ -125,8 +129,8 @@ export function LoginScreen({ lang = "fr" }) {
   const [error, setError] = React.useState(null);
   const [mfaToken, setMfaToken] = React.useState(null);
   const [mfaCode, setMfaCode] = React.useState("");
-  const { canInstall, promptInstall } = useInstallPrompt();
-  const [iosHint, setIosHint] = React.useState(false);
+  const { canInstall, promptInstall, manualHint } = useInstallPrompt();
+  const [showHint, setShowHint] = React.useState(false);
 
   const submit = async (e) => {
     e?.preventDefault?.();
@@ -250,19 +254,20 @@ export function LoginScreen({ lang = "fr" }) {
           </a>
         </div>
 
-        {(canInstall || IS_IOS) && (
-          <button type="button" onClick={() => (canInstall ? promptInstall() : setIosHint((v) => !v))}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              width: "100%", height: 36, border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8,
-              background: "transparent", color: "var(--fg-3, #6b6b6b)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-            }}>
-            {lang === "fr" ? "Installer l'application" : "Install the app"}
-          </button>
-        )}
-        {iosHint && (
+        <button type="button" onClick={() => (canInstall ? promptInstall() : setShowHint((v) => !v))}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            width: "100%", height: 36, border: "1px solid var(--border-2, #d8c8a8)", borderRadius: 8,
+            background: "transparent", color: "var(--fg-3, #6b6b6b)", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+          }}>
+          {lang === "fr" ? "Installer l'application" : "Install the app"}
+        </button>
+        {showHint && !canInstall && (
           <div style={{ fontSize: 11, color: "var(--fg-3)", textAlign: "center" }}>
-            Safari : {lang === "fr" ? "bouton Partager puis « Sur l'écran d'accueil »." : "Share button, then \"Add to Home Screen\"."}
+            {(MANUAL_HINT_TEXT[manualHint] || {})[lang]
+              || (lang === "fr"
+                ? "Utilise le menu de ton navigateur pour installer ou ajouter cette page à l'écran d'accueil."
+                : "Use your browser's menu to install or add this page to your home screen.")}
           </div>
         )}
       </form>
