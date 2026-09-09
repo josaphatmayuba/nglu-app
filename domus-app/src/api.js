@@ -194,7 +194,17 @@ export const api = {
   leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
 
   payments: () => get("/payments"),
-  createPayment: (b) => post("/payments", b),
+  // proofFile optionnel (photo/scan recu, capture mobile money) — meme
+  // pattern multipart que markContractSignedManually / uploadMaintenancePhoto.
+  createPayment: (b, proofFile = null) => {
+    if (!proofFile) return post("/payments", b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch("/payments", form);
+  },
   sendReminder: (b) => post("/payments/reminder", b),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
 

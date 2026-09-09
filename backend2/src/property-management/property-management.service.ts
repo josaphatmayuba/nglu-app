@@ -1592,6 +1592,7 @@ export class PropertyManagementService {
         notes: realEstateRentPayments.notes,
         taxAmount: realEstateRentPayments.taxAmount,
         taxName: realEstateRentPayments.taxName,
+        proofUrl: realEstateRentPayments.proofUrl,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -1622,7 +1623,8 @@ export class PropertyManagementService {
       ));
   }
 
-  async createPayment(input: CreateRentPaymentDto, orgId: number) {
+  async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
@@ -1671,6 +1673,7 @@ export class PropertyManagementService {
       notes: input.notes || "Payment for rent",
       taxAmount: taxAmt != null ? this.money(taxAmt) : null,
       taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+      proofUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -3233,6 +3236,17 @@ export class PropertyManagementService {
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
       allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
       prefix: "receipt",
+      maxBytes: 5 * 1024 * 1024,
+    });
+    const base = publicApiBase ?? "";
+    return `${base}/uploads/${name}`;
+  }
+
+  private saveProofFile(file: any, publicApiBase?: string): string | null {
+    if (!file?.buffer) return null;
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+      prefix: "rent-proof",
       maxBytes: 5 * 1024 * 1024,
     });
     const base = publicApiBase ?? "";

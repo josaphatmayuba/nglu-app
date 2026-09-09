@@ -349,6 +349,11 @@ export class CreateRentPaymentDto {
   @IsInt()
   @Min(1)
   currencyId?: number;
+
+  @ApiPropertyOptional({ description: "URL de la preuve de paiement deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class CollectDepositDto {

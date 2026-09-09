@@ -721,9 +721,25 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
   @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("payments")
-  createPayment(@Body() body: CreateRentPaymentDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.createPayment(body, orgId);
+  createPayment(
+    @Body() body: CreateRentPaymentDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Send payment reminder email to tenant" })
