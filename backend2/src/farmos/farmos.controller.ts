@@ -76,10 +76,12 @@ import {
   UpdateAnimalOperationDto,
   UpdateOperationTypeDto,
 } from "./dto/farmos.dto";
+import { CreateReproCycleDto, UpdateReproCycleDto } from "./dto/repro-cycle.dto";
 import { FarmosService } from "./farmos.service";
 import { FarmosFeedService } from "./farmos-feed.service";
 import { FarmosOperationsService } from "./farmos-operations.service";
 import { FarmosProfitabilityService } from "./farmos-profitability.service";
+import { FarmosReproService } from "./farmos-repro.service";
 
 const FARMOS_REALTIME_TABLES = [
   "animals",
@@ -109,6 +111,7 @@ export class FarmosController {
     private readonly farmosFeed: FarmosFeedService,
     private readonly farmosOperations: FarmosOperationsService,
     private readonly farmosProfitability: FarmosProfitabilityService,
+    private readonly farmosRepro: FarmosReproService,
   ) {}
 
   @ApiOperation({ summary: "FarmOS dashboard snapshot grouped in one request" })
@@ -506,6 +509,45 @@ export class FarmosController {
   @Get("reproduction-events")
   listReproductionEvents(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
     return this.farmos.listReproductionEvents(orgId, species);
+  }
+
+  // ─── Registre de reproduction porcine — cycles (Etape 1) ────────────────
+
+  @ApiOperation({ summary: "Watchlist des truies (statut repro, jours non productifs, prochaine action)." })
+  @Permissions("readAll-farmos")
+  @Get("repro/sow-watchlist")
+  getSowWatchlist(
+    @CurrentOrg() orgId: number,
+    @Query("site") site?: string,
+    @Query("status") status?: string,
+    @Query("minDays") minDays?: string,
+  ) {
+    return this.farmosRepro.getSowWatchlist(orgId, {
+      site,
+      status,
+      minDays: minDays !== undefined ? Number(minDays) : undefined,
+    });
+  }
+
+  @ApiOperation({ summary: "Historique des cycles de reproduction d'une truie." })
+  @Permissions("readAll-farmos")
+  @Get("repro/cycles")
+  listReproCycles(@CurrentOrg() orgId: number, @Query("sowId", ParseIntPipe) sowId: number) {
+    return this.farmosRepro.listCycles(orgId, sowId);
+  }
+
+  @ApiOperation({ summary: "Créer un cycle de reproduction (saillie initiale)." })
+  @Permissions("create-farmos")
+  @Post("repro/cycles")
+  createReproCycle(@Body() body: CreateReproCycleDto, @CurrentOrg() orgId: number) {
+    return this.farmosRepro.createCycle(orgId, body);
+  }
+
+  @ApiOperation({ summary: "Mettre à jour un cycle de reproduction (diagnostic / mise bas / sevrage)." })
+  @Permissions("update-farmos")
+  @Patch("repro/cycles/:id")
+  updateReproCycle(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateReproCycleDto, @CurrentOrg() orgId: number) {
+    return this.farmosRepro.updateCycle(orgId, id, body);
   }
 
   // ─── Sales & expenses ────────────────────────────────────────────────────

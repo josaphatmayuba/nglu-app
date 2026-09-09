@@ -1068,6 +1068,8 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
   taxAmount: decimal("tax_amount", { precision: 15, scale: 2 }),
   taxName: varchar("tax_name", { length: 255 }),
+  // Preuve de paiement (photo/scan recu, capture mobile money) — optionnelle.
+  proofUrl: varchar("proof_url", { length: 500 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -2393,6 +2395,12 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   fatherId: varchar("father_id", { length: 100 }),
   estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
   lastEvent: varchar("last_event", { length: 255 }),
+  // Etat reproductif (registre de reproduction porcine, etape 1).
+  // reproStatus : nulliparous | mated | pregnant | lactating | empty | culled
+  reproStatus: varchar("repro_status", { length: 20 }),
+  reproStatusSince: date("repro_status_since", { mode: "string" }),
+  bodyConditionScore: decimal("body_condition_score", { precision: 3, scale: 1 }),
+  parity: int("parity"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -3409,9 +3417,38 @@ export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events",
   birthDifficulty: varchar("birth_difficulty", { length: 20 }),
   weanedCount: int("weaned_count"),
   weaningDate: date("weaning_date", { mode: "string" }),
+  // Rattachement au cycle de reproduction (farmos_repro_cycles.id).
+  cycleId: bigint("cycle_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ─── Cycles de reproduction (registre truies) ───────────────────────────
+// Un cycle = une truie, de la saillie au sevrage. Pas de FK physique
+// (cohérent avec le reste des tables farmos_*).
+export const farmosReproCycles = mysqlTable("farmos_repro_cycles", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sowId: bigint("sow_id", { mode: "number" }).notNull(),
+  cycleNumber: int("cycle_number"),
+  matingDate: date("mating_date", { mode: "string" }),
+  sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
+  sireStrawId: bigint("sire_straw_id", { mode: "number" }),
+  breedingType: varchar("breeding_type", { length: 20 }), // natural | insemination
+  expectedDiagnosisDate: date("expected_diagnosis_date", { mode: "string" }),
+  diagnosisDate: date("diagnosis_date", { mode: "string" }),
+  diagnosisResult: varchar("diagnosis_result", { length: 20 }), // pregnant | empty | doubtful
+  expectedFarrowingDate: date("expected_farrowing_date", { mode: "string" }),
+  farrowingDate: date("farrowing_date", { mode: "string" }),
+  expectedWeaningDate: date("expected_weaning_date", { mode: "string" }),
+  weaningDate: date("weaning_date", { mode: "string" }),
+  // in_progress | farrowed | weaned | aborted | not_pregnant | culled
+  outcome: varchar("outcome", { length: 20 }).default("in_progress"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
 
 // ─── Banque de semence (insémination artificielle) ──────────────────────

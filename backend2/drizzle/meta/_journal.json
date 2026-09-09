@@ -1730,6 +1730,41 @@
       "when": 1781071200022,
       "tag": "0271_domus_maintenance_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "5",
+      "when": 1781071200023,
+      "tag": "0272_domus_residential_template_v3",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "5",
+      "when": 1781071200024,
+      "tag": "0273_farmos_animal_repro_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "5",
+      "when": 1781071200025,
+      "tag": "0274_farmos_repro_cycles",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "5",
+      "when": 1781071200026,
+      "tag": "0275_farmos_repro_cycles_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "5",
+      "when": 1781071200027,
+      "tag": "0276_domus_rent_payment_proof",
+      "breakpoints": true
     }
   ]
 }
