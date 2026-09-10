@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "${PORT:-8090}:8090"
+      - "127.0.0.1:${PORT:-8090}:8090"
     environment:
       PORT: 8090
       WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-true}
