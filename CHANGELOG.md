@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — fix page blanche sur la modale "Couts" d'un ticket de maintenance (`ReferenceError: supplierOptions is not defined`).** `CostModal` est un composant separe de l'ecran Maintenance ; il referencait directement `supplierOptions` (liste des fournisseurs actifs) sans que celui-ci lui soit passe en prop, provoquant une erreur au runtime en prod des l'ouverture de la modale. Fichier modifie : `domus-app/src/screens/maintenance.jsx`. Verifie : relecture du diff, aucun autre composant modal du fichier ne referencait de variable hors-prop similaire (pas de Docker local disponible sur cette machine).
+
 - **Domus — regroupe la gestion des modeles de contrat dans les Reglages.** Les composants d'edition/apercu des modeles de bail (`TemplatesCard`, `TemplatePreviewModal`) vivaient dans `contrats.jsx`, separes du reste de la configuration Domus (devises, moyens de paiement, messages). Deplaces vers `reglages.jsx` pour regrouper toute la configuration au meme endroit ; l'ecran Contrats ne garde que la liste/detail/envoi/signature. Fichiers modifies : `domus-app/src/screens/contrats.jsx`, `domus-app/src/screens/reglages.jsx`. Verifie : relecture du diff (pas de Docker local disponible sur cette machine).
 
 - **whatsapp-service — port lie sur `127.0.0.1` uniquement.** Le port du microservice WhatsApp (`docker-compose.yml`) etait expose sur toutes les interfaces (`0.0.0.0`) ; restreint a l'hote local, le service n'etant destine qu'a un appel interne depuis backend2. Fichier modifie : `whatsapp-service/docker-compose.yml`.
