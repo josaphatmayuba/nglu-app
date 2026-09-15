@@ -47,3 +47,17 @@ export function takeMaintenancePrefill() {
   prefillMaintenance = null;
   return value;
 }
+
+// Même mécanisme de handoff pour « P&L » depuis un bien (SCRUM-312) : on
+// mémorise le bien à présélectionner dans l'écran P&L.
+let prefillPnl = null;
+
+export function setPnlPrefill(propertyId) {
+  prefillPnl = propertyId != null ? String(propertyId) : null;
+}
+
+export function takePnlPrefill() {
+  const value = prefillPnl;
+  prefillPnl = null;
+  return value;
+}

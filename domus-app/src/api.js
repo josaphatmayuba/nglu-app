@@ -263,6 +263,15 @@ export const api = {
   updateMortgagePayment: (id, b) => patch(`/mortgage-payments/${id}`, b),
   deleteMortgagePayment: (id) => del(`/mortgage-payments/${id}`),
 
+  // P&L par propriété (SCRUM-312) — revenus/dépenses/hypothèque sur une période.
+  propertyPnl: (propertyId, dateFrom, dateTo) => {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/properties/${propertyId}/pnl${qs ? `?${qs}` : ""}`);
+  },
+
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),
   collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),

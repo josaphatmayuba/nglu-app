@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
-  ShieldCheck, Receipt, Landmark,
+  ShieldCheck, Receipt, Landmark, BarChart3,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -16,6 +16,7 @@ import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Depenses } from "./screens/depenses.jsx";
 import { Hypotheque } from "./screens/hypotheque.jsx";
+import { Pnl } from "./screens/pnl.jsx";
 import { Baux } from "./screens/baux.jsx";
 import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
@@ -36,6 +37,7 @@ const NAV = [
   { sec: "Pilotage", items: [
     { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { key: "previsionnel", label: "Prévisionnel", icon: TrendingUp },
+    { key: "pnl", label: "P&L par propriété", icon: BarChart3 },
   ] },
   { sec: "Patrimoine", items: [
     { key: "biens", label: "Propriétés", icon: Building },
@@ -62,11 +64,12 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "hypotheque", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "hypotheque", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
   previsionnel: () => <Forecast />,
+  pnl: () => <Pnl />,
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (nav, device) => <Locataires go={nav} device={device} />,

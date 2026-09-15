@@ -986,6 +986,22 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteMortgagePayment(id, orgId);
   }
 
+  // ── P&L par propriete (SCRUM-312) ───────────────────────────────────────────
+
+  @ApiOperation({ summary: "Property P&L: revenus (loyers) / depenses / hypotheque, par devise" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readAll-propertyManagement")
+  @Get("properties/:id/pnl")
+  getPropertyPnl(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.getPropertyPnl(id, orgId, scope, { dateFrom, dateTo });
+  }
+
   // ── Maintenance Photos ──────────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List photos for one maintenance ticket" })

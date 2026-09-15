@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   AlertTriangle,
+  BarChart3,
   Bath,
   BedDouble,
   Building2,
@@ -34,7 +35,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
-import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from "./reservationPrefill.js";
+import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill, setPnlPrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
 import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
@@ -1011,6 +1012,11 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
             onClick={() => { onClose(); go?.("hypotheque"); }}
             disabled={busy}
           ><Landmark size={14} /> Hypothèque</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setPnlPrefill(property.propertyId || property.id); onClose(); go?.("pnl"); }}
+            disabled={busy}
+          ><BarChart3 size={14} /> P&amp;L</button>
           <button
             className="domus-modal-draft"
             onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}

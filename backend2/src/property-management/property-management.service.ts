@@ -47,6 +47,7 @@ import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import { InvalidPhoneNumberError, normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
+import type { DomusPropertyScope } from "../auth/decorators/domus-property-scope.decorator";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -3658,6 +3659,187 @@ export class PropertyManagementService {
       .leftJoin(currencies, eq(currencies.id, realEstateMortgagePayments.currencyId))
       .where(and(...conditions))
       .orderBy(desc(realEstateMortgagePayments.paymentDate), desc(realEstateMortgagePayments.id));
+  }
+
+  // ── P&L par propriete (SCRUM-312) ─────────────────────────────────────────
+  // Pas de migration : agregation en memoire sur les 3 tables metier
+  // existantes (loyers via bail->propriete, depenses, hypotheque). Les loyers
+  // ne sont pas tagues par project_id (contrairement aux depenses/hypotheque),
+  // donc pas de passage par le ledger ici - chantier separe, hors scope.
+  async getPropertyPnl(
+    propertyId: number,
+    orgId: number,
+    scope: DomusPropertyScope,
+    filters: { dateFrom?: string; dateTo?: string } = {},
+  ) {
+    if (scope !== "all" && !scope.includes(propertyId)) {
+      throw new NotFoundException("Property not found.");
+    }
+
+    const propertyRows = await this.db
+      .select({ id: realEstateProperties.id, name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.id, propertyId),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateProperties.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!propertyRows.length) {
+      throw new NotFoundException("Property not found.");
+    }
+    const property = propertyRows[0];
+
+    const defaultCurrencyId = await this.resolveDefaultCurrency(orgId);
+
+    // Revenus : loyers de ce bien via le bail, meme filtre que l ecran Loyers
+    // existant (baux annules exclus), agreges par devise.
+    const rentConditions = [
+      ne(paymentLease.status, "cancelled"),
+      eq(paymentLease.propertyId, propertyId),
+      eq(realEstateRentPayments.organizationId, orgId),
+    ];
+    if (filters.dateFrom) rentConditions.push(gte(realEstateRentPayments.paymentDate, filters.dateFrom));
+    if (filters.dateTo) rentConditions.push(lte(realEstateRentPayments.paymentDate, filters.dateTo));
+
+    const rentRows = await this.db
+      .select({
+        currencyId: realEstateRentPayments.currencyId,
+        total: sql<string>`SUM(${realEstateRentPayments.amount})`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(realEstateRentPayments)
+      .leftJoin(paymentLease, eq(paymentLease.id, realEstateRentPayments.leaseId))
+      .where(and(...rentConditions))
+      .groupBy(realEstateRentPayments.currencyId);
+
+    // Depenses actives de ce bien, reutilise le meme filtre que SCRUM-310.
+    const expenseRows = await this.listPropertyExpenses(orgId, {
+      propertyId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    });
+
+    // Hypotheque active de ce bien, reutilise le meme filtre que SCRUM-311.
+    const mortgageRows = await this.listMortgagePayments(orgId, {
+      propertyId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    });
+
+    // Merge en memoire par devise. currencyId NULL -> devise par defaut de
+    // l org (jamais fusionne silencieusement avec une devise reelle existante,
+    // cf. incident "USD fantome").
+    const resolveCurrencyId = (id: number | null | undefined) => id ?? defaultCurrencyId ?? null;
+
+    type Bucket = {
+      currencyId: number | null;
+      revenueRent: number;
+      revenueCount: number;
+      expensesTotal: number;
+      expensesCount: number;
+      expensesByCategory: Map<string, number>;
+      mortgageInterest: number;
+      mortgagePrincipal: number;
+      mortgageEscrow: number;
+      mortgageCount: number;
+    };
+    const buckets = new Map<number | null, Bucket>();
+    const getBucket = (currencyId: number | null) => {
+      let bucket = buckets.get(currencyId);
+      if (!bucket) {
+        bucket = {
+          currencyId,
+          revenueRent: 0,
+          revenueCount: 0,
+          expensesTotal: 0,
+          expensesCount: 0,
+          expensesByCategory: new Map(),
+          mortgageInterest: 0,
+          mortgagePrincipal: 0,
+          mortgageEscrow: 0,
+          mortgageCount: 0,
+        };
+        buckets.set(currencyId, bucket);
+      }
+      return bucket;
+    };
+
+    for (const row of rentRows) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId as number | null));
+      bucket.revenueRent += Number(row.total ?? 0);
+      bucket.revenueCount += Number(row.count ?? 0);
+    }
+
+    for (const row of expenseRows as any[]) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId));
+      const amount = Number(row.amount ?? 0);
+      bucket.expensesTotal += amount;
+      bucket.expensesCount += 1;
+      const category = row.category ?? "other";
+      bucket.expensesByCategory.set(category, (bucket.expensesByCategory.get(category) ?? 0) + amount);
+    }
+
+    for (const row of mortgageRows as any[]) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId));
+      bucket.mortgageInterest += Number(row.interestAmount ?? 0);
+      bucket.mortgagePrincipal += Number(row.principalAmount ?? 0);
+      bucket.mortgageEscrow += Number(row.escrowAmount ?? 0);
+      bucket.mortgageCount += 1;
+    }
+
+    const currencyIds = Array.from(buckets.keys()).filter((id): id is number => id !== null);
+    const currencyRows = currencyIds.length
+      ? await this.db
+          .select({
+            id: currencies.id,
+            currencyCode: currencies.currencyCode,
+            currencyName: currencies.currencyName,
+            currencySymbol: currencies.currencySymbol,
+          })
+          .from(currencies)
+          .where(inArray(currencies.id, currencyIds))
+      : [];
+    const currencyById = new Map(currencyRows.map((c) => [c.id, c]));
+
+    const byCurrency = Array.from(buckets.values()).map((bucket) => {
+      const currency = bucket.currencyId !== null ? currencyById.get(bucket.currencyId) : undefined;
+      const netIncome = bucket.revenueRent - bucket.expensesTotal - bucket.mortgageInterest;
+      return {
+        currencyId: bucket.currencyId,
+        currencyCode: currency?.currencyCode ?? null,
+        currencyName: currency?.currencyName ?? null,
+        currencySymbol: currency?.currencySymbol ?? null,
+        revenue: {
+          rent: this.money(bucket.revenueRent),
+          count: bucket.revenueCount,
+        },
+        expenses: {
+          total: this.money(bucket.expensesTotal),
+          count: bucket.expensesCount,
+          byCategory: Array.from(bucket.expensesByCategory.entries()).map(([category, amount]) => ({
+            category,
+            amount: this.money(amount),
+          })),
+        },
+        mortgage: {
+          interest: this.money(bucket.mortgageInterest),
+          count: bucket.mortgageCount,
+          principal: this.money(bucket.mortgagePrincipal),
+          escrow: this.money(bucket.mortgageEscrow),
+        },
+        netIncome: this.money(netIncome),
+      };
+    });
+
+    return {
+      propertyId: property.id,
+      propertyName: property.name,
+      dateFrom: filters.dateFrom ?? null,
+      dateTo: filters.dateTo ?? null,
+      byCurrency,
+    };
   }
 
   async getMortgagePayment(id: number, orgId: number) {
