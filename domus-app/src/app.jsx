@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
-  ShieldCheck,
+  ShieldCheck, Receipt,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -14,6 +14,7 @@ import { CarteBiens } from "./screens/carte.jsx";
 import { Locataires } from "./screens/locataires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
+import { Depenses } from "./screens/depenses.jsx";
 import { Baux } from "./screens/baux.jsx";
 import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
@@ -49,6 +50,7 @@ const NAV = [
     { key: "loyers", label: "Loyers & paiements", icon: Wallet },
     { key: "paiement", label: "Paiement & quittance", icon: Smartphone },
     { key: "maintenance", label: "Maintenance", icon: Wrench },
+    { key: "depenses", label: "Dépenses", icon: Receipt },
   ] },
   { sec: "Espace & config", items: [
     { key: "portail", label: "Espace locataire", icon: UserRound },
@@ -58,7 +60,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -74,6 +76,7 @@ const SCREENS = {
   loyers: (nav, device) => <Loyers go={nav} device={device} />,
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
   maintenance: (_nav, device) => <Maintenance device={device} />,
+  depenses: (_nav, device) => <Depenses device={device} />,
   portail: (nav, device) => <Portail go={nav} device={device} />,
   reglages: (_nav, device) => <Reglages device={device} />,
 };

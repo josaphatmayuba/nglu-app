@@ -35,7 +35,8 @@ import {
 import { api } from "../api.js";
 import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
-import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
+import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
+import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
@@ -818,6 +819,25 @@ function PropertyMap({ rows }) {
 function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, onDeletePhoto, onEdit, go }) {
   const photos = Array.isArray(property.photos) ? property.photos : [];
   const cover = photos[0];
+  const propertyId = property.propertyId || property.id;
+  const expensesApi = useApi(() => api.propertyExpenses({ propertyId }), [propertyId]);
+  const currenciesApi = useApi(() => api.currencies(), []);
+  const settingApi = useApi(() => api.setting(), []);
+  const currency = useMemo(
+    () => normalizeCurrencyModule(currenciesApi.data, settingApi.data),
+    [currenciesApi.data, settingApi.data],
+  );
+  const propertyExpenses = useMemo(() => {
+    const raw = expensesApi.data;
+    return Array.isArray(raw) ? raw : raw?.data || [];
+  }, [expensesApi.data]);
+  const expenseSymbol = (expense) => {
+    const byId = expense?.currencyId != null ? currency.currencyById?.get(Number(expense.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(expense) || currency.defaultCurrencySymbol;
+  };
+  const expenseTotals = useMemo(() => expenseTotalsByCurrency(propertyExpenses, expenseSymbol), [propertyExpenses, currency]);
+  const categoryLabel = (key) => EXPENSE_CATEGORIES.find(([k]) => k === key)?.[1] || key;
   return (
     <Modal
       title={property.name}
@@ -891,11 +911,49 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           </div>
         )}
 
+        <div className="domus-property-detail-notes">
+          <p><strong>Dépenses</strong></p>
+          {expensesApi.loading ? (
+            <p className="muted">Chargement...</p>
+          ) : propertyExpenses.length === 0 ? (
+            <p className="muted">Aucune dépense enregistrée pour ce bien.</p>
+          ) : (
+            <>
+              <table className="tbl" style={{ width: "100%" }}>
+                <thead>
+                  <tr><th>Description</th><th>Catégorie</th><th>Date</th><th className="r">Montant</th></tr>
+                </thead>
+                <tbody>
+                  {propertyExpenses.map((expense) => (
+                    <tr key={expense.id}>
+                      <td>{expense.description}</td>
+                      <td>{categoryLabel(expense.category)}</td>
+                      <td>{expense.expenseDate ? String(expense.expenseDate).slice(0, 10) : "-"}</td>
+                      <td className="r">{money(expense.amount, expenseSymbol(expense))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {expenseTotals.map((c) => (
+                <div className="ops-score" key={c.symbol}>
+                  <span>{`Total ${c.symbol}`}</span>
+                  <b>{money(c.amount, c.symbol)}</b>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
         {error && <div className="api-error">{error}</div>}
       </div>
       <div className="domus-modal-footer">
         <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Fermer</button>
         <div>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { onClose(); go?.("depenses"); }}
+            disabled={busy}
+          ><Wallet size={14} /> Dépenses</button>
           <button
             className="domus-modal-draft"
             onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}

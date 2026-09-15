@@ -1197,3 +1197,120 @@ export class CheckOutReservationDto {
   @IsString()
   notes?: string | null;
 }
+
+// ── Depenses par propriete (SCRUM-310) ────────────────────────────────────────
+// "mortgage" est exclu volontairement de cette v1 (ticket dedie futur).
+export const PROPERTY_EXPENSE_CATEGORIES = [
+  "insurance",
+  "property_tax",
+  "hoa",
+  "maintenance_general",
+  "management_fee",
+  "security",
+  "cleaning",
+  "other",
+] as const;
+export type PropertyExpenseCategory = (typeof PROPERTY_EXPENSE_CATEGORIES)[number];
+
+export class CreatePropertyExpenseDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  leaseId?: number;
+
+  @ApiProperty({ example: "insurance", enum: PROPERTY_EXPENSE_CATEGORIES })
+  @IsIn(PROPERTY_EXPENSE_CATEGORIES, {
+    message:
+      "Categorie invalide. Valeurs autorisees: insurance, property_tax, hoa, maintenance_general, management_fee, security, cleaning, other. " +
+      "La categorie mortgage n'est pas prise en charge dans cette version, elle fera l'objet d'un ticket dedie.",
+  })
+  category: PropertyExpenseCategory;
+
+  @ApiProperty({ example: "Assurance annuelle immeuble" })
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @ApiProperty({ example: 500 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  expenseDate: string;
+
+  @ApiPropertyOptional({ example: "2026-01-01" })
+  @IsOptional()
+  @IsDateString()
+  periodStart?: string;
+
+  @ApiPropertyOptional({ example: "2026-12-31" })
+  @IsOptional()
+  @IsDateString()
+  periodEnd?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  supplierId?: number;
+
+  @ApiPropertyOptional({ example: "Sonas assurances" })
+  @IsOptional()
+  @IsString()
+  vendorName?: string;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash" })
+  @IsOptional()
+  @IsIn(["cash", "bank", "mobile_money", "cheque"])
+  paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
+
+  @ApiPropertyOptional({ example: "paid", default: "paid" })
+  @IsOptional()
+  @IsIn(["paid", "pending", "overdue"])
+  paymentStatus?: "paid" | "pending" | "overdue";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  recurrenceMonths?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdatePropertyExpenseDto extends PartialType(CreatePropertyExpenseDto) {}

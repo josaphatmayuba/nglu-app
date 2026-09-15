@@ -19,6 +19,7 @@ import {
   realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
   realEstateProperties,
+  realEstatePropertyExpenses,
   realEstatePropertyPhotos,
   realEstateReservations,
   realEstateCoupons,
@@ -69,6 +70,8 @@ import {
   UpdateCouponDto,
   PublicReservationRequestDto,
   PublicLeaseRequestDto,
+  CreatePropertyExpenseDto,
+  UpdatePropertyExpenseDto,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 
@@ -3362,6 +3365,237 @@ export class PropertyManagementService {
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
+  // Route chaque categorie vers un compte de charge CANONIQUE deja existant
+  // (memes comptes que le regroupement 0149 / le sous-compte standard "Maintenance").
+  // Pas de nouveau sous-compte cree par cette feature.
+  private static readonly PROPERTY_EXPENSE_CATEGORY_ACCOUNT: Record<string, string> = {
+    insurance: "Frais de bureau et divers",
+    property_tax: "Frais de bureau et divers",
+    hoa: "Frais de bureau et divers",
+    maintenance_general: "Maintenance",
+    management_fee: "Frais de bureau et divers",
+    security: "Frais de bureau et divers",
+    cleaning: "Frais de bureau et divers",
+    other: "Frais de bureau et divers",
+  };
+
+  private async getOrCreatePropertyProject(propertyId: number, orgId: number, userId?: number): Promise<number | null> {
+    const [property] = await this.db
+      .select({ name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(eq(realEstateProperties.id, propertyId))
+      .limit(1);
+    try {
+      const proj = await this.projects.create(
+        {
+          name: `Bien: ${property?.name ?? propertyId}`,
+          code: `PROP-${propertyId}`,
+          sourceSystem: "property",
+          externalRef: String(propertyId),
+        },
+        orgId,
+        userId,
+      );
+      return proj.id;
+    } catch (err) {
+      this.logger.warn(`getOrCreatePropertyProject: liaison projet ignoree: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  async listPropertyExpenses(
+    orgId: number,
+    filters: { propertyId?: number; category?: string; dateFrom?: string; dateTo?: string } = {},
+  ) {
+    const conditions = [
+      eq(realEstatePropertyExpenses.organizationId, orgId),
+      eq(realEstatePropertyExpenses.isActive, 1),
+    ];
+    if (filters.propertyId) conditions.push(eq(realEstatePropertyExpenses.propertyId, filters.propertyId));
+    if (filters.category) conditions.push(eq(realEstatePropertyExpenses.category, filters.category));
+    if (filters.dateFrom) conditions.push(gte(realEstatePropertyExpenses.expenseDate, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(realEstatePropertyExpenses.expenseDate, filters.dateTo));
+
+    return this.db
+      .select({
+        ...getTableColumns(realEstatePropertyExpenses),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstatePropertyExpenses)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .where(and(...conditions))
+      .orderBy(desc(realEstatePropertyExpenses.expenseDate), desc(realEstatePropertyExpenses.id));
+  }
+
+  async getPropertyExpense(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstatePropertyExpenses),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstatePropertyExpenses)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .where(and(
+        eq(realEstatePropertyExpenses.id, id),
+        eq(realEstatePropertyExpenses.isActive, 1),
+        eq(realEstatePropertyExpenses.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Property expense not found.");
+    return rows[0];
+  }
+
+  async createPropertyExpense(input: CreatePropertyExpenseDto, orgId: number, userId?: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const projectId = await this.getOrCreatePropertyProject(input.propertyId, orgId, userId);
+
+    const [result] = await this.db.insert(realEstatePropertyExpenses).values({
+      organizationId: orgId,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      leaseId: input.leaseId ?? null,
+      category: input.category,
+      description: input.description,
+      amount: String(input.amount),
+      currencyId: input.currencyId ?? null,
+      expenseDate: input.expenseDate,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
+      supplierId: input.supplierId ?? null,
+      vendorName: input.vendorName ?? null,
+      paymentMethod: input.paymentMethod ?? "cash",
+      paymentStatus: input.paymentStatus ?? "paid",
+      receiptUrl: input.receiptUrl ?? null,
+      projectId,
+      isRecurring: input.isRecurring ? 1 : 0,
+      recurrenceMonths: input.recurrenceMonths ?? null,
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const expenseId = Number((result as any).insertId);
+
+    // Ecriture comptable : debit charge (compte canonique de la categorie) / credit tresorerie.
+    const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const accountName = PropertyManagementService.PROPERTY_EXPENSE_CATEGORY_ACCOUNT[input.category] ?? "Frais de bureau et divers";
+    const debitId = await this.getOrCreateExpenseSubAccount(accountName, orgId);
+
+    let journalEntryId: number | null = null;
+    try {
+      const posted = await this.ledger.post(
+        {
+          date: input.expenseDate,
+          reference: `PROPEXP-${expenseId}`,
+          particulars: `${input.description}${input.vendorName ? ` — ${input.vendorName}` : ""}`,
+          sourceModule: "property_expense",
+          relatedId: String(expenseId),
+          currencyId: input.currencyId ?? undefined,
+          idempotencyKey: `property-expense:${expenseId}`,
+          lines: [
+            { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Property expense", projectId: projectId ?? undefined },
+            { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+          ],
+        },
+        orgId,
+        userId,
+      );
+      journalEntryId = posted?.id ? Number(posted.id) : null;
+    } catch (err) {
+      this.logger.warn(`createPropertyExpense: ecriture ledger ignoree: ${(err as Error).message}`);
+    }
+
+    if (journalEntryId) {
+      await this.db
+        .update(realEstatePropertyExpenses)
+        .set({ journalEntryId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstatePropertyExpenses.id, expenseId));
+    }
+
+    // Soumet la depense au circuit d'approbation (effectif si gate), comme les couts de maintenance.
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "property_expense", entityId: String(expenseId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit property expense approval skipped:", (err as Error).message);
+    }
+
+    return this.getPropertyExpense(expenseId, orgId);
+  }
+
+  async updatePropertyExpense(id: number, input: UpdatePropertyExpenseDto, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    if (input.propertyId !== undefined) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+    }
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({
+        ...this.pick(input, [
+          "propertyId",
+          "unitId",
+          "leaseId",
+          "category",
+          "description",
+          "currencyId",
+          "periodStart",
+          "periodEnd",
+          "supplierId",
+          "vendorName",
+          "paymentMethod",
+          "paymentStatus",
+          "receiptUrl",
+          "notes",
+        ]),
+        ...(input.amount !== undefined ? { amount: String(input.amount) } : {}),
+        ...(input.expenseDate !== undefined ? { expenseDate: input.expenseDate } : {}),
+        ...(input.isRecurring !== undefined ? { isRecurring: input.isRecurring ? 1 : 0 } : {}),
+        ...(input.recurrenceMonths !== undefined ? { recurrenceMonths: input.recurrenceMonths } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return this.getPropertyExpense(id, orgId);
+  }
+
+  async deletePropertyExpense(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return { message: "Deleted successfully." };
+  }
+
+  async uploadPropertyExpenseReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return this.getPropertyExpense(id, orgId);
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────

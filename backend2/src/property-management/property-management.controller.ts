@@ -62,6 +62,8 @@ import {
   CheckOutReservationDto,
   CreateCouponDto,
   UpdateCouponDto,
+  CreatePropertyExpenseDto,
+  UpdatePropertyExpenseDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -853,6 +855,82 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteMaintenanceCost(@Param("costId", ParseIntPipe) costId: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteMaintenanceCost(costId, orgId);
+  }
+
+  // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
+
+  @ApiOperation({ summary: "List property expenses (filters: propertyId, category, dateFrom, dateTo)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-expenses")
+  listPropertyExpenses(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("category") category?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.listPropertyExpenses(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      category,
+      dateFrom,
+      dateTo,
+    });
+  }
+
+  @ApiOperation({ summary: "Get single property expense by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("property-expenses/:id")
+  getPropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getPropertyExpense(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a property expense" })
+  @ApiCreatedResponse({ description: "Created property expense" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses")
+  createPropertyExpense(@Body() body: CreatePropertyExpenseDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createPropertyExpense(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a property expense" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/:id")
+  updatePropertyExpense(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyExpenseDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updatePropertyExpense(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a property expense (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("property-expenses/:id")
+  @HttpCode(200)
+  deletePropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deletePropertyExpense(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for a property expense" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("property-expenses/:id/receipt")
+  uploadPropertyExpenseReceipt(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadPropertyExpenseReceipt(id, orgId, receipt, this.publicApiBase(req));
   }
 
   // ── Maintenance Photos ──────────────────────────────────────────────────────

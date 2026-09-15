@@ -1202,6 +1202,46 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   updatedAt: timestamp("updated_at"),
 });
 
+// Domus / SCRUM-310 : depenses portees par un bien immobilier, hors tickets de
+// maintenance (qui ont leur propre table real_estate_maintenance_costs).
+// category : insurance, property_tax, hoa, maintenance_general, management_fee,
+// security, cleaning, other. mortgage exclu de la v1 (ticket dedie, car il faut
+// separer capital et interets).
+export const realEstatePropertyExpenses = mysqlTable("real_estate_property_expenses", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Imputation a une unite precise ; null = depense au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  // Renseigne quand la depense est refacturable a un locataire.
+  leaseId: bigint("lease_id", { mode: "number" }),
+  category: varchar("category", { length: 50 }).default("other").notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  // Periode couverte pour les depenses au prorata (assurance annuelle, taxe...).
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
+  // Lien vers le referentiel central fournisseurs (compta). vendorName reste en fallback texte libre.
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  vendorName: varchar("vendor_name", { length: 255 }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
+  paymentStatus: varchar("payment_status", { length: 30 }).default("paid").notNull(),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  // Ventilation analytique.
+  projectId: bigint("project_id", { mode: "number" }),
+  // Tracabilite vers lecriture comptable postee.
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  isRecurring: tinyint("is_recurring").default(0).notNull(),
+  recurrenceMonths: int("recurrence_months"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateContracts = mysqlTable("real_estate_contracts", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

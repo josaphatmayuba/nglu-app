@@ -228,6 +228,27 @@ export const api = {
   deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
   maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
 
+  // Dépenses par propriété (SCRUM-310) — filtres query optionnels.
+  propertyExpenses: ({ propertyId, category, dateFrom, dateTo } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (category) params.set("category", category);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/property-expenses${qs ? `?${qs}` : ""}`);
+  },
+  propertyExpense: (id) => get(`/property-expenses/${id}`),
+  createPropertyExpense: (b) => post("/property-expenses", b),
+  updatePropertyExpense: (id, b) => patch(`/property-expenses/${id}`, b),
+  deletePropertyExpense: (id) => del(`/property-expenses/${id}`),
+  // Justificatif (recu/facture) — meme pattern multipart que uploadMaintenancePhoto.
+  uploadPropertyExpenseReceipt: (id, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/property-expenses/${id}/receipt`, form);
+  },
+
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),
   collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
