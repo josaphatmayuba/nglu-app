@@ -4035,6 +4035,17 @@ export class PropertyManagementService {
     return { message: "Deleted successfully." };
   }
 
+  async uploadMortgagePaymentReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return this.getMortgagePayment(id, orgId);
+  }
+
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────
 
   private static readonly MAINTENANCE_PHOTO_TYPES = ["before", "after", "invoice"] as const;

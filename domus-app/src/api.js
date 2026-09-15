@@ -262,6 +262,12 @@ export const api = {
   createMortgagePayment: (b) => post("/mortgage-payments", b),
   updateMortgagePayment: (id, b) => patch(`/mortgage-payments/${id}`, b),
   deleteMortgagePayment: (id) => del(`/mortgage-payments/${id}`),
+  // Justificatif (recu/facture) — meme pattern que uploadPropertyExpenseReceipt.
+  uploadMortgagePaymentReceipt: (id, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/mortgage-payments/${id}/receipt`, form);
+  },
 
   // P&L par propriété (SCRUM-312) — revenus/dépenses/hypothèque sur une période.
   propertyPnl: (propertyId, dateFrom, dateTo) => {

@@ -986,6 +986,29 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteMortgagePayment(id, orgId);
   }
 
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for a mortgage payment" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("mortgage-payments/:id/receipt")
+  uploadMortgagePaymentReceipt(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadMortgagePaymentReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
   // ── P&L par propriete (SCRUM-312) ───────────────────────────────────────────
 
   @ApiOperation({ summary: "Property P&L: revenus (loyers) / depenses / hypotheque, par devise" })

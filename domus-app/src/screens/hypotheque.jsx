@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import {
   Banknote,
+  FileDown,
   Landmark,
   Pencil,
   Plus,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -45,6 +47,7 @@ const emptyPayment = {
   paymentStatus: "paid",
   reference: "",
   receiptUrl: "",
+  receiptFile: null,
   notes: "",
 };
 
@@ -157,8 +160,16 @@ export function Hypotheque() {
       if (gap > 0.01) {
         throw new Error(t("Capital + intérêts + frais annexes doit être égal au montant total."));
       }
-      if (form.id) await api.updateMortgagePayment(form.id, payload);
-      else await api.createMortgagePayment(payload);
+      let paymentId = form.id;
+      if (paymentId) await api.updateMortgagePayment(paymentId, payload);
+      else {
+        const created = await api.createMortgagePayment(payload);
+        paymentId = created?.id;
+      }
+      // Justificatif : upload multipart séparé (piece jointe), pas dans le payload JSON.
+      if (form.receiptFile && paymentId) {
+        await api.uploadMortgagePaymentReceipt(paymentId, form.receiptFile);
+      }
       setPaymentModal(null);
       await reloadAll();
     } catch (err) {
@@ -335,6 +346,7 @@ function paymentToForm(payment, defaultCurrencyId) {
     paymentStatus: payment.paymentStatus || "paid",
     reference: payment.reference || "",
     receiptUrl: payment.receiptUrl || "",
+    receiptFile: null,
     notes: payment.notes || "",
   };
 }
@@ -417,14 +429,50 @@ function MortgagePaymentModal({ value, properties, units, currencyOptions, defau
               {tf(t("Capital + intérêts + frais annexes ne correspond pas au montant total (écart {gap})."), { gap: money(gap, gapSymbol) })}
             </div>
           )}
-          {/* Justificatif : pas d'endpoint upload backend pour mortgage-payments en v1 — champ texte simple. */}
-          <DomusPropertyField label={t("Justificatif (URL)")} value={form.receiptUrl} onChange={(receiptUrl) => set({ receiptUrl })} placeholder={t("Lien vers le justificatif, si disponible")} />
+          <ReceiptField
+            receiptUrl={form.receiptUrl}
+            receiptFile={form.receiptFile}
+            onPick={(receiptFile) => set({ receiptFile })}
+            onClear={() => set({ receiptFile: null })}
+          />
           <DomusPropertyField label={t("Notes")} value={form.notes} onChange={(notes) => set({ notes })} textarea />
         </FormSection>
       </div>
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
       <ModalActions busy={busy} disabled={!form.propertyId || !form.paymentDate || !form.totalAmount || !gapOk} onClose={onClose} onSave={() => onSave(form)} />
     </Modal>
+  );
+}
+
+// Justificatif (SCRUM-311) — upload fichier (image/PDF), meme pattern que
+// ReceiptField dans depenses.jsx (SCRUM-310).
+function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
+  const isImage = receiptUrl && /\.(jpe?g|png|webp)$/i.test(receiptUrl);
+  return (
+    <label className="domus-property-field">
+      <span>{t("Justificatif")}</span>
+      <input
+        id="mortgage-receipt-input"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        style={{ display: "none" }}
+        onChange={(e) => onPick(e.target.files?.[0] || null)}
+      />
+      <label htmlFor="mortgage-receipt-input" className="btn" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+        <FileDown size={16} />
+        {receiptFile ? receiptFile.name : t("Photo, scan ou capture (JPEG, PNG, PDF)")}
+      </label>
+      {receiptFile && (
+        <button type="button" className="btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => onClear()}>
+          <X size={14} /> {t("Retirer le fichier")}
+        </button>
+      )}
+      {!receiptFile && receiptUrl && (
+        isImage
+          ? <a href={receiptUrl} target="_blank" rel="noreferrer"><img src={receiptUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
+          : <a href={receiptUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
+      )}
+    </label>
   );
 }
 
