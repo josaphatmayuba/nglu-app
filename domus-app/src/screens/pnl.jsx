@@ -6,6 +6,7 @@ import { money, useApi } from "../data.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { takePnlPrefill } from "./reservationPrefill.js";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 import { EXPENSE_CATEGORIES } from "./depenses.jsx";
 import { t, tf } from "../i18n.js";
 
@@ -176,11 +177,10 @@ export function Pnl() {
       </div>
 
       <div className="maintenance-toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-        <select className="immo-filter-select" value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
-          {properties.map((p) => (
-            <option key={p.id} value={String(p.id)}>{p.name}</option>
-          ))}
-        </select>
+        <div className="immo-filter-autocomplete">
+          <Autocomplete value={propertyId} onChange={setPropertyId} allowClear={false} placeholder={t("Choisir une propriété")}
+            options={properties.map((p) => [String(p.id), p.name])} />
+        </div>
         <PeriodPicker
           preset={preset}
           setPreset={setPreset}

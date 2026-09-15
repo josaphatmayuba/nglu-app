@@ -16,6 +16,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { t, tf } from "../i18n.js";
 
@@ -220,12 +221,10 @@ export function Hypotheque() {
       </div>
 
       <div className="maintenance-toolbar">
-        <select className="immo-filter-select" value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)}>
-          <option value="">{t("Toutes propriétés")}</option>
-          {properties.map((p) => (
-            <option key={p.id} value={String(p.id)}>{p.name}</option>
-          ))}
-        </select>
+        <div className="immo-filter-autocomplete">
+          <Autocomplete value={propertyFilter} onChange={setPropertyFilter} placeholder={t("Toutes propriétés")}
+            options={properties.map((p) => [String(p.id), p.name])} />
+        </div>
       </div>
 
       {actionError && <div className="api-error" style={{ marginBottom: 12 }}>{actionError}</div>}
