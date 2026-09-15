@@ -1779,6 +1779,27 @@
       "when": 1781071200029,
       "tag": "0278_domus_mortgage_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "5",
+      "when": 1781071200030,
+      "tag": "0279_domus_mortgage_loans",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "5",
+      "when": 1781071200031,
+      "tag": "0280_domus_expense_installments",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "5",
+      "when": 1781071200032,
+      "tag": "0281_domus_expense_installment_flags",
+      "breakpoints": true
     }
   ]
 }

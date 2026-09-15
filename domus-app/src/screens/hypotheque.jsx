@@ -1,9 +1,10 @@
 // Domus — Remboursement hypothèque par propriété (SCRUM-311).
 // Liste + modale de création/édition, sur le même pattern que depenses.jsx.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Banknote,
   FileDown,
+  HandCoins,
   Landmark,
   Pencil,
   Plus,
@@ -18,6 +19,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { setPretsPrefill } from "./reservationPrefill.js";
 import { t, tf } from "../i18n.js";
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -35,6 +37,7 @@ const PAYMENT_STATUS_OPTIONS = [
 const emptyPayment = {
   propertyId: "",
   unitId: "",
+  mortgageId: "",
   lenderName: "",
   paymentDate: "",
   periodStart: "",
@@ -80,7 +83,7 @@ export function mortgageTotalsByCurrency(payments, resolveSymbol) {
   return [...map.entries()].map(([symbol, entry]) => ({ symbol, ...entry }));
 }
 
-export function Hypotheque() {
+export function Hypotheque({ go } = {}) {
   const [query, setQuery] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("");
   const [paymentModal, setPaymentModal] = useState(null);
@@ -90,11 +93,13 @@ export function Hypotheque() {
 
   const confirm = useConfirm();
   const paymentsApi = useApi(() => api.mortgagePayments(), []);
+  const loansApi = useApi(() => api.mortgageLoans(), []);
   const propertiesApi = useApi(() => api.properties(), []);
   const unitsApi = useApi(() => api.units(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
   useRealtimeReload(paymentsApi.reload, ["mortgage-payments"]);
+  useRealtimeReload(loansApi.reload, ["mortgage-payments", "mortgage-loans"]);
 
   const loading = paymentsApi.loading || propertiesApi.loading || unitsApi.loading;
   const error = paymentsApi.error || propertiesApi.error || unitsApi.error;
@@ -104,6 +109,10 @@ export function Hypotheque() {
   }, [paymentsApi.data]);
   const properties = useMemo(() => (Array.isArray(propertiesApi.data) ? propertiesApi.data : propertiesApi.data?.data || []), [propertiesApi.data]);
   const units = useMemo(() => (Array.isArray(unitsApi.data) ? unitsApi.data : unitsApi.data?.data || []), [unitsApi.data]);
+  const loans = useMemo(() => {
+    const raw = loansApi.data;
+    return Array.isArray(raw) ? raw : raw?.data || [];
+  }, [loansApi.data]);
   const currency = useMemo(
     () => normalizeCurrencyModule(currenciesApi.data, settingApi.data),
     [currenciesApi.data, settingApi.data],
@@ -128,9 +137,23 @@ export function Hypotheque() {
 
   const totalsByCurrency = useMemo(() => mortgageTotalsByCurrency(filtered, paymentSymbol), [filtered, currency]);
 
-  const reloadAll = async () => {
-    await Promise.all([paymentsApi.reload(), propertiesApi.reload(), unitsApi.reload()]);
+  // Symbole de la devise PROPRE au prêt (jamais le défaut global).
+  const loanSymbol = (loan) => {
+    const byId = loan?.currencyId != null ? currency.currencyById?.get(Number(loan.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(loan) || currency.defaultCurrencySymbol;
   };
+
+  const reloadAll = async () => {
+    await Promise.all([paymentsApi.reload(), loansApi.reload(), propertiesApi.reload(), unitsApi.reload()]);
+  };
+
+  // Prêts actifs de la propriété filtrée (bandeau de solde + présélection du
+  // formulaire de paiement).
+  const activeLoansForFilter = useMemo(
+    () => (propertyFilter ? loans.filter((loan) => String(loan.propertyId) === String(propertyFilter) && loan.status === "active") : []),
+    [loans, propertyFilter],
+  );
 
   const savePayment = async (form) => {
     setBusy(true);
@@ -139,6 +162,7 @@ export function Hypotheque() {
       const payload = {
         propertyId: toId(form.propertyId),
         unitId: toId(form.unitId) ?? null,
+        mortgageId: toId(form.mortgageId) ?? null,
         lenderName: form.lenderName?.trim() || undefined,
         paymentDate: form.paymentDate || null,
         periodStart: form.periodStart || undefined,
@@ -227,6 +251,14 @@ export function Hypotheque() {
         </div>
       </div>
 
+      {propertyFilter && (
+        <MortgageBalanceBanner
+          loans={activeLoansForFilter}
+          loanSymbol={loanSymbol}
+          onCreateLoan={() => { setPretsPrefill(propertyFilter); go?.("prets"); }}
+        />
+      )}
+
       {actionError && <div className="api-error" style={{ marginBottom: 12 }}>{actionError}</div>}
 
       <MortgageTable
@@ -265,6 +297,7 @@ export function Hypotheque() {
           value={paymentModal}
           properties={properties}
           units={units}
+          loans={loans}
           currencyOptions={currency.currencyOptions}
           defaultCurrencyId={currency.defaultCurrencyId}
           busy={busy}
@@ -328,6 +361,7 @@ function paymentToForm(payment, defaultCurrencyId) {
     id: payment.id,
     propertyId: payment.propertyId ? String(payment.propertyId) : "",
     unitId: payment.unitId ? String(payment.unitId) : "",
+    mortgageId: payment.mortgageId ? String(payment.mortgageId) : "",
     lenderName: payment.lenderName || "",
     paymentDate: payment.paymentDate ? String(payment.paymentDate).slice(0, 10) : "",
     periodStart: payment.periodStart ? String(payment.periodStart).slice(0, 10) : "",
@@ -357,10 +391,21 @@ function computeGap(form) {
   return Math.round((total - (principal + interest + escrow)) * 100) / 100;
 }
 
-function MortgagePaymentModal({ value, properties, units, currencyOptions, defaultCurrencyId, busy, error, onClose, onSave }) {
+function MortgagePaymentModal({ value, properties, units, loans = [], currencyOptions, defaultCurrencyId, busy, error, onClose, onSave }) {
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
+  const propertyLoans = useMemo(
+    () => loans.filter((loan) => form.propertyId && String(loan.propertyId) === String(form.propertyId) && loan.status === "active"),
+    [loans, form.propertyId],
+  );
+
+  // Présélection automatique du prêt s'il n'y en a qu'un seul actif pour la propriété.
+  useEffect(() => {
+    if (!form.mortgageId && propertyLoans.length === 1) {
+      set({ mortgageId: String(propertyLoans[0].id) });
+    }
+  }, [propertyLoans]);
 
   const gap = computeGap(form);
   const hasAllThree = form.totalAmount !== "" && form.principalAmount !== "" && form.interestAmount !== "";
@@ -405,8 +450,9 @@ function MortgagePaymentModal({ value, properties, units, currencyOptions, defau
       <div className="domus-property-form">
         <FormSection icon={<Banknote size={14} />} title={t("Paiement")}>
           <div className="domus-property-form-grid">
-            <DomusPropertySelect label={t("Propriété")} value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
+            <DomusPropertySelect label={t("Propriété")} value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "", mortgageId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
             <DomusPropertySelect label={t("Unité")} value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
+            <DomusPropertySelect label={t("Prêt")} value={form.mortgageId} onChange={(mortgageId) => set({ mortgageId })} options={propertyLoans.map((loan) => [String(loan.id), `${loan.lenderName || t("Prêt")}${loan.reference ? ` (${loan.reference})` : ""}`])} />
             <DomusPropertyField label={t("Prêteur / Banque")} value={form.lenderName} onChange={(lenderName) => set({ lenderName })} placeholder={t("ex. Rawbank")} />
             <DomusPropertyField label={t("Date de paiement")} type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} required />
             <DomusPropertyField label={t("Début de période")} type="date" value={form.periodStart} onChange={(periodStart) => set({ periodStart })} />
@@ -468,6 +514,46 @@ function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
           : <a href={receiptUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
       )}
     </label>
+  );
+}
+
+// Bandeau « Solde restant dû » (SCRUM-311 phase 2) — visible uniquement quand
+// une propriété est sélectionnée dans le filtre de la liste des paiements.
+function MortgageBalanceBanner({ loans, loanSymbol, onCreateLoan }) {
+  if (!loans.length) {
+    return (
+      <div className="card ops-panel" style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <span>{t("Aucun prêt hypothécaire actif pour cette propriété.")}</span>
+        <button className="immo-btn primary" onClick={onCreateLoan}>
+          <HandCoins size={16} /> {t("Créer un prêt")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="card ops-panel" style={{ marginBottom: 16 }}>
+      <div className="panel-title">{t("Solde restant dû")}</div>
+      {loans.map((loan) => {
+        const sym = loanSymbol(loan);
+        const principal = Number(loan.principalAmount || 0);
+        const repaid = Number(loan.principalRepaid || 0);
+        const remaining = Number(loan.remainingBalance ?? principal);
+        const progress = principal > 0 ? Math.min(100, Math.round((repaid / principal) * 100)) : 0;
+        return (
+          <div key={loan.id} style={{ marginBottom: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "baseline" }}>
+              <span style={{ fontWeight: 700 }}>{loan.lenderName || loan.reference || `#${loan.id}`}</span>
+              <span>{tf(t("Emprunté : {amount}"), { amount: money(principal, sym) })}</span>
+              <span>{tf(t("Remboursé : {amount}"), { amount: money(repaid, sym) })}</span>
+              <span style={{ fontWeight: 700 }}>{tf(t("Solde restant : {amount} ({pct}%)"), { amount: money(remaining, sym), pct: progress })}</span>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: "#eee", marginTop: 4, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: remaining <= 0 ? "#2e7d32" : "#c9a24b", borderRadius: 3 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
-  ShieldCheck, Receipt, Landmark, BarChart3,
+  ShieldCheck, Receipt, Landmark, BarChart3, HandCoins,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -16,6 +16,7 @@ import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Depenses } from "./screens/depenses.jsx";
 import { Hypotheque } from "./screens/hypotheque.jsx";
+import { Prets } from "./screens/prets.jsx";
 import { Pnl } from "./screens/pnl.jsx";
 import { Baux } from "./screens/baux.jsx";
 import { Reservations } from "./screens/reservations.jsx";
@@ -55,6 +56,7 @@ const NAV = [
     { key: "maintenance", label: "Maintenance", icon: Wrench },
     { key: "depenses", label: "Dépenses", icon: Receipt },
     { key: "hypotheque", label: "Hypothèque", icon: Landmark },
+    { key: "prets", label: "Prêts", icon: HandCoins },
   ] },
   { sec: "Espace & config", items: [
     { key: "portail", label: "Espace locataire", icon: UserRound },
@@ -64,7 +66,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "hypotheque", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "hypotheque", "prets", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -82,7 +84,8 @@ const SCREENS = {
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
   maintenance: (_nav, device) => <Maintenance device={device} />,
   depenses: (_nav, device) => <Depenses device={device} />,
-  hypotheque: (_nav, device) => <Hypotheque device={device} />,
+  hypotheque: (nav, device) => <Hypotheque go={nav} device={device} />,
+  prets: (_nav, device) => <Prets device={device} />,
   portail: (nav, device) => <Portail go={nav} device={device} />,
   reglages: (_nav, device) => <Reglages device={device} />,
 };

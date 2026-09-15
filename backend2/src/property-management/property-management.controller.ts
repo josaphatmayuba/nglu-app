@@ -64,8 +64,14 @@ import {
   UpdateCouponDto,
   CreatePropertyExpenseDto,
   UpdatePropertyExpenseDto,
+  GenerateExpenseInstallmentsDto,
+  AddExpensePartialPaymentDto,
+  PayExpenseInstallmentDto,
+  UpdateExpenseInstallmentDto,
   CreateMortgagePaymentDto,
   UpdateMortgagePaymentDto,
+  CreateMortgageLoanDto,
+  UpdateMortgageLoanDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -935,6 +941,98 @@ export class PropertyManagementController {
     return this.propertyManagementService.uploadPropertyExpenseReceipt(id, orgId, receipt, this.publicApiBase(req));
   }
 
+  // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
+  // Note ordre des routes NestJS : les routes "installments/:installmentId..."
+  // utilisent un segment litteral "installments" different du :id numerique de
+  // "property-expenses/:id", donc pas de collision de matching possible ici
+  // (le param s'appelle differemment et le segment litteral est explicite).
+
+  @ApiOperation({ summary: "List installments (echeances/paiements) of a property expense" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-expenses/:id/installments")
+  listExpenseInstallments(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listExpenseInstallments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate (or regenerate) the monthly installment schedule of a property expense" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses/:id/installments/generate")
+  generateExpenseInstallments(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: GenerateExpenseInstallmentsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.generateExpenseInstallments(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Add a free-form partial payment to a property expense" })
+  @ApiCreatedResponse({ description: "Installment list after the partial payment" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses/:id/installments")
+  addExpensePartialPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: AddExpensePartialPaymentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.addExpensePartialPayment(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Pay a scheduled installment of a property expense" })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/installments/:installmentId/pay")
+  payExpenseInstallment(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @Body() body: PayExpenseInstallmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.payExpenseInstallment(installmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a pending (unpaid) expense installment" })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/installments/:installmentId")
+  updateExpenseInstallment(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @Body() body: UpdateExpenseInstallmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.updateExpenseInstallment(installmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete an expense installment (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("property-expenses/installments/:installmentId")
+  @HttpCode(200)
+  deleteExpenseInstallment(@Param("installmentId", ParseIntPipe) installmentId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteExpenseInstallment(installmentId, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for an expense installment" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("property-expenses/installments/:installmentId/receipt")
+  uploadExpenseInstallmentReceipt(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadExpenseInstallmentReceipt(installmentId, orgId, receipt, this.publicApiBase(req));
+  }
+
   // ── Mortgage Payments (SCRUM-311) ───────────────────────────────────────────
 
   @ApiOperation({ summary: "List mortgage payments (principal / interest split)" })
@@ -1007,6 +1105,55 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.uploadMortgagePaymentReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  // ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────
+
+  @ApiOperation({ summary: "List mortgage loans (reference), avec solde restant du calcule" })
+  @Permissions("readAll-propertyManagement")
+  @Get("mortgage-loans")
+  listMortgageLoans(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.propertyManagementService.listMortgageLoans(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      status,
+    });
+  }
+
+  @ApiOperation({ summary: "Get one mortgage loan, avec solde restant du calcule" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("mortgage-loans/:id")
+  getMortgageLoan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getMortgageLoan(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a mortgage loan (reference du pret, pas une ecriture comptable)" })
+  @ApiCreatedResponse({ description: "Created mortgage loan" })
+  @Permissions("create-propertyManagement")
+  @Post("mortgage-loans")
+  createMortgageLoan(@Body() body: CreateMortgageLoanDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createMortgageLoan(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a mortgage loan" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("mortgage-loans/:id")
+  updateMortgageLoan(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMortgageLoanDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMortgageLoan(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a mortgage loan (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("mortgage-loans/:id")
+  @HttpCode(200)
+  deleteMortgageLoan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMortgageLoan(id, orgId);
   }
 
   // ── P&L par propriete (SCRUM-312) ───────────────────────────────────────────

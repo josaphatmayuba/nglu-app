@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
@@ -12,6 +12,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateIf,
 } from "class-validator";
@@ -1307,6 +1308,19 @@ export class CreatePropertyExpenseDto {
   @Min(1)
   recurrenceMonths?: number;
 
+  @ApiPropertyOptional({
+    example: "single",
+    default: "single",
+    enum: ["single", "installments", "partial"],
+    description:
+      "Mode de reglement de la depense. single = comportement historique (aucune echeance). " +
+      "installments = genere immediatement recurrenceMonths echeances mensuelles. " +
+      "partial = aucune echeance generee, uniquement des paiements libres ajoutes ensuite.",
+  })
+  @IsOptional()
+  @IsIn(["single", "installments", "partial"])
+  paymentPlan?: "single" | "installments" | "partial";
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -1314,6 +1328,101 @@ export class CreatePropertyExpenseDto {
 }
 
 export class UpdatePropertyExpenseDto extends PartialType(CreatePropertyExpenseDto) {}
+
+// ── Echeancier de paiement des depenses de propriete (SCRUM-313) ────────────
+// Une depense en payment_plan='installments' genere N lignes real_estate_expense_installments
+// (kind='scheduled'). Une depense en payment_plan='partial' recoit des paiements
+// libres ajoutes un a un (kind='partial'). Voir property-management.service.ts
+// pour le detail des regles metier (arrondi, clamp fin de mois, regeneration).
+
+export class GenerateExpenseInstallmentsDto {
+  @ApiProperty({ example: 6, description: "Nombre d'echeances mensuelles a generer." })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  recurrenceMonths: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      "Force la regeneration meme si aucune echeance n'est payee (mode explicite). " +
+      "N'outrepasse PAS le refus si au moins une echeance a deja ete reglee : dans ce cas " +
+      "la regeneration reste toujours refusee (409), quelle que soit la valeur de force.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
+
+export class AddExpensePartialPaymentDto {
+  @ApiProperty({ example: 100 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paidDate: string;
+
+  @ApiPropertyOptional({ example: "cash" })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class PayExpenseInstallmentDto {
+  @ApiPropertyOptional({ description: "Montant paye. Si absent, utilise le plannedAmount complet de l'echeance." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paidDate: string;
+
+  @ApiPropertyOptional({ example: "cash" })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+}
+
+export class UpdateExpenseInstallmentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  plannedAmount?: number;
+
+  @ApiPropertyOptional({ example: "2026-10-15" })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
 
 // ── Remboursement hypothecaire (SCRUM-311) ───────────────────────────────────
 // Invariant metier : total = capital + interets + escrow (tolerance 0.01 pour
@@ -1418,3 +1527,91 @@ export class CreateMortgagePaymentDto {
 }
 
 export class UpdateMortgagePaymentDto extends PartialType(CreateMortgagePaymentDto) {}
+
+// ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────
+// Table de reference du pret, distincte des echeances (mortgage-payments
+// ci-dessus). Le solde restant du se calcule applicativement, jamais stocke ici.
+export class CreateMortgageLoanDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: "Rawbank" })
+  @IsOptional()
+  @IsString()
+  lenderName?: string;
+
+  @ApiPropertyOptional({ example: "PRET-2026-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiProperty({ example: 100000, description: "Montant emprunte initial." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  principalAmount: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiProperty({ example: "2026-01-01" })
+  @IsDateString()
+  startDate: string;
+
+  @ApiPropertyOptional({ example: "2036-01-01" })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ example: 5.25, description: "Taux annuel nominal, ex 5.25 pour 5,25%." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  interestRate?: number;
+
+  @ApiPropertyOptional({ example: 120 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  termMonths?: number;
+
+  @ApiPropertyOptional({ example: "active", default: "active" })
+  @IsOptional()
+  @IsIn(["active", "paid_off", "refinanced"])
+  status?: "active" | "paid_off" | "refinanced";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Si true, rattache automatiquement (apres creation) les paiements orphelins existants (mortgageId NULL) de la meme propriete/devise a ce pret. Jamais applique implicitement.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  attachExistingPayments?: boolean;
+}
+
+// attachExistingPayments est un flag d'action a la creation (rattachement
+// ponctuel des paiements orphelins), pas un champ persistant du pret : on
+// l'exclut du DTO d'update pour eviter toute confusion (un PATCH ne doit pas
+// re-declencher un rattachement en masse implicitement).
+export class UpdateMortgageLoanDto extends PartialType(
+  OmitType(CreateMortgageLoanDto, ["attachExistingPayments"] as const),
+) {}

@@ -249,6 +249,19 @@ export const api = {
     return multipartFetch(`/property-expenses/${id}/receipt`, form);
   },
 
+  // Echeancier de paiement des dépenses de propriété (SCRUM-313).
+  expenseInstallments: (expenseId) => get(`/property-expenses/${expenseId}/installments`),
+  generateExpenseInstallments: (expenseId, b) => post(`/property-expenses/${expenseId}/installments/generate`, b),
+  addExpensePartialPayment: (expenseId, b) => post(`/property-expenses/${expenseId}/installments`, b),
+  payExpenseInstallment: (installmentId, b) => patch(`/property-expenses/installments/${installmentId}/pay`, b),
+  updateExpenseInstallment: (installmentId, b) => patch(`/property-expenses/installments/${installmentId}`, b),
+  deleteExpenseInstallment: (installmentId) => del(`/property-expenses/installments/${installmentId}`),
+  uploadExpenseInstallmentReceipt: (installmentId, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/property-expenses/installments/${installmentId}/receipt`, form);
+  },
+
   // Remboursement hypothèque par propriété (SCRUM-311) — filtres query optionnels.
   mortgagePayments: ({ propertyId, dateFrom, dateTo } = {}) => {
     const params = new URLSearchParams();
@@ -268,6 +281,19 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/mortgage-payments/${id}/receipt`, form);
   },
+
+  // Prêts hypothécaires (SCRUM-311 phase 2) — filtres query optionnels.
+  mortgageLoans: ({ propertyId, status } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (status) params.set("status", status);
+    const qs = params.toString();
+    return get(`/mortgage-loans${qs ? `?${qs}` : ""}`);
+  },
+  mortgageLoan: (id) => get(`/mortgage-loans/${id}`),
+  createMortgageLoan: (b) => post("/mortgage-loans", b),
+  updateMortgageLoan: (id, b) => patch(`/mortgage-loans/${id}`, b),
+  deleteMortgageLoan: (id) => del(`/mortgage-loans/${id}`),
 
   // P&L par propriété (SCRUM-312) — revenus/dépenses/hypothèque sur une période.
   propertyPnl: (propertyId, dateFrom, dateTo) => {

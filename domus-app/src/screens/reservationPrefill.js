@@ -61,3 +61,17 @@ export function takePnlPrefill() {
   prefillPnl = null;
   return value;
 }
+
+// Même mécanisme de handoff pour « Créer un prêt » depuis l'écran Hypothèque
+// (SCRUM-311 phase 2) : on mémorise le bien à présélectionner dans l'écran Prêts.
+let prefillPrets = null;
+
+export function setPretsPrefill(propertyId) {
+  prefillPrets = propertyId != null ? String(propertyId) : null;
+}
+
+export function takePretsPrefill() {
+  const value = prefillPrets;
+  prefillPrets = null;
+  return value;
+}

@@ -1235,6 +1235,39 @@ export const realEstatePropertyExpenses = mysqlTable("real_estate_property_expen
   journalEntryId: bigint("journal_entry_id", { mode: "number" }),
   isRecurring: tinyint("is_recurring").default(0).notNull(),
   recurrenceMonths: int("recurrence_months"),
+  // Mode de reglement : single, installments, partial.
+  paymentPlan: varchar("payment_plan", { length: 20 }).default("single").notNull(),
+  // Cache denormalise : somme des paidAmount des echeances actives liees.
+  settledAmount: decimal("settled_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus : echeancier de paiement dune depense de propriete.
+// Une ligne = une echeance planifiee (kind = scheduled, sequenceNo 1..N) ou un
+// paiement partiel libre (kind = partial, sequenceNo 0).
+// propertyId est denormalise depuis la depense pour scoper sans join.
+// status : pending, paid, partial, cancelled. journalEntryId reserve v2.
+export const realEstateExpenseInstallments = mysqlTable("real_estate_expense_installments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  expenseId: bigint("expense_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  sequenceNo: int("sequence_no").default(1).notNull(),
+  kind: varchar("kind", { length: 20 }).default("scheduled").notNull(),
+  dueDate: date("due_date", { mode: "string" }),
+  plannedAmount: decimal("planned_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  paidAmount: decimal("paid_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  paidDate: date("paid_date", { mode: "string" }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
+  status: varchar("status", { length: 30 }).default("pending").notNull(),
+  reference: varchar("reference", { length: 100 }),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdBy: bigint("created_by", { mode: "number" }),
@@ -1273,6 +1306,36 @@ export const realEstateMortgagePayments = mysqlTable("real_estate_mortgage_payme
   projectId: bigint("project_id", { mode: "number" }),
   // Tracabilite vers lecriture comptable postee.
   journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus / SCRUM-311 : prets hypothecaires portes par un bien immobilier.
+// Table de reference du pret ; les echeances payees restent dans
+// real_estate_mortgage_payments, dont la colonne mortgageId pointera ici.
+// principalAmount = montant emprunte initial, le solde restant du se calcule a
+// partir des paiements. status = cycle de vie du pret (active / paid_off /
+// refinanced), distinct de isActive qui porte la suppression logique.
+export const realEstateMortgageLoans = mysqlTable("real_estate_mortgage_loans", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Pret rattache a une unite precise ; null = pret au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  lenderName: varchar("lender_name", { length: 255 }),
+  reference: varchar("reference", { length: 100 }),
+  // Montant emprunte initial.
+  principalAmount: decimal("principal_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }),
+  // Taux annuel nominal, ex 5.2500 pour 5,25 pourcent.
+  interestRate: decimal("interest_rate", { precision: 7, scale: 4 }),
+  termMonths: int("term_months"),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdBy: bigint("created_by", { mode: "number" }),
