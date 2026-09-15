@@ -2,6 +2,7 @@
 // Liste + modale de création/édition, sur le même pattern que maintenance.jsx.
 import { useMemo, useState } from "react";
 import {
+  CalendarClock,
   CircleDollarSign,
   FileDown,
   Pencil,
@@ -18,6 +19,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { ExpenseInstallmentsModal } from "./expenseInstallments.jsx";
 import { t, tf } from "../i18n.js";
 
 // Catégories autorisées côté backend (PROPERTY_EXPENSE_CATEGORIES) — mortgage
@@ -46,6 +48,13 @@ const PAYMENT_STATUS_OPTIONS = [
   ["overdue", t("En retard")],
 ];
 
+// Mode de règlement de la dépense (SCRUM-313) — single = comportement historique.
+const PAYMENT_PLAN_OPTIONS = [
+  ["single", t("Paiement unique")],
+  ["installments", t("Mensualités")],
+  ["partial", t("Paiements libres")],
+];
+
 const emptyExpense = {
   propertyId: "",
   unitId: "",
@@ -61,6 +70,8 @@ const emptyExpense = {
   receiptUrl: "",
   receiptFile: null,
   notes: "",
+  paymentPlan: "single",
+  recurrenceMonths: "",
 };
 
 function toId(value) {
@@ -93,6 +104,7 @@ export function Depenses() {
   const [propertyFilter, setPropertyFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [expenseModal, setExpenseModal] = useState(null);
+  const [installmentsFor, setInstallmentsFor] = useState(null);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -168,9 +180,16 @@ export function Depenses() {
         paymentMethod: form.paymentMethod || "cash",
         paymentStatus: form.paymentStatus || "paid",
         notes: form.notes?.trim() || undefined,
+        paymentPlan: form.paymentPlan || "single",
       };
+      if (payload.paymentPlan === "installments") {
+        payload.recurrenceMonths = toId(form.recurrenceMonths);
+      }
       if (!payload.propertyId || !payload.description || !payload.amount || !payload.expenseDate) {
         throw new Error(t("Bien, description, montant et date obligatoires."));
+      }
+      if (payload.paymentPlan === "installments" && !payload.recurrenceMonths) {
+        throw new Error(t("Nombre de mois obligatoire pour un paiement en mensualités."));
       }
       let expenseId = form.id;
       if (expenseId) await api.updatePropertyExpense(expenseId, payload);
@@ -250,6 +269,7 @@ export function Depenses() {
         expenseSymbol={expenseSymbol}
         onEdit={(expense) => setExpenseModal(expenseToForm(expense, currency.defaultCurrencyId))}
         onDelete={deleteExpense}
+        onInstallments={(expense) => setInstallmentsFor(expense)}
       />
 
       <div className="card ops-panel maintenance-summary-card">
@@ -278,15 +298,40 @@ export function Depenses() {
           onSave={saveExpense}
         />
       )}
+
+      {installmentsFor && (
+        <ExpenseInstallmentsModal
+          expense={installmentsFor}
+          symbol={expenseSymbol(installmentsFor)}
+          onClose={() => setInstallmentsFor(null)}
+          onChanged={async () => {
+            await expensesApi.reload();
+            const refreshed = (expensesApi.data?.data || expensesApi.data || []) || [];
+            const arr = Array.isArray(refreshed) ? refreshed : [];
+            const updated = arr.find((e) => e.id === installmentsFor.id);
+            if (updated) setInstallmentsFor(updated);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ExpenseTable({ expenses, busyId, expenseSymbol, onEdit, onDelete }) {
+// Statut d'échéancier (SCRUM-313) : dérivé de settledAmount vs amount, pour les
+// dépenses en plan de règlement != 'single'.
+function installmentPlanStatus(expense) {
+  const amount = Number(expense.amount || 0);
+  const settled = Number(expense.settledAmount ?? 0);
+  if (settled <= 0) return "pending";
+  if (settled >= amount) return "paid";
+  return "partial";
+}
+
+function ExpenseTable({ expenses, busyId, expenseSymbol, onEdit, onDelete, onInstallments }) {
   if (!expenses.length) return <div className="card maintenance-empty">{t("Aucune dépense à afficher pour ce filtre.")}</div>;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
-      <table className="tbl" style={{ width: "100%", minWidth: 860 }}>
+      <table className="tbl" style={{ width: "100%", minWidth: 980 }}>
         <thead>
           <tr>
             <th>{t("Description")}</th>
@@ -295,21 +340,37 @@ function ExpenseTable({ expenses, busyId, expenseSymbol, onEdit, onDelete }) {
             <th>{t("Date")}</th>
             <th>{t("Statut")}</th>
             <th className="r">{t("Montant")}</th>
+            <th className="r">{t("Reste à payer")}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {expenses.map((expense) => {
             const sym = expenseSymbol(expense);
+            const remaining = Number(expense.amount || 0) - Number(expense.settledAmount ?? 0);
+            const hasPlan = expense.paymentPlan && expense.paymentPlan !== "single";
             return (
               <tr key={expense.id}>
                 <td style={{ fontWeight: 700 }}>{expense.description}</td>
                 <td>{expense.propertyName || "-"}{expense.unitName ? ` - ${expense.unitName}` : ""}</td>
                 <td><span className="chip chip-ink">{CATEGORY_LABEL[expense.category] || expense.category}</span></td>
                 <td>{compactDate(expense.expenseDate)}</td>
-                <td>{PAYMENT_STATUS_OPTIONS.find(([k]) => k === expense.paymentStatus)?.[1] || expense.paymentStatus}</td>
+                <td>
+                  {PAYMENT_STATUS_OPTIONS.find(([k]) => k === expense.paymentStatus)?.[1] || expense.paymentStatus}
+                  {hasPlan && (
+                    <span className={`chip ${installmentPlanStatus(expense) === "paid" ? "chip-emerald" : installmentPlanStatus(expense) === "partial" ? "chip-amber" : "chip-ink"}`} style={{ marginLeft: 6 }}>
+                      {installmentPlanStatus(expense) === "paid" ? t("Payé") : installmentPlanStatus(expense) === "partial" ? t("Partiel") : t("En attente")}
+                    </span>
+                  )}
+                </td>
                 <td className="r">{money(expense.amount, sym)}</td>
+                <td className="r">{hasPlan ? money(Math.max(0, remaining), sym) : "-"}</td>
                 <td className="r">
+                  {hasPlan && (
+                    <button className="immo-link" disabled={busyId === expense.id} onClick={() => onInstallments(expense)}>
+                      <CalendarClock size={13} /> {t("Échéancier")}
+                    </button>
+                  )}
                   <button className="immo-link" disabled={busyId === expense.id} onClick={() => onEdit(expense)}>
                     <Pencil size={13} /> {t("Modifier")}
                   </button>
@@ -343,6 +404,8 @@ function expenseToForm(expense, defaultCurrencyId) {
     receiptUrl: expense.receiptUrl || "",
     receiptFile: null,
     notes: expense.notes || "",
+    paymentPlan: expense.paymentPlan || "single",
+    recurrenceMonths: expense.recurrenceMonths ?? "",
   };
 }
 
@@ -375,6 +438,12 @@ function ExpenseModal({ value, properties, units, currencyOptions, defaultCurren
             <DomusPropertyField label={t("Fournisseur (texte libre)")} value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
           </div>
           <DomusPropertyField label={t("Description")} value={form.description} onChange={(description) => set({ description })} required placeholder={t("ex. Assurance annuelle immeuble")} />
+          <PaymentPlanField
+            value={form.paymentPlan}
+            recurrenceMonths={form.recurrenceMonths}
+            onPlanChange={(paymentPlan) => set({ paymentPlan })}
+            onRecurrenceChange={(recurrenceMonths) => set({ recurrenceMonths })}
+          />
           <ReceiptField
             receiptUrl={form.receiptUrl}
             receiptFile={form.receiptFile}
@@ -387,6 +456,34 @@ function ExpenseModal({ value, properties, units, currencyOptions, defaultCurren
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
       <ModalActions busy={busy} disabled={!form.propertyId || !form.description || !form.amount || !form.expenseDate} onClose={onClose} onSave={() => onSave(form)} />
     </Modal>
+  );
+}
+
+// Mode de règlement (SCRUM-313) — radio simple, champ "Nombre de mois" visible
+// uniquement si "Mensualités" est sélectionné (généré immédiatement à la création).
+function PaymentPlanField({ value, recurrenceMonths, onPlanChange, onRecurrenceChange }) {
+  return (
+    <div className="domus-property-field">
+      <span>{t("Mode de règlement")}</span>
+      <div className="immo-radio-group">
+        {PAYMENT_PLAN_OPTIONS.map(([key, label]) => (
+          <label key={key} className="immo-radio-option">
+            <input type="radio" name="payment-plan" checked={value === key} onChange={() => onPlanChange(key)} />
+            {label}
+          </label>
+        ))}
+      </div>
+      {value === "installments" && (
+        <DomusPropertyField
+          label={t("Nombre de mois")}
+          type="number"
+          value={recurrenceMonths}
+          onChange={onRecurrenceChange}
+          required
+          placeholder={t("ex. 6")}
+        />
+      )}
+    </div>
   );
 }
 

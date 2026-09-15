@@ -517,6 +517,14 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-money-input input, .domus-money-input select { border:0; border-radius:0; box-shadow:none; height:40px; min-width:0; width:100%; }
 .domus-money-input input { padding:0 12px; }
 .domus-money-input select { border-left:1px solid #e4e4e7; color:#4f46e5; font-weight:800; padding:0 8px; text-align:center; }
+
+/* Echeancier de paiement des depenses (SCRUM-313) */
+.immo-radio-group { display:flex; flex-wrap:wrap; gap:14px; }
+.immo-radio-option { align-items:center; display:flex; font-size:13px; font-weight:600; gap:6px; }
+.installment-progress { display:flex; flex-direction:column; gap:8px; }
+.installment-progress-bar { background:var(--ink-100,#e4e4e7); border-radius:999px; height:10px; overflow:hidden; width:100%; }
+.installment-progress-fill { background:var(--grad-iris,#4f46e5); height:100%; transition:width .2s ease; }
+.installment-progress-labels { display:flex; flex-wrap:wrap; font-size:12px; font-weight:600; gap:12px; justify-content:space-between; }
 .domus-money-input input:focus, .domus-money-input select:focus { border:0; box-shadow:none; }
 .domus-checkbox-row { align-items:center; cursor:pointer; display:flex; gap:10px; padding:2px 0; }
 .domus-checkbox-row input[type=checkbox] { accent-color:#4f46e5; cursor:pointer; height:16px; width:16px; flex:none; }
