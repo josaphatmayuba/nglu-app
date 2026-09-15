@@ -1242,6 +1242,44 @@ export const realEstatePropertyExpenses = mysqlTable("real_estate_property_expen
   updatedAt: timestamp("updated_at"),
 });
 
+// Domus / SCRUM-311 : remboursements dhypotheque portes par un bien immobilier.
+// Table dediee et non une categorie de real_estate_property_expenses : un
+// paiement dhypotheque nest pas une charge a 100 pourcent, il faut separer le
+// capital (remboursement de dette) des interets (charge) et de lescrow.
+// Invariant applicatif : totalAmount = principalAmount + interestAmount + escrowAmount.
+export const realEstateMortgagePayments = mysqlTable("real_estate_mortgage_payments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Imputation a une unite precise ; null = paiement au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  // Reserve pour une future table de pret / tableau damortissement. Non exploite en v1.
+  mortgageId: bigint("mortgage_id", { mode: "number" }),
+  lenderName: varchar("lender_name", { length: 255 }),
+  paymentDate: date("payment_date", { mode: "string" }).notNull(),
+  // Echeance couverte par le paiement.
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
+  totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  principalAmount: decimal("principal_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  interestAmount: decimal("interest_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  escrowAmount: decimal("escrow_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("bank").notNull(),
+  paymentStatus: varchar("payment_status", { length: 30 }).default("paid").notNull(),
+  reference: varchar("reference", { length: 100 }),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  // Ventilation analytique.
+  projectId: bigint("project_id", { mode: "number" }),
+  // Tracabilite vers lecriture comptable postee.
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateContracts = mysqlTable("real_estate_contracts", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

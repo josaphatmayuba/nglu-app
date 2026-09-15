@@ -1314,3 +1314,107 @@ export class CreatePropertyExpenseDto {
 }
 
 export class UpdatePropertyExpenseDto extends PartialType(CreatePropertyExpenseDto) {}
+
+// ── Remboursement hypothecaire (SCRUM-311) ───────────────────────────────────
+// Invariant metier : total = capital + interets + escrow (tolerance 0.01 pour
+// les arrondis decimal(15,2)). Volontairement separe des depenses de propriete :
+// seule la part interets (+ escrow) est une charge, le capital solde une dette.
+
+/** Tolerance d arrondi appliquee au controle total = capital + interets + escrow. */
+export const MORTGAGE_AMOUNT_TOLERANCE = 0.01;
+
+export class CreateMortgagePaymentDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: 1, description: "Reserve pour une future table de pret. Non exploite en v1." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  mortgageId?: number;
+
+  @ApiPropertyOptional({ example: "Rawbank" })
+  @IsOptional()
+  @IsString()
+  lenderName?: string;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paymentDate: string;
+
+  @ApiPropertyOptional({ example: "2026-09-01" })
+  @IsOptional()
+  @IsDateString()
+  periodStart?: string;
+
+  @ApiPropertyOptional({ example: "2026-09-30" })
+  @IsOptional()
+  @IsDateString()
+  periodEnd?: string;
+
+  @ApiProperty({ example: 1200, description: "Doit egaler principalAmount + interestAmount + escrowAmount." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  totalAmount: number;
+
+  @ApiProperty({ example: 800, description: "Part capital : remboursement de dette (compte Liability)." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  principalAmount: number;
+
+  @ApiProperty({ example: 400, description: "Part interets : charge financiere (compte Expense)." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  interestAmount: number;
+
+  @ApiPropertyOptional({ example: 0, default: 0, description: "Part sequestre (assurance/taxes avancees par le preteur)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  escrowAmount?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "bank", default: "bank" })
+  @IsOptional()
+  @IsIn(["cash", "bank", "mobile_money", "cheque"])
+  paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
+
+  @ApiPropertyOptional({ example: "paid", default: "paid" })
+  @IsOptional()
+  @IsIn(["paid", "pending", "overdue"])
+  paymentStatus?: "paid" | "pending" | "overdue";
+
+  @ApiPropertyOptional({ example: "ECH-2026-09" })
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateMortgagePaymentDto extends PartialType(CreateMortgagePaymentDto) {}

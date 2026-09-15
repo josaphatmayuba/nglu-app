@@ -18,6 +18,7 @@ import {
   realEstateMaintenanceCosts,
   realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
+  realEstateMortgagePayments,
   realEstateProperties,
   realEstatePropertyExpenses,
   realEstatePropertyPhotos,
@@ -72,6 +73,9 @@ import {
   PublicLeaseRequestDto,
   CreatePropertyExpenseDto,
   UpdatePropertyExpenseDto,
+  CreateMortgagePaymentDto,
+  UpdateMortgagePaymentDto,
+  MORTGAGE_AMOUNT_TOLERANCE,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 
@@ -3596,6 +3600,257 @@ export class PropertyManagementService {
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
     return this.getPropertyExpense(id, orgId);
+  }
+
+  // ── Remboursements hypothecaires (SCRUM-311) ──────────────────────────────
+  // Un paiement d hypotheque n est pas une charge a 100 pourcent : le capital
+  // solde une dette (Liability), seuls les interets (+ escrow) sont des charges.
+  // D ou une table et un posting ledger dedies, sans toucher aux depenses de
+  // propriete (SCRUM-310).
+
+  /** Compte de dette recevant le remboursement du capital. */
+  private static readonly MORTGAGE_LIABILITY_ACCOUNT = "Emprunts hypothecaires";
+  /** Compte de charge recevant la part interets. */
+  private static readonly MORTGAGE_INTEREST_ACCOUNT = "Interets demprunt";
+  /**
+   * Compte de charge recevant l escrow (assurance / taxes avancees par le preteur).
+   * Reutilise le compte canonique deja utilise par insurance / property_tax
+   * (regroupement 0149), aucun nouveau compte n est cree.
+   */
+  private static readonly MORTGAGE_ESCROW_ACCOUNT = "Frais de bureau et divers";
+
+  /**
+   * Controle applicatif de l invariant total = capital + interets + escrow,
+   * avec tolerance d arrondi (decimal(15,2)). Pas de contrainte CHECK en base.
+   */
+  private assertMortgageAmountsConsistent(total: number, principal: number, interest: number, escrow: number) {
+    const sum = principal + interest + escrow;
+    if (Math.abs(sum - total) > MORTGAGE_AMOUNT_TOLERANCE) {
+      throw new BadRequestException(
+        `Montants incoherents : capital (${principal}) + interets (${interest}) + escrow (${escrow}) = ${sum.toFixed(2)}, ` +
+          `ce qui ne correspond pas au montant total (${total}). Corrigez la ventilation.`,
+      );
+    }
+  }
+
+  async listMortgagePayments(
+    orgId: number,
+    filters: { propertyId?: number; dateFrom?: string; dateTo?: string } = {},
+  ) {
+    const conditions = [
+      eq(realEstateMortgagePayments.organizationId, orgId),
+      eq(realEstateMortgagePayments.isActive, 1),
+    ];
+    if (filters.propertyId) conditions.push(eq(realEstateMortgagePayments.propertyId, filters.propertyId));
+    if (filters.dateFrom) conditions.push(gte(realEstateMortgagePayments.paymentDate, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(realEstateMortgagePayments.paymentDate, filters.dateTo));
+
+    return this.db
+      .select({
+        ...getTableColumns(realEstateMortgagePayments),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgagePayments)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgagePayments.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgagePayments.currencyId))
+      .where(and(...conditions))
+      .orderBy(desc(realEstateMortgagePayments.paymentDate), desc(realEstateMortgagePayments.id));
+  }
+
+  async getMortgagePayment(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstateMortgagePayments),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgagePayments)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgagePayments.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgagePayments.currencyId))
+      .where(and(
+        eq(realEstateMortgagePayments.id, id),
+        eq(realEstateMortgagePayments.isActive, 1),
+        eq(realEstateMortgagePayments.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Mortgage payment not found.");
+    return rows[0];
+  }
+
+  async createMortgagePayment(input: CreateMortgagePaymentDto, orgId: number, userId?: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const total = Number(input.totalAmount);
+    const principal = Number(input.principalAmount);
+    const interest = Number(input.interestAmount);
+    const escrow = Number(input.escrowAmount ?? 0);
+    this.assertMortgageAmountsConsistent(total, principal, interest, escrow);
+
+    const projectId = await this.getOrCreatePropertyProject(input.propertyId, orgId, userId);
+
+    const [result] = await this.db.insert(realEstateMortgagePayments).values({
+      organizationId: orgId,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      mortgageId: input.mortgageId ?? null,
+      lenderName: input.lenderName ?? null,
+      paymentDate: input.paymentDate,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
+      totalAmount: String(total),
+      principalAmount: String(principal),
+      interestAmount: String(interest),
+      escrowAmount: String(escrow),
+      currencyId: input.currencyId ?? null,
+      paymentMethod: input.paymentMethod ?? "bank",
+      paymentStatus: input.paymentStatus ?? "paid",
+      reference: input.reference ?? null,
+      receiptUrl: input.receiptUrl ?? null,
+      projectId,
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const paymentId = Number((result as any).insertId);
+
+    // Ecriture comptable : DEBIT dette (capital) + DEBIT charge (interets)
+    // [+ DEBIT charge (escrow)] / CREDIT tresorerie pour le total.
+    const paymentMethod = input.paymentMethod ?? "bank";
+    const creditId = paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const liabilityId = await this.getOrCreateLiabilitySubAccount(
+      PropertyManagementService.MORTGAGE_LIABILITY_ACCOUNT,
+      orgId,
+    );
+    const interestId = await this.getOrCreateExpenseSubAccount(
+      PropertyManagementService.MORTGAGE_INTEREST_ACCOUNT,
+      orgId,
+    );
+
+    const lines: Array<{
+      accountId: number;
+      side: "DEBIT" | "CREDIT";
+      amount: number;
+      description: string;
+      projectId?: number;
+    }> = [
+      { accountId: liabilityId, side: "DEBIT", amount: principal, description: "Mortgage principal", projectId: projectId ?? undefined },
+      { accountId: interestId, side: "DEBIT", amount: interest, description: "Mortgage interest", projectId: projectId ?? undefined },
+    ];
+    if (escrow > 0) {
+      const escrowId = await this.getOrCreateExpenseSubAccount(
+        PropertyManagementService.MORTGAGE_ESCROW_ACCOUNT,
+        orgId,
+      );
+      lines.push({ accountId: escrowId, side: "DEBIT", amount: escrow, description: "Mortgage escrow", projectId: projectId ?? undefined });
+    }
+    // Pas de projectId sur la ligne de tresorerie (identique a createPropertyExpense).
+    lines.push({ accountId: creditId, side: "CREDIT", amount: total, description: paymentMethod === "bank" ? "Bank" : "Cash" });
+
+    let journalEntryId: number | null = null;
+    try {
+      const posted = await this.ledger.post(
+        {
+          date: input.paymentDate,
+          reference: `MORTPAY-${paymentId}`,
+          particulars: `Echeance hypothecaire${input.lenderName ? ` — ${input.lenderName}` : ""}`,
+          sourceModule: "mortgage_payment",
+          relatedId: String(paymentId),
+          currencyId: input.currencyId ?? undefined,
+          idempotencyKey: `mortgage-payment:${paymentId}`,
+          lines,
+        },
+        orgId,
+        userId,
+      );
+      journalEntryId = posted?.id ? Number(posted.id) : null;
+    } catch (err) {
+      this.logger.warn(`createMortgagePayment: ecriture ledger ignoree: ${(err as Error).message}`);
+    }
+
+    if (journalEntryId) {
+      await this.db
+        .update(realEstateMortgagePayments)
+        .set({ journalEntryId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateMortgagePayments.id, paymentId));
+    }
+
+    // Soumet au circuit d approbation des depenses (effectif si gate active).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "mortgage_payment", entityId: String(paymentId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit mortgage payment approval skipped:", (err as Error).message);
+    }
+
+    return this.getMortgagePayment(paymentId, orgId);
+  }
+
+  async updateMortgagePayment(id: number, input: UpdateMortgagePaymentDto, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const current = await this.getMortgagePayment(id, orgId);
+    if (input.propertyId !== undefined) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+    }
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    // L invariant est reverifie sur l etat resultant (valeurs fournies fusionnees
+    // avec les valeurs en base), pour qu un update partiel ne casse pas la ventilation.
+    const total = input.totalAmount !== undefined ? Number(input.totalAmount) : Number(current.totalAmount);
+    const principal = input.principalAmount !== undefined ? Number(input.principalAmount) : Number(current.principalAmount);
+    const interest = input.interestAmount !== undefined ? Number(input.interestAmount) : Number(current.interestAmount);
+    const escrow = input.escrowAmount !== undefined ? Number(input.escrowAmount) : Number(current.escrowAmount);
+    this.assertMortgageAmountsConsistent(total, principal, interest, escrow);
+
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({
+        ...this.pick(input, [
+          "propertyId",
+          "unitId",
+          "mortgageId",
+          "lenderName",
+          "periodStart",
+          "periodEnd",
+          "currencyId",
+          "paymentMethod",
+          "paymentStatus",
+          "reference",
+          "receiptUrl",
+          "notes",
+        ]),
+        ...(input.paymentDate !== undefined ? { paymentDate: input.paymentDate } : {}),
+        ...(input.totalAmount !== undefined ? { totalAmount: String(total) } : {}),
+        ...(input.principalAmount !== undefined ? { principalAmount: String(principal) } : {}),
+        ...(input.interestAmount !== undefined ? { interestAmount: String(interest) } : {}),
+        ...(input.escrowAmount !== undefined ? { escrowAmount: String(escrow) } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return this.getMortgagePayment(id, orgId);
+  }
+
+  async deleteMortgagePayment(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    // Soft delete uniquement : l ecriture comptable liee reste tracable.
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return { message: "Deleted successfully." };
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────

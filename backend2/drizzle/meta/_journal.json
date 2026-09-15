@@ -1772,6 +1772,13 @@
       "when": 1781071200028,
       "tag": "0277_domus_property_expenses",
       "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "5",
+      "when": 1781071200029,
+      "tag": "0278_domus_mortgage_payments",
+      "breakpoints": true
     }
   ]
 }

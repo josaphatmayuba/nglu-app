@@ -64,6 +64,8 @@ import {
   UpdateCouponDto,
   CreatePropertyExpenseDto,
   UpdatePropertyExpenseDto,
+  CreateMortgagePaymentDto,
+  UpdateMortgagePaymentDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -931,6 +933,57 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.uploadPropertyExpenseReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  // ── Mortgage Payments (SCRUM-311) ───────────────────────────────────────────
+
+  @ApiOperation({ summary: "List mortgage payments (principal / interest split)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("mortgage-payments")
+  listMortgagePayments(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.listMortgagePayments(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      dateFrom,
+      dateTo,
+    });
+  }
+
+  @ApiOperation({ summary: "Get one mortgage payment" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("mortgage-payments/:id")
+  getMortgagePayment(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getMortgagePayment(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a mortgage payment (total = principal + interest + escrow)" })
+  @ApiCreatedResponse({ description: "Created mortgage payment" })
+  @Permissions("create-propertyManagement")
+  @Post("mortgage-payments")
+  createMortgagePayment(@Body() body: CreateMortgagePaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createMortgagePayment(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a mortgage payment" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("mortgage-payments/:id")
+  updateMortgagePayment(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMortgagePaymentDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMortgagePayment(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a mortgage payment (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("mortgage-payments/:id")
+  @HttpCode(200)
+  deleteMortgagePayment(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMortgagePayment(id, orgId);
   }
 
   // ── Maintenance Photos ──────────────────────────────────────────────────────

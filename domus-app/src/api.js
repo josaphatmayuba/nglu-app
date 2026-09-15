@@ -249,6 +249,20 @@ export const api = {
     return multipartFetch(`/property-expenses/${id}/receipt`, form);
   },
 
+  // Remboursement hypothèque par propriété (SCRUM-311) — filtres query optionnels.
+  mortgagePayments: ({ propertyId, dateFrom, dateTo } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/mortgage-payments${qs ? `?${qs}` : ""}`);
+  },
+  mortgagePayment: (id) => get(`/mortgage-payments/${id}`),
+  createMortgagePayment: (b) => post("/mortgage-payments", b),
+  updateMortgagePayment: (id, b) => patch(`/mortgage-payments/${id}`, b),
+  deleteMortgagePayment: (id) => del(`/mortgage-payments/${id}`),
+
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),
   collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),

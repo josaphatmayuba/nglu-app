@@ -14,6 +14,7 @@ import {
   Grid3X3,
   Home,
   Info,
+  Landmark,
   Layers,
   ChevronLeft,
   List,
@@ -37,6 +38,7 @@ import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from ".
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
 import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
+import { mortgageTotalsByCurrency } from "./hypotheque.jsx";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
@@ -821,6 +823,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
   const cover = photos[0];
   const propertyId = property.propertyId || property.id;
   const expensesApi = useApi(() => api.propertyExpenses({ propertyId }), [propertyId]);
+  const mortgagePaymentsApi = useApi(() => api.mortgagePayments({ propertyId }), [propertyId]);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
   const currency = useMemo(
@@ -838,6 +841,16 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
   };
   const expenseTotals = useMemo(() => expenseTotalsByCurrency(propertyExpenses, expenseSymbol), [propertyExpenses, currency]);
   const categoryLabel = (key) => EXPENSE_CATEGORIES.find(([k]) => k === key)?.[1] || key;
+  const mortgagePayments = useMemo(() => {
+    const raw = mortgagePaymentsApi.data;
+    return Array.isArray(raw) ? raw : raw?.data || [];
+  }, [mortgagePaymentsApi.data]);
+  const mortgageSymbol = (payment) => {
+    const byId = payment?.currencyId != null ? currency.currencyById?.get(Number(payment.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(payment) || currency.defaultCurrencySymbol;
+  };
+  const mortgageTotals = useMemo(() => mortgageTotalsByCurrency(mortgagePayments, mortgageSymbol), [mortgagePayments, currency]);
   return (
     <Modal
       title={property.name}
@@ -944,6 +957,45 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           )}
         </div>
 
+        <div className="domus-property-detail-notes">
+          <p><strong>Hypothèque</strong></p>
+          {mortgagePaymentsApi.loading ? (
+            <p className="muted">Chargement...</p>
+          ) : mortgagePayments.length === 0 ? (
+            <p className="muted">Aucun paiement d'hypothèque enregistré pour ce bien.</p>
+          ) : (
+            <>
+              <table className="tbl" style={{ width: "100%" }}>
+                <thead>
+                  <tr><th>Prêteur</th><th>Date</th><th className="r">Capital</th><th className="r">Intérêts</th></tr>
+                </thead>
+                <tbody>
+                  {mortgagePayments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td>{payment.lenderName || "-"}</td>
+                      <td>{payment.paymentDate ? String(payment.paymentDate).slice(0, 10) : "-"}</td>
+                      <td className="r">{money(payment.principalAmount, mortgageSymbol(payment))}</td>
+                      <td className="r">{money(payment.interestAmount, mortgageSymbol(payment))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {mortgageTotals.map((c) => (
+                <div key={c.symbol}>
+                  <div className="ops-score">
+                    <span>{`Capital remboursé ${c.symbol}`}</span>
+                    <b>{money(c.principal, c.symbol)}</b>
+                  </div>
+                  <div className="ops-score">
+                    <span>{`Intérêts payés ${c.symbol}`}</span>
+                    <b>{money(c.interest, c.symbol)}</b>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
         {error && <div className="api-error">{error}</div>}
       </div>
       <div className="domus-modal-footer">
@@ -954,6 +1006,11 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
             onClick={() => { onClose(); go?.("depenses"); }}
             disabled={busy}
           ><Wallet size={14} /> Dépenses</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { onClose(); go?.("hypotheque"); }}
+            disabled={busy}
+          ><Landmark size={14} /> Hypothèque</button>
           <button
             className="domus-modal-draft"
             onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}
