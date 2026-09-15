@@ -176,13 +176,11 @@ export function Pnl() {
       </div>
 
       <div className="maintenance-toolbar" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-        <div className="immo-filter-group">
+        <select className="immo-filter-select" value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
           {properties.map((p) => (
-            <button key={p.id} type="button" className={String(propertyId) === String(p.id) ? "active" : ""} onClick={() => setPropertyId(String(p.id))}>
-              {p.name}
-            </button>
+            <option key={p.id} value={String(p.id)}>{p.name}</option>
           ))}
-        </div>
+        </select>
         <PeriodPicker
           preset={preset}
           setPreset={setPreset}

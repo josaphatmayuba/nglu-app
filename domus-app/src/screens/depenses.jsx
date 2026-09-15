@@ -231,26 +231,18 @@ export function Depenses() {
       </div>
 
       <div className="maintenance-toolbar">
-        <div className="immo-filter-group">
-          <button type="button" className={propertyFilter === "" ? "active" : ""} onClick={() => setPropertyFilter("")}>
-            {t("Toutes propriétés")}
-          </button>
+        <select className="immo-filter-select" value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)}>
+          <option value="">{t("Toutes propriétés")}</option>
           {properties.map((p) => (
-            <button key={p.id} type="button" className={String(propertyFilter) === String(p.id) ? "active" : ""} onClick={() => setPropertyFilter(String(p.id))}>
-              {p.name}
-            </button>
+            <option key={p.id} value={String(p.id)}>{p.name}</option>
           ))}
-        </div>
-        <div className="immo-filter-group">
-          <button type="button" className={categoryFilter === "" ? "active" : ""} onClick={() => setCategoryFilter("")}>
-            {t("Toutes catégories")}
-          </button>
+        </select>
+        <select className="immo-filter-select" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+          <option value="">{t("Toutes catégories")}</option>
           {EXPENSE_CATEGORIES.map(([key, label]) => (
-            <button key={key} type="button" className={categoryFilter === key ? "active" : ""} onClick={() => setCategoryFilter(key)}>
-              {label}
-            </button>
+            <option key={key} value={key}>{label}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       {actionError && <div className="api-error" style={{ marginBottom: 12 }}>{actionError}</div>}
