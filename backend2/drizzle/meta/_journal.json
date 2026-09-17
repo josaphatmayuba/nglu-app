@@ -1828,6 +1828,20 @@
       "when": 1781071200036,
       "tag": "0285_domus_deposit_proof",
       "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "5",
+      "when": 1781071200037,
+      "tag": "0286_domus_real_estate_owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "5",
+      "when": 1781071200038,
+      "tag": "0287_domus_property_owner_id",
+      "breakpoints": true
     }
   ]
 }

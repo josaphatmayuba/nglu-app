@@ -409,14 +409,14 @@ export function Contrats() {
                   <div className="contrats-paper-sigs">
                     <div>
                       <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
-                      {detail?.companyInfo?.landlordSignature || detail?.landlordSignature ? (
+                      {detail?.landlordInfo?.signature || detail?.companyInfo?.landlordSignature || detail?.landlordSignature ? (
                         <img
-                          src={detail.companyInfo?.landlordSignature || detail.landlordSignature}
+                          src={detail.landlordInfo?.signature || detail.companyInfo?.landlordSignature || detail.landlordSignature}
                           alt="Signature bailleur"
                           className="contrats-sig-img"
                         />
                       ) : (
-                        <div className="contrats-sig-landlord">{detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
+                        <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
                       )}
                     </div>
                     <div>

@@ -156,6 +156,12 @@ export const api = {
   sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),
   sendOnboardingEmail: (id) => post(`/onboarding/${id}/send-email`),
 
+  owners: () => get("/owners"),
+  owner: (id) => get(`/owners/${id}`),
+  createOwner: (b) => post("/owners", b),
+  updateOwner: (id, b) => put(`/owners/${id}`, b),
+  deleteOwner: (id) => del(`/owners/${id}`),
+
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
   createProperty: (b) => post("/properties", b),

@@ -88,3 +88,6 @@ Userspaulnjira.json
 
 # Inventaire animaux (fichier de travail local)
 farmos_inventaire_animaux_reorganise.csv
+
+# Playwright MCP (artefacts locaux de session, pas du code projet)
+.playwright-mcp/

@@ -21,6 +21,7 @@ import {
   realEstateMaintenanceRequests,
   realEstateMortgageLoans,
   realEstateMortgagePayments,
+  realEstateOwners,
   realEstateProperties,
   realEstatePropertyExpenses,
   realEstatePropertyPhotos,
@@ -54,6 +55,8 @@ import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateOwnerDto,
+  UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
   CollectDepositDto,
@@ -817,6 +820,8 @@ export class PropertyManagementService {
         marketValue: realEstateProperties.marketValue,
         defaultRent: realEstateProperties.defaultRent,
         currencyId: realEstateProperties.currencyId,
+        ownerId: realEstateProperties.ownerId,
+        ownerName: realEstateOwners.displayName,
         description: realEstateProperties.description,
         availableForBooking: realEstateProperties.availableForBooking,
         createdAt: realEstateProperties.createdAt,
@@ -828,11 +833,185 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, realEstateProperties.ownerId))
       .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId), scopeFilter))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
     return rows.map((row) => ({ ...row, unitsCount: Number(row.unitsCount) }));
+  }
+
+  // ── Proprietaires legaux (Domus) ─────────────────────────────────────────
+  // Liste allegee (sans signature, trop lourde) + compteur de biens actifs.
+  async owners(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: realEstateOwners.id,
+        displayName: realEstateOwners.displayName,
+        ownerType: realEstateOwners.ownerType,
+        firstName: realEstateOwners.firstName,
+        lastName: realEstateOwners.lastName,
+        companyName: realEstateOwners.companyName,
+        representativeName: realEstateOwners.representativeName,
+        phone: realEstateOwners.phone,
+        phone2: realEstateOwners.phone2,
+        email: realEstateOwners.email,
+        address: realEstateOwners.address,
+        city: realEstateOwners.city,
+        country: realEstateOwners.country,
+        idDocumentType: realEstateOwners.idDocumentType,
+        idNumber: realEstateOwners.idNumber,
+        taxId: realEstateOwners.taxId,
+        notes: realEstateOwners.notes,
+        createdAt: realEstateOwners.createdAt,
+        updatedAt: realEstateOwners.updatedAt,
+      })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .orderBy(realEstateOwners.displayName);
+
+    if (!rows.length) return [];
+
+    const counts = await this.db
+      .select({
+        ownerId: realEstateProperties.ownerId,
+        count: sql<number>`count(*)`,
+      })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.isActive, 1),
+        inArray(realEstateProperties.ownerId, rows.map((r) => r.id)),
+      ))
+      .groupBy(realEstateProperties.ownerId);
+    const countByOwner = new Map(counts.map((c) => [Number(c.ownerId), Number(c.count)]));
+
+    return rows.map((row) => ({ ...row, propertiesCount: countByOwner.get(row.id) ?? 0 }));
+  }
+
+  async owner(id: number, orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Proprietaire introuvable.");
+
+    const properties = await this.db
+      .select({ id: realEstateProperties.id, name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.ownerId, id),
+        eq(realEstateProperties.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+      ))
+      .orderBy(realEstateProperties.name);
+
+    return { ...rows[0], properties };
+  }
+
+  async createOwner(input: CreateOwnerDto, orgId: number) {
+    const [result] = await this.db.insert(realEstateOwners).values({
+      organizationId: orgId,
+      displayName: input.displayName,
+      ownerType: input.ownerType ?? "individual",
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      companyName: input.companyName ?? null,
+      representativeName: input.representativeName ?? null,
+      phone: input.phone ?? null,
+      phone2: input.phone2 ?? null,
+      email: input.email ?? null,
+      address: input.address ?? null,
+      city: input.city ?? null,
+      country: input.country ?? null,
+      idDocumentType: input.idDocumentType ?? null,
+      idNumber: input.idNumber ?? null,
+      taxId: input.taxId ?? null,
+      signature: input.signature ?? null,
+      notes: input.notes ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return this.owner(Number(result.insertId), orgId);
+  }
+
+  async updateOwner(id: number, input: UpdateOwnerDto, orgId: number) {
+    await this.ensureActiveOwner(id, orgId);
+    await this.db
+      .update(realEstateOwners)
+      .set({
+        ...this.pick(input, [
+          "displayName",
+          "ownerType",
+          "firstName",
+          "lastName",
+          "companyName",
+          "representativeName",
+          "phone",
+          "phone2",
+          "email",
+          "address",
+          "city",
+          "country",
+          "idDocumentType",
+          "idNumber",
+          "taxId",
+          "signature",
+          "notes",
+        ]),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId)));
+    return this.owner(id, orgId);
+  }
+
+  async deleteOwner(id: number, orgId: number) {
+    await this.ensureActiveOwner(id, orgId);
+
+    const [attachedRow] = await this.db
+      .select({ id: realEstateProperties.id })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.ownerId, id),
+        eq(realEstateProperties.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+      ))
+      .limit(1);
+    if (attachedRow) {
+      throw new BadRequestException(
+        "Réassignez ou détachez d'abord les biens rattachés à ce propriétaire avant de le supprimer.",
+      );
+    }
+
+    await this.db
+      .update(realEstateOwners)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId)));
+    return { message: "Proprietaire supprime." };
+  }
+
+  private async ensureActiveOwner(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateOwners.id })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Proprietaire introuvable.");
+  }
+
+  // Variante 400 (au lieu de 404) utilisée quand ownerId est fourni depuis
+  // createProperty/updateProperty : un owner absent/inactif est une erreur de
+  // saisie sur le bien, pas une ressource "owner" introuvable en soi.
+  private async ensureActiveOwnerForProperty(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateOwners.id })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new BadRequestException("Proprietaire introuvable ou inactif.");
   }
 
   async propertyPhotos(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
@@ -1214,6 +1393,9 @@ export class PropertyManagementService {
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
+    if (input.ownerId != null) {
+      await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
+    }
     const [result] = await this.db.insert(realEstateProperties).values({
       organizationId: orgId,
       name: input.name,
@@ -1228,6 +1410,7 @@ export class PropertyManagementService {
       marketValue: this.money(input.marketValue),
       defaultRent: this.money(input.defaultRent),
       currencyId,
+      ownerId: input.ownerId ?? null,
       description: input.description ?? null,
       availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
@@ -1244,6 +1427,9 @@ export class PropertyManagementService {
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     }
+    if (input.ownerId !== undefined && input.ownerId !== null) {
+      await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
+    }
     await this.db
       .update(realEstateProperties)
       .set({
@@ -1259,6 +1445,7 @@ export class PropertyManagementService {
           "parkingSpaces",
           "description",
           "currencyId",
+          "ownerId",
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),

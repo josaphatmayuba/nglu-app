@@ -12,6 +12,7 @@ import {
   realEstateContracts,
   realEstateLeaseDocuments,
   realEstateLeases,
+  realEstateOwners,
   realEstateProperties,
   realEstateUnits,
   tenantDetails,
@@ -61,6 +62,16 @@ type LeaseDetails = {
   tenantIdDocumentType: string | null;
   tenantIdNumber: string | null;
   tenantName: string;
+  // Proprietaire legal du bien (real_estate_owners), si assigne sur la propriete.
+  ownerId: number | null;
+  ownerName: string | null;
+  ownerAddress: string | null;
+  ownerCity: string | null;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
+  ownerSignature: string | null;
+  ownerIdDocumentType: string | null;
+  ownerIdNumber: string | null;
 };
 
 type CompanyInfo = {
@@ -72,6 +83,21 @@ type CompanyInfo = {
   // Identité du bailleur (réglages) — prioritaire sur le nom/téléphone de l'entreprise.
   landlordName: string | null;
   landlordPhone: string | null;
+};
+
+// Bailleur resolu pour un bail donne : soit le proprietaire legal (real_estate_owners)
+// rattache au bien, soit (fallback) le bailleur/gestionnaire des reglages (CompanyInfo).
+// CompanyInfo reste inchange et continue de representer le GESTIONNAIRE mandate.
+type LandlordInfo = {
+  name: string;
+  address: string;
+  city?: string;
+  phone: string;
+  email: string;
+  signature: string | null;
+  idDocumentType?: string | null;
+  idNumber?: string | null;
+  source: "owner" | "settings";
 };
 
 @Injectable()
@@ -145,6 +171,7 @@ export class ContractsService {
    * When a value is empty, the placeholder is preserved verbatim so the gestionnaire sees what's missing.
    */
   private buildVariables(lease: LeaseDetails, company: CompanyInfo): Record<string, string> {
+    const landlord = this.resolveLandlord(lease, company);
     const today = this.formatDate(new Date());
     const startDate = this.formatDate(lease.startDate);
     const endDate = this.formatDate(lease.endDate);
@@ -158,10 +185,13 @@ export class ContractsService {
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
 
     return {
-      "NOM COMPLET DU BAILLEUR": company.landlordName || company.companyName || "",
-      "ADRESSE DU BAILLEUR": company.address ?? "",
-      "TÉLÉPHONE DU BAILLEUR": company.landlordPhone || company.phone || "",
-      "EMAIL DU BAILLEUR": company.email ?? "",
+      "NOM COMPLET DU BAILLEUR": landlord.name,
+      "ADRESSE DU BAILLEUR": landlord.address,
+      "TÉLÉPHONE DU BAILLEUR": landlord.phone,
+      "EMAIL DU BAILLEUR": landlord.email,
+      "NOM DU GESTIONNAIRE": company.landlordName || company.companyName || "",
+      "TÉLÉPHONE DU GESTIONNAIRE": company.landlordPhone || company.phone || "",
+      "EMAIL DU GESTIONNAIRE": company.email ?? "",
       "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
@@ -193,6 +223,38 @@ export class ContractsService {
       "DATE DU JOUR": today,
       "CONDITIONS PARTICULIÈRES": lease.terms ?? "",
       "NOTES ÉTAT DES LIEUX": lease.moveInNotes ?? "",
+    };
+  }
+
+  /**
+   * Resout le bailleur reel d'un bail : le PROPRIETAIRE legal du bien
+   * (real_estate_owners, signataire du bail) s'il est assigne sur la
+   * propriete, sinon (fallback total, comportement historique inchange) le
+   * bailleur/gestionnaire des reglages (appSettings.landlordName/... ou, a
+   * defaut, l'entreprise). company (CompanyInfo) reste toujours le
+   * GESTIONNAIRE mandate, independamment de la source retenue ici.
+   */
+  private resolveLandlord(lease: LeaseDetails, company: CompanyInfo): LandlordInfo {
+    if (lease.ownerId != null) {
+      return {
+        name: lease.ownerName ?? "",
+        address: lease.ownerAddress ?? "",
+        city: lease.ownerCity ?? undefined,
+        phone: lease.ownerPhone ?? "",
+        email: lease.ownerEmail ?? "",
+        signature: lease.ownerSignature ?? null,
+        idDocumentType: lease.ownerIdDocumentType ?? null,
+        idNumber: lease.ownerIdNumber ?? null,
+        source: "owner",
+      };
+    }
+    return {
+      name: company.landlordName || company.companyName || "",
+      address: company.address ?? "",
+      phone: company.landlordPhone || company.phone || "",
+      email: company.email ?? "",
+      signature: company.landlordSignature ?? null,
+      source: "settings",
     };
   }
 
@@ -232,6 +294,25 @@ export class ContractsService {
 
     const companyInfo = await this.getCompanyInfo(orgId);
 
+    // landlordInfo = bailleur reel (proprietaire ou reglages). On tente de charger
+    // le bail pour resoudre un eventuel proprietaire assigne ; si le bail a ete
+    // supprime entre temps, on retombe sur companyInfo seul (source "settings")
+    // plutot que de faire planter l'endpoint (rétrocompatibilité).
+    let landlordInfo: LandlordInfo;
+    try {
+      const lease = await this.getLeaseDetails(rows[0].leaseId, orgId);
+      landlordInfo = this.resolveLandlord(lease, companyInfo);
+    } catch {
+      landlordInfo = {
+        name: companyInfo.landlordName || companyInfo.companyName || "",
+        address: companyInfo.address ?? "",
+        phone: companyInfo.landlordPhone || companyInfo.phone || "",
+        email: companyInfo.email ?? "",
+        signature: companyInfo.landlordSignature ?? null,
+        source: "settings",
+      };
+    }
+
     let createdByName: string | null = null;
     if (rows[0].createdBy) {
       const [creator] = await this.db
@@ -245,7 +326,14 @@ export class ContractsService {
       }
     }
 
-    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.landlordName || companyInfo.companyName, createdByName };
+    return {
+      ...rows[0],
+      auditLogs,
+      companyInfo,
+      landlordInfo,
+      landlordName: companyInfo.landlordName || companyInfo.companyName,
+      createdByName,
+    };
   }
 
   async sendContract(id: number, orgId: number) {
@@ -754,6 +842,15 @@ export class ContractsService {
         tenantAddress: customers.address,
         tenantIdDocumentType: tenantDetails.idDocumentType,
         tenantIdNumber: tenantDetails.idNumber,
+        ownerId: realEstateOwners.id,
+        ownerName: realEstateOwners.displayName,
+        ownerAddress: realEstateOwners.address,
+        ownerCity: realEstateOwners.city,
+        ownerPhone: realEstateOwners.phone,
+        ownerEmail: realEstateOwners.email,
+        ownerSignature: realEstateOwners.signature,
+        ownerIdDocumentType: realEstateOwners.idDocumentType,
+        ownerIdNumber: realEstateOwners.idNumber,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
@@ -761,6 +858,7 @@ export class ContractsService {
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, realEstateProperties.ownerId))
       .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
@@ -774,6 +872,7 @@ export class ContractsService {
   }
 
   private generateContent(lease: LeaseDetails, company: CompanyInfo): string {
+    const landlordInfo = this.resolveLandlord(lease, company);
     const e = (s: string | null | undefined) => this.escapeHtml(s);
     const today = this.formatDate(new Date());
     const startDate = this.formatDate(lease.startDate);
@@ -786,10 +885,16 @@ export class ContractsService {
     const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = company.landlordName || company.companyName || "[NOM DU BAILLEUR]";
-    const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
-    const landlordPhone = company.landlordPhone || company.phone || "N/A";
-    const landlordEmail = company.email || "N/A";
+    const landlordName = landlordInfo.name || "[NOM DU BAILLEUR]";
+    const landlordAddress = landlordInfo.address || "[ADRESSE DU BAILLEUR]";
+    const landlordPhone = landlordInfo.phone || "N/A";
+    const landlordEmail = landlordInfo.email || "N/A";
+    const managerName = company.landlordName || company.companyName || "";
+    const managerPhone = company.landlordPhone || company.phone || "";
+    const managedByLine =
+      landlordInfo.source === "owner" && (managerName || managerPhone)
+        ? `<div style="font-size:12px;color:#555;margin-top:4px;">Représenté pour la gestion locative par ${e(managerName || "N/A")}${managerPhone ? ` — Tél : ${e(managerPhone)}` : ""}</div>`
+        : "";
 
     const art = (num: string, title: string, body: string) =>
       `<div style="margin-bottom:22px;">
@@ -814,7 +919,7 @@ export class ContractsService {
     return `<div style="font-family:Georgia,'Times New Roman',serif;color:#1a1a2e;line-height:1.8;font-size:14px;max-width:800px;margin:0 auto;">
 
   <div style="text-align:center;padding-bottom:20px;border-bottom:3px double #1a237e;margin-bottom:28px;">
-    <div style="font-size:20px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:2px;">${e(landlordName)}</div>
+    <div style="font-size:20px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:2px;">DOMUS &mdash; Système de gestion immobilière</div>
     <div style="font-size:12px;color:#666;margin-top:4px;">${e(landlordAddress)} &nbsp;|&nbsp; Tél&nbsp;: ${e(landlordPhone)} &nbsp;|&nbsp; ${e(landlordEmail)}</div>
     <div style="margin-top:18px;">
       <span style="font-size:17px;font-weight:bold;text-transform:uppercase;letter-spacing:3px;color:#1a1a2e;border:2px solid #1a237e;padding:7px 28px;border-radius:3px;display:inline-block;">
@@ -834,6 +939,7 @@ export class ContractsService {
       <strong>${e(landlordName)}</strong><br>
       Adresse&nbsp;: ${e(landlordAddress)}<br>
       Téléphone&nbsp;: ${e(landlordPhone)} &nbsp;&nbsp; Courriel&nbsp;: ${e(landlordEmail)}
+      ${managedByLine}
     </div>
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>

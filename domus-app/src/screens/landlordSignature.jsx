@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Check, FileSignature, Image as ImageIcon, PenLine, Save, Trash2, Type, Upload } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -7,6 +7,7 @@ import {
   generateCursiveSignature, loadCursiveFonts,
 } from "../landlordSignature.js";
 import { useConfirm } from "../components/Dialog.jsx";
+import { SignaturePad } from "../components/SignaturePad.jsx";
 
 export function LandlordSignatureCard({ setting, onSaved }) {
   const confirm = useConfirm();
@@ -19,9 +20,6 @@ export function LandlordSignatureCard({ setting, onSaved }) {
   const [cursiveFont, setCursiveFont] = useState(CURSIVE_FONTS[0].name);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
-  const canvasRef = useRef(null);
-  const drawingRef = useRef(false);
-
   useEffect(() => { loadCursiveFonts(); }, []);
   useEffect(() => { if (companyName) setCursiveText(companyName); }, [companyName]);
 
@@ -32,55 +30,10 @@ export function LandlordSignatureCard({ setting, onSaved }) {
 
   const cursiveMeta = CURSIVE_FONTS.find((f) => f.name === cursiveFont) || CURSIVE_FONTS[0];
 
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    setPreview(null);
-  };
-
   useEffect(() => {
-    if (type === "tablette" && canvasRef.current) clearCanvas();
     setPreview(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
-
-  const getPoint = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const src = e.touches ? e.touches[0] : e;
-    return {
-      x: ((src.clientX - rect.left) / rect.width) * canvas.width,
-      y: ((src.clientY - rect.top) / rect.height) * canvas.height,
-    };
-  };
-
-  const startDraw = (e) => {
-    e.preventDefault();
-    drawingRef.current = true;
-    const ctx = canvasRef.current.getContext("2d");
-    const { x, y } = getPoint(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.strokeStyle = "#18181b";
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-  };
-  const draw = (e) => {
-    if (!drawingRef.current) return;
-    e.preventDefault();
-    const { x, y } = getPoint(e);
-    const ctx = canvasRef.current.getContext("2d");
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-  const endDraw = () => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    setPreview(canvasRef.current.toDataURL("image/png"));
-  };
 
   const onFile = async (e) => {
     const file = e.target.files?.[0];
@@ -190,22 +143,7 @@ export function LandlordSignatureCard({ setting, onSaved }) {
       )}
 
       {type === "tablette" && (
-        <div className="landlord-sig-preview-box">
-          <canvas
-            ref={canvasRef}
-            width={520}
-            height={180}
-            className="landlord-sig-canvas"
-            onMouseDown={startDraw}
-            onMouseMove={draw}
-            onMouseUp={endDraw}
-            onMouseLeave={endDraw}
-            onTouchStart={startDraw}
-            onTouchMove={draw}
-            onTouchEnd={endDraw}
-          />
-          <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={clearCanvas}>{t("Effacer le tracé")}</button>
-        </div>
+        <SignaturePad value={preview} onChange={setPreview} showUpload={false} onError={(msg) => setMsg({ type: "err", text: msg })} />
       )}
 
       {type === "cursif" && (
@@ -235,7 +173,7 @@ export function LandlordSignatureCard({ setting, onSaved }) {
         </label>
       )}
 
-      {preview && type !== "eidas" && (
+      {preview && type === "image" && (
         <div className="landlord-sig-preview-box" style={{ marginTop: 10 }}>
           <img src={preview} alt={t("Aperçu")} style={{ maxHeight: 80 }} />
         </div>

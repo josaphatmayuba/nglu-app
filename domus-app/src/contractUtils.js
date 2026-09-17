@@ -108,8 +108,9 @@ function contractContentHtml(value = "") {
 
 function landlordPrintBlock(contract) {
   const company = contract?.companyInfo || {};
-  const name = contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
-  const sig = company.landlordSignature;
+  const landlordInfo = contract?.landlordInfo || {};
+  const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
+  const sig = landlordInfo.signature ?? company.landlordSignature;
   if (sig) {
     return `<img class="signature-image" src="${sig}" alt="Signature bailleur" /><div class="signature-name">${escapeHtml(name)}</div>`;
   }
@@ -257,7 +258,8 @@ export const CONTRACT_PRINT_CSS = `
 export function contractPrintBody(contract) {
   const dots = "..............................";
   const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
-  const landlordSignedDate = contract?.companyInfo?.landlordSignature && (contract?.sentAt || contract?.createdAt)
+  const landlordSignature = contract?.landlordInfo?.signature ?? contract?.companyInfo?.landlordSignature;
+  const landlordSignedDate = landlordSignature && (contract?.sentAt || contract?.createdAt)
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
     : dots;
   const tenantSignature = contract?.signatureData

@@ -45,6 +45,8 @@ import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateOwnerDto,
+  UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
   CollectDepositDto,
@@ -539,6 +541,47 @@ export class PropertyManagementController {
   @Get("properties/:id")
   findProperty(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findProperty(id);
+  }
+
+  // ── Proprietaires legaux des biens ───────────────────────────────────────
+  @ApiOperation({ summary: "List active owners (proprietaires legaux)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("owners")
+  owners(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.owners(orgId);
+  }
+
+  @ApiOperation({ summary: "Get single owner by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("owners/:id")
+  owner(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.owner(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create an owner" })
+  @ApiCreatedResponse({ description: "Created owner" })
+  @Permissions("create-propertyManagement")
+  @Post("owners")
+  createOwner(@Body() body: CreateOwnerDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createOwner(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update an owner" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Put("owners/:id")
+  updateOwner(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateOwnerDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateOwner(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) an owner" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("owners/:id")
+  @HttpCode(200)
+  deleteOwner(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteOwner(id, orgId);
   }
 
   @ApiOperation({ summary: "Create a property" })

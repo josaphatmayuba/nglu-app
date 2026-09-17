@@ -12,6 +12,7 @@ import { Dashboard } from "./screens/dashboard.jsx";
 import { Biens } from "./screens/biens.jsx";
 import { CarteBiens } from "./screens/carte.jsx";
 import { Locataires } from "./screens/locataires.jsx";
+import { Proprietaires } from "./screens/proprietaires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Depenses } from "./screens/depenses.jsx";
@@ -44,6 +45,7 @@ const NAV = [
   { sec: "Patrimoine", items: [
     { key: "biens", label: "Propriétés", icon: Building },
     { key: "carte", label: "Carte des propriétés", icon: MapPin },
+    { key: "proprietaires", label: "Propriétaires", icon: UserRound },
     { key: "locataires", label: "Locataires", icon: Users },
   ] },
   { sec: "Locatif", items: [
@@ -67,7 +69,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "depenses", "hypotheque", "prets", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "depenses", "hypotheque", "prets", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -76,6 +78,7 @@ const SCREENS = {
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (nav, device) => <Locataires go={nav} device={device} />,
+  proprietaires: (nav, device) => <Proprietaires go={nav} device={device} />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,

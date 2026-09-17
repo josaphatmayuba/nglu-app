@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   AlertTriangle,
@@ -70,6 +70,7 @@ const emptyProperty = {
   code: "",
   propertyType: "building",
   status: "available",
+  ownerId: "",
   address: "",
   city: "",
   country: "RDC",
@@ -519,6 +520,7 @@ export function Biens({ go }) {
           defaultCurrencyId={currency.defaultCurrencyId}
           onClose={() => setPropertyModal(null)}
           onSave={saveProperty}
+          go={go}
         />
       )}
 
@@ -908,6 +910,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           <DetailLine label="Type" value={property.type} />
           <DetailLine label="Code" value={property.code} />
           <DetailLine label="Locataire" value={property.tenant} />
+          <DetailLine label="Propriétaire" value={property.ownerName || "Non assigné (gestionnaire)"} />
           <DetailLine label="Loyer" value={`${property.rent} /mois`} />
           <DetailLine label="Chambres" value={property.beds || "0"} />
           <DetailLine label="Salles de bain" value={property.baths || "0"} />
@@ -1079,8 +1082,16 @@ function RecentPayments({ payments, go }) {
   );
 }
 
-function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurrencyId = "", onClose, onSave }) {
+function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurrencyId = "", onClose, onSave, go }) {
   const [form, setForm] = useState(value);
+  const [owners, setOwners] = useState([]);
+  useEffect(() => {
+    api.owners().then((list) => setOwners(Array.isArray(list) ? list : [])).catch(() => setOwners([]));
+  }, []);
+  const ownerOptions = [
+    ["", t("Non assigné (fallback gestionnaire)")],
+    ...owners.map((o) => [String(o.id), o.displayName || o.companyName || `#${o.id}`]),
+  ];
   const units = Array.isArray(form.units) ? form.units : [];
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const setUnit = (index, patch) => {
@@ -1158,6 +1169,12 @@ function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurren
               ))}
             </div>
           </div>
+          <DomusPropertySelect label={t("Propriétaire")} value={form.ownerId} onChange={(ownerId) => set({ ownerId })} options={ownerOptions} />
+          {go && (
+            <button type="button" className="immo-link" style={{ padding: 0 }} onClick={() => { onClose?.(); go("proprietaires"); }}>
+              {t("Gérer les propriétaires")}
+            </button>
+          )}
         </FormSection>
 
         <FormSection icon={<MapPin size={14} />} title="Localisation">
@@ -1510,6 +1527,8 @@ function normalizeProperty(property) {
     code: property.code || `P-${property.id}`,
     city: property.city || "",
     address: [property.address, property.city].filter(Boolean).join(", "),
+    ownerId: property.ownerId ?? null,
+    ownerName: property.ownerName || "",
   };
 }
 
@@ -1532,6 +1551,8 @@ function normalizeEmptyProperty(property, photosByProperty = new Map()) {
     address: property.address || "Adresse non renseignee",
     city: property.city || "",
     country: property.country || "",
+    ownerId: property.ownerId ?? null,
+    ownerName: property.ownerName || "",
     floors: property.floors,
     parkingSpaces: property.parkingSpaces,
     marketValue: property.marketValue,
@@ -1582,6 +1603,8 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = n
     name: owner.name || unit.propertyName || `Propriete #${unit.propertyId}`,
     address: [unit.propertyAddress || owner.address, owner.city].filter(Boolean).join(" - ") || "Adresse non renseignee",
     city: owner.city || "",
+    ownerId: owner.ownerId ?? null,
+    ownerName: owner.ownerName || "",
     country: owner.country || "",
     floors: owner.floors,
     parkingSpaces: owner.parkingSpaces,
@@ -1666,6 +1689,7 @@ function propertyPayload(form) {
     code: form.code || undefined,
     propertyType: form.propertyType || "building",
     status: form.status || "available",
+    ownerId: form.ownerId ? toNumber(form.ownerId) : null,
     address: form.address || null,
     city: form.city || null,
     country: form.country || null,
@@ -1741,6 +1765,7 @@ function propertyToForm(property) {
     code: raw.code || "",
     propertyType: raw.propertyType || "building",
     status: raw.status || "available",
+    ownerId: raw.ownerId != null ? String(raw.ownerId) : "",
     address: raw.address || "",
     city: raw.city || "",
     country: raw.country || "RDC",

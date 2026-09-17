@@ -98,9 +98,109 @@ export class CreatePropertyDto {
   @Type(() => Boolean)
   @IsBoolean()
   availableForBooking?: boolean;
+
+  @ApiPropertyOptional({ example: 1, description: "Proprietaire legal du bien (real_estate_owners). NULL = pas de proprietaire assigne, fallback sur les reglages (gestionnaire)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  ownerId?: number | null;
 }
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
+
+// ── Proprietaires legaux des biens (Domus) ───────────────────────────────────
+// Distinct du GESTIONNAIRE mandate (appSettings.landlordName/landlordPhone/landlordSignature,
+// champ texte libre inchange). Un proprietaire est rattache a 0..N biens via
+// real_estate_properties.owner_id (nullable). Voir property-management.service.ts.
+export class CreateOwnerDto {
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  displayName: string;
+
+  @ApiPropertyOptional({ example: "individual", enum: ["individual", "company"], default: "individual" })
+  @IsOptional()
+  @IsIn(["individual", "company"])
+  ownerType?: string;
+
+  @ApiPropertyOptional({ example: "Jean" })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: "Kabila" })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: "SCI Kabila SARL" })
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @ApiPropertyOptional({ example: "Marie Kabila" })
+  @IsOptional()
+  @IsString()
+  representativeName?: string;
+
+  @ApiPropertyOptional({ example: "+243810000000" })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "+243820000000" })
+  @IsOptional()
+  @IsString()
+  phone2?: string;
+
+  @ApiPropertyOptional({ example: "jean.kabila@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: "12 Avenue des Palmiers" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "Kinshasa" })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ example: "RDC" })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiPropertyOptional({ example: "Carte d'électeur" })
+  @IsOptional()
+  @IsString()
+  idDocumentType?: string;
+
+  @ApiPropertyOptional({ example: "CNI-0123456" })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+
+  @ApiPropertyOptional({ example: "TAX-0123456" })
+  @IsOptional()
+  @IsString()
+  taxId?: string;
+
+  @ApiPropertyOptional({ example: "data:image/png;base64,iVBORw0KGgo..." })
+  @IsOptional()
+  @IsString()
+  signature?: string;
+
+  @ApiPropertyOptional({ example: "Proprietaire depuis 2020" })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateOwnerDto extends PartialType(CreateOwnerDto) {}
 
 export class CreateUnitDto {
   @ApiProperty({ example: 1 })

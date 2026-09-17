@@ -929,6 +929,31 @@ export const transactionAttachments = mysqlTable("transaction_attachments", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const realEstateOwners = mysqlTable("real_estate_owners", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  ownerType: varchar("owner_type", { length: 20 }).default("individual").notNull(),
+  firstName: varchar("first_name", { length: 255 }),
+  lastName: varchar("last_name", { length: 255 }),
+  companyName: varchar("company_name", { length: 255 }),
+  representativeName: varchar("representative_name", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  phone2: varchar("phone2", { length: 50 }),
+  email: varchar("email", { length: 255 }),
+  address: varchar("address", { length: 500 }),
+  city: varchar("city", { length: 255 }),
+  country: varchar("country", { length: 255 }),
+  idDocumentType: varchar("id_document_type", { length: 100 }),
+  idNumber: varchar("id_number", { length: 100 }),
+  taxId: varchar("tax_id", { length: 100 }),
+  signature: text("signature"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateProperties = mysqlTable("real_estate_properties", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
@@ -944,6 +969,7 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   marketValue: decimal("market_value", { precision: 15, scale: 2 }).default("0").notNull(),
   defaultRent: decimal("default_rent", { precision: 15, scale: 2 }).default("0").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
+  ownerId: bigint("owner_id", { mode: "number" }),
   description: text("description"),
   availableForBooking: tinyint("available_for_booking").default(0).notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
