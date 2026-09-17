@@ -39,11 +39,14 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
+import { TenantPortalService } from "./tenant-portal.service";
 import {
   CreateContractDto,
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateOwnerDto,
+  UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
   CollectDepositDto,
@@ -62,6 +65,16 @@ import {
   CheckOutReservationDto,
   CreateCouponDto,
   UpdateCouponDto,
+  CreatePropertyExpenseDto,
+  UpdatePropertyExpenseDto,
+  GenerateExpenseInstallmentsDto,
+  AddExpensePartialPaymentDto,
+  PayExpenseInstallmentDto,
+  UpdateExpenseInstallmentDto,
+  CreateMortgagePaymentDto,
+  UpdateMortgagePaymentDto,
+  CreateMortgageLoanDto,
+  UpdateMortgageLoanDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -77,6 +90,7 @@ export class PropertyManagementController {
     private readonly propertyManagementService: PropertyManagementService,
     private readonly contractsService: ContractsService,
     private readonly rentReminderService: RentReminderService,
+    private readonly tenantPortalService: TenantPortalService,
   ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
@@ -156,6 +170,29 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteTenantIdDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteTenantIdDocument(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Chronological history of communications (email + SMS) sent to a tenant" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("tenants/:id/communications")
+  tenantCommunications(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.tenantCommunications(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate (or renew) a secure tenant portal link (no-login public access)" })
+  @Permissions("update-propertyManagement")
+  @Post("tenants/:id/portal-link")
+  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.generateTenantPortalLink(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("update-propertyManagement")
+  @Delete("tenants/:id/portal-link")
+  @HttpCode(200)
+  revokeTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.revokeTenantPortalLink(id, orgId);
   }
 
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
@@ -513,6 +550,47 @@ export class PropertyManagementController {
     return this.propertyManagementService.findProperty(id);
   }
 
+  // ── Proprietaires legaux des biens ───────────────────────────────────────
+  @ApiOperation({ summary: "List active owners (proprietaires legaux)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("owners")
+  owners(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.owners(orgId);
+  }
+
+  @ApiOperation({ summary: "Get single owner by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("owners/:id")
+  owner(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.owner(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create an owner" })
+  @ApiCreatedResponse({ description: "Created owner" })
+  @Permissions("create-propertyManagement")
+  @Post("owners")
+  createOwner(@Body() body: CreateOwnerDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createOwner(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update an owner" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Put("owners/:id")
+  updateOwner(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateOwnerDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateOwner(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) an owner" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("owners/:id")
+  @HttpCode(200)
+  deleteOwner(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteOwner(id, orgId);
+  }
+
   @ApiOperation({ summary: "Create a property" })
   @ApiCreatedResponse({ description: "Created property" })
   @Permissions("create-propertyManagement")
@@ -692,16 +770,50 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Collect a security deposit (records a liability accounting transaction)" })
   @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("leases/:id/deposit")
-  collectDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: CollectDepositDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.collectDeposit(id, body, orgId);
+  collectDeposit(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CollectDepositDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.collectDeposit(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Return a security deposit with optional damage deduction" })
   @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("leases/:id/deposit/return")
-  returnDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: ReturnDepositDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.returnDeposit(id, body, orgId);
+  returnDeposit(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ReturnDepositDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.returnDeposit(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "List rent payments" })
@@ -721,17 +833,33 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
   @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("payments")
-  createPayment(@Body() body: CreateRentPaymentDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.createPayment(body, orgId);
+  createPayment(
+    @Body() body: CreateRentPaymentDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Send payment reminder email to tenant" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/reminder")
   @HttpCode(200)
-  sendPaymentReminder(@Body() body: { leaseId: number }) {
-    return this.propertyManagementService.sendPaymentReminder(body.leaseId);
+  sendPaymentReminder(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendPaymentReminder(body.leaseId, orgId);
   }
 
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
@@ -837,6 +965,313 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteMaintenanceCost(@Param("costId", ParseIntPipe) costId: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteMaintenanceCost(costId, orgId);
+  }
+
+  // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
+
+  @ApiOperation({ summary: "List property expenses (filters: propertyId, category, dateFrom, dateTo)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-expenses")
+  listPropertyExpenses(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("category") category?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.listPropertyExpenses(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      category,
+      dateFrom,
+      dateTo,
+    });
+  }
+
+  @ApiOperation({ summary: "Get single property expense by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("property-expenses/:id")
+  getPropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getPropertyExpense(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a property expense" })
+  @ApiCreatedResponse({ description: "Created property expense" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses")
+  createPropertyExpense(@Body() body: CreatePropertyExpenseDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createPropertyExpense(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a property expense" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/:id")
+  updatePropertyExpense(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyExpenseDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updatePropertyExpense(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a property expense (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("property-expenses/:id")
+  @HttpCode(200)
+  deletePropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deletePropertyExpense(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for a property expense" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("property-expenses/:id/receipt")
+  uploadPropertyExpenseReceipt(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadPropertyExpenseReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
+  // Note ordre des routes NestJS : les routes "installments/:installmentId..."
+  // utilisent un segment litteral "installments" different du :id numerique de
+  // "property-expenses/:id", donc pas de collision de matching possible ici
+  // (le param s'appelle differemment et le segment litteral est explicite).
+
+  @ApiOperation({ summary: "List installments (echeances/paiements) of a property expense" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-expenses/:id/installments")
+  listExpenseInstallments(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listExpenseInstallments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate (or regenerate) the monthly installment schedule of a property expense" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses/:id/installments/generate")
+  generateExpenseInstallments(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: GenerateExpenseInstallmentsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.generateExpenseInstallments(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Add a free-form partial payment to a property expense" })
+  @ApiCreatedResponse({ description: "Installment list after the partial payment" })
+  @Permissions("create-propertyManagement")
+  @Post("property-expenses/:id/installments")
+  addExpensePartialPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: AddExpensePartialPaymentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.addExpensePartialPayment(id, body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Pay a scheduled installment of a property expense" })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/installments/:installmentId/pay")
+  payExpenseInstallment(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @Body() body: PayExpenseInstallmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.payExpenseInstallment(installmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a pending (unpaid) expense installment" })
+  @Permissions("update-propertyManagement")
+  @Patch("property-expenses/installments/:installmentId")
+  updateExpenseInstallment(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @Body() body: UpdateExpenseInstallmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.updateExpenseInstallment(installmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete an expense installment (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("property-expenses/installments/:installmentId")
+  @HttpCode(200)
+  deleteExpenseInstallment(@Param("installmentId", ParseIntPipe) installmentId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteExpenseInstallment(installmentId, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for an expense installment" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("property-expenses/installments/:installmentId/receipt")
+  uploadExpenseInstallmentReceipt(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadExpenseInstallmentReceipt(installmentId, orgId, receipt, this.publicApiBase(req));
+  }
+
+  // ── Mortgage Payments (SCRUM-311) ───────────────────────────────────────────
+
+  @ApiOperation({ summary: "List mortgage payments (principal / interest split)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("mortgage-payments")
+  listMortgagePayments(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.listMortgagePayments(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      dateFrom,
+      dateTo,
+    });
+  }
+
+  @ApiOperation({ summary: "Get one mortgage payment" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("mortgage-payments/:id")
+  getMortgagePayment(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getMortgagePayment(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a mortgage payment (total = principal + interest + escrow)" })
+  @ApiCreatedResponse({ description: "Created mortgage payment" })
+  @Permissions("create-propertyManagement")
+  @Post("mortgage-payments")
+  createMortgagePayment(@Body() body: CreateMortgagePaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createMortgagePayment(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a mortgage payment" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("mortgage-payments/:id")
+  updateMortgagePayment(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMortgagePaymentDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMortgagePayment(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a mortgage payment (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("mortgage-payments/:id")
+  @HttpCode(200)
+  deleteMortgagePayment(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMortgagePayment(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for a mortgage payment" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("mortgage-payments/:id/receipt")
+  uploadMortgagePaymentReceipt(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadMortgagePaymentReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  // ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────
+
+  @ApiOperation({ summary: "List mortgage loans (reference), avec solde restant du calcule" })
+  @Permissions("readAll-propertyManagement")
+  @Get("mortgage-loans")
+  listMortgageLoans(
+    @CurrentOrg() orgId: number,
+    @Query("propertyId") propertyId?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.propertyManagementService.listMortgageLoans(orgId, {
+      propertyId: propertyId ? Number(propertyId) : undefined,
+      status,
+    });
+  }
+
+  @ApiOperation({ summary: "Get one mortgage loan, avec solde restant du calcule" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("mortgage-loans/:id")
+  getMortgageLoan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.getMortgageLoan(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a mortgage loan (reference du pret, pas une ecriture comptable)" })
+  @ApiCreatedResponse({ description: "Created mortgage loan" })
+  @Permissions("create-propertyManagement")
+  @Post("mortgage-loans")
+  createMortgageLoan(@Body() body: CreateMortgageLoanDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createMortgageLoan(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a mortgage loan" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("mortgage-loans/:id")
+  updateMortgageLoan(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMortgageLoanDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMortgageLoan(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a mortgage loan (sets is_active=false)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("mortgage-loans/:id")
+  @HttpCode(200)
+  deleteMortgageLoan(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMortgageLoan(id, orgId);
+  }
+
+  // ── P&L par propriete (SCRUM-312) ───────────────────────────────────────────
+
+  @ApiOperation({ summary: "Property P&L: revenus (loyers) / depenses / hypotheque, par devise" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readAll-propertyManagement")
+  @Get("properties/:id/pnl")
+  getPropertyPnl(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("dateFrom") dateFrom?: string,
+    @Query("dateTo") dateTo?: string,
+  ) {
+    return this.propertyManagementService.getPropertyPnl(id, orgId, scope, { dateFrom, dateTo });
   }
 
   // ── Maintenance Photos ──────────────────────────────────────────────────────

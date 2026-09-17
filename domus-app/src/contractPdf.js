@@ -10,14 +10,16 @@ const formatDateTime = (value) => {
 
 export const landlordSignatureHtml = (contract) => {
   const company = contract?.companyInfo || {};
-  const name = company.companyName || contract?.landlordName || "Le Bailleur";
+  const landlordInfo = contract?.landlordInfo || {};
+  const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Le Bailleur";
+  const signature = landlordInfo.signature ?? company.landlordSignature;
   const dateRef = contract?.sentAt || contract?.createdAt;
   const dateStr = formatDateTime(dateRef);
 
-  if (company.landlordSignature) {
+  if (signature) {
     return `
       <h3>Signature du bailleur</h3>
-      <div class="signature-img"><img src="${company.landlordSignature}" alt="Signature bailleur" /></div>
+      <div class="signature-img"><img src="${signature}" alt="Signature bailleur" /></div>
       <div class="signed-on">${escapeHtml(name)}${dateStr ? ` - ${escapeHtml(dateStr)}` : ""}</div>`;
   }
 

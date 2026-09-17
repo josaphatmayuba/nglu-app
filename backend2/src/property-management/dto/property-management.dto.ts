@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
@@ -12,6 +12,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateIf,
 } from "class-validator";
@@ -97,9 +98,109 @@ export class CreatePropertyDto {
   @Type(() => Boolean)
   @IsBoolean()
   availableForBooking?: boolean;
+
+  @ApiPropertyOptional({ example: 1, description: "Proprietaire legal du bien (real_estate_owners). NULL = pas de proprietaire assigne, fallback sur les reglages (gestionnaire)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  ownerId?: number | null;
 }
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
+
+// ── Proprietaires legaux des biens (Domus) ───────────────────────────────────
+// Distinct du GESTIONNAIRE mandate (appSettings.landlordName/landlordPhone/landlordSignature,
+// champ texte libre inchange). Un proprietaire est rattache a 0..N biens via
+// real_estate_properties.owner_id (nullable). Voir property-management.service.ts.
+export class CreateOwnerDto {
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  displayName: string;
+
+  @ApiPropertyOptional({ example: "individual", enum: ["individual", "company"], default: "individual" })
+  @IsOptional()
+  @IsIn(["individual", "company"])
+  ownerType?: string;
+
+  @ApiPropertyOptional({ example: "Jean" })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: "Kabila" })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: "SCI Kabila SARL" })
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @ApiPropertyOptional({ example: "Marie Kabila" })
+  @IsOptional()
+  @IsString()
+  representativeName?: string;
+
+  @ApiPropertyOptional({ example: "+243810000000" })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "+243820000000" })
+  @IsOptional()
+  @IsString()
+  phone2?: string;
+
+  @ApiPropertyOptional({ example: "jean.kabila@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: "12 Avenue des Palmiers" })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ example: "Kinshasa" })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ example: "RDC" })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiPropertyOptional({ example: "Carte d'électeur" })
+  @IsOptional()
+  @IsString()
+  idDocumentType?: string;
+
+  @ApiPropertyOptional({ example: "CNI-0123456" })
+  @IsOptional()
+  @IsString()
+  idNumber?: string;
+
+  @ApiPropertyOptional({ example: "TAX-0123456" })
+  @IsOptional()
+  @IsString()
+  taxId?: string;
+
+  @ApiPropertyOptional({ example: "data:image/png;base64,iVBORw0KGgo..." })
+  @IsOptional()
+  @IsString()
+  signature?: string;
+
+  @ApiPropertyOptional({ example: "Proprietaire depuis 2020" })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateOwnerDto extends PartialType(CreateOwnerDto) {}
 
 export class CreateUnitDto {
   @ApiProperty({ example: 1 })
@@ -349,6 +450,11 @@ export class CreateRentPaymentDto {
   @IsInt()
   @Min(1)
   currencyId?: number;
+
+  @ApiPropertyOptional({ description: "URL de la preuve de paiement deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class CollectDepositDto {
@@ -383,6 +489,11 @@ export class CollectDepositDto {
   @IsOptional()
   @IsString()
   notes?: string | null;
+
+  @ApiPropertyOptional({ description: "URL de la preuve d'encaissement deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class ReturnDepositDto {
@@ -411,6 +522,11 @@ export class ReturnDepositDto {
   @IsOptional()
   @IsString()
   notes?: string | null;
+
+  @ApiPropertyOptional({ description: "URL de la preuve de restitution deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class CreateMaintenanceDto {
@@ -1192,3 +1308,420 @@ export class CheckOutReservationDto {
   @IsString()
   notes?: string | null;
 }
+
+// ── Depenses par propriete (SCRUM-310) ────────────────────────────────────────
+// "mortgage" est exclu volontairement de cette v1 (ticket dedie futur).
+export const PROPERTY_EXPENSE_CATEGORIES = [
+  "insurance",
+  "property_tax",
+  "hoa",
+  "maintenance_general",
+  "management_fee",
+  "security",
+  "cleaning",
+  "other",
+] as const;
+export type PropertyExpenseCategory = (typeof PROPERTY_EXPENSE_CATEGORIES)[number];
+
+export class CreatePropertyExpenseDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  leaseId?: number;
+
+  @ApiProperty({ example: "insurance", enum: PROPERTY_EXPENSE_CATEGORIES })
+  @IsIn(PROPERTY_EXPENSE_CATEGORIES, {
+    message:
+      "Categorie invalide. Valeurs autorisees: insurance, property_tax, hoa, maintenance_general, management_fee, security, cleaning, other. " +
+      "La categorie mortgage n'est pas prise en charge dans cette version, elle fera l'objet d'un ticket dedie.",
+  })
+  category: PropertyExpenseCategory;
+
+  @ApiProperty({ example: "Assurance annuelle immeuble" })
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @ApiProperty({ example: 500 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  expenseDate: string;
+
+  @ApiPropertyOptional({ example: "2026-01-01" })
+  @IsOptional()
+  @IsDateString()
+  periodStart?: string;
+
+  @ApiPropertyOptional({ example: "2026-12-31" })
+  @IsOptional()
+  @IsDateString()
+  periodEnd?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  supplierId?: number;
+
+  @ApiPropertyOptional({ example: "Sonas assurances" })
+  @IsOptional()
+  @IsString()
+  vendorName?: string;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash" })
+  @IsOptional()
+  @IsIn(["cash", "bank", "mobile_money", "cheque"])
+  paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
+
+  @ApiPropertyOptional({ example: "paid", default: "paid" })
+  @IsOptional()
+  @IsIn(["paid", "pending", "overdue"])
+  paymentStatus?: "paid" | "pending" | "overdue";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  recurrenceMonths?: number;
+
+  @ApiPropertyOptional({
+    example: "single",
+    default: "single",
+    enum: ["single", "installments", "partial"],
+    description:
+      "Mode de reglement de la depense. single = comportement historique (aucune echeance). " +
+      "installments = genere immediatement recurrenceMonths echeances mensuelles. " +
+      "partial = aucune echeance generee, uniquement des paiements libres ajoutes ensuite.",
+  })
+  @IsOptional()
+  @IsIn(["single", "installments", "partial"])
+  paymentPlan?: "single" | "installments" | "partial";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdatePropertyExpenseDto extends PartialType(CreatePropertyExpenseDto) {}
+
+// ── Echeancier de paiement des depenses de propriete (SCRUM-313) ────────────
+// Une depense en payment_plan='installments' genere N lignes real_estate_expense_installments
+// (kind='scheduled'). Une depense en payment_plan='partial' recoit des paiements
+// libres ajoutes un a un (kind='partial'). Voir property-management.service.ts
+// pour le detail des regles metier (arrondi, clamp fin de mois, regeneration).
+
+export class GenerateExpenseInstallmentsDto {
+  @ApiProperty({ example: 6, description: "Nombre d'echeances mensuelles a generer." })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  recurrenceMonths: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      "Force la regeneration meme si aucune echeance n'est payee (mode explicite). " +
+      "N'outrepasse PAS le refus si au moins une echeance a deja ete reglee : dans ce cas " +
+      "la regeneration reste toujours refusee (409), quelle que soit la valeur de force.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
+
+export class AddExpensePartialPaymentDto {
+  @ApiProperty({ example: 100 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  amount: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paidDate: string;
+
+  @ApiPropertyOptional({ example: "cash" })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class PayExpenseInstallmentDto {
+  @ApiPropertyOptional({ description: "Montant paye. Si absent, utilise le plannedAmount complet de l'echeance." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paidDate: string;
+
+  @ApiPropertyOptional({ example: "cash" })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+}
+
+export class UpdateExpenseInstallmentDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  plannedAmount?: number;
+
+  @ApiPropertyOptional({ example: "2026-10-15" })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+// ── Remboursement hypothecaire (SCRUM-311) ───────────────────────────────────
+// Invariant metier : total = capital + interets + escrow (tolerance 0.01 pour
+// les arrondis decimal(15,2)). Volontairement separe des depenses de propriete :
+// seule la part interets (+ escrow) est une charge, le capital solde une dette.
+
+/** Tolerance d arrondi appliquee au controle total = capital + interets + escrow. */
+export const MORTGAGE_AMOUNT_TOLERANCE = 0.01;
+
+export class CreateMortgagePaymentDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: 1, description: "Reserve pour une future table de pret. Non exploite en v1." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  mortgageId?: number;
+
+  @ApiPropertyOptional({ example: "Rawbank" })
+  @IsOptional()
+  @IsString()
+  lenderName?: string;
+
+  @ApiProperty({ example: "2026-09-15" })
+  @IsDateString()
+  paymentDate: string;
+
+  @ApiPropertyOptional({ example: "2026-09-01" })
+  @IsOptional()
+  @IsDateString()
+  periodStart?: string;
+
+  @ApiPropertyOptional({ example: "2026-09-30" })
+  @IsOptional()
+  @IsDateString()
+  periodEnd?: string;
+
+  @ApiProperty({ example: 1200, description: "Doit egaler principalAmount + interestAmount + escrowAmount." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  totalAmount: number;
+
+  @ApiProperty({ example: 800, description: "Part capital : remboursement de dette (compte Liability)." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  principalAmount: number;
+
+  @ApiProperty({ example: 400, description: "Part interets : charge financiere (compte Expense)." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  interestAmount: number;
+
+  @ApiPropertyOptional({ example: 0, default: 0, description: "Part sequestre (assurance/taxes avancees par le preteur)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  escrowAmount?: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "bank", default: "bank" })
+  @IsOptional()
+  @IsIn(["cash", "bank", "mobile_money", "cheque"])
+  paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
+
+  @ApiPropertyOptional({ example: "paid", default: "paid" })
+  @IsOptional()
+  @IsIn(["paid", "pending", "overdue"])
+  paymentStatus?: "paid" | "pending" | "overdue";
+
+  @ApiPropertyOptional({ example: "ECH-2026-09" })
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateMortgagePaymentDto extends PartialType(CreateMortgagePaymentDto) {}
+
+// ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────
+// Table de reference du pret, distincte des echeances (mortgage-payments
+// ci-dessus). Le solde restant du se calcule applicativement, jamais stocke ici.
+export class CreateMortgageLoanDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ example: "Rawbank" })
+  @IsOptional()
+  @IsString()
+  lenderName?: string;
+
+  @ApiPropertyOptional({ example: "PRET-2026-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiProperty({ example: 100000, description: "Montant emprunte initial." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  principalAmount: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number;
+
+  @ApiProperty({ example: "2026-01-01" })
+  @IsDateString()
+  startDate: string;
+
+  @ApiPropertyOptional({ example: "2036-01-01" })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ example: 5.25, description: "Taux annuel nominal, ex 5.25 pour 5,25%." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  interestRate?: number;
+
+  @ApiPropertyOptional({ example: 120 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  termMonths?: number;
+
+  @ApiPropertyOptional({ example: "active", default: "active" })
+  @IsOptional()
+  @IsIn(["active", "paid_off", "refinanced"])
+  status?: "active" | "paid_off" | "refinanced";
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Si true, rattache automatiquement (apres creation) les paiements orphelins existants (mortgageId NULL) de la meme propriete/devise a ce pret. Jamais applique implicitement.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  attachExistingPayments?: boolean;
+}
+
+// attachExistingPayments est un flag d'action a la creation (rattachement
+// ponctuel des paiements orphelins), pas un champ persistant du pret : on
+// l'exclut du DTO d'update pour eviter toute confusion (un PATCH ne doit pas
+// re-declencher un rattachement en masse implicitement).
+export class UpdateMortgageLoanDto extends PartialType(
+  OmitType(CreateMortgageLoanDto, ["attachExistingPayments"] as const),
+) {}

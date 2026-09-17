@@ -15,6 +15,7 @@ import {
   purchaseInvoiceProducts,
   purchaseInvoices,
   roles,
+  smsLogs,
   suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -83,8 +84,24 @@ export class CompatService {
   async sendSms(body: Record<string, any>) {
     if (!body.phone) return { success: false, message: "Phone is required." };
 
+    const smsType = body.smsType || "notification";
+    const organizationId = body.organizationId ?? 1;
+    const relatedType = body.relatedType ?? null;
+    const relatedId = body.relatedId == null ? null : String(body.relatedId);
+    const messageText = body.message || body.text || "Message de NgoluApp";
+
+    const logId = await this.createSmsLog({
+      organizationId,
+      smsType,
+      recipient: body.phone,
+      messageText,
+      relatedType,
+      relatedId,
+    });
+
     const { accountSid, authToken, from, messagingServiceSid } = env.twilio;
     if (!accountSid || !authToken || (!from && !messagingServiceSid)) {
+      await this.updateSmsLog(logId, "skipped", "SMS service is not configured.");
       return { success: false, message: "SMS service is not configured." };
     }
 
@@ -96,7 +113,7 @@ export class CompatService {
         params.set("From", from);
       }
       params.set("To", body.phone);
-      params.set("Body", body.message || body.text || "Message de NgoluApp");
+      params.set("Body", messageText);
       // Option A : StatusCallback par message. Twilio rappellera cette URL a
       // chaque changement de statut (sent/delivered/failed) pour tracer la
       // livraison reelle. L'appelant fournit l'URL publique (endpoint signe).
@@ -119,6 +136,7 @@ export class CompatService {
       const data: any = await res.json();
       if (!res.ok) {
         this.logger.error(`SMS failed to ${body.phone}: ${data?.message}`);
+        await this.updateSmsLog(logId, "failed", data?.message || "SMS delivery failed.", data?.sid ?? null);
         return { success: false, message: data?.message || "SMS delivery failed." };
       }
       // Un 2xx ne garantit pas l'acceptation : Twilio peut renvoyer un statut
@@ -129,13 +147,56 @@ export class CompatService {
         this.logger.error(
           `SMS rejected by Twilio to ${body.phone}: status=${status || "?"} error_code=${data?.error_code ?? "?"} ${data?.error_message ?? ""}`,
         );
+        await this.updateSmsLog(logId, "failed", data?.error_message || "SMS delivery failed.", data?.sid ?? null);
         return { success: false, message: data?.error_message || "SMS delivery failed." };
       }
+      await this.updateSmsLog(logId, "sent", null, data.sid ?? null);
       return { success: true, sid: data.sid, status: data.status };
     } catch (error) {
-      this.logger.error(`SMS failed to ${body.phone}: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`SMS failed to ${body.phone}: ${message}`);
+      await this.updateSmsLog(logId, "failed", "SMS delivery failed.");
       return { success: false, message: "SMS delivery failed." };
     }
+  }
+
+  private async createSmsLog(input: {
+    organizationId: number;
+    smsType: string;
+    recipient: string;
+    messageText: string;
+    relatedType?: string | null;
+    relatedId?: string | null;
+  }) {
+    const [result] = await this.db.insert(smsLogs).values({
+      organizationId: input.organizationId,
+      smsType: input.smsType,
+      recipient: input.recipient,
+      body: input.messageText,
+      status: "pending",
+      relatedType: input.relatedType ?? null,
+      relatedId: input.relatedId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return Number(result.insertId);
+  }
+
+  private async updateSmsLog(
+    id: number,
+    status: "sent" | "failed" | "skipped",
+    errorMessage?: string | null,
+    providerMessageId?: string | null,
+  ) {
+    await this.db
+      .update(smsLogs)
+      .set({
+        status,
+        errorMessage: errorMessage ?? null,
+        providerMessageId: providerMessageId ?? null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(smsLogs.id, id));
   }
 
   async purchaseReport(query: Record<string, string>) {

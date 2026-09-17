@@ -1,14 +1,14 @@
 // SCRUM-247 — Contrats & signature (liste, détail, envoi, modèles).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarX, Check, Clock, Copy, Eye, FileCheck2, FilePen, FilePlus, Files, History,
+  CalendarX, Check, Clock, Copy, FileCheck2, FilePen, FilePlus, History,
   Printer, Search, Send, ShieldCheck, X, FileCheck,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
-  AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef, escapeHtml,
+  AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef,
   formatAuditWhen, formatSignedAt, hasHtmlMarkup, openContractPrint, signingUrlFromContract,
 } from "../contractUtils.js";
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
@@ -80,7 +80,6 @@ export function Contrats() {
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [signingLinks, setSigningLinks] = useState({});
-  const [templateModal, setTemplateModal] = useState(null);
 
   const leasesById = useMemo(() => {
     const map = new Map();
@@ -250,67 +249,6 @@ export function Contrats() {
     }
   };
 
-  const openTemplateEditor = async (t) => {
-    setActionError("");
-    try {
-      const full = await api.contractTemplate(t.id);
-      setTemplateModal({ id: full.id, name: full.name || "", type: full.type || "residential", description: full.description || "", body: full.body || "", isActive: Boolean(full.isActive) });
-    } catch {
-      setTemplateModal({ id: t.id, name: t.name || "", type: t.type || "residential", description: t.description || "", body: t.body || "", isActive: Boolean(t.isActive) });
-    }
-  };
-  const handleActivateTemplate = async (t) => {
-    setBusy(`tpl-activate-${t.id}`);
-    setActionError("");
-    try {
-      await api.activateContractTemplate(t.id);
-      await reload();
-    } catch (e) {
-      setActionError(e.message || "Impossible d'activer le modèle.");
-    } finally {
-      setBusy("");
-    }
-  };
-  const handleDeleteTemplate = async (t) => {
-    if (!(await confirm({
-      title: "Supprimer le modèle",
-      message: `Supprimer le modèle « ${t.name} » ?`,
-      confirmLabel: "Supprimer",
-      danger: true,
-    }))) return;
-    setBusy(`tpl-del-${t.id}`);
-    setActionError("");
-    try {
-      await api.deleteContractTemplate(t.id);
-      await reload();
-    } catch (e) {
-      setActionError(e.message || "Impossible de supprimer le modèle.");
-    } finally {
-      setBusy("");
-    }
-  };
-  const handleSaveTemplate = async (form) => {
-    setBusy("tpl-save");
-    setActionError("");
-    try {
-      const payload = {
-        name: form.name.trim(),
-        type: form.type,
-        body: form.body,
-        description: form.description?.trim() || undefined,
-        isActive: Boolean(form.isActive),
-      };
-      if (form.id) await api.updateContractTemplate(form.id, payload);
-      else await api.createContractTemplate(payload);
-      setTemplateModal(null);
-      await reload();
-    } catch (e) {
-      setActionError(e.message || "Impossible d'enregistrer le modèle.");
-    } finally {
-      setBusy("");
-    }
-  };
-
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
 
@@ -471,14 +409,14 @@ export function Contrats() {
                   <div className="contrats-paper-sigs">
                     <div>
                       <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
-                      {detail?.companyInfo?.landlordSignature || detail?.landlordSignature ? (
+                      {detail?.landlordInfo?.signature || detail?.companyInfo?.landlordSignature || detail?.landlordSignature ? (
                         <img
-                          src={detail.companyInfo?.landlordSignature || detail.landlordSignature}
+                          src={detail.landlordInfo?.signature || detail.companyInfo?.landlordSignature || detail.landlordSignature}
                           alt="Signature bailleur"
                           className="contrats-sig-img"
                         />
                       ) : (
-                        <div className="contrats-sig-landlord">{detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
+                        <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
                       )}
                     </div>
                     <div>
@@ -532,42 +470,6 @@ export function Contrats() {
             </div>
           )}
         </div>
-
-        <aside className="card contrats-templates">
-          <div className="contrats-templates-head">
-            <span className="eyebrow" style={{ margin: 0 }}><Files size={14} /> Modèles de contrat</span>
-            <button type="button" className="immo-link" onClick={() => setTemplateModal({ name: "", type: "residential", description: "", body: "", isActive: false })}>
-              <FilePlus size={14} /> Nouveau
-            </button>
-          </div>
-          <div className="contrats-template-list">
-            {templates.length === 0 && (
-              <p className="muted" style={{ fontSize: 13 }}>Aucun modèle configuré.</p>
-            )}
-            {templates.map((t) => (
-              <div key={t.id} className={`contrats-template-card ${t.isActive ? "" : "inactive"}`}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</span>
-                  <span className={`chip ${t.isActive ? "chip-emerald" : "chip-ink"}`} style={{ marginLeft: "auto" }}>
-                    {t.isActive ? "Actif" : "Inactif"}
-                  </span>
-                </div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-                  {TEMPLATE_TYPE_LABEL[t.type] || t.type} · v{t.version || 1}
-                  {t.updatedAt ? ` · MAJ ${new Date(t.updatedAt).toLocaleDateString("fr-FR")}` : ""}
-                </div>
-                <div className="contrats-template-actions">
-                  <button type="button" disabled={Boolean(busy)} onClick={() => openTemplateEditor(t)}><FilePen size={12} /> Modifier</button>
-                  {!t.isActive && <button type="button" disabled={Boolean(busy)} onClick={() => handleActivateTemplate(t)}><Check size={12} /> Activer</button>}
-                  <button type="button" className="danger" disabled={Boolean(busy) || t.isActive} title={t.isActive ? "Impossible de supprimer le modèle actif" : "Supprimer"} onClick={() => handleDeleteTemplate(t)}><X size={12} /> Suppr.</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="muted" style={{ fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE], etc.
-          </p>
-        </aside>
       </div>
 
       {createOpen && (
@@ -609,209 +511,7 @@ export function Contrats() {
         </div>
       )}
 
-      {templateModal && (
-        <TemplateModal
-          value={templateModal}
-          busy={busy === "tpl-save"}
-          onClose={() => setTemplateModal(null)}
-          onSave={handleSaveTemplate}
-        />
-      )}
-
       {actionError && <div className="domus-floating-error">{actionError}</div>}
     </>
-  );
-}
-
-const TEMPLATE_TYPE_OPTIONS = [
-  ["residential", "Bail résidentiel"],
-  ["commercial", "Bail commercial"],
-  ["short_term", "Bail court terme / saisonnier"],
-];
-
-const CONTRACT_PLACEHOLDER_GROUPS = [
-  {
-    label: "Bailleur",
-    items: [
-      "NOM COMPLET DU BAILLEUR",
-      "ADRESSE DU BAILLEUR",
-      "TÉLÉPHONE DU BAILLEUR",
-      "EMAIL DU BAILLEUR",
-    ],
-  },
-  {
-    label: "Preneur",
-    items: [
-      "NOM COMPLET DU PRENEUR",
-      "ADRESSE DU PRENEUR",
-      "TÉLÉPHONE DU PRENEUR",
-      "EMAIL DU PRENEUR",
-      "TYPE DE PIÈCE D'IDENTITÉ",
-      "NUMÉRO DE PIÈCE D'IDENTITÉ",
-    ],
-  },
-  {
-    label: "Logement",
-    items: [
-      "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION",
-      "TYPE DE LOGEMENT",
-      "PROPRIÉTÉ",
-      "UNITÉ",
-      "RÉFÉRENCE BAIL",
-      "VILLE",
-    ],
-  },
-  {
-    label: "Dates",
-    items: [
-      "NUMÉRO DE MOIS",
-      "DURÉE DE BAIL EN MOIS",
-      "DATE DE DÉBUT DE BAIL",
-      "DATE DE DÉBUT DE BAIL JJ/MM/AAAA",
-      "DATE DE FIN DE BAIL",
-      "DATE DE FIN DE BAIL JJ/MM/AAAA",
-      "DATE DE SIGNATURE DE BAIL",
-      "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA",
-      "DATE DU JOUR",
-    ],
-  },
-  {
-    label: "Montants",
-    items: [
-      "MONTANT DU LOYER AVEC DEVISE",
-      "MONTANT DU LOYER",
-      "MONTANT GARANTIE AVEC DEVISE",
-      "MONTANT GARANTIE",
-      "NUMÉRO DE MOIS DE GARANTIE",
-      "DEVISE",
-      "SYMBOLE DE DEVISE",
-      "CODE DE DEVISE",
-    ],
-  },
-  {
-    label: "Notes / conditions (optionnel)",
-    items: [
-      "CONDITIONS PARTICULIÈRES",
-      "NOTES ÉTAT DES LIEUX",
-    ],
-  },
-];
-
-// Placeholders facultatifs : insérés dans une section conditionnelle {{#if}}...{{/if}}
-// pour que l'article disparaisse du contrat quand le champ du bail est vide.
-const OPTIONAL_PLACEHOLDERS = new Set(["CONDITIONS PARTICULIÈRES", "NOTES ÉTAT DES LIEUX"]);
-
-function TemplateModal({ value, busy, onClose, onSave }) {
-  const [form, setForm] = useState(value);
-  const [showPreview, setShowPreview] = useState(false);
-  const textareaRef = useRef(null);
-  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
-  const canSave = form.name.trim() && form.body.trim() && form.type;
-  const insertPlaceholder = (name) => {
-    const token = OPTIONAL_PLACEHOLDERS.has(name) ? `{{#if ${name}}}[${name}]{{/if}}` : `[${name}]`;
-    const textarea = textareaRef.current;
-    setShowPreview(false);
-    setForm((current) => {
-      const body = current.body || "";
-      const start = textarea ? textarea.selectionStart : body.length;
-      const end = textarea ? textarea.selectionEnd : body.length;
-      const insert = textarea ? token : `${body ? "\n" : ""}${token}`;
-      const nextBody = `${body.slice(0, start)}${insert}${body.slice(end)}`;
-      const nextCaret = start + insert.length;
-      requestAnimationFrame(() => {
-        const nextTextarea = textareaRef.current;
-        if (!nextTextarea) return;
-        nextTextarea.focus();
-        nextTextarea.setSelectionRange(nextCaret, nextCaret);
-      });
-      return { ...current, body: nextBody };
-    });
-  };
-  // Dans l'aperçu, on masque les balises de section {{#if ...}}/{{/if}} et on garde
-  // leur contenu (le rendu réel des blocs conditionnels est fait côté backend).
-  const previewBody = (form.body || "").replace(/\{\{\s*(#if\s+[^{}]+?|\/if)\s*\}\}/g, "");
-  const previewHtml = hasHtmlMarkup(previewBody)
-    ? previewBody
-    : `<pre class="domus-contract-plain">${escapeHtml(previewBody)}</pre>`;
-  return (
-    <div className="modal-layer">
-      <div className="modal-scrim" onClick={() => !busy && onClose()} />
-      <div className="modal-card domus-template-modal">
-        <div className="modal-head">
-          <div className="domus-modal-title">
-            <span className="domus-modal-title-icon"><FilePen size={20} /></span>
-            <div>
-              <h2>{form.id ? "Modifier le modèle" : "Nouveau modèle"}</h2>
-              <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER AVEC DEVISE])</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
-        </div>
-        <div className="domus-template-form">
-          <div className="domus-property-form-grid">
-            <label className="domus-property-field">
-              <span>Nom <b>*</b></span>
-              <input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="ex. Bail résidentiel standard" />
-            </label>
-            <label className="domus-property-field">
-              <span>Type <b>*</b></span>
-              <select value={form.type} onChange={(e) => set({ type: e.target.value })}>
-                {TEMPLATE_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </label>
-          </div>
-          <label className="domus-property-field">
-            <span>Description</span>
-            <input value={form.description} onChange={(e) => set({ description: e.target.value })} placeholder="Optionnel" />
-          </label>
-          <div className="domus-template-body-head">
-            <span>Contenu du contrat <b>*</b> <em>(HTML accepté)</em></span>
-            <button type="button" className="immo-link" onClick={() => setShowPreview((v) => !v)}>
-              <Eye size={14} /> {showPreview ? "Éditer" : "Aperçu"}
-            </button>
-          </div>
-          <div className="domus-placeholder-panel" aria-label="Placeholders disponibles">
-            {CONTRACT_PLACEHOLDER_GROUPS.map((group) => (
-              <div className="domus-placeholder-group" key={group.label}>
-                <div className="domus-placeholder-label">{group.label}</div>
-                <div className="domus-placeholder-list">
-                  {group.items.map((item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      onClick={() => insertPlaceholder(item)}
-                      title={`Insérer [${item}]`}
-                    >
-                      [{item}]
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          {showPreview ? (
-            <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }} />
-          ) : (
-            <textarea
-              ref={textareaRef}
-              className="domus-template-body"
-              value={form.body}
-              onChange={(e) => set({ body: e.target.value })}
-              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
-            />
-          )}
-          <label className="domus-template-active">
-            <input type="checkbox" checked={Boolean(form.isActive)} onChange={(e) => set({ isActive: e.target.checked })} />
-            <span>Définir comme modèle actif pour ce type</span>
-          </label>
-        </div>
-        <div className="domus-modal-footer">
-          <button type="button" className="domus-modal-cancel" onClick={onClose} disabled={busy}>Annuler</button>
-          <button type="button" className="domus-modal-submit" onClick={() => onSave(form)} disabled={busy || !canSave}>
-            <Check size={14} /> {busy ? "Enregistrement..." : "Enregistrer"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

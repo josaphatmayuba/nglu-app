@@ -46,6 +46,12 @@ const SUB_ACCOUNTS: Array<{ name: string; accountName: string }> = [
   // caractere pres a ACCOUNT_CASH_VARIANCE de kodatill/accounting.service.ts,
   // qui resout ce compte par nom et ne le cree jamais.
   { name: "Ecart de caisse", accountName: "Revenue" },
+  // Remboursement hypothecaire Domus (SCRUM-311) : le capital rembourse solde une
+  // DETTE (Liability), seuls les interets sont une charge. Noms SANS accent, ils
+  // doivent correspondre au caractere pres aux constantes MORTGAGE_* de
+  // property-management.service.ts, qui resout ces comptes par nom.
+  { name: "Emprunts hypothecaires", accountName: "Liability" },
+  { name: "Interets demprunt", accountName: "Expense" },
 ];
 
 // Regles transaction_type_rules (postByRules) liees a l avance fournisseur BatiPro

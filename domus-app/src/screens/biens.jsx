@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   AlertTriangle,
+  BarChart3,
   Bath,
   BedDouble,
   Building2,
@@ -14,6 +15,7 @@ import {
   Grid3X3,
   Home,
   Info,
+  Landmark,
   Layers,
   ChevronLeft,
   List,
@@ -33,9 +35,11 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
-import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from "./reservationPrefill.js";
+import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill, setPnlPrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
-import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
+import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
+import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
+import { mortgageTotalsByCurrency } from "./hypotheque.jsx";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
@@ -66,6 +70,7 @@ const emptyProperty = {
   code: "",
   propertyType: "building",
   status: "available",
+  ownerId: "",
   address: "",
   city: "",
   country: "RDC",
@@ -515,6 +520,7 @@ export function Biens({ go }) {
           defaultCurrencyId={currency.defaultCurrencyId}
           onClose={() => setPropertyModal(null)}
           onSave={saveProperty}
+          go={go}
         />
       )}
 
@@ -818,6 +824,36 @@ function PropertyMap({ rows }) {
 function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, onDeletePhoto, onEdit, go }) {
   const photos = Array.isArray(property.photos) ? property.photos : [];
   const cover = photos[0];
+  const propertyId = property.propertyId || property.id;
+  const expensesApi = useApi(() => api.propertyExpenses({ propertyId }), [propertyId]);
+  const mortgagePaymentsApi = useApi(() => api.mortgagePayments({ propertyId }), [propertyId]);
+  const currenciesApi = useApi(() => api.currencies(), []);
+  const settingApi = useApi(() => api.setting(), []);
+  const currency = useMemo(
+    () => normalizeCurrencyModule(currenciesApi.data, settingApi.data),
+    [currenciesApi.data, settingApi.data],
+  );
+  const propertyExpenses = useMemo(() => {
+    const raw = expensesApi.data;
+    return Array.isArray(raw) ? raw : raw?.data || [];
+  }, [expensesApi.data]);
+  const expenseSymbol = (expense) => {
+    const byId = expense?.currencyId != null ? currency.currencyById?.get(Number(expense.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(expense) || currency.defaultCurrencySymbol;
+  };
+  const expenseTotals = useMemo(() => expenseTotalsByCurrency(propertyExpenses, expenseSymbol), [propertyExpenses, currency]);
+  const categoryLabel = (key) => EXPENSE_CATEGORIES.find(([k]) => k === key)?.[1] || key;
+  const mortgagePayments = useMemo(() => {
+    const raw = mortgagePaymentsApi.data;
+    return Array.isArray(raw) ? raw : raw?.data || [];
+  }, [mortgagePaymentsApi.data]);
+  const mortgageSymbol = (payment) => {
+    const byId = payment?.currencyId != null ? currency.currencyById?.get(Number(payment.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(payment) || currency.defaultCurrencySymbol;
+  };
+  const mortgageTotals = useMemo(() => mortgageTotalsByCurrency(mortgagePayments, mortgageSymbol), [mortgagePayments, currency]);
   return (
     <Modal
       title={property.name}
@@ -874,6 +910,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           <DetailLine label="Type" value={property.type} />
           <DetailLine label="Code" value={property.code} />
           <DetailLine label="Locataire" value={property.tenant} />
+          <DetailLine label="Propriétaire" value={property.ownerName || "Non assigné (gestionnaire)"} />
           <DetailLine label="Loyer" value={`${property.rent} /mois`} />
           <DetailLine label="Chambres" value={property.beds || "0"} />
           <DetailLine label="Salles de bain" value={property.baths || "0"} />
@@ -891,11 +928,98 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           </div>
         )}
 
+        <div className="domus-property-detail-notes">
+          <p><strong>Dépenses</strong></p>
+          {expensesApi.loading ? (
+            <p className="muted">Chargement...</p>
+          ) : propertyExpenses.length === 0 ? (
+            <p className="muted">Aucune dépense enregistrée pour ce bien.</p>
+          ) : (
+            <>
+              <table className="tbl" style={{ width: "100%" }}>
+                <thead>
+                  <tr><th>Description</th><th>Catégorie</th><th>Date</th><th className="r">Montant</th></tr>
+                </thead>
+                <tbody>
+                  {propertyExpenses.map((expense) => (
+                    <tr key={expense.id}>
+                      <td>{expense.description}</td>
+                      <td>{categoryLabel(expense.category)}</td>
+                      <td>{expense.expenseDate ? String(expense.expenseDate).slice(0, 10) : "-"}</td>
+                      <td className="r">{money(expense.amount, expenseSymbol(expense))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {expenseTotals.map((c) => (
+                <div className="ops-score" key={c.symbol}>
+                  <span>{`Total ${c.symbol}`}</span>
+                  <b>{money(c.amount, c.symbol)}</b>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        <div className="domus-property-detail-notes">
+          <p><strong>Hypothèque</strong></p>
+          {mortgagePaymentsApi.loading ? (
+            <p className="muted">Chargement...</p>
+          ) : mortgagePayments.length === 0 ? (
+            <p className="muted">Aucun paiement d'hypothèque enregistré pour ce bien.</p>
+          ) : (
+            <>
+              <table className="tbl" style={{ width: "100%" }}>
+                <thead>
+                  <tr><th>Prêteur</th><th>Date</th><th className="r">Capital</th><th className="r">Intérêts</th></tr>
+                </thead>
+                <tbody>
+                  {mortgagePayments.map((payment) => (
+                    <tr key={payment.id}>
+                      <td>{payment.lenderName || "-"}</td>
+                      <td>{payment.paymentDate ? String(payment.paymentDate).slice(0, 10) : "-"}</td>
+                      <td className="r">{money(payment.principalAmount, mortgageSymbol(payment))}</td>
+                      <td className="r">{money(payment.interestAmount, mortgageSymbol(payment))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {mortgageTotals.map((c) => (
+                <div key={c.symbol}>
+                  <div className="ops-score">
+                    <span>{`Capital remboursé ${c.symbol}`}</span>
+                    <b>{money(c.principal, c.symbol)}</b>
+                  </div>
+                  <div className="ops-score">
+                    <span>{`Intérêts payés ${c.symbol}`}</span>
+                    <b>{money(c.interest, c.symbol)}</b>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
         {error && <div className="api-error">{error}</div>}
       </div>
       <div className="domus-modal-footer">
         <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Fermer</button>
         <div>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { onClose(); go?.("depenses"); }}
+            disabled={busy}
+          ><Wallet size={14} /> Dépenses</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { onClose(); go?.("hypotheque"); }}
+            disabled={busy}
+          ><Landmark size={14} /> Hypothèque</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setPnlPrefill(property.propertyId || property.id); onClose(); go?.("pnl"); }}
+            disabled={busy}
+          ><BarChart3 size={14} /> P&amp;L</button>
           <button
             className="domus-modal-draft"
             onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}
@@ -958,8 +1082,16 @@ function RecentPayments({ payments, go }) {
   );
 }
 
-function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurrencyId = "", onClose, onSave }) {
+function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurrencyId = "", onClose, onSave, go }) {
   const [form, setForm] = useState(value);
+  const [owners, setOwners] = useState([]);
+  useEffect(() => {
+    api.owners().then((list) => setOwners(Array.isArray(list) ? list : [])).catch(() => setOwners([]));
+  }, []);
+  const ownerOptions = [
+    ["", t("Non assigné (fallback gestionnaire)")],
+    ...owners.map((o) => [String(o.id), o.displayName || o.companyName || `#${o.id}`]),
+  ];
   const units = Array.isArray(form.units) ? form.units : [];
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const setUnit = (index, patch) => {
@@ -1037,6 +1169,12 @@ function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurren
               ))}
             </div>
           </div>
+          <DomusPropertySelect label={t("Propriétaire")} value={form.ownerId} onChange={(ownerId) => set({ ownerId })} options={ownerOptions} />
+          {go && (
+            <button type="button" className="immo-link" style={{ padding: 0 }} onClick={() => { onClose?.(); go("proprietaires"); }}>
+              {t("Gérer les propriétaires")}
+            </button>
+          )}
         </FormSection>
 
         <FormSection icon={<MapPin size={14} />} title="Localisation">
@@ -1389,6 +1527,8 @@ function normalizeProperty(property) {
     code: property.code || `P-${property.id}`,
     city: property.city || "",
     address: [property.address, property.city].filter(Boolean).join(", "),
+    ownerId: property.ownerId ?? null,
+    ownerName: property.ownerName || "",
   };
 }
 
@@ -1411,6 +1551,8 @@ function normalizeEmptyProperty(property, photosByProperty = new Map()) {
     address: property.address || "Adresse non renseignee",
     city: property.city || "",
     country: property.country || "",
+    ownerId: property.ownerId ?? null,
+    ownerName: property.ownerName || "",
     floors: property.floors,
     parkingSpaces: property.parkingSpaces,
     marketValue: property.marketValue,
@@ -1461,6 +1603,8 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = n
     name: owner.name || unit.propertyName || `Propriete #${unit.propertyId}`,
     address: [unit.propertyAddress || owner.address, owner.city].filter(Boolean).join(" - ") || "Adresse non renseignee",
     city: owner.city || "",
+    ownerId: owner.ownerId ?? null,
+    ownerName: owner.ownerName || "",
     country: owner.country || "",
     floors: owner.floors,
     parkingSpaces: owner.parkingSpaces,
@@ -1545,6 +1689,7 @@ function propertyPayload(form) {
     code: form.code || undefined,
     propertyType: form.propertyType || "building",
     status: form.status || "available",
+    ownerId: form.ownerId ? toNumber(form.ownerId) : null,
     address: form.address || null,
     city: form.city || null,
     country: form.country || null,
@@ -1620,6 +1765,7 @@ function propertyToForm(property) {
     code: raw.code || "",
     propertyType: raw.propertyType || "building",
     status: raw.status || "available",
+    ownerId: raw.ownerId != null ? String(raw.ownerId) : "",
     address: raw.address || "",
     city: raw.city || "",
     country: raw.country || "RDC",

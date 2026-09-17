@@ -176,6 +176,8 @@ const KIND_INVALIDATES = {
   createReproductionEvent:["reproductionEvents", "semenStraws", "animals"],
   updateReproductionEvent:["reproductionEvents"],
   deleteReproductionEvent:["reproductionEvents"],
+  createReproCycle:      ["reproductionEvents", "animals"],
+  updateReproCycle:      ["reproductionEvents", "animals"],
   createProductionLog:    ["productionLogs"],
   deleteProductionLog:    ["productionLogs"],
   createVaccination:      ["vaccinations"],
@@ -332,6 +334,13 @@ export const api = {
   listTreatments: cachedList("treatments", "/treatments"),
   listDiseases:   (species) => cachedList("diseases", `/diseases${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),
   listReproductionEvents: cachedList("reproductionEvents", "/reproduction-events"),
+  // Registre de reproduction porcine — cycles (Etape 1). Pas de cache
+  // stale-while-revalidate ici : la watchlist doit refleter l'etat serveur
+  // (jours non productifs) au chargement de l'ecran, pas un instantane perime.
+  getSowWatchlist: ({ site, status, minDays } = {}) => jsonFetch(`/repro/sow-watchlist${buildQuery({ site, status, minDays })}`),
+  listReproCycles: (sowId) => jsonFetch(`/repro/cycles${buildQuery({ sowId })}`),
+  createReproCycle: (body) => mutate({ kind: "createReproCycle", method: "POST", path: "/repro/cycles", body }),
+  updateReproCycle: (cycleId, body) => mutate({ kind: "updateReproCycle", method: "PATCH", path: `/repro/cycles/${cycleId}`, body }),
   listSales:    cachedList("sales", "/sales"),
   listExpenses: cachedList("expenses", "/expenses"),
   createAnimal:    (body) => mutate({ kind: "createAnimal", method: "POST", path: "/animals", body,

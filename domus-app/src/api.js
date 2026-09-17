@@ -144,6 +144,11 @@ export const api = {
   },
   deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
   tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
+  // Lien portail locataire (accès public sans login, token opaque dans l'URL).
+  generateTenantPortalLink: (id) => post(`/tenants/${id}/portal-link`),
+  revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
+  // Historique des communications (email + SMS) envoyées à ce locataire.
+  tenantCommunications: (id) => get(`/tenants/${id}/communications`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
@@ -152,6 +157,12 @@ export const api = {
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
   sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),
   sendOnboardingEmail: (id) => post(`/onboarding/${id}/send-email`),
+
+  owners: () => get("/owners"),
+  owner: (id) => get(`/owners/${id}`),
+  createOwner: (b) => post("/owners", b),
+  updateOwner: (id, b) => put(`/owners/${id}`, b),
+  deleteOwner: (id) => del(`/owners/${id}`),
 
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
@@ -194,7 +205,17 @@ export const api = {
   leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
 
   payments: () => get("/payments"),
-  createPayment: (b) => post("/payments", b),
+  // proofFile optionnel (photo/scan recu, capture mobile money) — meme
+  // pattern multipart que markContractSignedManually / uploadMaintenancePhoto.
+  createPayment: (b, proofFile = null) => {
+    if (!proofFile) return post("/payments", b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch("/payments", form);
+  },
   sendReminder: (b) => post("/payments/reminder", b),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
 
@@ -218,10 +239,103 @@ export const api = {
   deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
   maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
 
+  // Dépenses par propriété (SCRUM-310) — filtres query optionnels.
+  propertyExpenses: ({ propertyId, category, dateFrom, dateTo } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (category) params.set("category", category);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/property-expenses${qs ? `?${qs}` : ""}`);
+  },
+  propertyExpense: (id) => get(`/property-expenses/${id}`),
+  createPropertyExpense: (b) => post("/property-expenses", b),
+  updatePropertyExpense: (id, b) => patch(`/property-expenses/${id}`, b),
+  deletePropertyExpense: (id) => del(`/property-expenses/${id}`),
+  // Justificatif (recu/facture) — meme pattern multipart que uploadMaintenancePhoto.
+  uploadPropertyExpenseReceipt: (id, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/property-expenses/${id}/receipt`, form);
+  },
+
+  // Echeancier de paiement des dépenses de propriété (SCRUM-313).
+  expenseInstallments: (expenseId) => get(`/property-expenses/${expenseId}/installments`),
+  generateExpenseInstallments: (expenseId, b) => post(`/property-expenses/${expenseId}/installments/generate`, b),
+  addExpensePartialPayment: (expenseId, b) => post(`/property-expenses/${expenseId}/installments`, b),
+  payExpenseInstallment: (installmentId, b) => patch(`/property-expenses/installments/${installmentId}/pay`, b),
+  updateExpenseInstallment: (installmentId, b) => patch(`/property-expenses/installments/${installmentId}`, b),
+  deleteExpenseInstallment: (installmentId) => del(`/property-expenses/installments/${installmentId}`),
+  uploadExpenseInstallmentReceipt: (installmentId, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/property-expenses/installments/${installmentId}/receipt`, form);
+  },
+
+  // Remboursement hypothèque par propriété (SCRUM-311) — filtres query optionnels.
+  mortgagePayments: ({ propertyId, dateFrom, dateTo } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/mortgage-payments${qs ? `?${qs}` : ""}`);
+  },
+  mortgagePayment: (id) => get(`/mortgage-payments/${id}`),
+  createMortgagePayment: (b) => post("/mortgage-payments", b),
+  updateMortgagePayment: (id, b) => patch(`/mortgage-payments/${id}`, b),
+  deleteMortgagePayment: (id) => del(`/mortgage-payments/${id}`),
+  // Justificatif (recu/facture) — meme pattern que uploadPropertyExpenseReceipt.
+  uploadMortgagePaymentReceipt: (id, file) => {
+    const form = new FormData();
+    form.append("receipt", file);
+    return multipartFetch(`/mortgage-payments/${id}/receipt`, form);
+  },
+
+  // Prêts hypothécaires (SCRUM-311 phase 2) — filtres query optionnels.
+  mortgageLoans: ({ propertyId, status } = {}) => {
+    const params = new URLSearchParams();
+    if (propertyId) params.set("propertyId", propertyId);
+    if (status) params.set("status", status);
+    const qs = params.toString();
+    return get(`/mortgage-loans${qs ? `?${qs}` : ""}`);
+  },
+  mortgageLoan: (id) => get(`/mortgage-loans/${id}`),
+  createMortgageLoan: (b) => post("/mortgage-loans", b),
+  updateMortgageLoan: (id, b) => patch(`/mortgage-loans/${id}`, b),
+  deleteMortgageLoan: (id) => del(`/mortgage-loans/${id}`),
+
+  // P&L par propriété (SCRUM-312) — revenus/dépenses/hypothèque sur une période.
+  propertyPnl: (propertyId, dateFrom, dateTo) => {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("dateFrom", dateFrom);
+    if (dateTo) params.set("dateTo", dateTo);
+    const qs = params.toString();
+    return get(`/properties/${propertyId}/pnl${qs ? `?${qs}` : ""}`);
+  },
+
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
+  // proofFile optionnel (photo/scan recu signe) — meme pattern multipart que createPayment.
   deposits: () => get("/deposits"),
-  collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
-  returnDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit/return`, b),
+  collectDeposit: (leaseId, b, proofFile = null) => {
+    if (!proofFile) return post(`/leases/${leaseId}/deposit`, b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch(`/leases/${leaseId}/deposit`, form);
+  },
+  returnDeposit: (leaseId, b, proofFile = null) => {
+    if (!proofFile) return post(`/leases/${leaseId}/deposit/return`, b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch(`/leases/${leaseId}/deposit/return`, form);
+  },
 
   // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
   reservations: () => get("/reservations"),
@@ -300,6 +414,21 @@ export function domusOnboardingUrl(backendUrl) {
   }
 }
 
+// Même principe pour le portail locataire (accès public sans login) : URL propre
+// Domus sous /domus/mon-espace?token=... (deep-link mobile à préserver).
+export const PORTAL_PATH = `${import.meta.env.BASE_URL}mon-espace`;
+export function domusPortalUrl(backendUrlOrToken) {
+  if (!backendUrlOrToken) return "";
+  try {
+    const u = new URL(backendUrlOrToken);
+    const token = u.searchParams.get("token");
+    if (!token) return backendUrlOrToken || "";
+    return `${u.origin}${PORTAL_PATH}?token=${encodeURIComponent(token)}`;
+  } catch {
+    return backendUrlOrToken || "";
+  }
+}
+
 // Même principe pour l'enquête de prélocation (Québec) : URL propre Domus
 // sous /domus/prescreening/candidature?token=... (deep-link mobile à préserver).
 export const PRESCREENING_PATH = `${import.meta.env.BASE_URL}prescreening/candidature`;
@@ -337,6 +466,9 @@ export const publicApi = {
     publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
   submitOnboarding: (token, values) =>
     publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Portail locataire (accès public sans login, token opaque fait autorisation).
+  tenantPortal: (token) => publicFetch(`/tenant-portal?token=${encodeURIComponent(token)}`),
 
   // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
   prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),

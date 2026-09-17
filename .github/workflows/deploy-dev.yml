@@ -164,10 +164,15 @@ jobs:
             echo "static_any=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # ───────────────────────────── Backend2 → dev ─────────────────────────────
+  # ─────────── Deploiement SEQUENTIEL (un projet a la fois) sur ongdngolu ───────────
+  # `needs:` enchaine les jobs (plus de parallel:) pour ne pas surcharger le
+  # serveur ongdngolu quand plusieurs projets changent en meme temps.
+  # `if: always() && ...` fait continuer la chaine meme si le job precedent a
+  # echoue (l'echec reste visible dans l'onglet Actions, mais ne bloque pas
+  # les projets suivants).
   backend2-dev:
     needs: changes
-    if: needs.changes.outputs.backend2 == 'true'
+    if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -204,8 +209,8 @@ jobs:
           $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
   middleware-dev:
-    needs: changes
-    if: needs.changes.outputs.middleware == 'true'
+    needs: [changes, backend2-dev]
+    if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -226,15 +231,18 @@ jobs:
   # dist bind-monte (inode preserve : un `scp -r dist` cree un inode orphelin et
   # l'ancien build reste servi) -> copier -> reload nginx.
   static-dev:
-    needs: changes
+    needs: [changes, middleware-dev]
     runs-on: ubuntu-latest
     # Matrice calculee par le job `changes` : elle ne contient QUE les apps
     # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
     # par etape (`steps.gate`) devient inutile : un job present est un job a faire.
+    # max-parallel: 1 : les apps statiques se deploient une a une (meme
+    # serveur ongdngolu) au lieu de toutes en meme temps.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix: ${{ fromJSON(needs.changes.outputs.static_matrix) }}
-    if: needs.changes.outputs.static_any == 'true'
+    if: always() && needs.changes.outputs.static_any == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -263,8 +271,8 @@ jobs:
 
   # Tickets : pas de bind-mount hote, on copie dans le conteneur nginx.
   tickets-dev:
-    needs: changes
-    if: needs.changes.outputs.tickets == 'true'
+    needs: [changes, static-dev]
+    if: always() && needs.changes.outputs.tickets == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -286,8 +294,8 @@ jobs:
   # Migration Cockpit : nouveau volume html-migration-dev -> il faut RECREER le
   # conteneur frontend (conf montee :ro, `docker cp` impossible).
   migration-dev:
-    needs: changes
-    if: needs.changes.outputs.migration == 'true'
+    needs: [changes, tickets-dev]
+    if: always() && needs.changes.outputs.migration == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -313,8 +321,8 @@ jobs:
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
   marketing-dev:
-    needs: changes
-    if: needs.changes.outputs.marketing == 'true'
+    needs: [changes, migration-dev]
+    if: always() && needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -333,9 +341,12 @@ jobs:
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
   # ───────────────────── Serveur Avelomi (2e hote) → dev ─────────────────────
+  # ─────────── Deploiement SEQUENTIEL (un projet a la fois) sur Avelomi ───────────
+  # Serveur separe (3.128.45.29) de ongdngolu : chaine independante, mais
+  # sequentielle pour la meme raison (ne pas surcharger CE serveur-la).
   avelomi-site-dev:
     needs: changes
-    if: needs.changes.outputs.avelomi_site == 'true'
+    if: always() && needs.changes.outputs.avelomi_site == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -360,8 +371,8 @@ jobs:
           $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
 
   backend2-avelomi-dev:
-    needs: changes
-    if: needs.changes.outputs.backend2 == 'true'
+    needs: [changes, avelomi-site-dev]
+    if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -394,8 +405,8 @@ jobs:
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
   middleware-avelomi-dev:
-    needs: changes
-    if: needs.changes.outputs.middleware == 'true'
+    needs: [changes, backend2-avelomi-dev]
+    if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

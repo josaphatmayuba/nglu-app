@@ -13,12 +13,17 @@ import {
   customers,
   emailTemplates,
   realEstateContracts,
+  realEstateExpenseInstallments,
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateMaintenanceCosts,
   realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
+  realEstateMortgageLoans,
+  realEstateMortgagePayments,
+  realEstateOwners,
   realEstateProperties,
+  realEstatePropertyExpenses,
   realEstatePropertyPhotos,
   realEstateReservations,
   realEstateCoupons,
@@ -27,7 +32,9 @@ import {
   realEstateSecurityDeposits,
   realEstateUnits,
   roles,
+  smsLogs,
   subAccounts,
+  systemEmailLogs,
   tenantDetails,
   tenantOnboardings,
   transactions,
@@ -45,10 +52,13 @@ import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import { InvalidPhoneNumberError, normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
+import type { DomusPropertyScope } from "../auth/decorators/domus-property-scope.decorator";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateOwnerDto,
+  UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
   CollectDepositDto,
@@ -69,8 +79,20 @@ import {
   UpdateCouponDto,
   PublicReservationRequestDto,
   PublicLeaseRequestDto,
+  CreatePropertyExpenseDto,
+  UpdatePropertyExpenseDto,
+  GenerateExpenseInstallmentsDto,
+  AddExpensePartialPaymentDto,
+  PayExpenseInstallmentDto,
+  UpdateExpenseInstallmentDto,
+  CreateMortgagePaymentDto,
+  UpdateMortgagePaymentDto,
+  CreateMortgageLoanDto,
+  UpdateMortgageLoanDto,
+  MORTGAGE_AMOUNT_TOLERANCE,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
+import { TenantPortalService } from "./tenant-portal.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -96,6 +118,7 @@ export class PropertyManagementService {
     private readonly projects: ProjectsService,
     private readonly objectStorage: ObjectStorageService,
     private readonly whatsapp: WhatsappClientService,
+    private readonly tenantPortal: TenantPortalService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -799,6 +822,8 @@ export class PropertyManagementService {
         marketValue: realEstateProperties.marketValue,
         defaultRent: realEstateProperties.defaultRent,
         currencyId: realEstateProperties.currencyId,
+        ownerId: realEstateProperties.ownerId,
+        ownerName: realEstateOwners.displayName,
         description: realEstateProperties.description,
         availableForBooking: realEstateProperties.availableForBooking,
         createdAt: realEstateProperties.createdAt,
@@ -810,11 +835,185 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, realEstateProperties.ownerId))
       .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId), scopeFilter))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
     return rows.map((row) => ({ ...row, unitsCount: Number(row.unitsCount) }));
+  }
+
+  // ── Proprietaires legaux (Domus) ─────────────────────────────────────────
+  // Liste allegee (sans signature, trop lourde) + compteur de biens actifs.
+  async owners(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: realEstateOwners.id,
+        displayName: realEstateOwners.displayName,
+        ownerType: realEstateOwners.ownerType,
+        firstName: realEstateOwners.firstName,
+        lastName: realEstateOwners.lastName,
+        companyName: realEstateOwners.companyName,
+        representativeName: realEstateOwners.representativeName,
+        phone: realEstateOwners.phone,
+        phone2: realEstateOwners.phone2,
+        email: realEstateOwners.email,
+        address: realEstateOwners.address,
+        city: realEstateOwners.city,
+        country: realEstateOwners.country,
+        idDocumentType: realEstateOwners.idDocumentType,
+        idNumber: realEstateOwners.idNumber,
+        taxId: realEstateOwners.taxId,
+        notes: realEstateOwners.notes,
+        createdAt: realEstateOwners.createdAt,
+        updatedAt: realEstateOwners.updatedAt,
+      })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .orderBy(realEstateOwners.displayName);
+
+    if (!rows.length) return [];
+
+    const counts = await this.db
+      .select({
+        ownerId: realEstateProperties.ownerId,
+        count: sql<number>`count(*)`,
+      })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.isActive, 1),
+        inArray(realEstateProperties.ownerId, rows.map((r) => r.id)),
+      ))
+      .groupBy(realEstateProperties.ownerId);
+    const countByOwner = new Map(counts.map((c) => [Number(c.ownerId), Number(c.count)]));
+
+    return rows.map((row) => ({ ...row, propertiesCount: countByOwner.get(row.id) ?? 0 }));
+  }
+
+  async owner(id: number, orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Proprietaire introuvable.");
+
+    const properties = await this.db
+      .select({ id: realEstateProperties.id, name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.ownerId, id),
+        eq(realEstateProperties.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+      ))
+      .orderBy(realEstateProperties.name);
+
+    return { ...rows[0], properties };
+  }
+
+  async createOwner(input: CreateOwnerDto, orgId: number) {
+    const [result] = await this.db.insert(realEstateOwners).values({
+      organizationId: orgId,
+      displayName: input.displayName,
+      ownerType: input.ownerType ?? "individual",
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      companyName: input.companyName ?? null,
+      representativeName: input.representativeName ?? null,
+      phone: input.phone ?? null,
+      phone2: input.phone2 ?? null,
+      email: input.email ?? null,
+      address: input.address ?? null,
+      city: input.city ?? null,
+      country: input.country ?? null,
+      idDocumentType: input.idDocumentType ?? null,
+      idNumber: input.idNumber ?? null,
+      taxId: input.taxId ?? null,
+      signature: input.signature ?? null,
+      notes: input.notes ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return this.owner(Number(result.insertId), orgId);
+  }
+
+  async updateOwner(id: number, input: UpdateOwnerDto, orgId: number) {
+    await this.ensureActiveOwner(id, orgId);
+    await this.db
+      .update(realEstateOwners)
+      .set({
+        ...this.pick(input, [
+          "displayName",
+          "ownerType",
+          "firstName",
+          "lastName",
+          "companyName",
+          "representativeName",
+          "phone",
+          "phone2",
+          "email",
+          "address",
+          "city",
+          "country",
+          "idDocumentType",
+          "idNumber",
+          "taxId",
+          "signature",
+          "notes",
+        ]),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId)));
+    return this.owner(id, orgId);
+  }
+
+  async deleteOwner(id: number, orgId: number) {
+    await this.ensureActiveOwner(id, orgId);
+
+    const [attachedRow] = await this.db
+      .select({ id: realEstateProperties.id })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.organizationId, orgId),
+        eq(realEstateProperties.ownerId, id),
+        eq(realEstateProperties.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+      ))
+      .limit(1);
+    if (attachedRow) {
+      throw new BadRequestException(
+        "Réassignez ou détachez d'abord les biens rattachés à ce propriétaire avant de le supprimer.",
+      );
+    }
+
+    await this.db
+      .update(realEstateOwners)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId)));
+    return { message: "Proprietaire supprime." };
+  }
+
+  private async ensureActiveOwner(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateOwners.id })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Proprietaire introuvable.");
+  }
+
+  // Variante 400 (au lieu de 404) utilisée quand ownerId est fourni depuis
+  // createProperty/updateProperty : un owner absent/inactif est une erreur de
+  // saisie sur le bien, pas une ressource "owner" introuvable en soi.
+  private async ensureActiveOwnerForProperty(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateOwners.id })
+      .from(realEstateOwners)
+      .where(and(eq(realEstateOwners.id, id), eq(realEstateOwners.organizationId, orgId), eq(realEstateOwners.isActive, 1)))
+      .limit(1);
+    if (!rows.length) throw new BadRequestException("Proprietaire introuvable ou inactif.");
   }
 
   async propertyPhotos(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
@@ -1196,6 +1395,9 @@ export class PropertyManagementService {
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
+    if (input.ownerId != null) {
+      await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
+    }
     const [result] = await this.db.insert(realEstateProperties).values({
       organizationId: orgId,
       name: input.name,
@@ -1210,6 +1412,7 @@ export class PropertyManagementService {
       marketValue: this.money(input.marketValue),
       defaultRent: this.money(input.defaultRent),
       currencyId,
+      ownerId: input.ownerId ?? null,
       description: input.description ?? null,
       availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
@@ -1226,6 +1429,9 @@ export class PropertyManagementService {
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     }
+    if (input.ownerId !== undefined && input.ownerId !== null) {
+      await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
+    }
     await this.db
       .update(realEstateProperties)
       .set({
@@ -1241,6 +1447,7 @@ export class PropertyManagementService {
           "parkingSpaces",
           "description",
           "currencyId",
+          "ownerId",
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
@@ -1476,7 +1683,90 @@ export class PropertyManagementService {
       propertyId: input.propertyId,
       unitId: input.unitId,
     });
-    return this.findLease(leaseId);
+    const lease = await this.findLease(leaseId);
+
+    // Bienvenue portail locataire : uniquement pour le bail fraichement cree
+    // s'il est actif — jamais de backfill des locataires deja en place. Echec
+    // d'envoi = warning seulement, ne doit jamais faire echouer la creation.
+    if (lease.status === "active") {
+      await this.sendTenantPortalWelcome(lease, orgId);
+    }
+
+    return lease;
+  }
+
+  /** Genere/reutilise le lien portail du locataire et lui envoie un SMS/email de bienvenue (non bloquant). */
+  private async sendTenantPortalWelcome(
+    lease: {
+      id: number;
+      reference: string;
+      tenantId: number;
+      tenantFirstName: string | null;
+      tenantLastName: string | null;
+      tenantPhone: string | null;
+      tenantEmail: string | null;
+      propertyName: string | null;
+      propertyAddress: string | null;
+      rentAmount: string | number | null;
+      currencySymbol: string | null;
+    },
+    orgId: number,
+  ) {
+    if (!lease.tenantPhone && !lease.tenantEmail) return;
+
+    try {
+      const company = await readOrgAppSetting(this.db, orgId, { name: appSettings.companyName });
+      const companyName = (company?.name as string | null) || "votre gestionnaire";
+      const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+      const place = lease.propertyAddress || lease.propertyName || "votre logement";
+      const amount = `${lease.rentAmount}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
+
+      const smsMsg =
+        `Bonjour ${tenantName}, bienvenue ! Votre bail (${lease.reference}) pour ${place}, loyer ${amount}, ` +
+        `est actif. — ${companyName}`;
+
+      if (lease.tenantPhone) {
+        try {
+          const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(smsMsg, lease.tenantId, orgId);
+          const res = await this.sms.sendSms({
+            phone: lease.tenantPhone,
+            message: smsWithFooter,
+            organizationId: orgId,
+            smsType: "lease_welcome",
+            relatedType: "real-estate-lease",
+            relatedId: lease.id,
+          });
+          if (!res?.success) {
+            this.logger.warn(`Welcome SMS not sent (lease ${lease.id}, ${lease.tenantPhone}): ${res?.message}`);
+          }
+        } catch (error) {
+          this.logger.warn(`Welcome SMS error (lease ${lease.id}, ${lease.tenantPhone}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (lease.tenantEmail) {
+        const html =
+          `<p>Bonjour ${tenantName},</p>` +
+          `<p>Bienvenue ! Votre bail <strong>${lease.reference}</strong> pour <strong>${place}</strong>, ` +
+          `d'un loyer de <strong>${amount}</strong>, est desormais actif.</p>` +
+          `<p>Bienvenue parmi nous.<br>${companyName}</p>`;
+        try {
+          const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, orgId);
+          await this.emails.send({
+            to: lease.tenantEmail,
+            subject: "Bienvenue — votre espace locataire",
+            html: htmlWithFooter,
+            type: "tenant_portal_welcome",
+            relatedType: "real-estate-lease",
+            relatedId: lease.id,
+          });
+        } catch (error) {
+          this.logger.warn(`Welcome email error (lease ${lease.id}, ${lease.tenantEmail}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Tenant portal welcome failed (lease ${lease.id}): ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async updateLease(id: number, input: UpdateLeaseDto, orgId: number) {
@@ -1592,6 +1882,7 @@ export class PropertyManagementService {
         notes: realEstateRentPayments.notes,
         taxAmount: realEstateRentPayments.taxAmount,
         taxName: realEstateRentPayments.taxName,
+        proofUrl: realEstateRentPayments.proofUrl,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -1622,7 +1913,8 @@ export class PropertyManagementService {
       ));
   }
 
-  async createPayment(input: CreateRentPaymentDto, orgId: number) {
+  async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
@@ -1671,6 +1963,7 @@ export class PropertyManagementService {
       notes: input.notes || "Payment for rent",
       taxAmount: taxAmt != null ? this.money(taxAmt) : null,
       taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+      proofUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1767,7 +2060,8 @@ export class PropertyManagementService {
     return /(banc|bank|carte|card|cheque|virement)/.test(m);
   }
 
-  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number) {
+  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     // Une seule caution active détenue par bail.
@@ -1818,6 +2112,7 @@ export class PropertyManagementService {
       status: "held",
       reference: input.reference ?? null,
       notes: input.notes ?? null,
+      proofUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1848,7 +2143,8 @@ export class PropertyManagementService {
     return this.findDeposit(depositId);
   }
 
-  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number) {
+  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const returnProofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
     const rows = await this.db
       .select()
@@ -1921,6 +2217,7 @@ export class PropertyManagementService {
         returnedAmount: this.money(returned),
         returnMethod: input.returnMethod ?? "bank",
         returnDate: this.requiredDate(input.returnDate),
+        returnProofUrl,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(realEstateSecurityDeposits.id, deposit.id));
@@ -2662,10 +2959,12 @@ export class PropertyManagementService {
       .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
   }
 
-  async sendPaymentReminder(leaseId: number) {
+  async sendPaymentReminder(leaseId: number, orgId: number) {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
+        organizationId: realEstateLeases.organizationId,
+        tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
         currencySymbol: currencies.currencySymbol,
@@ -2676,7 +2975,7 @@ export class PropertyManagementService {
       .from(realEstateLeases)
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
-      .where(eq(realEstateLeases.id, leaseId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -2715,10 +3014,11 @@ export class PropertyManagementService {
       if (tpl[0].body) html = fill(tpl[0].body);
     }
 
+    const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
     const result = await this.emails.send({
       to: lease.tenantEmail,
       subject,
-      html,
+      html: htmlWithFooter,
       type: "payment_reminder",
       relatedType: "real-estate-lease",
       relatedId: leaseId,
@@ -3196,6 +3496,107 @@ export class PropertyManagementService {
     return { message: "Copie de la piece supprimee." };
   }
 
+  /**
+   * Historique fusionne (email + SMS) des communications envoyees a un locataire :
+   * bienvenue de bail, rappel de retard, lien de signature de contrat, lien portail,
+   * message de bienvenue post-signature, etc.
+   * Les logs sont rattaches soit directement au tenant ("tenant" + tenantId), soit
+   * a ses baux ("real-estate-lease" + leaseId), soit a ses contrats
+   * ("real-estate-contract" + contractId) — on resout donc les baux/contrats du
+   * locataire avant d'agreger. Scope strict organisation : findTenant() leve un
+   * 404 si le tenant n'appartient pas a orgId.
+   */
+  async tenantCommunications(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+
+    const leaseRows = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.tenantId, tenantId), eq(realEstateLeases.organizationId, orgId)));
+    const leaseIds = leaseRows.map((row) => row.id);
+
+    let contractIds: number[] = [];
+    if (leaseIds.length) {
+      const contractRows = await this.db
+        .select({ id: realEstateContracts.id })
+        .from(realEstateContracts)
+        .where(and(inArray(realEstateContracts.leaseId, leaseIds), eq(realEstateContracts.organizationId, orgId)));
+      contractIds = contractRows.map((row) => row.id);
+    }
+
+    const relatedConditions = [
+      and(eq(systemEmailLogs.relatedType, "tenant"), eq(systemEmailLogs.relatedId, String(tenantId))),
+      ...(leaseIds.length
+        ? [and(eq(systemEmailLogs.relatedType, "real-estate-lease"), inArray(systemEmailLogs.relatedId, leaseIds.map(String)))]
+        : []),
+      ...(contractIds.length
+        ? [and(eq(systemEmailLogs.relatedType, "real-estate-contract"), inArray(systemEmailLogs.relatedId, contractIds.map(String)))]
+        : []),
+    ];
+
+    const emailRows = await this.db
+      .select({
+        type: systemEmailLogs.emailType,
+        recipient: systemEmailLogs.recipient,
+        subject: systemEmailLogs.subject,
+        status: systemEmailLogs.status,
+        errorMessage: systemEmailLogs.errorMessage,
+        createdAt: systemEmailLogs.createdAt,
+      })
+      .from(systemEmailLogs)
+      .where(or(...relatedConditions))
+      .orderBy(desc(systemEmailLogs.createdAt))
+      .limit(100);
+
+    const smsRelatedConditions = [
+      and(eq(smsLogs.relatedType, "tenant"), eq(smsLogs.relatedId, String(tenantId))),
+      ...(leaseIds.length
+        ? [and(eq(smsLogs.relatedType, "real-estate-lease"), inArray(smsLogs.relatedId, leaseIds.map(String)))]
+        : []),
+      ...(contractIds.length
+        ? [and(eq(smsLogs.relatedType, "real-estate-contract"), inArray(smsLogs.relatedId, contractIds.map(String)))]
+        : []),
+    ];
+
+    const smsRows = await this.db
+      .select({
+        type: smsLogs.smsType,
+        recipient: smsLogs.recipient,
+        body: smsLogs.body,
+        status: smsLogs.status,
+        errorMessage: smsLogs.errorMessage,
+        createdAt: smsLogs.createdAt,
+      })
+      .from(smsLogs)
+      .where(and(eq(smsLogs.organizationId, orgId), or(...smsRelatedConditions)))
+      .orderBy(desc(smsLogs.createdAt))
+      .limit(100);
+
+    const merged = [
+      ...emailRows.map((row) => ({
+        channel: "email" as const,
+        type: row.type,
+        recipient: row.recipient,
+        subject: row.subject,
+        status: row.status,
+        createdAt: row.createdAt,
+        errorMessage: row.errorMessage,
+      })),
+      ...smsRows.map((row) => ({
+        channel: "sms" as const,
+        type: row.type,
+        recipient: row.recipient,
+        subject: row.body ? String(row.body).slice(0, 160) : null,
+        status: row.status,
+        createdAt: row.createdAt,
+        errorMessage: row.errorMessage,
+      })),
+    ];
+
+    merged.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    return merged.slice(0, 100);
+  }
+
   async findPayment(id: number) {
     const rows = await this.paymentQuery(id).limit(1);
     if (!rows.length) throw new NotFoundException("Payment not found.");
@@ -3233,6 +3634,17 @@ export class PropertyManagementService {
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
       allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
       prefix: "receipt",
+      maxBytes: 5 * 1024 * 1024,
+    });
+    const base = publicApiBase ?? "";
+    return `${base}/uploads/${name}`;
+  }
+
+  private saveProofFile(file: any, publicApiBase?: string): string | null {
+    if (!file?.buffer) return null;
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+      prefix: "rent-proof",
       maxBytes: 5 * 1024 * 1024,
     });
     const base = publicApiBase ?? "";
@@ -3348,6 +3760,1162 @@ export class PropertyManagementService {
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
+  // Route chaque categorie vers un compte de charge CANONIQUE deja existant
+  // (memes comptes que le regroupement 0149 / le sous-compte standard "Maintenance").
+  // Pas de nouveau sous-compte cree par cette feature.
+  private static readonly PROPERTY_EXPENSE_CATEGORY_ACCOUNT: Record<string, string> = {
+    insurance: "Frais de bureau et divers",
+    property_tax: "Frais de bureau et divers",
+    hoa: "Frais de bureau et divers",
+    maintenance_general: "Maintenance",
+    management_fee: "Frais de bureau et divers",
+    security: "Frais de bureau et divers",
+    cleaning: "Frais de bureau et divers",
+    other: "Frais de bureau et divers",
+  };
+
+  private async getOrCreatePropertyProject(propertyId: number, orgId: number, userId?: number): Promise<number | null> {
+    const [property] = await this.db
+      .select({ name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(eq(realEstateProperties.id, propertyId))
+      .limit(1);
+    try {
+      const proj = await this.projects.create(
+        {
+          name: `Bien: ${property?.name ?? propertyId}`,
+          code: `PROP-${propertyId}`,
+          sourceSystem: "property",
+          externalRef: String(propertyId),
+        },
+        orgId,
+        userId,
+      );
+      return proj.id;
+    } catch (err) {
+      this.logger.warn(`getOrCreatePropertyProject: liaison projet ignoree: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  async listPropertyExpenses(
+    orgId: number,
+    filters: { propertyId?: number; category?: string; dateFrom?: string; dateTo?: string } = {},
+  ) {
+    const conditions = [
+      eq(realEstatePropertyExpenses.organizationId, orgId),
+      eq(realEstatePropertyExpenses.isActive, 1),
+    ];
+    if (filters.propertyId) conditions.push(eq(realEstatePropertyExpenses.propertyId, filters.propertyId));
+    if (filters.category) conditions.push(eq(realEstatePropertyExpenses.category, filters.category));
+    if (filters.dateFrom) conditions.push(gte(realEstatePropertyExpenses.expenseDate, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(realEstatePropertyExpenses.expenseDate, filters.dateTo));
+
+    return this.db
+      .select({
+        ...getTableColumns(realEstatePropertyExpenses),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstatePropertyExpenses)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .where(and(...conditions))
+      .orderBy(desc(realEstatePropertyExpenses.expenseDate), desc(realEstatePropertyExpenses.id));
+  }
+
+  async getPropertyExpense(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstatePropertyExpenses),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstatePropertyExpenses)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .where(and(
+        eq(realEstatePropertyExpenses.id, id),
+        eq(realEstatePropertyExpenses.isActive, 1),
+        eq(realEstatePropertyExpenses.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Property expense not found.");
+    return rows[0];
+  }
+
+  async createPropertyExpense(input: CreatePropertyExpenseDto, orgId: number, userId?: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const projectId = await this.getOrCreatePropertyProject(input.propertyId, orgId, userId);
+
+    const [result] = await this.db.insert(realEstatePropertyExpenses).values({
+      organizationId: orgId,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      leaseId: input.leaseId ?? null,
+      category: input.category,
+      description: input.description,
+      amount: String(input.amount),
+      currencyId: input.currencyId ?? null,
+      expenseDate: input.expenseDate,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
+      supplierId: input.supplierId ?? null,
+      vendorName: input.vendorName ?? null,
+      paymentMethod: input.paymentMethod ?? "cash",
+      paymentStatus: input.paymentStatus ?? "paid",
+      receiptUrl: input.receiptUrl ?? null,
+      projectId,
+      isRecurring: input.isRecurring ? 1 : 0,
+      recurrenceMonths: input.recurrenceMonths ?? null,
+      paymentPlan: input.paymentPlan ?? "single",
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const expenseId = Number((result as any).insertId);
+
+    // Ecriture comptable : debit charge (compte canonique de la categorie) / credit tresorerie.
+    const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const accountName = PropertyManagementService.PROPERTY_EXPENSE_CATEGORY_ACCOUNT[input.category] ?? "Frais de bureau et divers";
+    const debitId = await this.getOrCreateExpenseSubAccount(accountName, orgId);
+
+    let journalEntryId: number | null = null;
+    try {
+      const posted = await this.ledger.post(
+        {
+          date: input.expenseDate,
+          reference: `PROPEXP-${expenseId}`,
+          particulars: `${input.description}${input.vendorName ? ` — ${input.vendorName}` : ""}`,
+          sourceModule: "property_expense",
+          relatedId: String(expenseId),
+          currencyId: input.currencyId ?? undefined,
+          idempotencyKey: `property-expense:${expenseId}`,
+          lines: [
+            { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Property expense", projectId: projectId ?? undefined },
+            { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+          ],
+        },
+        orgId,
+        userId,
+      );
+      journalEntryId = posted?.id ? Number(posted.id) : null;
+    } catch (err) {
+      this.logger.warn(`createPropertyExpense: ecriture ledger ignoree: ${(err as Error).message}`);
+    }
+
+    if (journalEntryId) {
+      await this.db
+        .update(realEstatePropertyExpenses)
+        .set({ journalEntryId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstatePropertyExpenses.id, expenseId));
+    }
+
+    // Soumet la depense au circuit d'approbation (effectif si gate), comme les couts de maintenance.
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "property_expense", entityId: String(expenseId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit property expense approval skipped:", (err as Error).message);
+    }
+
+    // Echeancier (SCRUM-313) : aucun impact ledger, purement informatif/suivi
+    // de reglement. single/partial ne generent rien ici (comportement inchange
+    // pour single ; partial attend des paiements libres ajoutes ensuite).
+    if (input.paymentPlan === "installments" && input.recurrenceMonths) {
+      await this.generateExpenseInstallments(
+        expenseId,
+        { recurrenceMonths: input.recurrenceMonths },
+        orgId,
+        userId,
+      );
+    }
+
+    return this.getPropertyExpense(expenseId, orgId);
+  }
+
+  async updatePropertyExpense(id: number, input: UpdatePropertyExpenseDto, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    if (input.propertyId !== undefined) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+    }
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({
+        ...this.pick(input, [
+          "propertyId",
+          "unitId",
+          "leaseId",
+          "category",
+          "description",
+          "currencyId",
+          "periodStart",
+          "periodEnd",
+          "supplierId",
+          "vendorName",
+          "paymentMethod",
+          "paymentStatus",
+          "receiptUrl",
+          "notes",
+        ]),
+        ...(input.amount !== undefined ? { amount: String(input.amount) } : {}),
+        ...(input.expenseDate !== undefined ? { expenseDate: input.expenseDate } : {}),
+        ...(input.isRecurring !== undefined ? { isRecurring: input.isRecurring ? 1 : 0 } : {}),
+        ...(input.recurrenceMonths !== undefined ? { recurrenceMonths: input.recurrenceMonths } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return this.getPropertyExpense(id, orgId);
+  }
+
+  async deletePropertyExpense(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return { message: "Deleted successfully." };
+  }
+
+  async uploadPropertyExpenseReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+    return this.getPropertyExpense(id, orgId);
+  }
+
+  // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
+  // payment_plan='installments' : genere N echeances mensuelles a la creation.
+  // payment_plan='partial' : aucune echeance generee, paiements libres ajoutes
+  // un a un. Les deux types de lignes cohabitent dans real_estate_expense_installments
+  // via la colonne kind ('scheduled' | 'partial'). Aucun impact ledger ici : le
+  // posting (debit charge / credit tresorerie) reste entierement porte par
+  // createPropertyExpense, quel que soit le payment_plan. journalEntryId reste
+  // NULL sur les installments en v1 (reserve pour une v2 comptabilisee).
+
+  /**
+   * Ajoute `months` mois a `date` en clampant sur le dernier jour du mois cible
+   * si necessaire (ex. 31 janvier + 1 mois -> 28/29 fevrier, jamais 3 mars).
+   * Meme pattern que addBillingCycle (baux), reimplemente ici en date-only UTC
+   * pour rester coherent avec les colonnes `date` (mode "string") des installments.
+   */
+  private addMonthsClamped(date: string, months: number): string {
+    const base = this.parseDateOnly(date);
+    const day = base.getUTCDate();
+    const next = new Date(base.getTime());
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
+    return this.formatDateOnly(next);
+  }
+
+  /**
+   * Recalcule settled_amount (somme des paidAmount des installments actifs) et
+   * payment_status ('paid' si settled >= amount, 'partial' si 0 < settled < amount,
+   * sinon la valeur existante est conservee) sur la depense parente.
+   * N'est jamais appele pour une depense en mode 'single' (aucune installment
+   * n'existe alors), donc ne modifie jamais le comportement actuel du mode single.
+   */
+  private async recalcExpenseSettlement(expenseId: number, orgId: number) {
+    const [expense] = await this.db
+      .select({ amount: realEstatePropertyExpenses.amount, paymentStatus: realEstatePropertyExpenses.paymentStatus })
+      .from(realEstatePropertyExpenses)
+      .where(and(eq(realEstatePropertyExpenses.id, expenseId), eq(realEstatePropertyExpenses.organizationId, orgId)))
+      .limit(1);
+    if (!expense) return;
+
+    const rows = await this.db
+      .select({ paidAmount: realEstateExpenseInstallments.paidAmount })
+      .from(realEstateExpenseInstallments)
+      .where(and(
+        eq(realEstateExpenseInstallments.expenseId, expenseId),
+        eq(realEstateExpenseInstallments.organizationId, orgId),
+        eq(realEstateExpenseInstallments.isActive, 1),
+      ));
+    const settled = rows.reduce((sum, r) => sum + Number(r.paidAmount ?? 0), 0);
+    const total = Number(expense.amount ?? 0);
+
+    let paymentStatus = expense.paymentStatus;
+    if (settled >= total && total > 0) paymentStatus = "paid";
+    else if (settled > 0 && settled < total) paymentStatus = "partial";
+
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({
+        settledAmount: settled.toFixed(2),
+        paymentStatus,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstatePropertyExpenses.id, expenseId), eq(realEstatePropertyExpenses.organizationId, orgId)));
+  }
+
+  private async findActiveExpenseForOrg(expenseId: number, orgId: number) {
+    const [expense] = await this.db
+      .select()
+      .from(realEstatePropertyExpenses)
+      .where(and(
+        eq(realEstatePropertyExpenses.id, expenseId),
+        eq(realEstatePropertyExpenses.organizationId, orgId),
+        eq(realEstatePropertyExpenses.isActive, 1),
+      ))
+      .limit(1);
+    if (!expense) throw new NotFoundException("Property expense not found.");
+    return expense;
+  }
+
+  async listExpenseInstallments(expenseId: number, orgId: number) {
+    await this.findActiveExpenseForOrg(expenseId, orgId);
+    return this.db
+      .select()
+      .from(realEstateExpenseInstallments)
+      .where(and(
+        eq(realEstateExpenseInstallments.expenseId, expenseId),
+        eq(realEstateExpenseInstallments.organizationId, orgId),
+        eq(realEstateExpenseInstallments.isActive, 1),
+      ))
+      .orderBy(realEstateExpenseInstallments.sequenceNo);
+  }
+
+  async generateExpenseInstallments(expenseId: number, input: GenerateExpenseInstallmentsDto, orgId: number, userId?: number) {
+    const expense = await this.findActiveExpenseForOrg(expenseId, orgId);
+
+    const existing = await this.db
+      .select()
+      .from(realEstateExpenseInstallments)
+      .where(and(
+        eq(realEstateExpenseInstallments.expenseId, expenseId),
+        eq(realEstateExpenseInstallments.organizationId, orgId),
+        eq(realEstateExpenseInstallments.isActive, 1),
+      ));
+
+    const hasPaidInstallment = existing.some((row) => Number(row.paidAmount ?? 0) > 0);
+    if (hasPaidInstallment) {
+      const paidCount = existing.filter((row) => Number(row.paidAmount ?? 0) > 0).length;
+      throw new BadRequestException(
+        `${paidCount} echeance(s) deja reglee(s), impossible de regenerer l'echeancier de cette depense.`,
+      );
+    }
+
+    // Soft-delete des anciennes lignes scheduled (aucun paiement, la regeneration est autorisee).
+    if (existing.length) {
+      await this.db
+        .update(realEstateExpenseInstallments)
+        .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(
+          eq(realEstateExpenseInstallments.expenseId, expenseId),
+          eq(realEstateExpenseInstallments.organizationId, orgId),
+        ));
+    }
+
+    const n = input.recurrenceMonths;
+    const total = Number(expense.amount ?? 0);
+    const baseAmount = Math.round((total / n) * 100) / 100;
+    const rows: (typeof realEstateExpenseInstallments.$inferInsert)[] = [];
+    let allocated = 0;
+    for (let k = 1; k <= n; k++) {
+      const isLast = k === n;
+      // La derniere echeance absorbe le reliquat d'arrondi pour garantir
+      // SUM(plannedAmount) === amount exactement.
+      const plannedAmount = isLast ? Math.round((total - allocated) * 100) / 100 : baseAmount;
+      allocated += plannedAmount;
+      rows.push({
+        organizationId: orgId,
+        expenseId,
+        propertyId: expense.propertyId,
+        sequenceNo: k,
+        kind: "scheduled",
+        dueDate: this.addMonthsClamped(expense.expenseDate, k - 1),
+        plannedAmount: plannedAmount.toFixed(2),
+        paidAmount: "0.00",
+        currencyId: expense.currencyId ?? null,
+        status: "pending",
+        isActive: 1,
+        createdBy: userId ?? null,
+        createdAt: sql`CURRENT_TIMESTAMP` as any,
+        updatedAt: sql`CURRENT_TIMESTAMP` as any,
+      });
+    }
+
+    await this.db.insert(realEstateExpenseInstallments).values(rows);
+
+    await this.db
+      .update(realEstatePropertyExpenses)
+      .set({ recurrenceMonths: n, paymentPlan: "installments", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyExpenses.id, expenseId), eq(realEstatePropertyExpenses.organizationId, orgId)));
+
+    await this.recalcExpenseSettlement(expenseId, orgId);
+    return this.listExpenseInstallments(expenseId, orgId);
+  }
+
+  async addExpensePartialPayment(expenseId: number, input: AddExpensePartialPaymentDto, orgId: number, userId?: number) {
+    const expense = await this.findActiveExpenseForOrg(expenseId, orgId);
+
+    await this.db.insert(realEstateExpenseInstallments).values({
+      organizationId: orgId,
+      expenseId,
+      propertyId: expense.propertyId,
+      sequenceNo: 0,
+      kind: "partial",
+      dueDate: null,
+      plannedAmount: "0.00",
+      paidAmount: String(input.amount),
+      paidDate: input.paidDate,
+      currencyId: expense.currencyId ?? null,
+      paymentMethod: input.paymentMethod ?? "cash",
+      status: "paid",
+      reference: input.reference ?? null,
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP` as any,
+      updatedAt: sql`CURRENT_TIMESTAMP` as any,
+    });
+
+    await this.recalcExpenseSettlement(expenseId, orgId);
+    return this.listExpenseInstallments(expenseId, orgId);
+  }
+
+  private async findActiveInstallmentForOrg(installmentId: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(realEstateExpenseInstallments)
+      .where(and(
+        eq(realEstateExpenseInstallments.id, installmentId),
+        eq(realEstateExpenseInstallments.organizationId, orgId),
+        eq(realEstateExpenseInstallments.isActive, 1),
+      ))
+      .limit(1);
+    if (!row) throw new NotFoundException("Expense installment not found.");
+    return row;
+  }
+
+  async payExpenseInstallment(installmentId: number, input: PayExpenseInstallmentDto, orgId: number) {
+    const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
+    const plannedAmount = Number(installment.plannedAmount ?? 0);
+    const paidAmount = input.amount !== undefined ? input.amount : plannedAmount;
+    const status = paidAmount >= plannedAmount ? "paid" : "partial";
+
+    await this.db
+      .update(realEstateExpenseInstallments)
+      .set({
+        paidAmount: paidAmount.toFixed(2),
+        paidDate: input.paidDate,
+        paymentMethod: input.paymentMethod ?? installment.paymentMethod,
+        reference: input.reference ?? installment.reference,
+        status,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
+
+    await this.recalcExpenseSettlement(installment.expenseId, orgId);
+    return this.listExpenseInstallments(installment.expenseId, orgId);
+  }
+
+  async updateExpenseInstallment(installmentId: number, input: UpdateExpenseInstallmentDto, orgId: number) {
+    const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
+    if (installment.status !== "pending") {
+      throw new BadRequestException("Impossible de modifier une echeance deja reglee (status != pending).");
+    }
+    await this.db
+      .update(realEstateExpenseInstallments)
+      .set({
+        ...this.pick(input, ["dueDate", "notes"]),
+        ...(input.plannedAmount !== undefined ? { plannedAmount: input.plannedAmount.toFixed(2) } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
+    return this.findActiveInstallmentForOrg(installmentId, orgId);
+  }
+
+  async deleteExpenseInstallment(installmentId: number, orgId: number) {
+    const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
+    await this.db
+      .update(realEstateExpenseInstallments)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
+    await this.recalcExpenseSettlement(installment.expenseId, orgId);
+    return { message: "Deleted successfully." };
+  }
+
+  async uploadExpenseInstallmentReceipt(installmentId: number, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.findActiveInstallmentForOrg(installmentId, orgId);
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
+    await this.db
+      .update(realEstateExpenseInstallments)
+      .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
+    return this.findActiveInstallmentForOrg(installmentId, orgId);
+  }
+
+  // ── Remboursements hypothecaires (SCRUM-311) ──────────────────────────────
+  // Un paiement d hypotheque n est pas une charge a 100 pourcent : le capital
+  // solde une dette (Liability), seuls les interets (+ escrow) sont des charges.
+  // D ou une table et un posting ledger dedies, sans toucher aux depenses de
+  // propriete (SCRUM-310).
+
+  /** Compte de dette recevant le remboursement du capital. */
+  private static readonly MORTGAGE_LIABILITY_ACCOUNT = "Emprunts hypothecaires";
+  /** Compte de charge recevant la part interets. */
+  private static readonly MORTGAGE_INTEREST_ACCOUNT = "Interets demprunt";
+  /**
+   * Compte de charge recevant l escrow (assurance / taxes avancees par le preteur).
+   * Reutilise le compte canonique deja utilise par insurance / property_tax
+   * (regroupement 0149), aucun nouveau compte n est cree.
+   */
+  private static readonly MORTGAGE_ESCROW_ACCOUNT = "Frais de bureau et divers";
+
+  /**
+   * Controle applicatif de l invariant total = capital + interets + escrow,
+   * avec tolerance d arrondi (decimal(15,2)). Pas de contrainte CHECK en base.
+   */
+  private assertMortgageAmountsConsistent(total: number, principal: number, interest: number, escrow: number) {
+    const sum = principal + interest + escrow;
+    if (Math.abs(sum - total) > MORTGAGE_AMOUNT_TOLERANCE) {
+      throw new BadRequestException(
+        `Montants incoherents : capital (${principal}) + interets (${interest}) + escrow (${escrow}) = ${sum.toFixed(2)}, ` +
+          `ce qui ne correspond pas au montant total (${total}). Corrigez la ventilation.`,
+      );
+    }
+  }
+
+  async listMortgagePayments(
+    orgId: number,
+    filters: { propertyId?: number; dateFrom?: string; dateTo?: string } = {},
+  ) {
+    const conditions = [
+      eq(realEstateMortgagePayments.organizationId, orgId),
+      eq(realEstateMortgagePayments.isActive, 1),
+    ];
+    if (filters.propertyId) conditions.push(eq(realEstateMortgagePayments.propertyId, filters.propertyId));
+    if (filters.dateFrom) conditions.push(gte(realEstateMortgagePayments.paymentDate, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(realEstateMortgagePayments.paymentDate, filters.dateTo));
+
+    return this.db
+      .select({
+        ...getTableColumns(realEstateMortgagePayments),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgagePayments)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgagePayments.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgagePayments.currencyId))
+      .where(and(...conditions))
+      .orderBy(desc(realEstateMortgagePayments.paymentDate), desc(realEstateMortgagePayments.id));
+  }
+
+  // ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────
+  // Table de reference du pret (real_estate_mortgage_loans), distincte des
+  // echeances payees (real_estate_mortgage_payments). Aucune ecriture
+  // comptable ici : creer/modifier/supprimer un pret n'est qu'une donnee de
+  // reference pour l'affichage du solde restant du, calcule applicativement a
+  // partir des paiements deja poses par createMortgagePayment (inchange).
+  private async attachMortgageBalances<T extends { id: number; principalAmount: string; currencyId: number | null }>(
+    orgId: number,
+    loans: T[],
+  ) {
+    if (!loans.length) return loans.map((loan) => ({ ...loan, principalRepaid: "0", remainingBalance: loan.principalAmount, otherCurrencyPayments: [] as any[] }));
+
+    const loanIds = loans.map((l) => l.id);
+    const paymentRows = await this.db
+      .select({
+        mortgageId: realEstateMortgagePayments.mortgageId,
+        currencyId: realEstateMortgagePayments.currencyId,
+        total: sql<string>`SUM(${realEstateMortgagePayments.principalAmount})`,
+      })
+      .from(realEstateMortgagePayments)
+      .where(and(
+        eq(realEstateMortgagePayments.organizationId, orgId),
+        eq(realEstateMortgagePayments.isActive, 1),
+        inArray(realEstateMortgagePayments.mortgageId, loanIds),
+      ))
+      .groupBy(realEstateMortgagePayments.mortgageId, realEstateMortgagePayments.currencyId);
+
+    // Devises impliquees dans les paiements "autre devise" (jamais fusionnees
+    // au solde principal — regle stricte, cf. incident "USD fantome").
+    const otherCurrencyIds = Array.from(new Set(
+      paymentRows
+        .filter((row) => {
+          const loan = loans.find((l) => l.id === Number(row.mortgageId));
+          return loan && Number(row.currencyId) !== (loan.currencyId ?? null);
+        })
+        .map((row) => Number(row.currencyId))
+        .filter((id) => !Number.isNaN(id)),
+    ));
+    const otherCurrencyRows = otherCurrencyIds.length
+      ? await this.db
+          .select({ id: currencies.id, currencyCode: currencies.currencyCode })
+          .from(currencies)
+          .where(inArray(currencies.id, otherCurrencyIds))
+      : [];
+    const otherCurrencyById = new Map(otherCurrencyRows.map((c) => [c.id, c.currencyCode]));
+
+    return loans.map((loan) => {
+      const rowsForLoan = paymentRows.filter((row) => Number(row.mortgageId) === loan.id);
+      const sameCurrencyRow = rowsForLoan.find((row) => (row.currencyId ?? null) === (loan.currencyId ?? null));
+      const principalRepaid = Number(sameCurrencyRow?.total ?? 0);
+      const remainingBalance = Math.max(0, Number(loan.principalAmount) - principalRepaid);
+      const otherCurrencyPayments = rowsForLoan
+        .filter((row) => (row.currencyId ?? null) !== (loan.currencyId ?? null))
+        .map((row) => ({
+          currencyId: row.currencyId,
+          currencyCode: row.currencyId ? otherCurrencyById.get(Number(row.currencyId)) ?? null : null,
+          total: this.money(Number(row.total ?? 0)),
+        }));
+      return {
+        ...loan,
+        principalRepaid: this.money(principalRepaid),
+        remainingBalance: this.money(remainingBalance),
+        otherCurrencyPayments,
+      };
+    });
+  }
+
+  async listMortgageLoans(orgId: number, filters: { propertyId?: number; status?: string } = {}) {
+    const conditions = [
+      eq(realEstateMortgageLoans.organizationId, orgId),
+      eq(realEstateMortgageLoans.isActive, 1),
+    ];
+    if (filters.propertyId) conditions.push(eq(realEstateMortgageLoans.propertyId, filters.propertyId));
+    if (filters.status) conditions.push(eq(realEstateMortgageLoans.status, filters.status));
+
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstateMortgageLoans),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgageLoans)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgageLoans.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgageLoans.currencyId))
+      .where(and(...conditions))
+      .orderBy(desc(realEstateMortgageLoans.startDate), desc(realEstateMortgageLoans.id));
+
+    return this.attachMortgageBalances(orgId, rows as any[]);
+  }
+
+  async getMortgageLoan(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstateMortgageLoans),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgageLoans)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgageLoans.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgageLoans.currencyId))
+      .where(and(
+        eq(realEstateMortgageLoans.id, id),
+        eq(realEstateMortgageLoans.isActive, 1),
+        eq(realEstateMortgageLoans.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Mortgage loan not found.");
+    const [withBalance] = await this.attachMortgageBalances(orgId, rows as any[]);
+    return withBalance;
+  }
+
+  async createMortgageLoan(input: CreateMortgageLoanDto, orgId: number, userId?: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const [result] = await this.db.insert(realEstateMortgageLoans).values({
+      organizationId: orgId,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      lenderName: input.lenderName ?? null,
+      reference: input.reference ?? null,
+      principalAmount: String(input.principalAmount),
+      currencyId: input.currencyId ?? null,
+      startDate: input.startDate,
+      endDate: input.endDate ?? null,
+      interestRate: input.interestRate !== undefined ? String(input.interestRate) : null,
+      termMonths: input.termMonths ?? null,
+      status: input.status ?? "active",
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const loanId = Number((result as any).insertId);
+
+    // Rattachement des paiements orphelins existants (meme propriete/devise),
+    // uniquement si explicitement demande : jamais automatique.
+    if (input.attachExistingPayments === true) {
+      await this.db
+        .update(realEstateMortgagePayments)
+        .set({ mortgageId: loanId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(
+          eq(realEstateMortgagePayments.organizationId, orgId),
+          eq(realEstateMortgagePayments.propertyId, input.propertyId),
+          eq(realEstateMortgagePayments.isActive, 1),
+          isNull(realEstateMortgagePayments.mortgageId),
+          input.currencyId !== undefined && input.currencyId !== null
+            ? eq(realEstateMortgagePayments.currencyId, input.currencyId)
+            : isNull(realEstateMortgagePayments.currencyId),
+        ));
+    }
+
+    return this.getMortgageLoan(loanId, orgId);
+  }
+
+  async updateMortgageLoan(id: number, input: UpdateMortgageLoanDto, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgageLoans, id, orgId, "Mortgage loan not found.");
+    if (input.propertyId !== undefined) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+    }
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    await this.db
+      .update(realEstateMortgageLoans)
+      .set({
+        ...this.pick(input, [
+          "propertyId",
+          "unitId",
+          "lenderName",
+          "reference",
+          "currencyId",
+          "endDate",
+          "termMonths",
+          "status",
+          "notes",
+        ]),
+        ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
+        ...(input.principalAmount !== undefined ? { principalAmount: String(input.principalAmount) } : {}),
+        ...(input.interestRate !== undefined ? { interestRate: String(input.interestRate) } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateMortgageLoans.id, id), eq(realEstateMortgageLoans.organizationId, orgId)));
+    return this.getMortgageLoan(id, orgId);
+  }
+
+  async deleteMortgageLoan(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgageLoans, id, orgId, "Mortgage loan not found.");
+    // Soft delete uniquement : pas de DELETE physique, historique des paiements preserve.
+    await this.db
+      .update(realEstateMortgageLoans)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMortgageLoans.id, id), eq(realEstateMortgageLoans.organizationId, orgId)));
+    return { message: "Deleted successfully." };
+  }
+
+  // ── P&L par propriete (SCRUM-312) ─────────────────────────────────────────
+  // Pas de migration : agregation en memoire sur les 3 tables metier
+  // existantes (loyers via bail->propriete, depenses, hypotheque). Les loyers
+  // ne sont pas tagues par project_id (contrairement aux depenses/hypotheque),
+  // donc pas de passage par le ledger ici - chantier separe, hors scope.
+  async getPropertyPnl(
+    propertyId: number,
+    orgId: number,
+    scope: DomusPropertyScope,
+    filters: { dateFrom?: string; dateTo?: string } = {},
+  ) {
+    if (scope !== "all" && !scope.includes(propertyId)) {
+      throw new NotFoundException("Property not found.");
+    }
+
+    const propertyRows = await this.db
+      .select({ id: realEstateProperties.id, name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.id, propertyId),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateProperties.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!propertyRows.length) {
+      throw new NotFoundException("Property not found.");
+    }
+    const property = propertyRows[0];
+
+    const defaultCurrencyId = await this.resolveDefaultCurrency(orgId);
+
+    // Revenus : loyers de ce bien via le bail, meme filtre que l ecran Loyers
+    // existant (baux annules exclus), agreges par devise.
+    const rentConditions = [
+      ne(paymentLease.status, "cancelled"),
+      eq(paymentLease.propertyId, propertyId),
+      eq(realEstateRentPayments.organizationId, orgId),
+    ];
+    if (filters.dateFrom) rentConditions.push(gte(realEstateRentPayments.paymentDate, filters.dateFrom));
+    if (filters.dateTo) rentConditions.push(lte(realEstateRentPayments.paymentDate, filters.dateTo));
+
+    const rentRows = await this.db
+      .select({
+        currencyId: realEstateRentPayments.currencyId,
+        total: sql<string>`SUM(${realEstateRentPayments.amount})`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(realEstateRentPayments)
+      .leftJoin(paymentLease, eq(paymentLease.id, realEstateRentPayments.leaseId))
+      .where(and(...rentConditions))
+      .groupBy(realEstateRentPayments.currencyId);
+
+    // Depenses actives de ce bien, reutilise le meme filtre que SCRUM-310.
+    const expenseRows = await this.listPropertyExpenses(orgId, {
+      propertyId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    });
+
+    // Hypotheque active de ce bien, reutilise le meme filtre que SCRUM-311.
+    const mortgageRows = await this.listMortgagePayments(orgId, {
+      propertyId,
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+    });
+
+    // Merge en memoire par devise. currencyId NULL -> devise par defaut de
+    // l org (jamais fusionne silencieusement avec une devise reelle existante,
+    // cf. incident "USD fantome").
+    const resolveCurrencyId = (id: number | null | undefined) => id ?? defaultCurrencyId ?? null;
+
+    type Bucket = {
+      currencyId: number | null;
+      revenueRent: number;
+      revenueCount: number;
+      expensesTotal: number;
+      expensesCount: number;
+      expensesByCategory: Map<string, number>;
+      mortgageInterest: number;
+      mortgagePrincipal: number;
+      mortgageEscrow: number;
+      mortgageCount: number;
+    };
+    const buckets = new Map<number | null, Bucket>();
+    const getBucket = (currencyId: number | null) => {
+      let bucket = buckets.get(currencyId);
+      if (!bucket) {
+        bucket = {
+          currencyId,
+          revenueRent: 0,
+          revenueCount: 0,
+          expensesTotal: 0,
+          expensesCount: 0,
+          expensesByCategory: new Map(),
+          mortgageInterest: 0,
+          mortgagePrincipal: 0,
+          mortgageEscrow: 0,
+          mortgageCount: 0,
+        };
+        buckets.set(currencyId, bucket);
+      }
+      return bucket;
+    };
+
+    for (const row of rentRows) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId as number | null));
+      bucket.revenueRent += Number(row.total ?? 0);
+      bucket.revenueCount += Number(row.count ?? 0);
+    }
+
+    for (const row of expenseRows as any[]) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId));
+      const amount = Number(row.amount ?? 0);
+      bucket.expensesTotal += amount;
+      bucket.expensesCount += 1;
+      const category = row.category ?? "other";
+      bucket.expensesByCategory.set(category, (bucket.expensesByCategory.get(category) ?? 0) + amount);
+    }
+
+    for (const row of mortgageRows as any[]) {
+      const bucket = getBucket(resolveCurrencyId(row.currencyId));
+      bucket.mortgageInterest += Number(row.interestAmount ?? 0);
+      bucket.mortgagePrincipal += Number(row.principalAmount ?? 0);
+      bucket.mortgageEscrow += Number(row.escrowAmount ?? 0);
+      bucket.mortgageCount += 1;
+    }
+
+    const currencyIds = Array.from(buckets.keys()).filter((id): id is number => id !== null);
+    const currencyRows = currencyIds.length
+      ? await this.db
+          .select({
+            id: currencies.id,
+            currencyCode: currencies.currencyCode,
+            currencyName: currencies.currencyName,
+            currencySymbol: currencies.currencySymbol,
+          })
+          .from(currencies)
+          .where(inArray(currencies.id, currencyIds))
+      : [];
+    const currencyById = new Map(currencyRows.map((c) => [c.id, c]));
+
+    const byCurrency = Array.from(buckets.values()).map((bucket) => {
+      const currency = bucket.currencyId !== null ? currencyById.get(bucket.currencyId) : undefined;
+      const netIncome = bucket.revenueRent - bucket.expensesTotal - bucket.mortgageInterest;
+      return {
+        currencyId: bucket.currencyId,
+        currencyCode: currency?.currencyCode ?? null,
+        currencyName: currency?.currencyName ?? null,
+        currencySymbol: currency?.currencySymbol ?? null,
+        revenue: {
+          rent: this.money(bucket.revenueRent),
+          count: bucket.revenueCount,
+        },
+        expenses: {
+          total: this.money(bucket.expensesTotal),
+          count: bucket.expensesCount,
+          byCategory: Array.from(bucket.expensesByCategory.entries()).map(([category, amount]) => ({
+            category,
+            amount: this.money(amount),
+          })),
+        },
+        mortgage: {
+          interest: this.money(bucket.mortgageInterest),
+          count: bucket.mortgageCount,
+          principal: this.money(bucket.mortgagePrincipal),
+          escrow: this.money(bucket.mortgageEscrow),
+        },
+        netIncome: this.money(netIncome),
+      };
+    });
+
+    return {
+      propertyId: property.id,
+      propertyName: property.name,
+      dateFrom: filters.dateFrom ?? null,
+      dateTo: filters.dateTo ?? null,
+      byCurrency,
+    };
+  }
+
+  async getMortgagePayment(id: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        ...getTableColumns(realEstateMortgagePayments),
+        propertyName: realEstateProperties.name,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(realEstateMortgagePayments)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateMortgagePayments.propertyId))
+      .leftJoin(currencies, eq(currencies.id, realEstateMortgagePayments.currencyId))
+      .where(and(
+        eq(realEstateMortgagePayments.id, id),
+        eq(realEstateMortgagePayments.isActive, 1),
+        eq(realEstateMortgagePayments.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Mortgage payment not found.");
+    return rows[0];
+  }
+
+  async createMortgagePayment(input: CreateMortgagePaymentDto, orgId: number, userId?: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const total = Number(input.totalAmount);
+    const principal = Number(input.principalAmount);
+    const interest = Number(input.interestAmount);
+    const escrow = Number(input.escrowAmount ?? 0);
+    this.assertMortgageAmountsConsistent(total, principal, interest, escrow);
+
+    const projectId = await this.getOrCreatePropertyProject(input.propertyId, orgId, userId);
+
+    const [result] = await this.db.insert(realEstateMortgagePayments).values({
+      organizationId: orgId,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      mortgageId: input.mortgageId ?? null,
+      lenderName: input.lenderName ?? null,
+      paymentDate: input.paymentDate,
+      periodStart: input.periodStart ?? null,
+      periodEnd: input.periodEnd ?? null,
+      totalAmount: String(total),
+      principalAmount: String(principal),
+      interestAmount: String(interest),
+      escrowAmount: String(escrow),
+      currencyId: input.currencyId ?? null,
+      paymentMethod: input.paymentMethod ?? "bank",
+      paymentStatus: input.paymentStatus ?? "paid",
+      reference: input.reference ?? null,
+      receiptUrl: input.receiptUrl ?? null,
+      projectId,
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdBy: userId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const paymentId = Number((result as any).insertId);
+
+    // Ecriture comptable : DEBIT dette (capital) + DEBIT charge (interets)
+    // [+ DEBIT charge (escrow)] / CREDIT tresorerie pour le total.
+    const paymentMethod = input.paymentMethod ?? "bank";
+    const creditId = paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const liabilityId = await this.getOrCreateLiabilitySubAccount(
+      PropertyManagementService.MORTGAGE_LIABILITY_ACCOUNT,
+      orgId,
+    );
+    const interestId = await this.getOrCreateExpenseSubAccount(
+      PropertyManagementService.MORTGAGE_INTEREST_ACCOUNT,
+      orgId,
+    );
+
+    const lines: Array<{
+      accountId: number;
+      side: "DEBIT" | "CREDIT";
+      amount: number;
+      description: string;
+      projectId?: number;
+    }> = [
+      { accountId: liabilityId, side: "DEBIT", amount: principal, description: "Mortgage principal", projectId: projectId ?? undefined },
+      { accountId: interestId, side: "DEBIT", amount: interest, description: "Mortgage interest", projectId: projectId ?? undefined },
+    ];
+    if (escrow > 0) {
+      const escrowId = await this.getOrCreateExpenseSubAccount(
+        PropertyManagementService.MORTGAGE_ESCROW_ACCOUNT,
+        orgId,
+      );
+      lines.push({ accountId: escrowId, side: "DEBIT", amount: escrow, description: "Mortgage escrow", projectId: projectId ?? undefined });
+    }
+    // Pas de projectId sur la ligne de tresorerie (identique a createPropertyExpense).
+    lines.push({ accountId: creditId, side: "CREDIT", amount: total, description: paymentMethod === "bank" ? "Bank" : "Cash" });
+
+    let journalEntryId: number | null = null;
+    try {
+      const posted = await this.ledger.post(
+        {
+          date: input.paymentDate,
+          reference: `MORTPAY-${paymentId}`,
+          particulars: `Echeance hypothecaire${input.lenderName ? ` — ${input.lenderName}` : ""}`,
+          sourceModule: "mortgage_payment",
+          relatedId: String(paymentId),
+          currencyId: input.currencyId ?? undefined,
+          idempotencyKey: `mortgage-payment:${paymentId}`,
+          lines,
+        },
+        orgId,
+        userId,
+      );
+      journalEntryId = posted?.id ? Number(posted.id) : null;
+    } catch (err) {
+      this.logger.warn(`createMortgagePayment: ecriture ledger ignoree: ${(err as Error).message}`);
+    }
+
+    if (journalEntryId) {
+      await this.db
+        .update(realEstateMortgagePayments)
+        .set({ journalEntryId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateMortgagePayments.id, paymentId));
+    }
+
+    // Soumet au circuit d approbation des depenses (effectif si gate active).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "mortgage_payment", entityId: String(paymentId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit mortgage payment approval skipped:", (err as Error).message);
+    }
+
+    return this.getMortgagePayment(paymentId, orgId);
+  }
+
+  async updateMortgagePayment(id: number, input: UpdateMortgagePaymentDto, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const current = await this.getMortgagePayment(id, orgId);
+    if (input.propertyId !== undefined) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+    }
+    if (input.unitId) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    // L invariant est reverifie sur l etat resultant (valeurs fournies fusionnees
+    // avec les valeurs en base), pour qu un update partiel ne casse pas la ventilation.
+    const total = input.totalAmount !== undefined ? Number(input.totalAmount) : Number(current.totalAmount);
+    const principal = input.principalAmount !== undefined ? Number(input.principalAmount) : Number(current.principalAmount);
+    const interest = input.interestAmount !== undefined ? Number(input.interestAmount) : Number(current.interestAmount);
+    const escrow = input.escrowAmount !== undefined ? Number(input.escrowAmount) : Number(current.escrowAmount);
+    this.assertMortgageAmountsConsistent(total, principal, interest, escrow);
+
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({
+        ...this.pick(input, [
+          "propertyId",
+          "unitId",
+          "mortgageId",
+          "lenderName",
+          "periodStart",
+          "periodEnd",
+          "currencyId",
+          "paymentMethod",
+          "paymentStatus",
+          "reference",
+          "receiptUrl",
+          "notes",
+        ]),
+        ...(input.paymentDate !== undefined ? { paymentDate: input.paymentDate } : {}),
+        ...(input.totalAmount !== undefined ? { totalAmount: String(total) } : {}),
+        ...(input.principalAmount !== undefined ? { principalAmount: String(principal) } : {}),
+        ...(input.interestAmount !== undefined ? { interestAmount: String(interest) } : {}),
+        ...(input.escrowAmount !== undefined ? { escrowAmount: String(escrow) } : {}),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return this.getMortgagePayment(id, orgId);
+  }
+
+  async deleteMortgagePayment(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    // Soft delete uniquement : l ecriture comptable liee reste tracable.
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return { message: "Deleted successfully." };
+  }
+
+  async uploadMortgagePaymentReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
+    await this.db
+      .update(realEstateMortgagePayments)
+      .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
+    return this.getMortgagePayment(id, orgId);
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────
@@ -3601,6 +5169,7 @@ export class PropertyManagementService {
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
         tenantPhone: customers.phone,
+        tenantEmail: customers.email,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })

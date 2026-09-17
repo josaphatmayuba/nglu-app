@@ -12,6 +12,7 @@ import {
   realEstateContracts,
   realEstateLeaseDocuments,
   realEstateLeases,
+  realEstateOwners,
   realEstateProperties,
   realEstateUnits,
   tenantDetails,
@@ -28,9 +29,11 @@ import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
+import { TenantPortalService } from "./tenant-portal.service";
 
 type LeaseDetails = {
   leaseId: number;
+  tenantId: number | null;
   reference: string | null;
   startDate: Date | string | null;
   endDate: Date | string | null;
@@ -59,6 +62,16 @@ type LeaseDetails = {
   tenantIdDocumentType: string | null;
   tenantIdNumber: string | null;
   tenantName: string;
+  // Proprietaire legal du bien (real_estate_owners), si assigne sur la propriete.
+  ownerId: number | null;
+  ownerName: string | null;
+  ownerAddress: string | null;
+  ownerCity: string | null;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
+  ownerSignature: string | null;
+  ownerIdDocumentType: string | null;
+  ownerIdNumber: string | null;
 };
 
 type CompanyInfo = {
@@ -72,6 +85,21 @@ type CompanyInfo = {
   landlordPhone: string | null;
 };
 
+// Bailleur resolu pour un bail donne : soit le proprietaire legal (real_estate_owners)
+// rattache au bien, soit (fallback) le bailleur/gestionnaire des reglages (CompanyInfo).
+// CompanyInfo reste inchange et continue de representer le GESTIONNAIRE mandate.
+type LandlordInfo = {
+  name: string;
+  address: string;
+  city?: string;
+  phone: string;
+  email: string;
+  signature: string | null;
+  idDocumentType?: string | null;
+  idNumber?: string | null;
+  source: "owner" | "settings";
+};
+
 @Injectable()
 export class ContractsService {
   private readonly logger = new Logger(ContractsService.name);
@@ -83,6 +111,7 @@ export class ContractsService {
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly sms: CompatService,
     private readonly objectStorage: ObjectStorageService,
+    private readonly tenantPortal: TenantPortalService,
   ) {}
 
   async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
@@ -142,6 +171,7 @@ export class ContractsService {
    * When a value is empty, the placeholder is preserved verbatim so the gestionnaire sees what's missing.
    */
   private buildVariables(lease: LeaseDetails, company: CompanyInfo): Record<string, string> {
+    const landlord = this.resolveLandlord(lease, company);
     const today = this.formatDate(new Date());
     const startDate = this.formatDate(lease.startDate);
     const endDate = this.formatDate(lease.endDate);
@@ -155,10 +185,13 @@ export class ContractsService {
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
 
     return {
-      "NOM COMPLET DU BAILLEUR": company.landlordName || company.companyName || "",
-      "ADRESSE DU BAILLEUR": company.address ?? "",
-      "TÉLÉPHONE DU BAILLEUR": company.landlordPhone || company.phone || "",
-      "EMAIL DU BAILLEUR": company.email ?? "",
+      "NOM COMPLET DU BAILLEUR": landlord.name,
+      "ADRESSE DU BAILLEUR": landlord.address,
+      "TÉLÉPHONE DU BAILLEUR": landlord.phone,
+      "EMAIL DU BAILLEUR": landlord.email,
+      "NOM DU GESTIONNAIRE": company.landlordName || company.companyName || "",
+      "TÉLÉPHONE DU GESTIONNAIRE": company.landlordPhone || company.phone || "",
+      "EMAIL DU GESTIONNAIRE": company.email ?? "",
       "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
@@ -190,6 +223,38 @@ export class ContractsService {
       "DATE DU JOUR": today,
       "CONDITIONS PARTICULIÈRES": lease.terms ?? "",
       "NOTES ÉTAT DES LIEUX": lease.moveInNotes ?? "",
+    };
+  }
+
+  /**
+   * Resout le bailleur reel d'un bail : le PROPRIETAIRE legal du bien
+   * (real_estate_owners, signataire du bail) s'il est assigne sur la
+   * propriete, sinon (fallback total, comportement historique inchange) le
+   * bailleur/gestionnaire des reglages (appSettings.landlordName/... ou, a
+   * defaut, l'entreprise). company (CompanyInfo) reste toujours le
+   * GESTIONNAIRE mandate, independamment de la source retenue ici.
+   */
+  private resolveLandlord(lease: LeaseDetails, company: CompanyInfo): LandlordInfo {
+    if (lease.ownerId != null) {
+      return {
+        name: lease.ownerName ?? "",
+        address: lease.ownerAddress ?? "",
+        city: lease.ownerCity ?? undefined,
+        phone: lease.ownerPhone ?? "",
+        email: lease.ownerEmail ?? "",
+        signature: lease.ownerSignature ?? null,
+        idDocumentType: lease.ownerIdDocumentType ?? null,
+        idNumber: lease.ownerIdNumber ?? null,
+        source: "owner",
+      };
+    }
+    return {
+      name: company.landlordName || company.companyName || "",
+      address: company.address ?? "",
+      phone: company.landlordPhone || company.phone || "",
+      email: company.email ?? "",
+      signature: company.landlordSignature ?? null,
+      source: "settings",
     };
   }
 
@@ -229,6 +294,25 @@ export class ContractsService {
 
     const companyInfo = await this.getCompanyInfo(orgId);
 
+    // landlordInfo = bailleur reel (proprietaire ou reglages). On tente de charger
+    // le bail pour resoudre un eventuel proprietaire assigne ; si le bail a ete
+    // supprime entre temps, on retombe sur companyInfo seul (source "settings")
+    // plutot que de faire planter l'endpoint (rétrocompatibilité).
+    let landlordInfo: LandlordInfo;
+    try {
+      const lease = await this.getLeaseDetails(rows[0].leaseId, orgId);
+      landlordInfo = this.resolveLandlord(lease, companyInfo);
+    } catch {
+      landlordInfo = {
+        name: companyInfo.landlordName || companyInfo.companyName || "",
+        address: companyInfo.address ?? "",
+        phone: companyInfo.landlordPhone || companyInfo.phone || "",
+        email: companyInfo.email ?? "",
+        signature: companyInfo.landlordSignature ?? null,
+        source: "settings",
+      };
+    }
+
     let createdByName: string | null = null;
     if (rows[0].createdBy) {
       const [creator] = await this.db
@@ -242,7 +326,14 @@ export class ContractsService {
       }
     }
 
-    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.landlordName || companyInfo.companyName, createdByName };
+    return {
+      ...rows[0],
+      auditLogs,
+      companyInfo,
+      landlordInfo,
+      landlordName: companyInfo.landlordName || companyInfo.companyName,
+      createdByName,
+    };
   }
 
   async sendContract(id: number, orgId: number) {
@@ -272,23 +363,33 @@ export class ContractsService {
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
+    // Récupère le bail pour le téléphone ET le tenantId (lien portail footer).
+    let tenantPhone: string | null = null;
+    let tenantId: number | null = null;
+    try {
+      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
+      tenantPhone = lease.tenantPhone ?? null;
+      tenantId = lease.tenantId ?? null;
+    } catch {
+      tenantPhone = null;
+      tenantId = null;
+    }
+
     if (contract.tenantEmail) {
+      const signingHtml = this.signingEmailHtml(contract.tenantName ?? "", signingUrl);
+      const htmlWithFooter = tenantId
+        ? await this.tenantPortal.appendPortalFooterToEmail(signingHtml, tenantId, orgId)
+        : signingHtml;
       await this.sendEmail(
         contract.tenantEmail,
         "Votre contrat de bail est prêt à être signé",
-        this.signingEmailHtml(contract.tenantName ?? "", signingUrl),
+        htmlWithFooter,
         "contract_signature",
+        id,
       );
     }
 
     // Also send the signing link by SMS to the tenant (best-effort).
-    let tenantPhone: string | null = null;
-    try {
-      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
-      tenantPhone = lease.tenantPhone ?? null;
-    } catch {
-      tenantPhone = null;
-    }
     if (tenantPhone) {
       const company = await this.getCompanyInfo(orgId);
       const companyName = company?.companyName || "votre gestionnaire";
@@ -297,7 +398,17 @@ export class ContractsService {
         `${greeting}, votre contrat de bail est prêt à être signé. ` +
         `Signez-le ici : ${signingUrl} (lien valable 7 jours). — ${companyName}`;
       try {
-        const res = await this.sms.sendSms({ phone: tenantPhone, message });
+        const messageWithFooter = tenantId
+          ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
+          : message;
+        const res = await this.sms.sendSms({
+          phone: tenantPhone,
+          message: messageWithFooter,
+          organizationId: orgId,
+          smsType: "contract_signature",
+          relatedType: "real-estate-contract",
+          relatedId: id,
+        });
         if (!res?.success) this.logger.warn(`Contract signing SMS not sent (contract ${id}): ${res?.message}`);
       } catch (error) {
         this.logger.warn(`Contract signing SMS error (contract ${id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -468,7 +579,11 @@ export class ContractsService {
     let emailSent = false;
     if (tenantEmail) {
       try {
-        await this.sendEmail(tenantEmail, subject, `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`, "contract_signed");
+        const emailHtml = `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+        const htmlWithFooter = lease.tenantId
+          ? await this.tenantPortal.appendPortalFooterToEmail(emailHtml, lease.tenantId, orgId)
+          : emailHtml;
+        await this.sendEmail(tenantEmail, subject, htmlWithFooter, "contract_signed", contract.id);
         emailSent = true;
       } catch (error) {
         this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -478,7 +593,17 @@ export class ContractsService {
     let smsSent = false;
     if (lease.tenantPhone) {
       try {
-        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: text });
+        const messageWithFooter = lease.tenantId
+          ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
+          : text;
+        const res = await this.sms.sendSms({
+          phone: lease.tenantPhone,
+          message: messageWithFooter,
+          organizationId: orgId,
+          smsType: "lease_welcome",
+          relatedType: "real-estate-lease",
+          relatedId: contract.leaseId,
+        });
         smsSent = Boolean(res?.success);
         if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
       } catch (error) {
@@ -704,6 +829,7 @@ export class ContractsService {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
+        tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
@@ -731,6 +857,15 @@ export class ContractsService {
         tenantAddress: customers.address,
         tenantIdDocumentType: tenantDetails.idDocumentType,
         tenantIdNumber: tenantDetails.idNumber,
+        ownerId: realEstateOwners.id,
+        ownerName: realEstateOwners.displayName,
+        ownerAddress: realEstateOwners.address,
+        ownerCity: realEstateOwners.city,
+        ownerPhone: realEstateOwners.phone,
+        ownerEmail: realEstateOwners.email,
+        ownerSignature: realEstateOwners.signature,
+        ownerIdDocumentType: realEstateOwners.idDocumentType,
+        ownerIdNumber: realEstateOwners.idNumber,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
@@ -738,6 +873,7 @@ export class ContractsService {
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, realEstateProperties.ownerId))
       .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
@@ -751,6 +887,7 @@ export class ContractsService {
   }
 
   private generateContent(lease: LeaseDetails, company: CompanyInfo): string {
+    const landlordInfo = this.resolveLandlord(lease, company);
     const e = (s: string | null | undefined) => this.escapeHtml(s);
     const today = this.formatDate(new Date());
     const startDate = this.formatDate(lease.startDate);
@@ -763,10 +900,16 @@ export class ContractsService {
     const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = company.landlordName || company.companyName || "[NOM DU BAILLEUR]";
-    const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
-    const landlordPhone = company.landlordPhone || company.phone || "N/A";
-    const landlordEmail = company.email || "N/A";
+    const landlordName = landlordInfo.name || "[NOM DU BAILLEUR]";
+    const landlordAddress = landlordInfo.address || "[ADRESSE DU BAILLEUR]";
+    const landlordPhone = landlordInfo.phone || "N/A";
+    const landlordEmail = landlordInfo.email || "N/A";
+    const managerName = company.landlordName || company.companyName || "";
+    const managerPhone = company.landlordPhone || company.phone || "";
+    const managedByLine =
+      landlordInfo.source === "owner" && (managerName || managerPhone)
+        ? `<div style="font-size:12px;color:#555;margin-top:4px;">Représenté pour la gestion locative par ${e(managerName || "N/A")}${managerPhone ? ` — Tél : ${e(managerPhone)}` : ""}</div>`
+        : "";
 
     const art = (num: string, title: string, body: string) =>
       `<div style="margin-bottom:22px;">
@@ -791,7 +934,7 @@ export class ContractsService {
     return `<div style="font-family:Georgia,'Times New Roman',serif;color:#1a1a2e;line-height:1.8;font-size:14px;max-width:800px;margin:0 auto;">
 
   <div style="text-align:center;padding-bottom:20px;border-bottom:3px double #1a237e;margin-bottom:28px;">
-    <div style="font-size:20px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:2px;">${e(landlordName)}</div>
+    <div style="font-size:20px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:2px;">DOMUS &mdash; Système de gestion immobilière</div>
     <div style="font-size:12px;color:#666;margin-top:4px;">${e(landlordAddress)} &nbsp;|&nbsp; Tél&nbsp;: ${e(landlordPhone)} &nbsp;|&nbsp; ${e(landlordEmail)}</div>
     <div style="margin-top:18px;">
       <span style="font-size:17px;font-weight:bold;text-transform:uppercase;letter-spacing:3px;color:#1a1a2e;border:2px solid #1a237e;padding:7px 28px;border-radius:3px;display:inline-block;">
@@ -811,6 +954,7 @@ export class ContractsService {
       <strong>${e(landlordName)}</strong><br>
       Adresse&nbsp;: ${e(landlordAddress)}<br>
       Téléphone&nbsp;: ${e(landlordPhone)} &nbsp;&nbsp; Courriel&nbsp;: ${e(landlordEmail)}
+      ${managedByLine}
     </div>
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>
@@ -1061,13 +1205,20 @@ export class ContractsService {
     });
   }
 
-  private async sendEmail(to: string, subject: string, html: string, type: SystemEmailType = "notification") {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    type: SystemEmailType = "notification",
+    relatedId?: number,
+  ) {
     await this.emails.send({
       to,
       subject,
       html,
       type,
       relatedType: "real-estate-contract",
+      relatedId,
     });
   }
 

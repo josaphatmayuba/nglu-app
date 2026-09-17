@@ -15,6 +15,7 @@ import {
 import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
+import { TenantPortalService } from "./tenant-portal.service";
 
 @Injectable()
 export class RentReminderService {
@@ -24,6 +25,7 @@ export class RentReminderService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly sms: CompatService,
     private readonly emails: SystemEmailService,
+    private readonly tenantPortal: TenantPortalService,
   ) {}
 
   @Cron(env.rentReminders.cron)
@@ -57,6 +59,8 @@ export class RentReminderService {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
+        organizationId: realEstateLeases.organizationId,
+        tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
@@ -105,7 +109,10 @@ export class RentReminderService {
         `régulariser ce paiement dès que possible afin d'éviter l'annulation de votre contrat de location. ` +
         `Pour tout règlement ou question, contactez ${companyName}${contactLine}. Merci de votre compréhension. — ${companyName}`;
 
-      if (lease.tenantPhone) await this.safeSms(lease.tenantPhone, tenantMsg, lease.leaseId);
+      if (lease.tenantPhone) {
+        const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, lease.organizationId);
+        await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId, lease.organizationId);
+      }
 
       if (lease.tenantEmail) {
         const html =
@@ -116,7 +123,8 @@ export class RentReminderService {
           `l'annulation de votre contrat de location.</p>` +
           `<p>Pour tout règlement ou question, vous pouvez contacter ${companyName}${contactLine}.</p>` +
           `<p>Merci de votre compréhension.<br>${companyName}</p>`;
-        await this.safeEmail(lease.tenantEmail, `Rappel: loyer en retard — bail ${lease.reference}`, html, lease.leaseId);
+        const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
+        await this.safeEmail(lease.tenantEmail, `Rappel: loyer en retard — bail ${lease.reference}`, htmlWithFooter, lease.leaseId);
       }
 
       if (lease.emergencyPhone) {
@@ -125,7 +133,7 @@ export class RentReminderService {
           `${place} (${amount}) est en retard de ${daysLate} jours. Merci de bien vouloir l'inviter à régulariser ` +
           `ce paiement auprès de ${companyName}${contactLine}, afin d'éviter l'annulation de son contrat de location. ` +
           `Merci de votre compréhension. — ${companyName}`;
-        await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId);
+        await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId);
       }
 
       await this.db
@@ -138,9 +146,16 @@ export class RentReminderService {
     return { candidates: rows.length, sent, enabled: send };
   }
 
-  private async safeSms(phone: string, message: string, leaseId: number) {
+  private async safeSms(phone: string, message: string, leaseId: number, organizationId: number) {
     try {
-      const res = await this.sms.sendSms({ phone, message });
+      const res = await this.sms.sendSms({
+        phone,
+        message,
+        organizationId,
+        smsType: "payment_reminder",
+        relatedType: "real-estate-lease",
+        relatedId: leaseId,
+      });
       if (!res?.success) {
         this.logger.warn(`Reminder SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
       }

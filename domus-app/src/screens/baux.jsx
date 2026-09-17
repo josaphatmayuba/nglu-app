@@ -90,8 +90,16 @@ function leaseInfo(l) {
   const tone = isExpired ? "danger" : daysLeft !== null && daysLeft <= 60 ? "warning" : "success";
   const statusText = isExpired ? "Expiré" : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
 
+  // dueCount/lateCount viennent du backend (withOverdueStats) : échéances
+  // réellement rapprochées des paiements enregistrés, pas juste la durée
+  // écoulée depuis startDate. paidOnTimeCount = à jour, sans retard.
+  const dueCount = Number.isFinite(l.dueCount) ? l.dueCount : null;
+  const lateCount = Number.isFinite(l.lateCount) ? l.lateCount : null;
+  const paidOnTimeCount = dueCount !== null && lateCount !== null ? Math.max(0, dueCount - lateCount) : null;
+
   return {
     variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
+    dueCount, lateCount, paidOnTimeCount, isOverdue: !!l.isOverdue,
     reference: `#${l.reference || `LEASE-${l.id}`}`,
     propertyLabel: [l.propertyAddress || l.propertyName, l.unitName].filter(Boolean).join(" · ") || "—",
   };
@@ -346,9 +354,15 @@ export function Baux({ go } = {}) {
                   <strong className={info.variant === "expired" ? "" : ""}>
                     {money(lease.rentAmount, lease.currencySymbol || "$")}<span>/mois</span>
                   </strong>
-                  <small className={info.variant === "expired" ? "muted" : "success"}>
-                    {info.variant !== "expired" && <Check size={13} />}
-                    {info.variant === "expired" ? "Bail terminé" : `${info.elapsedMonths || 1} paiements à jour`}
+                  <small className={info.variant === "expired" ? "muted" : info.isOverdue ? "danger" : "success"}>
+                    {info.variant !== "expired" && !info.isOverdue && <Check size={13} />}
+                    {info.variant === "expired"
+                      ? "Bail terminé"
+                      : info.dueCount === null
+                        ? "—"
+                        : info.lateCount > 0
+                          ? `${info.paidOnTimeCount}/${info.dueCount} paiements · ${info.lateCount} en retard`
+                          : `${info.paidOnTimeCount || info.dueCount} paiements à jour`}
                   </small>
                 </div>
                 <span className="immo-card-actions">
@@ -650,6 +664,7 @@ function DepositModal({ state, onClose, onDone }) {
   const [deduction, setDeduction] = useState("0");
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
+  const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -665,13 +680,13 @@ function DepositModal({ state, onClose, onDone }) {
           paymentDate: date, amount: Number(amount), method,
           notes: notes || null,
           ...(lease.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
-        });
+        }, proofFile);
         onDone(`Caution de ${money(Number(amount), symbol)} encaissée`);
       } else {
         await api.returnDeposit(lease.id, {
           returnDate: date, deductionAmount: dedNum, deductionReason: reason || null,
           returnMethod: method, notes: notes || null,
-        });
+        }, proofFile);
         onDone(`Caution restituée (${money(refund, symbol)})`);
       }
     } catch (e) {
@@ -711,6 +726,24 @@ function DepositModal({ state, onClose, onDone }) {
                 </select></label>
               <label className="immo-field"><span>Note (optionnel)</span>
                 <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Référence, remarque…" /></label>
+              <label className="immo-field"><span>Preuve / reçu signé (optionnel)</span>
+                <input
+                  id="deposit-collect-proof-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  style={{ display: "none" }}
+                  onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                />
+                <label htmlFor="deposit-collect-proof-input" className="btn" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <FileDown size={16} />
+                  {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
+                </label>
+              </label>
+              {proofFile && (
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => setProofFile(null)}>
+                  <X size={14} /> Retirer le fichier
+                </button>
+              )}
             </section>
           ) : (
             <section className="domus-form-section">
@@ -730,6 +763,24 @@ function DepositModal({ state, onClose, onDone }) {
               <div className="immo-pay-row" style={{ marginTop: 8 }}>
                 <span>Montant restitué</span><strong style={{ color: "#16a34a" }}>{money(refund, symbol)}</strong>
               </div>
+              <label className="immo-field"><span>Preuve / reçu signé (optionnel)</span>
+                <input
+                  id="deposit-return-proof-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  style={{ display: "none" }}
+                  onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                />
+                <label htmlFor="deposit-return-proof-input" className="btn" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <FileDown size={16} />
+                  {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
+                </label>
+              </label>
+              {proofFile && (
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => setProofFile(null)}>
+                  <X size={14} /> Retirer le fichier
+                </button>
+              )}
             </section>
           )}
           {err && <div className="api-error" style={{ margin: "0 18px 14px" }}>{err}</div>}

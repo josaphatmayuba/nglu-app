@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
-  ShieldCheck,
+  ShieldCheck, Receipt, Landmark, BarChart3, HandCoins,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -12,8 +12,13 @@ import { Dashboard } from "./screens/dashboard.jsx";
 import { Biens } from "./screens/biens.jsx";
 import { CarteBiens } from "./screens/carte.jsx";
 import { Locataires } from "./screens/locataires.jsx";
+import { Proprietaires } from "./screens/proprietaires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
+import { Depenses } from "./screens/depenses.jsx";
+import { Hypotheque } from "./screens/hypotheque.jsx";
+import { Prets } from "./screens/prets.jsx";
+import { Pnl } from "./screens/pnl.jsx";
 import { Baux } from "./screens/baux.jsx";
 import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
@@ -23,6 +28,7 @@ import { Onboarding } from "./screens/onboarding.jsx";
 import { Prescreening } from "./screens/prescreening.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
+import { TenantPortalPublic } from "./screens/tenant-portal-public.jsx";
 import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
@@ -34,10 +40,12 @@ const NAV = [
   { sec: "Pilotage", items: [
     { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { key: "previsionnel", label: "Prévisionnel", icon: TrendingUp },
+    { key: "pnl", label: "P&L par propriété", icon: BarChart3 },
   ] },
   { sec: "Patrimoine", items: [
     { key: "biens", label: "Propriétés", icon: Building },
     { key: "carte", label: "Carte des propriétés", icon: MapPin },
+    { key: "proprietaires", label: "Propriétaires", icon: UserRound },
     { key: "locataires", label: "Locataires", icon: Users },
   ] },
   { sec: "Locatif", items: [
@@ -49,6 +57,9 @@ const NAV = [
     { key: "loyers", label: "Loyers & paiements", icon: Wallet },
     { key: "paiement", label: "Paiement & quittance", icon: Smartphone },
     { key: "maintenance", label: "Maintenance", icon: Wrench },
+    { key: "depenses", label: "Dépenses", icon: Receipt },
+    { key: "hypotheque", label: "Hypothèque", icon: Landmark },
+    { key: "prets", label: "Prêts", icon: HandCoins },
   ] },
   { sec: "Espace & config", items: [
     { key: "portail", label: "Espace locataire", icon: UserRound },
@@ -58,14 +69,16 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "depenses", "hypotheque", "prets", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
   previsionnel: () => <Forecast />,
+  pnl: () => <Pnl />,
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (nav, device) => <Locataires go={nav} device={device} />,
+  proprietaires: (nav, device) => <Proprietaires go={nav} device={device} />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
@@ -74,6 +87,9 @@ const SCREENS = {
   loyers: (nav, device) => <Loyers go={nav} device={device} />,
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
   maintenance: (_nav, device) => <Maintenance device={device} />,
+  depenses: (_nav, device) => <Depenses device={device} />,
+  hypotheque: (nav, device) => <Hypotheque go={nav} device={device} />,
+  prets: (_nav, device) => <Prets device={device} />,
   portail: (nav, device) => <Portail go={nav} device={device} />,
   reglages: (_nav, device) => <Reglages device={device} />,
 };
@@ -132,6 +148,33 @@ function usePrescreeningRoute() {
   return token;
 }
 
+// Route publique du portail locataire (/domus/mon-espace?token=...) — sans
+// auth, même principe que useOnboardingRoute. Tolère un ancien lien par hash
+// (#/mon-espace?token=) par robustesse.
+function useTenantPortalRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/mon-espace\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/mon-espace(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
 function usePublicReservationsRoute() {
   const read = () => {
     if (typeof window === "undefined") return null;
@@ -159,6 +202,7 @@ export default function App() {
   const token = useAuthToken();
   const onboardingToken = useOnboardingRoute();
   const prescreeningToken = usePrescreeningRoute();
+  const tenantPortalToken = useTenantPortalRoute();
   const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -169,14 +213,15 @@ export default function App() {
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token || onboardingToken !== null || prescreeningToken !== null) return undefined;
+    if (!token || onboardingToken !== null || prescreeningToken !== null || tenantPortalToken !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token, onboardingToken, prescreeningToken]);
+  }, [token, onboardingToken, prescreeningToken, tenantPortalToken]);
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
   if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
+  if (tenantPortalToken !== null) return <TenantPortalPublic token={tenantPortalToken} />;
   if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;

@@ -45,7 +45,8 @@ body {
 /* ── Layout bureau ── */
 .shell { display:flex; min-height:100vh; }
 .sidebar { width:248px; flex:none; background:var(--grad-dark); color:#fff;
-  padding:16px; display:flex; flex-direction:column; gap:2px; position:sticky; top:0; height:100vh; }
+  padding:16px; display:flex; flex-direction:column; gap:2px; position:sticky; top:0; height:100vh;
+  overflow-y:auto; }
 .brand { display:flex; align-items:center; gap:10px; padding:10px 8px 14px; }
 .brand-logo { width:36px; height:36px; border-radius:8px; background:var(--grad-iris);
   display:flex; align-items:center; justify-content:center; }
@@ -354,6 +355,20 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .ops-list div { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--ink-100); border-radius:8px; padding:9px; font-size:12px; }
 .ops-list b { width:20px; height:20px; border-radius:999px; background:var(--iris-50); color:var(--iris-600); display:flex; align-items:center; justify-content:center; flex:none; }
 
+/* P&L par propriété (SCRUM-312) */
+.pnl-cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+.pnl-card { padding:16px; display:grid; gap:10px; }
+.pnl-card .ops-score b { font-size:18px; }
+.pnl-breakdown { margin:-4px 0 2px; }
+.pnl-breakdown-list { list-style:none; margin:6px 0 0; padding:0; display:grid; gap:4px; }
+.pnl-breakdown-list li { display:flex; justify-content:space-between; font-size:12px; color:var(--ink-500); padding:3px 0; border-bottom:1px solid var(--ink-100); }
+.pnl-net-block { display:flex; justify-content:space-between; align-items:center; border:1.5px solid; border-radius:8px; padding:10px 12px; margin-top:4px; }
+.pnl-net-block span { font-size:12px; color:var(--ink-500); font-weight:600; }
+.pnl-net-block b { font-size:22px; font-family:'Space Grotesk',sans-serif; }
+.pnl-mortgage-aside { background:var(--ink-50,#f8fafc); border:1px dashed var(--ink-200,#e2e8f0); border-radius:8px; padding:10px 12px; display:grid; gap:6px; margin-top:2px; }
+.pnl-mortgage-aside-title { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--ink-500); text-transform:uppercase; letter-spacing:.02em; }
+.pnl-mortgage-aside .ops-score b { font-size:14px; }
+
 .settings-hero { display:grid; grid-template-columns:1fr 190px 190px; gap:14px; padding:18px; margin-bottom:14px; align-items:stretch; }
 .settings-hero h3 { margin:10px 0 4px; font-family:'Space Grotesk',sans-serif; font-size:18px; }
 .settings-hero p { margin:0; color:var(--ink-500); font-size:13px; max-width:620px; }
@@ -502,6 +517,14 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-money-input input, .domus-money-input select { border:0; border-radius:0; box-shadow:none; height:40px; min-width:0; width:100%; }
 .domus-money-input input { padding:0 12px; }
 .domus-money-input select { border-left:1px solid #e4e4e7; color:#4f46e5; font-weight:800; padding:0 8px; text-align:center; }
+
+/* Echeancier de paiement des depenses (SCRUM-313) */
+.immo-radio-group { display:flex; flex-wrap:wrap; gap:14px; }
+.immo-radio-option { align-items:center; display:flex; font-size:13px; font-weight:600; gap:6px; }
+.installment-progress { display:flex; flex-direction:column; gap:8px; }
+.installment-progress-bar { background:var(--ink-100,#e4e4e7); border-radius:999px; height:10px; overflow:hidden; width:100%; }
+.installment-progress-fill { background:var(--grad-iris,#4f46e5); height:100%; transition:width .2s ease; }
+.installment-progress-labels { display:flex; flex-wrap:wrap; font-size:12px; font-weight:600; gap:12px; justify-content:space-between; }
 .domus-money-input input:focus, .domus-money-input select:focus { border:0; box-shadow:none; }
 .domus-checkbox-row { align-items:center; cursor:pointer; display:flex; gap:10px; padding:2px 0; }
 .domus-checkbox-row input[type=checkbox] { accent-color:#4f46e5; cursor:pointer; height:16px; width:16px; flex:none; }
@@ -663,6 +686,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 
 .immo-filters { align-items:center; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
 .immo-filter-group, .immo-view-switch { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }
+.immo-filter-autocomplete { width:220px; flex:none; }
 .immo-filter-group > span, .immo-view-switch > span { color:#52525b; font-size:13px; font-weight:600; }
 .immo-filter-group button, .immo-view-switch button { background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#3f3f46; height:30px; padding:0 12px; cursor:pointer; font-size:13px; font-weight:600; font-family:inherit; }
 .immo-view-switch button { align-items:center; display:flex; padding:0 8px; }
@@ -946,8 +970,8 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .contrats-template-actions button.danger { color:#dc2626; }
 .contrats-template-actions button.danger:hover:not(:disabled) { background:#fef2f2; }
 .contrats-template-actions button:disabled { opacity:.5; cursor:default; }
-.domus-template-modal { width:min(820px,96vw); max-height:92vh; display:flex; flex-direction:column; }
-.domus-template-form { padding:0 24px 8px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
+.domus-template-modal { width:min(820px,96vw); max-height:92vh; display:flex; flex-direction:column; overflow:hidden; }
+.domus-template-form { padding:0 24px 8px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; min-height:0; }
 .domus-template-body { min-height:240px; font-family:"Courier New", ui-monospace, monospace; font-size:12.5px; line-height:1.55; resize:vertical; white-space:pre; }
 .domus-template-active { display:flex; align-items:center; gap:8px; font-size:13px; color:#3f3f46; cursor:pointer; }
 .domus-template-active input { width:16px; height:16px; }

@@ -1318,7 +1318,14 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("quarter"));
   const [gestationExpanded, setGestationExpanded] = React.useState(false);
+  const [sowWatchlist, setSowWatchlist] = React.useState([]);
+  const [isNarrow, setIsNarrow] = React.useState(() => typeof window !== "undefined" ? window.innerWidth < 1120 : false);
   const refresh = useDataRefresh(["reproductionEvents", "animals"]);
+  React.useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 1120);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listReproductionEvents(), api.listAnimals()])
@@ -1329,6 +1336,15 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         setAllGestations(mapped);
       })
       .catch((e) => console.warn("listReproductionEvents failed:", e.message));
+    return () => { cancel = true; };
+  }, [reloadKey, refresh]);
+  // Truies à surveiller (registre de reproduction porcine, Etape 1) — tri
+  // par jours non productifs déjà fait côté backend, on ne retrie pas.
+  React.useEffect(() => {
+    let cancel = false;
+    api.getSowWatchlist()
+      .then((rows) => { if (!cancel) setSowWatchlist(Array.isArray(rows) ? rows : []); })
+      .catch((e) => console.warn("getSowWatchlist failed:", e.message));
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
@@ -1405,6 +1421,69 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             : <>Reproduction, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).en.toLowerCase() : "cycles & gestations"}</span></>}
         </h1>
       </div>
+
+      {/* Truies à surveiller (registre de reproduction porcine, Etape 1) */}
+      {sowWatchlist.length > 0 && (
+        <div className="card">
+          <div className="bilang" style={{ marginBottom: 12 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Truies à surveiller" : "Sows to watch"}</h3>
+            <span className="sec">{lang === "fr" ? `${sowWatchlist.length} suivie(s)` : `${sowWatchlist.length} tracked`}</span>
+          </div>
+          {isNarrow ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sowWatchlist.map((s) => {
+                const days = Number(s.daysNonProductive) || 0;
+                const alert = days >= 30;
+                return (
+                  <div key={s.animalId} style={{ border: "1px solid var(--border-1)", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span className="italic-serif" style={{ fontSize: 14, color: "var(--ink-950)" }}>{s.name || s.externalId || `#${s.animalId}`}</span>
+                      <span className={alert ? "tag tag-danger" : "tag"} style={!alert ? { background: "var(--pertinence-50)", color: "var(--pertinence-700)" } : undefined}>
+                        {days} {lang === "fr" ? "j" : "d"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--fg-3)" }} className="mono">{s.site || "—"} · {s.reproStatus || "—"}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--ink-800)" }}>{s.nextAction || "—"}{s.nextActionDate ? ` · ${s.nextActionDate}` : ""}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--fg-3)", fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    <th style={{ padding: "6px 8px" }}>{lang === "fr" ? "Truie" : "Sow"}</th>
+                    <th style={{ padding: "6px 8px" }}>{lang === "fr" ? "Site" : "Site"}</th>
+                    <th style={{ padding: "6px 8px" }}>{lang === "fr" ? "Statut" : "Status"}</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>{lang === "fr" ? "Jours non prod." : "Non-prod. days"}</th>
+                    <th style={{ padding: "6px 8px" }}>{lang === "fr" ? "Prochaine action" : "Next action"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sowWatchlist.map((s) => {
+                    const days = Number(s.daysNonProductive) || 0;
+                    const alert = days >= 30;
+                    return (
+                      <tr key={s.animalId} style={{ borderTop: "1px solid var(--border-1)" }}>
+                        <td style={{ padding: "6px 8px" }} className="italic-serif">{s.name || s.externalId || `#${s.animalId}`}</td>
+                        <td style={{ padding: "6px 8px" }} className="mono">{s.site || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{s.reproStatus || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                          <span className={alert ? "tag tag-danger" : "tag"} style={!alert ? { background: "var(--pertinence-50)", color: "var(--pertinence-700)" } : undefined}>
+                            {days} {lang === "fr" ? "j" : "d"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>{s.nextAction || "—"}{s.nextActionDate ? ` · ${s.nextActionDate}` : ""}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
@@ -2085,7 +2164,7 @@ function EggSection({ lang, eggStock, buildings, currencyMeta, harvestForm, setH
 }
 
 // ─── ALERTS ──────────────────────────────────────────────────────────────
-function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
+function deriveAlerts(animals, medicines, treatments, repro, diseases, lang, sowWatchlist = []) {
   const out = [];
   const activeAnimals = (animals || []).filter(isActiveLivestock);
   const aMap = new Map(activeAnimals.map((a) => [a.id, a]));
@@ -2160,6 +2239,23 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
       });
     }
   });
+  // Truies improductives (registre de reproduction porcine) : signalées dès
+  // que daysNonProductive >= 30 (watchlist déjà triée/filtrée côté backend).
+  (sowWatchlist || []).forEach((s) => {
+    const days = Number(s.daysNonProductive);
+    if (!Number.isFinite(days) || days < 30) return;
+    out.push({
+      id: `sow-${s.animalId}`, kind: "repro", severity: "high",
+      animal: s.name || s.externalId || "—",
+      animalId: s.externalId || `#${s.animalId}`,
+      species: "pig",
+      title: lang === "fr" ? "Truie improductive" : "Non-productive sow",
+      subtitle: lang === "fr"
+        ? `${days} j non productive · ${s.nextAction || "—"}`
+        : `${days} d non-productive · ${s.nextAction || "—"}`,
+      date: s.nextActionDate || "—", icon: "calendar", targetRoute: "repro",
+    });
+  });
   // Prêt à abattre / vente : engraissement prêt ou en retard, groupé par bâtiment.
   const slByBarn = new Map();
   activeAnimals.forEach((a) => {
@@ -2205,11 +2301,12 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     Promise.all([
       api.listAnimals(), api.listMedicines(), api.listTreatments(),
       api.listReproductionEvents(), api.listDiseases(),
+      api.getSowWatchlist({ minDays: 30 }).catch(() => []),
     ])
-      .then(([a, m, t, r, d]) => {
+      .then(([a, m, t, r, d, w]) => {
         if (cancel) return;
         const all = [a, m, t, r, d].every((x) => Array.isArray(x));
-        if (all) setLiveAlerts(deriveAlerts(a, m, t, r, d, lang));
+        if (all) setLiveAlerts(deriveAlerts(a, m, t, r, d, lang, Array.isArray(w) ? w : []));
       })
       .catch(() => {});
     return () => { cancel = true; };

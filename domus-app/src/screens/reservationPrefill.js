@@ -47,3 +47,31 @@ export function takeMaintenancePrefill() {
   prefillMaintenance = null;
   return value;
 }
+
+// Même mécanisme de handoff pour « P&L » depuis un bien (SCRUM-312) : on
+// mémorise le bien à présélectionner dans l'écran P&L.
+let prefillPnl = null;
+
+export function setPnlPrefill(propertyId) {
+  prefillPnl = propertyId != null ? String(propertyId) : null;
+}
+
+export function takePnlPrefill() {
+  const value = prefillPnl;
+  prefillPnl = null;
+  return value;
+}
+
+// Même mécanisme de handoff pour « Créer un prêt » depuis l'écran Hypothèque
+// (SCRUM-311 phase 2) : on mémorise le bien à présélectionner dans l'écran Prêts.
+let prefillPrets = null;
+
+export function setPretsPrefill(propertyId) {
+  prefillPrets = propertyId != null ? String(propertyId) : null;
+}
+
+export function takePretsPrefill() {
+  const value = prefillPrets;
+  prefillPrets = null;
+  return value;
+}

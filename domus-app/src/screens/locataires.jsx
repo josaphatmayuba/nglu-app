@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Search, UserPlus, Mail, Briefcase, Home, AlertTriangle, CheckCircle2,
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
-  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature,
+  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature, Link2,
 } from "lucide-react";
-import { api, domusOnboardingUrl } from "../api.js";
+import { api, domusOnboardingUrl, domusPortalUrl } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { normalizeCurrencyModule, useApi } from "../data.js";
@@ -516,11 +516,34 @@ function Info2({ icon: Icon, label, value }) {
 
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
 function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
+  const toast = useToast();
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalUrl, setPortalUrl] = useState("");
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Réinitialise l'URL affichée quand on change de locataire (le lien n'est
+  // jamais recalculable côté frontend, il vient du backend au clic).
+  useEffect(() => { setPortalUrl(""); }, [tenant?.id]);
+
+  const generatePortalLink = async () => {
+    setPortalBusy(true);
+    try {
+      const res = await api.generateTenantPortalLink(tenant.id);
+      const url = domusPortalUrl(res?.url);
+      setPortalUrl(url);
+      try { await navigator.clipboard?.writeText(url); toast.success(t("Lien portail copié.")); }
+      catch { toast.success(t("Lien portail généré.")); }
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setPortalBusy(false);
+    }
+  };
 
   const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
@@ -567,7 +590,17 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             {!activeLease && onCreateLease && (
               <button type="button" className="btn btn-primary" onClick={onCreateLease}><FileSignature size={16} /> Creer le bail</button>
             )}
+            <button type="button" className="btn" onClick={generatePortalLink} disabled={portalBusy}>
+              <Link2 size={16} /> {portalBusy ? t("Génération…") : t("Générer/copier le lien portail")}
+            </button>
           </div>
+          {portalUrl && (
+            <div className="info-cell" style={{ marginTop: -6, marginBottom: 8 }}>
+              <Link2 size={15} />
+              <span>{t("Lien portail")}</span>
+              <b style={{ wordBreak: "break-all" }}>{portalUrl}</b>
+            </div>
+          )}
 
           <div className="info-grid">
             <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
@@ -631,9 +664,65 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
               <span>{tenant.originProvince || t("Province non renseignee")}</span>
             </div>
           </div>
+
+          <TenantCommunications tenantId={tenant.id} />
         </div>
       </aside>
     </>
+  );
+}
+
+// ── Onglet « Communications » : historique fusionne email + SMS envoyes au locataire ──
+function TenantCommunications({ tenantId }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setItems(null);
+    setError("");
+    api.tenantCommunications(tenantId)
+      .then((res) => { if (!cancelled) setItems(Array.isArray(res) ? res : []); })
+      .catch((e) => { if (!cancelled) setError(e.message || String(e)); });
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
+  const statusMeta = {
+    sent: { className: "chip-emerald", label: t("Envoye") },
+    failed: { className: "chip-rose", label: t("Echec") },
+    skipped: { className: "chip-ink", label: t("Ignore") },
+    pending: { className: "chip-ink", label: t("En attente") },
+  };
+
+  return (
+    <div className="domus-tenant-communications" style={{ marginTop: 16 }}>
+      <h4 style={{ marginBottom: 8 }}>{t("Communications")}</h4>
+      {error && <ApiError error={error} />}
+      {!error && items === null && <Loading />}
+      {!error && items && items.length === 0 && (
+        <p className="muted">{t("Aucune communication envoyée à ce locataire pour le moment.")}</p>
+      )}
+      {!error && items && items.length > 0 && (
+        <div className="timeline">
+          {items.map((it, idx) => {
+            const meta = statusMeta[it.status] || statusMeta.pending;
+            return (
+              <div key={idx} className="timeline-item done">
+                <b>
+                  {it.channel === "email" ? <Mail size={14} /> : <MessageSquare size={14} />}{" "}
+                  {it.type} <span className={`chip ${meta.className}`} style={{ marginLeft: 6 }}>{meta.label}</span>
+                </b>
+                <span>
+                  {it.recipient} — {it.subject || "—"}
+                  {it.errorMessage ? ` — ${it.errorMessage}` : ""}
+                  {it.createdAt ? ` — ${formatShortDate(it.createdAt)}` : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

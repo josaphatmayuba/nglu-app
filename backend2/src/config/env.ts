@@ -196,4 +196,14 @@ export const env = {
       process.env.VACCINE_SYNC_ACIA_URL ||
       "https://apps.inspection.canada.ca/webapps/veterinary-biologics-product-list/Home/GetAllCSV",
   },
+  reproWatchlistAlert: {
+    // Desactive par defaut : aucun appel reseau sortant (WhatsApp) tant que non active.
+    enabled: process.env.REPRO_WATCHLIST_ALERT_ENABLED === "true",
+    // Quotidien a 07:00, fuseau serveur.
+    cron: process.env.REPRO_WATCHLIST_ALERT_CRON || "0 7 * * *",
+    // Seuil de jours non productifs a partir duquel une truie apparait dans l'alerte.
+    thresholdDays: Number.parseInt(process.env.REPRO_WATCHLIST_ALERT_THRESHOLD_DAYS || "30", 10),
+    // Jid WhatsApp du regisseur/groupe destinataire (meme pattern que WHATSAPP_DOMUS_MAINTENANCE_GROUP_JID).
+    recipientJid: process.env.REPRO_WATCHLIST_ALERT_JID || "",
+  },
 };

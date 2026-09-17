@@ -1730,6 +1730,125 @@
       "when": 1781071200022,
       "tag": "0271_domus_maintenance_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "5",
+      "when": 1781071200023,
+      "tag": "0272_domus_residential_template_v3",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "5",
+      "when": 1781071200024,
+      "tag": "0273_farmos_animal_repro_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "5",
+      "when": 1781071200025,
+      "tag": "0274_farmos_repro_cycles",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "5",
+      "when": 1781071200026,
+      "tag": "0275_farmos_repro_cycles_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "5",
+      "when": 1781071200027,
+      "tag": "0276_domus_rent_payment_proof",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "5",
+      "when": 1781071200028,
+      "tag": "0277_domus_property_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "5",
+      "when": 1781071200029,
+      "tag": "0278_domus_mortgage_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "5",
+      "when": 1781071200030,
+      "tag": "0279_domus_mortgage_loans",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "5",
+      "when": 1781071200031,
+      "tag": "0280_domus_expense_installments",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "5",
+      "when": 1781071200032,
+      "tag": "0281_domus_expense_installment_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "5",
+      "when": 1781071200033,
+      "tag": "0282_domus_tenant_portal_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "5",
+      "when": 1781071200034,
+      "tag": "0283_domus_tenant_portal_link_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "5",
+      "when": 1781071200035,
+      "tag": "0284_repair_real_estate_security_deposits",
+      "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "5",
+      "when": 1781071200036,
+      "tag": "0285_domus_deposit_proof",
+      "breakpoints": true
+    },
+    {
+      "idx": 261,
+      "version": "5",
+      "when": 1781071200037,
+      "tag": "0286_domus_real_estate_owners",
+      "breakpoints": true
+    },
+    {
+      "idx": 262,
+      "version": "5",
+      "when": 1781071200038,
+      "tag": "0287_domus_property_owner_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "5",
+      "when": 1781071200039,
+      "tag": "0288_domus_sms_logs",
+      "breakpoints": true
     }
   ]
 }

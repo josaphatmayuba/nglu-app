@@ -603,6 +603,8 @@ export function Paiement({ go }) {
   // numéro de reçu (auto-généré) — deux champs distincts selon la méthode.
   const [mobileNumber, setMobileNumber] = useState("");
   const [receiptRef, setReceiptRef] = useState(genReceiptRef);
+  // Preuve de paiement (photo/scan reçu, capture mobile money) — optionnelle, tous moyens.
+  const [proofFile, setProofFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
   const [err, setErr] = useState(null);
@@ -642,7 +644,7 @@ export function Paiement({ go }) {
         method: methodMeta?.label || method,
         reference: (methodMeta?.mobile ? mobileNumber : receiptRef) || null,
         ...(lease?.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
-      });
+      }, proofFile);
       setDone(payment || { amount, method: methodMeta?.label });
       setStep(4);
     } catch (e) {
@@ -654,7 +656,7 @@ export function Paiement({ go }) {
 
   const reset = () => {
     setStep(1); setLeaseId(null); setAmount(""); setMethod(null);
-    setMobileNumber(""); setReceiptRef(genReceiptRef()); setDone(null); setErr(null);
+    setMobileNumber(""); setReceiptRef(genReceiptRef()); setProofFile(null); setDone(null); setErr(null);
   };
 
   return (
@@ -719,6 +721,23 @@ export function Paiement({ go }) {
               ? "Numéro du locataire (pré-rempli) — modifiable."
               : "Numéro du reçu remis au locataire (généré automatiquement) — modifiable."}
           </div>
+          <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Preuve de paiement (optionnel)</div>
+          <input
+            id="rent-proof-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+          />
+          <label htmlFor="rent-proof-input" className="btn" style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <FileDown size={16} />
+            {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
+          </label>
+          {proofFile && (
+            <button type="button" className="btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setProofFile(null)}>
+              <X size={14} /> Retirer le fichier
+            </button>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button className="btn" onClick={() => setStep(1)}><ArrowLeft size={16} /></button>
             <button className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}

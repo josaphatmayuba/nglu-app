@@ -464,6 +464,7 @@ export function Maintenance() {
           currencyOptions={currency.currencyOptions}
           defaultCurrencyId={currency.defaultCurrencyId}
           defaultCurrencySymbol={currency.defaultCurrencySymbol}
+          supplierOptions={supplierOptions}
           busy={busy}
           error={actionError}
           onClose={() => { setCostModal(null); setActionError(""); }}
@@ -705,7 +706,7 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
   );
 }
 
-function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCurrencySymbol, busy, error, onClose, onSave }) {
+function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCurrencySymbol, supplierOptions, busy, error, onClose, onSave }) {
   const costsApi = useApi(() => api.maintenanceCosts(ticket.id), [ticket.id]);
   const [form, setForm] = useState({ ...emptyCost, currencyId: ticket.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));

@@ -929,6 +929,31 @@ export const transactionAttachments = mysqlTable("transaction_attachments", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+export const realEstateOwners = mysqlTable("real_estate_owners", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  ownerType: varchar("owner_type", { length: 20 }).default("individual").notNull(),
+  firstName: varchar("first_name", { length: 255 }),
+  lastName: varchar("last_name", { length: 255 }),
+  companyName: varchar("company_name", { length: 255 }),
+  representativeName: varchar("representative_name", { length: 255 }),
+  phone: varchar("phone", { length: 50 }),
+  phone2: varchar("phone2", { length: 50 }),
+  email: varchar("email", { length: 255 }),
+  address: varchar("address", { length: 500 }),
+  city: varchar("city", { length: 255 }),
+  country: varchar("country", { length: 255 }),
+  idDocumentType: varchar("id_document_type", { length: 100 }),
+  idNumber: varchar("id_number", { length: 100 }),
+  taxId: varchar("tax_id", { length: 100 }),
+  signature: text("signature"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateProperties = mysqlTable("real_estate_properties", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
@@ -944,6 +969,7 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   marketValue: decimal("market_value", { precision: 15, scale: 2 }).default("0").notNull(),
   defaultRent: decimal("default_rent", { precision: 15, scale: 2 }).default("0").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
+  ownerId: bigint("owner_id", { mode: "number" }),
   description: text("description"),
   availableForBooking: tinyint("available_for_booking").default(0).notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
@@ -1068,6 +1094,8 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
   taxAmount: decimal("tax_amount", { precision: 15, scale: 2 }),
   taxName: varchar("tax_name", { length: 255 }),
+  // Preuve de paiement (photo/scan recu, capture mobile money) — optionnelle.
+  proofUrl: varchar("proof_url", { length: 500 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1093,7 +1121,28 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
   returnDate: date("return_date", { mode: "string" }),
   reference: varchar("reference", { length: 255 }),
   notes: text("notes"),
+  // Preuve d'encaissement (photo/scan reçu signé) — optionnelle.
+  proofUrl: varchar("proof_url", { length: 500 }),
+  // Preuve de restitution (photo/scan reçu signé au moment du remboursement) — optionnelle.
+  returnProofUrl: varchar("return_proof_url", { length: 500 }),
   isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Lien portail locataire : accès public sans login (token opaque dans l'URL,
+// même pattern que tenantOnboardings.tokenHash). tenantId référence customers.id
+// (rôle Locataire). Un lien actif est réutilisé tant qu'il n'est pas révoqué ;
+// expiresAt nullable = lien permanent accepté. revokedAt = invalidation douce,
+// jamais de DELETE physique (règle soft delete du projet).
+export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal_links", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  tenantId: bigint("tenant_id", { mode: "number" }).notNull(),
+  token: varchar("token", { length: 64 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1196,6 +1245,147 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   // Ventilation analytique : la depense est portee sur le projet du chantier.
   projectId: bigint("project_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus / SCRUM-310 : depenses portees par un bien immobilier, hors tickets de
+// maintenance (qui ont leur propre table real_estate_maintenance_costs).
+// category : insurance, property_tax, hoa, maintenance_general, management_fee,
+// security, cleaning, other. mortgage exclu de la v1 (ticket dedie, car il faut
+// separer capital et interets).
+export const realEstatePropertyExpenses = mysqlTable("real_estate_property_expenses", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Imputation a une unite precise ; null = depense au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  // Renseigne quand la depense est refacturable a un locataire.
+  leaseId: bigint("lease_id", { mode: "number" }),
+  category: varchar("category", { length: 50 }).default("other").notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  // Periode couverte pour les depenses au prorata (assurance annuelle, taxe...).
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
+  // Lien vers le referentiel central fournisseurs (compta). vendorName reste en fallback texte libre.
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  vendorName: varchar("vendor_name", { length: 255 }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
+  paymentStatus: varchar("payment_status", { length: 30 }).default("paid").notNull(),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  // Ventilation analytique.
+  projectId: bigint("project_id", { mode: "number" }),
+  // Tracabilite vers lecriture comptable postee.
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  isRecurring: tinyint("is_recurring").default(0).notNull(),
+  recurrenceMonths: int("recurrence_months"),
+  // Mode de reglement : single, installments, partial.
+  paymentPlan: varchar("payment_plan", { length: 20 }).default("single").notNull(),
+  // Cache denormalise : somme des paidAmount des echeances actives liees.
+  settledAmount: decimal("settled_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus : echeancier de paiement dune depense de propriete.
+// Une ligne = une echeance planifiee (kind = scheduled, sequenceNo 1..N) ou un
+// paiement partiel libre (kind = partial, sequenceNo 0).
+// propertyId est denormalise depuis la depense pour scoper sans join.
+// status : pending, paid, partial, cancelled. journalEntryId reserve v2.
+export const realEstateExpenseInstallments = mysqlTable("real_estate_expense_installments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  expenseId: bigint("expense_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  sequenceNo: int("sequence_no").default(1).notNull(),
+  kind: varchar("kind", { length: 20 }).default("scheduled").notNull(),
+  dueDate: date("due_date", { mode: "string" }),
+  plannedAmount: decimal("planned_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  paidAmount: decimal("paid_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  paidDate: date("paid_date", { mode: "string" }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
+  status: varchar("status", { length: 30 }).default("pending").notNull(),
+  reference: varchar("reference", { length: 100 }),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus / SCRUM-311 : remboursements dhypotheque portes par un bien immobilier.
+// Table dediee et non une categorie de real_estate_property_expenses : un
+// paiement dhypotheque nest pas une charge a 100 pourcent, il faut separer le
+// capital (remboursement de dette) des interets (charge) et de lescrow.
+// Invariant applicatif : totalAmount = principalAmount + interestAmount + escrowAmount.
+export const realEstateMortgagePayments = mysqlTable("real_estate_mortgage_payments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Imputation a une unite precise ; null = paiement au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  // Reserve pour une future table de pret / tableau damortissement. Non exploite en v1.
+  mortgageId: bigint("mortgage_id", { mode: "number" }),
+  lenderName: varchar("lender_name", { length: 255 }),
+  paymentDate: date("payment_date", { mode: "string" }).notNull(),
+  // Echeance couverte par le paiement.
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
+  totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  principalAmount: decimal("principal_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  interestAmount: decimal("interest_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  escrowAmount: decimal("escrow_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("bank").notNull(),
+  paymentStatus: varchar("payment_status", { length: 30 }).default("paid").notNull(),
+  reference: varchar("reference", { length: 100 }),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
+  // Ventilation analytique.
+  projectId: bigint("project_id", { mode: "number" }),
+  // Tracabilite vers lecriture comptable postee.
+  journalEntryId: bigint("journal_entry_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus / SCRUM-311 : prets hypothecaires portes par un bien immobilier.
+// Table de reference du pret ; les echeances payees restent dans
+// real_estate_mortgage_payments, dont la colonne mortgageId pointera ici.
+// principalAmount = montant emprunte initial, le solde restant du se calcule a
+// partir des paiements. status = cycle de vie du pret (active / paid_off /
+// refinanced), distinct de isActive qui porte la suppression logique.
+export const realEstateMortgageLoans = mysqlTable("real_estate_mortgage_loans", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // Pret rattache a une unite precise ; null = pret au niveau du bien entier.
+  unitId: bigint("unit_id", { mode: "number" }),
+  lenderName: varchar("lender_name", { length: 255 }),
+  reference: varchar("reference", { length: 100 }),
+  // Montant emprunte initial.
+  principalAmount: decimal("principal_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }),
+  // Taux annuel nominal, ex 5.2500 pour 5,25 pourcent.
+  interestRate: decimal("interest_rate", { precision: 7, scale: 4 }),
+  termMonths: int("term_months"),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -2066,6 +2256,23 @@ export const systemEmailLogs = mysqlTable("system_email_logs", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Domus : outbound SMS (Twilio) audit trail — miroir de systemEmailLogs,
+// avec organization_id des le depart pour le scope multi-tenant strict.
+export const smsLogs = mysqlTable("sms_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  smsType: varchar("sms_type", { length: 100 }).notNull(),
+  recipient: varchar("recipient", { length: 50 }).notNull(),
+  body: text("body"),
+  status: mysqlEnum("status", ["pending", "sent", "failed", "skipped"]).default("pending").notNull(),
+  relatedType: varchar("related_type", { length: 100 }),
+  relatedId: varchar("related_id", { length: 100 }),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  errorMessage: varchar("error_message", { length: 1000 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // SCRUM-146: invoice templates
 export const invoiceTemplates = mysqlTable("invoice_templates", {
   id: serial("id").primaryKey(),
@@ -2393,6 +2600,12 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   fatherId: varchar("father_id", { length: 100 }),
   estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
   lastEvent: varchar("last_event", { length: 255 }),
+  // Etat reproductif (registre de reproduction porcine, etape 1).
+  // reproStatus : nulliparous | mated | pregnant | lactating | empty | culled
+  reproStatus: varchar("repro_status", { length: 20 }),
+  reproStatusSince: date("repro_status_since", { mode: "string" }),
+  bodyConditionScore: decimal("body_condition_score", { precision: 3, scale: 1 }),
+  parity: int("parity"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -3409,9 +3622,38 @@ export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events",
   birthDifficulty: varchar("birth_difficulty", { length: 20 }),
   weanedCount: int("weaned_count"),
   weaningDate: date("weaning_date", { mode: "string" }),
+  // Rattachement au cycle de reproduction (farmos_repro_cycles.id).
+  cycleId: bigint("cycle_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ─── Cycles de reproduction (registre truies) ───────────────────────────
+// Un cycle = une truie, de la saillie au sevrage. Pas de FK physique
+// (cohérent avec le reste des tables farmos_*).
+export const farmosReproCycles = mysqlTable("farmos_repro_cycles", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sowId: bigint("sow_id", { mode: "number" }).notNull(),
+  cycleNumber: int("cycle_number"),
+  matingDate: date("mating_date", { mode: "string" }),
+  sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
+  sireStrawId: bigint("sire_straw_id", { mode: "number" }),
+  breedingType: varchar("breeding_type", { length: 20 }), // natural | insemination
+  expectedDiagnosisDate: date("expected_diagnosis_date", { mode: "string" }),
+  diagnosisDate: date("diagnosis_date", { mode: "string" }),
+  diagnosisResult: varchar("diagnosis_result", { length: 20 }), // pregnant | empty | doubtful
+  expectedFarrowingDate: date("expected_farrowing_date", { mode: "string" }),
+  farrowingDate: date("farrowing_date", { mode: "string" }),
+  expectedWeaningDate: date("expected_weaning_date", { mode: "string" }),
+  weaningDate: date("weaning_date", { mode: "string" }),
+  // in_progress | farrowed | weaned | aborted | not_pregnant | culled
+  outcome: varchar("outcome", { length: 20 }).default("in_progress"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
 
 // ─── Banque de semence (insémination artificielle) ──────────────────────
