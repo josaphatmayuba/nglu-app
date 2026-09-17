@@ -1849,6 +1849,13 @@
       "when": 1781071200039,
       "tag": "0288_domus_sms_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 264,
+      "version": "5",
+      "when": 1781071200040,
+      "tag": "0289_domus_property_geocoding",
+      "breakpoints": true
     }
   ]
 }

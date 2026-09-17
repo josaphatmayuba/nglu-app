@@ -14,6 +14,7 @@ import { PropertyManagementController } from "./property-management.controller";
 import { PropertyManagementPublicController } from "./property-management-public.controller";
 import { PropertyManagementService } from "./property-management.service";
 import { ObjectStorageService } from "./object-storage.service";
+import { GeocodingService } from "./geocoding.service";
 import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 import { TenantPortalPublicController } from "./tenant-portal-public.controller";
@@ -45,6 +46,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     DomusPropertyGuard,
     TenantPrescreeningService,
     WhatsappClientService,
+    GeocodingService,
   ],
 })
 export class PropertyManagementModule {}

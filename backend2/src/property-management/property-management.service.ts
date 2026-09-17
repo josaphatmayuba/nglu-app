@@ -93,6 +93,7 @@ import {
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { GeocodingService } from "./geocoding.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -119,6 +120,7 @@ export class PropertyManagementService {
     private readonly objectStorage: ObjectStorageService,
     private readonly whatsapp: WhatsappClientService,
     private readonly tenantPortal: TenantPortalService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -817,6 +819,8 @@ export class PropertyManagementService {
         address: realEstateProperties.address,
         city: realEstateProperties.city,
         country: realEstateProperties.country,
+        latitude: realEstateProperties.latitude,
+        longitude: realEstateProperties.longitude,
         floors: realEstateProperties.floors,
         parkingSpaces: realEstateProperties.parkingSpaces,
         marketValue: realEstateProperties.marketValue,
@@ -1398,6 +1402,7 @@ export class PropertyManagementService {
     if (input.ownerId != null) {
       await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
     }
+    const geo = await this.geocodePropertyAddress(input.address ?? null, input.city ?? null, input.country ?? null);
     const [result] = await this.db.insert(realEstateProperties).values({
       organizationId: orgId,
       name: input.name,
@@ -1407,6 +1412,8 @@ export class PropertyManagementService {
       address: input.address ?? null,
       city: input.city ?? null,
       country: input.country ?? null,
+      latitude: geo ? String(geo.latitude) : null,
+      longitude: geo ? String(geo.longitude) : null,
       floors: input.floors ?? 1,
       parkingSpaces: input.parkingSpaces ?? 0,
       marketValue: this.money(input.marketValue),
@@ -1426,12 +1433,33 @@ export class PropertyManagementService {
 
   async updateProperty(id: number, input: UpdatePropertyDto, orgId: number) {
     await this.ensureActiveProperty(id, orgId);
+    const [existing] = await this.db
+      .select({
+        address: realEstateProperties.address,
+        city: realEstateProperties.city,
+        country: realEstateProperties.country,
+      })
+      .from(realEstateProperties)
+      .where(eq(realEstateProperties.id, id))
+      .limit(1);
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     }
     if (input.ownerId !== undefined && input.ownerId !== null) {
       await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
     }
+    const addressChanged =
+      !!existing &&
+      ((input.address !== undefined && input.address !== existing.address) ||
+        (input.city !== undefined && input.city !== existing.city) ||
+        (input.country !== undefined && input.country !== existing.country));
+    const geo = addressChanged
+      ? await this.geocodePropertyAddress(
+          input.address !== undefined ? input.address : existing!.address,
+          input.city !== undefined ? input.city : existing!.city,
+          input.country !== undefined ? input.country : existing!.country,
+        )
+      : null;
     await this.db
       .update(realEstateProperties)
       .set({
@@ -1449,6 +1477,7 @@ export class PropertyManagementService {
           "currencyId",
           "ownerId",
         ]),
+        ...(addressChanged ? { latitude: geo ? String(geo.latitude) : null, longitude: geo ? String(geo.longitude) : null } : {}),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
         ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
@@ -5671,6 +5700,21 @@ export class PropertyManagementService {
 
   private money(value: number | undefined | null) {
     return String(value ?? 0);
+  }
+
+  /** Geocode best-effort une adresse de bien (Nominatim) ; ne jamais throw. */
+  private async geocodePropertyAddress(
+    address?: string | null,
+    city?: string | null,
+    country?: string | null,
+  ): Promise<{ latitude: number; longitude: number } | null> {
+    const query = this.geocoding.buildQuery(address, city, country);
+    if (!query) return null;
+    try {
+      return await this.geocoding.geocode(query);
+    } catch {
+      return null;
+    }
   }
 
   private date(value: string | null | undefined) {

@@ -130,6 +130,7 @@ function makeService(opts: {
     {} as any, // objectStorage
     {} as any, // whatsapp
     {} as any, // tenantPortal
+    {} as any, // geocoding
   );
 
   return { service, db };

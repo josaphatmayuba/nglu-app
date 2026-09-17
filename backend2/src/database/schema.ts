@@ -964,6 +964,8 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   address: varchar("address", { length: 255 }),
   city: varchar("city", { length: 255 }),
   country: varchar("country", { length: 255 }),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   floors: int("floors").default(1).notNull(),
   parkingSpaces: int("parking_spaces").default(0).notNull(),
   marketValue: decimal("market_value", { precision: 15, scale: 2 }).default("0").notNull(),

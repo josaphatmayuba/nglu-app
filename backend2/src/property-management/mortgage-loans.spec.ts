@@ -120,6 +120,7 @@ function makeService(opts: {
     objectStorage,
     whatsapp,
     {} as any,
+  {} as any,
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit };

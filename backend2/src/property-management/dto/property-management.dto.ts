@@ -109,6 +109,14 @@ export class CreatePropertyDto {
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
 
+export class PropertyGeocodingDto {
+  @ApiPropertyOptional({ example: -11.6609, description: "Latitude geocodee depuis l'adresse (best-effort). Null si non geocode." })
+  latitude?: number | null;
+
+  @ApiPropertyOptional({ example: 27.4794, description: "Longitude geocodee depuis l'adresse (best-effort). Null si non geocode." })
+  longitude?: number | null;
+}
+
 // ── Proprietaires legaux des biens (Domus) ───────────────────────────────────
 // Distinct du GESTIONNAIRE mandate (appSettings.landlordName/landlordPhone/landlordSignature,
 // champ texte libre inchange). Un proprietaire est rattache a 0..N biens via
