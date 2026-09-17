@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Search, UserPlus, Mail, Briefcase, Home, AlertTriangle, CheckCircle2,
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
-  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature,
+  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature, Link2,
 } from "lucide-react";
-import { api, domusOnboardingUrl } from "../api.js";
+import { api, domusOnboardingUrl, domusPortalUrl } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { normalizeCurrencyModule, useApi } from "../data.js";
@@ -516,11 +516,34 @@ function Info2({ icon: Icon, label, value }) {
 
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
 function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
+  const toast = useToast();
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalUrl, setPortalUrl] = useState("");
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Réinitialise l'URL affichée quand on change de locataire (le lien n'est
+  // jamais recalculable côté frontend, il vient du backend au clic).
+  useEffect(() => { setPortalUrl(""); }, [tenant?.id]);
+
+  const generatePortalLink = async () => {
+    setPortalBusy(true);
+    try {
+      const res = await api.generateTenantPortalLink(tenant.id);
+      const url = domusPortalUrl(res?.url);
+      setPortalUrl(url);
+      try { await navigator.clipboard?.writeText(url); toast.success(t("Lien portail copié.")); }
+      catch { toast.success(t("Lien portail généré.")); }
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setPortalBusy(false);
+    }
+  };
 
   const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
@@ -567,7 +590,17 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             {!activeLease && onCreateLease && (
               <button type="button" className="btn btn-primary" onClick={onCreateLease}><FileSignature size={16} /> Creer le bail</button>
             )}
+            <button type="button" className="btn" onClick={generatePortalLink} disabled={portalBusy}>
+              <Link2 size={16} /> {portalBusy ? t("Génération…") : t("Générer/copier le lien portail")}
+            </button>
           </div>
+          {portalUrl && (
+            <div className="info-cell" style={{ marginTop: -6, marginBottom: 8 }}>
+              <Link2 size={15} />
+              <span>{t("Lien portail")}</span>
+              <b style={{ wordBreak: "break-all" }}>{portalUrl}</b>
+            </div>
+          )}
 
           <div className="info-grid">
             <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />

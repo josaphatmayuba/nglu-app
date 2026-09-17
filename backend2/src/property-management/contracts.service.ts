@@ -28,9 +28,11 @@ import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
+import { TenantPortalService } from "./tenant-portal.service";
 
 type LeaseDetails = {
   leaseId: number;
+  tenantId: number | null;
   reference: string | null;
   startDate: Date | string | null;
   endDate: Date | string | null;
@@ -83,6 +85,7 @@ export class ContractsService {
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly sms: CompatService,
     private readonly objectStorage: ObjectStorageService,
+    private readonly tenantPortal: TenantPortalService,
   ) {}
 
   async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
@@ -272,23 +275,32 @@ export class ContractsService {
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
+    // Récupère le bail pour le téléphone ET le tenantId (lien portail footer).
+    let tenantPhone: string | null = null;
+    let tenantId: number | null = null;
+    try {
+      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
+      tenantPhone = lease.tenantPhone ?? null;
+      tenantId = lease.tenantId ?? null;
+    } catch {
+      tenantPhone = null;
+      tenantId = null;
+    }
+
     if (contract.tenantEmail) {
+      const signingHtml = this.signingEmailHtml(contract.tenantName ?? "", signingUrl);
+      const htmlWithFooter = tenantId
+        ? await this.tenantPortal.appendPortalFooterToEmail(signingHtml, tenantId, orgId)
+        : signingHtml;
       await this.sendEmail(
         contract.tenantEmail,
         "Votre contrat de bail est prêt à être signé",
-        this.signingEmailHtml(contract.tenantName ?? "", signingUrl),
+        htmlWithFooter,
         "contract_signature",
       );
     }
 
     // Also send the signing link by SMS to the tenant (best-effort).
-    let tenantPhone: string | null = null;
-    try {
-      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
-      tenantPhone = lease.tenantPhone ?? null;
-    } catch {
-      tenantPhone = null;
-    }
     if (tenantPhone) {
       const company = await this.getCompanyInfo(orgId);
       const companyName = company?.companyName || "votre gestionnaire";
@@ -297,7 +309,10 @@ export class ContractsService {
         `${greeting}, votre contrat de bail est prêt à être signé. ` +
         `Signez-le ici : ${signingUrl} (lien valable 7 jours). — ${companyName}`;
       try {
-        const res = await this.sms.sendSms({ phone: tenantPhone, message });
+        const messageWithFooter = tenantId
+          ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
+          : message;
+        const res = await this.sms.sendSms({ phone: tenantPhone, message: messageWithFooter });
         if (!res?.success) this.logger.warn(`Contract signing SMS not sent (contract ${id}): ${res?.message}`);
       } catch (error) {
         this.logger.warn(`Contract signing SMS error (contract ${id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -468,7 +483,11 @@ export class ContractsService {
     let emailSent = false;
     if (tenantEmail) {
       try {
-        await this.sendEmail(tenantEmail, subject, `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`, "contract_signed");
+        const emailHtml = `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+        const htmlWithFooter = lease.tenantId
+          ? await this.tenantPortal.appendPortalFooterToEmail(emailHtml, lease.tenantId, orgId)
+          : emailHtml;
+        await this.sendEmail(tenantEmail, subject, htmlWithFooter, "contract_signed");
         emailSent = true;
       } catch (error) {
         this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -478,7 +497,10 @@ export class ContractsService {
     let smsSent = false;
     if (lease.tenantPhone) {
       try {
-        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: text });
+        const messageWithFooter = lease.tenantId
+          ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
+          : text;
+        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: messageWithFooter });
         smsSent = Boolean(res?.success);
         if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
       } catch (error) {
@@ -704,6 +726,7 @@ export class ContractsService {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
+        tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,

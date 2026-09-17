@@ -87,6 +87,7 @@ import {
   MORTGAGE_AMOUNT_TOLERANCE,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
+import { TenantPortalService } from "./tenant-portal.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -112,6 +113,7 @@ export class PropertyManagementService {
     private readonly projects: ProjectsService,
     private readonly objectStorage: ObjectStorageService,
     private readonly whatsapp: WhatsappClientService,
+    private readonly tenantPortal: TenantPortalService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -1492,7 +1494,83 @@ export class PropertyManagementService {
       propertyId: input.propertyId,
       unitId: input.unitId,
     });
-    return this.findLease(leaseId);
+    const lease = await this.findLease(leaseId);
+
+    // Bienvenue portail locataire : uniquement pour le bail fraichement cree
+    // s'il est actif — jamais de backfill des locataires deja en place. Echec
+    // d'envoi = warning seulement, ne doit jamais faire echouer la creation.
+    if (lease.status === "active") {
+      await this.sendTenantPortalWelcome(lease, orgId);
+    }
+
+    return lease;
+  }
+
+  /** Genere/reutilise le lien portail du locataire et lui envoie un SMS/email de bienvenue (non bloquant). */
+  private async sendTenantPortalWelcome(
+    lease: {
+      id: number;
+      reference: string;
+      tenantId: number;
+      tenantFirstName: string | null;
+      tenantLastName: string | null;
+      tenantPhone: string | null;
+      tenantEmail: string | null;
+      propertyName: string | null;
+      propertyAddress: string | null;
+      rentAmount: string | number | null;
+      currencySymbol: string | null;
+    },
+    orgId: number,
+  ) {
+    if (!lease.tenantPhone && !lease.tenantEmail) return;
+
+    try {
+      const company = await readOrgAppSetting(this.db, orgId, { name: appSettings.companyName });
+      const companyName = (company?.name as string | null) || "votre gestionnaire";
+      const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+      const place = lease.propertyAddress || lease.propertyName || "votre logement";
+      const amount = `${lease.rentAmount}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
+
+      const smsMsg =
+        `Bonjour ${tenantName}, bienvenue ! Votre bail (${lease.reference}) pour ${place}, loyer ${amount}, ` +
+        `est actif. — ${companyName}`;
+
+      if (lease.tenantPhone) {
+        try {
+          const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(smsMsg, lease.tenantId, orgId);
+          const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: smsWithFooter });
+          if (!res?.success) {
+            this.logger.warn(`Welcome SMS not sent (lease ${lease.id}, ${lease.tenantPhone}): ${res?.message}`);
+          }
+        } catch (error) {
+          this.logger.warn(`Welcome SMS error (lease ${lease.id}, ${lease.tenantPhone}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (lease.tenantEmail) {
+        const html =
+          `<p>Bonjour ${tenantName},</p>` +
+          `<p>Bienvenue ! Votre bail <strong>${lease.reference}</strong> pour <strong>${place}</strong>, ` +
+          `d'un loyer de <strong>${amount}</strong>, est desormais actif.</p>` +
+          `<p>Bienvenue parmi nous.<br>${companyName}</p>`;
+        try {
+          const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, orgId);
+          await this.emails.send({
+            to: lease.tenantEmail,
+            subject: "Bienvenue — votre espace locataire",
+            html: htmlWithFooter,
+            type: "tenant_portal_welcome",
+            relatedType: "real-estate-lease",
+            relatedId: lease.id,
+          });
+        } catch (error) {
+          this.logger.warn(`Welcome email error (lease ${lease.id}, ${lease.tenantEmail}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Tenant portal welcome failed (lease ${lease.id}): ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async updateLease(id: number, input: UpdateLeaseDto, orgId: number) {
@@ -2681,10 +2759,12 @@ export class PropertyManagementService {
       .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
   }
 
-  async sendPaymentReminder(leaseId: number) {
+  async sendPaymentReminder(leaseId: number, orgId: number) {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
+        organizationId: realEstateLeases.organizationId,
+        tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
         currencySymbol: currencies.currencySymbol,
@@ -2695,7 +2775,7 @@ export class PropertyManagementService {
       .from(realEstateLeases)
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
-      .where(eq(realEstateLeases.id, leaseId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -2734,10 +2814,11 @@ export class PropertyManagementService {
       if (tpl[0].body) html = fill(tpl[0].body);
     }
 
+    const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
     const result = await this.emails.send({
       to: lease.tenantEmail,
       subject,
-      html,
+      html: htmlWithFooter,
       type: "payment_reminder",
       relatedType: "real-estate-lease",
       relatedId: leaseId,
@@ -4787,6 +4868,7 @@ export class PropertyManagementService {
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
         tenantPhone: customers.phone,
+        tenantEmail: customers.email,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })

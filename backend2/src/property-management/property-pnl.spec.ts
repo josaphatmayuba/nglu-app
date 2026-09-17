@@ -129,6 +129,7 @@ function makeService(opts: {
     {} as any, // projects
     {} as any, // objectStorage
     {} as any, // whatsapp
+    {} as any, // tenantPortal
   );
 
   return { service, db };

@@ -105,6 +105,7 @@ function makeService(opts: {
     projects,
     objectStorage,
     whatsapp,
+    {} as any,
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate };
@@ -393,6 +394,7 @@ describe("PropertyManagementService — listMortgagePayments", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     await service.listMortgagePayments(ORG, {
       propertyId: 3,
@@ -424,6 +426,7 @@ describe("PropertyManagementService — listMortgagePayments", () => {
     };
     const service = new PropertyManagementService(
       db,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

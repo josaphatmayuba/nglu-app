@@ -11,6 +11,7 @@ export type SystemEmailType =
   | "contract_signature"
   | "contract_signed"
   | "payment_reminder"
+  | "tenant_portal_welcome"
   | "password_reset"
   | "form_link"
   | "notification"
@@ -52,6 +53,11 @@ const templates: Record<SystemEmailType, { subject: string; html: string }> = {
 <p><strong>Montant dû:</strong> {{amount}}</p>
 <p>Merci de régulariser ce paiement au plus tôt possible.</p>
 <p>Cordialement,<br>L'équipe de gestion immobilière</p>`,
+  },
+  tenant_portal_welcome: {
+    subject: "Bienvenue — votre espace locataire",
+    html: `<p>Bonjour {{tenantName}},</p>
+<p>Bienvenue ! Votre espace locataire est disponible ici : <a href="{{url}}">{{url}}</a></p>`,
   },
   password_reset: {
     subject: "Réinitialisation de mot de passe - NgoluApp",

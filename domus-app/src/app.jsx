@@ -27,6 +27,7 @@ import { Onboarding } from "./screens/onboarding.jsx";
 import { Prescreening } from "./screens/prescreening.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
+import { TenantPortalPublic } from "./screens/tenant-portal-public.jsx";
 import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
@@ -144,6 +145,33 @@ function usePrescreeningRoute() {
   return token;
 }
 
+// Route publique du portail locataire (/domus/mon-espace?token=...) — sans
+// auth, même principe que useOnboardingRoute. Tolère un ancien lien par hash
+// (#/mon-espace?token=) par robustesse.
+function useTenantPortalRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/mon-espace\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/mon-espace(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
 function usePublicReservationsRoute() {
   const read = () => {
     if (typeof window === "undefined") return null;
@@ -171,6 +199,7 @@ export default function App() {
   const token = useAuthToken();
   const onboardingToken = useOnboardingRoute();
   const prescreeningToken = usePrescreeningRoute();
+  const tenantPortalToken = useTenantPortalRoute();
   const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -181,14 +210,15 @@ export default function App() {
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token || onboardingToken !== null || prescreeningToken !== null) return undefined;
+    if (!token || onboardingToken !== null || prescreeningToken !== null || tenantPortalToken !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token, onboardingToken, prescreeningToken]);
+  }, [token, onboardingToken, prescreeningToken, tenantPortalToken]);
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
   if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
+  if (tenantPortalToken !== null) return <TenantPortalPublic token={tenantPortalToken} />;
   if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;

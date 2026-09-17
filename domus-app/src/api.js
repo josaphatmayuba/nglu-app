@@ -144,6 +144,9 @@ export const api = {
   },
   deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
   tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
+  // Lien portail locataire (accès public sans login, token opaque dans l'URL).
+  generateTenantPortalLink: (id) => post(`/tenants/${id}/portal-link`),
+  revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
@@ -386,6 +389,21 @@ export function domusOnboardingUrl(backendUrl) {
   }
 }
 
+// Même principe pour le portail locataire (accès public sans login) : URL propre
+// Domus sous /domus/mon-espace?token=... (deep-link mobile à préserver).
+export const PORTAL_PATH = `${import.meta.env.BASE_URL}mon-espace`;
+export function domusPortalUrl(backendUrlOrToken) {
+  if (!backendUrlOrToken) return "";
+  try {
+    const u = new URL(backendUrlOrToken);
+    const token = u.searchParams.get("token");
+    if (!token) return backendUrlOrToken || "";
+    return `${u.origin}${PORTAL_PATH}?token=${encodeURIComponent(token)}`;
+  } catch {
+    return backendUrlOrToken || "";
+  }
+}
+
 // Même principe pour l'enquête de prélocation (Québec) : URL propre Domus
 // sous /domus/prescreening/candidature?token=... (deep-link mobile à préserver).
 export const PRESCREENING_PATH = `${import.meta.env.BASE_URL}prescreening/candidature`;
@@ -423,6 +441,9 @@ export const publicApi = {
     publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
   submitOnboarding: (token, values) =>
     publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Portail locataire (accès public sans login, token opaque fait autorisation).
+  tenantPortal: (token) => publicFetch(`/tenant-portal?token=${encodeURIComponent(token)}`),
 
   // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
   prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),

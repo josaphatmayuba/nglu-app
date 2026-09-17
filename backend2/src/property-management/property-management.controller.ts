@@ -39,6 +39,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
+import { TenantPortalService } from "./tenant-portal.service";
 import {
   CreateContractDto,
   CreateLeaseDto,
@@ -87,6 +88,7 @@ export class PropertyManagementController {
     private readonly propertyManagementService: PropertyManagementService,
     private readonly contractsService: ContractsService,
     private readonly rentReminderService: RentReminderService,
+    private readonly tenantPortalService: TenantPortalService,
   ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
@@ -166,6 +168,22 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteTenantIdDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteTenantIdDocument(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate (or renew) a secure tenant portal link (no-login public access)" })
+  @Permissions("update-propertyManagement")
+  @Post("tenants/:id/portal-link")
+  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.generateTenantPortalLink(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("update-propertyManagement")
+  @Delete("tenants/:id/portal-link")
+  @HttpCode(200)
+  revokeTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.revokeTenantPortalLink(id, orgId);
   }
 
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
@@ -756,8 +774,8 @@ export class PropertyManagementController {
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/reminder")
   @HttpCode(200)
-  sendPaymentReminder(@Body() body: { leaseId: number }) {
-    return this.propertyManagementService.sendPaymentReminder(body.leaseId);
+  sendPaymentReminder(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendPaymentReminder(body.leaseId, orgId);
   }
 
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })

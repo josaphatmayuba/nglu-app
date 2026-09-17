@@ -99,6 +99,7 @@ function makeService(opts: {
     projects,
     objectStorage,
     whatsapp,
+    {} as any,
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate };
@@ -267,6 +268,7 @@ describe("PropertyManagementService — listPropertyExpenses", () => {
     };
     const service = new PropertyManagementService(
       db,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

@@ -1100,6 +1100,23 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
   updatedAt: timestamp("updated_at"),
 });
 
+// Lien portail locataire : accès public sans login (token opaque dans l'URL,
+// même pattern que tenantOnboardings.tokenHash). tenantId référence customers.id
+// (rôle Locataire). Un lien actif est réutilisé tant qu'il n'est pas révoqué ;
+// expiresAt nullable = lien permanent accepté. revokedAt = invalidation douce,
+// jamais de DELETE physique (règle soft delete du projet).
+export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal_links", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  tenantId: bigint("tenant_id", { mode: "number" }).notNull(),
+  token: varchar("token", { length: 64 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 // Réservation temporaire type hôtel : un client occupe un bien entier OU une
 // unité sur une plage de dates, au tarif par jour. Indépendant du bail longue
 // durée (real_estate_leases). Recette comptabilisée au check-out.

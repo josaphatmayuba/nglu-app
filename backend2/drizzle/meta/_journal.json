@@ -1800,6 +1800,20 @@
       "when": 1781071200032,
       "tag": "0281_domus_expense_installment_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 257,
+      "version": "5",
+      "when": 1781071200033,
+      "tag": "0282_domus_tenant_portal_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 258,
+      "version": "5",
+      "when": 1781071200034,
+      "tag": "0283_domus_tenant_portal_link_token",
+      "breakpoints": true
     }
   ]
 }
