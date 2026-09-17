@@ -32,7 +32,9 @@ import {
   realEstateSecurityDeposits,
   realEstateUnits,
   roles,
+  smsLogs,
   subAccounts,
+  systemEmailLogs,
   tenantDetails,
   tenantOnboardings,
   transactions,
@@ -1726,7 +1728,14 @@ export class PropertyManagementService {
       if (lease.tenantPhone) {
         try {
           const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(smsMsg, lease.tenantId, orgId);
-          const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: smsWithFooter });
+          const res = await this.sms.sendSms({
+            phone: lease.tenantPhone,
+            message: smsWithFooter,
+            organizationId: orgId,
+            smsType: "lease_welcome",
+            relatedType: "real-estate-lease",
+            relatedId: lease.id,
+          });
           if (!res?.success) {
             this.logger.warn(`Welcome SMS not sent (lease ${lease.id}, ${lease.tenantPhone}): ${res?.message}`);
           }
@@ -3485,6 +3494,107 @@ export class PropertyManagementService {
       })
       .where(eq(tenantDetails.customerId, tenantId));
     return { message: "Copie de la piece supprimee." };
+  }
+
+  /**
+   * Historique fusionne (email + SMS) des communications envoyees a un locataire :
+   * bienvenue de bail, rappel de retard, lien de signature de contrat, lien portail,
+   * message de bienvenue post-signature, etc.
+   * Les logs sont rattaches soit directement au tenant ("tenant" + tenantId), soit
+   * a ses baux ("real-estate-lease" + leaseId), soit a ses contrats
+   * ("real-estate-contract" + contractId) — on resout donc les baux/contrats du
+   * locataire avant d'agreger. Scope strict organisation : findTenant() leve un
+   * 404 si le tenant n'appartient pas a orgId.
+   */
+  async tenantCommunications(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+
+    const leaseRows = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.tenantId, tenantId), eq(realEstateLeases.organizationId, orgId)));
+    const leaseIds = leaseRows.map((row) => row.id);
+
+    let contractIds: number[] = [];
+    if (leaseIds.length) {
+      const contractRows = await this.db
+        .select({ id: realEstateContracts.id })
+        .from(realEstateContracts)
+        .where(and(inArray(realEstateContracts.leaseId, leaseIds), eq(realEstateContracts.organizationId, orgId)));
+      contractIds = contractRows.map((row) => row.id);
+    }
+
+    const relatedConditions = [
+      and(eq(systemEmailLogs.relatedType, "tenant"), eq(systemEmailLogs.relatedId, String(tenantId))),
+      ...(leaseIds.length
+        ? [and(eq(systemEmailLogs.relatedType, "real-estate-lease"), inArray(systemEmailLogs.relatedId, leaseIds.map(String)))]
+        : []),
+      ...(contractIds.length
+        ? [and(eq(systemEmailLogs.relatedType, "real-estate-contract"), inArray(systemEmailLogs.relatedId, contractIds.map(String)))]
+        : []),
+    ];
+
+    const emailRows = await this.db
+      .select({
+        type: systemEmailLogs.emailType,
+        recipient: systemEmailLogs.recipient,
+        subject: systemEmailLogs.subject,
+        status: systemEmailLogs.status,
+        errorMessage: systemEmailLogs.errorMessage,
+        createdAt: systemEmailLogs.createdAt,
+      })
+      .from(systemEmailLogs)
+      .where(or(...relatedConditions))
+      .orderBy(desc(systemEmailLogs.createdAt))
+      .limit(100);
+
+    const smsRelatedConditions = [
+      and(eq(smsLogs.relatedType, "tenant"), eq(smsLogs.relatedId, String(tenantId))),
+      ...(leaseIds.length
+        ? [and(eq(smsLogs.relatedType, "real-estate-lease"), inArray(smsLogs.relatedId, leaseIds.map(String)))]
+        : []),
+      ...(contractIds.length
+        ? [and(eq(smsLogs.relatedType, "real-estate-contract"), inArray(smsLogs.relatedId, contractIds.map(String)))]
+        : []),
+    ];
+
+    const smsRows = await this.db
+      .select({
+        type: smsLogs.smsType,
+        recipient: smsLogs.recipient,
+        body: smsLogs.body,
+        status: smsLogs.status,
+        errorMessage: smsLogs.errorMessage,
+        createdAt: smsLogs.createdAt,
+      })
+      .from(smsLogs)
+      .where(and(eq(smsLogs.organizationId, orgId), or(...smsRelatedConditions)))
+      .orderBy(desc(smsLogs.createdAt))
+      .limit(100);
+
+    const merged = [
+      ...emailRows.map((row) => ({
+        channel: "email" as const,
+        type: row.type,
+        recipient: row.recipient,
+        subject: row.subject,
+        status: row.status,
+        createdAt: row.createdAt,
+        errorMessage: row.errorMessage,
+      })),
+      ...smsRows.map((row) => ({
+        channel: "sms" as const,
+        type: row.type,
+        recipient: row.recipient,
+        subject: row.body ? String(row.body).slice(0, 160) : null,
+        status: row.status,
+        createdAt: row.createdAt,
+        errorMessage: row.errorMessage,
+      })),
+    ];
+
+    merged.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+    return merged.slice(0, 100);
   }
 
   async findPayment(id: number) {

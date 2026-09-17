@@ -147,6 +147,8 @@ export const api = {
   // Lien portail locataire (accès public sans login, token opaque dans l'URL).
   generateTenantPortalLink: (id) => post(`/tenants/${id}/portal-link`),
   revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
+  // Historique des communications (email + SMS) envoyées à ce locataire.
+  tenantCommunications: (id) => get(`/tenants/${id}/communications`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),

@@ -385,6 +385,7 @@ export class ContractsService {
         "Votre contrat de bail est prêt à être signé",
         htmlWithFooter,
         "contract_signature",
+        id,
       );
     }
 
@@ -400,7 +401,14 @@ export class ContractsService {
         const messageWithFooter = tenantId
           ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
           : message;
-        const res = await this.sms.sendSms({ phone: tenantPhone, message: messageWithFooter });
+        const res = await this.sms.sendSms({
+          phone: tenantPhone,
+          message: messageWithFooter,
+          organizationId: orgId,
+          smsType: "contract_signature",
+          relatedType: "real-estate-contract",
+          relatedId: id,
+        });
         if (!res?.success) this.logger.warn(`Contract signing SMS not sent (contract ${id}): ${res?.message}`);
       } catch (error) {
         this.logger.warn(`Contract signing SMS error (contract ${id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -575,7 +583,7 @@ export class ContractsService {
         const htmlWithFooter = lease.tenantId
           ? await this.tenantPortal.appendPortalFooterToEmail(emailHtml, lease.tenantId, orgId)
           : emailHtml;
-        await this.sendEmail(tenantEmail, subject, htmlWithFooter, "contract_signed");
+        await this.sendEmail(tenantEmail, subject, htmlWithFooter, "contract_signed", contract.id);
         emailSent = true;
       } catch (error) {
         this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
@@ -588,7 +596,14 @@ export class ContractsService {
         const messageWithFooter = lease.tenantId
           ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
           : text;
-        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: messageWithFooter });
+        const res = await this.sms.sendSms({
+          phone: lease.tenantPhone,
+          message: messageWithFooter,
+          organizationId: orgId,
+          smsType: "lease_welcome",
+          relatedType: "real-estate-lease",
+          relatedId: contract.leaseId,
+        });
         smsSent = Boolean(res?.success);
         if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
       } catch (error) {
@@ -1190,13 +1205,20 @@ export class ContractsService {
     });
   }
 
-  private async sendEmail(to: string, subject: string, html: string, type: SystemEmailType = "notification") {
+  private async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    type: SystemEmailType = "notification",
+    relatedId?: number,
+  ) {
     await this.emails.send({
       to,
       subject,
       html,
       type,
       relatedType: "real-estate-contract",
+      relatedId,
     });
   }
 

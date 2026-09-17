@@ -1842,6 +1842,13 @@
       "when": 1781071200038,
       "tag": "0287_domus_property_owner_id",
       "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "5",
+      "when": 1781071200039,
+      "tag": "0288_domus_sms_logs",
+      "breakpoints": true
     }
   ]
 }

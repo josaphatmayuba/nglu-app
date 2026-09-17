@@ -2256,6 +2256,23 @@ export const systemEmailLogs = mysqlTable("system_email_logs", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Domus : outbound SMS (Twilio) audit trail — miroir de systemEmailLogs,
+// avec organization_id des le depart pour le scope multi-tenant strict.
+export const smsLogs = mysqlTable("sms_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  smsType: varchar("sms_type", { length: 100 }).notNull(),
+  recipient: varchar("recipient", { length: 50 }).notNull(),
+  body: text("body"),
+  status: mysqlEnum("status", ["pending", "sent", "failed", "skipped"]).default("pending").notNull(),
+  relatedType: varchar("related_type", { length: 100 }),
+  relatedId: varchar("related_id", { length: 100 }),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  errorMessage: varchar("error_message", { length: 1000 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // SCRUM-146: invoice templates
 export const invoiceTemplates = mysqlTable("invoice_templates", {
   id: serial("id").primaryKey(),

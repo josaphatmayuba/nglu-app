@@ -111,7 +111,7 @@ export class RentReminderService {
 
       if (lease.tenantPhone) {
         const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, lease.organizationId);
-        await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId);
+        await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId, lease.organizationId);
       }
 
       if (lease.tenantEmail) {
@@ -133,7 +133,7 @@ export class RentReminderService {
           `${place} (${amount}) est en retard de ${daysLate} jours. Merci de bien vouloir l'inviter à régulariser ` +
           `ce paiement auprès de ${companyName}${contactLine}, afin d'éviter l'annulation de son contrat de location. ` +
           `Merci de votre compréhension. — ${companyName}`;
-        await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId);
+        await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId);
       }
 
       await this.db
@@ -146,9 +146,16 @@ export class RentReminderService {
     return { candidates: rows.length, sent, enabled: send };
   }
 
-  private async safeSms(phone: string, message: string, leaseId: number) {
+  private async safeSms(phone: string, message: string, leaseId: number, organizationId: number) {
     try {
-      const res = await this.sms.sendSms({ phone, message });
+      const res = await this.sms.sendSms({
+        phone,
+        message,
+        organizationId,
+        smsType: "payment_reminder",
+        relatedType: "real-estate-lease",
+        relatedId: leaseId,
+      });
       if (!res?.success) {
         this.logger.warn(`Reminder SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
       }

@@ -172,6 +172,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteTenantIdDocument(id, orgId);
   }
 
+  @ApiOperation({ summary: "Chronological history of communications (email + SMS) sent to a tenant" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("tenants/:id/communications")
+  tenantCommunications(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.tenantCommunications(id, orgId);
+  }
+
   @ApiOperation({ summary: "Generate (or renew) a secure tenant portal link (no-login public access)" })
   @Permissions("update-propertyManagement")
   @Post("tenants/:id/portal-link")
