@@ -1095,6 +1095,10 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
   returnDate: date("return_date", { mode: "string" }),
   reference: varchar("reference", { length: 255 }),
   notes: text("notes"),
+  // Preuve d'encaissement (photo/scan reçu signé) — optionnelle.
+  proofUrl: varchar("proof_url", { length: 500 }),
+  // Preuve de restitution (photo/scan reçu signé au moment du remboursement) — optionnelle.
+  returnProofUrl: varchar("return_proof_url", { length: 500 }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),

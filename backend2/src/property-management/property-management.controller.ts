@@ -720,16 +720,50 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Collect a security deposit (records a liability accounting transaction)" })
   @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("leases/:id/deposit")
-  collectDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: CollectDepositDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.collectDeposit(id, body, orgId);
+  collectDeposit(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CollectDepositDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.collectDeposit(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Return a security deposit with optional damage deduction" })
   @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("leases/:id/deposit/return")
-  returnDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: ReturnDepositDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.returnDeposit(id, body, orgId);
+  returnDeposit(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ReturnDepositDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.returnDeposit(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "List rent payments" })

@@ -308,9 +308,26 @@ export const api = {
   },
 
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
+  // proofFile optionnel (photo/scan recu signe) — meme pattern multipart que createPayment.
   deposits: () => get("/deposits"),
-  collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
-  returnDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit/return`, b),
+  collectDeposit: (leaseId, b, proofFile = null) => {
+    if (!proofFile) return post(`/leases/${leaseId}/deposit`, b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch(`/leases/${leaseId}/deposit`, form);
+  },
+  returnDeposit: (leaseId, b, proofFile = null) => {
+    if (!proofFile) return post(`/leases/${leaseId}/deposit/return`, b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch(`/leases/${leaseId}/deposit/return`, form);
+  },
 
   // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
   reservations: () => get("/reservations"),

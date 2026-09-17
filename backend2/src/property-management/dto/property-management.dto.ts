@@ -389,6 +389,11 @@ export class CollectDepositDto {
   @IsOptional()
   @IsString()
   notes?: string | null;
+
+  @ApiPropertyOptional({ description: "URL de la preuve d'encaissement deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class ReturnDepositDto {
@@ -417,6 +422,11 @@ export class ReturnDepositDto {
   @IsOptional()
   @IsString()
   notes?: string | null;
+
+  @ApiPropertyOptional({ description: "URL de la preuve de restitution deja hebergee (fallback si aucun fichier envoye)." })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string | null;
 }
 
 export class CreateMaintenanceDto {

@@ -1864,7 +1864,8 @@ export class PropertyManagementService {
     return /(banc|bank|carte|card|cheque|virement)/.test(m);
   }
 
-  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number) {
+  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     // Une seule caution active détenue par bail.
@@ -1915,6 +1916,7 @@ export class PropertyManagementService {
       status: "held",
       reference: input.reference ?? null,
       notes: input.notes ?? null,
+      proofUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1945,7 +1947,8 @@ export class PropertyManagementService {
     return this.findDeposit(depositId);
   }
 
-  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number) {
+  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const returnProofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
     const rows = await this.db
       .select()
@@ -2018,6 +2021,7 @@ export class PropertyManagementService {
         returnedAmount: this.money(returned),
         returnMethod: input.returnMethod ?? "bank",
         returnDate: this.requiredDate(input.returnDate),
+        returnProofUrl,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(realEstateSecurityDeposits.id, deposit.id));

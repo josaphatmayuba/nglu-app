@@ -1821,6 +1821,13 @@
       "when": 1781071200035,
       "tag": "0284_repair_real_estate_security_deposits",
       "breakpoints": true
+    },
+    {
+      "idx": 260,
+      "version": "5",
+      "when": 1781071200036,
+      "tag": "0285_domus_deposit_proof",
+      "breakpoints": true
     }
   ]
 }
