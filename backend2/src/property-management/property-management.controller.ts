@@ -49,6 +49,7 @@ import {
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  ConfirmPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -852,6 +853,40 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req));
+  }
+
+  @ApiOperation({ summary: "Generate missing (pending) monthly rent payment rows for a retroactive lease — no accounting impact" })
+  @Permissions("create-propertyManagement")
+  @Post("leases/:id/generate-missing-payments")
+  generateMissingPayments(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.generateMissingPayments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Confirm a pending rent payment row (records the real accounting transaction)" })
+  @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("payments/:id/confirm")
+  confirmPendingPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ConfirmPendingPaymentDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Send payment reminder email to tenant" })

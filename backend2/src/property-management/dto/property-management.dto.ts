@@ -465,6 +465,11 @@ export class CreateRentPaymentDto {
   proofUrl?: string | null;
 }
 
+// Confirmation d'une echeance 'pending' generee retroactivement : memes
+// champs que CreateRentPaymentDto mais sans leaseId (deja connu via l'ID
+// de la ligne pending a confirmer).
+export class ConfirmPendingPaymentDto extends OmitType(CreateRentPaymentDto, ["leaseId"] as const) {}
+
 export class CollectDepositDto {
   @ApiProperty({ example: "2026-06-04" })
   @IsDateString()

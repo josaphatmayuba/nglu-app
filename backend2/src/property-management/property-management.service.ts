@@ -61,6 +61,7 @@ import {
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  ConfirmPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -185,7 +186,10 @@ export class PropertyManagementService {
     const [collectedRent] = await this.db
       .select({ total: sql<string>`coalesce(sum(${realEstateRentPayments.amount}), 0)` })
       .from(realEstateRentPayments)
-      .where(eq(realEstateRentPayments.organizationId, orgId));
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.status, "paid"),
+      ));
     const [openMaintenance] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateMaintenanceRequests)
@@ -1907,6 +1911,7 @@ export class PropertyManagementService {
         paymentDate: realEstateRentPayments.paymentDate,
         amount: realEstateRentPayments.amount,
         method: realEstateRentPayments.method,
+        status: realEstateRentPayments.status,
         reference: realEstateRentPayments.reference,
         notes: realEstateRentPayments.notes,
         taxAmount: realEstateRentPayments.taxAmount,
@@ -2051,6 +2056,190 @@ export class PropertyManagementService {
 
     await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    return this.findPayment(paymentId);
+  }
+
+  // Genere les echeances de loyer manquantes d'un bail (baux crees
+  // retroactivement dont les mois passes n'ont jamais ete saisis), sans les
+  // compter comme argent encaisse : pas de transaction comptable, pas de
+  // ledger. status='pending' — a confirmer individuellement ensuite via
+  // confirmPendingPayment. Idempotent : un mois deja couvert par une ligne
+  // (paid OU pending) n'est jamais duplique.
+  async generateMissingPayments(leaseId: number, orgId: number) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+
+    const existing = await this.db
+      .select({ paymentDate: realEstateRentPayments.paymentDate })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+      ));
+    const coveredMonths = new Set(
+      existing.map((p) => {
+        const d = this.parseDateOnly(p.paymentDate);
+        return `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+      }),
+    );
+
+    const start = this.parseDateOnly(lease.startDate);
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const boundary = lease.endDate ? this.parseDateOnly(lease.endDate) : null;
+
+    const monthsToCreate: Date[] = [];
+    let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    while (cursor.getTime() <= lastMonth.getTime()) {
+      if (!boundary || cursor.getTime() <= boundary.getTime()) {
+        const key = `${cursor.getUTCFullYear()}-${cursor.getUTCMonth()}`;
+        if (!coveredMonths.has(key)) monthsToCreate.push(new Date(cursor.getTime()));
+      }
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    }
+
+    const created: number[] = [];
+    for (const month of monthsToCreate) {
+      const [result] = await this.db.insert(realEstateRentPayments).values({
+        organizationId: orgId,
+        leaseId: lease.id,
+        currencyId: (lease as any).currencyId ?? null,
+        transactionId: null,
+        paymentDate: this.formatDateOnly(month),
+        amount: this.money(Number(lease.rentAmount)),
+        method: "pending",
+        status: "pending",
+        reference: null,
+        notes: "Echeance generee automatiquement (bail retroactif) — a confirmer.",
+        proofUrl: null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      created.push(Number((result as any).insertId));
+    }
+
+    const payments = created.length
+      ? await this.db.select().from(realEstateRentPayments).where(inArray(realEstateRentPayments.id, created))
+      : [];
+
+    return { createdCount: created.length, payments };
+  }
+
+  // Confirme une echeance 'pending' generee retroactivement : transforme la
+  // ligne existante en vrai paiement encaisse (UPDATE, pas de duplication),
+  // en creant la transaction comptable + ecriture ledger comme createPayment.
+  // Reutilise integralement le meme calcul de taxe / compte de paiement.
+  async confirmPendingPayment(paymentId: number, input: ConfirmPendingPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+
+    const [pending] = await this.db
+      .select()
+      .from(realEstateRentPayments)
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)))
+      .limit(1);
+    if (!pending) throw new NotFoundException("Payment not found.");
+    if (pending.status !== "pending") {
+      throw new BadRequestException("Ce paiement n'est pas en attente de confirmation.");
+    }
+
+    const lease = await this.getLeaseOrThrow(pending.leaseId, orgId);
+    await this.ensureLeaseContractSigned(pending.leaseId);
+    const rentPaymentType = await this.getRentPaymentType(orgId);
+    const debitId = input.paymentAccountId
+      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId));
+    await this.ensureExists(subAccounts, debitId, "Payment account not found.");
+
+    const paymentCurrencyId =
+      (input as any).currencyId
+      ?? (lease as any).currencyId
+      ?? (await this.resolveDefaultCurrency(orgId));
+
+    const [transactionResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
+      date: new Date(input.paymentDate),
+      debitId,
+      creditId: rentPaymentType.creditAccountId,
+      particulars: input.notes || "Payment for rent",
+      amount: input.amount,
+      currencyId: paymentCurrencyId ?? null,
+      type: "Rent Payment",
+      relatedId: String(lease.id),
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const taxAmt = this.computeInclusiveTax(Number(input.amount), lease as any);
+
+    await this.db
+      .update(realEstateRentPayments)
+      .set({
+        status: "paid",
+        currencyId: paymentCurrencyId,
+        transactionId: Number(transactionResult.insertId),
+        paymentDate: this.requiredDate(input.paymentDate),
+        amount: this.money(input.amount),
+        method: input.method ?? "cash",
+        reference: input.reference ?? null,
+        notes: input.notes || "Payment for rent",
+        taxAmount: taxAmt != null ? this.money(taxAmt) : null,
+        taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+        proofUrl,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
+      if (taxType) {
+        await this.db.insert(transactions).values({
+          organizationId: orgId,
+          date: new Date(input.paymentDate),
+          debitId: taxType.debitAccountId,
+          creditId: taxType.creditAccountId,
+          particulars: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})`,
+          amount: taxAmt,
+          currencyId: paymentCurrencyId ?? null,
+          type: "Real Estate Tax",
+          relatedId: String(lease.id),
+          status: "true",
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+      }
+    }
+
+    const rentLines = [
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+    ];
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
+      if (taxType) {
+        rentLines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `RENT-${paymentId}`,
+        particulars: input.notes || `Payment for rent — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: paymentCurrencyId ?? undefined,
+        idempotencyKey: `rent-payment:${paymentId}`,
+        lines: rentLines,
+      },
+      orgId,
+    );
+
+    await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
+    await this.publishPaymentUpdate("updated", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
@@ -2973,6 +3162,7 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
+        eq(realEstateRentPayments.status, "paid"),
         gte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodStart)),
         lte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodEnd)),
       ));
@@ -4600,6 +4790,7 @@ export class PropertyManagementService {
       ne(paymentLease.status, "cancelled"),
       eq(paymentLease.propertyId, propertyId),
       eq(realEstateRentPayments.organizationId, orgId),
+      eq(realEstateRentPayments.status, "paid"),
     ];
     if (filters.dateFrom) rentConditions.push(gte(realEstateRentPayments.paymentDate, filters.dateFrom));
     if (filters.dateTo) rentConditions.push(lte(realEstateRentPayments.paymentDate, filters.dateTo));
@@ -5227,7 +5418,10 @@ export class PropertyManagementService {
         paymentDate: realEstateRentPayments.paymentDate,
       })
       .from(realEstateRentPayments)
-      .where(inArray(realEstateRentPayments.leaseId, leaseIds))
+      .where(and(
+        inArray(realEstateRentPayments.leaseId, leaseIds),
+        eq(realEstateRentPayments.status, "paid"),
+      ))
       .orderBy(realEstateRentPayments.paymentDate);
 
     const paymentsByLease = new Map<number, string[]>();

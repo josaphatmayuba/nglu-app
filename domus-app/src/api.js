@@ -219,6 +219,21 @@ export const api = {
   sendReminder: (b) => post("/payments/reminder", b),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
 
+  // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
+  // manquantes en statut pending, une ligne par mois calendaire ecoule non couvert.
+  generateMissingPayments: (leaseId) => post(`/leases/${leaseId}/generate-missing-payments`),
+  // Confirme une echeance pending en paiement encaisse (transaction comptable
+  // + ledger crees a la confirmation). Meme pattern multipart que createPayment.
+  confirmPayment: (paymentId, b, proofFile = null) => {
+    if (!proofFile) return post(`/payments/${paymentId}/confirm`, b);
+    const form = new FormData();
+    Object.entries(b || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    });
+    form.append("proof", proofFile);
+    return multipartFetch(`/payments/${paymentId}/confirm`, form);
+  },
+
   maintenance: () => get("/maintenance"),
   maintenanceItem: (id) => get(`/maintenance/${id}`),
   createMaintenance: (b) => post("/maintenance", b),

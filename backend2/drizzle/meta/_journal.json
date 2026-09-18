@@ -1856,6 +1856,13 @@
       "when": 1781071200040,
       "tag": "0289_domus_property_geocoding",
       "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "5",
+      "when": 1781071200041,
+      "tag": "0290_domus_rent_payment_status",
+      "breakpoints": true
     }
   ]
 }

@@ -607,6 +607,7 @@ function LeaseActionsMenu({
         <>
           <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
           <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat signé</button>
+          <button onClick={onPayments}><Receipt size={15} /> Paiements</button>
           <hr />
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
           {renewable && <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>}
