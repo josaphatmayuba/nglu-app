@@ -347,7 +347,7 @@ export function Maintenance() {
       </div>
 
       <div className="immo-metrics-grid">
-        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label={t("Tickets ouverts")} value={openTickets.length} />
+        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label={t("Tickets non resolus")} value={openTickets.length} />
         <Metric icon={<AlertTriangle size={20} />} tone="immo-tone-red" label={t("Urgents")} value={urgentTickets.length} danger />
         <Metric icon={<Columns3 size={20} />} tone="immo-tone-brand" label={t("En cours")} value={inProgressTickets.length} />
         <Metric icon={<CheckCircle2 size={20} />} tone="immo-tone-green" label={t("Termines")} value={doneTickets.length} success />
