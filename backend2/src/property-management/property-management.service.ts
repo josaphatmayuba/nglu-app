@@ -274,7 +274,14 @@ export class PropertyManagementService {
   }
 
   async updateTenant(id: number, input: UpdateTenantDto, orgId: number) {
-    const existing = await this.findTenant(id, orgId);
+    // Lecture SANS filtre sur status : findTenant n'expose que les dossiers
+    // actifs, ce qui rendrait un locataire desactive introuvable et donc
+    // impossible a reactiver (soft delete sans retour possible).
+    const [existing] = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)))
+      .limit(1);
     if (!existing) {
       throw new NotFoundException("Locataire introuvable.");
     }
@@ -286,6 +293,10 @@ export class PropertyManagementService {
     if (input.email !== undefined) customerSet.email = input.email || null;
     if (input.phone !== undefined) customerSet.phone = input.phone;
     if (input.address !== undefined) customerSet.address = input.address;
+    // Soft delete / reactivation : sans ca, PUT /tenants/:id acquittait un
+    // status envoye par le client sans jamais l'appliquer (le dossier restait
+    // actif). Aucun DELETE physique, l'historique reste intact.
+    if (input.status !== undefined) customerSet.status = input.status;
     await this.db
       .update(customers)
       .set(customerSet)
@@ -367,6 +378,12 @@ export class PropertyManagementService {
       });
     }
 
+    // Apres une desactivation (status "false"), le dossier sort du perimetre de
+    // findTenant : on renvoie alors un accuse minimal plutot qu'un 404 sur une
+    // mise a jour qui a pourtant reussi.
+    if (input.status === "false") {
+      return { id, status: "false" };
+    }
     return this.findTenant(id, orgId);
   }
 

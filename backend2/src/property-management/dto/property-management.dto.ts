@@ -782,7 +782,15 @@ export class CreateTenantDto {
   child_age?: number[];
 }
 
-export class UpdateTenantDto extends PartialType(CreateTenantDto) {}
+export class UpdateTenantDto extends PartialType(CreateTenantDto) {
+  // Soft delete / reactivation du dossier locataire. Absent de CreateTenantDto
+  // (une creation est toujours active). Suppression = status "false", jamais de
+  // DELETE physique : l'historique (baux, paiements) doit rester intact.
+  @ApiPropertyOptional({ example: "false", enum: ["true", "false"] })
+  @IsOptional()
+  @IsIn(["true", "false"])
+  status?: string;
+}
 
 export class GenerateTenantOnboardingDto {
   @ApiPropertyOptional({ example: "Jean" })
