@@ -180,6 +180,38 @@ export class PropertyManagementController {
     return this.propertyManagementService.tenantCommunications(id, orgId);
   }
 
+  @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
+  @Permissions("readAll-propertyManagement")
+  @Get("tenant-change-requests")
+  tenantChangeRequests(@CurrentOrg() orgId: number, @Query("status") status?: string) {
+    return this.tenantPortalService.listChangeRequests(orgId, status || "pending");
+  }
+
+  @ApiOperation({ summary: "Approve a change request and apply it to the tenant record" })
+  @Permissions("update-propertyManagement")
+  @Post("tenant-change-requests/:id/approve")
+  approveTenantChangeRequest(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @Body() body: { note?: string },
+  ) {
+    return this.tenantPortalService.approveChangeRequest(id, orgId, userId, body?.note);
+  }
+
+  @ApiOperation({ summary: "Reject a change request without touching the tenant record" })
+  @Permissions("update-propertyManagement")
+  @Post("tenant-change-requests/:id/reject")
+  @HttpCode(200)
+  rejectTenantChangeRequest(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @Body() body: { note?: string },
+  ) {
+    return this.tenantPortalService.rejectChangeRequest(id, orgId, userId, body?.note);
+  }
+
   @ApiOperation({ summary: "Read the existing tenant portal link without creating one" })
   @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("tenants/:id/portal-link")

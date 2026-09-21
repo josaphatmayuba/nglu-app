@@ -539,6 +539,32 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
     return () => { cancelled = true; };
   }, [tenant?.id]);
 
+  // Demandes de modification soumises par CE locataire depuis son portail.
+  const [changeReqs, setChangeReqs] = useState([]);
+  const [reqBusy, setReqBusy] = useState(false);
+  const reloadChangeReqs = async () => {
+    if (!tenant?.id) return;
+    try {
+      const all = await api.tenantChangeRequests("pending");
+      setChangeReqs((all || []).filter((r) => String(r.tenantId) === String(tenant.id)));
+    } catch { /* non bloquant : la fiche reste utilisable */ }
+  };
+  useEffect(() => { setChangeReqs([]); reloadChangeReqs(); }, [tenant?.id]);
+
+  const reviewChangeReq = async (id, approve) => {
+    setReqBusy(true);
+    try {
+      if (approve) await api.approveTenantChangeRequest(id);
+      else await api.rejectTenantChangeRequest(id);
+      toast.success(approve ? t("Modification appliquee.") : t("Demande refusee."));
+      await reloadChangeReqs();
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setReqBusy(false);
+    }
+  };
+
   const copyPortalLink = async () => {
     try { await navigator.clipboard?.writeText(portalUrl); toast.success(t("Lien portail copié.")); }
     catch { toast.error(t("Copie impossible.")); }
@@ -621,6 +647,31 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
               <b style={{ wordBreak: "break-all" }}>
                 <a href={portalUrl} target="_blank" rel="noopener noreferrer">{portalUrl}</a>
               </b>
+            </div>
+          )}
+
+          {changeReqs.length > 0 && (
+            <div className="info-cell" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, marginBottom: 10 }}>
+              <b style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <AlertTriangle size={14} /> {t("Demande de modification du locataire")}
+              </b>
+              {changeReqs.map((r) => (
+                <div key={r.id} style={{ fontSize: 13 }}>
+                  <ul style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
+                    {Object.entries(r.changes || {}).map(([k, v]) => (
+                      <li key={k}>{k} : <strong>{String(v)}</strong></li>
+                    ))}
+                  </ul>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" className="btn btn-primary" disabled={reqBusy} onClick={() => reviewChangeReq(r.id, true)}>
+                      <CheckCircle2 size={14} /> {t("Approuver")}
+                    </button>
+                    <button type="button" className="btn" disabled={reqBusy} onClick={() => reviewChangeReq(r.id, false)}>
+                      <X size={14} /> {t("Refuser")}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

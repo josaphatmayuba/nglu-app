@@ -5,7 +5,7 @@
 // dueChip/daysUntil/buildLeaseCards dupliqués/réutilisés depuis portail.jsx —
 // on ne touche pas au portail gestionnaire existant.
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature } from "lucide-react";
 import { publicApi } from "../api.js";
 import { money } from "../data.js";
 import { buildLeaseCards } from "./loyers.jsx";
@@ -49,6 +49,11 @@ export function TenantPortalPublic({ token }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [fatal, setFatal] = useState("");
+  // Formulaire de mise a jour : les valeurs saisies ne modifient rien
+  // directement, elles partent en demande soumise a validation.
+  const [form, setForm] = useState(null);
+  const [formBusy, setFormBusy] = useState(false);
+  const [formMsg, setFormMsg] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +63,15 @@ export function TenantPortalPublic({ token }) {
         const rec = await publicApi.tenantPortal(token);
         if (!alive) return;
         setData(rec);
+        // Pre-remplit le formulaire avec les donnees actuelles du dossier.
+        const tn = rec?.tenant || {};
+        setForm({
+          firstName: tn.firstName || "",
+          lastName: tn.lastName || "",
+          email: tn.email || "",
+          phone: tn.phone || "",
+          address: tn.address || "",
+        });
       } catch (e) {
         if (alive) setFatal(t("Ce lien n'est plus valide ou a expiré."));
       } finally {
@@ -66,6 +80,38 @@ export function TenantPortalPublic({ token }) {
     })();
     return () => { alive = false; };
   }, [token]);
+
+  // Soumet une DEMANDE de modification : le dossier n'est pas modifie tant
+  // qu'un gestionnaire n'a pas approuve (le lien portail n'ayant pas de mot de
+  // passe, une ecriture directe permettrait un detournement du telephone).
+  const submitChanges = async (e) => {
+    e.preventDefault();
+    if (!form) return;
+    setFormBusy(true);
+    setFormMsg(null);
+    try {
+      await publicApi.submitTenantChangeRequest(token, form);
+      setFormMsg({ type: "ok", text: t("Demande envoyée. Elle sera validée par votre gestionnaire.") });
+      const rec = await publicApi.tenantPortal(token);
+      setData(rec);
+    } catch (err) {
+      setFormMsg({ type: "error", text: err?.message || t("Envoi impossible.") });
+    } finally {
+      setFormBusy(false);
+    }
+  };
+
+  // Ouvre le justificatif dans un nouvel onglet. L'URL n'est jamais dans la
+  // page : elle est demandee au backend, qui verifie d'abord que le paiement
+  // appartient bien au porteur du token.
+  const openProof = async (paymentId) => {
+    try {
+      const res = await publicApi.tenantPaymentProof(token, paymentId);
+      if (res?.url) window.open(res.url, "_blank", "noopener");
+    } catch {
+      setFormMsg({ type: "error", text: t("Justificatif indisponible.") });
+    }
+  };
 
   const activeLease = useMemo(() => {
     const leases = Array.isArray(data?.leases) ? data.leases : [];
@@ -84,13 +130,41 @@ export function TenantPortalPublic({ token }) {
     return cards[0] || null;
   }, [activeLease, data]);
 
+  // Etat de la derniere demande de modification, pour informer le locataire
+  // sans qu'il ait a resoumettre.
+  const pendingRequest = useMemo(
+    () => (data?.changeRequests || []).find((r) => r.status === "pending") || null,
+    [data],
+  );
+  const lastReviewed = useMemo(
+    () => (data?.changeRequests || []).find((r) => r.status !== "pending") || null,
+    [data],
+  );
+
   const dueDate = activeLease?.nextInvoiceDate || activeLease?.endDate || null;
   const due = dueChip(daysUntil(dueDate));
 
+  // Paiements reellement encaisses (status 'paid'). La caution n'apparait pas
+  // ici : elle est stockee a part (real_estate_security_deposits) et n'est pas
+  // un loyer.
   const history = useMemo(
-    () => [...leasePayments].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0)).slice(0, 12),
+    () => leasePayments
+      .filter((p) => (p.status || "paid") === "paid")
+      .sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))
+      .slice(0, 12),
     [leasePayments],
   );
+
+  // Echeances generees mais non reglees : celles dont la date est passee sont
+  // en retard, les autres sont a venir.
+  const pending = useMemo(
+    () => leasePayments
+      .filter((p) => (p.status || "paid") === "pending")
+      .sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0)),
+    [leasePayments],
+  );
+  const overdue = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0), [pending]);
+  const upcoming = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) >= 0), [pending]);
 
   if (loading) {
     return (
@@ -134,7 +208,9 @@ export function TenantPortalPublic({ token }) {
           {!activeLease ? (
             <div className="onb-card">
               <div className="onb-card-body">
-                <p className="muted" style={{ margin: 0 }}>{t("Aucun bail actif trouvé pour ce lien.")}</p>
+                <p className="muted" style={{ margin: 0 }}>
+                  {t("Aucun bail en cours. Vous pouvez mettre à jour vos informations ci-dessous.")}
+                </p>
               </div>
             </div>
           ) : (
@@ -161,6 +237,75 @@ export function TenantPortalPublic({ token }) {
                 </div>
               </section>
 
+              {overdue.length > 0 && (
+                <section className="onb-card">
+                  <div className="onb-card-head">
+                    <span className="onb-card-icon tone-rose"><AlertTriangle size={18} /></span>
+                    <div className="onb-card-heading">
+                      <h3>{t("Loyers en retard")}</h3>
+                      <p>{t("Échéances non réglées à ce jour")}</p>
+                    </div>
+                  </div>
+                  <div className="onb-card-body">
+                    {overdue.map((p) => (
+                      <div key={p.id} className="portail-hist-row">
+                        <AlertTriangle size={14} className="muted" />
+                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                        <span className="chip chip-rose">
+                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                        </span>
+                        <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {upcoming.length > 0 && (
+                <section className="onb-card">
+                  <div className="onb-card-head">
+                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
+                    <div className="onb-card-heading">
+                      <h3>{t("Paiements à venir")}</h3>
+                      <p>{t("Prochaines échéances de votre bail")}</p>
+                    </div>
+                  </div>
+                  <div className="onb-card-body">
+                    {upcoming.slice(0, 12).map((p) => (
+                      <div key={p.id} className="portail-hist-row">
+                        <Clock size={14} className="muted" />
+                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                        <span className="muted">{dueChip(daysUntil(p.paymentDate)).text}</span>
+                        <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {(data?.contracts || []).length > 0 && (
+                <section className="onb-card">
+                  <div className="onb-card-head">
+                    <span className="onb-card-icon tone-iris"><FileSignature size={18} /></span>
+                    <div className="onb-card-heading">
+                      <h3>{t("Mon bail")}</h3>
+                      <p>{t("Contrat signé")}</p>
+                    </div>
+                  </div>
+                  <div className="onb-card-body">
+                    {(data.contracts || []).map((c) => (
+                      <div key={c.id} className="portail-hist-row">
+                        <FileSignature size={14} className="muted" />
+                        <span className="flex-1">{t("Contrat")} #{c.id}</span>
+                        <span className="chip chip-emerald">
+                          <CheckCircle2 size={12} /> {c.signedAt ? monthLabel(c.signedAt) : t("Signé")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="onb-card">
                 <div className="onb-card-head">
                   <span className="onb-card-icon tone-emerald"><History size={18} /></span>
@@ -179,12 +324,78 @@ export function TenantPortalPublic({ token }) {
                       <span className="flex-1">{monthLabel(p.paymentDate)}</span>
                       <span className="muted">{p.method || "—"}</span>
                       <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                      {p.hasProof ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => openProof(p.id)}
+                          title={t("Télécharger le justificatif")}
+                        >
+                          <Download size={14} />
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                 </div>
               </section>
             </>
           )}
+
+          {/* Toujours affichee, y compris sans bail en cours : c'est le seul
+              service disponible pour un locataire sans bail actif. */}
+          <section className="onb-card">
+            <div className="onb-card-head">
+              <span className="onb-card-icon tone-iris"><User size={18} /></span>
+              <div className="onb-card-heading">
+                <h3>{t("Mes informations")}</h3>
+                <p>{t("Demandez une mise à jour de vos données")}</p>
+              </div>
+            </div>
+            <div className="onb-card-body">
+              {pendingRequest ? (
+                <p className="chip chip-amber" style={{ marginBottom: 12 }}>
+                  <Clock size={12} /> {t("Demande en attente de validation")}
+                </p>
+              ) : null}
+              {lastReviewed ? (
+                <p className={`chip ${lastReviewed.status === "approved" ? "chip-emerald" : "chip-rose"}`} style={{ marginBottom: 12 }}>
+                  {lastReviewed.status === "approved"
+                    ? <><CheckCircle2 size={12} /> {t("Dernière demande acceptée")}</>
+                    : <><AlertTriangle size={12} /> {t("Dernière demande refusée")}{lastReviewed.reviewNote ? ` — ${lastReviewed.reviewNote}` : ""}</>}
+                </p>
+              ) : null}
+              <form onSubmit={submitChanges} className="onb-form-grid">
+                {[
+                  ["firstName", t("Prénom")],
+                  ["lastName", t("Nom")],
+                  ["phone", t("Téléphone")],
+                  ["email", t("Email")],
+                  ["address", t("Adresse")],
+                ].map(([key, label]) => (
+                  <label key={key} className="onb-field">
+                    <span>{label}</span>
+                    <input
+                      type={key === "email" ? "email" : "text"}
+                      value={form?.[key] ?? ""}
+                      onChange={(ev) => setForm((f) => ({ ...f, [key]: ev.target.value }))}
+                      disabled={formBusy}
+                    />
+                  </label>
+                ))}
+                {formMsg ? (
+                  <p className={`muted ${formMsg.type === "error" ? "text-rose" : "text-emerald"}`} style={{ fontSize: 13, margin: 0 }}>
+                    {formMsg.text}
+                  </p>
+                ) : null}
+                <button type="submit" className="btn btn-primary" disabled={formBusy}>
+                  <Send size={16} /> {formBusy ? t("Envoi…") : t("Demander la modification")}
+                </button>
+                <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+                  {t("Vos modifications sont vérifiées par votre gestionnaire avant d'être appliquées.")}
+                </p>
+              </form>
+            </div>
+          </section>
 
           <p className="onb-secure">{t("Lien personnel — ne le partagez pas.")}</p>
         </div>

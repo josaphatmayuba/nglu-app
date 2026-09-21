@@ -1152,6 +1152,23 @@ export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal
   updatedAt: timestamp("updated_at"),
 });
 
+// Demandes de modification des données personnelles soumises par le locataire
+// depuis son portail public. Rien n'est appliqué automatiquement : `changes`
+// (JSON) est mis en attente jusqu'à l'approbation d'un gestionnaire, sinon
+// quiconque détient le lien pourrait changer le téléphone ou l'email du dossier.
+export const realEstateTenantChangeRequests = mysqlTable("real_estate_tenant_change_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  tenantId: int("tenant_id").notNull(),
+  changes: text("changes").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  reviewedBy: int("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: varchar("review_note", { length: 500 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 // Réservation temporaire type hôtel : un client occupe un bien entier OU une
 // unité sur une plage de dates, au tarif par jour. Indépendant du bail longue
 // durée (real_estate_leases). Recette comptabilisée au check-out.
