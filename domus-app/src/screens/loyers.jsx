@@ -94,14 +94,18 @@ export function buildLeaseCards(leases, payments) {
     .filter((l) => (l.status || "active") === "active")
     .map((l) => {
       const list = payments.filter((p) => String(p.leaseId) === String(l.id));
-      const paidMonths = new Set(list.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
-      const latest = [...list].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
+      // Seules les échéances réellement réglées comptent pour la couverture/frise ;
+      // les "pending" (générées auto sur bail rétroactif, pas encore confirmées) ne
+      // doivent pas être comptées comme payées.
+      const paidList = list.filter((p) => p.status !== "pending");
+      const paidMonths = new Set(paidList.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
+      const latest = [...paidList].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
 
       // Couverture par MONTANT : le total payé / loyer mensuel = nb de mois couverts,
       // rempli du début du bail vers le présent. Régler le montant total fait avancer
       // la couverture et met donc le statut à jour (corrige « reste en retard apres paiement »).
       const rent = Number(l.rentAmount) || 0;
-      const totalPaid = list.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalPaid = paidList.reduce((s, p) => s + Number(p.amount || 0), 0);
       const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : list.length;
       // Couverture fractionnaire : un paiement partiel (ex. 50 sur 100) remplit une demi-case.
       const monthsCoveredFloat = rent > 0 ? totalPaid / rent : monthsCovered;

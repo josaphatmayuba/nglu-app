@@ -2072,18 +2072,19 @@ export class PropertyManagementService {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     const existing = await this.db
-      .select({ paymentDate: realEstateRentPayments.paymentDate })
+      .select({ amount: realEstateRentPayments.amount })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
       ));
-    const coveredMonths = new Set(
-      existing.map((p) => {
-        const d = this.parseDateOnly(p.paymentDate);
-        return `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
-      }),
-    );
+    // Couverture par MONTANT cumulé (paid + pending), pas par mois calendaire :
+    // un seul virement de plusieurs mois de loyer daté d'un seul mois doit quand
+    // meme couvrir plusieurs echeances, sinon on regenere a tort des "manquantes"
+    // deja payees. Coherent avec le calcul de couverture du frontend (loyers.jsx).
+    const rent = Number(lease.rentAmount) || 0;
+    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
 
     const start = this.parseDateOnly(lease.startDate);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
@@ -2092,11 +2093,12 @@ export class PropertyManagementService {
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
     const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
       if (!boundary || cursor.getTime() <= boundary.getTime()) {
-        const key = `${cursor.getUTCFullYear()}-${cursor.getUTCMonth()}`;
-        if (!coveredMonths.has(key)) monthsToCreate.push(new Date(cursor.getTime()));
+        if (monthIndex >= monthsAlreadyCovered) monthsToCreate.push(new Date(cursor.getTime()));
       }
+      monthIndex += 1;
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
     }
 
