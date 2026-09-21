@@ -1390,6 +1390,11 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .onb-actions{align-items:center;backdrop-filter:blur(10px);background:rgba(255,255,255,.86);border:1px solid #e6e8f0;border-radius:16px;bottom:18px;box-shadow:0 18px 44px -22px rgba(24,24,27,.5);display:flex;gap:12px;margin-top:18px;padding:14px 18px;position:sticky;}
 .onb-save-status{color:#8a8a93;font-size:12.5px;margin-right:auto;}
 .onb-actions .btn{min-height:42px;}
+/* Barre d'actions DANS une carte (portail locataire) : meme empilement mobile
+   que .onb-actions mais sans position:sticky, qui ferait flotter les boutons
+   au-dessus des champs du formulaire. */
+.onb-inline-actions{display:flex;gap:12px;margin-top:20px;}
+.onb-inline-actions .btn{min-height:42px;}
 
 @media (max-width:640px){
   .onb-page{padding:18px 12px 128px;}
@@ -1399,6 +1404,8 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
   .onb-actions{flex-wrap:wrap;}
   .onb-save-status{flex-basis:100%;margin:0 0 4px;}
   .onb-actions .btn{flex:1;}
+  .onb-inline-actions{flex-wrap:wrap;}
+  .onb-inline-actions .btn{flex:1;}
 }
 
 @media (max-width:640px){

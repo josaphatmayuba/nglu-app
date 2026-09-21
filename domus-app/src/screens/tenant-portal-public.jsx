@@ -455,7 +455,7 @@ export function TenantPortalPublic({ token }) {
                       autoComplete="street-address" placeholder={t("Non renseigné")}
                       onChange={(v) => setForm((f) => ({ ...(f || {}), address: v }))} />
                   </div>
-                  <div className="onb-actions" style={{ marginTop: 20 }}>
+                  <div className="onb-inline-actions">
                     <button type="button" className="btn" disabled={formBusy}
                       onClick={() => { setForm(buildForm(data)); setFormMsg(null); setEditing(false); }}>
                       {t("Annuler")}
