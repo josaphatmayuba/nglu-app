@@ -5,8 +5,9 @@
 // dueChip/daysUntil/buildLeaseCards dupliqués/réutilisés depuis portail.jsx —
 // on ne touche pas au portail gestionnaire existant.
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature } from "lucide-react";
+import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature, Pencil } from "lucide-react";
 import { publicApi } from "../api.js";
+import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { money } from "../data.js";
 import { buildLeaseCards } from "./loyers.jsx";
 import { t } from "../i18n.js";
@@ -40,6 +41,53 @@ function dueChip(days) {
   return { text: `${t("dû dans")} ${days} j`, chip: "chip-amber" };
 }
 
+// Champs editables du dossier, dans l'ordre d'affichage. Le telephone est
+// traite a part (input international, cf. DomusPhoneField).
+const INFO_FIELDS = [
+  ["firstName", "Prénom"],
+  ["lastName", "Nom"],
+  ["email", "Email"],
+  ["address", "Adresse"],
+];
+
+// Champ simple (memes classes que onboarding-public.jsx — on duplique plutot
+// que de coupler deux pages publiques entre elles).
+function Field({ label, value, onChange, type = "text", placeholder = "", disabled = false, autoComplete }) {
+  return (
+    <label className="domus-property-field">
+      <span>{label}</span>
+      <input type={type} value={value ?? ""} placeholder={placeholder} disabled={disabled}
+        autoComplete={autoComplete} maxLength={255}
+        onChange={(e) => onChange?.(e.target.value)} />
+    </label>
+  );
+}
+
+// "" et null sont equivalents cote dossier : sans ca le bouton d'envoi
+// resterait actif alors que rien n'a change.
+function norm(v) {
+  return String(v ?? "").trim();
+}
+
+// Valeurs du formulaire = dossier actuel, ecrase par la demande en attente
+// s'il y en a une (sinon le locataire perdrait sa saisie precedente).
+function buildForm(rec) {
+  const tn = rec?.tenant || {};
+  const pending = (rec?.changeRequests || []).find((r) => r.status === "pending");
+  const changes = pending?.changes || {};
+  const base = {
+    firstName: tn.firstName || "",
+    lastName: tn.lastName || "",
+    email: tn.email || "",
+    phone: tn.phone || "",
+    address: tn.address || "",
+  };
+  for (const k of Object.keys(base)) {
+    if (changes[k] != null) base[k] = changes[k];
+  }
+  return base;
+}
+
 function tenantName(tenant) {
   const n = [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ").trim();
   return n || tenant?.entityName || t("Locataire");
@@ -54,6 +102,12 @@ export function TenantPortalPublic({ token }) {
   const [form, setForm] = useState(null);
   const [formBusy, setFormBusy] = useState(false);
   const [formMsg, setFormMsg] = useState(null);
+  // La carte s'ouvre en LECTURE : le locataire n'entre en saisie que s'il
+  // clique explicitement sur « Modifier mes informations ».
+  const [editing, setEditing] = useState(false);
+  // Erreur du justificatif : separee de formMsg, sinon elle s'affichait dans
+  // le formulaire d'informations personnelles, hors contexte.
+  const [proofMsg, setProofMsg] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -63,15 +117,8 @@ export function TenantPortalPublic({ token }) {
         const rec = await publicApi.tenantPortal(token);
         if (!alive) return;
         setData(rec);
-        // Pre-remplit le formulaire avec les donnees actuelles du dossier.
-        const tn = rec?.tenant || {};
-        setForm({
-          firstName: tn.firstName || "",
-          lastName: tn.lastName || "",
-          email: tn.email || "",
-          phone: tn.phone || "",
-          address: tn.address || "",
-        });
+        // Pre-remplit le formulaire (dossier + demande en attente eventuelle).
+        setForm(buildForm(rec));
       } catch (e) {
         if (alive) setFatal(t("Ce lien n'est plus valide ou a expiré."));
       } finally {
@@ -86,14 +133,18 @@ export function TenantPortalPublic({ token }) {
   // passe, une ecriture directe permettrait un detournement du telephone).
   const submitChanges = async (e) => {
     e.preventDefault();
-    if (!form) return;
+    if (!form || !dirty) return;
     setFormBusy(true);
     setFormMsg(null);
     try {
-      await publicApi.submitTenantChangeRequest(token, form);
+      // On n'envoie que les champs reellement modifies : la demande cote
+      // gestionnaire reste lisible (3 diffs au lieu de 5 lignes identiques).
+      await publicApi.submitTenantChangeRequest(token, changed);
       setFormMsg({ type: "ok", text: t("Demande envoyée. Elle sera validée par votre gestionnaire.") });
       const rec = await publicApi.tenantPortal(token);
       setData(rec);
+      setForm(buildForm(rec));
+      setEditing(false);
     } catch (err) {
       setFormMsg({ type: "error", text: err?.message || t("Envoi impossible.") });
     } finally {
@@ -109,7 +160,7 @@ export function TenantPortalPublic({ token }) {
       const res = await publicApi.tenantPaymentProof(token, paymentId);
       if (res?.url) window.open(res.url, "_blank", "noopener");
     } catch {
-      setFormMsg({ type: "error", text: t("Justificatif indisponible.") });
+      setProofMsg(t("Justificatif indisponible."));
     }
   };
 
@@ -140,6 +191,19 @@ export function TenantPortalPublic({ token }) {
     () => (data?.changeRequests || []).find((r) => r.status !== "pending") || null,
     [data],
   );
+
+  // Diff entre la saisie et le dossier actuel : sert a desactiver l'envoi et a
+  // n'envoyer que le strict necessaire.
+  const changed = useMemo(() => {
+    const tn = data?.tenant || {};
+    const out = {};
+    if (!form) return out;
+    for (const k of Object.keys(form)) {
+      if (norm(form[k]) !== norm(tn[k])) out[k] = norm(form[k]);
+    }
+    return out;
+  }, [form, data]);
+  const dirty = Object.keys(changed).length > 0;
 
   const dueDate = activeLease?.nextInvoiceDate || activeLease?.endDate || null;
   const due = dueChip(daysUntil(dueDate));
@@ -209,7 +273,7 @@ export function TenantPortalPublic({ token }) {
             <div className="onb-card">
               <div className="onb-card-body">
                 <p className="muted" style={{ margin: 0 }}>
-                  {t("Aucun bail en cours. Vous pouvez mettre à jour vos informations ci-dessous.")}
+                  {t("Aucun bail en cours. Vous pouvez consulter et demander la mise à jour de vos informations ci-dessous.")}
                 </p>
               </div>
             </div>
@@ -336,6 +400,11 @@ export function TenantPortalPublic({ token }) {
                       ) : null}
                     </div>
                   ))}
+                  {proofMsg ? (
+                    <p role="status" aria-live="polite" className="muted text-rose" style={{ fontSize: 13, margin: "8px 0 0" }}>
+                      {proofMsg}
+                    </p>
+                  ) : null}
                 </div>
               </section>
             </>
@@ -357,43 +426,82 @@ export function TenantPortalPublic({ token }) {
                   <Clock size={12} /> {t("Demande en attente de validation")}
                 </p>
               ) : null}
-              {lastReviewed ? (
+              {/* Une demande en attente remplace l'etat de la precedente :
+                  afficher les deux chips donnerait deux messages contradictoires. */}
+              {!pendingRequest && lastReviewed ? (
                 <p className={`chip ${lastReviewed.status === "approved" ? "chip-emerald" : "chip-rose"}`} style={{ marginBottom: 12 }}>
                   {lastReviewed.status === "approved"
                     ? <><CheckCircle2 size={12} /> {t("Dernière demande acceptée")}</>
                     : <><AlertTriangle size={12} /> {t("Dernière demande refusée")}{lastReviewed.reviewNote ? ` — ${lastReviewed.reviewNote}` : ""}</>}
                 </p>
               ) : null}
-              <form onSubmit={submitChanges} className="onb-form-grid">
-                {[
-                  ["firstName", t("Prénom")],
-                  ["lastName", t("Nom")],
-                  ["phone", t("Téléphone")],
-                  ["email", t("Email")],
-                  ["address", t("Adresse")],
-                ].map(([key, label]) => (
-                  <label key={key} className="onb-field">
-                    <span>{label}</span>
-                    <input
-                      type={key === "email" ? "email" : "text"}
-                      value={form?.[key] ?? ""}
-                      onChange={(ev) => setForm((f) => ({ ...f, [key]: ev.target.value }))}
-                      disabled={formBusy}
-                    />
-                  </label>
-                ))}
-                {formMsg ? (
-                  <p className={`muted ${formMsg.type === "error" ? "text-rose" : "text-emerald"}`} style={{ fontSize: 13, margin: 0 }}>
-                    {formMsg.text}
+
+              {editing ? (
+                <form onSubmit={submitChanges}>
+                  <div className="domus-property-form-grid">
+                    {INFO_FIELDS.slice(0, 2).map(([key, label]) => (
+                      <Field key={key} label={t(label)} value={form?.[key]} disabled={formBusy}
+                        autoComplete={key === "firstName" ? "given-name" : "family-name"}
+                        onChange={(v) => setForm((f) => ({ ...(f || {}), [key]: v }))} />
+                    ))}
+                    <DomusPhoneField label={t("Téléphone")} value={form?.phone}
+                      onChange={(v) => setForm((f) => ({ ...(f || {}), phone: v }))} />
+                    <Field label={t("Email")} type="email" value={form?.email} disabled={formBusy}
+                      autoComplete="email" placeholder={t("Non renseigné")}
+                      onChange={(v) => setForm((f) => ({ ...(f || {}), email: v }))} />
+                  </div>
+                  <div style={{ marginTop: 20 }}>
+                    <Field label={t("Adresse")} value={form?.address} disabled={formBusy}
+                      autoComplete="street-address" placeholder={t("Non renseigné")}
+                      onChange={(v) => setForm((f) => ({ ...(f || {}), address: v }))} />
+                  </div>
+                  <div className="onb-actions" style={{ marginTop: 20 }}>
+                    <button type="button" className="btn" disabled={formBusy}
+                      onClick={() => { setForm(buildForm(data)); setFormMsg(null); setEditing(false); }}>
+                      {t("Annuler")}
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={formBusy || !dirty}>
+                      <Send size={16} /> {formBusy ? t("Envoi…") : t("Envoyer la demande")}
+                    </button>
+                  </div>
+                  <p className="muted" style={{ fontSize: 12, margin: "12px 0 0" }}>
+                    {t("Vos modifications sont vérifiées par votre gestionnaire avant d'être appliquées.")}
                   </p>
-                ) : null}
-                <button type="submit" className="btn btn-primary" disabled={formBusy}>
-                  <Send size={16} /> {formBusy ? t("Envoi…") : t("Demander la modification")}
-                </button>
-                <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-                  {t("Vos modifications sont vérifiées par votre gestionnaire avant d'être appliquées.")}
+                </form>
+              ) : (
+                <>
+                  {[...INFO_FIELDS.slice(0, 2), ["phone", "Téléphone"], ...INFO_FIELDS.slice(2)].map(([key, label]) => {
+                    const current = data?.tenant?.[key];
+                    const asked = pendingRequest?.changes?.[key];
+                    const hasAsked = asked != null && norm(asked) !== norm(current);
+                    return (
+                      <div key={key} className="portail-hist-row">
+                        <span className="flex-1 muted">{t(label)}</span>
+                        <div style={{ textAlign: "right" }}>
+                          <strong>{norm(current) || "—"}</strong>
+                          {hasAsked ? (
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              {t("demandé")} : {norm(asked) || "—"}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button type="button" className="btn btn-primary" style={{ marginTop: 16 }}
+                    onClick={() => { setForm(buildForm(data)); setFormMsg(null); setEditing(true); }}>
+                    <Pencil size={16} /> {pendingRequest ? t("Modifier ma demande") : t("Modifier mes informations")}
+                  </button>
+                </>
+              )}
+
+              {formMsg ? (
+                <p role="status" aria-live="polite"
+                  className={`muted ${formMsg.type === "error" ? "text-rose" : "text-emerald"}`}
+                  style={{ fontSize: 13, margin: "12px 0 0" }}>
+                  {formMsg.text}
                 </p>
-              </form>
+              ) : null}
             </div>
           </section>
 
