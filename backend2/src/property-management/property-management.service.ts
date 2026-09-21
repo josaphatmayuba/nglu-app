@@ -785,7 +785,71 @@ export class PropertyManagementService {
       return createdCustomerId;
     });
 
-    return this.findTenant(customerId, orgId);
+    const tenant = await this.findTenant(customerId, orgId);
+    // Le lien portail est cree systematiquement a l'ouverture du dossier (meme
+    // sans telephone) : la fiche locataire doit toujours pouvoir l'afficher
+    // sans qu'un gestionnaire ait a cliquer sur "Generer".
+    try {
+      await this.tenantPortal.generateTenantPortalLink(customerId, orgId);
+    } catch (error) {
+      this.logger.warn(
+        `Portal link not created for tenant ${customerId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    await this.sendTenantCreatedSms(customerId, orgId);
+    return tenant;
+  }
+
+  /**
+   * Genere (ou reutilise) le lien portail d'un locataire ET le previent par SMS
+   * que son dossier est disponible. Utilise par le bouton "Generer le lien
+   * portail" de la fiche locataire, pour les dossiers anterieurs qui n'avaient
+   * pas encore de lien : meme resultat qu'une creation de dossier aujourd'hui.
+   */
+  async generateTenantPortalLinkAndNotify(tenantId: number, orgId: number) {
+    const link = await this.tenantPortal.generateTenantPortalLink(tenantId, orgId);
+    await this.sendTenantCreatedSms(tenantId, orgId);
+    return link;
+  }
+
+  /**
+   * SMS de confirmation envoye au locataire des que son dossier est cree.
+   * Best-effort : un echec d'envoi ne doit jamais faire echouer la creation
+   * du dossier (meme principe que sendLeaseWelcome).
+   */
+  async sendTenantCreatedSms(tenantId: number, orgId: number) {
+    try {
+      const tenant: any = await this.findTenant(tenantId, orgId);
+      const phone = tenant?.phone;
+      if (!phone) return;
+
+      // Message volontairement court : appendPortalFooterToSms ajoute ensuite
+      // "Cliquez ici pour voir votre dossier : <lien>" (~99 caracteres avec un
+      // token court). Objectif = tenir dans UN seul SMS (160 caracteres) pour
+      // ne pas doubler le cout d'envoi. D'ou le prenom seul (pas "prenom nom")
+      // et pas de nom de societe : l'emetteur est deja identifiable par le
+      // domaine du lien.
+      const firstName = (tenant.firstName || "").trim().split(/\s+/)[0] || "";
+      const greeting = firstName ? `Bonjour ${firstName}, v` : "V";
+      const message = `${greeting}otre dossier locataire est cree.`;
+
+      const messageWithFooter = await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId);
+      const res = await this.sms.sendSms({
+        phone,
+        message: messageWithFooter,
+        organizationId: orgId,
+        smsType: "tenant_created",
+        relatedType: "tenant",
+        relatedId: tenantId,
+      });
+      if (!res?.success) {
+        this.logger.warn(`Tenant created SMS not sent (tenant ${tenantId}, ${phone}): ${res?.message}`);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Tenant created SMS error (tenant ${tenantId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   // ── Helpers RBAC par bien (Domus, Phase 2) ───────────────────────────────

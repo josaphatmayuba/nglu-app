@@ -180,11 +180,18 @@ export class PropertyManagementController {
     return this.propertyManagementService.tenantCommunications(id, orgId);
   }
 
-  @ApiOperation({ summary: "Generate (or renew) a secure tenant portal link (no-login public access)" })
+  @ApiOperation({ summary: "Read the existing tenant portal link without creating one" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("tenants/:id/portal-link")
+  tenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.getTenantPortalLink(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate a secure tenant portal link and notify the tenant by SMS" })
   @Permissions("update-propertyManagement")
   @Post("tenants/:id/portal-link")
   generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.tenantPortalService.generateTenantPortalLink(id, orgId);
+    return this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId);
   }
 
   @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })

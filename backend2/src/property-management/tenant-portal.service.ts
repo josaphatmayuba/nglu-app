@@ -30,6 +30,22 @@ export class TenantPortalService {
     return createHash("sha256").update(token).digest("hex");
   }
 
+  /**
+   * Token court (12 caracteres base62, ~71 bits d'entropie) : l'URL complete
+   * tient dans un SMS au lieu des 64 caracteres hex precedents. La resolution
+   * publique se fait par hash SHA-256, donc les anciens tokens longs deja
+   * envoyes aux locataires restent valides sans migration.
+   */
+  private newPortalToken() {
+    const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const bytes = randomBytes(12);
+    let token = "";
+    for (let i = 0; i < 12; i += 1) {
+      token += alphabet[bytes[i] % alphabet.length];
+    }
+    return token;
+  }
+
   private portalUrl(token: string) {
     return `${env.appUrl.replace(/\/$/, "")}/domus/mon-espace?token=${token}`;
   }
@@ -84,7 +100,7 @@ export class TenantPortalService {
       return { token: existing.token, url: this.portalUrl(existing.token) };
     }
 
-    const token = randomBytes(32).toString("hex");
+    const token = this.newPortalToken();
     const tokenHash = this.hashToken(token);
     await this.db.insert(realEstateTenantPortalLinks).values({
       organizationId: orgId,
@@ -99,6 +115,36 @@ export class TenantPortalService {
   }
 
   /**
+   * Retourne le lien portail du locataire pour affichage permanent sur la
+   * fiche : avant, seul le POST revelait l'URL, obligeant a cliquer sur
+   * "Generer" pour simplement la relire. Les dossiers crees depuis ce
+   * changement ont deja un lien, affiche directement. Les locataires anterieurs
+   * (ou dont le lien a ete revoque) renvoient null : la fiche propose alors le
+   * bouton "Generer le lien portail", qui passe par le POST.
+   */
+  async getTenantPortalLink(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+
+    const [existing] = await this.db
+      .select({ token: realEstateTenantPortalLinks.token })
+      .from(realEstateTenantPortalLinks)
+      .where(and(
+        eq(realEstateTenantPortalLinks.tenantId, tenantId),
+        eq(realEstateTenantPortalLinks.organizationId, orgId),
+        isNull(realEstateTenantPortalLinks.revokedAt),
+      ))
+      .orderBy(desc(realEstateTenantPortalLinks.id))
+      .limit(1);
+
+    if (existing?.token) {
+      return { token: existing.token, url: this.portalUrl(existing.token) };
+    }
+    // Aucun lien actif : la fiche affiche le bouton "Generer le lien portail",
+    // qui cree le lien ET previent le locataire par SMS.
+    return { token: null, url: null };
+  }
+
+  /**
    * Ajoute une ligne finale avec le lien portail du locataire à un message SMS
    * (texte brut). Helper centralisé : à appeler depuis chaque point d'envoi qui
    * s'adresse au LOCATAIRE lui-même (jamais un contact d'urgence/signataire
@@ -109,7 +155,7 @@ export class TenantPortalService {
   async appendPortalFooterToSms(message: string, tenantId: number, orgId: number): Promise<string> {
     try {
       const { url } = await this.generateTenantPortalLink(tenantId, orgId);
-      return `${message} Vous pouvez vérifier vos informations et vos paiements ici : ${url}`;
+      return `${message} Cliquez ici pour voir votre dossier : ${url}`;
     } catch (error) {
       this.logger.warn(
         `Portal footer (SMS) skipped for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,

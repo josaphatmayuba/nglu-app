@@ -145,6 +145,7 @@ export const api = {
   deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
   tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
   // Lien portail locataire (accès public sans login, token opaque dans l'URL).
+  tenantPortalLink: (id) => get(`/tenants/${id}/portal-link`),
   generateTenantPortalLink: (id) => post(`/tenants/${id}/portal-link`),
   revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
   // Historique des communications (email + SMS) envoyées à ce locataire.
