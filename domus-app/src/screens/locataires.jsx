@@ -745,6 +745,16 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
   );
 }
 
+// Rend cliquables les URL contenues dans un texte brut (les SMS envoyes au
+// locataire se terminent par le lien de son espace personnel).
+function linkifyText(text) {
+  return String(text).split(/(https?:\/\/\S+)/g).map((part, i) => (
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a>
+      : <span key={i}>{part}</span>
+  ));
+}
+
 // ── Onglet « Communications » : historique fusionne email + SMS envoyes au locataire ──
 function TenantCommunications({ tenantId }) {
   const [items, setItems] = useState(null);
@@ -785,8 +795,8 @@ function TenantCommunications({ tenantId }) {
                   {it.channel === "email" ? <Mail size={14} /> : <MessageSquare size={14} />}{" "}
                   {it.type} <span className={`chip ${meta.className}`} style={{ marginLeft: 6 }}>{meta.label}</span>
                 </b>
-                <span>
-                  {it.recipient} — {it.subject || "—"}
+                <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {it.recipient} — {it.subject ? linkifyText(it.subject) : "—"}
                   {it.errorMessage ? ` — ${it.errorMessage}` : ""}
                   {it.createdAt ? ` — ${formatShortDate(it.createdAt)}` : ""}
                 </span>

@@ -3888,7 +3888,10 @@ export class PropertyManagementService {
         channel: "sms" as const,
         type: row.type,
         recipient: row.recipient,
-        subject: row.body ? String(row.body).slice(0, 160) : null,
+        // Texte SMS complet : la troncature a 160 caracteres coupait la fin du
+        // message, donc le lien du portail locataire ajoute en pied (SMS bien
+        // envoye avec le lien, mais invisible dans l'historique).
+        subject: row.body ? String(row.body) : null,
         status: row.status,
         createdAt: row.createdAt,
         errorMessage: row.errorMessage,
