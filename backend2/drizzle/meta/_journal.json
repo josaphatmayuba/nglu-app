@@ -1870,6 +1870,13 @@
       "when": 1781071200042,
       "tag": "0291_domus_tenant_change_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "5",
+      "when": 1781071200043,
+      "tag": "0292_domus_owner_portal_links",
+      "breakpoints": true
     }
   ]
 }

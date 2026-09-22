@@ -30,6 +30,7 @@ import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { OwnerNotificationsService } from "./owner-notifications.service";
 
 type LeaseDetails = {
   leaseId: number;
@@ -112,6 +113,7 @@ export class ContractsService {
     private readonly sms: CompatService,
     private readonly objectStorage: ObjectStorageService,
     private readonly tenantPortal: TenantPortalService,
+    private readonly ownerNotifications: OwnerNotificationsService,
   ) {}
 
   async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
@@ -393,14 +395,28 @@ export class ContractsService {
     if (tenantPhone) {
       const company = await this.getCompanyInfo(orgId);
       const companyName = company?.companyName || "votre gestionnaire";
-      const greeting = contract.tenantName ? `Bonjour ${contract.tenantName}` : "Bonjour";
-      const message =
-        `${greeting}, votre contrat de bail est prêt à être signé. ` +
-        `Signez-le ici : ${signingUrl} (lien valable 7 jours). — ${companyName}`;
+      // Texte pilote depuis Reglages > Messages (evenement "contract_signature").
+      const message = await this.ownerNotifications.renderMessage(
+        "contract_signature",
+        "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. " +
+          "Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
+        {
+          tenantName: contract.tenantName || "",
+          firstName: contract.tenantName || "",
+          url: signingUrl,
+          companyName,
+          reference: "",
+          amount: "",
+        },
+      );
       try {
-        const messageWithFooter = tenantId
-          ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
-          : message;
+        // fitOneSms apres le footer : le lien s'ajoute hors du rendu et ne doit
+        // pas faire basculer le message sur un 2e segment facture.
+        const messageWithFooter = this.ownerNotifications.fitOneSms(
+          tenantId
+            ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
+            : message,
+        );
         const res = await this.sms.sendSms({
           phone: tenantPhone,
           message: messageWithFooter,
@@ -538,11 +554,19 @@ export class ContractsService {
       [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || lease.propertyName || "votre logement";
     const unitPart = lease.unitName ? ` (${lease.unitName})` : "";
     const rentDisplay = this.formatMoneyWithCurrency(lease.rentAmount, lease);
+    // Le locataire doit savoir A QUI il loue et QUEL logement exactement : on
+    // expose le bailleur reel (proprietaire du bien, sinon reglages) et le
+    // numero d'appartement/unite comme placeholders dedies, en plus de
+    // {address} qui ne portait jusqu'ici que la rue et la ville.
+    const landlord = this.resolveLandlord(lease, company);
+    const landlordName = landlord.name || companyName;
+    const unitLabel = lease.unitName ?? "";
 
     let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
     let text =
       `Bonjour ${tenantName}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
       `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
+      `Votre bailleur est ${landlordName}. ` +
       `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
       `Merci de votre confiance. ` +
       `${contactPhone ? `Pour toute question, contactez-nous au ${contactPhone}. ` : ""}` +
@@ -566,7 +590,16 @@ export class ContractsService {
           .replace(/\{startDate\}/g, startDate)
           .replace(/\{endDate\}/g, endDate)
           .replace(/\{duration\}/g, duration)
-          .replace(/\{contactPhone\}/g, contactPhone);
+          .replace(/\{contactPhone\}/g, contactPhone)
+          .replace(/\{landlordName\}/g, landlordName)
+          .replace(/\{unit\}/g, unitLabel)
+          // Un bail sans unite laisserait "appartement ," : on nettoie le mot
+          // d'introduction devenu orphelin plutot que d'envoyer le texte casse.
+          .replace(/,?\s*\b(appartement|appt|unite)\b\s*:?\s*(?=[.,;]|$)/gi, "")
+          .replace(/\s+([.,;!?])/g, "$1")
+          .replace(/,\s*\./g, ".")
+          .replace(/\s+/g, " ")
+          .trim();
       if (tpl[0].subject) subject = fill(tpl[0].subject);
       if (tpl[0].body) text = fill(tpl[0].body);
     }
@@ -593,9 +626,11 @@ export class ContractsService {
     let smsSent = false;
     if (lease.tenantPhone) {
       try {
-        const messageWithFooter = lease.tenantId
-          ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
-          : text;
+        const messageWithFooter = this.ownerNotifications.fitOneSms(
+          lease.tenantId
+            ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
+            : text,
+        );
         const res = await this.sms.sendSms({
           phone: lease.tenantPhone,
           message: messageWithFooter,

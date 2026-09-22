@@ -1140,6 +1140,26 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
 // (rôle Locataire). Un lien actif est réutilisé tant qu'il n'est pas révoqué ;
 // expiresAt nullable = lien permanent accepté. revokedAt = invalidation douce,
 // jamais de DELETE physique (règle soft delete du projet).
+// Lien portail PROPRIETAIRE : meme mecanique que realEstateTenantPortalLinks,
+// mais scope a un couple (proprietaire, locataire). Le proprietaire recoit par
+// SMS l'annonce d'un nouveau dossier locataire (ou d'un nouveau bail) sur son
+// bien, avec ce lien court ; il n'ouvre QUE cette fiche, jamais le reste du
+// portefeuille ni un autre locataire. propertyId garde le bien a l'origine de
+// la notification (nullable : le lien reste valable si le bien change de main).
+export const realEstateOwnerPortalLinks = mysqlTable("real_estate_owner_portal_links", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  ownerId: bigint("owner_id", { mode: "number" }).notNull(),
+  tenantId: bigint("tenant_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }),
+  token: varchar("token", { length: 64 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal_links", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

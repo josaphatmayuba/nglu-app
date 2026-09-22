@@ -121,6 +121,7 @@ function makeService(opts: {
     whatsapp,
     {} as any,
   {} as any,
+    {} as any, // ownerNotifications
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit };

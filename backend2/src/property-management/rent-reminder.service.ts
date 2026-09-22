@@ -16,6 +16,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { OwnerNotificationsService } from "./owner-notifications.service";
 
 @Injectable()
 export class RentReminderService {
@@ -26,6 +27,7 @@ export class RentReminderService {
     private readonly sms: CompatService,
     private readonly emails: SystemEmailService,
     private readonly tenantPortal: TenantPortalService,
+    private readonly ownerNotifications: OwnerNotificationsService,
   ) {}
 
   @Cron(env.rentReminders.cron)
@@ -71,6 +73,7 @@ export class RentReminderService {
         tenantPhone: customers.phone,
         emergencyPhone: tenantDetails.contactedPersonPhoneNumber,
         currencySymbol: currencies.currencySymbol,
+        propertyId: realEstateLeases.propertyId,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
       })
@@ -103,38 +106,68 @@ export class RentReminderService {
       const amount = `${lease.rentAmount}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
-      const tenantMsg =
-        `Bonjour ${tenantName}, nous constatons que le loyer de ${place} (bail ${lease.reference}), ` +
-        `d'un montant de ${amount}, est en retard de ${daysLate} jours. Nous vous invitons gentiment à ` +
-        `régulariser ce paiement dès que possible afin d'éviter l'annulation de votre contrat de location. ` +
-        `Pour tout règlement ou question, contactez ${companyName}${contactLine}. Merci de votre compréhension. — ${companyName}`;
+      // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
+      const vars = {
+        tenantName,
+        firstName: lease.tenantFirstName || tenantName,
+        reference: lease.reference || "",
+        amount,
+        address: place,
+        daysLate: String(daysLate),
+        companyName,
+        contactPhone: contactLine,
+        url: await this.tenantPortal.portalUrlForTenant(lease.tenantId, lease.organizationId),
+      };
+      const tenantMsg = await this.ownerNotifications.renderMessage(
+        "payment_reminder",
+        "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), " +
+          "d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a " +
+          "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
+          "Pour tout reglement ou question, contactez {companyName}{contactPhone}. Merci de votre comprehension. — {companyName}",
+        vars,
+      );
 
       if (lease.tenantPhone) {
-        const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, lease.organizationId);
+        // Footer seulement si le modele n'a pas deja place {url} lui-meme.
+        const smsWithFooter = this.ownerNotifications.fitOneSms(
+          vars.url && tenantMsg.includes(vars.url)
+            ? tenantMsg
+            : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, lease.organizationId),
+        );
         await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId, lease.organizationId);
       }
 
       if (lease.tenantEmail) {
-        const html =
-          `<p>Bonjour ${tenantName},</p>` +
-          `<p>Nous constatons que le loyer de <strong>${place}</strong> (bail <strong>${lease.reference}</strong>), ` +
-          `d'un montant de <strong>${amount}</strong>, est en retard de <strong>${daysLate} jours</strong>.</p>` +
-          `<p>Nous vous invitons gentiment à régulariser ce paiement dès que possible afin d'éviter ` +
-          `l'annulation de votre contrat de location.</p>` +
-          `<p>Pour tout règlement ou question, vous pouvez contacter ${companyName}${contactLine}.</p>` +
-          `<p>Merci de votre compréhension.<br>${companyName}</p>`;
+        // Meme contenu que le SMS (un seul texte configurable pour les deux canaux).
+        const html = `<p>${tenantMsg}</p>`;
         const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
         await this.safeEmail(lease.tenantEmail, `Rappel: loyer en retard — bail ${lease.reference}`, htmlWithFooter, lease.leaseId);
       }
 
       if (lease.emergencyPhone) {
-        const emergencyMsg =
-          `Bonjour, en tant que personne de contact de ${tenantName}, nous vous informons que son loyer pour ` +
-          `${place} (${amount}) est en retard de ${daysLate} jours. Merci de bien vouloir l'inviter à régulariser ` +
-          `ce paiement auprès de ${companyName}${contactLine}, afin d'éviter l'annulation de son contrat de location. ` +
-          `Merci de votre compréhension. — ${companyName}`;
+        // Message distinct : il s'adresse au CONTACT D'URGENCE, pas au locataire
+        // (aucun lien portail ne doit y figurer). Evenement dedie
+        // "payment_reminder_contact" dans les Reglages.
+        const emergencyMsg = await this.ownerNotifications.renderMessage(
+          "payment_reminder_contact",
+          "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour " +
+            "{address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser " +
+            "ce paiement aupres de {companyName}{contactPhone}, afin d'eviter l'annulation de son contrat de location. " +
+            "Merci de votre comprehension. — {companyName}",
+          vars,
+        );
         await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId);
       }
+
+      // Le PROPRIETAIRE du bien est prevenu du retard au meme rythme que le
+      // locataire (une fois par periode impayee) : c'est son loyer qui manque.
+      // Best-effort, comme les autres envois de cette boucle.
+      await this.ownerNotifications.notifyPaymentOverdue(
+        lease.leaseId,
+        Number(lease.propertyId),
+        daysLate,
+        lease.organizationId,
+      );
 
       await this.db
         .update(realEstateLeases)

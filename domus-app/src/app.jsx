@@ -29,6 +29,7 @@ import { Prescreening } from "./screens/prescreening.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { TenantPortalPublic } from "./screens/tenant-portal-public.jsx";
+import { OwnerPortalPublic } from "./screens/owner-portal-public.jsx";
 import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
@@ -175,6 +176,32 @@ function useTenantPortalRoute() {
   return token;
 }
 
+// Route publique du portail proprietaire (/domus/proprietaire?token=...) —
+// meme mecanique que useTenantPortalRoute, cote bailleur.
+function useOwnerPortalRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/proprietaire\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/proprietaire(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
 function usePublicReservationsRoute() {
   const read = () => {
     if (typeof window === "undefined") return null;
@@ -203,6 +230,7 @@ export default function App() {
   const onboardingToken = useOnboardingRoute();
   const prescreeningToken = usePrescreeningRoute();
   const tenantPortalToken = useTenantPortalRoute();
+  const ownerPortalToken = useOwnerPortalRoute();
   const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -222,6 +250,7 @@ export default function App() {
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
   if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
   if (tenantPortalToken !== null) return <TenantPortalPublic token={tenantPortalToken} />;
+  if (ownerPortalToken !== null) return <OwnerPortalPublic token={ownerPortalToken} />;
   if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;

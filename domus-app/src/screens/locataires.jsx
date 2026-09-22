@@ -1261,6 +1261,7 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
           </div>
           <DomusPropertyField label="Motif du demenagement" value={form.moving_reason} onChange={(v) => set({ moving_reason: v })} placeholder="Optionnel" textarea />
         </FormSection>
+
       </div>
 
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}

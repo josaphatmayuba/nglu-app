@@ -147,6 +147,23 @@ export class TenantPortalService {
   }
 
   /**
+   * URL du portail locataire pour alimenter le placeholder {url} d'un message
+   * configurable, ou "" si le lien ne peut pas etre genere. Contrairement a
+   * appendPortalFooterToSms, ne touche pas au texte : c'est le template qui
+   * decide ou placer le lien.
+   */
+  async portalUrlForTenant(tenantId: number, orgId: number): Promise<string> {
+    try {
+      return (await this.generateTenantPortalLink(tenantId, orgId)).url;
+    } catch (error) {
+      this.logger.warn(
+        `Portal url unavailable for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return "";
+    }
+  }
+
+  /**
    * Ajoute une ligne finale avec le lien portail du locataire à un message SMS
    * (texte brut). Helper centralisé : à appeler depuis chaque point d'envoi qui
    * s'adresse au LOCATAIRE lui-même (jamais un contact d'urgence/signataire
