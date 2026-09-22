@@ -180,6 +180,11 @@ export const env = {
     from: process.env.TWILIO_FROM || "",
     messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || "",
   },
+  smsGateway: {
+    login: process.env.SMS_GATEWAY_LOGIN || "",
+    password: process.env.SMS_GATEWAY_PASSWORD || "",
+    baseUrl: process.env.SMS_GATEWAY_BASE_URL || "https://api.sms-gate.app/3rdparty/v1",
+  },
   rentReminders: {
     enabled: process.env.RENT_REMINDERS_ENABLED === "true",
     overdueDays: Number(process.env.RENT_REMINDER_OVERDUE_DAYS || 15),

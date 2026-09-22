@@ -49,6 +49,7 @@ import {
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  ConfirmPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -179,11 +180,50 @@ export class PropertyManagementController {
     return this.propertyManagementService.tenantCommunications(id, orgId);
   }
 
-  @ApiOperation({ summary: "Generate (or renew) a secure tenant portal link (no-login public access)" })
+  @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
+  @Permissions("readAll-propertyManagement")
+  @Get("tenant-change-requests")
+  tenantChangeRequests(@CurrentOrg() orgId: number, @Query("status") status?: string) {
+    return this.tenantPortalService.listChangeRequests(orgId, status || "pending");
+  }
+
+  @ApiOperation({ summary: "Approve a change request and apply it to the tenant record" })
+  @Permissions("update-propertyManagement")
+  @Post("tenant-change-requests/:id/approve")
+  approveTenantChangeRequest(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @Body() body: { note?: string },
+  ) {
+    return this.tenantPortalService.approveChangeRequest(id, orgId, userId, body?.note);
+  }
+
+  @ApiOperation({ summary: "Reject a change request without touching the tenant record" })
+  @Permissions("update-propertyManagement")
+  @Post("tenant-change-requests/:id/reject")
+  @HttpCode(200)
+  rejectTenantChangeRequest(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @Body() body: { note?: string },
+  ) {
+    return this.tenantPortalService.rejectChangeRequest(id, orgId, userId, body?.note);
+  }
+
+  @ApiOperation({ summary: "Read the existing tenant portal link without creating one" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("tenants/:id/portal-link")
+  tenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.tenantPortalService.getTenantPortalLink(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Generate a secure tenant portal link and notify the tenant by SMS" })
   @Permissions("update-propertyManagement")
   @Post("tenants/:id/portal-link")
   generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.tenantPortalService.generateTenantPortalLink(id, orgId);
+    return this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId);
   }
 
   @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })
@@ -852,6 +892,40 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req));
+  }
+
+  @ApiOperation({ summary: "Generate missing (pending) monthly rent payment rows for a retroactive lease — no accounting impact" })
+  @Permissions("create-propertyManagement")
+  @Post("leases/:id/generate-missing-payments")
+  generateMissingPayments(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.generateMissingPayments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Confirm a pending rent payment row (records the real accounting transaction)" })
+  @Permissions("create-propertyManagement")
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("payments/:id/confirm")
+  confirmPendingPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ConfirmPendingPaymentDto,
+    @UploadedFile() proof: any,
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Send payment reminder email to tenant" })

@@ -109,6 +109,14 @@ export class CreatePropertyDto {
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
 
+export class PropertyGeocodingDto {
+  @ApiPropertyOptional({ example: -11.6609, description: "Latitude geocodee depuis l'adresse (best-effort). Null si non geocode." })
+  latitude?: number | null;
+
+  @ApiPropertyOptional({ example: 27.4794, description: "Longitude geocodee depuis l'adresse (best-effort). Null si non geocode." })
+  longitude?: number | null;
+}
+
 // ── Proprietaires legaux des biens (Domus) ───────────────────────────────────
 // Distinct du GESTIONNAIRE mandate (appSettings.landlordName/landlordPhone/landlordSignature,
 // champ texte libre inchange). Un proprietaire est rattache a 0..N biens via
@@ -457,6 +465,11 @@ export class CreateRentPaymentDto {
   proofUrl?: string | null;
 }
 
+// Confirmation d'une echeance 'pending' generee retroactivement : memes
+// champs que CreateRentPaymentDto mais sans leaseId (deja connu via l'ID
+// de la ligne pending a confirmer).
+export class ConfirmPendingPaymentDto extends OmitType(CreateRentPaymentDto, ["leaseId"] as const) {}
+
 export class CollectDepositDto {
   @ApiProperty({ example: "2026-06-04" })
   @IsDateString()
@@ -769,7 +782,15 @@ export class CreateTenantDto {
   child_age?: number[];
 }
 
-export class UpdateTenantDto extends PartialType(CreateTenantDto) {}
+export class UpdateTenantDto extends PartialType(CreateTenantDto) {
+  // Soft delete / reactivation du dossier locataire. Absent de CreateTenantDto
+  // (une creation est toujours active). Suppression = status "false", jamais de
+  // DELETE physique : l'historique (baux, paiements) doit rester intact.
+  @ApiPropertyOptional({ example: "false", enum: ["true", "false"] })
+  @IsOptional()
+  @IsIn(["true", "false"])
+  status?: string;
+}
 
 export class GenerateTenantOnboardingDto {
   @ApiPropertyOptional({ example: "Jean" })

@@ -81,6 +81,34 @@ export class CompatService {
 
   private readonly logger = new Logger(CompatService.name);
 
+  // Envoi via l'app "SMS Gateway for Android" installee sur un telephone
+  // physique (relay cloud sms-gate.app), utilisee a la place de Twilio.
+  private async sendSmsViaGateway(
+    phone: string,
+    message: string,
+    config: { login: string; password: string; baseUrl: string },
+  ): Promise<{ success: boolean; id?: string; message?: string }> {
+    try {
+      const credentials = Buffer.from(`${config.login}:${config.password}`).toString("base64");
+      const res = await fetch(`${config.baseUrl}/message`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ textMessage: { text: message }, phoneNumbers: [phone] }),
+      });
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, message: data?.message || `SMS gateway HTTP ${res.status}` };
+      }
+      return { success: true, id: data?.id };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, message };
+    }
+  }
+
   async sendSms(body: Record<string, any>) {
     if (!body.phone) return { success: false, message: "Phone is required." };
 
@@ -98,6 +126,16 @@ export class CompatService {
       relatedType,
       relatedId,
     });
+
+    const { login, password, baseUrl } = env.smsGateway;
+    if (login && password) {
+      const gatewayResult = await this.sendSmsViaGateway(body.phone, messageText, { login, password, baseUrl });
+      if (gatewayResult.success) {
+        await this.updateSmsLog(logId, "sent", null, gatewayResult.id ?? null);
+        return { success: true, sid: gatewayResult.id, status: "sent" };
+      }
+      this.logger.warn(`SMS gateway (phone) failed to ${body.phone}: ${gatewayResult.message}. Falling back to Twilio if configured.`);
+    }
 
     const { accountSid, authToken, from, messagingServiceSid } = env.twilio;
     if (!accountSid || !authToken || (!from && !messagingServiceSid)) {

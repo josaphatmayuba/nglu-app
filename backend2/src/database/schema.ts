@@ -964,6 +964,8 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   address: varchar("address", { length: 255 }),
   city: varchar("city", { length: 255 }),
   country: varchar("country", { length: 255 }),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   floors: int("floors").default(1).notNull(),
   parkingSpaces: int("parking_spaces").default(0).notNull(),
   marketValue: decimal("market_value", { precision: 15, scale: 2 }).default("0").notNull(),
@@ -1089,6 +1091,9 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   paymentDate: date("payment_date", { mode: "string" }).notNull(),
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
   method: varchar("method", { length: 255 }).default("cash").notNull(),
+  // 'paid' = paiement réellement encaissé (génère une transaction comptable),
+  // 'pending' = échéance de loyer générée mais pas encore encaissée.
+  status: varchar("status", { length: 20 }).default("paid").notNull(),
   reference: varchar("reference", { length: 255 }),
   notes: text("notes"),
   // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
@@ -1143,6 +1148,23 @@ export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
   expiresAt: timestamp("expires_at"),
   revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Demandes de modification des données personnelles soumises par le locataire
+// depuis son portail public. Rien n'est appliqué automatiquement : `changes`
+// (JSON) est mis en attente jusqu'à l'approbation d'un gestionnaire, sinon
+// quiconque détient le lien pourrait changer le téléphone ou l'email du dossier.
+export const realEstateTenantChangeRequests = mysqlTable("real_estate_tenant_change_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: int("organization_id").notNull(),
+  tenantId: int("tenant_id").notNull(),
+  changes: text("changes").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  reviewedBy: int("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNote: varchar("review_note", { length: 500 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

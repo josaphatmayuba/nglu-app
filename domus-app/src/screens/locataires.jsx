@@ -526,18 +526,59 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Réinitialise l'URL affichée quand on change de locataire (le lien n'est
-  // jamais recalculable côté frontend, il vient du backend au clic).
-  useEffect(() => { setPortalUrl(""); }, [tenant?.id]);
+  // Charge le lien portail existant à l'ouverture de la fiche : avant, il
+  // fallait cliquer sur "Générer" pour simplement le relire. Le GET ne crée
+  // aucun lien (url null si le locataire n'en a jamais eu).
+  useEffect(() => {
+    let cancelled = false;
+    setPortalUrl("");
+    if (!tenant?.id) return undefined;
+    api.tenantPortalLink(tenant.id)
+      .then((res) => { if (!cancelled && res?.url) setPortalUrl(domusPortalUrl(res.url)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [tenant?.id]);
 
+  // Demandes de modification soumises par CE locataire depuis son portail.
+  const [changeReqs, setChangeReqs] = useState([]);
+  const [reqBusy, setReqBusy] = useState(false);
+  const reloadChangeReqs = async () => {
+    if (!tenant?.id) return;
+    try {
+      const all = await api.tenantChangeRequests("pending");
+      setChangeReqs((all || []).filter((r) => String(r.tenantId) === String(tenant.id)));
+    } catch { /* non bloquant : la fiche reste utilisable */ }
+  };
+  useEffect(() => { setChangeReqs([]); reloadChangeReqs(); }, [tenant?.id]);
+
+  const reviewChangeReq = async (id, approve) => {
+    setReqBusy(true);
+    try {
+      if (approve) await api.approveTenantChangeRequest(id);
+      else await api.rejectTenantChangeRequest(id);
+      toast.success(approve ? t("Modification appliquee.") : t("Demande refusee."));
+      await reloadChangeReqs();
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setReqBusy(false);
+    }
+  };
+
+  const copyPortalLink = async () => {
+    try { await navigator.clipboard?.writeText(portalUrl); toast.success(t("Lien portail copié.")); }
+    catch { toast.error(t("Copie impossible.")); }
+  };
+
+  // Genere le lien portail ET previent le locataire par SMS que son dossier
+  // est disponible (meme effet qu'une creation de dossier aujourd'hui).
   const generatePortalLink = async () => {
     setPortalBusy(true);
     try {
       const res = await api.generateTenantPortalLink(tenant.id);
       const url = domusPortalUrl(res?.url);
       setPortalUrl(url);
-      try { await navigator.clipboard?.writeText(url); toast.success(t("Lien portail copié.")); }
-      catch { toast.success(t("Lien portail généré.")); }
+      toast.success(t("Lien portail créé, SMS envoyé au locataire."));
     } catch (e) {
       toast.error(e.message || String(e));
     } finally {
@@ -590,15 +631,47 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             {!activeLease && onCreateLease && (
               <button type="button" className="btn btn-primary" onClick={onCreateLease}><FileSignature size={16} /> Creer le bail</button>
             )}
+            {portalUrl && (
+              <button type="button" className="btn" onClick={copyPortalLink}>
+                <Link2 size={16} /> {t("Copier le lien portail")}
+              </button>
+            )}
             <button type="button" className="btn" onClick={generatePortalLink} disabled={portalBusy}>
-              <Link2 size={16} /> {portalBusy ? t("Génération…") : t("Générer/copier le lien portail")}
+              <Link2 size={16} /> {portalBusy ? t("Envoi…") : portalUrl ? t("Renvoyer le lien par SMS") : t("Générer le lien + SMS")}
             </button>
           </div>
           {portalUrl && (
             <div className="info-cell" style={{ marginTop: -6, marginBottom: 8 }}>
               <Link2 size={15} />
               <span>{t("Lien portail")}</span>
-              <b style={{ wordBreak: "break-all" }}>{portalUrl}</b>
+              <b style={{ wordBreak: "break-all" }}>
+                <a href={portalUrl} target="_blank" rel="noopener noreferrer">{portalUrl}</a>
+              </b>
+            </div>
+          )}
+
+          {changeReqs.length > 0 && (
+            <div className="info-cell" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, marginBottom: 10 }}>
+              <b style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <AlertTriangle size={14} /> {t("Demande de modification du locataire")}
+              </b>
+              {changeReqs.map((r) => (
+                <div key={r.id} style={{ fontSize: 13 }}>
+                  <ul style={{ margin: "4px 0 8px", paddingLeft: 18 }}>
+                    {Object.entries(r.changes || {}).map(([k, v]) => (
+                      <li key={k}>{k} : <strong>{String(v)}</strong></li>
+                    ))}
+                  </ul>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" className="btn btn-primary" disabled={reqBusy} onClick={() => reviewChangeReq(r.id, true)}>
+                      <CheckCircle2 size={14} /> {t("Approuver")}
+                    </button>
+                    <button type="button" className="btn" disabled={reqBusy} onClick={() => reviewChangeReq(r.id, false)}>
+                      <X size={14} /> {t("Refuser")}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -672,6 +745,16 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
   );
 }
 
+// Rend cliquables les URL contenues dans un texte brut (les SMS envoyes au
+// locataire se terminent par le lien de son espace personnel).
+function linkifyText(text) {
+  return String(text).split(/(https?:\/\/\S+)/g).map((part, i) => (
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a>
+      : <span key={i}>{part}</span>
+  ));
+}
+
 // ── Onglet « Communications » : historique fusionne email + SMS envoyes au locataire ──
 function TenantCommunications({ tenantId }) {
   const [items, setItems] = useState(null);
@@ -712,8 +795,8 @@ function TenantCommunications({ tenantId }) {
                   {it.channel === "email" ? <Mail size={14} /> : <MessageSquare size={14} />}{" "}
                   {it.type} <span className={`chip ${meta.className}`} style={{ marginLeft: 6 }}>{meta.label}</span>
                 </b>
-                <span>
-                  {it.recipient} — {it.subject || "—"}
+                <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {it.recipient} — {it.subject ? linkifyText(it.subject) : "—"}
                   {it.errorMessage ? ` — ${it.errorMessage}` : ""}
                   {it.createdAt ? ` — ${formatShortDate(it.createdAt)}` : ""}
                 </span>

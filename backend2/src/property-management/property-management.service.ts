@@ -61,6 +61,7 @@ import {
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  ConfirmPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -93,6 +94,7 @@ import {
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { GeocodingService } from "./geocoding.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -119,6 +121,7 @@ export class PropertyManagementService {
     private readonly objectStorage: ObjectStorageService,
     private readonly whatsapp: WhatsappClientService,
     private readonly tenantPortal: TenantPortalService,
+    private readonly geocoding: GeocodingService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -183,7 +186,10 @@ export class PropertyManagementService {
     const [collectedRent] = await this.db
       .select({ total: sql<string>`coalesce(sum(${realEstateRentPayments.amount}), 0)` })
       .from(realEstateRentPayments)
-      .where(eq(realEstateRentPayments.organizationId, orgId));
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.status, "paid"),
+      ));
     const [openMaintenance] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateMaintenanceRequests)
@@ -268,7 +274,14 @@ export class PropertyManagementService {
   }
 
   async updateTenant(id: number, input: UpdateTenantDto, orgId: number) {
-    const existing = await this.findTenant(id, orgId);
+    // Lecture SANS filtre sur status : findTenant n'expose que les dossiers
+    // actifs, ce qui rendrait un locataire desactive introuvable et donc
+    // impossible a reactiver (soft delete sans retour possible).
+    const [existing] = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)))
+      .limit(1);
     if (!existing) {
       throw new NotFoundException("Locataire introuvable.");
     }
@@ -280,6 +293,10 @@ export class PropertyManagementService {
     if (input.email !== undefined) customerSet.email = input.email || null;
     if (input.phone !== undefined) customerSet.phone = input.phone;
     if (input.address !== undefined) customerSet.address = input.address;
+    // Soft delete / reactivation : sans ca, PUT /tenants/:id acquittait un
+    // status envoye par le client sans jamais l'appliquer (le dossier restait
+    // actif). Aucun DELETE physique, l'historique reste intact.
+    if (input.status !== undefined) customerSet.status = input.status;
     await this.db
       .update(customers)
       .set(customerSet)
@@ -361,6 +378,12 @@ export class PropertyManagementService {
       });
     }
 
+    // Apres une desactivation (status "false"), le dossier sort du perimetre de
+    // findTenant : on renvoie alors un accuse minimal plutot qu'un 404 sur une
+    // mise a jour qui a pourtant reussi.
+    if (input.status === "false") {
+      return { id, status: "false" };
+    }
     return this.findTenant(id, orgId);
   }
 
@@ -779,7 +802,71 @@ export class PropertyManagementService {
       return createdCustomerId;
     });
 
-    return this.findTenant(customerId, orgId);
+    const tenant = await this.findTenant(customerId, orgId);
+    // Le lien portail est cree systematiquement a l'ouverture du dossier (meme
+    // sans telephone) : la fiche locataire doit toujours pouvoir l'afficher
+    // sans qu'un gestionnaire ait a cliquer sur "Generer".
+    try {
+      await this.tenantPortal.generateTenantPortalLink(customerId, orgId);
+    } catch (error) {
+      this.logger.warn(
+        `Portal link not created for tenant ${customerId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    await this.sendTenantCreatedSms(customerId, orgId);
+    return tenant;
+  }
+
+  /**
+   * Genere (ou reutilise) le lien portail d'un locataire ET le previent par SMS
+   * que son dossier est disponible. Utilise par le bouton "Generer le lien
+   * portail" de la fiche locataire, pour les dossiers anterieurs qui n'avaient
+   * pas encore de lien : meme resultat qu'une creation de dossier aujourd'hui.
+   */
+  async generateTenantPortalLinkAndNotify(tenantId: number, orgId: number) {
+    const link = await this.tenantPortal.generateTenantPortalLink(tenantId, orgId);
+    await this.sendTenantCreatedSms(tenantId, orgId);
+    return link;
+  }
+
+  /**
+   * SMS de confirmation envoye au locataire des que son dossier est cree.
+   * Best-effort : un echec d'envoi ne doit jamais faire echouer la creation
+   * du dossier (meme principe que sendLeaseWelcome).
+   */
+  async sendTenantCreatedSms(tenantId: number, orgId: number) {
+    try {
+      const tenant: any = await this.findTenant(tenantId, orgId);
+      const phone = tenant?.phone;
+      if (!phone) return;
+
+      // Message volontairement court : appendPortalFooterToSms ajoute ensuite
+      // "Cliquez ici pour voir votre dossier : <lien>" (~99 caracteres avec un
+      // token court). Objectif = tenir dans UN seul SMS (160 caracteres) pour
+      // ne pas doubler le cout d'envoi. D'ou le prenom seul (pas "prenom nom")
+      // et pas de nom de societe : l'emetteur est deja identifiable par le
+      // domaine du lien.
+      const firstName = (tenant.firstName || "").trim().split(/\s+/)[0] || "";
+      const greeting = firstName ? `Bonjour ${firstName}, v` : "V";
+      const message = `${greeting}otre dossier locataire est cree.`;
+
+      const messageWithFooter = await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId);
+      const res = await this.sms.sendSms({
+        phone,
+        message: messageWithFooter,
+        organizationId: orgId,
+        smsType: "tenant_created",
+        relatedType: "tenant",
+        relatedId: tenantId,
+      });
+      if (!res?.success) {
+        this.logger.warn(`Tenant created SMS not sent (tenant ${tenantId}, ${phone}): ${res?.message}`);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Tenant created SMS error (tenant ${tenantId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   // ── Helpers RBAC par bien (Domus, Phase 2) ───────────────────────────────
@@ -817,6 +904,8 @@ export class PropertyManagementService {
         address: realEstateProperties.address,
         city: realEstateProperties.city,
         country: realEstateProperties.country,
+        latitude: realEstateProperties.latitude,
+        longitude: realEstateProperties.longitude,
         floors: realEstateProperties.floors,
         parkingSpaces: realEstateProperties.parkingSpaces,
         marketValue: realEstateProperties.marketValue,
@@ -1398,6 +1487,7 @@ export class PropertyManagementService {
     if (input.ownerId != null) {
       await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
     }
+    const geo = await this.geocodePropertyAddress(input.address ?? null, input.city ?? null, input.country ?? null);
     const [result] = await this.db.insert(realEstateProperties).values({
       organizationId: orgId,
       name: input.name,
@@ -1407,6 +1497,8 @@ export class PropertyManagementService {
       address: input.address ?? null,
       city: input.city ?? null,
       country: input.country ?? null,
+      latitude: geo ? String(geo.latitude) : null,
+      longitude: geo ? String(geo.longitude) : null,
       floors: input.floors ?? 1,
       parkingSpaces: input.parkingSpaces ?? 0,
       marketValue: this.money(input.marketValue),
@@ -1426,12 +1518,33 @@ export class PropertyManagementService {
 
   async updateProperty(id: number, input: UpdatePropertyDto, orgId: number) {
     await this.ensureActiveProperty(id, orgId);
+    const [existing] = await this.db
+      .select({
+        address: realEstateProperties.address,
+        city: realEstateProperties.city,
+        country: realEstateProperties.country,
+      })
+      .from(realEstateProperties)
+      .where(eq(realEstateProperties.id, id))
+      .limit(1);
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     }
     if (input.ownerId !== undefined && input.ownerId !== null) {
       await this.ensureActiveOwnerForProperty(input.ownerId, orgId);
     }
+    const addressChanged =
+      !!existing &&
+      ((input.address !== undefined && input.address !== existing.address) ||
+        (input.city !== undefined && input.city !== existing.city) ||
+        (input.country !== undefined && input.country !== existing.country));
+    const geo = addressChanged
+      ? await this.geocodePropertyAddress(
+          input.address !== undefined ? input.address : existing!.address,
+          input.city !== undefined ? input.city : existing!.city,
+          input.country !== undefined ? input.country : existing!.country,
+        )
+      : null;
     await this.db
       .update(realEstateProperties)
       .set({
@@ -1449,6 +1562,7 @@ export class PropertyManagementService {
           "currencyId",
           "ownerId",
         ]),
+        ...(addressChanged ? { latitude: geo ? String(geo.latitude) : null, longitude: geo ? String(geo.longitude) : null } : {}),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
         ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
@@ -1878,6 +1992,7 @@ export class PropertyManagementService {
         paymentDate: realEstateRentPayments.paymentDate,
         amount: realEstateRentPayments.amount,
         method: realEstateRentPayments.method,
+        status: realEstateRentPayments.status,
         reference: realEstateRentPayments.reference,
         notes: realEstateRentPayments.notes,
         taxAmount: realEstateRentPayments.taxAmount,
@@ -2022,6 +2137,192 @@ export class PropertyManagementService {
 
     await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    return this.findPayment(paymentId);
+  }
+
+  // Genere les echeances de loyer manquantes d'un bail (baux crees
+  // retroactivement dont les mois passes n'ont jamais ete saisis), sans les
+  // compter comme argent encaisse : pas de transaction comptable, pas de
+  // ledger. status='pending' — a confirmer individuellement ensuite via
+  // confirmPendingPayment. Idempotent : un mois deja couvert par une ligne
+  // (paid OU pending) n'est jamais duplique.
+  async generateMissingPayments(leaseId: number, orgId: number) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+
+    const existing = await this.db
+      .select({ amount: realEstateRentPayments.amount })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+      ));
+    // Couverture par MONTANT cumulé (paid + pending), pas par mois calendaire :
+    // un seul virement de plusieurs mois de loyer daté d'un seul mois doit quand
+    // meme couvrir plusieurs echeances, sinon on regenere a tort des "manquantes"
+    // deja payees. Coherent avec le calcul de couverture du frontend (loyers.jsx).
+    const rent = Number(lease.rentAmount) || 0;
+    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
+
+    const start = this.parseDateOnly(lease.startDate);
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const boundary = lease.endDate ? this.parseDateOnly(lease.endDate) : null;
+
+    const monthsToCreate: Date[] = [];
+    let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    let monthIndex = 0;
+    while (cursor.getTime() <= lastMonth.getTime()) {
+      if (!boundary || cursor.getTime() <= boundary.getTime()) {
+        if (monthIndex >= monthsAlreadyCovered) monthsToCreate.push(new Date(cursor.getTime()));
+      }
+      monthIndex += 1;
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    }
+
+    const created: number[] = [];
+    for (const month of monthsToCreate) {
+      const [result] = await this.db.insert(realEstateRentPayments).values({
+        organizationId: orgId,
+        leaseId: lease.id,
+        currencyId: (lease as any).currencyId ?? null,
+        transactionId: null,
+        paymentDate: this.formatDateOnly(month),
+        amount: this.money(Number(lease.rentAmount)),
+        method: "pending",
+        status: "pending",
+        reference: null,
+        notes: "Echeance generee automatiquement (bail retroactif) — a confirmer.",
+        proofUrl: null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      created.push(Number((result as any).insertId));
+    }
+
+    const payments = created.length
+      ? await this.db.select().from(realEstateRentPayments).where(inArray(realEstateRentPayments.id, created))
+      : [];
+
+    return { createdCount: created.length, payments };
+  }
+
+  // Confirme une echeance 'pending' generee retroactivement : transforme la
+  // ligne existante en vrai paiement encaisse (UPDATE, pas de duplication),
+  // en creant la transaction comptable + ecriture ledger comme createPayment.
+  // Reutilise integralement le meme calcul de taxe / compte de paiement.
+  async confirmPendingPayment(paymentId: number, input: ConfirmPendingPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
+    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+
+    const [pending] = await this.db
+      .select()
+      .from(realEstateRentPayments)
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)))
+      .limit(1);
+    if (!pending) throw new NotFoundException("Payment not found.");
+    if (pending.status !== "pending") {
+      throw new BadRequestException("Ce paiement n'est pas en attente de confirmation.");
+    }
+
+    const lease = await this.getLeaseOrThrow(pending.leaseId, orgId);
+    await this.ensureLeaseContractSigned(pending.leaseId);
+    const rentPaymentType = await this.getRentPaymentType(orgId);
+    const debitId = input.paymentAccountId
+      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId));
+    await this.ensureExists(subAccounts, debitId, "Payment account not found.");
+
+    const paymentCurrencyId =
+      (input as any).currencyId
+      ?? (lease as any).currencyId
+      ?? (await this.resolveDefaultCurrency(orgId));
+
+    const [transactionResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
+      date: new Date(input.paymentDate),
+      debitId,
+      creditId: rentPaymentType.creditAccountId,
+      particulars: input.notes || "Payment for rent",
+      amount: input.amount,
+      currencyId: paymentCurrencyId ?? null,
+      type: "Rent Payment",
+      relatedId: String(lease.id),
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const taxAmt = this.computeInclusiveTax(Number(input.amount), lease as any);
+
+    await this.db
+      .update(realEstateRentPayments)
+      .set({
+        status: "paid",
+        currencyId: paymentCurrencyId,
+        transactionId: Number(transactionResult.insertId),
+        paymentDate: this.requiredDate(input.paymentDate),
+        amount: this.money(input.amount),
+        method: input.method ?? "cash",
+        reference: input.reference ?? null,
+        notes: input.notes || "Payment for rent",
+        taxAmount: taxAmt != null ? this.money(taxAmt) : null,
+        taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+        proofUrl,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
+      if (taxType) {
+        await this.db.insert(transactions).values({
+          organizationId: orgId,
+          date: new Date(input.paymentDate),
+          debitId: taxType.debitAccountId,
+          creditId: taxType.creditAccountId,
+          particulars: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})`,
+          amount: taxAmt,
+          currencyId: paymentCurrencyId ?? null,
+          type: "Real Estate Tax",
+          relatedId: String(lease.id),
+          status: "true",
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+      }
+    }
+
+    const rentLines = [
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+    ];
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
+      if (taxType) {
+        rentLines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `RENT-${paymentId}`,
+        particulars: input.notes || `Payment for rent — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: paymentCurrencyId ?? undefined,
+        idempotencyKey: `rent-payment:${paymentId}`,
+        lines: rentLines,
+      },
+      orgId,
+    );
+
+    await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
+    await this.publishPaymentUpdate("updated", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
@@ -2944,6 +3245,7 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
+        eq(realEstateRentPayments.status, "paid"),
         gte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodStart)),
         lte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodEnd)),
       ));
@@ -3586,7 +3888,10 @@ export class PropertyManagementService {
         channel: "sms" as const,
         type: row.type,
         recipient: row.recipient,
-        subject: row.body ? String(row.body).slice(0, 160) : null,
+        // Texte SMS complet : la troncature a 160 caracteres coupait la fin du
+        // message, donc le lien du portail locataire ajoute en pied (SMS bien
+        // envoye avec le lien, mais invisible dans l'historique).
+        subject: row.body ? String(row.body) : null,
         status: row.status,
         createdAt: row.createdAt,
         errorMessage: row.errorMessage,
@@ -4571,6 +4876,7 @@ export class PropertyManagementService {
       ne(paymentLease.status, "cancelled"),
       eq(paymentLease.propertyId, propertyId),
       eq(realEstateRentPayments.organizationId, orgId),
+      eq(realEstateRentPayments.status, "paid"),
     ];
     if (filters.dateFrom) rentConditions.push(gte(realEstateRentPayments.paymentDate, filters.dateFrom));
     if (filters.dateTo) rentConditions.push(lte(realEstateRentPayments.paymentDate, filters.dateTo));
@@ -5198,7 +5504,10 @@ export class PropertyManagementService {
         paymentDate: realEstateRentPayments.paymentDate,
       })
       .from(realEstateRentPayments)
-      .where(inArray(realEstateRentPayments.leaseId, leaseIds))
+      .where(and(
+        inArray(realEstateRentPayments.leaseId, leaseIds),
+        eq(realEstateRentPayments.status, "paid"),
+      ))
       .orderBy(realEstateRentPayments.paymentDate);
 
     const paymentsByLease = new Map<number, string[]>();
@@ -5671,6 +5980,21 @@ export class PropertyManagementService {
 
   private money(value: number | undefined | null) {
     return String(value ?? 0);
+  }
+
+  /** Geocode best-effort une adresse de bien (Nominatim) ; ne jamais throw. */
+  private async geocodePropertyAddress(
+    address?: string | null,
+    city?: string | null,
+    country?: string | null,
+  ): Promise<{ latitude: number; longitude: number } | null> {
+    const query = this.geocoding.buildQuery(address, city, country);
+    if (!query) return null;
+    try {
+      return await this.geocoding.geocode(query);
+    } catch {
+      return null;
+    }
   }
 
   private date(value: string | null | undefined) {

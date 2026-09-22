@@ -94,14 +94,18 @@ export function buildLeaseCards(leases, payments) {
     .filter((l) => (l.status || "active") === "active")
     .map((l) => {
       const list = payments.filter((p) => String(p.leaseId) === String(l.id));
-      const paidMonths = new Set(list.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
-      const latest = [...list].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
+      // Seules les échéances réellement réglées comptent pour la couverture/frise ;
+      // les "pending" (générées auto sur bail rétroactif, pas encore confirmées) ne
+      // doivent pas être comptées comme payées.
+      const paidList = list.filter((p) => p.status !== "pending");
+      const paidMonths = new Set(paidList.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
+      const latest = [...paidList].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
 
       // Couverture par MONTANT : le total payé / loyer mensuel = nb de mois couverts,
       // rempli du début du bail vers le présent. Régler le montant total fait avancer
       // la couverture et met donc le statut à jour (corrige « reste en retard apres paiement »).
       const rent = Number(l.rentAmount) || 0;
-      const totalPaid = list.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalPaid = paidList.reduce((s, p) => s + Number(p.amount || 0), 0);
       const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : list.length;
       // Couverture fractionnaire : un paiement partiel (ex. 50 sur 100) remplit une demi-case.
       const monthsCoveredFloat = rent > 0 ? totalPaid / rent : monthsCovered;
@@ -151,6 +155,7 @@ export function buildLeaseCards(leases, payments) {
         totalPaid,
         latest,
         status,
+        list,
       };
     });
 }
@@ -162,8 +167,13 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
-function TenantPayCard({ card, index, onPay }) {
-  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null } = card;
+function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false }) {
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null, list = [] } = card;
+  // Des echeances manquantes existent si le bail a des mois en retard ET
+  // qu'aucune ligne pending n'a deja ete generee pour couvrir ces mois-la
+  // (sinon on duplique l'action : il suffit de confirmer les pending existantes).
+  const hasPending = list.some((p) => p.status === "pending");
+  const missingMonths = monthsBehind > 0 && Boolean(lease) && !hasPending;
   const coveredUntilLabel = coveredUntil
     ? coveredUntil.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
     : null;
@@ -242,9 +252,17 @@ function TenantPayCard({ card, index, onPay }) {
         <span>{MONTHS_FR[slots[slots.length - 1].getMonth()]}</span>
       </div>
       {actionable && (
-        <button className="immo-btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} onClick={() => onPay(card)}>
-          <Smartphone size={16} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button className="immo-btn primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onPay(card)}>
+            <Smartphone size={16} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
+          </button>
+          {missingMonths && (
+            <button className="immo-btn" style={{ flex: 1, justifyContent: "center" }} disabled={generating}
+              onClick={() => onGenerateMissing?.(card)}>
+              <CalendarRange size={16} /> {generating ? "…" : "Générer les échéances"}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -257,6 +275,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
   const [amount, setAmount] = useState(String(fullBalance || monthRent || ""));
   const [method, setMethod] = useState(null);
+  const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -274,7 +293,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         method: m?.label || method,
         reference: null,
         ...(card.currencyId ? { currencyId: Number(card.currencyId) } : {}),
-      });
+      }, proofFile);
       onPaid(`Paiement de ${money(Number(amount), card.symbol)} enregistré pour ${card.name}`);
     } catch (e) {
       setErr(e.message || String(e));
@@ -330,12 +349,123 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
               </button>
             ))}
           </div>
+          <label className="immo-field-label">Preuve de paiement (optionnel)</label>
+          <input
+            id="quickpay-proof-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+          />
+          <label htmlFor="quickpay-proof-input" className="immo-btn" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <FileDown size={16} />
+            {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
+          </label>
+          {proofFile && (
+            <button type="button" className="immo-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setProofFile(null)}>
+              <X size={14} /> Retirer le fichier
+            </button>
+          )}
           {err && <div className="api-error" style={{ marginTop: 10 }}>{err}</div>}
         </div>
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
           <button className="immo-btn primary" onClick={submit} disabled={busy || !amount}>
             {busy ? "Encaissement…" : <><Check size={16} /> Confirmer le paiement</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mini-modale de confirmation d'une échéance pending (générée par
+// generate-missing-payments). Contrairement à QuickPayModal, la date par
+// défaut est celle DU MOIS CONCERNÉ (pas today()) — l'échéance de janvier
+// doit se confirmer avec une date de janvier, éditable par l'utilisateur.
+function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
+  const [amount, setAmount] = useState(String(payment.amount ?? ""));
+  const [paymentDate, setPaymentDate] = useState(() => {
+    const d = payment.paymentDate ? new Date(payment.paymentDate) : new Date();
+    return d.toISOString().slice(0, 10);
+  });
+  const [method, setMethod] = useState(null);
+  const [proofFile, setProofFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const activeKey = method ?? methods[0]?.key;
+  const tenant = tenantName(payment);
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const m = methods.find((x) => x.key === activeKey);
+      await api.confirmPayment(payment.id, {
+        paymentDate,
+        amount: Number(amount),
+        method: m?.label || method,
+        reference: null,
+        ...(payment.currencyId ? { currencyId: Number(payment.currencyId) } : {}),
+      }, proofFile);
+      onConfirmed(`Paiement de ${money(Number(amount), payment.currencySymbol)} confirmé pour ${tenant}`);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="immo-modal-scrim" onClick={onClose}>
+      <div className="immo-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="immo-modal-head">
+          <div>
+            <div className="eyebrow">Confirmation d'échéance</div>
+            <h3>{t("Confirmer le paiement")}</h3>
+          </div>
+          <button className="immo-flat-icon" onClick={onClose} aria-label={t("Fermer")}><X size={16} /></button>
+        </div>
+        <div className="immo-modal-body">
+          <div className="immo-pay-row"><span>Locataire</span><strong>{tenant}</strong></div>
+          <div className="immo-pay-row"><span>Logement</span><strong>{[payment.propertyName, payment.unitName].filter(Boolean).join(" · ") || "—"}</strong></div>
+          <label className="immo-field-label">Date du paiement</label>
+          <input className="immo-input" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+          <label className="immo-field-label">Montant</label>
+          <input className="immo-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          <label className="immo-field-label">Moyen de paiement</label>
+          <div className="immo-method-grid">
+            {methods.map((m) => (
+              <button key={m.key} type="button" className={`immo-method ${activeKey === m.key ? "active" : ""}`} onClick={() => setMethod(m.key)}>
+                <span className="immo-method-badge" style={{ background: m.color }}>{m.short}</span>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <label className="immo-field-label">Preuve de paiement (optionnel)</label>
+          <input
+            id="confirmpay-proof-input"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+          />
+          <label htmlFor="confirmpay-proof-input" className="immo-btn" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <FileDown size={16} />
+            {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
+          </label>
+          {proofFile && (
+            <button type="button" className="immo-btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setProofFile(null)}>
+              <X size={14} /> Retirer le fichier
+            </button>
+          )}
+          {err && <div className="api-error" style={{ marginTop: 10 }}>{err}</div>}
+        </div>
+        <div className="immo-modal-foot">
+          <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
+          <button className="immo-btn primary" onClick={submit} disabled={busy || !amount || !paymentDate}>
+            {busy ? "Confirmation…" : <><Check size={16} /> Confirmer</>}
           </button>
         </div>
       </div>
@@ -379,6 +509,8 @@ export function Loyers({ go }) {
   );
   const [view, setView] = useState("locataire");
   const [payTarget, setPayTarget] = useState(null);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
 
@@ -427,6 +559,32 @@ export function Loyers({ go }) {
     setFlash(msg);
     reload();
     setTimeout(() => setFlash(null), 4000);
+  };
+
+  const handleConfirmed = (msg) => {
+    setConfirmTarget(null);
+    setFlash(msg);
+    reload();
+    setTimeout(() => setFlash(null), 4000);
+  };
+
+  const handleGenerateMissing = async (card) => {
+    if (!card.lease?.id || generatingLeaseId) return;
+    setGeneratingLeaseId(card.lease.id);
+    try {
+      const res = await api.generateMissingPayments(card.lease.id);
+      const createdCount = res?.createdCount ?? 0;
+      toast.success(
+        createdCount > 0
+          ? tf(t("{n} échéance(s) manquante(s) générée(s)."), { n: createdCount })
+          : t("Aucune échéance manquante à générer."),
+      );
+      await reload();
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setGeneratingLeaseId(null);
+    }
   };
 
   // Calendrier : 12 mois glissants, total encaissé + nb de paiements par mois.
@@ -526,7 +684,16 @@ export function Loyers({ go }) {
           <div className="immo-empty"><Wallet size={28} /><h3>{t("Aucun résultat")}</h3><p>{tf(t("Aucun locataire ne correspond à « {q} »."), {q: query})}</p></div>
         ) : (
           <div className="immo-pay-grid">
-            {shownCards.map((c, i) => <TenantPayCard key={c.lease?.id ?? c.name} card={c} index={i} onPay={setPayTarget} />)}
+            {shownCards.map((c, i) => (
+              <TenantPayCard
+                key={c.lease?.id ?? c.name}
+                card={c}
+                index={i}
+                onPay={setPayTarget}
+                onGenerateMissing={handleGenerateMissing}
+                generating={Boolean(c.lease?.id) && generatingLeaseId === c.lease?.id}
+              />
+            ))}
           </div>
         )
       ) : view === "calendrier" ? (
@@ -542,23 +709,35 @@ export function Loyers({ go }) {
       ) : (
         <div className="card" style={{ overflow: "hidden" }}>
           <table className="tbl">
-            <thead><tr><th>Locataire</th><th>Logement</th><th>Date</th><th>Méthode</th><th>Montant</th></tr></thead>
+            <thead><tr><th>Locataire</th><th>Logement</th><th>Date</th><th>Méthode</th><th>Statut</th><th>Montant</th><th></th></tr></thead>
             <tbody>
-              {shownRows.map((p) => (
-                <tr key={p.id}>
-                  <td style={{ fontWeight: 500 }}>{tenantName(p)}</td>
-                  <td className="muted">{[p.propertyName, p.unitName].filter(Boolean).join(" · ") || "—"}</td>
-                  <td className="muted">{p.paymentDate || "—"}</td>
-                  <td><span className="chip chip-ink">{p.method || "—"}</span></td>
-                  <td style={{ fontWeight: 600 }}>{money(p.amount, p.currencySymbol || "$")}</td>
-                </tr>
-              ))}
+              {shownRows.map((p) => {
+                const isPending = p.status === "pending";
+                return (
+                  <tr key={p.id}>
+                    <td style={{ fontWeight: 500 }}>{tenantName(p)}</td>
+                    <td className="muted">{[p.propertyName, p.unitName].filter(Boolean).join(" · ") || "—"}</td>
+                    <td className="muted">{p.paymentDate || "—"}</td>
+                    <td><span className="chip chip-ink">{p.method || "—"}</span></td>
+                    <td><span className={`immo-pill ${isPending ? "warning" : "success"}`}>{isPending ? "En attente" : "Payé"}</span></td>
+                    <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}</td>
+                    <td>
+                      {isPending && (
+                        <button className="immo-btn" style={{ fontSize: 12 }} onClick={() => setConfirmTarget(p)}>
+                          <Check size={14} /> Confirmer
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
+      {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
       {flash && <div className="immo-toast"><Check size={16} /> {flash}</div>}
     </>
   );

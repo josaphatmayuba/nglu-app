@@ -54,6 +54,14 @@ const NEXT_STATUS = { open: "in_progress", in_progress: "done" };
 const PRIORITY_LABEL = { urgent: t("Urgent"), high: t("Urgent"), medium: t("Moyen"), low: t("Bas") };
 const PRIORITY_CLASS = { urgent: "chip-rose", high: "chip-rose", medium: "chip-amber", low: "chip-ink" };
 
+const PHOTO_TYPES = [
+  { key: "before", label: t("Avant") },
+  { key: "after", label: t("Apres") },
+  { key: "invoice", label: t("Facture/recu") },
+];
+// Types utilisables au moment de la création : "after" n'a de sens qu'une fois le ticket résolu.
+const CREATE_PHOTO_TYPES = PHOTO_TYPES.filter((type) => type.key !== "after");
+
 const emptyTicket = {
   title: "",
   propertyId: "",
@@ -129,6 +137,7 @@ export function Maintenance() {
   const [ticketModal, setTicketModal] = useState(null);
   const [costModal, setCostModal] = useState(null);
   const [photosModal, setPhotosModal] = useState(null);
+  const [resolveModal, setResolveModal] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -234,7 +243,7 @@ export function Maintenance() {
     await Promise.all([maintenanceApi.reload(), propertiesApi.reload(), unitsApi.reload()]);
   };
 
-  const saveTicket = async (form) => {
+  const saveTicket = async (form, pendingPhotos) => {
     setBusy(true);
     setActionError("");
     try {
@@ -250,10 +259,28 @@ export function Maintenance() {
         description: form.description?.trim() || null,
       };
       if (!payload.title || !payload.propertyId) throw new Error(t("Titre et bien obligatoires."));
+      const wasNew = !form.id;
+      let ticketId = form.id;
       if (form.id) await api.updateMaintenance(form.id, payload);
-      else await api.createMaintenance(payload);
+      else {
+        const created = await api.createMaintenance(payload);
+        ticketId = created?.id ?? created?.data?.id;
+      }
+      // Upload des photos mises en attente pendant la création (avant que le ticket n'existe).
+      let uploadError = "";
+      if (wasNew && ticketId && pendingPhotos?.length) {
+        for (const item of pendingPhotos) {
+          try {
+            await api.uploadMaintenancePhoto(ticketId, item.file, item.type);
+          } catch (err) {
+            uploadError = err.message || String(err);
+          }
+        }
+      }
       setTicketModal(null);
       await reloadAll();
+      // Le ticket est créé ; une erreur d'upload ne doit pas bloquer/rouvrir le modal.
+      if (uploadError) setActionError(tf(t("Ticket créé, mais échec de l'envoi d'une photo : {err}"), { err: uploadError }));
     } catch (err) {
       setActionError(err.message || String(err));
     } finally {
@@ -293,9 +320,34 @@ export function Maintenance() {
     }
   };
 
+  // Passage à "done" : exige une photo "after" ou un commentaire (ouvre resolveModal) ;
+  // les autres transitions passent directement par changeStatus comme avant.
+  const requestStatusChange = (ticket, status) => {
+    if (status === "done") setResolveModal({ ticket });
+    else changeStatus(ticket, status);
+  };
+
   const advance = (ticket) => {
     const next = NEXT_STATUS[ticket.status];
-    if (next) changeStatus(ticket, next);
+    if (next) requestStatusChange(ticket, next);
+  };
+
+  const resolveTicket = async (ticket, { comment, hasPhoto }) => {
+    setBusyId(ticket.id);
+    setActionError("");
+    try {
+      const payload = { status: "done" };
+      if (comment?.trim()) {
+        payload.description = `${ticket.description ? `${ticket.description}\n\n` : ""}${t("[Résolution]")} ${comment.trim()}`;
+      }
+      await api.updateMaintenance(ticket.id, payload);
+      await maintenanceApi.reload();
+      setResolveModal(null);
+    } catch (err) {
+      setActionError(err.message || String(err));
+    } finally {
+      setBusyId(null);
+    }
   };
 
   const saveCost = async (ticket, form) => {
@@ -347,7 +399,7 @@ export function Maintenance() {
       </div>
 
       <div className="immo-metrics-grid">
-        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label={t("Tickets ouverts")} value={openTickets.length} />
+        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label={t("Tickets non resolus")} value={openTickets.length} />
         <Metric icon={<AlertTriangle size={20} />} tone="immo-tone-red" label={t("Urgents")} value={urgentTickets.length} danger />
         <Metric icon={<Columns3 size={20} />} tone="immo-tone-brand" label={t("En cours")} value={inProgressTickets.length} />
         <Metric icon={<CheckCircle2 size={20} />} tone="immo-tone-green" label={t("Termines")} value={doneTickets.length} success />
@@ -383,7 +435,7 @@ export function Maintenance() {
           setMenuId={setMenuId}
           costSymbol={costSymbol}
           onAdvance={advance}
-          onStatusChange={changeStatus}
+          onStatusChange={requestStatusChange}
           onEdit={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
@@ -476,6 +528,16 @@ export function Maintenance() {
         <PhotosModal
           ticket={photosModal.ticket}
           onClose={() => setPhotosModal(null)}
+        />
+      )}
+
+      {resolveModal && (
+        <ResolveModal
+          ticket={resolveModal.ticket}
+          busy={busyId === resolveModal.ticket.id}
+          error={actionError}
+          onClose={() => { setResolveModal(null); setActionError(""); }}
+          onConfirm={(payload) => resolveTicket(resolveModal.ticket, payload)}
         />
       )}
     </>
@@ -684,6 +746,41 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
+  const isEdit = Boolean(form.id);
+
+  // Création : photos choisies mais pas encore uploadées (le ticket n'existe pas encore).
+  const [pendingPhotos, setPendingPhotos] = useState([]);
+  const [pendingType, setPendingType] = useState("before");
+
+  // Édition : upload immédiat, comme dans PhotosModal.
+  const photosApi = useApi(() => (isEdit ? api.maintenancePhotos(form.id) : Promise.resolve([])), [isEdit, form.id]);
+  const [editType, setEditType] = useState("before");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const existingPhotos = Array.isArray(photosApi.data) ? photosApi.data : photosApi.data?.data || [];
+
+  function addPendingPhoto(file) {
+    if (!file) return;
+    setPendingPhotos((list) => [...list, { file, type: pendingType, name: file.name }]);
+  }
+  function removePendingPhoto(index) {
+    setPendingPhotos((list) => list.filter((_, i) => i !== index));
+  }
+
+  async function uploadEditPhoto(file) {
+    if (!file || !form.id) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try {
+      await api.uploadMaintenancePhoto(form.id, file, editType);
+      await photosApi.reload();
+    } catch (err) {
+      setPhotoError(err.message || String(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   return (
     <Modal title={form.id ? t("Modifier le ticket") : t("Nouveau ticket")} subtitle={t("Meme flux que le CRM immobilier")} icon={<Wrench size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
@@ -699,9 +796,82 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
           </div>
           <DomusPropertyField label={t("Description")} value={form.description} onChange={(description) => set({ description })} textarea />
         </FormSection>
+
+        {!isEdit && (
+          <FormSection icon={<Camera size={14} />} title={t("Photos")}>
+            <div className="immo-filter-group">
+              {CREATE_PHOTO_TYPES.map((type) => (
+                <button key={type.key} type="button" className={pendingType === type.key ? "active" : ""} onClick={() => setPendingType(type.key)}>
+                  {type.label}
+                </button>
+              ))}
+            </div>
+            <div className="domus-photo-strip">
+              {pendingPhotos.map((item, index) => (
+                <div className="domus-photo-thumb" key={`${item.name}-${index}`}>
+                  <img src={URL.createObjectURL(item.file)} alt={item.name} />
+                  <button type="button" onClick={() => removePendingPhoto(index)} title={t("Retirer")}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+              <label className="domus-photo-add">
+                <Camera size={16} />
+                <span>{t("Ajouter")}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    addPendingPhoto(file);
+                  }}
+                />
+              </label>
+            </div>
+          </FormSection>
+        )}
+
+        {isEdit && (
+          <FormSection icon={<Camera size={14} />} title={t("Photos")}>
+            <div className="immo-filter-group">
+              {CREATE_PHOTO_TYPES.map((type) => (
+                <button key={type.key} type="button" className={editType === type.key ? "active" : ""} onClick={() => setEditType(type.key)}>
+                  {type.label}
+                </button>
+              ))}
+            </div>
+            <div className="domus-photo-strip">
+              {existingPhotos
+                .filter((photo) => (photo.photoType || "before") === editType)
+                .map((photo) => (
+                  <div className="domus-photo-thumb" key={photo.id}>
+                    <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || editType} />
+                  </div>
+                ))}
+              <label className="domus-photo-add">
+                <Camera size={16} />
+                <span>{t("Ajouter")}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  disabled={photoBusy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) uploadEditPhoto(file);
+                  }}
+                />
+              </label>
+            </div>
+            {photoError && <div className="api-error">{photoError}</div>}
+          </FormSection>
+        )}
       </div>
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
-      <ModalActions busy={busy} disabled={!form.title || !form.propertyId} onClose={onClose} onSave={() => onSave(form)} />
+      <ModalActions busy={busy} disabled={!form.title || !form.propertyId} onClose={onClose} onSave={() => onSave(form, pendingPhotos)} />
     </Modal>
   );
 }
@@ -767,12 +937,6 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
     </Modal>
   );
 }
-
-const PHOTO_TYPES = [
-  { key: "before", label: t("Avant") },
-  { key: "after", label: t("Apres") },
-  { key: "invoice", label: t("Facture/recu") },
-];
 
 function PhotosModal({ ticket, onClose }) {
   const photosApi = useApi(() => api.maintenancePhotos(ticket.id), [ticket.id]);
@@ -882,6 +1046,93 @@ function PhotosModal({ ticket, onClose }) {
         {error && <div className="api-error">{error}</div>}
       </div>
       <div className="modal-actions"><button className="btn" onClick={onClose}>{t("Fermer")}</button></div>
+    </Modal>
+  );
+}
+
+// Confirmation exigée pour passer un ticket en "Resolu" : au moins une photo "after"
+// ou un commentaire de résolution (annexé à la description, pas de colonne dédiée).
+function ResolveModal({ ticket, busy, error, onClose, onConfirm }) {
+  const photosApi = useApi(() => api.maintenancePhotos(ticket.id), [ticket.id]);
+  const [comment, setComment] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+
+  const photos = Array.isArray(photosApi.data) ? photosApi.data : photosApi.data?.data || [];
+  const afterPhotos = photos.filter((photo) => (photo.photoType || "before") === "after");
+  const hasPhoto = afterPhotos.length > 0;
+  const hasComment = comment.trim().length > 0;
+
+  async function handleUpload(file) {
+    if (!file) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try {
+      await api.uploadMaintenancePhoto(ticket.id, file, "after");
+      await photosApi.reload();
+    } catch (err) {
+      setPhotoError(err.message || String(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={t("Marquer comme resolu")}
+      subtitle={ticket.title}
+      icon={<CheckCircle2 size={20} />}
+      className="domus-property-modal"
+      onClose={onClose}
+    >
+      <div className="domus-property-form">
+        <FormSection icon={<Camera size={14} />} title={t("Photo apres travaux")}>
+          <div className="domus-photo-strip">
+            {afterPhotos.map((photo) => (
+              <div className="domus-photo-thumb" key={photo.id}>
+                <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || "after"} />
+              </div>
+            ))}
+            <label className="domus-photo-add">
+              <Camera size={16} />
+              <span>{t("Ajouter")}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                disabled={photoBusy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) handleUpload(file);
+                }}
+              />
+            </label>
+          </div>
+          {photoError && <div className="api-error">{photoError}</div>}
+        </FormSection>
+        <FormSection icon={<Pencil size={14} />} title={t("Ou commentaire de resolution")}>
+          <DomusPropertyField
+            label={t("Commentaire")}
+            value={comment}
+            onChange={setComment}
+            textarea
+            placeholder={t("Obligatoire si aucune photo n'est ajoutee")}
+          />
+        </FormSection>
+        {!hasPhoto && !hasComment && (
+          <p className="muted" style={{ margin: "0 24px" }}>
+            {t("Ajoutez une photo apres travaux ou un commentaire pour confirmer la resolution.")}
+          </p>
+        )}
+        {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
+      </div>
+      <ModalActions
+        busy={busy}
+        disabled={!hasPhoto && !hasComment}
+        onClose={onClose}
+        onSave={() => onConfirm({ comment, hasPhoto })}
+      />
     </Modal>
   );
 }

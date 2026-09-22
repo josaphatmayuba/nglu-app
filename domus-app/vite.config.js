@@ -46,14 +46,31 @@ export default defineConfig(({ mode }) => {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         navigateFallback: BASE + "index.html",
         // La navigation ne doit jamais retomber sur l'API.
-        navigateFallbackDenylist: [/^\/api\//],
+        // Les pages PUBLIQUES a token (portail locataire, onboarding,
+        // prelocation, reservations) sont exclues du fallback : servir le
+        // index.html precache y renvoyait un ancien bundle, qui ignore la route
+        // et affiche l'ecran de connexion au lieu de la page publique.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /\/mon-espace/,
+          /\/onboarding\//,
+          /\/prescreening\//,
+          /\/public(\/|$)/,
+        ],
         // Lecture hors ligne : on garde la dernière réponse connue des GET API.
         // NetworkFirst = réseau d'abord (données fraîches), sinon cache (offline).
         runtimeCaching: [
           {
+            // Les reponses des endpoints PUBLICS a token ne sont jamais mises
+            // en cache : elles contiennent les donnees personnelles d'UN
+            // locataire, et le cache survit 7 jours sur l'appareil. Sur un
+            // telephone partage, un autre locataire pourrait les relire.
             urlPattern: ({ url, request }) => request.method === "GET"
               && url.pathname.startsWith("/api/")
-              && !url.pathname.startsWith("/api/events"),
+              && !url.pathname.startsWith("/api/events")
+              && !url.pathname.startsWith("/api/tenant-portal")
+              && !url.pathname.startsWith("/api/tenant-onboarding")
+              && !url.pathname.startsWith("/api/tenant-prescreening"),
             handler: "NetworkFirst",
             options: {
               cacheName: "domus-api-cache",
