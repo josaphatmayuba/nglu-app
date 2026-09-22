@@ -1859,6 +1859,8 @@ export class PropertyManagementService {
       propertyName: string | null;
       propertyAddress: string | null;
       unitName: string | null;
+      startDate: string | null;
+      endDate: string | null;
       rentAmount: string | number | null;
       currencySymbol: string | null;
     },
@@ -1882,16 +1884,24 @@ export class PropertyManagementService {
       // Texte pilote depuis Reglages > Messages & notifications (evenement
       // "lease_created"). Le defaut ci-dessous ne sert que si aucun modele
       // actif n'est configure.
+      // EXCEPTION a la regle "un seul SMS" : le message de bail au locataire est
+      // envoye en DEUX SMS, le contenu puis le lien. Tenir en 160 caracteres
+      // avec un lien de ~52 obligeait a sacrifier soit l'adresse, soit le
+      // bailleur, soit la formule d'appel ; en scindant, le locataire recoit
+      // un message complet et naturel. Le 2e SMS ne part que si un lien existe.
+      // Les autres notifications restent volontairement en un seul segment.
       const smsMsg = await this.ownerNotifications.renderMessage(
         "lease_created",
-        `Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, ` +
-          `est actif.${ownerName ? " Proprietaire : {landlordName}." : ""} — {companyName}`,
+        "Bonjour {firstName}, votre bail {address}, {unit} est actif. " +
+          "Du {startDate} au {endDate}. Loyer {amount}. Bailleur {landlordName}.",
         {
           tenantName,
           firstName: lease.tenantFirstName || tenantName,
           reference: lease.reference || String(lease.id),
-          address: `${place}${unitPart}`,
-          unit: lease.unitName || "",
+          address: place,
+          unit: lease.unitName ? `Appt ${lease.unitName}` : "",
+          startDate: this.ownerNotifications.shortDate(lease.startDate),
+          endDate: this.ownerNotifications.shortDate(lease.endDate),
           landlordName: ownerName,
           amount,
           companyName,
@@ -1901,14 +1911,13 @@ export class PropertyManagementService {
 
       if (lease.tenantPhone) {
         try {
-          const smsWithFooter = this.ownerNotifications.fitOneSms(
-            portalUrl && smsMsg.includes(portalUrl)
-              ? smsMsg
-              : await this.tenantPortal.appendPortalFooterToSms(smsMsg, lease.tenantId, orgId),
-          );
+          // 1er SMS : le contenu. Si un modele personnalise place deja {url}
+          // dans le texte, on n'envoie pas de second message (le gestionnaire
+          // a choisi de tout mettre dans un seul SMS).
+          const inlineLink = Boolean(portalUrl) && smsMsg.includes(portalUrl);
           const res = await this.sms.sendSms({
             phone: lease.tenantPhone,
-            message: smsWithFooter,
+            message: this.ownerNotifications.fitOneSms(smsMsg),
             organizationId: orgId,
             smsType: "lease_welcome",
             relatedType: "real-estate-lease",
@@ -1916,6 +1925,23 @@ export class PropertyManagementService {
           });
           if (!res?.success) {
             this.logger.warn(`Welcome SMS not sent (lease ${lease.id}, ${lease.tenantPhone}): ${res?.message}`);
+          }
+
+          // 2e SMS : le lien seul, pour que le 1er reste complet et lisible.
+          if (portalUrl && !inlineLink) {
+            const linkRes = await this.sms.sendSms({
+              phone: lease.tenantPhone,
+              message: this.ownerNotifications.fitOneSms(
+                `Consultez votre dossier locataire ici : ${portalUrl}`,
+              ),
+              organizationId: orgId,
+              smsType: "lease_welcome_link",
+              relatedType: "real-estate-lease",
+              relatedId: lease.id,
+            });
+            if (!linkRes?.success) {
+              this.logger.warn(`Welcome link SMS not sent (lease ${lease.id}): ${linkRes?.message}`);
+            }
           }
         } catch (error) {
           this.logger.warn(`Welcome SMS error (lease ${lease.id}, ${lease.tenantPhone}): ${error instanceof Error ? error.message : String(error)}`);

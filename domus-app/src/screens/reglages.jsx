@@ -478,6 +478,8 @@ const MESSAGE_EVENTS = [
   ["lease_created_owner", "Propriétaire · nouveau bail"],
   ["payment_received_owner", "Propriétaire · paiement reçu"],
   ["payment_overdue_owner", "Propriétaire · loyer en retard"],
+  ["lease_expiring", "Fin de bail · locataire"],
+  ["lease_expiring_owner", "Propriétaire · fin de bail"],
   ["custom", "Autre / personnalisé"],
 ];
 const eventLabel = (ev) => (MESSAGE_EVENTS.find(([v]) => v === ev) || [, ev || "—"])[1];
@@ -550,6 +552,22 @@ const DEFAULT_MESSAGES = [
     body:
       "Bail {tenantName}, {unit}. {startDate} au {endDate}. " +
       "Loyer {amount}, caut. {deposit}. {url}",
+  },
+  {
+    name: "Fin de bail — locataire",
+    eventType: "lease_expiring",
+    subject: "Votre bail se termine le {endDate}",
+    body:
+      "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
+      "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+  },
+  {
+    name: "Propriétaire — fin de bail",
+    eventType: "lease_expiring_owner",
+    subject: "Fin de bail {reference} sur votre bien",
+    body:
+      "Fin de bail : {tenantName}, {unit} se termine le {endDate}. " +
+      "Loyer {amount}. {url}",
   },
   {
     name: "Propriétaire — loyer en retard",

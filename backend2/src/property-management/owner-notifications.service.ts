@@ -158,6 +158,22 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}, caut. {deposit}. {url}",
     },
     {
+      name: "Fin de bail — locataire",
+      eventType: "lease_expiring",
+      subject: "Votre bail se termine le {endDate}",
+      body:
+        "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
+        "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+    },
+    {
+      name: "Proprietaire — fin de bail",
+      eventType: "lease_expiring_owner",
+      subject: "Fin de bail {reference} sur votre bien",
+      body:
+        "Fin de bail : {tenantName}, {unit} se termine le {endDate}. " +
+        "Loyer {amount}. {url}",
+    },
+    {
       name: "Proprietaire — loyer en retard",
       eventType: "payment_overdue_owner",
       subject: "Loyer en retard — bail {reference}",
@@ -319,9 +335,10 @@ export class OwnerNotificationsService implements OnModuleInit {
     const orphans = [
       // "<mot d'introduction>" suivi immediatement d'une ponctuation de fin
       /\s*\b(chez|revenu|contact|proprietaire|bailleur|appartement|appt|unite|de|a|au|pour|du|avec)\b\s*:?\s*(?=[.,;)]|$)/gi,
-      // "Marie a ." / "Mariee a ," -> mention entiere retiree quand le
-      // conjoint n'est pas renseigne (locataire non marie).
-      /\s*\bmari[ée]e?\b\s*(?=[.,;]|$)/gi,
+      // "Marie a ." / "Marie(e) avec ." -> mention retiree quand le conjoint
+      // n'est pas renseigne. Le lookbehind sur un debut de phrase evite de
+      // supprimer le PRENOM "Marie" dans "Bonjour Marie, ...".
+      /(?<=^|[.;])\s*mari[ée]e?(?:\([ée]?e?\))?\s*(?:a|avec)?\s*(?=[.,;]|$)/gi,
       // segment entre ponctuations ne contenant qu'un mot d'introduction
       /([.,;])\s*\b(chez|revenu|contact|occupants?|enfants?)\b\s*(?=[.,;]|$)/gi,
     ];
@@ -445,7 +462,7 @@ export class OwnerNotificationsService implements OnModuleInit {
    * caracteres la ou "2026-10-01" en fait 10, et le format court est celui que
    * lisent les destinataires en RDC. Retourne "" si la date est absente.
    */
-  private shortDate(value?: string | null): string {
+  shortDate(value?: string | null): string {
     if (!value) return "";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
@@ -829,6 +846,73 @@ export class OwnerNotificationsService implements OnModuleInit {
     } catch (error) {
       this.logger.warn(
         `notifyPaymentOverdue failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  // ── 5. Bail arrivant a echeance sur un bien du proprietaire ──────────────
+
+  /**
+   * Previent le bailleur que le bail de son bien arrive a echeance, pour qu'il
+   * anticipe le renouvellement ou la relocation. Declenche par
+   * RentReminderService.runExpiryReminders, une seule fois par echeance.
+   */
+  async notifyLeaseExpiring(leaseId: number, propertyId: number, orgId: number) {
+    try {
+      const owner = await this.resolveOwnerForProperty(propertyId, orgId);
+      if (!owner) return;
+
+      const [lease] = await this.db
+        .select({
+          id: realEstateLeases.id,
+          reference: realEstateLeases.reference,
+          tenantId: realEstateLeases.tenantId,
+          endDate: realEstateLeases.endDate,
+          rentAmount: realEstateLeases.rentAmount,
+          currencySymbol: currencies.currencySymbol,
+          propertyName: realEstateProperties.name,
+          propertyAddress: realEstateProperties.address,
+          unitName: realEstateUnits.name,
+          tenantFirstName: customers.firstName,
+          tenantLastName: customers.lastName,
+          tenantPhone: customers.phone,
+        })
+        .from(realEstateLeases)
+        .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+        .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+        .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+        .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+        .limit(1);
+      if (!lease) return;
+
+      const { url } = await this.ownerPortal.generateOwnerPortalLink(
+        owner.id,
+        Number(lease.tenantId),
+        orgId,
+        propertyId,
+      );
+
+      const vars = {
+        ownerName: owner.name,
+        tenantName: this.fullName(lease.tenantFirstName, lease.tenantLastName),
+        tenantPhone: lease.tenantPhone || "",
+        reference: lease.reference || String(lease.id),
+        address: lease.propertyAddress || lease.propertyName || "",
+        unit: lease.unitName ? `Appt ${lease.unitName}` : "",
+        property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
+        endDate: this.shortDate(lease.endDate),
+        amount: this.money(lease.rentAmount, lease.currencySymbol),
+        url,
+      };
+      const fallback =
+        "Fin de bail : {tenantName}, {unit} se termine le {endDate}. " +
+        "Loyer {amount}. {url}";
+      const message = await this.renderMessage("lease_expiring_owner", fallback, vars);
+      await this.send(owner, message, "lease_expiring_owner", "real-estate-lease", leaseId, orgId);
+    } catch (error) {
+      this.logger.warn(
+        `notifyLeaseExpiring failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

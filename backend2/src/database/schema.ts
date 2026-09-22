@@ -1062,6 +1062,10 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   taxApplyMode: varchar("tax_apply_mode", { length: 20 }).default("never").notNull(),
   // Period (next_invoice_date value) we last sent an overdue reminder for, to send once per period.
   lastOverdueReminderDate: date("last_overdue_reminder_date", { mode: "string" }),
+  // Fin de bail deja annoncee (valeur = end_date couverte). Evite de renvoyer
+  // le rappel chaque jour pendant les 90 jours precedant l'echeance ; une
+  // prolongation change end_date et reouvre donc l'envoi.
+  lastExpiryReminderDate: date("last_expiry_reminder_date", { mode: "string" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

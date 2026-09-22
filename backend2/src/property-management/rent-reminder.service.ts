@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { CompatService } from "../compat/compat.service";
 import { DRIZZLE } from "../database/database.constants";
@@ -36,6 +36,8 @@ export class RentReminderService {
     try {
       const result = await this.runOverdueReminders();
       this.logger.log(`Scheduled overdue reminders: ${JSON.stringify(result)}`);
+      const expiry = await this.runExpiryReminders();
+      this.logger.log(`Scheduled expiry reminders: ${JSON.stringify(expiry)}`);
     } catch (error) {
       this.logger.error(`Scheduled overdue reminders failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -172,6 +174,106 @@ export class RentReminderService {
       await this.db
         .update(realEstateLeases)
         .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateLeases.id, lease.leaseId));
+      sent += 1;
+    }
+
+    return { candidates: rows.length, sent, enabled: send };
+  }
+
+  /**
+   * Rappel de FIN DE BAIL : previent le locataire que son bail arrive a
+   * echeance et l'invite a se manifester s'il souhaite renouveler, et previent
+   * le proprietaire pour qu'il anticipe la relocation. Envoye une seule fois
+   * par echeance (last_expiry_reminder_date porte la end_date couverte) ; si le
+   * bail est prolonge, la nouvelle end_date reouvre l'envoi.
+   * Best-effort : un echec n'interrompt jamais la boucle.
+   */
+  async runExpiryReminders() {
+    const noticeDays = env.rentReminders.expiryNoticeDays;
+    const horizon = new Date();
+    horizon.setHours(0, 0, 0, 0);
+    horizon.setDate(horizon.getDate() + noticeDays);
+    const horizonStr = horizon.toISOString().slice(0, 10);
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const company = await readOrgAppSetting(this.db, 1, {
+      name: appSettings.companyName,
+      phone: appSettings.phone,
+    });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    const companyPhone = ((company?.phone as string | null) || "").trim();
+
+    // Baux actifs dont la fin tombe dans la fenetre [aujourd'hui, +noticeDays].
+    // Les baux sans date de fin (duree indeterminee) sont exclus par isNotNull.
+    const rows = await this.db
+      .select({
+        leaseId: realEstateLeases.id,
+        organizationId: realEstateLeases.organizationId,
+        tenantId: realEstateLeases.tenantId,
+        propertyId: realEstateLeases.propertyId,
+        reference: realEstateLeases.reference,
+        endDate: realEstateLeases.endDate,
+        lastExpiryReminder: realEstateLeases.lastExpiryReminderDate,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantPhone: customers.phone,
+        propertyName: realEstateProperties.name,
+        propertyAddress: realEstateProperties.address,
+      })
+      .from(realEstateLeases)
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .where(
+        and(
+          eq(realEstateLeases.status, "active"),
+          isNotNull(realEstateLeases.endDate),
+          lte(realEstateLeases.endDate, horizonStr),
+          gte(realEstateLeases.endDate, todayStr),
+        ),
+      );
+
+    const send = env.rentReminders.enabled;
+    let sent = 0;
+
+    for (const lease of rows) {
+      // Deja annonce pour CETTE echeance : on ne renvoie pas chaque jour.
+      if (lease.lastExpiryReminder && lease.lastExpiryReminder === lease.endDate) continue;
+      if (!send) continue;
+
+      const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+      const place = lease.propertyAddress || lease.propertyName || "votre logement";
+      const endLabel = this.ownerNotifications.shortDate(lease.endDate);
+      const vars = {
+        tenantName,
+        firstName: lease.tenantFirstName || tenantName,
+        reference: lease.reference || "",
+        address: place,
+        endDate: endLabel,
+        companyName,
+        contactPhone: companyPhone ? ` au ${companyPhone}` : "",
+        url: "",
+      };
+
+      if (lease.tenantPhone) {
+        const msg = await this.ownerNotifications.renderMessage(
+          "lease_expiring",
+          "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
+            "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+          vars,
+        );
+        await this.safeSms(lease.tenantPhone, msg, lease.leaseId, lease.organizationId);
+      }
+
+      await this.ownerNotifications.notifyLeaseExpiring(
+        lease.leaseId,
+        Number(lease.propertyId),
+        lease.organizationId,
+      );
+
+      await this.db
+        .update(realEstateLeases)
+        .set({ lastExpiryReminderDate: lease.endDate, updatedAt: sql`CURRENT_TIMESTAMP` })
         .where(eq(realEstateLeases.id, lease.leaseId));
       sent += 1;
     }
