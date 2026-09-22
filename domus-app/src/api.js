@@ -494,6 +494,12 @@ export const publicApi = {
   // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
   tenantPaymentProof: (token, paymentId) =>
     publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // Copie du bail : une seule URL selon `copySource` renvoye par le portail
+  // ('scan' = bail papier numerise, 'electronic' = bail signe en ligne rendu en
+  // HTML imprimable). Le backend revalide que le bail appartient au porteur du
+  // token, l'id seul ne donne acces a rien.
+  tenantContractCopyUrl: (token, contractId, source) =>
+    `${API_ROOT}/tenant-portal/contracts/${contractId}/${source === "scan" ? "scan" : "print"}?token=${encodeURIComponent(token)}`,
 
   // Portail proprietaire (lecture seule, token opaque fait autorisation) :
   // le bailleur ouvre la fiche du locataire annonce par SMS.
