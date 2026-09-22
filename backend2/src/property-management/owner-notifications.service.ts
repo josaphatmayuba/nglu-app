@@ -154,25 +154,23 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "lease_created_owner",
       subject: "Nouveau bail {reference} sur votre bien",
       body:
-        "Nouveau bail {reference} sur {address}, appartement {unit}. Locataire : {tenantName}. " +
-        "Du {startDate} au {endDate}. Loyer : {amount}. Caution : {deposit}.{charges} " +
-        "Details ici : {url}",
+        "Bail {tenantName}, {unit}. {startDate} au {endDate}. " +
+        "Loyer {amount}, caut. {deposit}. {url}",
     },
     {
       name: "Proprietaire — loyer en retard",
       eventType: "payment_overdue_owner",
       subject: "Loyer en retard — bail {reference}",
       body:
-        "Loyer en retard : {tenantName} ({tenantPhone}) doit {amount} pour {property} " +
-        "(bail {reference}), en retard de {daysLate} jours. Details ici : {url}",
+        "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
+        "{daysLate} j de retard. {url}",
     },
     {
       name: "Proprietaire — paiement recu",
       eventType: "payment_received_owner",
       subject: "Paiement recu — bail {reference}",
       body:
-        "Paiement recu : {tenantName} a regle {amount} pour {property} (bail {reference}). " +
-        "Details ici : {url}",
+        "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}",
     },
   ];
 
@@ -349,17 +347,23 @@ export class OwnerNotificationsService implements OnModuleInit {
   fitOneSms(text: string, limit = 160): string {
     if (text.length <= limit) return text;
 
+    // Coupe sur une frontiere de mot et garantit <= limit : le .trim() et le
+    // retrait du dernier mot peuvent raccourcir, jamais rallonger, et un
+    // ultime slice() protege contre tout depassement residuel.
+    const clip = (t: string, max: number) => {
+      if (t.length <= max) return t;
+      const head = t.slice(0, max - 1).replace(/\s+\S*$/, "").trimEnd();
+      return `${head}…`.slice(0, max);
+    };
+
     const url = text.match(/https?:\/\/\S+/)?.[0] ?? "";
-    if (!url) return `${text.slice(0, limit - 1).replace(/\s+\S*$/, "")}…`;
+    if (!url) return clip(text, limit);
 
     // On garde " <url>" en fin de message et on rogne ce qui precede.
     const body = text.replace(url, "").trim();
     const room = limit - url.length - 1;
     if (room <= 0) return url.slice(0, limit);
-    const cut = body.length <= room
-      ? body
-      : `${body.slice(0, room - 1).replace(/\s+\S*$/, "")}…`;
-    return `${cut} ${url}`.trim();
+    return `${clip(body, room)} ${url}`.trim().slice(0, limit);
   }
 
   /** Envoi best-effort, trace dans sms_logs comme tous les autres envois. */
@@ -436,6 +440,19 @@ export class OwnerNotificationsService implements OnModuleInit {
     return labels[code] || String(status || "");
   }
 
+  /**
+   * Date au format JJ/MM/AA. Un SMS coute 160 caracteres : "01/10/26" fait 8
+   * caracteres la ou "2026-10-01" en fait 10, et le format court est celui que
+   * lisent les destinataires en RDC. Retourne "" si la date est absente.
+   */
+  private shortDate(value?: string | null): string {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(-2)}`;
+  }
+
   private fullName(firstName?: string | null, lastName?: string | null) {
     return [firstName, lastName].filter(Boolean).join(" ").trim();
   }
@@ -486,6 +503,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           contractType: tenantDetails.contractType,
           monthlyPay: tenantDetails.monthlyPay,
           otherMonthlyIncome: tenantDetails.otherMonthlyIncome,
+          salaryCurrencySymbol: currencies.currencySymbol,
           occupantNumber: tenantDetails.occupantNumber,
           childNumber: tenantDetails.childNumber,
           partenairName: tenantDetails.partenairName,
@@ -496,6 +514,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         })
         .from(customers)
         .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+        // Devise du salaire : regle projet, un montant ne s'affiche jamais nu.
+        .leftJoin(currencies, eq(currencies.id, tenantDetails.salaryCurrencyId))
         .where(and(eq(customers.id, tenantId), eq(customers.organizationId, orgId)))
         .limit(1);
       if (!tenant) return;
@@ -519,8 +539,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         activity: tenant.mainActivity || "",
         employer: tenant.entityName || "",
         contractType: tenant.contractType || "",
-        income: tenant.monthlyPay != null ? this.money(tenant.monthlyPay) : "",
-        otherIncome: tenant.otherMonthlyIncome != null ? this.money(tenant.otherMonthlyIncome) : "",
+        income: tenant.monthlyPay != null ? this.money(tenant.monthlyPay, tenant.salaryCurrencySymbol) : "",
+        otherIncome: tenant.otherMonthlyIncome != null ? this.money(tenant.otherMonthlyIncome, tenant.salaryCurrencySymbol) : "",
         occupants: tenant.occupantNumber != null ? String(tenant.occupantNumber) : "",
         children: tenant.childNumber != null ? String(tenant.childNumber) : "",
         // Conjoint : le formulaire ne demande ces champs que pour un locataire
@@ -634,17 +654,22 @@ export class OwnerNotificationsService implements OnModuleInit {
         reference: lease.reference || String(lease.id),
         address,
         unit: lease.unitName || "",
-        startDate: lease.startDate || "",
-        endDate: lease.endDate || "",
+        startDate: this.shortDate(lease.startDate),
+        endDate: this.shortDate(lease.endDate),
         amount: this.money(lease.rentAmount, lease.currencySymbol),
         deposit: this.money(lease.securityDeposit, lease.currencySymbol),
         charges: charges ? ` Charges : ${charges}.` : "",
         url,
       };
+      // Format compact impose par la limite d'UN SMS : avec un lien de ~52
+      // caracteres, la version longue sautait le loyer et la caution. Ici tout
+      // l'essentiel passe sans troncature (locataire, unite, debut, fin,
+      // loyer, caution) ; l'adresse complete et les charges restent accessibles
+      // via le lien, et les placeholders {address} / {charges} restent
+      // disponibles pour qui veut les remettre depuis Reglages.
       const fallback =
-        "Nouveau bail {reference} sur {address}, appartement {unit}. Locataire : {tenantName}. " +
-        "Du {startDate} au {endDate}. Loyer : {amount}. Caution : {deposit}.{charges} " +
-        "Details ici : {url}";
+        "Bail {tenantName}, {unit}. {startDate} au {endDate}. " +
+        "Loyer {amount}, caut. {deposit}. {url}";
       const message = await this.renderMessage("lease_created_owner", fallback, vars);
       await this.send(owner, message, "lease_created_owner", "real-estate-lease", leaseId, orgId);
     } catch (error) {
@@ -797,8 +822,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         url,
       };
       const fallback =
-        "Loyer en retard : {tenantName} ({tenantPhone}) doit {amount} pour {property} " +
-        "(bail {reference}), en retard de {daysLate} jours. Details ici : {url}";
+        "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
+        "{daysLate} j de retard. {url}";
       const message = await this.renderMessage("payment_overdue_owner", fallback, vars);
       await this.send(owner, message, "payment_overdue_owner", "real-estate-lease", leaseId, orgId);
     } catch (error) {
@@ -856,8 +881,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         url,
       };
       const fallback =
-        "Paiement recu : {tenantName} a regle {amount} pour {property} (bail {reference}). " +
-        "Details ici : {url}";
+        "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}";
       const message = await this.renderMessage("payment_received_owner", fallback, vars);
       await this.send(owner, message, "payment_received_owner", "real-estate-rent-payment", paymentId, orgId);
     } catch (error) {

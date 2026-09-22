@@ -548,25 +548,23 @@ const DEFAULT_MESSAGES = [
     eventType: "lease_created_owner",
     subject: "Nouveau bail {reference} sur votre bien",
     body:
-      "Nouveau bail {reference} sur {address}, appartement {unit}. Locataire : {tenantName}. " +
-      "Du {startDate} au {endDate}. Loyer : {amount}. Caution : {deposit}.{charges} " +
-      "Details ici : {url}",
+      "Bail {tenantName}, {unit}. {startDate} au {endDate}. " +
+      "Loyer {amount}, caut. {deposit}. {url}",
   },
   {
     name: "Propriétaire — loyer en retard",
     eventType: "payment_overdue_owner",
     subject: "Loyer en retard — bail {reference}",
     body:
-      "Loyer en retard : {tenantName} ({tenantPhone}) doit {amount} pour {property} " +
-      "(bail {reference}), en retard de {daysLate} jours. Details ici : {url}",
+      "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
+      "{daysLate} j de retard. {url}",
   },
   {
     name: "Propriétaire — paiement reçu",
     eventType: "payment_received_owner",
     subject: "Paiement reçu — bail {reference}",
     body:
-      "Paiement recu : {tenantName} a regle {amount} pour {property} (bail {reference}). " +
-      "Details ici : {url}",
+      "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}",
   },
 ];
 
@@ -657,7 +655,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
