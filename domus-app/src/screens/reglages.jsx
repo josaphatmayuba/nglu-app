@@ -473,6 +473,13 @@ const MESSAGE_EVENTS = [
   ["contract_signed", "Bienvenue / contrat signé"],
   ["payment_received", "Paiement reçu / quittance"],
   ["payment_reminder", "Rappel de loyer / retard"],
+  // Messages adressés au PROPRIÉTAIRE du bien (bailleur), pas au locataire.
+  ["tenant_created_owner", "Propriétaire · nouveau dossier locataire"],
+  ["lease_created_owner", "Propriétaire · nouveau bail"],
+  ["payment_received_owner", "Propriétaire · paiement reçu"],
+  ["payment_overdue_owner", "Propriétaire · loyer en retard"],
+  ["lease_expiring", "Fin de bail · locataire"],
+  ["lease_expiring_owner", "Propriétaire · fin de bail"],
   ["custom", "Autre / personnalisé"],
 ];
 const eventLabel = (ev) => (MESSAGE_EVENTS.find(([v]) => v === ev) || [, ev || "—"])[1];
@@ -497,7 +504,8 @@ const DEFAULT_MESSAGES = [
     eventType: "lease_created",
     subject: "Votre bail {reference} est confirmé",
     body:
-      "Bonjour {tenantName}, votre bail {reference} est confirmé (loyer mensuel : {amount}). " +
+      "Bonjour {tenantName}, votre bail {reference} pour {address}, appartement {unit}, est confirmé " +
+      "(loyer mensuel : {amount}, bailleur : {landlordName}). " +
       "Consultez et signez votre contrat ici : {url}. Merci de votre confiance. — Votre gestionnaire",
   },
   {
@@ -506,7 +514,8 @@ const DEFAULT_MESSAGES = [
     subject: "Bienvenue ! Votre bail {reference} est signé et confirmé",
     body:
       "Bonjour {tenantName}, félicitations ! Votre contrat de bail {reference} est bien signé et confirmé. " +
-      "Bienvenue dans votre nouveau logement : {address}. Votre location court du {startDate} au {endDate} ({duration}). " +
+      "Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. " +
+      "Votre location court du {startDate} au {endDate} ({duration}). " +
       "Merci de votre confiance. Pour toute question, contactez-nous au {contactPhone}. — Votre gestionnaire",
   },
   {
@@ -515,7 +524,8 @@ const DEFAULT_MESSAGES = [
     subject: "Paiement reçu — bail {reference}",
     body:
       "Bonjour {tenantName}, nous confirmons la réception de votre paiement de {amount} " +
-      "pour le bail {reference}. Votre quittance est disponible. Merci ! — Votre gestionnaire",
+      "pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. " +
+      "Merci ! — Votre gestionnaire",
   },
   {
     name: "Rappel de loyer en retard",
@@ -525,6 +535,54 @@ const DEFAULT_MESSAGES = [
       "Bonjour {tenantName}, le loyer du bail {reference} ({amount}) est en retard. " +
       "Merci de régulariser dès que possible afin d'éviter l'annulation de votre contrat de location. " +
       "Pour tout règlement ou question, contactez-nous. Merci de votre compréhension. — Votre gestionnaire",
+  },
+  {
+    name: "Propriétaire — nouveau dossier locataire",
+    eventType: "tenant_created_owner",
+    subject: "Nouveau dossier locataire",
+    body:
+      "Nouveau dossier locataire : {tenantName} ({tenantPhone}). " +
+      "{profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. " +
+      "{occupants} occupants. Contact : {emergencyContact}.",
+  },
+  {
+    name: "Propriétaire — nouveau bail",
+    eventType: "lease_created_owner",
+    subject: "Nouveau bail {reference} sur votre bien",
+    body:
+      "Bail {tenantName}, {unit}. {startDate} au {endDate}. " +
+      "Loyer {amount}, caut. {deposit}. {url}",
+  },
+  {
+    name: "Fin de bail — locataire",
+    eventType: "lease_expiring",
+    subject: "Votre bail se termine le {endDate}",
+    body:
+      "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
+      "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+  },
+  {
+    name: "Propriétaire — fin de bail",
+    eventType: "lease_expiring_owner",
+    subject: "Fin de bail {reference} sur votre bien",
+    body:
+      "Fin de bail : {tenantName}, {unit} se termine le {endDate}. " +
+      "Loyer {amount}. {url}",
+  },
+  {
+    name: "Propriétaire — loyer en retard",
+    eventType: "payment_overdue_owner",
+    subject: "Loyer en retard — bail {reference}",
+    body:
+      "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
+      "{daysLate} j de retard. {url}",
+  },
+  {
+    name: "Propriétaire — paiement reçu",
+    eventType: "payment_received_owner",
+    subject: "Paiement reçu — bail {reference}",
+    body:
+      "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}",
   },
 ];
 
@@ -615,7 +673,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise).
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}

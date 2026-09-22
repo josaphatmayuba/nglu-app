@@ -188,6 +188,9 @@ export const env = {
   rentReminders: {
     enabled: process.env.RENT_REMINDERS_ENABLED === "true",
     overdueDays: Number(process.env.RENT_REMINDER_OVERDUE_DAYS || 15),
+    // Preavis de fin de bail : le locataire et le proprietaire sont prevenus
+    // ce nombre de jours avant end_date, pour decider du renouvellement.
+    expiryNoticeDays: Number(process.env.LEASE_EXPIRY_NOTICE_DAYS || 90),
     // Daily run time, server timezone. Default 09:00.
     cron: process.env.RENT_REMINDER_CRON || "0 9 * * *",
   },

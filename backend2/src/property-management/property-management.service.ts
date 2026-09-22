@@ -94,6 +94,7 @@ import {
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
@@ -122,6 +123,7 @@ export class PropertyManagementService {
     private readonly whatsapp: WhatsappClientService,
     private readonly tenantPortal: TenantPortalService,
     private readonly geocoding: GeocodingService,
+    private readonly ownerNotifications: OwnerNotificationsService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -439,9 +441,15 @@ export class PropertyManagementService {
       throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
     }
 
+    // Texte pilote depuis Reglages > Messages (evenement "tenant_onboarding").
+    const message = await this.ownerNotifications.renderMessage(
+      "tenant_onboarding",
+      "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
+      { firstName: (data.firstName as string) || "", tenantName: "", url, reference: "", amount: "" },
+    );
     const result = await this.sms.sendSms({
       phone,
-      message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
+      message,
       // Option A : Twilio rappellera cet endpoint public signe pour tracer la
       // livraison reelle (voir handleSmsStatusCallback).
       statusCallback: `${env.appUrl.replace(/\/$/, "")}/api/tenant-onboarding/sms-status`,
@@ -482,13 +490,15 @@ export class PropertyManagementService {
 
     const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
     const companyName = (company?.name as string | null) || "votre gestionnaire";
-    const greeting = data.firstName ? `Bonjour ${data.firstName}` : "Bonjour";
-    const html =
-      `<p>${greeting},</p>` +
-      `<p>Voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien :</p>` +
-      `<p><a href="${url}">${url}</a></p>` +
-      `<p>Merci de le compléter dès que possible.</p>` +
-      `<p>Cordialement,<br>${companyName}</p>`;
+    // Meme texte que le SMS (regle Domus : un seul contenu sert aux deux
+    // canaux), pilote par le template "tenant_onboarding" des Reglages.
+    const text = await this.ownerNotifications.renderMessage(
+      "tenant_onboarding",
+      "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}. " +
+        `Merci de le faire des que possible. — ${companyName}`,
+      { firstName: (data.firstName as string) || "", tenantName: "", url, reference: "", amount: "" },
+    );
+    const html = `<p>${text.replace(url, `<a href="${url}">${url}</a>`)}</p>`;
     try {
       await this.emails.send({
         to: email,
@@ -814,6 +824,10 @@ export class PropertyManagementService {
       );
     }
     await this.sendTenantCreatedSms(customerId, orgId);
+    // Tous les proprietaires actifs sont informes de l'ouverture du dossier
+    // (SMS + lien portail proprietaire). Le ciblage sur le seul bailleur
+    // concerne se fait a la creation du bail, quand le bien est connu.
+    await this.ownerNotifications.notifyTenantCreated(customerId, orgId);
     return tenant;
   }
 
@@ -847,10 +861,29 @@ export class PropertyManagementService {
       // et pas de nom de societe : l'emetteur est deja identifiable par le
       // domaine du lien.
       const firstName = (tenant.firstName || "").trim().split(/\s+/)[0] || "";
-      const greeting = firstName ? `Bonjour ${firstName}, v` : "V";
-      const message = `${greeting}otre dossier locataire est cree.`;
+      // Texte pilote depuis Reglages > Messages (evenement "tenant_created").
+      // {url} = espace locataire public ; si le modele ne le place pas, le
+      // footer standard l'ajoute en fin de message (jamais les deux).
+      const portalUrl = await this.tenantPortal.portalUrlForTenant(tenantId, orgId);
+      const message = await this.ownerNotifications.renderMessage(
+        "tenant_created",
+        firstName ? "Bonjour {firstName}, votre dossier locataire est cree." : "Votre dossier locataire est cree.",
+        {
+          firstName,
+          tenantName: [tenant.firstName, tenant.lastName].filter(Boolean).join(" "),
+          url: portalUrl,
+          reference: "",
+          amount: "",
+        },
+      );
 
-      const messageWithFooter = await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId);
+      // fitOneSms apres le footer : le lien est ajoute hors du rendu, il ne
+      // doit pas faire basculer le message sur un 2e segment facture.
+      const messageWithFooter = this.ownerNotifications.fitOneSms(
+        portalUrl && message.includes(portalUrl)
+          ? message
+          : await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId),
+      );
       const res = await this.sms.sendSms({
         phone,
         message: messageWithFooter,
@@ -1805,6 +1838,9 @@ export class PropertyManagementService {
     if (lease.status === "active") {
       await this.sendTenantPortalWelcome(lease, orgId);
     }
+    // Recapitulatif du bail au proprietaire du bien (locataire, adresse, duree,
+    // loyer, caution, charges) + lien portail proprietaire. Best-effort.
+    await this.ownerNotifications.notifyLeaseCreated(leaseId, orgId);
 
     return lease;
   }
@@ -1819,8 +1855,12 @@ export class PropertyManagementService {
       tenantLastName: string | null;
       tenantPhone: string | null;
       tenantEmail: string | null;
+      propertyId: number | null;
       propertyName: string | null;
       propertyAddress: string | null;
+      unitName: string | null;
+      startDate: string | null;
+      endDate: string | null;
       rentAmount: string | number | null;
       currencySymbol: string | null;
     },
@@ -1832,19 +1872,52 @@ export class PropertyManagementService {
       const company = await readOrgAppSetting(this.db, orgId, { name: appSettings.companyName });
       const companyName = (company?.name as string | null) || "votre gestionnaire";
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+      // Le locataire doit reconnaitre SON logement : adresse + numero
+      // d'appartement quand le bail porte sur une unite, et le nom du
+      // proprietaire a qui il loue (si le bien en a un d'assigne).
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
+      const unitPart = lease.unitName ? ` (appt ${lease.unitName})` : "";
+      const ownerName = await this.ownerNotifications.ownerNameForProperty(lease.propertyId, orgId);
       const amount = `${lease.rentAmount}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
+      const portalUrl = await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId);
 
-      const smsMsg =
-        `Bonjour ${tenantName}, bienvenue ! Votre bail (${lease.reference}) pour ${place}, loyer ${amount}, ` +
-        `est actif. — ${companyName}`;
+      // Texte pilote depuis Reglages > Messages & notifications (evenement
+      // "lease_created"). Le defaut ci-dessous ne sert que si aucun modele
+      // actif n'est configure.
+      // EXCEPTION a la regle "un seul SMS" : le message de bail au locataire est
+      // envoye en DEUX SMS, le contenu puis le lien. Tenir en 160 caracteres
+      // avec un lien de ~52 obligeait a sacrifier soit l'adresse, soit le
+      // bailleur, soit la formule d'appel ; en scindant, le locataire recoit
+      // un message complet et naturel. Le 2e SMS ne part que si un lien existe.
+      // Les autres notifications restent volontairement en un seul segment.
+      const smsMsg = await this.ownerNotifications.renderMessage(
+        "lease_created",
+        "Bonjour {firstName}, votre bail {address}, {unit} est actif. " +
+          "Du {startDate} au {endDate}. Loyer {amount}. Bailleur {landlordName}.",
+        {
+          tenantName,
+          firstName: lease.tenantFirstName || tenantName,
+          reference: lease.reference || String(lease.id),
+          address: place,
+          unit: lease.unitName ? `Appt ${lease.unitName}` : "",
+          startDate: this.ownerNotifications.shortDate(lease.startDate),
+          endDate: this.ownerNotifications.shortDate(lease.endDate),
+          landlordName: ownerName,
+          amount,
+          companyName,
+          url: portalUrl,
+        },
+      );
 
       if (lease.tenantPhone) {
         try {
-          const smsWithFooter = await this.tenantPortal.appendPortalFooterToSms(smsMsg, lease.tenantId, orgId);
+          // 1er SMS : le contenu. Si un modele personnalise place deja {url}
+          // dans le texte, on n'envoie pas de second message (le gestionnaire
+          // a choisi de tout mettre dans un seul SMS).
+          const inlineLink = Boolean(portalUrl) && smsMsg.includes(portalUrl);
           const res = await this.sms.sendSms({
             phone: lease.tenantPhone,
-            message: smsWithFooter,
+            message: this.ownerNotifications.fitOneSms(smsMsg),
             organizationId: orgId,
             smsType: "lease_welcome",
             relatedType: "real-estate-lease",
@@ -1853,17 +1926,32 @@ export class PropertyManagementService {
           if (!res?.success) {
             this.logger.warn(`Welcome SMS not sent (lease ${lease.id}, ${lease.tenantPhone}): ${res?.message}`);
           }
+
+          // 2e SMS : le lien seul, pour que le 1er reste complet et lisible.
+          if (portalUrl && !inlineLink) {
+            const linkRes = await this.sms.sendSms({
+              phone: lease.tenantPhone,
+              message: this.ownerNotifications.fitOneSms(
+                `Consultez votre dossier locataire ici : ${portalUrl}`,
+              ),
+              organizationId: orgId,
+              smsType: "lease_welcome_link",
+              relatedType: "real-estate-lease",
+              relatedId: lease.id,
+            });
+            if (!linkRes?.success) {
+              this.logger.warn(`Welcome link SMS not sent (lease ${lease.id}): ${linkRes?.message}`);
+            }
+          }
         } catch (error) {
           this.logger.warn(`Welcome SMS error (lease ${lease.id}, ${lease.tenantPhone}): ${error instanceof Error ? error.message : String(error)}`);
         }
       }
 
       if (lease.tenantEmail) {
-        const html =
-          `<p>Bonjour ${tenantName},</p>` +
-          `<p>Bienvenue ! Votre bail <strong>${lease.reference}</strong> pour <strong>${place}</strong>, ` +
-          `d'un loyer de <strong>${amount}</strong>, est desormais actif.</p>` +
-          `<p>Bienvenue parmi nous.<br>${companyName}</p>`;
+        // Meme contenu que le SMS (regle Domus : un seul texte sert d'email et
+        // de SMS), simplement enveloppe dans un paragraphe.
+        const html = `<p>${smsMsg}</p>`;
         try {
           const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, orgId);
           await this.emails.send({
@@ -2140,6 +2228,10 @@ export class PropertyManagementService {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
+    // Confirmation d'encaissement : quittance au locataire, avis au
+    // proprietaire du bien. Best-effort, jamais bloquant pour le paiement.
+    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), input.amount, orgId);
+    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), input.amount, orgId);
     return this.findPayment(paymentId);
   }
 
@@ -2326,6 +2418,10 @@ export class PropertyManagementService {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
+    // Confirmation d'encaissement : quittance au locataire, avis au
+    // proprietaire du bien. Best-effort, jamais bloquant pour le paiement.
+    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), input.amount, orgId);
+    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), input.amount, orgId);
     return this.findPayment(paymentId);
   }
 

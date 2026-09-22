@@ -18,6 +18,7 @@ import {
 import type { Database } from "../../database/types";
 import { normalizePhoneE164 } from "../../common/phone.util";
 import { CompatService } from "../../compat/compat.service";
+import { OwnerNotificationsService } from "../owner-notifications.service";
 import { SystemEmailService } from "../../system-email/system-email.service";
 import {
   AddPrescreeningReferenceDto,
@@ -41,6 +42,7 @@ export class TenantPrescreeningService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly emails: SystemEmailService,
     private readonly sms: CompatService,
+    private readonly ownerNotifications: OwnerNotificationsService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -101,11 +103,18 @@ export class TenantPrescreeningService {
     // Notification best-effort : réutilise les mêmes services que l'onboarding
     // (CompatService.sendSms / SystemEmailService), pas de nouvelle intégration.
     const url = this.prescreeningUrl(token);
+    // Texte pilote depuis Reglages > Messages (evenement "tenant_prescreening").
+    // Le meme contenu sert au SMS et a l'email, comme partout dans Domus.
+    const text = await this.ownerNotifications.renderMessage(
+      "tenant_prescreening",
+      "Bonjour {firstName}, veuillez completer votre enquete de prelocation ici : {url}",
+      { firstName: dto.firstName ?? "", tenantName: [dto.firstName, dto.lastName].filter(Boolean).join(" "), url },
+    );
     if (phone) {
       try {
         await this.sms.sendSms({
           phone,
-          message: `Bonjour, veuillez completer votre enquete de prelocation ici: ${url}`,
+          message: text,
         });
         await this.db
           .update(tenantPrescreenings)
@@ -120,7 +129,7 @@ export class TenantPrescreeningService {
         await this.emails.send({
           to: dto.email,
           subject: "Enquête de prélocation",
-          html: `<p>Bonjour,</p><p>Veuillez compléter votre enquête de prélocation ici :</p><p><a href="${url}">${url}</a></p>`,
+          html: `<p>${text.replace(url, `<a href="${url}">${url}</a>`)}</p>`,
           type: "form_link",
           relatedType: "tenant-prescreening",
         });

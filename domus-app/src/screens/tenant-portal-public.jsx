@@ -164,6 +164,15 @@ export function TenantPortalPublic({ token }) {
     }
   };
 
+  // Copie du bail. Le scan s'ouvre tel quel (PDF/image) ; la version
+  // electronique s'ouvre en page imprimable qui declenche Enregistrer en PDF.
+  // Le backend revalide l'appartenance du bail au porteur du token.
+  const openContractCopy = (contract) => {
+    if (!contract?.copySource) return;
+    const url = publicApi.tenantContractCopyUrl(token, contract.id, contract.copySource);
+    window.open(url, "_blank", "noopener");
+  };
+
   const activeLease = useMemo(() => {
     const leases = Array.isArray(data?.leases) ? data.leases : [];
     return leases.find((l) => (l.status || "active") === "active") || leases[0] || null;
@@ -290,6 +299,13 @@ export function TenantPortalPublic({ token }) {
                 </div>
                 <div className="onb-card-body">
                   <div style={{ fontSize: 28, fontWeight: 600 }}>{money(activeLease.rentAmount, symbol)}</div>
+                  {/* Nom du bailleur : masque si le bien n'a pas de proprietaire
+                      renseigne, plutot qu'afficher un libelle vide. */}
+                  {activeLease.landlordName ? (
+                    <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
+                      {t("Propriétaire")} : {activeLease.landlordName}
+                    </p>
+                  ) : null}
                   <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
                     {dueDate
                       ? `${t("Échéance")} ${parseDate(dueDate)?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
@@ -353,7 +369,9 @@ export function TenantPortalPublic({ token }) {
                     <span className="onb-card-icon tone-iris"><FileSignature size={18} /></span>
                     <div className="onb-card-heading">
                       <h3>{t("Mon bail")}</h3>
-                      <p>{t("Contrat signé")}</p>
+                      <p>{(data.contracts || []).some((c) => c.copySource)
+                        ? t("Téléchargez votre copie")
+                        : t("Contrat signé")}</p>
                     </div>
                   </div>
                   <div className="onb-card-body">
@@ -364,6 +382,20 @@ export function TenantPortalPublic({ token }) {
                         <span className="chip chip-emerald">
                           <CheckCircle2 size={12} /> {c.signedAt ? monthLabel(c.signedAt) : t("Signé")}
                         </span>
+                        {/* Un seul bouton : le scan du bail papier si le gestionnaire
+                            l'a numérisé, sinon la version signée électroniquement. */}
+                        {c.copySource ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => openContractCopy(c)}
+                            title={c.copySource === "scan"
+                              ? t("Télécharger la copie du bail (scan)")
+                              : t("Télécharger la copie du bail")}
+                          >
+                            <Download size={14} />
+                          </button>
+                        ) : null}
                       </div>
                     ))}
                   </div>

@@ -436,6 +436,8 @@ export function domusOnboardingUrl(backendUrl) {
 // Même principe pour le portail locataire (accès public sans login) : URL propre
 // Domus sous /domus/mon-espace?token=... (deep-link mobile à préserver).
 export const PORTAL_PATH = `${import.meta.env.BASE_URL}mon-espace`;
+// Domus sous /domus/proprietaire?token=... (pendant bailleur de PORTAL_PATH).
+export const OWNER_PORTAL_PATH = `${import.meta.env.BASE_URL}proprietaire`;
 export function domusPortalUrl(backendUrlOrToken) {
   if (!backendUrlOrToken) return "";
   try {
@@ -492,6 +494,16 @@ export const publicApi = {
   // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
   tenantPaymentProof: (token, paymentId) =>
     publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // Copie du bail : une seule URL selon `copySource` renvoye par le portail
+  // ('scan' = bail papier numerise, 'electronic' = bail signe en ligne rendu en
+  // HTML imprimable). Le backend revalide que le bail appartient au porteur du
+  // token, l'id seul ne donne acces a rien.
+  tenantContractCopyUrl: (token, contractId, source) =>
+    `${API_ROOT}/tenant-portal/contracts/${contractId}/${source === "scan" ? "scan" : "print"}?token=${encodeURIComponent(token)}`,
+
+  // Portail proprietaire (lecture seule, token opaque fait autorisation) :
+  // le bailleur ouvre la fiche du locataire annonce par SMS.
+  ownerPortal: (token) => publicFetch(`/owner-portal?token=${encodeURIComponent(token)}`),
   // Demande de mise a jour des donnees personnelles : rien n'est applique, la
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>

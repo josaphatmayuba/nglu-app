@@ -12,7 +12,9 @@ import {
   customers,
   realEstateContracts,
   realEstateTenantChangeRequests,
+  realEstateLeaseDocuments,
   realEstateLeases,
+  realEstateOwners,
   realEstateProperties,
   realEstateRentPayments,
   realEstateTenantPortalLinks,
@@ -21,12 +23,16 @@ import {
   roles,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "./object-storage.service";
 
 @Injectable()
 export class TenantPortalService {
   private readonly logger = new Logger(TenantPortalService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly objectStorage: ObjectStorageService,
+  ) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -144,6 +150,23 @@ export class TenantPortalService {
     // Aucun lien actif : la fiche affiche le bouton "Generer le lien portail",
     // qui cree le lien ET previent le locataire par SMS.
     return { token: null, url: null };
+  }
+
+  /**
+   * URL du portail locataire pour alimenter le placeholder {url} d'un message
+   * configurable, ou "" si le lien ne peut pas etre genere. Contrairement a
+   * appendPortalFooterToSms, ne touche pas au texte : c'est le template qui
+   * decide ou placer le lien.
+   */
+  async portalUrlForTenant(tenantId: number, orgId: number): Promise<string> {
+    try {
+      return (await this.generateTenantPortalLink(tenantId, orgId)).url;
+    } catch (error) {
+      this.logger.warn(
+        `Portal url unavailable for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return "";
+    }
   }
 
   /**
@@ -320,6 +343,151 @@ export class TenantPortalService {
     return { url: row.proofUrl };
   }
 
+  // ── Copie du bail exposee au locataire ──
+  // Une seule copie est servie, par ordre de priorite : le scan du bail papier
+  // s'il existe, sinon le bail signe electroniquement (contract_content rendu
+  // en HTML imprimable). Le front n'affiche donc qu'un seul bouton.
+  // Scope strict : innerJoin sur le bail + tenant_id du token, pour qu'un
+  // locataire ne puisse jamais lire le bail d'un autre en changeant l'id.
+  private async findPublicContract(token: string, contractId: number) {
+    const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
+
+    const [row] = await this.db
+      .select({
+        id: realEstateContracts.id,
+        status: realEstateContracts.status,
+        signedAt: realEstateContracts.signedAt,
+        contractContent: realEstateContracts.contractContent,
+        signedDocumentId: realEstateContracts.signedDocumentId,
+        tenantName: realEstateContracts.tenantName,
+        leaseReference: realEstateLeases.reference,
+        propertyName: realEstateProperties.name,
+        unitName: realEstateUnits.name,
+      })
+      .from(realEstateContracts)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateContracts.leaseId))
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .where(and(
+        eq(realEstateContracts.id, contractId),
+        eq(realEstateContracts.organizationId, organizationId),
+        eq(realEstateLeases.tenantId, tenantId),
+        // Meme perimetre que getPublicTenantPortal, qui n'expose que le bail en
+        // cours : sans ce filtre l'endpoint servirait aussi les contrats d'un
+        // bail termine, que le portail n'affiche pourtant pas.
+        eq(realEstateLeases.status, "active"),
+        // Un brouillon en cours de redaction par le gestionnaire n'est jamais
+        // telechargeable : meme liste blanche que getPublicTenantPortal.
+        inArray(realEstateContracts.status, ["signed", "active", "completed"]),
+      ))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("Bail introuvable.");
+    return { ...row, organizationId };
+  }
+
+  // Scan du bail papier : streame le fichier depuis le stockage objet. L'objectKey
+  // n'est jamais expose au public, seul le flux passe par cet endpoint token.
+  async getPublicContractScan(token: string, contractId: number) {
+    const contract = await this.findPublicContract(token, contractId);
+    if (!contract.signedDocumentId) throw new NotFoundException("Aucun scan disponible pour ce bail.");
+
+    const [doc] = await this.db
+      .select({
+        id: realEstateLeaseDocuments.id,
+        objectKey: realEstateLeaseDocuments.objectKey,
+        originalName: realEstateLeaseDocuments.originalName,
+        mimeType: realEstateLeaseDocuments.mimeType,
+      })
+      .from(realEstateLeaseDocuments)
+      .where(and(
+        eq(realEstateLeaseDocuments.id, contract.signedDocumentId),
+        eq(realEstateLeaseDocuments.organizationId, contract.organizationId),
+        eq(realEstateLeaseDocuments.isActive, 1),
+      ))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Aucun scan disponible pour ce bail.");
+
+    const object = await this.objectStorage.getObject(doc.objectKey);
+    return {
+      ...object,
+      mimeType: doc.mimeType,
+      originalName: doc.originalName || `bail-${contract.id}`,
+    };
+  }
+
+  // Bail signe electroniquement : pas de PDF serveur (meme choix que HR/FarmOS,
+  // pas de Puppeteer a deployer). On renvoie le contenu en HTML imprimable et le
+  // navigateur produit le PDF via Imprimer / Enregistrer en PDF.
+  async getPublicContractPrintable(token: string, contractId: number) {
+    const contract = await this.findPublicContract(token, contractId);
+    if (!contract.contractContent?.trim()) {
+      throw new NotFoundException("Aucune copie electronique disponible pour ce bail.");
+    }
+    return this.contractPrintableHtml(contract);
+  }
+
+  private esc(v: any): string {
+    return String(v ?? "").replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] as string));
+  }
+
+  private contractPrintableHtml(contract: {
+    id: number;
+    signedAt: Date | null;
+    contractContent: string | null;
+    tenantName: string | null;
+    leaseReference: string | null;
+    propertyName: string | null;
+    unitName: string | null;
+  }) {
+    const fmtDate = (d: Date | null) => (d
+      ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+      : null);
+    const signedLabel = fmtDate(contract.signedAt);
+    const location = [contract.propertyName, contract.unitName].filter(Boolean).join(" · ");
+    const title = `Bail ${contract.leaseReference || `#${contract.id}`}`;
+
+    // contractContent est du HTML produit par nos templates (cote gestionnaire,
+    // authentifie). On le rend tel quel mais sans jamais laisser passer de
+    // script/iframe/handler inline, pour qu'un template mal saisi ne devienne
+    // pas une execution de code dans le navigateur du locataire.
+    const safeContent = String(contract.contractContent ?? "")
+      .replace(/<\s*(script|iframe|object|embed)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+      .replace(/<\s*(script|iframe|object|embed)\b[^>]*>/gi, "")
+      .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/javascript:/gi, "");
+
+    return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${this.esc(title)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background:#fff;padding:40px 48px;max-width:820px;margin:0 auto}
+@media print{body{padding:20px 24px}@page{margin:1cm}.no-print{display:none}}
+.header{border-bottom:2px solid #6366f1;padding-bottom:16px;margin-bottom:24px}
+.header h1{font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.header .meta{font-size:11px;color:#666;margin-top:4px}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;color:#fff;background:#10b981;margin-top:6px}
+.content{line-height:1.6}
+.content h1,.content h2,.content h3{margin:16px 0 8px;font-size:14px}
+.content p{margin:8px 0}
+.content table{width:100%;border-collapse:collapse;margin:12px 0}
+.content td,.content th{border:1px solid #ddd;padding:6px 8px;text-align:left}
+.content img{max-width:220px;height:auto}
+.no-print{margin-bottom:20px}
+.no-print button{padding:9px 16px;font-size:13px;font-weight:600;color:#fff;background:#6366f1;border:0;border-radius:8px;cursor:pointer}
+</style></head><body>
+<div class="no-print"><button onclick="window.print()">Telecharger / Imprimer en PDF</button></div>
+<div class="header">
+  <h1>${this.esc(title)}</h1>
+  <div class="meta">${this.esc([contract.tenantName, location].filter(Boolean).join(" · "))}</div>
+  ${signedLabel ? `<div class="badge">Signe electroniquement le ${this.esc(signedLabel)}</div>` : ""}
+</div>
+<div class="content">${safeContent}</div>
+<script>window.onload=function(){setTimeout(function(){window.print()},400)}</script>
+</body></html>`;
+  }
+
   async revokeTenantPortalLink(tenantId: number, orgId: number) {
     await this.findTenant(tenantId, orgId);
     await this.db
@@ -404,12 +572,19 @@ export class TenantPortalService {
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
         unitName: realEstateUnits.name,
+        // Nom du bailleur affiche au locataire sur sa page publique. leftJoin :
+        // un bien sans proprietaire renseigne reste affichable (landlordName null).
+        landlordName: realEstateOwners.displayName,
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .leftJoin(realEstateOwners, and(
+        eq(realEstateOwners.id, realEstateProperties.ownerId),
+        eq(realEstateOwners.organizationId, organizationId),
+      ))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(and(
         eq(realEstateLeases.tenantId, tenantId),
@@ -459,6 +634,11 @@ export class TenantPortalService {
             leaseId: realEstateContracts.leaseId,
             status: realEstateContracts.status,
             signedAt: realEstateContracts.signedAt,
+            // Copie telechargeable : le scan du bail papier est prioritaire, le
+            // bail signe electroniquement sert de repli. Le front n'affiche
+            // qu'un seul bouton, pilote par `copySource` calcule ici.
+            hasScan: sql<boolean>`${realEstateContracts.signedDocumentId} IS NOT NULL`,
+            hasContent: sql<boolean>`${realEstateContracts.contractContent} IS NOT NULL AND ${realEstateContracts.contractContent} <> ''`,
           })
           .from(realEstateContracts)
           .where(and(
@@ -503,7 +683,12 @@ export class TenantPortalService {
       // La caution n'y figure pas : elle vit dans real_estate_security_deposits
       // et n'est pas un loyer.
       payments,
-      contracts,
+      // copySource : 'scan' si le bail papier est numerise, sinon 'electronic'
+      // si le bail a ete signe en ligne, sinon null (rien a telecharger).
+      contracts: contracts.map((c) => ({
+        ...c,
+        copySource: c.hasScan ? "scan" : c.hasContent ? "electronic" : null,
+      })),
       changeRequests: changeRequests.map((r) => ({
         ...r,
         changes: this.parseChanges(r.changes),

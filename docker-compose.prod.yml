@@ -97,6 +97,10 @@ services:
       RENT_REMINDERS_ENABLED: ${RENT_REMINDERS_ENABLED:-false}
       RENT_REMINDER_OVERDUE_DAYS: ${RENT_REMINDER_OVERDUE_DAYS:-15}
       RENT_REMINDER_CRON: ${RENT_REMINDER_CRON:-0 9 * * *}
+      # Preavis de fin de bail : locataire et proprietaire sont prevenus ce
+      # nombre de jours avant end_date, pour decider du renouvellement. Porte
+      # par le meme cron que les rappels de retard (RENT_REMINDERS_ENABLED).
+      LEASE_EXPIRY_NOTICE_DAYS: ${LEASE_EXPIRY_NOTICE_DAYS:-90}
       OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
       OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-nglu_minio}
       OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-change_me_minio_password_32_chars_minimum}
