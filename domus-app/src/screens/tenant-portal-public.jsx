@@ -299,6 +299,13 @@ export function TenantPortalPublic({ token }) {
                 </div>
                 <div className="onb-card-body">
                   <div style={{ fontSize: 28, fontWeight: 600 }}>{money(activeLease.rentAmount, symbol)}</div>
+                  {/* Nom du bailleur : masque si le bien n'a pas de proprietaire
+                      renseigne, plutot qu'afficher un libelle vide. */}
+                  {activeLease.landlordName ? (
+                    <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
+                      {t("Propriétaire")} : {activeLease.landlordName}
+                    </p>
+                  ) : null}
                   <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
                     {dueDate
                       ? `${t("Échéance")} ${parseDate(dueDate)?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`

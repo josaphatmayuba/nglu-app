@@ -14,6 +14,7 @@ import {
   realEstateTenantChangeRequests,
   realEstateLeaseDocuments,
   realEstateLeases,
+  realEstateOwners,
   realEstateProperties,
   realEstateRentPayments,
   realEstateTenantPortalLinks,
@@ -571,12 +572,19 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
         unitName: realEstateUnits.name,
+        // Nom du bailleur affiche au locataire sur sa page publique. leftJoin :
+        // un bien sans proprietaire renseigne reste affichable (landlordName null).
+        landlordName: realEstateOwners.displayName,
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .leftJoin(realEstateOwners, and(
+        eq(realEstateOwners.id, realEstateProperties.ownerId),
+        eq(realEstateOwners.organizationId, organizationId),
+      ))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(and(
         eq(realEstateLeases.tenantId, tenantId),
