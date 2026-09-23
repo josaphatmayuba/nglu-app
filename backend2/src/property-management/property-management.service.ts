@@ -3958,6 +3958,7 @@ export class PropertyManagementService {
 
     const smsRows = await this.db
       .select({
+        id: smsLogs.id,
         type: smsLogs.smsType,
         recipient: smsLogs.recipient,
         body: smsLogs.body,
@@ -3973,6 +3974,7 @@ export class PropertyManagementService {
     const merged = [
       ...emailRows.map((row) => ({
         channel: "email" as const,
+        id: null as number | null,
         type: row.type,
         recipient: row.recipient,
         subject: row.subject,
@@ -3982,6 +3984,8 @@ export class PropertyManagementService {
       })),
       ...smsRows.map((row) => ({
         channel: "sms" as const,
+        // Id du log : permet a l'UI de proposer un renvoi quand l'envoi a echoue.
+        id: row.id,
         type: row.type,
         recipient: row.recipient,
         // Texte SMS complet : la troncature a 160 caracteres coupait la fin du
@@ -3996,6 +4000,39 @@ export class PropertyManagementService {
 
     merged.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
     return merged.slice(0, 100);
+  }
+
+  /**
+   * Renvoie un SMS deja trace dans sms_logs (typiquement un envoi en echec :
+   * passerelle injoignable, compte inactif...). On reprend le destinataire et
+   * le corps exacts du log d'origine ; sendSms cree une NOUVELLE ligne de log,
+   * l'ancienne reste telle quelle pour garder l'historique des tentatives.
+   */
+  async resendSmsLog(logId: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        recipient: smsLogs.recipient,
+        body: smsLogs.body,
+        smsType: smsLogs.smsType,
+        relatedType: smsLogs.relatedType,
+        relatedId: smsLogs.relatedId,
+      })
+      .from(smsLogs)
+      .where(and(eq(smsLogs.id, logId), eq(smsLogs.organizationId, orgId)))
+      .limit(1);
+    const log = rows[0];
+    if (!log) throw new NotFoundException("SMS log not found.");
+    if (!log.body) throw new BadRequestException("Ce SMS n'a pas de contenu a renvoyer.");
+
+    const res = await this.sms.sendSms({
+      phone: log.recipient,
+      message: log.body,
+      organizationId: orgId,
+      smsType: log.smsType,
+      relatedType: log.relatedType ?? undefined,
+      relatedId: log.relatedId ?? undefined,
+    });
+    return { success: Boolean(res?.success), message: res?.message ?? null };
   }
 
   async findPayment(id: number) {

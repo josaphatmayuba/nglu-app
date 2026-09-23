@@ -180,6 +180,14 @@ export class PropertyManagementController {
     return this.propertyManagementService.tenantCommunications(id, orgId);
   }
 
+  @ApiOperation({ summary: "Resend an SMS already logged (e.g. after a gateway failure)" })
+  @Permissions("update-propertyManagement")
+  @Post("sms-logs/:id/resend")
+  @HttpCode(200)
+  resendSmsLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.resendSmsLog(id, orgId);
+  }
+
   @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
   @Permissions("readAll-propertyManagement")
   @Get("tenant-change-requests")

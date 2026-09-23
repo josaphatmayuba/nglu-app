@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Search, UserPlus, Mail, Briefcase, Home, AlertTriangle, CheckCircle2,
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
-  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature, Link2,
+  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature, Link2, RotateCw,
 } from "lucide-react";
 import { api, domusOnboardingUrl, domusPortalUrl } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -759,16 +759,37 @@ function linkifyText(text) {
 function TenantCommunications({ tenantId }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState("");
+  const [resendingId, setResendingId] = useState(null);
+  const toast = useToast();
+
+  const load = () => api.tenantCommunications(tenantId);
 
   useEffect(() => {
     let cancelled = false;
     setItems(null);
     setError("");
-    api.tenantCommunications(tenantId)
+    load()
       .then((res) => { if (!cancelled) setItems(Array.isArray(res) ? res : []); })
       .catch((e) => { if (!cancelled) setError(e.message || String(e)); });
     return () => { cancelled = true; };
   }, [tenantId]);
+
+  // Renvoi d'un SMS en echec : le backend rejoue le meme texte au meme numero
+  // et cree une nouvelle ligne d'historique (l'ancienne tentative est gardee).
+  const resend = async (logId) => {
+    setResendingId(logId);
+    try {
+      const res = await api.resendSmsLog(logId);
+      if (res?.success) toast.success(t("SMS renvoyé."));
+      else toast.error(res?.message || t("Le renvoi a échoué."));
+      const fresh = await load();
+      setItems(Array.isArray(fresh) ? fresh : []);
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const statusMeta = {
     sent: { className: "chip-emerald", label: t("Envoye") },
@@ -800,6 +821,18 @@ function TenantCommunications({ tenantId }) {
                   {it.errorMessage ? ` — ${it.errorMessage}` : ""}
                   {it.createdAt ? ` — ${formatShortDate(it.createdAt)}` : ""}
                 </span>
+                {it.channel === "sms" && it.id && (it.status === "failed" || it.status === "skipped") && (
+                  <div style={{ marginTop: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={resendingId === it.id}
+                      onClick={() => resend(it.id)}
+                    >
+                      <RotateCw size={14} /> {resendingId === it.id ? t("Envoi...") : t("Renvoyer le SMS")}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

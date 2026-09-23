@@ -153,6 +153,8 @@ export const api = {
   revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
   // Historique des communications (email + SMS) envoyées à ce locataire.
   tenantCommunications: (id) => get(`/tenants/${id}/communications`),
+  // Renvoi d'un SMS dont l'envoi a echoue (reprend destinataire + texte du log).
+  resendSmsLog: (logId) => post(`/sms-logs/${logId}/resend`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
