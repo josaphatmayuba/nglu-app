@@ -20,12 +20,14 @@
 // (table email_templates, eventType ci-dessus). Sans template actif, le texte
 // par defaut code ici est utilise.
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   currencies,
   customers,
   emailTemplates,
+  realEstateDelegateAssignments,
+  realEstateDelegates,
   realEstateLeases,
   realEstateOwners,
   realEstateProperties,
@@ -34,6 +36,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { CompatService } from "../compat/compat.service";
+import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
 
@@ -51,6 +54,7 @@ export class OwnerNotificationsService implements OnModuleInit {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly sms: CompatService,
+    private readonly delegatePortal: DelegatePortalService,
     private readonly ownerPortal: OwnerPortalService,
     private readonly tenantPortal: TenantPortalService,
   ) {}
@@ -158,6 +162,14 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}, caut. {deposit}. {url}",
     },
     {
+      name: "Delegue — loyer en retard a confirmer",
+      eventType: "payment_overdue_delegate",
+      subject: "Loyer en retard a verifier",
+      body:
+        "{tenantName} doit {amount} pour {property}, {daysLate} j de retard. " +
+        "A-t-il paye ? Repondez ici : {url}",
+    },
+    {
       name: "Fin de bail — locataire",
       eventType: "lease_expiring",
       subject: "Votre bail se termine le {endDate}",
@@ -220,6 +232,120 @@ export class OwnerNotificationsService implements OnModuleInit {
       this.logger.warn(
         `Message templates seeding skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Delegues a prevenir pour un bien, pour un evenement donne.
+   *
+   * Un delegue est joint quand il suit ce bien precis (scope 'property') OU
+   * tout le portefeuille de son proprietaire (scope 'owner') : la seconde
+   * portee le rattache automatiquement aux biens acquis plus tard, sans
+   * reaffectation. Le drapeau d'abonnement filtre par evenement, pour ne pas
+   * inonder un mandataire engage seulement sur les retards.
+   *
+   * Comme pour les proprietaires, un delegue sans telephone est saute en
+   * silence : l'operation metier ne doit jamais echouer sur un envoi.
+   */
+  private async resolveDelegatesForProperty(
+    propertyId: number,
+    orgId: number,
+    event: "lease" | "overdue" | "payment",
+  ): Promise<OwnerTarget[]> {
+    try {
+      const [property] = await this.db
+        .select({ ownerId: realEstateProperties.ownerId })
+        .from(realEstateProperties)
+        .where(and(
+          eq(realEstateProperties.id, propertyId),
+          eq(realEstateProperties.organizationId, orgId),
+        ))
+        .limit(1);
+      if (!property) return [];
+
+      const flag =
+        event === "lease"
+          ? realEstateDelegateAssignments.notifyLease
+          : event === "overdue"
+            ? realEstateDelegateAssignments.notifyOverdue
+            : realEstateDelegateAssignments.notifyPayment;
+
+      // Le bien lui-meme, ou le portefeuille de son proprietaire quand il en a un.
+      const scopeMatch = property.ownerId
+        ? or(
+            and(
+              eq(realEstateDelegateAssignments.scopeType, "property"),
+              eq(realEstateDelegateAssignments.scopeId, propertyId),
+            ),
+            and(
+              eq(realEstateDelegateAssignments.scopeType, "owner"),
+              eq(realEstateDelegateAssignments.scopeId, Number(property.ownerId)),
+            ),
+          )
+        : and(
+            eq(realEstateDelegateAssignments.scopeType, "property"),
+            eq(realEstateDelegateAssignments.scopeId, propertyId),
+          );
+
+      const rows = await this.db
+        .select({
+          id: realEstateDelegates.id,
+          displayName: realEstateDelegates.displayName,
+          phone: realEstateDelegates.phone,
+          phone2: realEstateDelegates.phone2,
+        })
+        .from(realEstateDelegateAssignments)
+        .innerJoin(
+          realEstateDelegates,
+          eq(realEstateDelegates.id, realEstateDelegateAssignments.delegateId),
+        )
+        .where(and(
+          eq(realEstateDelegateAssignments.organizationId, orgId),
+          eq(realEstateDelegateAssignments.isActive, 1),
+          eq(realEstateDelegates.organizationId, orgId),
+          eq(realEstateDelegates.isActive, 1),
+          eq(flag, 1),
+          scopeMatch,
+        ));
+
+      // Un delegue cumulant les deux portees (le bien ET son proprietaire)
+      // remonte deux fois : il ne doit recevoir qu'un seul SMS.
+      const seen = new Set<number>();
+      const targets: OwnerTarget[] = [];
+      for (const row of rows) {
+        const id = Number(row.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const phone = (row.phone || row.phone2 || "").trim();
+        if (!phone) continue;
+        targets.push({ id, name: row.displayName, phone, propertyId });
+      }
+      return targets;
+    } catch (error) {
+      this.logger.warn(
+        `resolveDelegatesForProperty failed (property ${propertyId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Relaie aux delegues du bien le message deja rendu pour le proprietaire.
+   * Le texte est identique : un seul modele a maintenir dans Reglages, et le
+   * delegue lit exactement ce que lit le bailleur. Best-effort, comme send().
+   */
+  private async sendToDelegates(
+    propertyId: number,
+    orgId: number,
+    event: "lease" | "overdue" | "payment",
+    message: string,
+    smsType: string,
+    relatedType: string,
+    relatedId: number,
+  ) {
+    const delegates = await this.resolveDelegatesForProperty(propertyId, orgId, event);
+    for (const delegate of delegates) {
+      await this.send(delegate, message, smsType, relatedType, relatedId, orgId);
     }
   }
 
@@ -401,6 +527,51 @@ export class OwnerNotificationsService implements OnModuleInit {
       this.logger.warn(
         `Owner SMS error (${smsType}, owner ${target.id}): ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Avis de retard aux DELEGUES du bien, avec lien de confirmation.
+   *
+   * Message distinct de celui du proprietaire : le bailleur est informe, le
+   * delegue est interroge. Chaque delegue recoit SON propre lien — un token
+   * partage permettrait a l un de repondre a la place de l autre et rendrait
+   * la tracabilite inutilisable.
+   *
+   * Best-effort de bout en bout : un delegue dont le lien ne peut etre genere
+   * est saute, la boucle de rappels n est jamais interrompue.
+   */
+  private async notifyOverdueDelegates(
+    leaseId: number,
+    propertyId: number,
+    orgId: number,
+    baseVars: Record<string, string>,
+  ) {
+    const delegates = await this.resolveDelegatesForProperty(propertyId, orgId, "overdue");
+    for (const delegate of delegates) {
+      try {
+        const { url } = await this.delegatePortal.generateRentCheckLink(
+          delegate.id,
+          leaseId,
+          orgId,
+          propertyId,
+        );
+        const fallback =
+          "{tenantName} doit {amount} pour {property}, {daysLate} j de retard. " +
+          "A-t-il paye ? Repondez ici : {url}";
+        const message = await this.renderMessage(
+          "payment_overdue_delegate",
+          fallback,
+          { ...baseVars, delegateName: delegate.name, url },
+        );
+        await this.send(
+          delegate, message, "payment_overdue_delegate", "real-estate-lease", leaseId, orgId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `notifyOverdueDelegates failed (lease ${leaseId}, delegate ${delegate.id}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
@@ -689,6 +860,10 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}, caut. {deposit}. {url}";
       const message = await this.renderMessage("lease_created_owner", fallback, vars);
       await this.send(owner, message, "lease_created_owner", "real-estate-lease", leaseId, orgId);
+      await this.sendToDelegates(
+        Number(lease.propertyId), orgId, "lease", message,
+        "lease_created_delegate", "real-estate-lease", leaseId,
+      );
     } catch (error) {
       this.logger.warn(
         `notifyLeaseCreated failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -843,6 +1018,10 @@ export class OwnerNotificationsService implements OnModuleInit {
         "{daysLate} j de retard. {url}";
       const message = await this.renderMessage("payment_overdue_owner", fallback, vars);
       await this.send(owner, message, "payment_overdue_owner", "real-estate-lease", leaseId, orgId);
+      // Le delegue ne recoit PAS le message du proprietaire : le sien porte une
+      // question a laquelle il doit repondre (le locataire a-t-il paye ?) et un
+      // lien d action, la ou celui du bailleur est purement informatif.
+      await this.notifyOverdueDelegates(leaseId, propertyId, orgId, vars);
     } catch (error) {
       this.logger.warn(
         `notifyPaymentOverdue failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -910,6 +1089,10 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}. {url}";
       const message = await this.renderMessage("lease_expiring_owner", fallback, vars);
       await this.send(owner, message, "lease_expiring_owner", "real-estate-lease", leaseId, orgId);
+      await this.sendToDelegates(
+        propertyId, orgId, "lease", message,
+        "lease_expiring_delegate", "real-estate-lease", leaseId,
+      );
     } catch (error) {
       this.logger.warn(
         `notifyLeaseExpiring failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -968,6 +1151,12 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}";
       const message = await this.renderMessage("payment_received_owner", fallback, vars);
       await this.send(owner, message, "payment_received_owner", "real-estate-rent-payment", paymentId, orgId);
+      if (owner.propertyId) {
+        await this.sendToDelegates(
+          owner.propertyId, orgId, "payment", message,
+          "payment_received_delegate", "real-estate-rent-payment", paymentId,
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `notifyPaymentReceived failed (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`,

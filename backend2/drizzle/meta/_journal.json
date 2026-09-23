@@ -1884,6 +1884,20 @@
       "when": 1781071200044,
       "tag": "0293_domus_lease_expiry_reminder",
       "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "5",
+      "when": 1781071200045,
+      "tag": "0294_domus_delegates",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "5",
+      "when": 1781071200046,
+      "tag": "0295_domus_delegate_rent_checks",
+      "breakpoints": true
     }
   ]
 }

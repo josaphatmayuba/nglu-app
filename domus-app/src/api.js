@@ -170,6 +170,18 @@ export const api = {
   updateOwner: (id, b) => put(`/owners/${id}`, b),
   deleteOwner: (id) => del(`/owners/${id}`),
 
+  // Délégués : mandataires chargés du suivi de loyer. Ils reçoivent les mêmes
+  // annonces que le propriétaire sur le périmètre qui leur est affecté.
+  delegates: () => get("/delegates"),
+  delegateRentChecks: (answer) => get(`/delegate-rent-checks${answer ? `?answer=${encodeURIComponent(answer)}` : ""}`),
+  delegate: (id) => get(`/delegates/${id}`),
+  createDelegate: (b) => post("/delegates", b),
+  updateDelegate: (id, b) => put(`/delegates/${id}`, b),
+  deleteDelegate: (id) => del(`/delegates/${id}`),
+  addDelegateAssignment: (id, b) => post(`/delegates/${id}/assignments`, b),
+  updateDelegateAssignment: (id, assignmentId, b) => put(`/delegates/${id}/assignments/${assignmentId}`, b),
+  removeDelegateAssignment: (id, assignmentId) => del(`/delegates/${id}/assignments/${assignmentId}`),
+
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
   createProperty: (b) => post("/properties", b),
@@ -510,6 +522,31 @@ export const publicApi = {
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>
     publicFetch(`/tenant-portal/change-request?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Portail delegue : le mandataire repond a une relance de loyer en retard.
+  // La reponse "paye" cree une ligne de paiement EN ATTENTE que le gestionnaire
+  // valide ensuite depuis le CRM — jamais un encaissement direct.
+  delegateRentCheck: (token) => publicFetch(`/delegate-portal?token=${encodeURIComponent(token)}`),
+  // Envoi multipart (une photo de preuve possible) : publicFetch force un
+  // Content-Type JSON, on passe donc par un fetch dedie qui laisse le
+  // navigateur poser lui-meme la frontiere multipart.
+  submitDelegateRentCheck: async (token, { answer, amount, comment, proof } = {}) => {
+    const form = new FormData();
+    form.append("answer", answer || "");
+    if (amount != null && amount !== "") form.append("amount", String(amount));
+    if (comment) form.append("comment", comment);
+    if (proof) form.append("proof", proof);
+    const res = await fetch(`${API_ROOT}/delegate-portal?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(cleanApiError(res, body));
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
 
   // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
   prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),

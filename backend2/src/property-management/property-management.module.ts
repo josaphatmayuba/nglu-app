@@ -14,6 +14,9 @@ import { PropertyManagementController } from "./property-management.controller";
 import { PropertyManagementPublicController } from "./property-management-public.controller";
 import { PropertyManagementService } from "./property-management.service";
 import { ObjectStorageService } from "./object-storage.service";
+import { DelegatePortalPublicController } from "./delegate-portal-public.controller";
+import { DelegatePortalService } from "./delegate-portal.service";
+import { DelegatesService } from "./delegates.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
 import { OwnerPortalPublicController } from "./owner-portal-public.controller";
 import { OwnerPortalService } from "./owner-portal.service";
@@ -34,6 +37,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     TenantOnboardingPublicController,
     TenantPortalPublicController,
     OwnerPortalPublicController,
+    DelegatePortalPublicController,
     TenantPrescreeningPublicController,
     PropertyManagementPublicController,
     PropertyManagementController,
@@ -48,6 +52,8 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     RentReminderService,
     TenantPortalService,
     OwnerPortalService,
+    DelegatePortalService,
+    DelegatesService,
     OwnerNotificationsService,
     DomusPropertyGuard,
     TenantPrescreeningService,

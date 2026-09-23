@@ -1746,3 +1746,74 @@ export class CreateMortgageLoanDto {
 export class UpdateMortgageLoanDto extends PartialType(
   OmitType(CreateMortgageLoanDto, ["attachExistingPayments"] as const),
 ) {}
+
+// ── Delegues (mandataires charges du suivi de loyer) ───────────────────────
+// Un delegue n'est pas le bailleur : il suit un portefeuille pour le compte du
+// proprietaire et recoit les memes annonces. userId nullable porte les deux
+// natures : absent = contact externe joint par SMS, renseigne = employe interne
+// ayant deja un compte nglu.
+export class CreateDelegateDto {
+  @ApiProperty({ example: "Patrick Ilunga" })
+  @IsString()
+  @IsNotEmpty()
+  displayName: string;
+
+  @ApiPropertyOptional({ example: "+243810000000" })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ example: "+243990000000" })
+  @IsOptional()
+  @IsString()
+  phone2?: string;
+
+  @ApiPropertyOptional({ example: "patrick@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ example: 12, description: "Compte nglu, pour un delegue interne" })
+  @IsOptional()
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional({ example: "Suit les immeubles de Gombe" })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateDelegateDto extends PartialType(CreateDelegateDto) {}
+
+// Une affectation = un perimetre suivi + les evenements auxquels le delegue est
+// abonne. 'owner' couvre tout le portefeuille d'un proprietaire (biens futurs
+// compris), 'property' un seul bien.
+export class CreateDelegateAssignmentDto {
+  @ApiProperty({ example: "property", enum: ["owner", "property"] })
+  @IsIn(["owner", "property"])
+  scopeType: string;
+
+  @ApiProperty({ example: 3, description: "ID du proprietaire ou du bien selon scopeType" })
+  @IsInt()
+  scopeId: number;
+
+  @ApiPropertyOptional({ example: true, default: true, description: "Bail cree et fin de bail" })
+  @IsOptional()
+  @IsBoolean()
+  notifyLease?: boolean;
+
+  @ApiPropertyOptional({ example: true, default: true, description: "Loyer en retard" })
+  @IsOptional()
+  @IsBoolean()
+  notifyOverdue?: boolean;
+
+  @ApiPropertyOptional({ example: false, default: false, description: "Loyer encaisse" })
+  @IsOptional()
+  @IsBoolean()
+  notifyPayment?: boolean;
+}
+
+export class UpdateDelegateAssignmentDto extends PartialType(
+  OmitType(CreateDelegateAssignmentDto, ["scopeType", "scopeId"] as const),
+) {}

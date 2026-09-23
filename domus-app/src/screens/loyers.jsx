@@ -475,14 +475,17 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
 
 // ─────────────────────────── LOYERS (liste) ───────────────────────────
 async function loadPaymentsModule() {
-  const [payments, leases, currencies, setting, paymentMethods] = await Promise.all([
+  const [payments, leases, currencies, setting, paymentMethods, delegateChecks] = await Promise.all([
     api.payments(),
     api.leases(),
     api.currencies(),
     api.setting(),
     api.paymentMethods().catch(() => []),
+    // Reponses des delegues aux relances de retard. Tolerant a l'echec : un
+    // backend anterieur a la feature ne doit pas casser l'ecran Loyers.
+    api.delegateRentChecks().catch(() => []),
   ]);
-  return { payments, leases, currencies, setting, paymentMethods };
+  return { payments, leases, currencies, setting, paymentMethods, delegateChecks };
 }
 
 export function Loyers({ go }) {
@@ -513,6 +516,14 @@ export function Loyers({ go }) {
   const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
+
+  // Seules les relances auxquelles le delegue a repondu sont montrees : une
+  // relance sans reponse n'apprend rien au gestionnaire, qui voit deja
+  // l'impaye dans la liste.
+  const delegateChecks = useMemo(
+    () => (Array.isArray(data?.delegateChecks) ? data.delegateChecks : []).filter((c) => c.answer),
+    [data?.delegateChecks],
+  );
 
   // Cartes par bail actif (détection du retard). Fallback : regroupement par
   // paiements si aucun bail n'est renvoyé par l'API (pas de paiement direct).
@@ -653,6 +664,42 @@ export function Loyers({ go }) {
           </button>
         </div>
       </div>
+
+      {delegateChecks.length > 0 && (
+        <div className="immo-card" style={{ marginBottom: 16, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Users size={18} />
+            <strong>{t("Retours des delegues")}</strong>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {t("suivi de loyer confie a un mandataire")}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {delegateChecks.map((c) => {
+              const who = [c.tenantFirstName, c.tenantLastName].filter(Boolean).join(" ").trim();
+              const paid = c.answer === "paid";
+              return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span className={`immo-mini-badge ${paid ? "success" : "warn"}`}>
+                    {paid ? t("Paiement declare") : t("Toujours impaye")}
+                  </span>
+                  <strong>{who || `Bail #${c.leaseId}`}</strong>
+                  <span className="muted">{c.propertyName || ""}</span>
+                  {paid && c.amount != null ? (
+                    <span>{money(c.amount, currency.defaultCurrencySymbol)}</span>
+                  ) : null}
+                  {c.comment ? <em className="muted">« {c.comment} »</em> : null}
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {c.delegateName ? `— ${c.delegateName}` : ""}
+                  </span>
+                  {/* Le paiement declare apparait aussi dans la liste ci-dessous
+                      en statut "En attente" : c'est la qu'il se valide. */}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="immo-pay-toolbar">
         <div className="immo-seg-toggle">

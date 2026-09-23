@@ -1164,6 +1164,83 @@ export const realEstateOwnerPortalLinks = mysqlTable("real_estate_owner_portal_l
   updatedAt: timestamp("updated_at"),
 });
 
+// Domus — DELEGUE : mandataire charge du suivi de loyer sur un portefeuille.
+// Ce n'est pas le bailleur legal : il recoit les memes annonces que le
+// proprietaire (bail, fin de bail, retard) sans posseder le bien.
+// userId nullable porte les deux natures : NULL = contact externe joint par
+// SMS seulement, renseigne = employe interne ayant deja un compte nglu.
+// Dans les deux cas c'est le telephone qui porte la notification.
+export const realEstateDelegates = mysqlTable("real_estate_delegates", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 50 }),
+  phone2: varchar("phone2", { length: 50 }),
+  email: varchar("email", { length: 255 }),
+  userId: bigint("user_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Ce qu'un delegue suit, et ce qu'il doit recevoir.
+// scopeType 'owner' -> scopeId = realEstateOwners.id (tout le portefeuille de
+// ce proprietaire, biens futurs compris) ; 'property' -> scopeId =
+// realEstateProperties.id (ce bien precis). Les deux portees coexistent.
+// Les drapeaux sont des abonnements par evenement : un delegue engage seulement
+// sur les retards ne recoit pas les creations de bail.
+export const realEstateDelegateAssignments = mysqlTable("real_estate_delegate_assignments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  delegateId: bigint("delegate_id", { mode: "number" }).notNull(),
+  scopeType: varchar("scope_type", { length: 20 }).default("property").notNull(),
+  scopeId: bigint("scope_id", { mode: "number" }).notNull(),
+  notifyLease: tinyint("notify_lease").default(1).notNull(),
+  notifyOverdue: tinyint("notify_overdue").default(1).notNull(),
+  notifyPayment: tinyint("notify_payment").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Domus — reponse d'un DELEGUE a une relance de loyer en retard.
+// Le delegue recoit un SMS avec un lien et repond : le locataire a paye, ou
+// pas encore. La reponse negative est tracee elle aussi, pour que le
+// gestionnaire sache ou en est le recouvrement au lieu de relancer a l'aveugle.
+//
+// Sur une reponse 'paid', une ligne realEstateRentPayments est creee en statut
+// 'pending' (id conserve dans rentPaymentId) : JAMAIS 'paid', et aucune
+// ecriture comptable. Le lien n'etant protege par aucun mot de passe, laisser
+// un lien SMS ecrire dans la comptabilite ouvrirait la caisse a quiconque le
+// detient ; le gestionnaire valide ensuite depuis le CRM (confirmPendingPayment).
+// Meme principe que realEstateTenantChangeRequests, qui reste 'pending'
+// jusqu'a approbation.
+export const realEstateDelegateRentChecks = mysqlTable("real_estate_delegate_rent_checks", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  delegateId: bigint("delegate_id", { mode: "number" }).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }),
+  token: varchar("token", { length: 64 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  // Mois de loyer concerne : un lien actif par (delegue, bail, mois), sinon le
+  // cron quotidien de retard invaliderait chaque jour le SMS de la veille.
+  periodMonth: date("period_month", { mode: "string" }),
+  // null tant que le delegue n'a pas repondu · 'paid' · 'unpaid'
+  answer: varchar("answer", { length: 20 }),
+  amount: decimal("amount", { precision: 15, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  comment: varchar("comment", { length: 500 }),
+  proofUrl: varchar("proof_url", { length: 500 }),
+  rentPaymentId: bigint("rent_payment_id", { mode: "number" }),
+  answeredAt: timestamp("answered_at"),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateTenantPortalLinks = mysqlTable("real_estate_tenant_portal_links", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

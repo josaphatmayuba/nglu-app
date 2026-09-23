@@ -39,13 +39,19 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
+import { DelegatePortalService } from "./delegate-portal.service";
+import { DelegatesService } from "./delegates.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import {
   CreateContractDto,
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateDelegateAssignmentDto,
+  CreateDelegateDto,
   CreateOwnerDto,
+  UpdateDelegateAssignmentDto,
+  UpdateDelegateDto,
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
@@ -92,6 +98,8 @@ export class PropertyManagementController {
     private readonly contractsService: ContractsService,
     private readonly rentReminderService: RentReminderService,
     private readonly tenantPortalService: TenantPortalService,
+    private readonly delegatesService: DelegatesService,
+    private readonly delegatePortalService: DelegatePortalService,
   ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
@@ -637,6 +645,97 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteOwner(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteOwner(id, orgId);
+  }
+
+  // -- Delegues (mandataires charges du suivi de loyer) ---------------------
+  // Memes permissions que les proprietaires : gerer un delegue, c'est gerer le
+  // parc, pas une operation comptable.
+  @ApiOperation({ summary: "List active delegates (mandataires de suivi de loyer)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegates")
+  delegates(@CurrentOrg() orgId: number) {
+    return this.delegatesService.list(orgId);
+  }
+
+  @ApiOperation({ summary: "Get single delegate with its assignments" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("delegates/:id")
+  delegate(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.delegatesService.findOne(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a delegate" })
+  @ApiCreatedResponse({ description: "Created delegate" })
+  @Permissions("create-propertyManagement")
+  @Post("delegates")
+  createDelegate(@Body() body: CreateDelegateDto, @CurrentOrg() orgId: number) {
+    return this.delegatesService.create(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a delegate" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Put("delegates/:id")
+  updateDelegate(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateDelegateDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.update(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) a delegate" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("delegates/:id")
+  @HttpCode(200)
+  deleteDelegate(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.delegatesService.remove(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Assign a delegate to an owner portfolio or a property" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("delegates/:id/assignments")
+  addDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateDelegateAssignmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.addAssignment(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update the event subscriptions of one assignment" })
+  @Permissions("update-propertyManagement")
+  @Put("delegates/:id/assignments/:assignmentId")
+  updateDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("assignmentId", ParseIntPipe) assignmentId: number,
+    @Body() body: UpdateDelegateAssignmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.updateAssignment(id, assignmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Remove (soft) one assignment of a delegate" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("update-propertyManagement")
+  @Delete("delegates/:id/assignments/:assignmentId")
+  @HttpCode(200)
+  removeDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("assignmentId", ParseIntPipe) assignmentId: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.removeAssignment(id, assignmentId, orgId);
+  }
+
+  @ApiOperation({ summary: "List rent checks sent to delegates and their answers" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegate-rent-checks")
+  delegateRentChecks(@CurrentOrg() orgId: number, @Query("answer") answer?: string) {
+    return this.delegatePortalService.listRentChecks(orgId, answer);
   }
 
   @ApiOperation({ summary: "Create a property" })
