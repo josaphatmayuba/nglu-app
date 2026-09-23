@@ -26,18 +26,21 @@ function monthLabel(dateLike) {
   return `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// Date de bail au format jj/mm/aaaa. Les bornes d'un bail arrivent en date
-// seule ("2026-07-08") : `new Date` les lit alors comme minuit UTC, et un
-// affichage local decalerait au jour precedent a l'ouest de Greenwich. On
-// formate donc ces valeurs a partir de leurs composantes, sans fuseau.
+// Date de bail en toutes lettres ("8 juillet 2026"), plus lisible qu'un
+// 08/07/2026 pour un locataire. Les bornes d'un bail arrivent en date seule
+// ("2026-07-08") : `new Date` les lit alors comme minuit UTC, et un affichage
+// local decalerait au jour precedent a l'ouest de Greenwich. On formate donc
+// ces valeurs a partir de leurs composantes, sans fuseau.
 function shortDate(dateLike) {
   const dateOnly = typeof dateLike === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateLike.trim());
   if (dateOnly) {
     const [y, m, day] = dateLike.trim().split("-");
-    return `${day}/${m}/${y}`;
+    const month = MONTHS_FR[Number(m) - 1];
+    if (!month) return null;
+    return `${Number(day)} ${month} ${y}`;
   }
   const d = parseDate(dateLike);
-  return d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : null;
+  return d ? `${d.getDate()} ${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}` : null;
 }
 
 // Libelle d'un contrat cote locataire : l'id technique (#2) ne lui parle pas,
