@@ -149,7 +149,9 @@ body {
 .portail-doc-label { flex:1; display:flex; flex-direction:column; gap:2px; font-size:13px; font-weight:500; min-width:0; }
 .portail-hist-row { display:flex; align-items:center; gap:10px; font-size:13px; padding:6px 0; }
 .portail-hist-dot { width:8px; height:8px; border-radius:999px; background:var(--emerald); flex:none; }
-.portail-hist-row .flex-1 { flex:1; }
+.portail-hist-row .flex-1 { flex:1; min-width:0; }
+/* Sous-ligne d'une ligne d'historique (reference + periode du bail). */
+.portail-hist-sub { display:block; font-size:11.5px; line-height:1.4; margin-top:2px; }
 @media (max-width:900px) {
   .portail-main-grid, .portail-docs-grid { grid-template-columns:1fr; }
 }
