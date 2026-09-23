@@ -821,7 +821,6 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     e.target.value = "";
@@ -856,7 +855,6 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
                   disabled={photoBusy}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -1027,7 +1025,6 @@ function PhotosModal({ ticket, onClose }) {
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      capture="environment"
                       disabled={busy}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1099,7 +1096,6 @@ function ResolveModal({ ticket, busy, error, onClose, onConfirm }) {
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                capture="environment"
                 disabled={photoBusy}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
