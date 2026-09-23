@@ -1066,6 +1066,12 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   // le rappel chaque jour pendant les 90 jours precedant l'echeance ; une
   // prolongation change end_date et reouvre donc l'envoi.
   lastExpiryReminderDate: date("last_expiry_reminder_date", { mode: "string" }),
+  // Preavis pour defaut de paiement notifie au locataire (action manuelle du
+  // gestionnaire, reservee aux baux qui doivent plus d'un mois de loyer).
+  // Date d'envoi = preuve que le locataire a ete averti ; on garde aussi le
+  // nombre de mois dus a ce moment-la pour retrouver la situation exacte.
+  defaultNoticeSentAt: timestamp("default_notice_sent_at"),
+  defaultNoticeMonthsBehind: int("default_notice_months_behind"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

@@ -235,6 +235,9 @@ export const api = {
     return multipartFetch("/payments", form);
   },
   sendReminder: (b) => post("/payments/reminder", b),
+  // Preavis pour defaut de paiement : reserve aux baux qui doivent plus d'un
+  // mois de loyer (le backend revalide le seuil et refuse sinon).
+  sendDefaultNotice: (leaseId) => post("/payments/default-notice", { leaseId }),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances

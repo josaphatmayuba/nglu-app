@@ -1898,6 +1898,13 @@
       "when": 1781071200046,
       "tag": "0295_domus_delegate_rent_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "5",
+      "when": 1781071200047,
+      "tag": "0296_domus_lease_default_notice",
+      "breakpoints": true
     }
   ]
 }

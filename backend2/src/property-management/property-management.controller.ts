@@ -1043,6 +1043,17 @@ export class PropertyManagementController {
     return this.propertyManagementService.sendPaymentReminder(body.leaseId, orgId);
   }
 
+  // Preavis pour defaut de paiement : action grave et tracee, donc reservee aux
+  // memes permissions que les relances. Le service refuse le bail qui doit
+  // 1 mois ou moins, quelle que soit la demande du client.
+  @ApiOperation({ summary: "Notify tenant that a default-of-payment notice will be filed (>1 month unpaid)" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("payments/default-notice")
+  @HttpCode(200)
+  sendDefaultNotice(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId);
+  }
+
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/run-overdue-reminders")

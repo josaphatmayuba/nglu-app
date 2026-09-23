@@ -3357,12 +3357,26 @@ export class PropertyManagementService {
       .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
   }
 
+  /**
+   * Echappe une valeur venant de la base avant de l'inserer dans un email HTML.
+   * Les noms de proprietaire et de gestionnaire sont saisis librement : un
+   * caractere `<` non echappe casserait le rendu du mail.
+   */
+  private escapeHtml(value: string | null | undefined) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   async sendPaymentReminder(leaseId: number, orgId: number) {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
         organizationId: realEstateLeases.organizationId,
         tenantId: realEstateLeases.tenantId,
+        propertyId: realEstateLeases.propertyId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
         currencySymbol: currencies.currencySymbol,
@@ -3384,14 +3398,31 @@ export class PropertyManagementService {
     const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
     // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
     const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
+    // Le locataire est renvoyé vers les personnes en charge de SON immeuble
+    // (propriétaire + gestionnaire assigné), comme le rappel automatique, et non
+    // vers un « nous » anonyme. Repli sur le contact société si aucun des deux
+    // n'est joignable.
+    const company = await readOrgAppSetting(this.db, 1, {
+      name: appSettings.companyName,
+      phone: appSettings.phone,
+    });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    const companyPhone = ((company?.phone as string | null) || "").trim();
+    const propertyContacts = await this.ownerNotifications.propertyContactVars(
+      lease.propertyId ? Number(lease.propertyId) : null,
+      lease.organizationId,
+    );
+    const contacts =
+      propertyContacts.contacts || `${companyName}${companyPhone ? ` au ${companyPhone}` : ""}`;
+
     let subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
     let html = `
       <p>Bonjour ${tenantName},</p>
       <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
       <p><strong>Montant du:</strong> ${rentDisplay}</p>
       <p>Merci de régulariser ce paiement au plus tôt possible.</p>
-      <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
-      <p>Cordialement,<br>L'équipe de gestion immobilière</p>
+      <p>Pour tout règlement ou question, contactez ${this.escapeHtml(contacts)}.</p>
+      <p>Cordialement,<br>${this.escapeHtml(companyName)}</p>
     `;
 
     // Message configurable (Réglages → Messages) : si un template "payment_reminder"
@@ -3407,7 +3438,11 @@ export class PropertyManagementService {
           .replace(/\{tenantName\}/g, tenantName)
           .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
           .replace(/\{reference\}/g, lease.reference || "")
-          .replace(/\{amount\}/g, rentDisplay);
+          .replace(/\{amount\}/g, rentDisplay)
+          .replace(/\{companyName\}/g, companyName)
+          .replace(/\{ownerContact\}/g, propertyContacts.ownerContact)
+          .replace(/\{managerContact\}/g, propertyContacts.managerContact)
+          .replace(/\{contacts\}/g, contacts);
       if (tpl[0].subject) subject = fill(tpl[0].subject);
       if (tpl[0].body) html = fill(tpl[0].body);
     }
