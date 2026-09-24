@@ -27,6 +27,7 @@ import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { Lightbox } from "../components/Lightbox.jsx";
 import { takeMaintenancePrefill } from "./reservationPrefill.js";
 import { t, tf } from "../i18n.js";
 
@@ -441,7 +442,7 @@ export function Maintenance() {
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
           onPhotos={(ticket) => setPhotosModal({ ticket })}
-          onOpen={setDetailModal}
+          onOpen={(ticket) => { setMenuId(null); setDetailModal(ticket); }}
         />
       )}
       {view === "list" && (
@@ -460,7 +461,7 @@ export function Maintenance() {
               onDelete={() => deleteTicket(ticket)}
               onCost={(mode) => setCostModal({ ticket, mode })}
               onPhotos={() => setPhotosModal({ ticket })}
-              onOpen={setDetailModal}
+              onOpen={() => { setMenuId(null); setDetailModal(ticket); }}
             />
           ))}
           {filtered.length === 0 && <EmptyMaintenance />}
@@ -478,7 +479,7 @@ export function Maintenance() {
           onOpen={setDetailModal}
         />
       )}
-      {view === "calendar" && <CalendarView tickets={filtered} onOpen={setDetailModal} />}
+      {view === "calendar" && <CalendarView tickets={filtered} onOpen={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))} />}
 
       <div className="card ops-panel maintenance-summary-card">
         <div className="panel-title">{t("Priorites")}</div>
@@ -534,8 +535,6 @@ export function Maintenance() {
           costSymbol={costSymbol}
           onClose={() => setDetailModal(null)}
           onEdit={(ticket) => { setDetailModal(null); setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId)); }}
-          onCost={(ticket, mode) => { setDetailModal(null); setCostModal({ ticket, mode }); }}
-          onPhotos={(ticket) => { setDetailModal(null); setPhotosModal({ ticket }); }}
         />
       )}
       {photosModal && (
@@ -617,11 +616,7 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   return (
     <article
       className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}
-      role={onOpen ? "button" : undefined}
-      tabIndex={onOpen ? 0 : undefined}
-      style={onOpen ? { cursor: "pointer" } : undefined}
-      onClick={onOpen ? () => onOpen(ticket) : undefined}
-      onKeyDown={onOpen ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(ticket); } } : undefined}
+      onClick={onOpen ? (e) => { if (e.target.closest("button, a, input, label")) return; onOpen(ticket); } : undefined}
     >
       <div className="ticket-head">
         <span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>
@@ -640,7 +635,11 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
           />
         </div>
       </div>
-      <h3>{ticket.title}</h3>
+      <h3>
+        {onOpen
+          ? <button type="button" className="maintenance-card-open" onClick={() => onOpen(ticket)}>{ticket.title}</button>
+          : ticket.title}
+      </h3>
       <p>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</p>
       {!compact && ticket.description && <p className="maintenance-description">{ticket.description}</p>}
       <div className="ticket-meta">
@@ -660,16 +659,69 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   );
 }
 
-function DetailRow({ icon, label, value }) {
+function DetailRow({ icon, label, value, wide }) {
   return (
-    <div className="ops-score">
-      <span>{icon} {label}</span>
+    <div className="info-cell" style={wide ? { gridColumn: "1 / -1" } : undefined}>
+      {icon}
+      <span>{label}</span>
       <b>{value || "-"}</b>
     </div>
   );
 }
 
-function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost, onPhotos }) {
+// Bande photos en LECTURE SEULE : aucune suppression, aucun upload.
+// L'ajout/retrait reste dans PhotosModal, joignable seulement par le menu d'actions.
+function TicketPhotoStrip({ ticket }) {
+  const photosApi = useApi(() => api.maintenancePhotos(ticket.id), [ticket.id]);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+
+  const photos = Array.isArray(photosApi.data) ? photosApi.data : photosApi.data?.data || [];
+  // Ordre Avant -> Apres -> Facture, pour que la navigation suive la chronologie du chantier.
+  const ordered = PHOTO_TYPES.flatMap((type) =>
+    photos
+      .filter((photo) => (photo.photoType || "before") === type.key)
+      .map((photo) => ({ ...photo, typeLabel: type.label })),
+  );
+  const items = ordered.map((photo) => ({
+    url: api.maintenancePhotoUrl(photo.id),
+    label: `${photo.typeLabel}${photo.createdAt ? ` - ${compactDate(photo.createdAt)}` : ""}`,
+  }));
+
+  if (photosApi.loading) return <p className="muted">{t("Chargement...")}</p>;
+  if (!ordered.length) return <p className="muted">{t("Aucune photo.")}</p>;
+
+  return (
+    <>
+      {PHOTO_TYPES.map((type) => {
+        const group = ordered.filter((photo) => (photo.photoType || "before") === type.key);
+        if (!group.length) return null;
+        return (
+          <div key={type.key} className="maintenance-photo-group">
+            <span className="muted">{type.label}</span>
+            <div className="domus-photo-strip">
+              {group.map((photo) => (
+                <button
+                  type="button"
+                  className="domus-photo-thumb maintenance-photo-view"
+                  key={photo.id}
+                  onClick={() => setLightboxIndex(ordered.findIndex((p) => p.id === photo.id))}
+                  title={t("Agrandir")}
+                >
+                  <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || type.label} />
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {lightboxIndex !== null && (
+        <Lightbox items={items} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
+      )}
+    </>
+  );
+}
+
+function TicketDetailModal({ ticket, costSymbol, onClose, onEdit }) {
   const sym = costSymbol ? costSymbol(ticket) : undefined;
   const spent = spentEntries(ticket, sym);
   return (
@@ -681,35 +733,37 @@ function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost, onPhot
     >
       <div className="modal-body">
         <FormSection icon={<Wrench size={14} />} title={t("Informations")}>
-          <DetailRow icon={<AlertTriangle size={14} />} label={t("Priorite")}
-            value={<span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || t("Moyen")}</span>} />
-          <DetailRow icon={<CheckCircle2 size={14} />} label={t("Statut")} value={STATUS_LABEL[ticket.status] || ticket.status} />
-          <DetailRow icon={<Wrench size={14} />} label={t("Bien")}
-            value={`${ticket.propertyName || "-"}${ticket.unitName ? ` - ${ticket.unitName}` : ""}`} />
-          <DetailRow icon={<User size={14} />} label={t("Assigne")} value={assigneeName(ticket) || t("Non assigne")} />
-          <DetailRow icon={<CalendarDays size={14} />} label={t("Date prevue")} value={compactDate(ticket.scheduledDate)} />
-          <DetailRow icon={<CalendarDays size={14} />} label={t("Cree le")} value={compactDate(ticket.createdAt)} />
-          {ticket.projectId && <DetailRow icon={<FolderKanban size={14} />} label={t("Reference")} value={`MNT-${ticket.id}`} />}
+          <div className="info-grid">
+            <DetailRow icon={<AlertTriangle size={14} />} label={t("Priorite")}
+              value={<span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || t("Moyen")}</span>} />
+            <DetailRow icon={<CheckCircle2 size={14} />} label={t("Statut")} value={STATUS_LABEL[ticket.status] || ticket.status} />
+            <DetailRow icon={<User size={14} />} label={t("Assigne")} value={assigneeName(ticket) || t("Non assigne")} />
+            <DetailRow icon={<CalendarDays size={14} />} label={t("Date prevue")} value={compactDate(ticket.scheduledDate)} />
+            <DetailRow icon={<CalendarDays size={14} />} label={t("Cree le")} value={compactDate(ticket.createdAt)} />
+            <DetailRow icon={<FolderKanban size={14} />} label={t("Reference")} value={`MNT-${ticket.id}`} />
+          </div>
+        </FormSection>
+        <FormSection icon={<Images size={14} />} title={t("Photos")}>
+          <TicketPhotoStrip ticket={ticket} />
         </FormSection>
         {ticket.description && (
           <FormSection icon={<List size={14} />} title={t("Description")}>
-            <p className="maintenance-description">{ticket.description}</p>
+            <p className="maintenance-detail-description">{ticket.description}</p>
           </FormSection>
         )}
         <FormSection icon={<CircleDollarSign size={14} />} title={t("Couts")}>
-          <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={money(ticket.estimatedCost, sym)} />
-          {spent.length
-            ? spent.map((e) => (
-                <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={money(e.amount, e.symbol)} />
-              ))
-            : <p className="muted">{t("Aucun cout enregistre.")}</p>}
+          <div className="info-grid">
+            <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={money(ticket.estimatedCost, sym)} />
+            {spent.map((e) => (
+              <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={money(e.amount, e.symbol)} />
+            ))}
+          </div>
+          {!spent.length && <p className="muted">{t("Aucun cout enregistre.")}</p>}
         </FormSection>
       </div>
       <div className="modal-actions">
-        <button className="btn" onClick={() => onPhotos(ticket)}><Images size={14} /> {t("Photos")}</button>
-        <button className="btn" onClick={() => onCost(ticket, "view")}><Eye size={14} /> {t("Voir les couts")}</button>
-        <button className="btn btn-primary" onClick={() => onEdit(ticket)}><Pencil size={14} /> {t("Modifier")}</button>
         <button className="btn" onClick={onClose}>{t("Fermer")}</button>
+        <button className="btn btn-primary" onClick={() => onEdit(ticket)}><Pencil size={14} /> {t("Modifier")}</button>
       </div>
     </Modal>
   );
@@ -750,8 +804,12 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
             const sym = costSymbol ? costSymbol(ticket) : currencySymbol;
             const spent = spentEntries(ticket, sym);
             return (
-            <tr key={ticket.id} style={onOpen ? { cursor: "pointer" } : undefined} onClick={onOpen ? () => onOpen(ticket) : undefined}>
-              <td style={{ fontWeight: 700 }}>{ticket.title}</td>
+            <tr key={ticket.id}>
+              <td style={{ fontWeight: 700 }}>
+                {onOpen
+                  ? <button type="button" className="maintenance-card-open" onClick={() => onOpen(ticket)}>{ticket.title}</button>
+                  : ticket.title}
+              </td>
               <td>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</td>
               <td><span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || "Moyen"}</span></td>
               <td>{STATUS_LABEL[ticket.status] || ticket.status}</td>
@@ -759,7 +817,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
               <td>{compactDate(ticketDate(ticket))}</td>
               <td className="r">{money(ticket.estimatedCost, sym)}</td>
               <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{money(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
-              <td className="r" onClick={(e) => e.stopPropagation()}>
+              <td className="r">
                 <button className="immo-link" onClick={() => onCost(ticket, "view")}>{t("Couts")}</button>
                 <button className="immo-link" onClick={() => onEdit(ticket)}>{t("Modifier")}</button>
                 <button className="immo-link danger" onClick={() => onDelete(ticket)}>{t("Supprimer")}</button>
