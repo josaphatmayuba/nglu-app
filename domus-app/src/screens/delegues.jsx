@@ -14,7 +14,7 @@
 import { useMemo, useState } from "react";
 import {
   Search, UserPlus, Phone, Pencil, Trash2, Info, UserRound,
-  Building2, BellRing, Plus, X,
+  Building2, BellRing, Plus, X, FileText, AlertTriangle, Wallet,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -350,11 +350,29 @@ function DelegateModal({ value, candidates = [], busy, error, onClose, onSave })
   );
 }
 
+// "Loyer en retard" est l'evenement le plus souvent decisif pour justifier une
+// delegation : tone "warn" pour le distinguer des deux autres, purement
+// informatifs.
 const EVENT_FLAGS = [
-  ["notifyLease", "Bail créé et fin de bail"],
-  ["notifyOverdue", "Loyer en retard"],
-  ["notifyPayment", "Loyer encaissé"],
+  ["notifyLease", "Bail créé et fin de bail", FileText, "default"],
+  ["notifyOverdue", "Loyer en retard", AlertTriangle, "warn"],
+  ["notifyPayment", "Loyer encaissé", Wallet, "default"],
 ];
+
+// Ligne case a cocher + icone + libelle, partagee entre le formulaire d'ajout
+// et la carte de chaque perimetre deja suivi, pour eviter la duplication.
+function EventFlagRow({ flag, checked, onChange }) {
+  const [key, label, Icon, tone] = flag;
+  return (
+    <label className={`domus-event-flag-row${tone === "warn" ? " warn" : ""}`}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span className={`domus-event-flag-row-icon ${tone}`}>
+        <Icon size={13} />
+      </span>
+      <span>{t(label)}</span>
+    </label>
+  );
+}
 
 // Périmètre suivi : la liste des affectations, plus un formulaire d'ajout.
 // Chaque ligne porte ses propres abonnements, modifiables sans la recréer.
@@ -437,11 +455,13 @@ function DelegateScopeModal({ delegate, owners, properties, onClose, onChanged }
           <div className="domus-property-field">
             <span>{t("Notifications")}</span>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {EVENT_FLAGS.map(([key, label]) => (
-                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={flags[key]} onChange={(e) => setFlags((c) => ({ ...c, [key]: e.target.checked }))} />
-                  {t(label)}
-                </label>
+              {EVENT_FLAGS.map((flag) => (
+                <EventFlagRow
+                  key={flag[0]}
+                  flag={flag}
+                  checked={flags[flag[0]]}
+                  onChange={(e) => setFlags((c) => ({ ...c, [flag[0]]: e.target.checked }))}
+                />
               ))}
             </div>
           </div>
@@ -468,11 +488,13 @@ function DelegateScopeModal({ delegate, owners, properties, onClose, onChanged }
                     </button>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
-                    {EVENT_FLAGS.map(([key, label]) => (
-                      <label key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <input type="checkbox" checked={Boolean(a[key])} onChange={() => toggleFlag(a, key)} />
-                        {t(label)}
-                      </label>
+                    {EVENT_FLAGS.map((flag) => (
+                      <EventFlagRow
+                        key={flag[0]}
+                        flag={flag}
+                        checked={Boolean(a[flag[0]])}
+                        onChange={() => toggleFlag(a, flag[0])}
+                      />
                     ))}
                   </div>
                 </div>
