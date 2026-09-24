@@ -227,14 +227,17 @@ export class SuppliersService {
       );
     const matchingIds = [...new Set(matching.map((row) => Number(row.supplierId)))];
     const taggedIds = new Set(tagged.map((row) => Number(row.supplierId)));
-    const untaggedClause = taggedIds.size
-      ? sql`${suppliers.id} NOT IN (${sql.join([...taggedIds].map((id) => sql`${id}`), sql`, `)})`
-      : undefined;
     const matchClause = matchingIds.length ? inArray(suppliers.id, matchingIds) : undefined;
-    if (matchClause && untaggedClause) {
-      return or(matchClause, untaggedClause);
+    // Quand PERSONNE n'est tague sur cet axe, tout le monde est non tague, donc
+    // tout le monde reste visible : il n'y a aucune condition a poser. Renvoyer
+    // une clause vide ici est essentiel -- une version precedente retombait sur
+    // `1 = 0` dans ce cas et vidait completement les listes de Domus, BatiPro et
+    // RH, puisque le backfill ne pose aucune nature.
+    if (!taggedIds.size) {
+      return undefined;
     }
-    return matchClause ?? untaggedClause ?? sql`1 = 0`;
+    const untaggedClause = sql`${suppliers.id} NOT IN (${sql.join([...taggedIds].map((id) => sql`${id}`), sql`, `)})`;
+    return matchClause ? or(matchClause, untaggedClause) : untaggedClause;
   }
 
   private async withTags<T extends { id: number }>(rows: T[], orgId: number) {
