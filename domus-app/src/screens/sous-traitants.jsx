@@ -46,6 +46,7 @@ const emptySubcontractor = {
   contactPerson: "",
   notes: "",
   alsoConstruction: false,
+  wasConstruction: false,
 };
 
 function subcontractorToForm(s) {
@@ -60,6 +61,7 @@ function subcontractorToForm(s) {
     contactPerson: s.contactPerson || "",
     notes: s.notes || "",
     alsoConstruction: Array.isArray(s.domains) && s.domains.includes("construction"),
+    wasConstruction: Array.isArray(s.domains) && s.domains.includes("construction"),
   };
 }
 
@@ -115,12 +117,26 @@ export function SousTraitants() {
   if (loading && !data) return <Loading />;
   if (error && !data) return <ApiError error={error} />;
 
+  // Cocher « aussi BâtiPro » doit rendre l'artisan utilisable tel quel sur un
+  // chantier, pas seulement visible dans les listes de tiers : BâtiPro tient son
+  // propre carnet (batipro_subcontractors), qui porte le marché, le métier et la
+  // note. On y inscrit donc la fiche, sans projet ni montant — c'est BâtiPro qui
+  // les renseigne au moment de l'affecter. L'appel est tolérant à l'échec : le
+  // sous-traitant Domus est enregistré, le reste est un confort inter-app.
   async function saveSubcontractor(form) {
     setSaving(true);
     setActionError("");
     try {
+      const alreadyThere = Boolean(form.id) && form.wasConstruction;
       if (form.id) await api.updateSupplier(form.id, subcontractorPayload(form));
       else await api.createSupplier(subcontractorPayload(form));
+      if (form.alsoConstruction && !alreadyThere) {
+        try {
+          await api.registerBatiproSubcontractor({ name: form.name.trim(), trade: form.notes?.trim() || undefined });
+        } catch {
+          toast.info(t("Fiche enregistrée. Inscription au carnet BâtiPro à refaire depuis BâtiPro."));
+        }
+      }
       setModal(null);
       await reload();
     } catch (e) {
@@ -274,7 +290,7 @@ function SubcontractorModal({ value, busy, error, onClose, onSave }) {
             {t("Travaille aussi sur les chantiers BâtiPro")}
           </label>
           <p className="muted" style={{ fontSize: 13, margin: "6px 0 0" }}>
-            {t("La fiche reste unique : meme contact, un seul historique de facturation.")}
+            {t("Il apparaitra dans le carnet BatiPro, pret a etre affecte a un chantier. Une seule fiche, un seul historique de facturation.")}
           </p>
         </FormSection>
 

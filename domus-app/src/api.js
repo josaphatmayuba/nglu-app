@@ -272,6 +272,11 @@ export const api = {
   updateSupplier: (id, b) => jsonFetch(`/supplier/${id}`, { method: "PUT", body: b, base: API_ROOT }),
   setSupplierStatus: (id, status) =>
     jsonFetch(`/supplier/${id}`, { method: "PATCH", body: { status }, base: API_ROOT }),
+  // Inscription au carnet BatiPro (route /api/batipro, hors prefixe Domus). Sert
+  // a rendre un artisan saisi ici reutilisable tel quel sur un chantier : la fiche
+  // part sans projet ni montant, que BatiPro renseigne en l affectant.
+  registerBatiproSubcontractor: (b) =>
+    jsonFetch("/batipro/subcontractors", { method: "POST", body: b, base: API_ROOT }),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
