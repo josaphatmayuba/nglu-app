@@ -100,7 +100,12 @@ export function SousTraitants() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const subcontractors = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  // `query=all` renvoie aussi les fiches retirees : le soft delete passe
+  // status=false sans les sortir de la reponse. Meme filtre que la maintenance.
+  const subcontractors = useMemo(
+    () => (Array.isArray(data) ? data : []).filter((s) => String(s.status) === "true"),
+    [data],
+  );
 
   const companies = useMemo(
     () => subcontractors.filter((s) => (s.partyType || "company") === "company").length,
