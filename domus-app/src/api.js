@@ -261,7 +261,17 @@ export const api = {
   updateMaintenance: (id, b) => put(`/maintenance/${id}`, b),
   deleteMaintenance: (id) => del(`/maintenance/${id}`),
   // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /property-management)
-  suppliers: () => jsonFetch("/supplier?query=all&type=real_estate", { method: "GET", base: API_ROOT }),
+  // `nature` restreint la liste a ce que fait le tiers (service, subcontractor,
+  // goods) ; sans argument on garde tous les tiers du domaine immobilier, comme avant.
+  suppliers: (nature) =>
+    jsonFetch(`/supplier?query=all&type=real_estate${nature ? `&nature=${nature}` : ""}`, { method: "GET", base: API_ROOT }),
+  // Ecriture sur le referentiel central. `domains`/`natures` sont multi-valeurs :
+  // un sous-traitant cree ici reste UN seul tiers, visible aussi dans BatiPro
+  // s il porte ce domaine. La suppression est un soft delete (status=false).
+  createSupplier: (b) => jsonFetch("/supplier", { method: "POST", body: b, base: API_ROOT }),
+  updateSupplier: (id, b) => jsonFetch(`/supplier/${id}`, { method: "PUT", body: b, base: API_ROOT }),
+  setSupplierStatus: (id, status) =>
+    jsonFetch(`/supplier/${id}`, { method: "PATCH", body: { status }, base: API_ROOT }),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
