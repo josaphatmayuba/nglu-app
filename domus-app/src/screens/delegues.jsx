@@ -27,12 +27,15 @@ import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
 
 async function loadDelegatesModule() {
-  const [delegates, owners, properties] = await Promise.all([
+  const [delegates, owners, properties, candidates] = await Promise.all([
     api.delegates(),
     api.owners().catch(() => []),
     api.properties().catch(() => []),
+    // Repli sur liste vide : l'ecran doit rester utilisable en saisie libre si
+    // la route candidates n'est pas encore deployee.
+    api.delegateCandidates().catch(() => []),
   ]);
-  return { delegates, owners, properties };
+  return { delegates, owners, properties, candidates };
 }
 
 function delegateInitials(name) {
@@ -47,6 +50,11 @@ const emptyDelegate = {
   phone2: "",
   email: "",
   notes: "",
+  // Origine de la personne : un delegue est un employe ou un sous-traitant deja
+  // enregistre, qu'on DESIGNE au lieu de ressaisir. "" = saisie libre (fiches
+  // anciennes, ou personne qui n'est dans aucun des deux registres).
+  userId: null,
+  supplierId: null,
 };
 
 function delegateToForm(delegate) {
@@ -58,6 +66,8 @@ function delegateToForm(delegate) {
     phone2: delegate.phone2 || "",
     email: delegate.email || "",
     notes: delegate.notes || "",
+    userId: delegate.userId ?? null,
+    supplierId: delegate.supplierId ?? null,
   };
 }
 
@@ -68,6 +78,8 @@ function delegatePayload(f) {
     phone2: f.phone2.trim() || null,
     email: f.email.trim() || null,
     notes: f.notes.trim() || null,
+    userId: f.userId ?? null,
+    supplierId: f.supplierId ?? null,
   };
 }
 
@@ -193,9 +205,22 @@ export function Delegues({ go } = {}) {
                 <h3>{delegate.displayName}</h3>
                 <p>{delegate.phone || t("telephone non renseigne")}</p>
                 <p>{delegate.email || t("email non renseigne")}</p>
-                <span className={`immo-mini-badge ${Number(delegate.assignmentsCount) ? "success" : "warn"}`}>
-                  {tf(t("{n} périmètre(s) suivi(s)"), { n: Number(delegate.assignmentsCount) || 0 })}
-                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <span className={`immo-mini-badge ${Number(delegate.assignmentsCount) ? "success" : "warn"}`}>
+                    {tf(t("{n} périmètre(s) suivi(s)"), { n: Number(delegate.assignmentsCount) || 0 })}
+                  </span>
+                  {/* Origine de la personne : savoir si le delegue est un employe
+                      ou un sous-traitant evite d'aller chercher dans deux ecrans.
+                      "Non rattache" = fiche saisie avant le rattachement, encore
+                      valide mais non reliee a une personne enregistree. */}
+                  <span className="immo-mini-badge">
+                    {delegate.userId
+                      ? t("Employé")
+                      : delegate.supplierId
+                        ? t("Sous-traitant")
+                        : t("Non rattaché")}
+                  </span>
+                </div>
               </div>
               <div className="immo-tenant-divider" />
               <div className="immo-tenant-lease" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
@@ -217,6 +242,7 @@ export function Delegues({ go } = {}) {
       {modal && (
         <DelegateModal
           value={modal}
+          candidates={data?.candidates || []}
           busy={saving}
           error={actionError}
           onClose={() => { setModal(null); setActionError(""); }}
@@ -241,9 +267,36 @@ export function Delegues({ go } = {}) {
   );
 }
 
-function DelegateModal({ value, busy, error, onClose, onSave }) {
+function DelegateModal({ value, candidates = [], busy, error, onClose, onSave }) {
   const [form, setForm] = useState(value);
   const set = (patch) => setForm((cur) => ({ ...cur, ...patch }));
+
+  // Cle unique par personne : source + id, les ids d'employes et de tiers
+  // provenant de deux tables et pouvant donc se chevaucher.
+  const keyOf = (c) => `${c.source}:${c.id}`;
+  const selectedKey = form.userId ? `user:${form.userId}` : form.supplierId ? `supplier:${form.supplierId}` : "";
+
+  // Une personne deja designee est exclue, sauf s'il s'agit de celle qu'on est
+  // en train de modifier : sinon son propre nom disparaitrait du selecteur.
+  const options = candidates.filter((c) => !c.alreadyDelegate || keyOf(c) === selectedKey);
+  const staff = options.filter((c) => c.source === "user");
+  const external = options.filter((c) => c.source === "supplier");
+
+  // Designer quelqu'un remplit nom/telephone/email : c'est tout l'interet, ne
+  // plus ressaisir ce qui est deja en base. Les champs restent modifiables, un
+  // tiers cree depuis BatiPro n'ayant par exemple aucun telephone.
+  const pickPerson = (key) => {
+    if (!key) { set({ userId: null, supplierId: null }); return; }
+    const person = candidates.find((c) => keyOf(c) === key);
+    if (!person) return;
+    set({
+      userId: person.source === "user" ? person.id : null,
+      supplierId: person.source === "supplier" ? person.id : null,
+      displayName: person.displayName || form.displayName,
+      phone: person.phone || form.phone,
+      email: person.email || form.email,
+    });
+  };
 
   return (
     <Modal
@@ -255,6 +308,19 @@ function DelegateModal({ value, busy, error, onClose, onSave }) {
     >
       <div className="domus-property-form">
         <FormSection icon={<Info size={14} />} title={t("Identité")}>
+          <DomusPropertySelect
+            label={t("Personne")}
+            value={selectedKey}
+            onChange={pickPerson}
+            options={[
+              ["", t("— Saisir une personne non enregistrée —")],
+              ...staff.map((c) => [keyOf(c), `${t("Employé")} · ${c.displayName}`]),
+              ...external.map((c) => [keyOf(c), `${t("Sous-traitant")} · ${c.displayName}`]),
+            ]}
+          />
+          <label className="domus-property-field">
+            <small>{t("Un délégué est un employé ou un sous-traitant déjà enregistré : le désigner remplit son nom et son numéro au lieu de les ressaisir.")}</small>
+          </label>
           <DomusPropertyField label={t("Nom affiché")} value={form.displayName} onChange={(v) => set({ displayName: v })} required placeholder={t("ex. Patrick Ilunga")} />
         </FormSection>
 

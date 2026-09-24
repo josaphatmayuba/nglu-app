@@ -4,10 +4,20 @@
 // bailleur legal : il recoit les memes annonces (bail cree, fin de bail, loyer
 // en retard) et, a terme, confirmera les encaissements depuis son portail.
 //
-// Deux natures cohabitent derriere le meme modele : un contact externe joint
-// uniquement par SMS (userId null) et un employe interne ayant deja un compte
-// nglu (userId renseigne). C'est le telephone qui porte la notification dans
-// les deux cas, jamais le login.
+// Un delegue n'est pas une personne de plus dans la base : c'est un EMPLOYE
+// (userId) ou un SOUS-TRAITANT du registre central (supplierId) a qui on confie
+// en plus le suivi d'un portefeuille. On le DESIGNE parmi les personnes deja
+// connues au lieu de ressaisir son nom et son telephone, qui existeraient sinon
+// en deux ou trois exemplaires -- corriger un numero obligerait a le faire
+// partout, et rien ne dirait que le delegue Patrick est le meme homme que le
+// sous-traitant Patrick. Les fiches creees avant ce rattachement n'ont ni
+// userId ni supplierId et restent valides.
+//
+// displayName / phone sont la valeur qui PART dans le SMS : ils sont figes au
+// moment de la designation plutot que relus a chaque envoi, pour qu'un tiers
+// renomme ou desactive dans le registre ne change pas silencieusement le
+// destinataire d'une relance en cours. C'est le telephone qui porte la
+// notification, jamais le login.
 //
 // Deux portees d'affectation cohabitent aussi : 'owner' suit tout le
 // portefeuille d'un proprietaire (biens acquis plus tard compris, sans
@@ -17,13 +27,16 @@
 // Suppression = soft delete (is_active = 0), conformement a la regle projet :
 // l'historique d'envois dans sms_logs reste lisible.
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   realEstateDelegateAssignments,
   realEstateDelegates,
   realEstateOwners,
   realEstateProperties,
+  supplierTags,
+  suppliers,
+  users,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
@@ -46,6 +59,7 @@ export class DelegatesService {
         phone2: realEstateDelegates.phone2,
         email: realEstateDelegates.email,
         userId: realEstateDelegates.userId,
+        supplierId: realEstateDelegates.supplierId,
         notes: realEstateDelegates.notes,
         createdAt: realEstateDelegates.createdAt,
         updatedAt: realEstateDelegates.updatedAt,
@@ -82,6 +96,7 @@ export class DelegatesService {
         phone2: realEstateDelegates.phone2,
         email: realEstateDelegates.email,
         userId: realEstateDelegates.userId,
+        supplierId: realEstateDelegates.supplierId,
         notes: realEstateDelegates.notes,
         createdAt: realEstateDelegates.createdAt,
         updatedAt: realEstateDelegates.updatedAt,
@@ -105,6 +120,7 @@ export class DelegatesService {
       phone2: input.phone2 ?? null,
       email: input.email ?? null,
       userId: input.userId ?? null,
+      supplierId: input.supplierId ?? null,
       notes: input.notes ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -117,7 +133,7 @@ export class DelegatesService {
     await this.db
       .update(realEstateDelegates)
       .set({
-        ...this.pick(input, ["displayName", "phone", "phone2", "email", "userId", "notes"]),
+        ...this.pick(input, ["displayName", "phone", "phone2", "email", "userId", "supplierId", "notes"]),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateDelegates.id, id), eq(realEstateDelegates.organizationId, orgId)));
@@ -145,6 +161,85 @@ export class DelegatesService {
    * Affectations d'un delegue, enrichies du libelle du perimetre suivi pour
    * que l'UI affiche "Immeuble Gombe" plutot qu'un identifiant nu.
    */
+  // Les personnes que l'on peut DESIGNER comme delegue : les employes et les
+  // sous-traitants / prestataires du registre central, en UNE liste. L'ecran ne
+  // doit pas obliger a choisir sa source avant de chercher quelqu'un : on ignore
+  // souvent, au moment de designer, si Patrick est enregistre comme employe ou
+  // comme tiers externe.
+  //
+  // `alreadyDelegate` evite de designer deux fois la meme personne : l'UI grise
+  // la ligne au lieu de laisser creer un doublon que rien ne signalerait.
+  async candidates(orgId: number) {
+    const staff = await this.db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        username: users.username,
+        phone: users.phone,
+        email: users.email,
+      })
+      .from(users)
+      .where(and(eq(users.organizationId, orgId), eq(users.status, "true")))
+      .orderBy(users.firstName);
+
+    // Seules les natures externes : un fournisseur de materiaux n'a aucune
+    // raison de suivre un portefeuille de loyers.
+    const externalIds = await this.db
+      .select({ supplierId: supplierTags.supplierId })
+      .from(supplierTags)
+      .where(and(
+        eq(supplierTags.organizationId, orgId),
+        eq(supplierTags.axis, "nature"),
+        inArray(supplierTags.code, ["subcontractor", "service"]),
+      ));
+    const ids = [...new Set(externalIds.map((row) => Number(row.supplierId)))];
+    const external = ids.length
+      ? await this.db
+          .select({
+            id: suppliers.id,
+            name: suppliers.name,
+            phone: suppliers.phone,
+            email: suppliers.email,
+          })
+          .from(suppliers)
+          .where(and(
+            eq(suppliers.organizationId, orgId),
+            eq(suppliers.status, "true"),
+            inArray(suppliers.id, ids),
+          ))
+          .orderBy(suppliers.name)
+      : [];
+
+    const designated = await this.db
+      .select({ userId: realEstateDelegates.userId, supplierId: realEstateDelegates.supplierId })
+      .from(realEstateDelegates)
+      .where(and(eq(realEstateDelegates.organizationId, orgId), eq(realEstateDelegates.isActive, 1)));
+    const takenUsers = new Set(designated.map((row) => Number(row.userId)).filter(Boolean));
+    const takenSuppliers = new Set(designated.map((row) => Number(row.supplierId)).filter(Boolean));
+
+    return [
+      ...staff.map((row) => ({
+        source: "user" as const,
+        id: Number(row.id),
+        displayName: [row.firstName, row.lastName].filter(Boolean).join(" ") || row.username,
+        phone: row.phone ?? null,
+        email: row.email ?? null,
+        alreadyDelegate: takenUsers.has(Number(row.id)),
+      })),
+      ...external.map((row) => ({
+        source: "supplier" as const,
+        id: Number(row.id),
+        displayName: row.name,
+        // Un tiers cree a la volee depuis BatiPro n'a pas de telephone : l'UI
+        // doit pouvoir le completer, sans quoi aucun SMS ne partirait.
+        phone: row.phone || null,
+        email: row.email ?? null,
+        alreadyDelegate: takenSuppliers.has(Number(row.id)),
+      })),
+    ];
+  }
+
   async assignments(delegateId: number, orgId: number) {
     const rows = await this.db
       .select({

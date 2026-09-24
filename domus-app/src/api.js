@@ -174,6 +174,10 @@ export const api = {
   // annonces que le propriétaire sur le périmètre qui leur est affecté.
   delegates: () => get("/delegates"),
   delegateRentChecks: (answer) => get(`/delegate-rent-checks${answer ? `?answer=${encodeURIComponent(answer)}` : ""}`),
+  // Personnes designables comme delegue : employes + sous-traitants/prestataires
+  // du registre central, en une seule liste (on ignore souvent, au moment de
+  // designer, si la personne est enregistree comme employe ou comme tiers).
+  delegateCandidates: () => get("/delegates/candidates"),
   delegate: (id) => get(`/delegates/${id}`),
   createDelegate: (b) => post("/delegates", b),
   updateDelegate: (id, b) => put(`/delegates/${id}`, b),

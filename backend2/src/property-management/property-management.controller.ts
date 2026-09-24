@@ -657,6 +657,15 @@ export class PropertyManagementController {
     return this.delegatesService.list(orgId);
   }
 
+  // DOIT rester declaree AVANT delegates/:id : sinon Nest fait correspondre
+  // "candidates" au parametre :id et ParseIntPipe rejette la requete en 400.
+  @ApiOperation({ summary: "List people who can be designated as delegate (staff + external providers)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegates/candidates")
+  delegateCandidates(@CurrentOrg() orgId: number) {
+    return this.delegatesService.candidates(orgId);
+  }
+
   @ApiOperation({ summary: "Get single delegate with its assignments" })
   @ApiParam({ name: "id", type: Number })
   @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")

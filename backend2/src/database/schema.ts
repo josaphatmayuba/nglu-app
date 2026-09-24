@@ -1197,7 +1197,11 @@ export const realEstateDelegates = mysqlTable("real_estate_delegates", {
   phone: varchar("phone", { length: 50 }),
   phone2: varchar("phone2", { length: 50 }),
   email: varchar("email", { length: 255 }),
+  // Un delegue est soit un employe (userId), soit un sous-traitant du registre
+  // central (supplierId), soit ni l'un ni l'autre pour les fiches saisies a la
+  // main avant le rattachement. Au plus une des deux colonnes est renseignee.
   userId: bigint("user_id", { mode: "number" }),
+  supplierId: bigint("supplier_id", { mode: "number" }),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),

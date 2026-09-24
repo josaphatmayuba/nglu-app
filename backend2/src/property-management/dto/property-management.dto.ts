@@ -1750,8 +1750,9 @@ export class UpdateMortgageLoanDto extends PartialType(
 // ── Delegues (mandataires charges du suivi de loyer) ───────────────────────
 // Un delegue n'est pas le bailleur : il suit un portefeuille pour le compte du
 // proprietaire et recoit les memes annonces. userId nullable porte les deux
-// natures : absent = contact externe joint par SMS, renseigne = employe interne
-// ayant deja un compte nglu.
+// Un delegue n'est pas une personne de plus : c'est un employe (userId) ou un
+// sous-traitant du registre central (supplierId) a qui on confie le suivi d'un
+// portefeuille. Les deux absents = fiche saisie a la main avant le rattachement.
 export class CreateDelegateDto {
   @ApiProperty({ example: "Patrick Ilunga" })
   @IsString()
@@ -1773,10 +1774,19 @@ export class CreateDelegateDto {
   @IsEmail()
   email?: string;
 
-  @ApiPropertyOptional({ example: 12, description: "Compte nglu, pour un delegue interne" })
+  @ApiPropertyOptional({ example: 12, description: "Compte nglu, pour un delegue employe interne" })
   @IsOptional()
   @IsInt()
   userId?: number;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description:
+      "Tiers du registre central (table supplier), pour un delegue sous-traitant ou prestataire. Exclusif avec userId : un delegue est un employe OU un tiers externe, pas les deux.",
+  })
+  @IsOptional()
+  @IsInt()
+  supplierId?: number;
 
   @ApiPropertyOptional({ example: "Suit les immeubles de Gombe" })
   @IsOptional()
