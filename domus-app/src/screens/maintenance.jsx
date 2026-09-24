@@ -27,6 +27,7 @@ import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { Lightbox } from "../components/Lightbox.jsx";
 import { takeMaintenancePrefill } from "./reservationPrefill.js";
 import { t, tf } from "../i18n.js";
 
@@ -71,6 +72,7 @@ const emptyTicket = {
   scheduledDate: "",
   estimatedCost: "",
   currencyId: "",
+  assigneeId: "",
   description: "",
 };
 
@@ -137,6 +139,7 @@ export function Maintenance() {
   const [ticketModal, setTicketModal] = useState(null);
   const [costModal, setCostModal] = useState(null);
   const [photosModal, setPhotosModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
   const [resolveModal, setResolveModal] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -157,8 +160,18 @@ export function Maintenance() {
   const unitsApi = useApi(() => api.units(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
-  const suppliersApi = useApi(() => api.suppliers(), []);
+  const suppliersApi = useApi(() => api.suppliers("service,subcontractor"), []);
+  const candidatesApi = useApi(() => api.delegateCandidates(), []);
   useRealtimeReload(maintenanceApi.reload, ["maintenance"]);
+
+  // Personnes assignables : uniquement les comptes utilisateurs (assigneeId = FK users).
+  const assigneeOptions = useMemo(() => {
+    const raw = candidatesApi.data;
+    const arr = Array.isArray(raw) ? raw : raw?.data || [];
+    return (arr || [])
+      .filter((c) => c.source === "user")
+      .map((c) => [String(c.id), c.displayName]);
+  }, [candidatesApi.data]);
 
   // Fournisseurs actifs du référentiel central (options [id, libellé] pour le select)
   const supplierOptions = useMemo(() => {
@@ -256,6 +269,7 @@ export function Maintenance() {
         scheduledDate: form.scheduledDate || null,
         estimatedCost: toMoney(form.estimatedCost),
         currencyId: toId(form.currencyId) ?? null,
+        assigneeId: toId(form.assigneeId) ?? null,
         description: form.description?.trim() || null,
       };
       if (!payload.title || !payload.propertyId) throw new Error(t("Titre et bien obligatoires."));
@@ -440,6 +454,7 @@ export function Maintenance() {
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
           onPhotos={(ticket) => setPhotosModal({ ticket })}
+          onOpen={(ticket) => { setMenuId(null); setDetailModal(ticket); }}
         />
       )}
       {view === "list" && (
@@ -458,6 +473,7 @@ export function Maintenance() {
               onDelete={() => deleteTicket(ticket)}
               onCost={(mode) => setCostModal({ ticket, mode })}
               onPhotos={() => setPhotosModal({ ticket })}
+              onOpen={() => { setMenuId(null); setDetailModal(ticket); }}
             />
           ))}
           {filtered.length === 0 && <EmptyMaintenance />}
@@ -472,6 +488,7 @@ export function Maintenance() {
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
           onPhotos={(ticket) => setPhotosModal({ ticket })}
+          onOpen={setDetailModal}
         />
       )}
       {view === "calendar" && <CalendarView tickets={filtered} onOpen={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))} />}
@@ -502,6 +519,7 @@ export function Maintenance() {
           units={units}
           currencyOptions={currency.currencyOptions}
           defaultCurrencyId={currency.defaultCurrencyId}
+          assigneeOptions={assigneeOptions}
           busy={busy}
           error={actionError}
           onClose={() => { setTicketModal(null); setActionError(""); }}
@@ -524,6 +542,15 @@ export function Maintenance() {
         />
       )}
 
+      {detailModal && (
+        <TicketDetailModal
+          ticket={detailModal}
+          costSymbol={costSymbol}
+          onClose={() => setDetailModal(null)}
+          onEdit={(ticket) => { setDetailModal(null); setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId)); }}
+          onCost={(ticket, mode) => { setDetailModal(null); setCostModal({ ticket, mode }); }}
+        />
+      )}
       {photosModal && (
         <PhotosModal
           ticket={photosModal.ticket}
@@ -554,7 +581,7 @@ function Metric({ icon, tone, label, value, danger, success }) {
   );
 }
 
-function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost, onPhotos }) {
+function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost, onPhotos, onOpen }) {
   return (
     <div className="maintenance-kanban">
       {COLUMNS.map((column) => {
@@ -581,6 +608,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
                   onCost={(mode) => onCost(ticket, mode)}
                   onMove={(status) => onStatusChange(ticket, status)}
                   onPhotos={() => onPhotos(ticket)}
+                  onOpen={onOpen}
                 />
               ))}
               {items.length === 0 && <div className="maintenance-empty-col">{t("Aucun ticket")}</div>}
@@ -592,7 +620,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
   );
 }
 
-function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove, onPhotos }) {
+function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove, onPhotos, onOpen }) {
   const urgent = isUrgent(ticket);
   const done = isDone(ticket);
   const assignee = assigneeName(ticket);
@@ -600,7 +628,10 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   const sym = costSymbol ? costSymbol(ticket) : undefined;
   const spent = spentEntries(ticket, sym);
   return (
-    <article className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}>
+    <article
+      className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}
+      onClick={onOpen ? (e) => { if (e.target.closest("button, a, input, label")) return; onOpen(ticket); } : undefined}
+    >
       <div className="ticket-head">
         <span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>
           {urgent && <AlertTriangle size={12} />} {PRIORITY_LABEL[ticket.priority] || "Moyen"}
@@ -618,7 +649,11 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
           />
         </div>
       </div>
-      <h3>{ticket.title}</h3>
+      <h3>
+        {onOpen
+          ? <button type="button" className="maintenance-card-open" onClick={() => onOpen(ticket)}>{ticket.title}</button>
+          : ticket.title}
+      </h3>
       <p>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</p>
       {!compact && ticket.description && <p className="maintenance-description">{ticket.description}</p>}
       <div className="ticket-meta">
@@ -630,11 +665,129 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
         ))}
       </div>
       {next && (
-        <button className="immo-btn maintenance-next" disabled={busy} onClick={() => onAdvance(ticket)}>
+        <button className="immo-btn maintenance-next" disabled={busy} onClick={(e) => { e.stopPropagation(); onAdvance(ticket); }}>
           {busy ? "..." : tf(t("Passer a {status}"), {status: STATUS_LABEL[next]})}
         </button>
       )}
     </article>
+  );
+}
+
+function DetailRow({ icon, label, value, wide }) {
+  return (
+    <div className="info-cell" style={wide ? { gridColumn: "1 / -1" } : undefined}>
+      {icon}
+      <span>{label}</span>
+      <b>{value || "-"}</b>
+    </div>
+  );
+}
+
+// Bande photos en LECTURE SEULE : aucune suppression, aucun upload.
+// L'ajout/retrait reste dans PhotosModal, joignable seulement par le menu d'actions.
+function TicketPhotoStrip({ ticket }) {
+  const photosApi = useApi(() => api.maintenancePhotos(ticket.id), [ticket.id]);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+
+  const photos = Array.isArray(photosApi.data) ? photosApi.data : photosApi.data?.data || [];
+  // Ordre Avant -> Apres -> Facture, pour que la navigation suive la chronologie du chantier.
+  const ordered = PHOTO_TYPES.flatMap((type) =>
+    photos
+      .filter((photo) => (photo.photoType || "before") === type.key)
+      .map((photo) => ({ ...photo, typeLabel: type.label })),
+  );
+  const items = ordered.map((photo) => ({
+    url: api.maintenancePhotoUrl(photo.id),
+    label: `${photo.typeLabel}${photo.createdAt ? ` - ${compactDate(photo.createdAt)}` : ""}`,
+  }));
+
+  if (photosApi.loading) return <p className="muted">{t("Chargement...")}</p>;
+  if (!ordered.length) return <p className="muted">{t("Aucune photo.")}</p>;
+
+  return (
+    <>
+      {PHOTO_TYPES.map((type) => {
+        const group = ordered.filter((photo) => (photo.photoType || "before") === type.key);
+        if (!group.length) return null;
+        return (
+          <div key={type.key} className="maintenance-photo-group">
+            <span className="muted">{type.label}</span>
+            <div className="domus-photo-strip">
+              {group.map((photo) => (
+                <button
+                  type="button"
+                  className="domus-photo-thumb maintenance-photo-view"
+                  key={photo.id}
+                  onClick={() => setLightboxIndex(ordered.findIndex((p) => p.id === photo.id))}
+                  title={t("Agrandir")}
+                >
+                  <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || type.label} />
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {lightboxIndex !== null && (
+        <Lightbox items={items} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
+      )}
+    </>
+  );
+}
+
+function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost }) {
+  const sym = costSymbol ? costSymbol(ticket) : undefined;
+  const spent = spentEntries(ticket, sym);
+  return (
+    <Modal
+      title={ticket.title}
+      subtitle={`${ticket.propertyName || "-"}${ticket.unitName ? ` - ${ticket.unitName}` : ""}`}
+      icon={isUrgent(ticket) ? <AlertTriangle size={16} /> : <Wrench size={16} />}
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <FormSection icon={<Wrench size={14} />} title={t("Informations")}>
+          <div className="info-grid">
+            <DetailRow icon={<AlertTriangle size={14} />} label={t("Priorite")}
+              value={<span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || t("Moyen")}</span>} />
+            <DetailRow icon={<CheckCircle2 size={14} />} label={t("Statut")} value={STATUS_LABEL[ticket.status] || ticket.status} />
+            <DetailRow icon={<User size={14} />} label={t("Assigne")} value={assigneeName(ticket) || t("Non assigne")} />
+            <DetailRow icon={<CalendarDays size={14} />} label={t("Date prevue")} value={compactDate(ticket.scheduledDate)} />
+            <DetailRow icon={<CalendarDays size={14} />} label={t("Cree le")} value={compactDate(ticket.createdAt)} />
+            <DetailRow icon={<FolderKanban size={14} />} label={t("Reference")} value={`MNT-${ticket.id}`} />
+          </div>
+        </FormSection>
+        <FormSection icon={<Images size={14} />} title={t("Photos")}>
+          <TicketPhotoStrip ticket={ticket} />
+        </FormSection>
+        {ticket.description && (
+          <FormSection icon={<List size={14} />} title={t("Description")}>
+            <p className="maintenance-detail-description">{ticket.description}</p>
+          </FormSection>
+        )}
+        <FormSection icon={<CircleDollarSign size={14} />} title={t("Couts")}>
+          <div className="info-grid">
+            <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={money(ticket.estimatedCost, sym)} />
+            {spent.map((e) => (
+              <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={money(e.amount, e.symbol)} />
+            ))}
+          </div>
+          {!spent.length && <p className="muted">{t("Aucun cout enregistre.")}</p>}
+          <div className="maintenance-detail-cost-actions">
+            <button type="button" className="btn" onClick={() => onCost?.(ticket, "add")}>
+              <Plus size={14} /> {t("Ajouter une depense")}
+            </button>
+            <button type="button" className="btn" onClick={() => onCost?.(ticket, "view")}>
+              <Eye size={14} /> {t("Voir les couts")}
+            </button>
+          </div>
+        </FormSection>
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>{t("Fermer")}</button>
+        <button className="btn btn-primary" onClick={() => onEdit(ticket)}><Pencil size={14} /> {t("Modifier")}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -645,7 +798,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove, onPhotos
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div className="maintenance-menu-pop">
+        <div className="maintenance-menu-pop" onClick={(e) => e.stopPropagation()}>
           <button type="button" onClick={onPhotos}><Images size={14} /> {t("Photos")}</button>
           <button type="button" onClick={() => onCost?.("view")}><Eye size={14} /> {t("Voir les couts")}</button>
           <button type="button" onClick={() => onCost?.("add")}><CircleDollarSign size={14} /> {t("Enregistrer un cout")}</button>
@@ -660,7 +813,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove, onPhotos
   );
 }
 
-function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost, onPhotos }) {
+function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost, onPhotos, onOpen }) {
   if (!tickets.length) return <EmptyMaintenance />;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
@@ -674,7 +827,11 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
             const spent = spentEntries(ticket, sym);
             return (
             <tr key={ticket.id}>
-              <td style={{ fontWeight: 700 }}>{ticket.title}</td>
+              <td style={{ fontWeight: 700 }}>
+                {onOpen
+                  ? <button type="button" className="maintenance-card-open" onClick={() => onOpen(ticket)}>{ticket.title}</button>
+                  : ticket.title}
+              </td>
               <td>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</td>
               <td><span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || "Moyen"}</span></td>
               <td>{STATUS_LABEL[ticket.status] || ticket.status}</td>
@@ -738,11 +895,12 @@ function ticketToForm(ticket, defaultCurrencyId) {
     scheduledDate: ticket.scheduledDate ? String(ticket.scheduledDate).slice(0, 10) : "",
     estimatedCost: ticket.estimatedCost ?? "",
     currencyId: ticket.currencyId || defaultCurrencyId || "",
+    assigneeId: ticket.assigneeId ? String(ticket.assigneeId) : "",
     description: ticket.description || "",
   };
 }
 
-function TicketModal({ value, properties, units, currencyOptions, defaultCurrencyId, busy, error, onClose, onSave }) {
+function TicketModal({ value, properties, units, currencyOptions, defaultCurrencyId, assigneeOptions = [], busy, error, onClose, onSave }) {
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
@@ -791,6 +949,7 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
             <DomusPropertySelect label={t("Unite")} value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
             <DomusPropertySelect label={t("Priorite")} value={form.priority} onChange={(priority) => set({ priority })} options={[["low", t("Bas")], ["medium", t("Moyen")], ["high", t("Urgent")]]} />
             <DomusPropertySelect label={t("Statut")} value={form.status} onChange={(status) => set({ status })} options={[["open", t("Ouvert")], ["in_progress", t("En cours")], ["done", t("Resolu")]]} />
+            <DomusPropertySelect label={t("Assigne a")} value={form.assigneeId} onChange={(assigneeId) => set({ assigneeId })} options={[["", t("— Non assigne —")], ...assigneeOptions]} />
             <DomusPropertyField label={t("Date prevue")} type="date" value={form.scheduledDate} onChange={(scheduledDate) => set({ scheduledDate })} />
             <MoneyField label={t("Cout estime")} value={form.estimatedCost} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(estimatedCost) => set({ estimatedCost })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
@@ -821,7 +980,6 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     e.target.value = "";
@@ -856,7 +1014,6 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  capture="environment"
                   disabled={photoBusy}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -1027,7 +1184,6 @@ function PhotosModal({ ticket, onClose }) {
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      capture="environment"
                       disabled={busy}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1099,7 +1255,6 @@ function ResolveModal({ ticket, busy, error, onClose, onConfirm }) {
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                capture="environment"
                 disabled={photoBusy}
                 onChange={(e) => {
                   const file = e.target.files?.[0];

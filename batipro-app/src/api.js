@@ -105,7 +105,10 @@ export const api = {
   updateTask: (id, b) => jsonFetch(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteTask: (id) => jsonFetch(`/tasks/${id}`, { method: "DELETE" }),
   // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /batipro)
-  suppliers: () => jsonFetch("/supplier?query=all&type=construction", { base: API_ROOT }),
+  // `nature` restreint la liste a ce que fait le tiers : goods pour un achat de
+  // materiaux, subcontractor pour un lot sous-traite. Sans argument, tout le domaine.
+  suppliers: (nature) =>
+    jsonFetch(`/supplier?query=all&type=construction${nature ? `&nature=${nature}` : ""}`, { base: API_ROOT }),
   currencies: () => jsonFetch("/currency?query=all", { base: API_ROOT }),
   // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "batipro".
   forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>

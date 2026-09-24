@@ -3,7 +3,10 @@
 import React from "react";
 import { X } from "lucide-react";
 
-export function Autocomplete({ value, onChange, options, placeholder = "Choisirâ€¦", allowClear = true }) {
+// allowCustom : la liste devient une suggestion et non une contrainte â€” ce que
+// l utilisateur tape est conserve tel quel s il ne correspond a aucune option
+// (ex. un metier d artisan absent du referentiel).
+export function Autocomplete({ value, onChange, options, placeholder = "Choisirâ€¦", allowClear = true, allowCustom = false }) {
   const norm = (options || []).map((o) =>
     Array.isArray(o) ? { value: o[0], label: o[1] } : { value: o.value, label: o.label },
   );
@@ -11,7 +14,7 @@ export function Autocomplete({ value, onChange, options, placeholder = "Choisirâ
   const [query, setQuery] = React.useState("");
   const wrapRef = React.useRef(null);
   const selected = norm.find((o) => String(o.value) === String(value));
-  const display = open ? query : (selected ? selected.label : "");
+  const display = open ? query : (selected ? selected.label : (allowCustom ? (value ?? "") : ""));
   const q = query.trim().toLowerCase();
   const filtered = !open ? norm : (q ? norm.filter((o) => String(o.label).toLowerCase().includes(q)) : norm);
 
@@ -29,9 +32,10 @@ export function Autocomplete({ value, onChange, options, placeholder = "Choisirâ
         autoComplete="off"
         placeholder={placeholder}
         value={display}
-        onFocus={() => { setQuery(""); setOpen(true); }}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-        onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } else if (e.key === "Enter" && filtered.length) { e.preventDefault(); pick(filtered[0]); } }}
+        onFocus={() => { setQuery(allowCustom && !selected ? (value ?? "") : ""); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); if (allowCustom) onChange(e.target.value); }}
+        onBlur={() => { if (allowCustom) { setOpen(false); setQuery(""); } }}
+        onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } else if (e.key === "Enter") { e.preventDefault(); if (filtered.length) pick(filtered[0]); else if (allowCustom) { setOpen(false); setQuery(""); } } }}
         style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--domus-border, #d8d5cc)", fontSize: 14 }}
       />
       {allowClear && value && !open && (

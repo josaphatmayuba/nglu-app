@@ -153,6 +153,8 @@ export const api = {
   revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
   // Historique des communications (email + SMS) envoyées à ce locataire.
   tenantCommunications: (id) => get(`/tenants/${id}/communications`),
+  // Renvoi d'un SMS dont l'envoi a echoue (reprend destinataire + texte du log).
+  resendSmsLog: (logId) => post(`/sms-logs/${logId}/resend`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
@@ -167,6 +169,22 @@ export const api = {
   createOwner: (b) => post("/owners", b),
   updateOwner: (id, b) => put(`/owners/${id}`, b),
   deleteOwner: (id) => del(`/owners/${id}`),
+
+  // Délégués : mandataires chargés du suivi de loyer. Ils reçoivent les mêmes
+  // annonces que le propriétaire sur le périmètre qui leur est affecté.
+  delegates: () => get("/delegates"),
+  delegateRentChecks: (answer) => get(`/delegate-rent-checks${answer ? `?answer=${encodeURIComponent(answer)}` : ""}`),
+  // Personnes designables comme delegue : employes + sous-traitants/prestataires
+  // du registre central, en une seule liste (on ignore souvent, au moment de
+  // designer, si la personne est enregistree comme employe ou comme tiers).
+  delegateCandidates: () => get("/delegates/candidates"),
+  delegate: (id) => get(`/delegates/${id}`),
+  createDelegate: (b) => post("/delegates", b),
+  updateDelegate: (id, b) => put(`/delegates/${id}`, b),
+  deleteDelegate: (id) => del(`/delegates/${id}`),
+  addDelegateAssignment: (id, b) => post(`/delegates/${id}/assignments`, b),
+  updateDelegateAssignment: (id, assignmentId, b) => put(`/delegates/${id}/assignments/${assignmentId}`, b),
+  removeDelegateAssignment: (id, assignmentId) => del(`/delegates/${id}/assignments/${assignmentId}`),
 
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
@@ -221,6 +239,9 @@ export const api = {
     return multipartFetch("/payments", form);
   },
   sendReminder: (b) => post("/payments/reminder", b),
+  // Preavis pour defaut de paiement : reserve aux baux qui doivent plus d'un
+  // mois de loyer (le backend revalide le seuil et refuse sinon).
+  sendDefaultNotice: (leaseId) => post("/payments/default-notice", { leaseId }),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
@@ -244,7 +265,22 @@ export const api = {
   updateMaintenance: (id, b) => put(`/maintenance/${id}`, b),
   deleteMaintenance: (id) => del(`/maintenance/${id}`),
   // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /property-management)
-  suppliers: () => jsonFetch("/supplier?query=all&type=real_estate", { method: "GET", base: API_ROOT }),
+  // `nature` restreint la liste a ce que fait le tiers (service, subcontractor,
+  // goods) ; sans argument on garde tous les tiers du domaine immobilier, comme avant.
+  suppliers: (nature) =>
+    jsonFetch(`/supplier?query=all&type=real_estate${nature ? `&nature=${nature}` : ""}`, { method: "GET", base: API_ROOT }),
+  // Ecriture sur le referentiel central. `domains`/`natures` sont multi-valeurs :
+  // un sous-traitant cree ici reste UN seul tiers, visible aussi dans BatiPro
+  // s il porte ce domaine. La suppression est un soft delete (status=false).
+  createSupplier: (b) => jsonFetch("/supplier", { method: "POST", body: b, base: API_ROOT }),
+  updateSupplier: (id, b) => jsonFetch(`/supplier/${id}`, { method: "PUT", body: b, base: API_ROOT }),
+  setSupplierStatus: (id, status) =>
+    jsonFetch(`/supplier/${id}`, { method: "PATCH", body: { status }, base: API_ROOT }),
+  // Inscription au carnet BatiPro (route /api/batipro, hors prefixe Domus). Sert
+  // a rendre un artisan saisi ici reutilisable tel quel sur un chantier : la fiche
+  // part sans projet ni montant, que BatiPro renseigne en l affectant.
+  registerBatiproSubcontractor: (b) =>
+    jsonFetch("/batipro/subcontractors", { method: "POST", body: b, base: API_ROOT }),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
@@ -508,6 +544,31 @@ export const publicApi = {
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>
     publicFetch(`/tenant-portal/change-request?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+
+  // Portail delegue : le mandataire repond a une relance de loyer en retard.
+  // La reponse "paye" cree une ligne de paiement EN ATTENTE que le gestionnaire
+  // valide ensuite depuis le CRM — jamais un encaissement direct.
+  delegateRentCheck: (token) => publicFetch(`/delegate-portal?token=${encodeURIComponent(token)}`),
+  // Envoi multipart (une photo de preuve possible) : publicFetch force un
+  // Content-Type JSON, on passe donc par un fetch dedie qui laisse le
+  // navigateur poser lui-meme la frontiere multipart.
+  submitDelegateRentCheck: async (token, { answer, amount, comment, proof } = {}) => {
+    const form = new FormData();
+    form.append("answer", answer || "");
+    if (amount != null && amount !== "") form.append("amount", String(amount));
+    if (comment) form.append("comment", comment);
+    if (proof) form.append("proof", proof);
+    const res = await fetch(`${API_ROOT}/delegate-portal?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(cleanApiError(res, body));
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
 
   // Enquête de prélocation (Québec) — dossier public sans authentification (token opaque).
   prescreening: (token) => publicFetch(`/tenant-prescreening?token=${encodeURIComponent(token)}`),

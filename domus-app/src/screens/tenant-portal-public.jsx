@@ -26,6 +26,44 @@ function monthLabel(dateLike) {
   return `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Date de bail en toutes lettres ("8 juillet 2026"), plus lisible qu'un
+// 08/07/2026 pour un locataire. Les bornes d'un bail arrivent en date seule
+// ("2026-07-08") : `new Date` les lit alors comme minuit UTC, et un affichage
+// local decalerait au jour precedent a l'ouest de Greenwich. On formate donc
+// ces valeurs a partir de leurs composantes, sans fuseau.
+function shortDate(dateLike) {
+  const dateOnly = typeof dateLike === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateLike.trim());
+  if (dateOnly) {
+    const [y, m, day] = dateLike.trim().split("-");
+    const month = MONTHS_FR[Number(m) - 1];
+    if (!month) return null;
+    return `${Number(day)} ${month} ${y}`;
+  }
+  const d = parseDate(dateLike);
+  return d ? `${d.getDate()} ${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}` : null;
+}
+
+// Libelle d'un contrat cote locataire : l'id technique (#2) ne lui parle pas,
+// on affiche le bien (et l'unite) du bail rattache, avec repli sur la
+// reference du bail puis sur l'id si le bail n'est pas resolvable.
+function contractTitle(contract, lease) {
+  const place = [lease?.propertyName, lease?.unitName].filter(Boolean).join(", ");
+  if (place) return `${t("Bail")} — ${place}`;
+  if (lease?.reference) return `${t("Bail")} ${lease.reference}`;
+  return `${t("Contrat")} #${contract.id}`;
+}
+
+// Sous-ligne : reference du bail + periode couverte, selon ce qui est connu.
+function contractSubtitle(lease) {
+  const parts = [];
+  if (lease?.reference) parts.push(`${t("Réf.")} ${lease.reference}`);
+  const from = shortDate(lease?.startDate);
+  const to = shortDate(lease?.endDate);
+  if (from && to) parts.push(`${t("du")} ${from} ${t("au")} ${to}`);
+  else if (from) parts.push(`${t("depuis le")} ${from}`);
+  return parts.join(" · ");
+}
+
 function daysUntil(dateLike) {
   const d = parseDate(dateLike);
   if (!d) return null;
@@ -375,12 +413,21 @@ export function TenantPortalPublic({ token }) {
                     </div>
                   </div>
                   <div className="onb-card-body">
-                    {(data.contracts || []).map((c) => (
+                    {(data.contracts || []).map((c) => {
+                      // Le bail du contrat : on ne suppose pas que c'est le bail
+                      // actif, on relie par leaseId quand c'est possible.
+                      const lease = (data.leases || []).find((l) => String(l.id) === String(c.leaseId))
+                        || (String(c.leaseId) === String(activeLease?.id) ? activeLease : null);
+                      const subtitle = contractSubtitle(lease);
+                      return (
                       <div key={c.id} className="portail-hist-row">
                         <FileSignature size={14} className="muted" />
-                        <span className="flex-1">{t("Contrat")} #{c.id}</span>
+                        <span className="flex-1">
+                          {contractTitle(c, lease)}
+                          {subtitle ? <small className="portail-hist-sub muted">{subtitle}</small> : null}
+                        </span>
                         <span className="chip chip-emerald">
-                          <CheckCircle2 size={12} /> {c.signedAt ? monthLabel(c.signedAt) : t("Signé")}
+                          <CheckCircle2 size={12} /> {c.signedAt ? `${t("Signé")} ${monthLabel(c.signedAt)}` : t("Signé")}
                         </span>
                         {/* Un seul bouton : le scan du bail papier si le gestionnaire
                             l'a numérisé, sinon la version signée électroniquement. */}
@@ -397,7 +444,8 @@ export function TenantPortalPublic({ token }) {
                           </button>
                         ) : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}

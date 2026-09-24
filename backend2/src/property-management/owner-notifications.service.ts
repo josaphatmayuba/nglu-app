@@ -20,12 +20,14 @@
 // (table email_templates, eventType ci-dessus). Sans template actif, le texte
 // par defaut code ici est utilise.
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   currencies,
   customers,
   emailTemplates,
+  realEstateDelegateAssignments,
+  realEstateDelegates,
   realEstateLeases,
   realEstateOwners,
   realEstateProperties,
@@ -34,6 +36,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { CompatService } from "../compat/compat.service";
+import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
 
@@ -51,6 +54,7 @@ export class OwnerNotificationsService implements OnModuleInit {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly sms: CompatService,
+    private readonly delegatePortal: DelegatePortalService,
     private readonly ownerPortal: OwnerPortalService,
     private readonly tenantPortal: TenantPortalService,
   ) {}
@@ -111,7 +115,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. " +
         "Bienvenue dans votre nouveau logement : {address}, appartement {unit}. " +
         "Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). " +
-        "Pour toute question, contactez-nous au {contactPhone}. — Votre gestionnaire",
+        "Pour toute question, contactez {contacts}. — {companyName}",
     },
     {
       name: "Quittance / paiement recu",
@@ -129,7 +133,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), " +
         "d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a " +
         "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
-        "Pour tout reglement ou question, contactez {companyName}{contactPhone}. — {companyName}",
+        "Pour tout reglement ou question, contactez {contacts}. — {companyName}",
     },
     {
       name: "Rappel de loyer — personne de contact",
@@ -138,7 +142,33 @@ export class OwnerNotificationsService implements OnModuleInit {
       body:
         "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour " +
         "{address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser " +
-        "ce paiement aupres de {companyName}{contactPhone}. — {companyName}",
+        "ce paiement aupres de {contacts}. — {companyName}",
+    },
+    {
+      name: "Preavis pour defaut de paiement — locataire",
+      eventType: "default_notice",
+      subject: "Preavis pour defaut de paiement — bail {reference}",
+      body:
+        "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour " +
+        "{address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis " +
+        "pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+    },
+    {
+      name: "Preavis defaut de paiement — personne de contact",
+      eventType: "default_notice_contact",
+      subject: "Preavis pour defaut de paiement de {tenantName}",
+      body:
+        "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois " +
+        "de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de " +
+        "paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+    },
+    {
+      name: "Proprietaire — preavis pour defaut de paiement",
+      eventType: "default_notice_owner",
+      subject: "Preavis notifie — bail {reference}",
+      body:
+        "Preavis pour defaut de paiement notifie a {tenantName} ({property}) : " +
+        "{monthsBehind} mois impayes, {amount}. {url}",
     },
     {
       name: "Proprietaire — nouveau dossier locataire",
@@ -158,12 +188,20 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}, caut. {deposit}. {url}",
     },
     {
+      name: "Delegue — loyer en retard a confirmer",
+      eventType: "payment_overdue_delegate",
+      subject: "Loyer en retard a verifier",
+      body:
+        "{tenantName} doit {amount} pour {property}, {daysLate} j de retard. " +
+        "A-t-il paye ? Repondez ici : {url}",
+    },
+    {
       name: "Fin de bail — locataire",
       eventType: "lease_expiring",
       subject: "Votre bail se termine le {endDate}",
       body:
         "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
-        "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+        "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
     },
     {
       name: "Proprietaire — fin de bail",
@@ -191,35 +229,176 @@ export class OwnerNotificationsService implements OnModuleInit {
   ];
 
   /**
-   * Insere les modeles manquants au demarrage. Idempotent : un evenement qui a
-   * deja une ligne (meme modifiee, meme desactivee) n'est jamais touche — on ne
-   * doit pas ecraser la personnalisation d'un gestionnaire a chaque redemarrage.
+   * Reference de contact sortante : les anciens modeles renvoyaient le
+   * locataire vers le numero generique de la societe. Elle est reecrite au
+   * demarrage vers {contacts} (proprietaire + gestionnaire du bien).
+   */
+  private static readonly LEGACY_CONTACT_FRAGMENTS: Array<[RegExp, string]> = [
+    [/\{companyName\}\{contactPhone\}/g, "{contacts}"],
+    [/contactez-nous au \{contactPhone\}/g, "contactez {contacts}"],
+    [/\{contactPhone\}/g, "{contacts}"],
+  ];
+
+  /**
+   * Insere les modeles manquants au demarrage, et remplace dans les modeles
+   * existants la seule reference au contact generique de la societe par
+   * {contacts}. Idempotent : hors ce fragment, un modele deja en base (meme
+   * modifie, meme desactive) n'est jamais touche — on ne doit pas ecraser la
+   * personnalisation d'un gestionnaire a chaque redemarrage.
    * Best-effort : une erreur ici ne doit pas empecher l'application de demarrer.
    */
   async onModuleInit() {
     try {
       const existing = await this.db
-        .select({ eventType: emailTemplates.eventType })
+        .select({ id: emailTemplates.id, eventType: emailTemplates.eventType, body: emailTemplates.body })
         .from(emailTemplates);
       const known = new Set(existing.map((r) => r.eventType).filter(Boolean));
 
       const missing = OwnerNotificationsService.DEFAULT_TEMPLATES.filter((t) => !known.has(t.eventType));
-      if (!missing.length) return;
+      if (missing.length) {
+        await this.db.insert(emailTemplates).values(
+          missing.map((t) => ({
+            name: t.name,
+            subject: t.subject,
+            body: t.body,
+            eventType: t.eventType,
+            status: "true",
+          })),
+        );
+        this.logger.log(`Message templates seeded: ${missing.map((t) => t.eventType).join(", ")}`);
+      }
 
-      await this.db.insert(emailTemplates).values(
-        missing.map((t) => ({
-          name: t.name,
-          subject: t.subject,
-          body: t.body,
-          eventType: t.eventType,
-          status: "true",
-        })),
-      );
-      this.logger.log(`Message templates seeded: ${missing.map((t) => t.eventType).join(", ")}`);
+      for (const row of existing) {
+        const body = row.body || "";
+        let next = body;
+        for (const [re, to] of OwnerNotificationsService.LEGACY_CONTACT_FRAGMENTS) {
+          next = next.replace(re, to);
+        }
+        if (next === body) continue;
+        await this.db
+          .update(emailTemplates)
+          .set({ body: next })
+          .where(eq(emailTemplates.id, row.id));
+        this.logger.log(`Message template contact placeholder migrated: ${row.eventType}`);
+      }
     } catch (error) {
       this.logger.warn(
         `Message templates seeding skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Delegues a prevenir pour un bien, pour un evenement donne.
+   *
+   * Un delegue est joint quand il suit ce bien precis (scope 'property') OU
+   * tout le portefeuille de son proprietaire (scope 'owner') : la seconde
+   * portee le rattache automatiquement aux biens acquis plus tard, sans
+   * reaffectation. Le drapeau d'abonnement filtre par evenement, pour ne pas
+   * inonder un mandataire engage seulement sur les retards.
+   *
+   * Comme pour les proprietaires, un delegue sans telephone est saute en
+   * silence : l'operation metier ne doit jamais echouer sur un envoi.
+   */
+  private async resolveDelegatesForProperty(
+    propertyId: number,
+    orgId: number,
+    event: "lease" | "overdue" | "payment",
+  ): Promise<OwnerTarget[]> {
+    try {
+      const [property] = await this.db
+        .select({ ownerId: realEstateProperties.ownerId })
+        .from(realEstateProperties)
+        .where(and(
+          eq(realEstateProperties.id, propertyId),
+          eq(realEstateProperties.organizationId, orgId),
+        ))
+        .limit(1);
+      if (!property) return [];
+
+      const flag =
+        event === "lease"
+          ? realEstateDelegateAssignments.notifyLease
+          : event === "overdue"
+            ? realEstateDelegateAssignments.notifyOverdue
+            : realEstateDelegateAssignments.notifyPayment;
+
+      // Le bien lui-meme, ou le portefeuille de son proprietaire quand il en a un.
+      const scopeMatch = property.ownerId
+        ? or(
+            and(
+              eq(realEstateDelegateAssignments.scopeType, "property"),
+              eq(realEstateDelegateAssignments.scopeId, propertyId),
+            ),
+            and(
+              eq(realEstateDelegateAssignments.scopeType, "owner"),
+              eq(realEstateDelegateAssignments.scopeId, Number(property.ownerId)),
+            ),
+          )
+        : and(
+            eq(realEstateDelegateAssignments.scopeType, "property"),
+            eq(realEstateDelegateAssignments.scopeId, propertyId),
+          );
+
+      const rows = await this.db
+        .select({
+          id: realEstateDelegates.id,
+          displayName: realEstateDelegates.displayName,
+          phone: realEstateDelegates.phone,
+          phone2: realEstateDelegates.phone2,
+        })
+        .from(realEstateDelegateAssignments)
+        .innerJoin(
+          realEstateDelegates,
+          eq(realEstateDelegates.id, realEstateDelegateAssignments.delegateId),
+        )
+        .where(and(
+          eq(realEstateDelegateAssignments.organizationId, orgId),
+          eq(realEstateDelegateAssignments.isActive, 1),
+          eq(realEstateDelegates.organizationId, orgId),
+          eq(realEstateDelegates.isActive, 1),
+          eq(flag, 1),
+          scopeMatch,
+        ));
+
+      // Un delegue cumulant les deux portees (le bien ET son proprietaire)
+      // remonte deux fois : il ne doit recevoir qu'un seul SMS.
+      const seen = new Set<number>();
+      const targets: OwnerTarget[] = [];
+      for (const row of rows) {
+        const id = Number(row.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const phone = (row.phone || row.phone2 || "").trim();
+        if (!phone) continue;
+        targets.push({ id, name: row.displayName, phone, propertyId });
+      }
+      return targets;
+    } catch (error) {
+      this.logger.warn(
+        `resolveDelegatesForProperty failed (property ${propertyId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Relaie aux delegues du bien le message deja rendu pour le proprietaire.
+   * Le texte est identique : un seul modele a maintenir dans Reglages, et le
+   * delegue lit exactement ce que lit le bailleur. Best-effort, comme send().
+   */
+  private async sendToDelegates(
+    propertyId: number,
+    orgId: number,
+    event: "lease" | "overdue" | "payment",
+    message: string,
+    smsType: string,
+    relatedType: string,
+    relatedId: number,
+  ) {
+    const delegates = await this.resolveDelegatesForProperty(propertyId, orgId, event);
+    for (const delegate of delegates) {
+      await this.send(delegate, message, smsType, relatedType, relatedId, orgId);
     }
   }
 
@@ -285,6 +464,53 @@ export class OwnerNotificationsService implements OnModuleInit {
   }
 
   /**
+   * Contacts a donner au LOCATAIRE pour un bien : le proprietaire (bailleur)
+   * et le gestionnaire assigne a ce bien (delegue du suivi de loyer).
+   *
+   * Le locataire ne doit plus etre renvoye vers un numero d'entreprise
+   * generique : il appelle les personnes reellement en charge de SON immeuble.
+   * Le gestionnaire retenu est le premier delegue actif abonne aux retards,
+   * qu'il suive ce bien precis ou tout le portefeuille du proprietaire.
+   *
+   * Best-effort : un bien sans proprietaire joignable ou sans gestionnaire
+   * renvoie simplement des chaines vides — les placeholders disparaissent alors
+   * du message via tidy(), plutot que de bloquer l'envoi.
+   */
+  async propertyContactVars(
+    propertyId: number | null | undefined,
+    orgId: number,
+  ): Promise<{ ownerContact: string; managerContact: string; contacts: string }> {
+    const empty = { ownerContact: "", managerContact: "", contacts: "" };
+    if (!propertyId) return empty;
+    try {
+      const [owner, delegates] = await Promise.all([
+        this.resolveOwnerForProperty(Number(propertyId), orgId).catch(() => null),
+        this.resolveDelegatesForProperty(Number(propertyId), orgId, "overdue"),
+      ]);
+
+      const label = (t: OwnerTarget | null | undefined) =>
+        t && t.phone ? `${t.name} au ${t.phone}` : "";
+      const ownerContact = label(owner);
+      // Le gestionnaire est parfois aussi le proprietaire : on ne repete pas
+      // le meme numero deux fois dans un SMS de 160 caracteres.
+      const manager = delegates.find((d) => !owner || d.phone !== owner.phone);
+      const managerContact = label(manager);
+
+      const parts = [
+        ownerContact ? `proprietaire ${ownerContact}` : "",
+        managerContact ? `gestionnaire ${managerContact}` : "",
+      ].filter(Boolean);
+
+      return { ownerContact, managerContact, contacts: parts.join(", ") };
+    } catch (error) {
+      this.logger.warn(
+        `propertyContactVars failed (property ${propertyId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return empty;
+    }
+  }
+
+  /**
    * Texte du message : template configure (Reglages > Messages & notifications)
    * si present, sinon le defaut fourni. Les placeholders sont substitues dans
    * les deux cas. Public : PropertyManagementService et ContractsService s'en
@@ -334,7 +560,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     // car supprimer un fragment peut en exposer un autre juste avant.
     const orphans = [
       // "<mot d'introduction>" suivi immediatement d'une ponctuation de fin
-      /\s*\b(chez|revenu|contact|proprietaire|bailleur|appartement|appt|unite|de|a|au|pour|du|avec)\b\s*:?\s*(?=[.,;)]|$)/gi,
+      /\s*\b(chez|revenu|contact|contactez|contactez-nous|proprietaire|bailleur|appartement|appt|unite|de|a|au|pour|du|avec)\b\s*:?\s*(?=[.,;)]|$)/gi,
       // "Marie a ." / "Marie(e) avec ." -> mention retiree quand le conjoint
       // n'est pas renseigne. Le lookbehind sur un debut de phrase evite de
       // supprimer le PRENOM "Marie" dans "Bonjour Marie, ...".
@@ -401,6 +627,51 @@ export class OwnerNotificationsService implements OnModuleInit {
       this.logger.warn(
         `Owner SMS error (${smsType}, owner ${target.id}): ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+  /**
+   * Avis de retard aux DELEGUES du bien, avec lien de confirmation.
+   *
+   * Message distinct de celui du proprietaire : le bailleur est informe, le
+   * delegue est interroge. Chaque delegue recoit SON propre lien — un token
+   * partage permettrait a l un de repondre a la place de l autre et rendrait
+   * la tracabilite inutilisable.
+   *
+   * Best-effort de bout en bout : un delegue dont le lien ne peut etre genere
+   * est saute, la boucle de rappels n est jamais interrompue.
+   */
+  private async notifyOverdueDelegates(
+    leaseId: number,
+    propertyId: number,
+    orgId: number,
+    baseVars: Record<string, string>,
+  ) {
+    const delegates = await this.resolveDelegatesForProperty(propertyId, orgId, "overdue");
+    for (const delegate of delegates) {
+      try {
+        const { url } = await this.delegatePortal.generateRentCheckLink(
+          delegate.id,
+          leaseId,
+          orgId,
+          propertyId,
+        );
+        const fallback =
+          "{tenantName} doit {amount} pour {property}, {daysLate} j de retard. " +
+          "A-t-il paye ? Repondez ici : {url}";
+        const message = await this.renderMessage(
+          "payment_overdue_delegate",
+          fallback,
+          { ...baseVars, delegateName: delegate.name, url },
+        );
+        await this.send(
+          delegate, message, "payment_overdue_delegate", "real-estate-lease", leaseId, orgId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `notifyOverdueDelegates failed (lease ${leaseId}, delegate ${delegate.id}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
   }
 
@@ -689,6 +960,10 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}, caut. {deposit}. {url}";
       const message = await this.renderMessage("lease_created_owner", fallback, vars);
       await this.send(owner, message, "lease_created_owner", "real-estate-lease", leaseId, orgId);
+      await this.sendToDelegates(
+        Number(lease.propertyId), orgId, "lease", message,
+        "lease_created_delegate", "real-estate-lease", leaseId,
+      );
     } catch (error) {
       this.logger.warn(
         `notifyLeaseCreated failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -843,10 +1118,63 @@ export class OwnerNotificationsService implements OnModuleInit {
         "{daysLate} j de retard. {url}";
       const message = await this.renderMessage("payment_overdue_owner", fallback, vars);
       await this.send(owner, message, "payment_overdue_owner", "real-estate-lease", leaseId, orgId);
+      // Le delegue ne recoit PAS le message du proprietaire : le sien porte une
+      // question a laquelle il doit repondre (le locataire a-t-il paye ?) et un
+      // lien d action, la ou celui du bailleur est purement informatif.
+      await this.notifyOverdueDelegates(leaseId, propertyId, orgId, vars);
     } catch (error) {
       this.logger.warn(
         `notifyPaymentOverdue failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
       );
+    }
+  }
+
+
+  /**
+   * PREAVIS POUR DEFAUT DE PAIEMENT notifie au locataire : le bailleur (et les
+   * gestionnaires delegues du bien) sont informes que la procedure a ete
+   * engagee sur leur bien. Best-effort : un echec ici ne doit pas faire
+   * echouer le preavis deja envoye au locataire, d'ou le retour booleen plutot
+   * qu'une exception.
+   *
+   * Les variables sont fournies par l'appelant (PropertyManagementService), qui
+   * a deja calcule les mois dus et le solde ; on ne les recalcule pas ici pour
+   * que le proprietaire lise exactement les memes chiffres que le locataire.
+   */
+  async notifyDefaultNotice(
+    leaseId: number,
+    propertyId: number,
+    tenantId: number,
+    tenantVars: Record<string, string>,
+    orgId: number,
+  ): Promise<boolean> {
+    try {
+      const owner = await this.resolveOwnerForProperty(propertyId, orgId);
+      if (!owner) return false;
+
+      const { url } = await this.ownerPortal.generateOwnerPortalLink(
+        owner.id,
+        tenantId,
+        orgId,
+        propertyId,
+      );
+
+      const vars = { ...tenantVars, ownerName: owner.name, url };
+      const fallback =
+        "Preavis pour defaut de paiement notifie a {tenantName} ({property}) : " +
+        "{monthsBehind} mois impayes, {amount}. {url}";
+      const message = await this.renderMessage("default_notice_owner", fallback, vars);
+      await this.send(owner, message, "default_notice_owner", "real-estate-lease", leaseId, orgId);
+      await this.sendToDelegates(
+        propertyId, orgId, "overdue", message,
+        "default_notice_delegate", "real-estate-lease", leaseId,
+      );
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `notifyDefaultNotice failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
     }
   }
 
@@ -910,6 +1238,10 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer {amount}. {url}";
       const message = await this.renderMessage("lease_expiring_owner", fallback, vars);
       await this.send(owner, message, "lease_expiring_owner", "real-estate-lease", leaseId, orgId);
+      await this.sendToDelegates(
+        propertyId, orgId, "lease", message,
+        "lease_expiring_delegate", "real-estate-lease", leaseId,
+      );
     } catch (error) {
       this.logger.warn(
         `notifyLeaseExpiring failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -968,6 +1300,12 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}";
       const message = await this.renderMessage("payment_received_owner", fallback, vars);
       await this.send(owner, message, "payment_received_owner", "real-estate-rent-payment", paymentId, orgId);
+      if (owner.propertyId) {
+        await this.sendToDelegates(
+          owner.propertyId, orgId, "payment", message,
+          "payment_received_delegate", "real-estate-rent-payment", paymentId,
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `notifyPaymentReceived failed (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`,

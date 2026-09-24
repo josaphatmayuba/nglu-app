@@ -1884,6 +1884,48 @@
       "when": 1781071200044,
       "tag": "0293_domus_lease_expiry_reminder",
       "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "5",
+      "when": 1781071200045,
+      "tag": "0294_domus_delegates",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "5",
+      "when": 1781071200046,
+      "tag": "0295_domus_delegate_rent_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "5",
+      "when": 1781071200047,
+      "tag": "0296_domus_lease_default_notice",
+      "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "5",
+      "when": 1781071200048,
+      "tag": "0297_supplier_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "5",
+      "when": 1781071200049,
+      "tag": "0298_domus_delegate_supplier",
+      "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "5",
+      "when": 1781071200050,
+      "tag": "0299_supplier_trade",
+      "breakpoints": true
     }
   ]
 }

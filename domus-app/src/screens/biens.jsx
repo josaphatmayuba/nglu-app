@@ -1420,11 +1420,11 @@ export function DomusPropertyField({ label, value, onChange, type = "text", requ
   );
 }
 
-export function DomusPropertySelect({ label, value, options, onChange, required = false }) {
+export function DomusPropertySelect({ label, value, options, onChange, required = false, allowCustom = false, placeholder = "Choisir…" }) {
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
-      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder="Choisir…" />
+      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder={placeholder} allowCustom={allowCustom} />
     </label>
   );
 }

@@ -101,6 +101,7 @@ const NAV = [
   { id: "employes", label: "Employés", icon: "users" },
   { id: "contrats", label: "Contrats", icon: "fileText" },
   { id: "dossiers", label: "Dossiers & documents", icon: "folder" },
+  { id: "prestataires", label: "Prestataires externes", icon: "truck" },
   { section: "Temps" },
   { id: "presences", label: "Présences & pointage", icon: "fingerprint" },
   { id: "conges", label: "Congés & absences", icon: "palmtree" },
@@ -1322,6 +1323,7 @@ function App() {
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} onNewDept={() => setModal({ kind: "department" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
     selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
+    prestataires: <PrestatairesExternes />,
     parametres: <Parametres />,
   };
 
@@ -3096,6 +3098,88 @@ function Recrutement({ data, reload, setModal }) {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+/* Prestataires externes — LECTURE SEULE.
+   Un sous-traitant ou un prestataire facture : il n'a ni contrat de travail, ni
+   paie, ni conges, et n'entre donc pas dans l'effectif ni dans la masse salariale.
+   Cet ecran repond a une seule question : qui travaille pour l'organisation sans
+   etre employe. Toute modification se fait dans le registre central (compta), qui
+   est la source unique partagee avec BatiPro et Domus — d'ou l'absence de tout
+   bouton d'action ici, volontaire et non un oubli.
+   Le journalier de chantier n'y figure pas : il est paye a la journee, ne facture
+   pas, et vit dans batipro_workers avec son pointage. */
+function PrestatairesExternes() {
+  const [rows, setRows] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [search, setSearch] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+    api.externalProviders()
+      .then((r) => {
+        if (!alive) return;
+        const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
+        setRows((arr || []).filter((x) => String(x.status) === "true"));
+      })
+      .catch((e) => { if (alive) { setError(String(e.message || e)); setRows([]); } });
+    return () => { alive = false; };
+  }, []);
+
+  const natureLabel = (codes) => {
+    const map = { subcontractor: "Sous-traitant", service: "Prestataire", goods: "Fournisseur" };
+    const list = (codes || []).map((c) => map[c]).filter(Boolean);
+    return list.length ? list.join(" · ") : "Non classé";
+  };
+  const key = search.trim().toLowerCase();
+  const filtered = (rows || []).filter((r) => !key
+    || String(r.name || "").toLowerCase().includes(key)
+    || String(r.phone || "").toLowerCase().includes(key)
+    || String(r.contactPerson || "").toLowerCase().includes(key));
+  const subs = filtered.filter((r) => (r.natures || []).includes("subcontractor")).length;
+  const servs = filtered.filter((r) => (r.natures || []).includes("service")).length;
+
+  return (
+    <>
+      <PageHead eyebrow="Hors effectif · registre central partagé" title="Prestataires externes" />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="card pad" style={{ marginBottom: 16, fontSize: 12.5, color: "var(--ink-600)" }}>
+        Ces tiers <strong>facturent</strong> leurs prestations : ils n'ont ni contrat de travail, ni paie, ni congés,
+        et ne comptent pas dans l'effectif. Cette liste est en <strong>lecture seule</strong> — les fiches se modifient
+        dans le registre central (Comptabilité › Fournisseurs), partagé avec BâtiPro et Domus.
+      </div>
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label="Tiers externes" value={filtered.length} />
+        <Mini label="Sous-traitants" value={subs} />
+        <Mini label="Prestataires de service" value={servs} />
+        <Mini label="Non classés" value={filtered.filter((r) => !(r.natures?.length)).length} />
+      </div>
+      <div className="card pad" style={{ marginBottom: 12 }}>
+        <input className="input" placeholder="Rechercher (nom, téléphone, contact…)" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+      <div className="card pad">
+        <div className="section-head">
+          <h3 className="block-title font-display">Liste des tiers externes</h3>
+          <span className="tiny">{rows ? `${filtered.length} tiers` : "Chargement…"}</span>
+        </div>
+        {rows && filtered.length === 0 && (
+          <EmptyState title={key ? "Aucun tiers ne correspond" : "Aucun prestataire externe classé"} />
+        )}
+        {filtered.map((r) => (
+          <div className="row" key={r.id}>
+            <span className="row-ic" style={{ background: "var(--ink-100)", color: "var(--ink-600)" }}>
+              <Icon name={(r.partyType || "company") === "company" ? "truck" : "circleUser"} />
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 500, fontSize: 13 }}>{r.name}</div>
+              <div className="tiny muted">{r.phone || "—"}{r.contactPerson ? ` · ${r.contactPerson}` : ""}</div>
+            </div>
+            <span className="chip ink">{natureLabel(r.natures)}</span>
+          </div>
+        ))}
+      </div>
     </>
   );
 }

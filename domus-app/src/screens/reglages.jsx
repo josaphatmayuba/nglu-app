@@ -473,6 +473,11 @@ const MESSAGE_EVENTS = [
   ["contract_signed", "Bienvenue / contrat signé"],
   ["payment_received", "Paiement reçu / quittance"],
   ["payment_reminder", "Rappel de loyer / retard"],
+  // Preavis pour defaut de paiement (declenche a la main depuis Loyers, au-dela
+  // d'un mois de loyer du) : un texte par destinataire.
+  ["default_notice", "Préavis défaut de paiement · locataire"],
+  ["default_notice_contact", "Préavis défaut de paiement · personne de contact"],
+  ["default_notice_owner", "Propriétaire · préavis défaut de paiement"],
   // Messages adressés au PROPRIÉTAIRE du bien (bailleur), pas au locataire.
   ["tenant_created_owner", "Propriétaire · nouveau dossier locataire"],
   ["lease_created_owner", "Propriétaire · nouveau bail"],
@@ -516,7 +521,7 @@ const DEFAULT_MESSAGES = [
       "Bonjour {tenantName}, félicitations ! Votre contrat de bail {reference} est bien signé et confirmé. " +
       "Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. " +
       "Votre location court du {startDate} au {endDate} ({duration}). " +
-      "Merci de votre confiance. Pour toute question, contactez-nous au {contactPhone}. — Votre gestionnaire",
+      "Merci de votre confiance. Pour toute question, contactez {contacts}. — {companyName}",
   },
   {
     name: "Quittance / paiement reçu",
@@ -534,7 +539,7 @@ const DEFAULT_MESSAGES = [
     body:
       "Bonjour {tenantName}, le loyer du bail {reference} ({amount}) est en retard. " +
       "Merci de régulariser dès que possible afin d'éviter l'annulation de votre contrat de location. " +
-      "Pour tout règlement ou question, contactez-nous. Merci de votre compréhension. — Votre gestionnaire",
+      "Pour tout règlement ou question, contactez {contacts}. Merci de votre compréhension. — {companyName}",
   },
   {
     name: "Propriétaire — nouveau dossier locataire",
@@ -554,12 +559,38 @@ const DEFAULT_MESSAGES = [
       "Loyer {amount}, caut. {deposit}. {url}",
   },
   {
+    name: "Préavis pour défaut de paiement — locataire",
+    eventType: "default_notice",
+    subject: "Préavis pour défaut de paiement — bail {reference}",
+    body:
+      "Bonjour {tenantName}, malgré nos rappels, {monthsBehind} mois de loyer restent impayés pour " +
+      "{address} (bail {reference}), soit {amount}. Sans régularisation de votre part, un préavis " +
+      "pour défaut de paiement sera déposé. Merci de contacter {contacts} sans tarder.",
+  },
+  {
+    name: "Préavis défaut de paiement — personne de contact",
+    eventType: "default_notice_contact",
+    subject: "Préavis pour défaut de paiement de {tenantName}",
+    body:
+      "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois " +
+      "de loyer ({amount}) restent impayés pour {address}. Sans régularisation, un préavis pour défaut de " +
+      "paiement sera déposé. Merci de l'inviter à contacter {contacts}.",
+  },
+  {
+    name: "Propriétaire — préavis pour défaut de paiement",
+    eventType: "default_notice_owner",
+    subject: "Préavis notifié — bail {reference}",
+    body:
+      "Préavis pour défaut de paiement notifié à {tenantName} ({property}) : " +
+      "{monthsBehind} mois impayés, {amount}. {url}",
+  },
+  {
     name: "Fin de bail — locataire",
     eventType: "lease_expiring",
     subject: "Votre bail se termine le {endDate}",
     body:
       "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
-      "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+      "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
   },
   {
     name: "Propriétaire — fin de bail",
@@ -673,7 +704,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contacts}"} (proprietaire du bien et gestionnaire qui lui est assigne, avec leurs telephones ; {"{ownerContact}"} et {"{managerContact}"} permettent de n'en citer qu'un), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}

@@ -11,6 +11,7 @@ export type SystemEmailType =
   | "contract_signature"
   | "contract_signed"
   | "payment_reminder"
+  | "default_notice"
   | "tenant_portal_welcome"
   | "password_reset"
   | "form_link"
@@ -52,6 +53,14 @@ const templates: Record<SystemEmailType, { subject: string; html: string }> = {
 <p>Nous vous rappelons que votre loyer pour le bail <strong>#{{leaseReference}}</strong> est en retard.</p>
 <p><strong>Montant dû:</strong> {{amount}}</p>
 <p>Merci de régulariser ce paiement au plus tôt possible.</p>
+<p>Cordialement,<br>L'équipe de gestion immobilière</p>`,
+  },
+  default_notice: {
+    subject: "Préavis pour défaut de paiement - Bail #{{leaseReference}}",
+    html: `<p>Bonjour {{tenantName}},</p>
+<p>Malgré nos rappels, votre loyer pour le bail <strong>#{{leaseReference}}</strong> reste impayé.</p>
+<p><strong>Montant dû:</strong> {{amount}}</p>
+<p>Sans régularisation de votre part, un préavis pour défaut de paiement sera déposé.</p>
 <p>Cordialement,<br>L'équipe de gestion immobilière</p>`,
   },
   tenant_portal_welcome: {

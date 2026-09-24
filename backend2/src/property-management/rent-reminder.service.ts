@@ -109,6 +109,13 @@ export class RentReminderService {
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
       // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
+      // Le locataire est renvoye vers les personnes en charge de SON immeuble
+      // (proprietaire + gestionnaire assigne), pas vers un numero d'entreprise
+      // generique ; on retombe sur le contact de la societe s'il n'y en a aucun.
+      const propertyContacts = await this.ownerNotifications.propertyContactVars(
+        lease.propertyId ? Number(lease.propertyId) : null,
+        lease.organizationId,
+      );
       const vars = {
         tenantName,
         firstName: lease.tenantFirstName || tenantName,
@@ -118,6 +125,9 @@ export class RentReminderService {
         daysLate: String(daysLate),
         companyName,
         contactPhone: contactLine,
+        ownerContact: propertyContacts.ownerContact,
+        managerContact: propertyContacts.managerContact,
+        contacts: propertyContacts.contacts || `${companyName}${contactLine}`,
         url: await this.tenantPortal.portalUrlForTenant(lease.tenantId, lease.organizationId),
       };
       const tenantMsg = await this.ownerNotifications.renderMessage(
@@ -125,7 +135,7 @@ export class RentReminderService {
         "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), " +
           "d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a " +
           "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
-          "Pour tout reglement ou question, contactez {companyName}{contactPhone}. Merci de votre comprehension. — {companyName}",
+          "Pour tout reglement ou question, contactez {contacts}. Merci de votre comprehension. — {companyName}",
         vars,
       );
 
@@ -154,7 +164,7 @@ export class RentReminderService {
           "payment_reminder_contact",
           "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour " +
             "{address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser " +
-            "ce paiement aupres de {companyName}{contactPhone}, afin d'eviter l'annulation de son contrat de location. " +
+            "ce paiement aupres de {contacts}, afin d'eviter l'annulation de son contrat de location. " +
             "Merci de votre comprehension. — {companyName}",
           vars,
         );
@@ -244,6 +254,11 @@ export class RentReminderService {
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
       const endLabel = this.ownerNotifications.shortDate(lease.endDate);
+      const contactLine = companyPhone ? ` au ${companyPhone}` : "";
+      const propertyContacts = await this.ownerNotifications.propertyContactVars(
+        lease.propertyId ? Number(lease.propertyId) : null,
+        lease.organizationId,
+      );
       const vars = {
         tenantName,
         firstName: lease.tenantFirstName || tenantName,
@@ -251,7 +266,10 @@ export class RentReminderService {
         address: place,
         endDate: endLabel,
         companyName,
-        contactPhone: companyPhone ? ` au ${companyPhone}` : "",
+        contactPhone: contactLine,
+        ownerContact: propertyContacts.ownerContact,
+        managerContact: propertyContacts.managerContact,
+        contacts: propertyContacts.contacts || `${companyName}${contactLine}`,
         url: "",
       };
 
@@ -259,7 +277,7 @@ export class RentReminderService {
         const msg = await this.ownerNotifications.renderMessage(
           "lease_expiring",
           "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
-            "Pour le renouveler ou nous informer de votre depart, contactez {companyName}{contactPhone}.",
+            "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
           vars,
         );
         await this.safeSms(lease.tenantPhone, msg, lease.leaseId, lease.organizationId);

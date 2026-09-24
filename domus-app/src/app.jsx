@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, HardHat, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
   ShieldCheck, Receipt, Landmark, BarChart3, HandCoins,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
@@ -13,6 +13,8 @@ import { Biens } from "./screens/biens.jsx";
 import { CarteBiens } from "./screens/carte.jsx";
 import { Locataires } from "./screens/locataires.jsx";
 import { Proprietaires } from "./screens/proprietaires.jsx";
+import { Delegues } from "./screens/delegues.jsx";
+import { SousTraitants } from "./screens/sous-traitants.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Depenses } from "./screens/depenses.jsx";
@@ -30,6 +32,7 @@ import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { TenantPortalPublic } from "./screens/tenant-portal-public.jsx";
 import { OwnerPortalPublic } from "./screens/owner-portal-public.jsx";
+import { DelegatePortalPublic } from "./screens/delegate-portal-public.jsx";
 import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
@@ -47,6 +50,8 @@ const NAV = [
     { key: "biens", label: "Propriétés", icon: Building },
     { key: "carte", label: "Carte des propriétés", icon: MapPin },
     { key: "proprietaires", label: "Propriétaires", icon: UserRound },
+    { key: "delegues", label: "Délégués", icon: UserRound },
+    { key: "sous-traitants", label: "Sous-traitants", icon: HardHat },
     { key: "locataires", label: "Locataires", icon: Users },
   ] },
   { sec: "Locatif", items: [
@@ -70,7 +75,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "depenses", "hypotheque", "prets", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "delegues", "sous-traitants", "depenses", "hypotheque", "prets", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -80,6 +85,8 @@ const SCREENS = {
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (nav, device) => <Locataires go={nav} device={device} />,
   proprietaires: (nav, device) => <Proprietaires go={nav} device={device} />,
+  delegues: (nav, device) => <Delegues go={nav} device={device} />,
+  "sous-traitants": () => <SousTraitants />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
@@ -202,6 +209,32 @@ function useOwnerPortalRoute() {
   return token;
 }
 
+// Route publique du portail delegue (/domus/delegue?token=...) — meme
+// mecanique que useOwnerPortalRoute, cote mandataire du suivi de loyer.
+function useDelegatePortalRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/delegue\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/delegue(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
 function usePublicReservationsRoute() {
   const read = () => {
     if (typeof window === "undefined") return null;
@@ -231,6 +264,7 @@ export default function App() {
   const prescreeningToken = usePrescreeningRoute();
   const tenantPortalToken = useTenantPortalRoute();
   const ownerPortalToken = useOwnerPortalRoute();
+  const delegatePortalToken = useDelegatePortalRoute();
   const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -251,6 +285,7 @@ export default function App() {
   if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
   if (tenantPortalToken !== null) return <TenantPortalPublic token={tenantPortalToken} />;
   if (ownerPortalToken !== null) return <OwnerPortalPublic token={ownerPortalToken} />;
+  if (delegatePortalToken !== null) return <DelegatePortalPublic token={delegatePortalToken} />;
   if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;

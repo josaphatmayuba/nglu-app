@@ -450,6 +450,14 @@ const EN = {
   "En attente de signature": "Awaiting signature",
   "Brouillons": "Drafts",
   "Baux expirent < 30 j": "Leases expire < 30 days",
+  // Écran: tenant-portal-public.jsx — libellé du bail du locataire
+  "Bail": "Lease",
+  "Contrat": "Contract",
+  "Signé": "Signed",
+  "Réf.": "Ref.",
+  "du": "from",
+  "au": "to",
+  "depuis le": "since",
   // Écran: reglages.jsx
   "Reglages": "Settings",
   "Devises, facturation et configuration du module": "Currencies, billing and module configuration",

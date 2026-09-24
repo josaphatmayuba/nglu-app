@@ -3357,12 +3357,26 @@ export class PropertyManagementService {
       .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
   }
 
+  /**
+   * Echappe une valeur venant de la base avant de l'inserer dans un email HTML.
+   * Les noms de proprietaire et de gestionnaire sont saisis librement : un
+   * caractere `<` non echappe casserait le rendu du mail.
+   */
+  private escapeHtml(value: string | null | undefined) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   async sendPaymentReminder(leaseId: number, orgId: number) {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
         organizationId: realEstateLeases.organizationId,
         tenantId: realEstateLeases.tenantId,
+        propertyId: realEstateLeases.propertyId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
         currencySymbol: currencies.currencySymbol,
@@ -3384,14 +3398,31 @@ export class PropertyManagementService {
     const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
     // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
     const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
+    // Le locataire est renvoyé vers les personnes en charge de SON immeuble
+    // (propriétaire + gestionnaire assigné), comme le rappel automatique, et non
+    // vers un « nous » anonyme. Repli sur le contact société si aucun des deux
+    // n'est joignable.
+    const company = await readOrgAppSetting(this.db, 1, {
+      name: appSettings.companyName,
+      phone: appSettings.phone,
+    });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    const companyPhone = ((company?.phone as string | null) || "").trim();
+    const propertyContacts = await this.ownerNotifications.propertyContactVars(
+      lease.propertyId ? Number(lease.propertyId) : null,
+      lease.organizationId,
+    );
+    const contacts =
+      propertyContacts.contacts || `${companyName}${companyPhone ? ` au ${companyPhone}` : ""}`;
+
     let subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
     let html = `
       <p>Bonjour ${tenantName},</p>
       <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
       <p><strong>Montant du:</strong> ${rentDisplay}</p>
       <p>Merci de régulariser ce paiement au plus tôt possible.</p>
-      <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
-      <p>Cordialement,<br>L'équipe de gestion immobilière</p>
+      <p>Pour tout règlement ou question, contactez ${this.escapeHtml(contacts)}.</p>
+      <p>Cordialement,<br>${this.escapeHtml(companyName)}</p>
     `;
 
     // Message configurable (Réglages → Messages) : si un template "payment_reminder"
@@ -3407,7 +3438,11 @@ export class PropertyManagementService {
           .replace(/\{tenantName\}/g, tenantName)
           .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
           .replace(/\{reference\}/g, lease.reference || "")
-          .replace(/\{amount\}/g, rentDisplay);
+          .replace(/\{amount\}/g, rentDisplay)
+          .replace(/\{companyName\}/g, companyName)
+          .replace(/\{ownerContact\}/g, propertyContacts.ownerContact)
+          .replace(/\{managerContact\}/g, propertyContacts.managerContact)
+          .replace(/\{contacts\}/g, contacts);
       if (tpl[0].subject) subject = fill(tpl[0].subject);
       if (tpl[0].body) html = fill(tpl[0].body);
     }
@@ -3422,6 +3457,224 @@ export class PropertyManagementService {
       relatedId: leaseId,
     });
     return { message: "success", email: result };
+  }
+
+  /**
+   * PREAVIS POUR DEFAUT DE PAIEMENT — action manuelle du gestionnaire depuis la
+   * page Loyers. Previent formellement le locataire qu'un preavis sera depose
+   * s'il ne regularise pas, et informe sa personne de contact ainsi que le
+   * proprietaire du bien.
+   *
+   * Reserve aux locataires qui doivent STRICTEMENT PLUS D'UN MOIS de loyer :
+   * le seuil est recalcule ici (meme formule que la carte locataire, par
+   * COUVERTURE EN MONTANT) et non repris du client, pour qu'un appel direct a
+   * l'API ne puisse pas notifier un locataire a jour.
+   */
+  async sendDefaultNotice(leaseId: number, orgId: number) {
+    const [lease] = await this.db
+      .select({
+        id: realEstateLeases.id,
+        organizationId: realEstateLeases.organizationId,
+        tenantId: realEstateLeases.tenantId,
+        propertyId: realEstateLeases.propertyId,
+        reference: realEstateLeases.reference,
+        startDate: realEstateLeases.startDate,
+        rentAmount: realEstateLeases.rentAmount,
+        nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        noticeSentAt: realEstateLeases.defaultNoticeSentAt,
+        currencySymbol: currencies.currencySymbol,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantEmail: customers.email,
+        tenantPhone: customers.phone,
+        emergencyPhone: tenantDetails.contactedPersonPhoneNumber,
+        propertyName: realEstateProperties.name,
+        propertyAddress: realEstateProperties.address,
+        unitName: realEstateUnits.name,
+      })
+      .from(realEstateLeases)
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+      .limit(1);
+
+    if (!lease) throw new NotFoundException("Bail introuvable.");
+
+    // Couverture en montant : total deja verse / loyer mensuel. Les echeances
+    // "pending" (generees mais non encaissees) ne comptent pas comme payees.
+    const payments = await this.db
+      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
+      .from(realEstateRentPayments)
+      .where(and(eq(realEstateRentPayments.leaseId, leaseId), eq(realEstateRentPayments.organizationId, orgId)));
+    const rent = Number(lease.rentAmount) || 0;
+    const totalPaid = payments
+      .filter((p) => p.status !== "pending")
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : 0;
+
+    // Mois exigibles depuis le debut du bail, mois courant inclus.
+    const now = new Date();
+    const start = new Date(`${lease.startDate}T00:00:00`);
+    const elapsedPast = Math.max(
+      0,
+      (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()),
+    );
+    const monthsDue = elapsedPast + 1;
+    const monthsBehind = Math.max(0, monthsDue - monthsCovered);
+    const balance = Math.max(0, Math.round((monthsDue * rent - totalPaid) * 100) / 100);
+
+    if (monthsBehind <= 1) {
+      throw new BadRequestException(
+        "Le preavis pour defaut de paiement est reserve aux locataires qui doivent plus d'un mois de loyer.",
+      );
+    }
+
+    const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const place =
+      [lease.propertyName, lease.unitName].filter(Boolean).join(", ") ||
+      lease.propertyAddress ||
+      "votre logement";
+    const daysLate = lease.nextInvoiceDate
+      ? Math.max(0, Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000))
+      : 0;
+    const contacts = await this.ownerNotifications.propertyContactVars(
+      lease.propertyId ? Number(lease.propertyId) : null,
+      orgId,
+    );
+    const vars = {
+      tenantName,
+      firstName: lease.tenantFirstName || tenantName,
+      reference: lease.reference || String(lease.id),
+      address: place,
+      property: place,
+      amount: `${balance}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`,
+      rentAmount: `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim(),
+      monthsBehind: String(monthsBehind),
+      daysLate: String(daysLate),
+      ownerContact: contacts.ownerContact,
+      managerContact: contacts.managerContact,
+      contacts: contacts.contacts,
+      url: await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId),
+    };
+
+    // Texte pilote depuis Reglages > Messages (evenement "default_notice").
+    const tenantMsg = await this.ownerNotifications.renderMessage(
+      "default_notice",
+      "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour " +
+        "{address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis " +
+        "pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+      vars,
+    );
+
+    let smsSent = false;
+    if (lease.tenantPhone) {
+      const smsWithFooter = this.ownerNotifications.fitOneSms(
+        vars.url && tenantMsg.includes(vars.url)
+          ? tenantMsg
+          : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, orgId),
+      );
+      smsSent = await this.safeNoticeSms(lease.tenantPhone, smsWithFooter, leaseId, orgId);
+    }
+
+    let emailSent = false;
+    if (lease.tenantEmail) {
+      const html = await this.tenantPortal.appendPortalFooterToEmail(
+        `<p>${tenantMsg}</p>`,
+        lease.tenantId,
+        orgId,
+      );
+      try {
+        await this.emails.send({
+          to: lease.tenantEmail,
+          subject: `Preavis pour defaut de paiement — bail ${vars.reference}`,
+          html,
+          type: "default_notice",
+          relatedType: "real-estate-lease",
+          relatedId: leaseId,
+        });
+        emailSent = true;
+      } catch (error) {
+        this.logger.warn(
+          `Default notice email error (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (!smsSent && !emailSent) {
+      throw new BadRequestException("Aucun contact (telephone ou email) disponible pour ce locataire.");
+    }
+
+    // La personne de contact est informee, sans lien portail : le message ne
+    // s'adresse pas au locataire (meme principe que les relances de retard).
+    let contactNotified = false;
+    if (lease.emergencyPhone) {
+      const contactMsg = await this.ownerNotifications.renderMessage(
+        "default_notice_contact",
+        "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois " +
+          "de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de " +
+          "paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+        vars,
+      );
+      contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId);
+    }
+
+    // Le proprietaire est prevenu qu'un preavis a ete notifie sur son bien.
+    const ownerNotified = await this.ownerNotifications.notifyDefaultNotice(
+      leaseId,
+      Number(lease.propertyId),
+      Number(lease.tenantId),
+      vars,
+      orgId,
+    );
+
+    // Trace : date d'envoi (preuve que le locataire a ete averti) + mois dus a
+    // cet instant. Ecrite seulement si au moins un canal locataire a abouti.
+    await this.db
+      .update(realEstateLeases)
+      .set({
+        defaultNoticeSentAt: sql`CURRENT_TIMESTAMP`,
+        defaultNoticeMonthsBehind: monthsBehind,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateLeases.id, leaseId));
+
+    return {
+      message: "success",
+      monthsBehind,
+      balance,
+      smsSent,
+      emailSent,
+      contactNotified,
+      ownerNotified,
+      previousNoticeAt: lease.noticeSentAt ?? null,
+    };
+  }
+
+  /** Envoi SMS best-effort : un echec n'annule pas le reste du preavis. */
+  private async safeNoticeSms(phone: string, message: string, leaseId: number, orgId: number) {
+    try {
+      const res = await this.sms.sendSms({
+        phone,
+        message,
+        organizationId: orgId,
+        smsType: "default_notice",
+        relatedType: "real-estate-lease",
+        relatedId: leaseId,
+      });
+      if (!res?.success) {
+        this.logger.warn(`Default notice SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Default notice SMS error (lease ${leaseId}, ${phone}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
   }
 
   maintenance(_orgId?: number) {
@@ -3958,6 +4211,7 @@ export class PropertyManagementService {
 
     const smsRows = await this.db
       .select({
+        id: smsLogs.id,
         type: smsLogs.smsType,
         recipient: smsLogs.recipient,
         body: smsLogs.body,
@@ -3973,6 +4227,7 @@ export class PropertyManagementService {
     const merged = [
       ...emailRows.map((row) => ({
         channel: "email" as const,
+        id: null as number | null,
         type: row.type,
         recipient: row.recipient,
         subject: row.subject,
@@ -3982,6 +4237,8 @@ export class PropertyManagementService {
       })),
       ...smsRows.map((row) => ({
         channel: "sms" as const,
+        // Id du log : permet a l'UI de proposer un renvoi quand l'envoi a echoue.
+        id: row.id,
         type: row.type,
         recipient: row.recipient,
         // Texte SMS complet : la troncature a 160 caracteres coupait la fin du
@@ -3996,6 +4253,39 @@ export class PropertyManagementService {
 
     merged.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
     return merged.slice(0, 100);
+  }
+
+  /**
+   * Renvoie un SMS deja trace dans sms_logs (typiquement un envoi en echec :
+   * passerelle injoignable, compte inactif...). On reprend le destinataire et
+   * le corps exacts du log d'origine ; sendSms cree une NOUVELLE ligne de log,
+   * l'ancienne reste telle quelle pour garder l'historique des tentatives.
+   */
+  async resendSmsLog(logId: number, orgId: number) {
+    const rows = await this.db
+      .select({
+        recipient: smsLogs.recipient,
+        body: smsLogs.body,
+        smsType: smsLogs.smsType,
+        relatedType: smsLogs.relatedType,
+        relatedId: smsLogs.relatedId,
+      })
+      .from(smsLogs)
+      .where(and(eq(smsLogs.id, logId), eq(smsLogs.organizationId, orgId)))
+      .limit(1);
+    const log = rows[0];
+    if (!log) throw new NotFoundException("SMS log not found.");
+    if (!log.body) throw new BadRequestException("Ce SMS n'a pas de contenu a renvoyer.");
+
+    const res = await this.sms.sendSms({
+      phone: log.recipient,
+      message: log.body,
+      organizationId: orgId,
+      smsType: log.smsType,
+      relatedType: log.relatedType ?? undefined,
+      relatedId: log.relatedId ?? undefined,
+    });
+    return { success: Boolean(res?.success), message: res?.message ?? null };
   }
 
   async findPayment(id: number) {
@@ -5565,6 +5855,10 @@ export class PropertyManagementService {
         taxType: realEstateLeases.taxType,
         taxValue: realEstateLeases.taxValue,
         taxApplyMode: realEstateLeases.taxApplyMode,
+        // Trace du preavis pour defaut de paiement : la page Loyers s'en sert
+        // pour afficher la date du dernier preavis notifie sur ce bail.
+        defaultNoticeSentAt: realEstateLeases.defaultNoticeSentAt,
+        defaultNoticeMonthsBehind: realEstateLeases.defaultNoticeMonthsBehind,
         propertyName: leaseProperty.name,
         propertyAddress: leaseProperty.address,
         unitName: leaseUnit.name,

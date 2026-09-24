@@ -10,7 +10,7 @@ import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRo
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
-import { useToast } from "../components/Dialog.jsx";
+import { useConfirm, useToast } from "../components/Dialog.jsx";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -167,8 +167,16 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
-function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false }) {
+function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false, onDefaultNotice, noticing = false }) {
   const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null, list = [] } = card;
+  // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
+  // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
+  // qui doit le seul mois en cours n'est pas en defaut : pas de bouton.
+  const canNotifyDefault = Boolean(lease) && monthsBehind > 1;
+  const noticeSentAt = lease?.defaultNoticeSentAt || null;
+  const noticeLabel = noticeSentAt
+    ? new Date(noticeSentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+    : null;
   // Des echeances manquantes existent si le bail a des mois en retard ET
   // qu'aucune ligne pending n'a deja ete generee pour couvrir ces mois-la
   // (sinon on duplique l'action : il suffit de confirmer les pending existantes).
@@ -224,6 +232,12 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
           <strong style={{ color: status === "late" ? "#dc2626" : "#d97706" }}>{money(balance, symbol)}</strong>
         </div>
       )}
+      {canNotifyDefault && noticeLabel && (
+        <div className="immo-pay-row">
+          <span>Préavis notifié le</span>
+          <strong style={{ color: "#b91c1c" }}>{noticeLabel}</strong>
+        </div>
+      )}
       {status === "ok" && credit > 0 && (
         <div className="immo-pay-row">
           <span>Avance{monthsAhead > 0 ? ` · ${monthsAhead} mois` : ""}</span>
@@ -263,6 +277,13 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
             </button>
           )}
         </div>
+      )}
+      {canNotifyDefault && (
+        <button className="immo-btn danger" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
+          disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
+          <AlertTriangle size={16} />
+          {noticing ? "…" : noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
+        </button>
       )}
     </div>
   );
@@ -475,14 +496,17 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
 
 // ─────────────────────────── LOYERS (liste) ───────────────────────────
 async function loadPaymentsModule() {
-  const [payments, leases, currencies, setting, paymentMethods] = await Promise.all([
+  const [payments, leases, currencies, setting, paymentMethods, delegateChecks] = await Promise.all([
     api.payments(),
     api.leases(),
     api.currencies(),
     api.setting(),
     api.paymentMethods().catch(() => []),
+    // Reponses des delegues aux relances de retard. Tolerant a l'echec : un
+    // backend anterieur a la feature ne doit pas casser l'ecran Loyers.
+    api.delegateRentChecks().catch(() => []),
   ]);
-  return { payments, leases, currencies, setting, paymentMethods };
+  return { payments, leases, currencies, setting, paymentMethods, delegateChecks };
 }
 
 export function Loyers({ go }) {
@@ -490,6 +514,7 @@ export function Loyers({ go }) {
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
   const toast = useToast();
+  const confirm = useConfirm();
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -511,8 +536,17 @@ export function Loyers({ go }) {
   const [payTarget, setPayTarget] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
+  const [noticingLeaseId, setNoticingLeaseId] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
+
+  // Seules les relances auxquelles le delegue a repondu sont montrees : une
+  // relance sans reponse n'apprend rien au gestionnaire, qui voit deja
+  // l'impaye dans la liste.
+  const delegateChecks = useMemo(
+    () => (Array.isArray(data?.delegateChecks) ? data.delegateChecks : []).filter((c) => c.answer),
+    [data?.delegateChecks],
+  );
 
   // Cartes par bail actif (détection du retard). Fallback : regroupement par
   // paiements si aucun bail n'est renvoyé par l'API (pas de paiement direct).
@@ -587,6 +621,38 @@ export function Loyers({ go }) {
     }
   };
 
+  // Preavis pour defaut de paiement. Action grave et tracee (date d'envoi
+  // enregistree sur le bail) : on demande confirmation, en rappelant au
+  // gestionnaire ce que le locataire va recevoir et qui d'autre est prevenu.
+  const handleDefaultNotice = async (card) => {
+    if (!card.lease?.id || noticingLeaseId) return;
+    if (!(await confirm({
+      title: t("Notifier un préavis pour défaut de paiement"),
+      message: tf(
+        t("{name} doit {months} mois de loyer ({balance}). Le locataire, sa personne de contact et le propriétaire seront prévenus qu'un préavis sera déposé faute de régularisation. Continuer ?"),
+        { name: card.name, months: card.monthsBehind, balance: money(card.balance, card.symbol) },
+      ),
+      confirmLabel: t("Notifier"),
+      danger: true,
+    }))) return;
+    setNoticingLeaseId(card.lease.id);
+    try {
+      const res = await api.sendDefaultNotice(card.lease.id);
+      const channels = [
+        res?.smsSent ? "SMS" : null,
+        res?.emailSent ? "email" : null,
+        res?.contactNotified ? t("personne de contact") : null,
+        res?.ownerNotified ? t("propriétaire") : null,
+      ].filter(Boolean);
+      toast.success(tf(t("Préavis notifié ({channels})."), { channels: channels.join(", ") }));
+      await reload();
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setNoticingLeaseId(null);
+    }
+  };
+
   // Calendrier : 12 mois glissants, total encaissé + nb de paiements par mois.
   const calendar = useMemo(() => lastMonths(BAR_MONTHS).map((d) => {
     const inMonth = rows.filter((p) => p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
@@ -654,6 +720,42 @@ export function Loyers({ go }) {
         </div>
       </div>
 
+      {delegateChecks.length > 0 && (
+        <div className="immo-card" style={{ marginBottom: 16, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Users size={18} />
+            <strong>{t("Retours des delegues")}</strong>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {t("suivi de loyer confie a un mandataire")}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {delegateChecks.map((c) => {
+              const who = [c.tenantFirstName, c.tenantLastName].filter(Boolean).join(" ").trim();
+              const paid = c.answer === "paid";
+              return (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span className={`immo-mini-badge ${paid ? "success" : "warn"}`}>
+                    {paid ? t("Paiement declare") : t("Toujours impaye")}
+                  </span>
+                  <strong>{who || `Bail #${c.leaseId}`}</strong>
+                  <span className="muted">{c.propertyName || ""}</span>
+                  {paid && c.amount != null ? (
+                    <span>{money(c.amount, currency.defaultCurrencySymbol)}</span>
+                  ) : null}
+                  {c.comment ? <em className="muted">« {c.comment} »</em> : null}
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {c.delegateName ? `— ${c.delegateName}` : ""}
+                  </span>
+                  {/* Le paiement declare apparait aussi dans la liste ci-dessous
+                      en statut "En attente" : c'est la qu'il se valide. */}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="immo-pay-toolbar">
         <div className="immo-seg-toggle">
           {VIEWS.map((v) => (
@@ -692,6 +794,8 @@ export function Loyers({ go }) {
                 onPay={setPayTarget}
                 onGenerateMissing={handleGenerateMissing}
                 generating={Boolean(c.lease?.id) && generatingLeaseId === c.lease?.id}
+                onDefaultNotice={handleDefaultNotice}
+                noticing={Boolean(c.lease?.id) && noticingLeaseId === c.lease?.id}
               />
             ))}
           </div>

@@ -158,6 +158,12 @@ export const api = {
   },
   deletePersonalDocument: (docId) => jsonFetch(`/hr/employees/personal-documents/${docId}`, { method: "DELETE" }),
   taxRules: () => jsonFetch("/hr/tax-rules"),
+  // Registre central des tiers (route racine /api/supplier, hors prefixe /hr).
+  // LECTURE SEULE cote RH : un sous-traitant facture, il n'a ni contrat de travail
+  // ni paie, et n'a donc rien a faire dans l'effectif. L'ecran sert uniquement a
+  // voir qui travaille pour l'organisation sans etre employe.
+  externalProviders: () =>
+    jsonFetch("/supplier?query=all&nature=subcontractor,service", { base: API_ROOT }),
   createTaxRule: (body) => jsonFetch("/hr/tax-rules", { method: "POST", body: JSON.stringify(body) }),
   updateTaxRule: (id, body) => jsonFetch(`/hr/tax-rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteTaxRule: (id) => jsonFetch(`/hr/tax-rules/${id}`, { method: "DELETE" }),

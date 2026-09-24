@@ -49,6 +49,7 @@ type LeaseDetails = {
   moveInNotes: string | null;
   signingCity: string | null;
   moveInMeterReading: string | null;
+  propertyId: number | null;
   propertyName: string | null;
   propertyType: string | null;
   propertyAddress: string | null;
@@ -561,6 +562,16 @@ export class ContractsService {
     const landlord = this.resolveLandlord(lease, company);
     const landlordName = landlord.name || companyName;
     const unitLabel = lease.unitName ?? "";
+    // Le locataire doit joindre les personnes en charge de SON immeuble : le
+    // proprietaire du bien et le gestionnaire qui lui est assigne, pas un
+    // numero d'entreprise generique. Repli sur le contact societe si aucun des
+    // deux n'est joignable.
+    const propertyContacts = await this.ownerNotifications.propertyContactVars(
+      lease.propertyId ? Number(lease.propertyId) : null,
+      orgId,
+    );
+    const contacts =
+      propertyContacts.contacts || `${companyName}${contactPhone ? ` au ${contactPhone}` : ""}`;
 
     let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
     let text =
@@ -569,7 +580,7 @@ export class ContractsService {
       `Votre bailleur est ${landlordName}. ` +
       `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
       `Merci de votre confiance. ` +
-      `${contactPhone ? `Pour toute question, contactez-nous au ${contactPhone}. ` : ""}` +
+      `Pour toute question, contactez ${contacts}. ` +
       `— ${companyName}`;
 
     // Message configurable (Réglages → Messages) : si un template "contract_signed"
@@ -591,6 +602,9 @@ export class ContractsService {
           .replace(/\{endDate\}/g, endDate)
           .replace(/\{duration\}/g, duration)
           .replace(/\{contactPhone\}/g, contactPhone)
+          .replace(/\{ownerContact\}/g, propertyContacts.ownerContact)
+          .replace(/\{managerContact\}/g, propertyContacts.managerContact)
+          .replace(/\{contacts\}/g, contacts)
           .replace(/\{landlordName\}/g, landlordName)
           .replace(/\{unit\}/g, unitLabel)
           // Un bail sans unite laisserait "appartement ," : on nettoie le mot
@@ -879,6 +893,7 @@ export class ContractsService {
         moveInNotes: realEstateLeases.moveInNotes,
         signingCity: realEstateLeases.signingCity,
         moveInMeterReading: realEstateLeases.moveInMeterReading,
+        propertyId: realEstateLeases.propertyId,
         propertyName: realEstateProperties.name,
         propertyType: realEstateProperties.propertyType,
         propertyAddress: realEstateProperties.address,

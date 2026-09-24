@@ -39,13 +39,19 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
+import { DelegatePortalService } from "./delegate-portal.service";
+import { DelegatesService } from "./delegates.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import {
   CreateContractDto,
   CreateLeaseDto,
   CreateMaintenanceCostDto,
   CreateMaintenanceDto,
+  CreateDelegateAssignmentDto,
+  CreateDelegateDto,
   CreateOwnerDto,
+  UpdateDelegateAssignmentDto,
+  UpdateDelegateDto,
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
@@ -92,6 +98,8 @@ export class PropertyManagementController {
     private readonly contractsService: ContractsService,
     private readonly rentReminderService: RentReminderService,
     private readonly tenantPortalService: TenantPortalService,
+    private readonly delegatesService: DelegatesService,
+    private readonly delegatePortalService: DelegatePortalService,
   ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
@@ -178,6 +186,14 @@ export class PropertyManagementController {
   @Get("tenants/:id/communications")
   tenantCommunications(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.tenantCommunications(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Resend an SMS already logged (e.g. after a gateway failure)" })
+  @Permissions("update-propertyManagement")
+  @Post("sms-logs/:id/resend")
+  @HttpCode(200)
+  resendSmsLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.resendSmsLog(id, orgId);
   }
 
   @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
@@ -631,6 +647,106 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteOwner(id, orgId);
   }
 
+  // -- Delegues (mandataires charges du suivi de loyer) ---------------------
+  // Memes permissions que les proprietaires : gerer un delegue, c'est gerer le
+  // parc, pas une operation comptable.
+  @ApiOperation({ summary: "List active delegates (mandataires de suivi de loyer)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegates")
+  delegates(@CurrentOrg() orgId: number) {
+    return this.delegatesService.list(orgId);
+  }
+
+  // DOIT rester declaree AVANT delegates/:id : sinon Nest fait correspondre
+  // "candidates" au parametre :id et ParseIntPipe rejette la requete en 400.
+  @ApiOperation({ summary: "List people who can be designated as delegate (staff + external providers)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegates/candidates")
+  delegateCandidates(@CurrentOrg() orgId: number) {
+    return this.delegatesService.candidates(orgId);
+  }
+
+  @ApiOperation({ summary: "Get single delegate with its assignments" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("delegates/:id")
+  delegate(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.delegatesService.findOne(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a delegate" })
+  @ApiCreatedResponse({ description: "Created delegate" })
+  @Permissions("create-propertyManagement")
+  @Post("delegates")
+  createDelegate(@Body() body: CreateDelegateDto, @CurrentOrg() orgId: number) {
+    return this.delegatesService.create(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a delegate" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Put("delegates/:id")
+  updateDelegate(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateDelegateDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.update(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) a delegate" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("delegates/:id")
+  @HttpCode(200)
+  deleteDelegate(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.delegatesService.remove(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Assign a delegate to an owner portfolio or a property" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("delegates/:id/assignments")
+  addDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateDelegateAssignmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.addAssignment(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update the event subscriptions of one assignment" })
+  @Permissions("update-propertyManagement")
+  @Put("delegates/:id/assignments/:assignmentId")
+  updateDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("assignmentId", ParseIntPipe) assignmentId: number,
+    @Body() body: UpdateDelegateAssignmentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.updateAssignment(id, assignmentId, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Remove (soft) one assignment of a delegate" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("update-propertyManagement")
+  @Delete("delegates/:id/assignments/:assignmentId")
+  @HttpCode(200)
+  removeDelegateAssignment(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("assignmentId", ParseIntPipe) assignmentId: number,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.delegatesService.removeAssignment(id, assignmentId, orgId);
+  }
+
+  @ApiOperation({ summary: "List rent checks sent to delegates and their answers" })
+  @Permissions("readAll-propertyManagement")
+  @Get("delegate-rent-checks")
+  delegateRentChecks(@CurrentOrg() orgId: number, @Query("answer") answer?: string) {
+    return this.delegatePortalService.listRentChecks(orgId, answer);
+  }
+
   @ApiOperation({ summary: "Create a property" })
   @ApiCreatedResponse({ description: "Created property" })
   @Permissions("create-propertyManagement")
@@ -934,6 +1050,17 @@ export class PropertyManagementController {
   @HttpCode(200)
   sendPaymentReminder(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.sendPaymentReminder(body.leaseId, orgId);
+  }
+
+  // Preavis pour defaut de paiement : action grave et tracee, donc reservee aux
+  // memes permissions que les relances. Le service refuse le bail qui doit
+  // 1 mois ou moins, quelle que soit la demande du client.
+  @ApiOperation({ summary: "Notify tenant that a default-of-payment notice will be filed (>1 month unpaid)" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("payments/default-notice")
+  @HttpCode(200)
+  sendDefaultNotice(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId);
   }
 
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
