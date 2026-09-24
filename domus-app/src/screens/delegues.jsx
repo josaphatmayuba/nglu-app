@@ -361,11 +361,14 @@ const EVENT_FLAGS = [
 
 // Ligne case a cocher + icone + libelle, partagee entre le formulaire d'ajout
 // et la carte de chaque perimetre deja suivi, pour eviter la duplication.
-function EventFlagRow({ flag, checked, onChange }) {
+function EventFlagRow({ flag, checked, onChange, busy }) {
   const [key, label, Icon, tone] = flag;
   return (
-    <label className={`domus-event-flag-row${tone === "warn" ? " warn" : ""}`}>
-      <input type="checkbox" checked={checked} onChange={onChange} />
+    <label
+      className={`domus-event-flag-row${tone === "warn" ? " warn" : ""}${busy ? " busy" : ""}`}
+      style={busy ? { opacity: 0.55, cursor: "wait" } : undefined}
+    >
+      <input type="checkbox" checked={checked} onChange={onChange} disabled={busy} />
       <span className={`domus-event-flag-row-icon ${tone}`}>
         <Icon size={13} />
       </span>
@@ -381,6 +384,10 @@ function DelegateScopeModal({ delegate, owners, properties, onClose, onChanged }
   const [scopeId, setScopeId] = useState("");
   const [flags, setFlags] = useState({ notifyLease: true, notifyOverdue: true, notifyPayment: false });
   const [busy, setBusy] = useState(false);
+  // Cle unique "assignmentId:key" de la case en cours de bascule, pour ne
+  // desactiver que celle-la (pas tout le formulaire) et eviter un double-clic
+  // sur le meme appel encore en vol.
+  const [togglingFlag, setTogglingFlag] = useState(null);
   const [error, setError] = useState("");
   const toast = useToast();
 
@@ -404,11 +411,16 @@ function DelegateScopeModal({ delegate, owners, properties, onClose, onChanged }
   }
 
   async function toggleFlag(assignment, key) {
+    const flagKey = `${assignment.id}:${key}`;
+    if (togglingFlag === flagKey) return; // deja en vol : ignore le double-clic
+    setTogglingFlag(flagKey);
     try {
       await api.updateDelegateAssignment(delegate.id, assignment.id, { [key]: !assignment[key] });
       await onChanged(delegate.id);
     } catch (e) {
       toast.error(e.message || String(e));
+    } finally {
+      setTogglingFlag(null);
     }
   }
 
@@ -493,6 +505,7 @@ function DelegateScopeModal({ delegate, owners, properties, onClose, onChanged }
                         key={flag[0]}
                         flag={flag}
                         checked={Boolean(a[flag[0]])}
+                        busy={togglingFlag === `${a.id}:${flag[0]}`}
                         onChange={() => toggleFlag(a, flag[0])}
                       />
                     ))}

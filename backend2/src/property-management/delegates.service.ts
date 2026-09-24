@@ -26,7 +26,7 @@
 //
 // Suppression = soft delete (is_active = 0), conformement a la regle projet :
 // l'historique d'envois dans sms_logs reste lisible.
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -113,6 +113,7 @@ export class DelegatesService {
   }
 
   async create(input: CreateDelegateDto, orgId: number) {
+    await this.ensurePersonLink(input.userId, input.supplierId, orgId);
     const [result] = await this.db.insert(realEstateDelegates).values({
       organizationId: orgId,
       displayName: input.displayName,
@@ -130,6 +131,7 @@ export class DelegatesService {
 
   async update(id: number, input: UpdateDelegateDto, orgId: number) {
     await this.ensureActive(id, orgId);
+    await this.ensurePersonLink(input.userId, input.supplierId, orgId);
     await this.db
       .update(realEstateDelegates)
       .set({
@@ -371,6 +373,36 @@ export class DelegatesService {
         eq(realEstateDelegateAssignments.organizationId, orgId),
       ));
     return { message: "Affectation retiree." };
+  }
+
+  /**
+   * userId et supplierId sont exclusifs (un delegue est un employe OU un tiers
+   * externe, pas les deux) et doivent designer une personne de l'organisation
+   * courante, sinon un employe/tiers d'une autre organisation pourrait etre
+   * rattache par erreur (ou par un ID devine). Seuls les champs presents dans
+   * le patch sont verifies : un update qui ne touche pas userId/supplierId ne
+   * doit pas re-valider une valeur deja en base.
+   */
+  private async ensurePersonLink(userId: number | null | undefined, supplierId: number | null | undefined, orgId: number) {
+    if (userId != null && supplierId != null) {
+      throw new BadRequestException("Un delegue est un employe OU un sous-traitant, pas les deux.");
+    }
+    if (userId != null) {
+      const [row] = await this.db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.organizationId, orgId), eq(users.status, "true")))
+        .limit(1);
+      if (!row) throw new BadRequestException("Employe introuvable dans cette organisation.");
+    }
+    if (supplierId != null) {
+      const [row] = await this.db
+        .select({ id: suppliers.id })
+        .from(suppliers)
+        .where(and(eq(suppliers.id, supplierId), eq(suppliers.organizationId, orgId), eq(suppliers.status, "true")))
+        .limit(1);
+      if (!row) throw new BadRequestException("Sous-traitant introuvable dans cette organisation.");
+    }
   }
 
   private async ensureActive(id: number, orgId: number) {
