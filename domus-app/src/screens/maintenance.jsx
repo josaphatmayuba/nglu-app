@@ -72,6 +72,7 @@ const emptyTicket = {
   scheduledDate: "",
   estimatedCost: "",
   currencyId: "",
+  assigneeId: "",
   description: "",
 };
 
@@ -160,7 +161,17 @@ export function Maintenance() {
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
   const suppliersApi = useApi(() => api.suppliers("service,subcontractor"), []);
+  const candidatesApi = useApi(() => api.delegateCandidates(), []);
   useRealtimeReload(maintenanceApi.reload, ["maintenance"]);
+
+  // Personnes assignables : uniquement les comptes utilisateurs (assigneeId = FK users).
+  const assigneeOptions = useMemo(() => {
+    const raw = candidatesApi.data;
+    const arr = Array.isArray(raw) ? raw : raw?.data || [];
+    return (arr || [])
+      .filter((c) => c.source === "user")
+      .map((c) => [String(c.id), c.displayName]);
+  }, [candidatesApi.data]);
 
   // Fournisseurs actifs du référentiel central (options [id, libellé] pour le select)
   const supplierOptions = useMemo(() => {
@@ -258,6 +269,7 @@ export function Maintenance() {
         scheduledDate: form.scheduledDate || null,
         estimatedCost: toMoney(form.estimatedCost),
         currencyId: toId(form.currencyId) ?? null,
+        assigneeId: toId(form.assigneeId) ?? null,
         description: form.description?.trim() || null,
       };
       if (!payload.title || !payload.propertyId) throw new Error(t("Titre et bien obligatoires."));
@@ -507,6 +519,7 @@ export function Maintenance() {
           units={units}
           currencyOptions={currency.currencyOptions}
           defaultCurrencyId={currency.defaultCurrencyId}
+          assigneeOptions={assigneeOptions}
           busy={busy}
           error={actionError}
           onClose={() => { setTicketModal(null); setActionError(""); }}
@@ -535,6 +548,7 @@ export function Maintenance() {
           costSymbol={costSymbol}
           onClose={() => setDetailModal(null)}
           onEdit={(ticket) => { setDetailModal(null); setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId)); }}
+          onCost={(ticket, mode) => { setDetailModal(null); setCostModal({ ticket, mode }); }}
         />
       )}
       {photosModal && (
@@ -721,7 +735,7 @@ function TicketPhotoStrip({ ticket }) {
   );
 }
 
-function TicketDetailModal({ ticket, costSymbol, onClose, onEdit }) {
+function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost }) {
   const sym = costSymbol ? costSymbol(ticket) : undefined;
   const spent = spentEntries(ticket, sym);
   return (
@@ -759,6 +773,14 @@ function TicketDetailModal({ ticket, costSymbol, onClose, onEdit }) {
             ))}
           </div>
           {!spent.length && <p className="muted">{t("Aucun cout enregistre.")}</p>}
+          <div className="maintenance-detail-cost-actions">
+            <button type="button" className="btn" onClick={() => onCost?.(ticket, "add")}>
+              <Plus size={14} /> {t("Ajouter une depense")}
+            </button>
+            <button type="button" className="btn" onClick={() => onCost?.(ticket, "view")}>
+              <Eye size={14} /> {t("Voir les couts")}
+            </button>
+          </div>
         </FormSection>
       </div>
       <div className="modal-actions">
@@ -873,11 +895,12 @@ function ticketToForm(ticket, defaultCurrencyId) {
     scheduledDate: ticket.scheduledDate ? String(ticket.scheduledDate).slice(0, 10) : "",
     estimatedCost: ticket.estimatedCost ?? "",
     currencyId: ticket.currencyId || defaultCurrencyId || "",
+    assigneeId: ticket.assigneeId ? String(ticket.assigneeId) : "",
     description: ticket.description || "",
   };
 }
 
-function TicketModal({ value, properties, units, currencyOptions, defaultCurrencyId, busy, error, onClose, onSave }) {
+function TicketModal({ value, properties, units, currencyOptions, defaultCurrencyId, assigneeOptions = [], busy, error, onClose, onSave }) {
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
@@ -926,6 +949,7 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
             <DomusPropertySelect label={t("Unite")} value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
             <DomusPropertySelect label={t("Priorite")} value={form.priority} onChange={(priority) => set({ priority })} options={[["low", t("Bas")], ["medium", t("Moyen")], ["high", t("Urgent")]]} />
             <DomusPropertySelect label={t("Statut")} value={form.status} onChange={(status) => set({ status })} options={[["open", t("Ouvert")], ["in_progress", t("En cours")], ["done", t("Resolu")]]} />
+            <DomusPropertySelect label={t("Assigne a")} value={form.assigneeId} onChange={(assigneeId) => set({ assigneeId })} options={[["", t("— Non assigne —")], ...assigneeOptions]} />
             <DomusPropertyField label={t("Date prevue")} type="date" value={form.scheduledDate} onChange={(scheduledDate) => set({ scheduledDate })} />
             <MoneyField label={t("Cout estime")} value={form.estimatedCost} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(estimatedCost) => set({ estimatedCost })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>

@@ -352,6 +352,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .maintenance-cost-list div { border:1px solid #e5e7eb; border-radius:8px; display:flex; justify-content:space-between; gap:12px; padding:10px 12px; }
 .maintenance-cost-list strong { color:#111827; font-size:13px; }
 .maintenance-cost-list span { color:#64748b; font-size:13px; text-align:right; }
+.maintenance-detail-cost-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .ops-score { display:flex; justify-content:space-between; align-items:end; font-size:12px; color:var(--ink-500); }
 .ops-score b { font-size:28px; color:var(--ink-900); font-family:'Space Grotesk',sans-serif; }
 .ops-track { height:8px; border-radius:999px; background:var(--ink-100); overflow:hidden; margin:12px 0 16px; }
