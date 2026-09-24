@@ -31,6 +31,7 @@ import {
   journalEntryLines,
   projects,
   subAccounts,
+  supplierTags,
   suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -1026,11 +1027,72 @@ export class BatiproService {
     return row;
   }
 
+  // Un sous-traitant saisi ici sans supplier_id restait connu de BatiPro SEUL :
+  // il n'apparaissait pas dans le registre central, donc ni dans Domus ni dans la
+  // compta, et son historique de facturation repartait de zero a chaque re-saisie.
+  // On l'inscrit donc au registre a la volee. Le tiers est cree avec la nature
+  // "subcontractor" et les domaines construction + immobilier, puisque le meme
+  // sous-traitant intervient couramment sur un chantier et sur un bien en gestion.
+  // Si un tiers actif porte deja ce nom, on le reutilise au lieu d'en creer un
+  // double : le rapprochement se fait sur le nom, seule donnee dont on dispose ici.
+  private async registerSubcontractor(
+    input: CreateBatiproSubcontractorDto,
+    orgId: number,
+  ): Promise<number | null> {
+    const name = input.name?.trim();
+    if (!name) {
+      return null;
+    }
+    const [existing] = await this.db
+      .select({ id: suppliers.id })
+      .from(suppliers)
+      .where(and(eq(suppliers.organizationId, orgId), eq(suppliers.name, name), eq(suppliers.status, "true")))
+      .limit(1);
+    if (existing) {
+      await this.tagSupplier(Number(existing.id), orgId);
+      return Number(existing.id);
+    }
+    // `phone` est NOT NULL sans valeur par defaut : le formulaire BatiPro ne
+    // demande pas de telephone, d'ou la chaine vide plutot qu'un echec de creation
+    // du sous-traitant pour un champ que l'utilisateur n'a pas eu a saisir.
+    const [created] = await this.db
+      .insert(suppliers)
+      .values({
+        organizationId: orgId,
+        name,
+        phone: "",
+        supplierType: "construction",
+        partyType: "company",
+        notes: input.trade ? `Sous-traitant BatiPro — ${input.trade}` : "Sous-traitant BatiPro",
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .$returningId();
+    const supplierId = Number(created.id);
+    await this.tagSupplier(supplierId, orgId);
+    return supplierId;
+  }
+
+  private async tagSupplier(supplierId: number, orgId: number) {
+    // INSERT IGNORE via onDuplicateKeyUpdate : l'index unique de supplier_tags
+    // rend l'operation rejouable, un meme tiers pouvant etre re-saisi plusieurs fois.
+    await this.db
+      .insert(supplierTags)
+      .values([
+        { organizationId: orgId, supplierId, axis: "nature", code: "subcontractor", createdAt: sql`CURRENT_TIMESTAMP` },
+        { organizationId: orgId, supplierId, axis: "domain", code: "construction", createdAt: sql`CURRENT_TIMESTAMP` },
+        { organizationId: orgId, supplierId, axis: "domain", code: "real_estate", createdAt: sql`CURRENT_TIMESTAMP` },
+      ])
+      .onDuplicateKeyUpdate({ set: { code: sql`code` } });
+  }
+
   async createSubcontractor(input: CreateBatiproSubcontractorDto, orgId: number) {
+    const supplierId = input.supplier_id ?? (await this.registerSubcontractor(input, orgId));
     const [result] = await this.db.insert(batiproSubcontractors).values({
       organizationId: orgId,
       projectId: input.project_id ?? null,
-      supplierId: input.supplier_id ?? null,
+      supplierId,
       name: input.name,
       trade: input.trade ?? null,
       contractAmount: String(input.contract_amount ?? 0),

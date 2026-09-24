@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, inArray, like, or, sql, sum } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { suppliers, transactions } from "../database/schema";
+import { supplierTags, suppliers, transactions } from "../database/schema";
 import type { Database } from "../database/types";
 import { CreateSupplierDto, SupplierQueryDto, UpdateSupplierDto } from "./dto/supplier.dto";
 
@@ -34,12 +34,17 @@ export class SuppliersService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId), orgId);
+    const supplierId = Number(result.insertId);
+    await this.syncTags(supplierId, orgId, input.domains, input.natures, input.supplierType ?? "general");
+    return this.findOne(supplierId, orgId);
   }
 
   async findAll(query: SupplierQueryDto, orgId: number) {
     if (query.query === "all") {
-      return this.supplierQuery().where(eq(suppliers.organizationId, orgId)).orderBy(desc(suppliers.id));
+      const rows = await this.supplierQuery()
+        .where(and(eq(suppliers.organizationId, orgId), await this.tagFilter(query, orgId)))
+        .orderBy(desc(suppliers.id));
+      return this.withTags(rows, orgId);
     }
 
     if (query.query === "info") {
@@ -70,7 +75,8 @@ export class SuppliersService {
     }
 
     const totals = await this.supplierTotals(id, orgId);
-    return { ...rows[0], ...totals };
+    const [withTags] = await this.withTags(rows, orgId);
+    return { ...withTags, ...totals };
   }
 
   async update(id: number, input: UpdateSupplierDto, orgId: number) {
@@ -101,6 +107,8 @@ export class SuppliersService {
       })
       .where(and(eq(suppliers.id, id), eq(suppliers.organizationId, orgId)));
 
+    await this.syncTags(id, orgId, input.domains, input.natures, input.supplierType);
+
     return { message: "Supplier updated Successfully" };
   }
 
@@ -118,6 +126,7 @@ export class SuppliersService {
     const key = `%${query.key?.trim() || ""}%`;
     const where = and(
       eq(suppliers.organizationId, orgId),
+      await this.tagFilter(query, orgId),
       or(
         like(suppliers.name, key),
         like(suppliers.phone, key),
@@ -133,7 +142,7 @@ export class SuppliersService {
     const [total] = await this.db.select({ total: count(suppliers.id) }).from(suppliers).where(where);
 
     return {
-      getAllSupplier: rows,
+      getAllSupplier: await this.withTags(rows, orgId),
       totalSupplier: Number(total.total ?? 0),
     };
   }
@@ -141,11 +150,10 @@ export class SuppliersService {
   private async paginated(query: SupplierQueryDto, orgId: number) {
     const pagination = this.pagination(query);
     const statuses = this.csv(query.status || "true");
-    const types = this.csv(query.type || "");
     const where = and(
       eq(suppliers.organizationId, orgId),
       statuses.length ? inArray(suppliers.status, statuses) : undefined,
-      types.length ? inArray(suppliers.supplierType, types) : undefined,
+      await this.tagFilter(query, orgId),
     );
     const rows = await this.supplierQuery()
       .where(where)
@@ -155,14 +163,15 @@ export class SuppliersService {
     const [total] = await this.db.select({ total: count(suppliers.id) }).from(suppliers).where(where);
 
     return {
-      getAllSupplier: rows,
+      getAllSupplier: await this.withTags(rows, orgId),
       totalSupplier: Number(total.total ?? 0),
     };
   }
 
   private async report(orgId: number) {
     const rows = await this.supplierQuery().where(eq(suppliers.organizationId, orgId)).orderBy(desc(suppliers.id));
-    const enriched = await Promise.all(rows.map(async (supplier) => ({ ...supplier, ...(await this.supplierTotals(supplier.id, orgId)) })));
+    const tagged = await this.withTags(rows, orgId);
+    const enriched = await Promise.all(tagged.map(async (supplier) => ({ ...supplier, ...(await this.supplierTotals(supplier.id, orgId)) })));
     const grandData = enriched.reduce(
       (totals, supplier) => ({
         grandTotalAmount: totals.grandTotalAmount + supplier.totalAmount,
@@ -184,6 +193,117 @@ export class SuppliersService {
       grandData,
       allSupplier: enriched,
     };
+  }
+
+  // Un tiers dont l axe n est pas renseigne reste visible : sans cela, le jour du
+  // deploiement, tous les tiers non encore classes disparaitraient des ecrans.
+  private async tagFilter(query: SupplierQueryDto, orgId: number) {
+    const domains = this.csv(query.type || "");
+    const natures = this.csv(query.nature || "");
+    const clauses = [
+      await this.axisClause("domain", domains, orgId),
+      await this.axisClause("nature", natures, orgId),
+    ].filter((clause) => clause !== undefined);
+    return clauses.length ? and(...clauses) : undefined;
+  }
+
+  private async axisClause(axis: string, codes: string[], orgId: number) {
+    if (!codes.length) {
+      return undefined;
+    }
+    const tagged = await this.db
+      .select({ supplierId: supplierTags.supplierId })
+      .from(supplierTags)
+      .where(and(eq(supplierTags.organizationId, orgId), eq(supplierTags.axis, axis)));
+    const matching = await this.db
+      .select({ supplierId: supplierTags.supplierId })
+      .from(supplierTags)
+      .where(
+        and(
+          eq(supplierTags.organizationId, orgId),
+          eq(supplierTags.axis, axis),
+          inArray(supplierTags.code, codes),
+        ),
+      );
+    const matchingIds = [...new Set(matching.map((row) => Number(row.supplierId)))];
+    const taggedIds = new Set(tagged.map((row) => Number(row.supplierId)));
+    const untaggedClause = taggedIds.size
+      ? sql`${suppliers.id} NOT IN (${sql.join([...taggedIds].map((id) => sql`${id}`), sql`, `)})`
+      : undefined;
+    const matchClause = matchingIds.length ? inArray(suppliers.id, matchingIds) : undefined;
+    if (matchClause && untaggedClause) {
+      return or(matchClause, untaggedClause);
+    }
+    return matchClause ?? untaggedClause ?? sql`1 = 0`;
+  }
+
+  private async withTags<T extends { id: number }>(rows: T[], orgId: number) {
+    if (!rows.length) {
+      return rows.map((row) => ({ ...row, domains: [] as string[], natures: [] as string[] }));
+    }
+    const links = await this.db
+      .select({ supplierId: supplierTags.supplierId, axis: supplierTags.axis, code: supplierTags.code })
+      .from(supplierTags)
+      .where(
+        and(
+          eq(supplierTags.organizationId, orgId),
+          inArray(supplierTags.supplierId, rows.map((row) => Number(row.id))),
+        ),
+      );
+    return rows.map((row) => {
+      const mine = links.filter((link) => Number(link.supplierId) === Number(row.id));
+      return {
+        ...row,
+        domains: mine.filter((link) => link.axis === "domain").map((link) => link.code),
+        natures: mine.filter((link) => link.axis === "nature").map((link) => link.code),
+      };
+    });
+  }
+
+  // Le domaine principal (supplier_type) est toujours present parmi les domaines :
+  // les ecrans qui lisent encore la colonne seule restent coherents avec la liste.
+  private async syncTags(
+    supplierId: number,
+    orgId: number,
+    domains: string[] | undefined,
+    natures: string[] | undefined,
+    supplierType: string | undefined,
+  ) {
+    if (domains !== undefined || supplierType !== undefined) {
+      const codes = new Set([...(domains ?? [])].map((code) => code.trim()).filter(Boolean));
+      if (supplierType) {
+        codes.add(supplierType);
+      }
+      await this.replaceAxis(supplierId, orgId, "domain", [...codes]);
+    }
+    if (natures !== undefined) {
+      const codes = [...new Set(natures.map((code) => code.trim()).filter(Boolean))];
+      await this.replaceAxis(supplierId, orgId, "nature", codes);
+    }
+  }
+
+  private async replaceAxis(supplierId: number, orgId: number, axis: string, codes: string[]) {
+    await this.db
+      .delete(supplierTags)
+      .where(
+        and(
+          eq(supplierTags.organizationId, orgId),
+          eq(supplierTags.supplierId, supplierId),
+          eq(supplierTags.axis, axis),
+        ),
+      );
+    if (!codes.length) {
+      return;
+    }
+    await this.db.insert(supplierTags).values(
+      codes.map((code) => ({
+        organizationId: orgId,
+        supplierId,
+        axis,
+        code,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+      })),
+    );
   }
 
   private supplierQuery() {

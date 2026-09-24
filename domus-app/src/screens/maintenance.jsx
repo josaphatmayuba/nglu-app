@@ -158,7 +158,7 @@ export function Maintenance() {
   const unitsApi = useApi(() => api.units(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
-  const suppliersApi = useApi(() => api.suppliers(), []);
+  const suppliersApi = useApi(() => api.suppliers("service,subcontractor"), []);
   useRealtimeReload(maintenanceApi.reload, ["maintenance"]);
 
   // Fournisseurs actifs du référentiel central (options [id, libellé] pour le select)

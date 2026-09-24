@@ -1905,6 +1905,13 @@
       "when": 1781071200047,
       "tag": "0296_domus_lease_default_notice",
       "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "5",
+      "when": 1781071200048,
+      "tag": "0297_supplier_tags",
+      "breakpoints": true
     }
   ]
 }

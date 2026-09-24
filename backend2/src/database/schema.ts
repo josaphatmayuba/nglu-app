@@ -875,6 +875,20 @@ export const suppliers = mysqlTable("supplier", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Classement des tiers sur deux axes independants, tous deux multi-valeurs :
+// axis="domain" (construction, real_estate...) decide dans quelles apps le tiers
+// apparait ; axis="nature" (goods, subcontractor, service) decrit ce qu il fait.
+// supplier.supplierType reste le domaine principal ; cette table porte le reste,
+// ce qui permet a UN sous-traitant d etre vu dans BatiPro et Domus a la fois.
+export const supplierTags = mysqlTable("supplier_tags", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  supplierId: bigint("supplier_id", { mode: "number" }).notNull(),
+  axis: varchar("axis", { length: 20 }).notNull(),
+  code: varchar("code", { length: 40 }).notNull(),
+  createdAt: timestamp("created_at"),
+});
+
 export const currencies = mysqlTable("currency", {
   id: serial("id").primaryKey(),
   currencyCode: varchar("currencyCode", { length: 3 }),

@@ -2239,8 +2239,22 @@ const SUPPLIER_TYPES = [
   { id: "farm", label: "Ferme (FarmOS)" },
   { id: "factory", label: "Usine" },
 ];
+// Ce que fait le tiers, independamment des apps ou il apparait (SUPPLIER_TYPES).
+// Le journalier de chantier n'est pas ici : il ne facture pas et vit dans
+// batipro_workers avec son pointage.
+const SUPPLIER_NATURES = [
+  { id: "goods", label: "Fournisseur", hint: "Nous livre des produits, des matériaux" },
+  { id: "subcontractor", label: "Sous-traitant", hint: "Travaille sur le chantier et nous facture (tâcheron inclus)" },
+  { id: "service", label: "Prestataire", hint: "Prestation ponctuelle hors chantier (plomberie, nettoyage)" },
+];
 const partyLabel = (v) => PARTY_TYPES.find((p) => p.id === v)?.label || "Entreprise";
 const supplierTypeLabel = (v) => SUPPLIER_TYPES.find((s) => s.id === v)?.label || "Général";
+// Un tiers non classe reste affiche comme "Tiers" plutot que "Fournisseur" : tant
+// que la nature n'est pas saisie, on ne prejuge pas de ce qu'il fait.
+const natureLabel = (codes) => {
+  const list = (codes || []).map((c) => SUPPLIER_NATURES.find((n) => n.id === c)?.label).filter(Boolean);
+  return list.length ? list.join(" · ") : "Tiers";
+};
 
 function Fournisseurs({ canMutate }) {
   const [rows, setRows] = React.useState(null);
@@ -2248,6 +2262,7 @@ function Fournisseurs({ canMutate }) {
   const [editing, setEditing] = React.useState(null); // objet fournisseur (ou {} pour nouveau)
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
+  const [natureFilter, setNatureFilter] = React.useState("");
 
   const load = React.useCallback(async () => {
     try {
@@ -2267,7 +2282,11 @@ function Fournisseurs({ canMutate }) {
   };
 
   const filtered = (rows || []).filter((s) => {
-    if (typeFilter && s.supplierType !== typeFilter) return false;
+    // Le domaine principal ne suffit pas : un tiers coche sur plusieurs domaines
+    // doit ressortir sur chacun d'eux.
+    if (typeFilter && s.supplierType !== typeFilter && !(s.domains || []).includes(typeFilter)) return false;
+    if (natureFilter === "__unset" && (s.natures?.length || 0) > 0) return false;
+    if (natureFilter && natureFilter !== "__unset" && !(s.natures || []).includes(natureFilter)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return [s.name, s.phone, s.email, s.contactPerson, s.rccm, s.nationalId].some((v) => String(v || "").toLowerCase().includes(q));
@@ -2295,12 +2314,17 @@ function Fournisseurs({ canMutate }) {
           <option value="">Tous les domaines</option>
           {SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
         </select>
+        <select className="select" style={{ height: 36 }} value={natureFilter} onChange={(e) => setNatureFilter(e.target.value)}>
+          <option value="">Toutes les natures</option>
+          {SUPPLIER_NATURES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+          <option value="__unset">— Non classés —</option>
+        </select>
       </div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Liste des fournisseurs</h3><span className="tiny">{rows ? `${filtered.length} fournisseur(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
-          <table className="tbl" style={{ minWidth: 820 }}>
-            <thead><tr><th>Nom</th><th>Type</th><th>Domaine</th><th>Contact</th><th>Téléphone</th><th>Pièces légales</th><th className="r">Action</th></tr></thead>
+          <table className="tbl" style={{ minWidth: 940 }}>
+            <thead><tr><th>Nom</th><th>Type</th><th>Nature</th><th>Domaine</th><th>Contact</th><th>Téléphone</th><th>Pièces légales</th><th className="r">Action</th></tr></thead>
             <tbody>
               {page.shown.map((s) => {
                 const inactive = String(s.status) !== "true";
@@ -2309,7 +2333,8 @@ function Fournisseurs({ canMutate }) {
                   <tr key={s.id} style={inactive ? { opacity: 0.5 } : undefined}>
                     <td style={{ fontWeight: 500 }}>{s.name}{inactive && <span className="chip" style={{ marginLeft: 6 }}>inactif</span>}</td>
                     <td><span className="chip">{isCompany ? "🏢 Entreprise" : "👤 Personne"}</span></td>
-                    <td className="muted">{supplierTypeLabel(s.supplierType)}</td>
+                    <td className="muted">{natureLabel(s.natures)}</td>
+                    <td className="muted" title={(s.domains || []).map(supplierTypeLabel).join(", ")}>{supplierTypeLabel(s.supplierType)}{(s.domains?.length || 0) > 1 ? ` +${s.domains.length - 1}` : ""}</td>
                     <td className="muted">{s.contactPerson || (isCompany ? "—" : s.name)}</td>
                     <td className="muted">{s.phone || "—"}</td>
                     <td className="tiny muted">{isCompany ? (s.rccm ? `RCCM ${s.rccm}` : "—") : (s.nationalId ? `ID ${s.nationalId}` : "—")}{s.taxId ? ` · NIF ${s.taxId}` : ""}</td>
@@ -2334,6 +2359,10 @@ function Fournisseurs({ canMutate }) {
 function SupplierModal({ initial, onClose, onSaved }) {
   const [f, setF] = React.useState({
     name: initial.name || "", partyType: initial.partyType || "company", supplierType: initial.supplierType || "general",
+    // Multi-valeurs : un menuisier peut nous vendre des portes ET poser un plafond,
+    // et un sous-traitant peut devoir apparaitre dans BatiPro et Domus a la fois.
+    domains: initial.domains?.length ? initial.domains : [initial.supplierType || "general"],
+    natures: initial.natures || [],
     phone: initial.phone || "", email: initial.email || "", address: initial.address || "",
     contactPerson: initial.contactPerson || "", rccm: initial.rccm || "", nationalId: initial.nationalId || "",
     taxId: initial.taxId || "", paymentTerms: initial.paymentTerms || "", notes: initial.notes || "",
@@ -2341,6 +2370,7 @@ function SupplierModal({ initial, onClose, onSaved }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const toggle = (k, v) => setF((p) => ({ ...p, [k]: p[k].includes(v) ? p[k].filter((x) => x !== v) : [...p[k], v] }));
   const isCompany = f.partyType === "company";
 
   const submit = async (e) => {
@@ -2350,6 +2380,10 @@ function SupplierModal({ initial, onClose, onSaved }) {
     setBusy(true); setError("");
     // n'envoie que les champs renseignés (les optionnels vides → non transmis)
     const body = { name: f.name.trim(), partyType: f.partyType, supplierType: f.supplierType, phone: f.phone.trim() };
+    // Le domaine principal reste dans supplierType (lu par les ecrans existants) ;
+    // le backend le rajoute de lui-meme aux domaines, d'ou l'absence de doublon ici.
+    body.domains = f.domains.length ? f.domains : [f.supplierType];
+    body.natures = f.natures;
     ["email", "address", "contactPerson", "rccm", "nationalId", "taxId", "paymentTerms", "notes"].forEach((k) => { if (f[k]?.trim()) body[k] = f[k].trim(); });
     try {
       if (initial.id) await api.updateSupplier(initial.id, body);
@@ -2377,9 +2411,35 @@ function SupplierModal({ initial, onClose, onSaved }) {
             <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={isCompany ? "Ex : SARL Kintambo Matériaux" : "Ex : Jean Mukendi"} autoFocus />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Domaine"><select className="select" value={f.supplierType} onChange={(e) => set("supplierType", e.target.value)}>{SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+            <Field label="Domaine principal"><select className="select" value={f.supplierType} onChange={(e) => { const v = e.target.value; setF((p) => ({ ...p, supplierType: v, domains: p.domains.includes(v) ? p.domains : [...p.domains, v] })); }}>{SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
             <Field label="Téléphone"><input className="input" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+243…" /></Field>
           </div>
+          <Field label="Visible aussi dans">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {SUPPLIER_TYPES.map((t) => {
+                const on = f.domains.includes(t.id);
+                const locked = t.id === f.supplierType; // le domaine principal ne se decoche pas
+                return (
+                  <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, opacity: locked ? 0.6 : 1 }}>
+                    <input type="checkbox" checked={on} disabled={locked} onChange={() => toggle("domains", t.id)} />
+                    {t.label}
+                  </label>
+                );
+              })}
+            </div>
+            <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--ink-500)" }}>Un sous-traitant coché sur plusieurs domaines reste une seule fiche, avec un seul historique de facturation.</p>
+          </Field>
+          <Field label="Nature (ce que fait le tiers)">
+            <div style={{ display: "grid", gap: 6 }}>
+              {SUPPLIER_NATURES.map((n) => (
+                <label key={n.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 12.5 }}>
+                  <input type="checkbox" checked={f.natures.includes(n.id)} onChange={() => toggle("natures", n.id)} style={{ marginTop: 3 }} />
+                  <span><strong>{n.label}</strong> <span style={{ color: "var(--ink-500)" }}>— {n.hint}</span></span>
+                </label>
+              ))}
+            </div>
+            <p style={{ margin: "4px 0 0", fontSize: 11.5, color: "var(--ink-500)" }}>Laissé vide, le tiers reste visible partout — il n'est simplement pas encore classé.</p>
+          </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="E-mail"><input className="input" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="contact@…" /></Field>
             <Field label={isCompany ? "Personne de contact" : "Téléphone secondaire (optionnel)"}><input className="input" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder={isCompany ? "Nom du contact" : "—"} /></Field>

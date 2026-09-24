@@ -4581,7 +4581,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
   const [currencies, setCurrencies] = React.useState([]);
   React.useEffect(() => {
     if (kind !== "material") return;
-    api.suppliers().then((r) => {
+    api.suppliers("goods").then((r) => {
       const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
       setSuppliers((arr || []).filter((s) => String(s.status) === "true"));
     }).catch(() => setSuppliers([]));
