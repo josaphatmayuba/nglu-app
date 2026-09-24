@@ -1919,6 +1919,13 @@
       "when": 1781071200049,
       "tag": "0298_domus_delegate_supplier",
       "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "5",
+      "when": 1781071200050,
+      "tag": "0299_supplier_trade",
+      "breakpoints": true
     }
   ]
 }

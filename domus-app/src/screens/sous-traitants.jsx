@@ -37,6 +37,14 @@ function subcontractorInitials(name) {
   return parts.slice(0, 2).map((p) => p[0].toUpperCase()).join("");
 }
 
+// Metiers proposes a la saisie. La liste guide la saisie pour que « plomberie »
+// ne s ecrive pas de trois facons, mais elle n est pas fermee : allowCustom
+// laisse taper un metier absent d ici sans passer par une migration.
+export const SUBCONTRACTOR_TRADES = [
+  "Plomberie", "Électricité", "Maçonnerie", "Peinture",
+  "Menuiserie", "Climatisation", "Toiture", "Autre",
+];
+
 const emptySubcontractor = {
   name: "",
   phone: "",
@@ -44,6 +52,7 @@ const emptySubcontractor = {
   address: "",
   partyType: "company",
   contactPerson: "",
+  trade: "",
   notes: "",
   alsoConstruction: false,
   wasConstruction: false,
@@ -59,6 +68,7 @@ function subcontractorToForm(s) {
     address: s.address || "",
     partyType: s.partyType || "company",
     contactPerson: s.contactPerson || "",
+    trade: s.trade || "",
     notes: s.notes || "",
     alsoConstruction: Array.isArray(s.domains) && s.domains.includes("construction"),
     wasConstruction: Array.isArray(s.domains) && s.domains.includes("construction"),
@@ -76,6 +86,7 @@ function subcontractorPayload(f) {
     address: f.address.trim() || null,
     partyType: f.partyType || "company",
     contactPerson: f.contactPerson.trim() || null,
+    trade: f.trade.trim() || null,
     notes: f.notes.trim() || null,
     supplierType: "real_estate",
     domains: f.alsoConstruction ? ["real_estate", "construction"] : ["real_estate"],
@@ -115,7 +126,7 @@ export function SousTraitants() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return subcontractors;
-    return subcontractors.filter((s) => [s.name, s.phone, s.email, s.contactPerson]
+    return subcontractors.filter((s) => [s.name, s.phone, s.email, s.contactPerson, s.trade]
       .some((v) => String(v || "").toLowerCase().includes(q)));
   }, [subcontractors, query]);
 
@@ -137,7 +148,7 @@ export function SousTraitants() {
       else await api.createSupplier(subcontractorPayload(form));
       if (form.alsoConstruction && !alreadyThere) {
         try {
-          await api.registerBatiproSubcontractor({ name: form.name.trim(), trade: form.notes?.trim() || undefined });
+          await api.registerBatiproSubcontractor({ name: form.name.trim(), trade: form.trade?.trim() || undefined });
         } catch {
           toast.info(t("Fiche enregistrée. Inscription au carnet BâtiPro à refaire depuis BâtiPro."));
         }
@@ -215,6 +226,7 @@ export function SousTraitants() {
                 <p>{s.phone || t("telephone non renseigne")}</p>
                 <p>{s.email || t("email non renseigne")}</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {s.trade && <span className="immo-mini-badge">{s.trade}</span>}
                   <span className="immo-mini-badge success">
                     {(s.partyType || "company") === "company" ? t("Entreprise") : t("Artisan indépendant")}
                   </span>
@@ -272,6 +284,14 @@ function SubcontractorModal({ value, busy, error, onClose, onSave }) {
             ]} />
             <DomusPropertyField label={t("Personne de contact")} value={form.contactPerson} onChange={(v) => set({ contactPerson: v })} placeholder={t("Optionnel")} />
           </div>
+          <DomusPropertySelect
+            label={t("Profession")}
+            value={form.trade}
+            onChange={(v) => set({ trade: v })}
+            options={SUBCONTRACTOR_TRADES.map((m) => [m, t(m)])}
+            allowCustom
+            placeholder={t("ex. Plomberie — ou saisir un autre métier")}
+          />
         </FormSection>
 
         <FormSection icon={<Phone size={14} />} title={t("Contact")}>

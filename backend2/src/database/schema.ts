@@ -865,6 +865,9 @@ export const suppliers = mysqlTable("supplier", {
   partyType: varchar("party_type", { length: 20 }).default("company").notNull(),
   supplierType: varchar("supplier_type", { length: 50 }).default("general").notNull(),
   contactPerson: varchar("contact_person", { length: 255 }),
+  // Metier de l artisan (plomberie, electricite...). Libre : la liste
+  // proposee a l ecran guide la saisie sans interdire un metier hors liste.
+  trade: varchar("trade", { length: 255 }),
   rccm: varchar("rccm", { length: 100 }),
   nationalId: varchar("national_id", { length: 100 }),
   taxId: varchar("tax_id", { length: 100 }),

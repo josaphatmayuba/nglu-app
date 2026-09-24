@@ -57,6 +57,11 @@ export class CreateSupplierDto {
   @IsString()
   contactPerson?: string | null;
 
+  @ApiPropertyOptional({ example: "Plomberie" })
+  @IsOptional()
+  @IsString()
+  trade?: string | null;
+
   @ApiPropertyOptional({ example: "CD/KIN/RCCM/22-B-1234" })
   @IsOptional()
   @IsString()
