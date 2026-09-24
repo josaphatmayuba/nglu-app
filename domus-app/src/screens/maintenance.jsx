@@ -137,6 +137,7 @@ export function Maintenance() {
   const [ticketModal, setTicketModal] = useState(null);
   const [costModal, setCostModal] = useState(null);
   const [photosModal, setPhotosModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
   const [resolveModal, setResolveModal] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -440,6 +441,7 @@ export function Maintenance() {
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
           onPhotos={(ticket) => setPhotosModal({ ticket })}
+          onOpen={setDetailModal}
         />
       )}
       {view === "list" && (
@@ -458,6 +460,7 @@ export function Maintenance() {
               onDelete={() => deleteTicket(ticket)}
               onCost={(mode) => setCostModal({ ticket, mode })}
               onPhotos={() => setPhotosModal({ ticket })}
+              onOpen={setDetailModal}
             />
           ))}
           {filtered.length === 0 && <EmptyMaintenance />}
@@ -472,9 +475,10 @@ export function Maintenance() {
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
           onPhotos={(ticket) => setPhotosModal({ ticket })}
+          onOpen={setDetailModal}
         />
       )}
-      {view === "calendar" && <CalendarView tickets={filtered} onOpen={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))} />}
+      {view === "calendar" && <CalendarView tickets={filtered} onOpen={setDetailModal} />}
 
       <div className="card ops-panel maintenance-summary-card">
         <div className="panel-title">{t("Priorites")}</div>
@@ -524,6 +528,16 @@ export function Maintenance() {
         />
       )}
 
+      {detailModal && (
+        <TicketDetailModal
+          ticket={detailModal}
+          costSymbol={costSymbol}
+          onClose={() => setDetailModal(null)}
+          onEdit={(ticket) => { setDetailModal(null); setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId)); }}
+          onCost={(ticket, mode) => { setDetailModal(null); setCostModal({ ticket, mode }); }}
+          onPhotos={(ticket) => { setDetailModal(null); setPhotosModal({ ticket }); }}
+        />
+      )}
       {photosModal && (
         <PhotosModal
           ticket={photosModal.ticket}
@@ -554,7 +568,7 @@ function Metric({ icon, tone, label, value, danger, success }) {
   );
 }
 
-function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost, onPhotos }) {
+function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusChange, onEdit, onDelete, onCost, onPhotos, onOpen }) {
   return (
     <div className="maintenance-kanban">
       {COLUMNS.map((column) => {
@@ -581,6 +595,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
                   onCost={(mode) => onCost(ticket, mode)}
                   onMove={(status) => onStatusChange(ticket, status)}
                   onPhotos={() => onPhotos(ticket)}
+                  onOpen={onOpen}
                 />
               ))}
               {items.length === 0 && <div className="maintenance-empty-col">{t("Aucun ticket")}</div>}
@@ -592,7 +607,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
   );
 }
 
-function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove, onPhotos }) {
+function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove, onPhotos, onOpen }) {
   const urgent = isUrgent(ticket);
   const done = isDone(ticket);
   const assignee = assigneeName(ticket);
@@ -600,7 +615,14 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   const sym = costSymbol ? costSymbol(ticket) : undefined;
   const spent = spentEntries(ticket, sym);
   return (
-    <article className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}>
+    <article
+      className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      style={onOpen ? { cursor: "pointer" } : undefined}
+      onClick={onOpen ? () => onOpen(ticket) : undefined}
+      onKeyDown={onOpen ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(ticket); } } : undefined}
+    >
       <div className="ticket-head">
         <span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>
           {urgent && <AlertTriangle size={12} />} {PRIORITY_LABEL[ticket.priority] || "Moyen"}
@@ -630,11 +652,66 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
         ))}
       </div>
       {next && (
-        <button className="immo-btn maintenance-next" disabled={busy} onClick={() => onAdvance(ticket)}>
+        <button className="immo-btn maintenance-next" disabled={busy} onClick={(e) => { e.stopPropagation(); onAdvance(ticket); }}>
           {busy ? "..." : tf(t("Passer a {status}"), {status: STATUS_LABEL[next]})}
         </button>
       )}
     </article>
+  );
+}
+
+function DetailRow({ icon, label, value }) {
+  return (
+    <div className="ops-score">
+      <span>{icon} {label}</span>
+      <b>{value || "-"}</b>
+    </div>
+  );
+}
+
+function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost, onPhotos }) {
+  const sym = costSymbol ? costSymbol(ticket) : undefined;
+  const spent = spentEntries(ticket, sym);
+  return (
+    <Modal
+      title={ticket.title}
+      subtitle={`${ticket.propertyName || "-"}${ticket.unitName ? ` - ${ticket.unitName}` : ""}`}
+      icon={isUrgent(ticket) ? <AlertTriangle size={16} /> : <Wrench size={16} />}
+      onClose={onClose}
+    >
+      <div className="modal-body">
+        <FormSection icon={<Wrench size={14} />} title={t("Informations")}>
+          <DetailRow icon={<AlertTriangle size={14} />} label={t("Priorite")}
+            value={<span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || t("Moyen")}</span>} />
+          <DetailRow icon={<CheckCircle2 size={14} />} label={t("Statut")} value={STATUS_LABEL[ticket.status] || ticket.status} />
+          <DetailRow icon={<Wrench size={14} />} label={t("Bien")}
+            value={`${ticket.propertyName || "-"}${ticket.unitName ? ` - ${ticket.unitName}` : ""}`} />
+          <DetailRow icon={<User size={14} />} label={t("Assigne")} value={assigneeName(ticket) || t("Non assigne")} />
+          <DetailRow icon={<CalendarDays size={14} />} label={t("Date prevue")} value={compactDate(ticket.scheduledDate)} />
+          <DetailRow icon={<CalendarDays size={14} />} label={t("Cree le")} value={compactDate(ticket.createdAt)} />
+          {ticket.projectId && <DetailRow icon={<FolderKanban size={14} />} label={t("Reference")} value={`MNT-${ticket.id}`} />}
+        </FormSection>
+        {ticket.description && (
+          <FormSection icon={<List size={14} />} title={t("Description")}>
+            <p className="maintenance-description">{ticket.description}</p>
+          </FormSection>
+        )}
+        <FormSection icon={<CircleDollarSign size={14} />} title={t("Couts")}>
+          <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={money(ticket.estimatedCost, sym)} />
+          {spent.length
+            ? spent.map((e) => (
+                <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={money(e.amount, e.symbol)} />
+              ))
+            : <p className="muted">{t("Aucun cout enregistre.")}</p>}
+        </FormSection>
+      </div>
+      <div className="modal-actions">
+        <button className="btn" onClick={() => onPhotos(ticket)}><Images size={14} /> {t("Photos")}</button>
+        <button className="btn" onClick={() => onCost(ticket, "view")}><Eye size={14} /> {t("Voir les couts")}</button>
+        <button className="btn btn-primary" onClick={() => onEdit(ticket)}><Pencil size={14} /> {t("Modifier")}</button>
+        <button className="btn" onClick={onClose}>{t("Fermer")}</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -645,7 +722,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove, onPhotos
         <MoreHorizontal size={16} />
       </button>
       {open && (
-        <div className="maintenance-menu-pop">
+        <div className="maintenance-menu-pop" onClick={(e) => e.stopPropagation()}>
           <button type="button" onClick={onPhotos}><Images size={14} /> {t("Photos")}</button>
           <button type="button" onClick={() => onCost?.("view")}><Eye size={14} /> {t("Voir les couts")}</button>
           <button type="button" onClick={() => onCost?.("add")}><CircleDollarSign size={14} /> {t("Enregistrer un cout")}</button>
@@ -660,7 +737,7 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove, onPhotos
   );
 }
 
-function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost, onPhotos }) {
+function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost, onPhotos, onOpen }) {
   if (!tickets.length) return <EmptyMaintenance />;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
@@ -673,7 +750,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
             const sym = costSymbol ? costSymbol(ticket) : currencySymbol;
             const spent = spentEntries(ticket, sym);
             return (
-            <tr key={ticket.id}>
+            <tr key={ticket.id} style={onOpen ? { cursor: "pointer" } : undefined} onClick={onOpen ? () => onOpen(ticket) : undefined}>
               <td style={{ fontWeight: 700 }}>{ticket.title}</td>
               <td>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</td>
               <td><span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || "Moyen"}</span></td>
@@ -682,7 +759,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
               <td>{compactDate(ticketDate(ticket))}</td>
               <td className="r">{money(ticket.estimatedCost, sym)}</td>
               <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{money(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
-              <td className="r">
+              <td className="r" onClick={(e) => e.stopPropagation()}>
                 <button className="immo-link" onClick={() => onCost(ticket, "view")}>{t("Couts")}</button>
                 <button className="immo-link" onClick={() => onEdit(ticket)}>{t("Modifier")}</button>
                 <button className="immo-link danger" onClick={() => onDelete(ticket)}>{t("Supprimer")}</button>
