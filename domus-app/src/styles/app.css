@@ -393,7 +393,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .settings-shortcut-tile svg { color:var(--iris-500); flex:none; }
 .settings-shortcut-tile:hover { border-color:var(--iris-300,#c7d2fe); background:var(--iris-50,#eef2ff); }
 /* ── Mise en page Reglages : groupes etiquetes + grille (au lieu de cartes empilees colle-a-colle) ── */
-.settings-group { margin-top:22px; }
+.settings-group { margin-top:22px; scroll-margin-top:76px; }
 .settings-group:first-of-type { margin-top:8px; }
 .settings-group-label {
   display:flex; align-items:center; gap:10px; margin:0 2px 12px;
