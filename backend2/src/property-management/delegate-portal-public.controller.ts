@@ -19,11 +19,13 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import type { Request } from "express";
 import { join } from "path";
 import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { DelegatePortalService } from "./delegate-portal.service";
 
+@Throttle({ default: { ttl: 60000, limit: 20 } })
 @ApiTags("delegate-portal")
 @Controller("delegate-portal")
 export class DelegatePortalPublicController {

@@ -6508,10 +6508,14 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
 
   // Génération en masse (via modal GenerateBoxesModal)
   const onGenerate = () => setGenOpen(true);
-  const doGenerate = async ({ count, capacity }) => {
+  const doGenerate = async ({ count, capacity, start }) => {
     setBusy(true);
     try {
-      await api.generateBoxes({ building_id: building.id, count, capacity });
+      // Le préfixe reprend celui des box existants ("Box 4" → "Box "), sinon les
+      // nouveaux s'appelleraient "1", "2"… à côté de "Box 1", "Box 2"…
+      const sample = (boxes || []).map((b) => String(b.name || "")).find((n) => /^(.*?)\d+\s*$/.test(n));
+      const prefix = sample ? sample.replace(/\d+\s*$/, "") : "Box ";
+      await api.generateBoxes({ building_id: building.id, count, capacity, start, prefix });
       setGenOpen(false);
       reload();
     } catch (e) { window.alert(String(e.message || e)); }
@@ -6555,6 +6559,21 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
     setBusy(true);
     try {
       await api.assignAnimalsToBox({ box_id: null, animal_ids: [animalId] });
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
+      reload();
+    } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+  // Vider un box sans le supprimer : la case reste disponible pour y replacer
+  // des animaux, contrairement à la suppression qui fait disparaître la case.
+  const emptyBox = async (box, animalsInBox) => {
+    const ids = (animalsInBox || []).map((a) => a.id);
+    if (ids.length === 0) return;
+    if (!window.confirm(L(`Retirer les ${ids.length} animal(aux) du box ${box.name} ? Le box restera disponible.`,
+      `Remove the ${ids.length} animal(s) from box ${box.name}? The box stays available.`))) return;
+    setBusy(true);
+    try {
+      await api.assignAnimalsToBox({ box_id: null, animal_ids: ids });
       window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
       reload();
     } catch (e) { window.alert(String(e.message || e)); }
@@ -6749,6 +6768,12 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                         <button type="button" title={L("Déclarer une maladie sur tout le box", "Declare a disease on the whole box")} disabled={busy} onClick={() => setDiseaseBoxId(selBox.id)}
                           style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid var(--oxblood-300)", background: "var(--oxblood-50)", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "var(--oxblood-700)" }}>
                           <Icon name="syringe" size={14} color="var(--oxblood-700)"/>{L("Maladie", "Disease")}
+                        </button>
+                      )}
+                      {inBox.length > 0 && (
+                        <button type="button" title={L("Vider le box (les animaux restent dans le cheptel)", "Empty the box (animals stay in the herd)")} disabled={busy} onClick={() => emptyBox(selBox, inBox)}
+                          style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid var(--border-1)", background: "var(--paper)", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "var(--ink-700)" }}>
+                          <Icon name="x" size={14} color="var(--ink-700)"/>{L("Vider", "Empty")}
                         </button>
                       )}
                       <button type="button" title={L("Supprimer ce box", "Delete this box")} disabled={busy} onClick={() => deleteOne(selBox)}
@@ -7076,13 +7101,21 @@ const GenerateBoxesModal = ({ lang, building, existingCount = 0, busy, onCancel,
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [count, setCount] = React.useState(String(building?.capacity || 20));
   const [capacity, setCapacity] = React.useState("");
+  // Numéro de départ : laissé vide, le backend reprend après le plus grand
+  // existant. À renseigner pour recréer un box supprimé au milieu (ex. Box 1).
+  const [start, setStart] = React.useState("");
   const nCount = parseInt(count, 10);
   const valid = Number.isFinite(nCount) && nCount >= 1;
   const submit = (e) => {
     e.preventDefault();
     if (!valid || busy) return;
     const cap = capacity.trim() ? parseInt(capacity, 10) : null;
-    onConfirm({ count: nCount, capacity: Number.isFinite(cap) && cap > 0 ? cap : null });
+    const nStart = start.trim() ? parseInt(start, 10) : null;
+    onConfirm({
+      count: nCount,
+      capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
+      start: Number.isFinite(nStart) && nStart > 0 ? nStart : null,
+    });
   };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
@@ -7120,6 +7153,18 @@ const GenerateBoxesModal = ({ lang, building, existingCount = 0, busy, onCancel,
             <input className="input" type="number" min="1" inputMode="numeric"
               placeholder={L("Laisser vide = sans limite", "Empty = unlimited")}
               value={capacity} onChange={(e) => setCapacity(e.target.value)}/>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--ink-700)", marginBottom: 5 }}>
+              {L("Numéro de départ", "Starting number")}
+            </label>
+            <input className="input" type="number" min="1" inputMode="numeric"
+              placeholder={L("Laisser vide = à la suite des box existants", "Empty = after the existing boxes")}
+              value={start} onChange={(e) => setStart(e.target.value)}/>
+            <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 4 }}>
+              {L("À renseigner pour recréer un box supprimé (ex. 1 pour refaire le Box 1).",
+                 "Set this to recreate a deleted box (e.g. 1 to restore Box 1).")}
+            </div>
           </div>
         </div>
 

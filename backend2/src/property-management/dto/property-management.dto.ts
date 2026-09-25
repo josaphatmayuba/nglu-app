@@ -1782,7 +1782,7 @@ export class CreateDelegateDto {
   @ApiPropertyOptional({
     example: 7,
     description:
-      "Tiers du registre central (table supplier), pour un delegue sous-traitant ou prestataire. Exclusif avec userId : un delegue est un employe OU un tiers externe, pas les deux.",
+      "Tiers du registre central (table supplier), pour un delegue sous-traitant ou prestataire. Exclusif avec userId (verifie par DelegatesService.ensurePersonLink) : un delegue est un employe OU un tiers externe, pas les deux.",
   })
   @IsOptional()
   @IsInt()
