@@ -2770,11 +2770,11 @@ export class FarmosService {
     // Numérotation : reprend après le plus grand numéro de box existant du bâtiment
     // (évite de recréer 1..N en double à chaque clic "+ Box"). Le start explicite l'emporte.
     let start = input.start != null ? Number(input.start) || 1 : 1;
+    const existing = await this.db
+      .select({ name: farmosBoxes.name })
+      .from(farmosBoxes)
+      .where(and(eq(farmosBoxes.buildingId, buildingId), eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)));
     if (input.start == null) {
-      const existing = await this.db
-        .select({ name: farmosBoxes.name })
-        .from(farmosBoxes)
-        .where(and(eq(farmosBoxes.buildingId, buildingId), eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)));
       let maxNum = 0;
       for (const b of existing) {
         const m = String(b.name ?? "").match(/(\d+)\s*$/);
@@ -2782,6 +2782,9 @@ export class FarmosService {
       }
       start = maxNum + 1;
     }
+    // Un start explicite peut viser un numéro déjà pris (recréation d'un box
+    // supprimé au milieu) : on ignore les noms existants au lieu de doublonner.
+    const taken = new Set(existing.map((b) => String(b.name ?? "")));
     const values = Array.from({ length: count }, (_, i) => ({
       organizationId: orgId,
       buildingId,
@@ -2789,10 +2792,11 @@ export class FarmosService {
       section: input.section ?? null,
       capacity,
       notes: null,
-    }));
+    })).filter((v) => !taken.has(v.name));
+    if (values.length === 0) return { created: 0 };
     await this.db.insert(farmosBoxes).values(values);
     await this.publishFarmosUpdate("generateBoxes", ["boxes"], "created", buildingId, orgId);
-    return { created: count };
+    return { created: values.length };
   }
 
   async updateBox(id: number, input: any, orgId: number) {

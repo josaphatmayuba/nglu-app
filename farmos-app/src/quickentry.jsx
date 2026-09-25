@@ -163,6 +163,10 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
 
   const pick = (o) => { onChange(o.value); setOpen(false); setQuery(""); inputRef.current && inputRef.current.blur(); };
   const clear = (e) => { e.preventDefault(); e.stopPropagation(); onChange(""); setQuery(""); setOpen(false); };
+  // Sélection au pointerdown en phase capture : sans ça, le mousedown global
+  // ci-dessus peut fermer la liste avant que le clic n'atteigne l'option, et la
+  // première sélection est perdue (il faut cliquer deux fois).
+  const pickOnPointerDown = (o) => (e) => { e.preventDefault(); e.stopPropagation(); pick(o); };
 
   let lastGroup = null;
   return (
@@ -210,7 +214,7 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
                   </div>
                 )}
                 <div
-                  onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+                  onPointerDownCapture={pickOnPointerDown(o)}
                   style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer",
                     background: isSel ? "var(--bg-sunken, #f4f3ef)" : "transparent" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken, #f4f3ef)")}
@@ -230,7 +234,7 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
 // AutocompleteDB — same UX as Autocomplete but loads options from the DB
 // (`farmos_lookups` for breed/pig_type/vet/route/death_cause OR `farmos_diseases`)
 // and exposes a "+ Ajouter" action so the user can add new values on the fly.
-const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, allowClear = true, customFetch, customCreate, useLabel = false, noAdd = false }) => {
+const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, allowClear = true, customFetch, customCreate, onCreate, useLabel = false, noAdd = false }) => {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -276,6 +280,7 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
 
   const pick = (o) => { onChange(o.value); setOpen(false); setQuery(""); inputRef.current && inputRef.current.blur(); };
   const clear = (e) => { e.preventDefault(); e.stopPropagation(); onChange(""); setQuery(""); setOpen(false); };
+  const pickOnPointerDown = (o) => (e) => { e.preventDefault(); e.stopPropagation(); pick(o); };
 
   const addNew = async () => {
     const v = query.trim();
@@ -284,9 +289,11 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
     setError(null);
     try {
       const body = customCreate ? customCreate(v) : { category, scope_key: scope || null, value_fr: v, value_en: v };
-      const res = customCreate
-        ? await api.createDisease(body)
-        : await api.createLookup(body);
+      const res = onCreate
+        ? await onCreate(v)
+        : customCreate
+          ? await api.createDisease(body)
+          : await api.createLookup(body);
       reload();
       window.dispatchEvent(new CustomEvent("farmos:lookup-created", { detail: { category, scope } }));
       if (useLabel) onChange(v);
@@ -344,7 +351,7 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
             const isSel = String(o.value) === String(value);
             return (
               <div key={o.value}
-                onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+                onPointerDownCapture={pickOnPointerDown(o)}
                 style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer",
                   background: isSel ? "var(--bg-sunken, #f4f3ef)" : "transparent" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken, #f4f3ef)")}
@@ -356,7 +363,7 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
           })}
           {canAdd && (
             <div
-              onMouseDown={(e) => { e.preventDefault(); addNew(); }}
+              onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); addNew(); }}
               style={{ padding: "10px 12px", fontSize: 13, cursor: "pointer",
                 borderTop: filtered.length > 0 ? "1px solid var(--border-1)" : 0,
                 color: "var(--clay-700)", fontWeight: 600,
@@ -542,6 +549,18 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
     return Array.from(seen).sort((a, b) => a.localeCompare(b));
   }, [animalsForGen]);
 
+  // Les bâtiments sont de vraies entités (farmos_buildings), pas un référentiel
+  // de libellés : sans ça le champ ne propose rien et recrée un doublon.
+  const fetchBuildings = React.useCallback(
+    () => api.listBuildings().then((rows) =>
+      (rows || [])
+        .filter((b) => (b.name || "").trim())
+        .map((b) => ({ id: b.id, valueFr: b.name, valueEn: b.name }))),
+    []);
+  const createBuilding = React.useCallback(
+    (name) => api.createBuilding({ name, species, zone_id: null }),
+    [species]);
+
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -670,6 +689,8 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
               lang={lang}
               category="building"
               scope={species}
+              customFetch={fetchBuildings}
+              onCreate={createBuilding}
               placeholder={species === "fish"
                 ? (lang === "fr" ? "Rechercher ou ajouter un bassin…" : "Search or add a pond…")
                 : (lang === "fr" ? "Rechercher ou ajouter un bâtiment…" : "Search or add a barn…")}
