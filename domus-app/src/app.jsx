@@ -99,7 +99,7 @@ const SCREENS = {
   hypotheque: (nav, device) => <Hypotheque go={nav} device={device} />,
   prets: (_nav, device) => <Prets device={device} />,
   portail: (nav, device) => <Portail go={nav} device={device} />,
-  reglages: (_nav, device) => <Reglages device={device} />,
+  reglages: (nav, device) => <Reglages go={nav} device={device} />,
 };
 
 // Route publique d'inscription locataire (/domus/onboarding/tenant?token=...) —

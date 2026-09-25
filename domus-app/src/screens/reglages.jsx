@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
   MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard, UserRound,
-  Files, FilePen, FilePlus, Eye,
+  Files, FilePen, FilePlus, Eye, HardHat, Info,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -41,16 +41,60 @@ function currencyList(raw) {
   })).filter((c) => c.id != null);
 }
 
-function SettingsGroup({ label, cols = 1, children }) {
+function SettingsGroup({ id, label, cols = 1, children }) {
   return (
-    <div className="settings-group">
+    <div className="settings-group" id={id}>
       <h2 className="settings-group-label">{label}</h2>
       <div className="settings-grid" data-cols={cols}>{children}</div>
     </div>
   );
 }
 
-export function Reglages({ device }) {
+// Raccourcis affiches en tete de Réglages : certains naviguent vers un autre
+// ecran (go), d'autres font defiler jusqu'a une carte de cette page (anchor).
+function scrollToAnchor(id) {
+  if (typeof document === "undefined") return;
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+const SETTINGS_SHORTCUTS = [
+  { key: "delegues", label: "Délégués", icon: UserRound, kind: "go", target: "delegues" },
+  { key: "sous-traitants", label: "Sous-traitants", icon: HardHat, kind: "go", target: "sous-traitants" },
+  { key: "devises", label: "Devises", icon: Coins, kind: "anchor", target: "reglages-devises" },
+  { key: "paiement", label: "Moyens de paiement", icon: CreditCard, kind: "anchor", target: "reglages-devises" },
+  { key: "numerotation", label: "Numérotation", icon: Hash, kind: "anchor", target: "reglages-devises" },
+  { key: "identite", label: "Identité du bailleur", icon: UserRound, kind: "anchor", target: "reglages-contrats" },
+  { key: "signature", label: "Signature du bailleur", icon: FilePen, kind: "anchor", target: "reglages-contrats" },
+  { key: "messages", label: "Messages & notifications", icon: MessageSquare, kind: "anchor", target: "reglages-contrats" },
+  { key: "modeles", label: "Modèles de contrat", icon: Files, kind: "anchor", target: "reglages-contrats" },
+  { key: "apropos", label: "À propos", icon: Info, kind: "anchor", target: "reglages-apropos" },
+];
+
+function SettingsShortcuts({ go }) {
+  return (
+    <div className="settings-shortcuts card">
+      <h3 className="settings-shortcuts-title">{t("Accès rapide")}</h3>
+      <div className="settings-shortcuts-grid">
+        {SETTINGS_SHORTCUTS.map((s) => {
+          const Icon = s.icon;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              className="settings-shortcut-tile"
+              onClick={() => (s.kind === "go" ? go?.(s.target) : scrollToAnchor(s.target))}
+            >
+              <Icon size={18} />
+              <span>{t(s.label)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function Reglages({ device, go }) {
   const { data, loading, error, reload } = useApi(loadConfig, []);
 
   if (loading) return <Loading />;
@@ -85,13 +129,15 @@ export function Reglages({ device }) {
         </div>
       </div>
 
-      <SettingsGroup label={t("Devises & facturation")}>
+      <SettingsShortcuts go={go} />
+
+      <SettingsGroup id="reglages-devises" label={t("Devises & facturation")}>
         <CurrenciesCard initial={data?.currencies} onChanged={reload} />
         <PaymentMethodsCard initial={data?.paymentMethods} subAccounts={data?.subAccounts} onChanged={reload} />
         <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
       </SettingsGroup>
 
-      <SettingsGroup label={t("Contrats & communication")} cols={2}>
+      <SettingsGroup id="reglages-contrats" label={t("Contrats & communication")} cols={2}>
         <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
@@ -99,7 +145,7 @@ export function Reglages({ device }) {
       </SettingsGroup>
 
       {device && (
-        <SettingsGroup label={t("Affichage & application")}>
+        <SettingsGroup id="reglages-device" label={t("Affichage & application")}>
           <section className="card settings-card device-settings-card">
             <h3><Smartphone size={17} /> Apercu device</h3>
             <div className="device-segmented">
@@ -114,7 +160,7 @@ export function Reglages({ device }) {
         </SettingsGroup>
       )}
 
-      <SettingsGroup label="À propos">
+      <SettingsGroup id="reglages-apropos" label="À propos">
         <AboutCard />
       </SettingsGroup>
     </div>
