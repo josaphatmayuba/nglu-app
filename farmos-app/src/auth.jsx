@@ -38,7 +38,19 @@ function setToken(t) {
 // doit PAS traiter ça comme une session invalide : on jette une erreur taguée
 // `.isNetworkError` pour que l'appelant (api.js) garde la session et réessaie
 // plus tard, au lieu de déconnecter l'utilisateur juste parce qu'il est hors ligne.
+let inFlightRefresh = null;
+
 export async function restoreSession() {
+  // Un seul refresh reseau a la fois : les refresh-tokens tournent a chaque
+  // usage (SCRUM-121), donc deux appels concurrents se marchent dessus — le
+  // premier fait tourner le cookie, le second presente un jeton deja consomme
+  // et echoue. Les appelants simultanes partagent donc la meme promesse.
+  if (inFlightRefresh) return inFlightRefresh;
+  inFlightRefresh = doRestoreSession().finally(() => { inFlightRefresh = null; });
+  return inFlightRefresh;
+}
+
+async function doRestoreSession() {
   let res;
   try {
     res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });

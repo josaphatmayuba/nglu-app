@@ -50,6 +50,10 @@ async function doJsonFetch(path, init = {}, retried = false) {
         try {
           const token = await restoreSession();
           if (token) return doJsonFetch(path, init, true);
+          // Au demarrage, plusieurs ecrans tirent en parallele avant que le
+          // bootstrap ait pose le token : le refresh mutualise a pu aboutir
+          // pour un autre appelant. Ne pas deconnecter sans avoir revérifié.
+          if (getToken()) return doJsonFetch(path, init, true);
         } catch (err) {
           // Hors ligne : le 401 vient probablement d'un token expiré qu'on ne
           // peut pas rafraîchir sans réseau. On NE déconnecte PAS — on laisse
@@ -85,6 +89,8 @@ async function doGlobalJsonFetch(path, init = {}, retried = false) {
         try {
           const token = await restoreSession();
           if (token) return doGlobalJsonFetch(path, init, true);
+          // Idem : un refresh concurrent a pu reussir entre-temps.
+          if (getToken()) return doGlobalJsonFetch(path, init, true);
         } catch (err) {
           // Hors ligne : ne pas déconnecter, laisser remonter l'erreur réseau.
           if (err?.isNetworkError) throw err;

@@ -2563,6 +2563,15 @@ export class FarmosService {
     return { ok: true };
   }
 
+  // Nombre de tetes porte par une fiche : une fiche individuelle a count NULL
+  // et vaut 1, un lot vaut son count. Un count explicitement a 0 vaut 0 : sans
+  // cette distinction, un lot entierement vide pesait une tete fantome.
+  private static headCount(count: unknown): number {
+    if (count == null) return 1;
+    const n = Number(count);
+    return Number.isFinite(n) && n >= 0 ? n : 1;
+  }
+
   // ─── Bâtiments FarmOS — occupation calculée depuis animals.barn (par nom) ─────
   async listBuildings(orgId: number, species?: string | null, zoneId?: number | null) {
     const conds = [eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)];
@@ -2581,7 +2590,7 @@ export class FarmosService {
     const occByName = new Map<string, number>();
     for (const a of animals) {
       if (!a.barn) continue;
-      const n = Number(a.count ?? 0) || 1;
+      const n = FarmosService.headCount(a.count);
       occByName.set(a.barn, (occByName.get(a.barn) ?? 0) + n);
     }
     return buildings.map((b) => {
@@ -2673,7 +2682,7 @@ export class FarmosService {
     const sickByBox = new Map<number, number>();
     for (const a of animals) {
       if (!a.boxId) continue;
-      const n = Number(a.count ?? 0) || 1;
+      const n = FarmosService.headCount(a.count);
       occByBox.set(a.boxId, (occByBox.get(a.boxId) ?? 0) + n);
       if (a.status === "sick" || a.status === "quarantine") {
         sickByBox.set(a.boxId, (sickByBox.get(a.boxId) ?? 0) + n);
@@ -2739,7 +2748,7 @@ export class FarmosService {
       ))
       .orderBy(farmosAnimals.name);
 
-    const heads = animals.reduce((s, a) => s + (Number(a.count ?? 0) || 1), 0);
+    const heads = animals.reduce((s, a) => s + FarmosService.headCount(a.count), 0);
     return { box, building: building ?? null, zone: zone ?? null, farm: farm ?? null, animals, heads };
   }
 
@@ -2849,7 +2858,7 @@ export class FarmosService {
     let occupancy = 0;
     for (const r of rows) {
       if (exclude.has(r.id)) continue;
-      occupancy += Number(r.count ?? 0) || 1;
+      occupancy += FarmosService.headCount(r.count);
     }
     return { capacity: box.capacity, occupancy, free: box.capacity - occupancy };
   }
@@ -2897,7 +2906,7 @@ export class FarmosService {
     }
     const alreadyHere = animals.filter((a) => a.boxId === targetBoxId).map((a) => a.id);
     const incoming = animals.filter((a) => a.boxId !== targetBoxId)
-      .reduce((s, a) => s + (Number(a.count ?? 0) || 1), 0);
+      .reduce((s, a) => s + FarmosService.headCount(a.count), 0);
     const { capacity, occupancy, free } = await this.boxFreeSpace(box, orgId, alreadyHere);
 
     if (capacity != null && incoming > free && !force) {
@@ -3655,9 +3664,12 @@ export class FarmosService {
       }
       const countAfter = Math.max(0, countBefore - count);
 
+      // Un lot entierement extrait n'a plus d'animal derriere lui : le desactiver,
+      // sinon la fiche vide continue de peser une tete fantome dans l'occupation
+      // du batiment (le comptage fait `Number(count ?? 0) || 1`, donc 0 vaut 1).
       await tx
         .update(farmosAnimals)
-        .set({ count: countAfter })
+        .set(countAfter === 0 ? { count: 0, isActive: 0 } : { count: countAfter })
         .where(and(eq(farmosAnimals.id, fromRow.id), eq(farmosAnimals.organizationId, orgId)));
 
       const motherId = fromRow.motherId ?? null;
