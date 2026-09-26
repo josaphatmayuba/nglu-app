@@ -2371,14 +2371,23 @@ const AllLotsDataList = () => {
 const AllBarnsDataList = () => {
   const [barns, setBarns] = React.useState([]);
   React.useEffect(() => {
-    api.listBuildings().then((rows) => {
+    let alive = true;
+    // Au demarrage, cet appel peut partir avant que le token soit restaure :
+    // le .catch() muet laissait alors la liste vide pour toute la session, et
+    // le champ Batiment ne proposait plus rien. On reessaie une fois.
+    const load = (retry) => api.listBuildings().then((rows) => {
+      if (!alive) return;
       const seen = new Map();
       (rows || []).forEach((b) => {
         const name = (b.name || "").trim();
         if (name && !seen.has(name)) seen.set(name, b.zone?.name || "");
       });
       setBarns(Array.from(seen.entries()).sort((a, b) => a[0].localeCompare(b[0])));
-    }).catch(() => {});
+    }).catch(() => {
+      if (alive && retry) setTimeout(() => load(false), 1200);
+    });
+    load(true);
+    return () => { alive = false; };
   }, []);
   return (
     <datalist id="all-barns">
