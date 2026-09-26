@@ -3676,13 +3676,20 @@ export class FarmosService {
           name: count === 1 ? (input.name ?? null) : (input.name ? `${input.name}${suffix}` : null),
           species: fromRow.species,
           race: fromRow.race ?? null,
-          sex: (input.sex as "M" | "F" | undefined) ?? null,
+          // A defaut de sexe fourni, reprendre celui du lot source : un lot de
+          // males n'extrait pas des individus de sexe inconnu.
+          sex: (input.sex as "M" | "F" | undefined) ?? (fromRow.sex as "M" | "F" | null) ?? null,
           dateOfBirth: fromRow.dateOfBirth ?? null,
           count: 1,
           lot: fromRow.lot ?? null,
           buildingId: fromRow.buildingId ?? null,
           boxId: fromRow.boxId ?? null,
           zoneId: fromRow.zoneId ?? null,
+          // barn/room doivent suivre : un lot dont le buildingId est nul est
+          // rattache a son batiment par le NOM (barn). Sans ces deux champs, les
+          // individus extraits sortaient du comptage d'occupation du batiment.
+          barn: fromRow.barn ?? null,
+          room: fromRow.room ?? null,
           type: null,
           status: "healthy",
           motherId,
