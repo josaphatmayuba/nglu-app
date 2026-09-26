@@ -205,7 +205,7 @@ export function money(n, currency = "CDF") {
 export function moneyExact(n, currency = "CDF") {
   const v = Number(n || 0);
   const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
-  return `${symbol} ${v.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}`;
+  return `${symbol} ${v.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`;
 }
 
 // ── Moyens de paiement configurables (table paymentMethod partagée avec le CRM) ──
