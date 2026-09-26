@@ -2865,11 +2865,15 @@ export class FarmosService {
     const force = input.force === true || input.force === "true";
 
     if (targetBoxId == null) {
-      await this.db.update(farmosAnimals)
+      const [res]: any = await this.db.update(farmosAnimals)
         .set({ boxId: null })
         .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+      // Pas de controle d'erreur ici : MySQL renvoie 0 ligne affectee quand
+      // l'animal n'avait deja aucun box, ce qui est un retrait sans effet mais
+      // legitime (idempotent). Le nombre reel est simplement remonte a l'appelant.
+      const affected = Number(res?.affectedRows ?? animalIds.length);
       await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", 0, orgId);
-      return { assigned: animalIds.length, boxId: null };
+      return { assigned: affected, boxId: null };
     }
 
     const box = await this.getBox(targetBoxId, orgId);
@@ -2880,6 +2884,17 @@ export class FarmosService {
       .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1),
         this.activeLivestockSqlCondition(),
         sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+    // Un id absent de cette requete ne sera pas affecte non plus par l'UPDATE
+    // ci-dessous (autre organisation, inactif, ou statut vendu/decede) : le dire
+    // plutot que de renvoyer un 201 sur une affectation qui n'aura pas lieu.
+    const foundIds = new Set(animals.map((a) => a.id));
+    const missing = animalIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Animal(aux) introuvable(s) ou non affectable(s) : ${missing.join(", ")}. `
+        + "Verifiez qu'ils sont actifs et ni vendus ni decedes.",
+      );
+    }
     const alreadyHere = animals.filter((a) => a.boxId === targetBoxId).map((a) => a.id);
     const incoming = animals.filter((a) => a.boxId !== targetBoxId)
       .reduce((s, a) => s + (Number(a.count ?? 0) || 1), 0);
@@ -2893,11 +2908,17 @@ export class FarmosService {
       });
     }
 
-    await this.db.update(farmosAnimals)
+    const [res]: any = await this.db.update(farmosAnimals)
       .set({ boxId: targetBoxId })
       .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+    // MySQL compte 0 ligne affectee quand la valeur ecrite est deja en place :
+    // ne signaler l'echec que s'il restait vraiment quelque chose a deplacer.
+    const affected = Number(res?.affectedRows ?? animalIds.length);
+    if (affected === 0 && alreadyHere.length < animalIds.length) {
+      throw new BadRequestException("L'affectation n'a modifie aucun animal : rien n'a ete enregistre.");
+    }
     await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", targetBoxId, orgId);
-    return { assigned: animalIds.length, boxId: targetBoxId, forced: force && capacity != null && incoming > free };
+    return { assigned: affected, boxId: targetBoxId, forced: force && capacity != null && incoming > free };
   }
 
   // Déclare une maladie sur tout un box d'un coup (traitement de masse).
