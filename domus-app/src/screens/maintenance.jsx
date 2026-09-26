@@ -21,7 +21,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useDateRange } from "../dateRange.jsx";
-import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
+import { moneyExact, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
@@ -496,11 +496,11 @@ export function Maintenance() {
       <div className="card ops-panel maintenance-summary-card">
         <div className="panel-title">{t("Priorites")}</div>
         {costTotalsByCurrency.length === 0
-          ? <div className="ops-score"><span>{t("Cout estime total")}</span><b>{money(0, currency.defaultCurrencySymbol)}</b></div>
+          ? <div className="ops-score"><span>{t("Cout estime total")}</span><b>{moneyExact(0, currency.defaultCurrencySymbol)}</b></div>
           : costTotalsByCurrency.map((c) => (
               <div className="ops-score" key={c.symbol}>
                 <span>{tf("Couts {sym}", {sym: c.symbol})}</span>
-                <b>{money(c.estimated, c.symbol)} {t("estimé")}{c.spent > 0 ? ` · ${money(c.spent, c.symbol)} ${t("dépensé")}` : ""}</b>
+                <b>{moneyExact(c.estimated, c.symbol)} {t("estimé")}{c.spent > 0 ? ` · ${moneyExact(c.spent, c.symbol)} ${t("dépensé")}` : ""}</b>
               </div>
             ))}
         <div className="ops-track"><span style={{ width: `${Math.min(100, urgentTickets.length * 20)}%` }} /></div>
@@ -659,9 +659,9 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
       <div className="ticket-meta">
         <span><User size={14} /> {assignee || t("Non assigne")}</span>
         <span><CalendarDays size={14} /> {compactDate(ticketDate(ticket))}</span>
-        {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {money(ticket.estimatedCost, sym)}</span>}
+        {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {moneyExact(ticket.estimatedCost, sym)}</span>}
         {spent.map((e) => (
-          <span key={e.symbol} title={t("Coût réel déjà dépensé")}><CircleDollarSign size={14} /> {money(e.amount, e.symbol)} {t("dépensé")}</span>
+          <span key={e.symbol} title={t("Coût réel déjà dépensé")}><CircleDollarSign size={14} /> {moneyExact(e.amount, e.symbol)} {t("dépensé")}</span>
         ))}
       </div>
       {next && (
@@ -767,9 +767,9 @@ function TicketDetailModal({ ticket, costSymbol, onClose, onEdit, onCost }) {
         )}
         <FormSection icon={<CircleDollarSign size={14} />} title={t("Couts")}>
           <div className="info-grid">
-            <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={money(ticket.estimatedCost, sym)} />
+            <DetailRow icon={<Wrench size={14} />} label={t("Cout estime")} value={moneyExact(ticket.estimatedCost, sym)} />
             {spent.map((e) => (
-              <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={money(e.amount, e.symbol)} />
+              <DetailRow key={e.symbol} icon={<CircleDollarSign size={14} />} label={t("Depense")} value={moneyExact(e.amount, e.symbol)} />
             ))}
           </div>
           {!spent.length && <p className="muted">{t("Aucun cout enregistre.")}</p>}
@@ -837,8 +837,8 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
               <td>{STATUS_LABEL[ticket.status] || ticket.status}</td>
               <td>{assigneeName(ticket) || t("Non assigne")}</td>
               <td>{compactDate(ticketDate(ticket))}</td>
-              <td className="r">{money(ticket.estimatedCost, sym)}</td>
-              <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{money(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
+              <td className="r">{moneyExact(ticket.estimatedCost, sym)}</td>
+              <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{moneyExact(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
               <td className="r">
                 <button className="immo-link" onClick={() => onCost(ticket, "view")}>{t("Couts")}</button>
                 <button className="immo-link" onClick={() => onEdit(ticket)}>{t("Modifier")}</button>
@@ -1055,16 +1055,16 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
               {costs.map((cost) => (
                 <div key={cost.id}>
                   <strong>{cost.description}</strong>
-                  <span>{money(cost.amount, costSym(cost))} - {cost.vendorName || cost.type}</span>
+                  <span>{moneyExact(cost.amount, costSym(cost))} - {cost.vendorName || cost.type}</span>
                 </div>
               ))}
               {costs.length === 0 && <p className="muted">{t("Aucun cout enregistre.")}</p>}
             </div>
           )}
           {totalsByCur.length === 0
-            ? <div className="ops-score"><span>{t("Total")}</span><b>{money(0, defaultCurrencySymbol)}</b></div>
+            ? <div className="ops-score"><span>{t("Total")}</span><b>{moneyExact(0, defaultCurrencySymbol)}</b></div>
             : totalsByCur.map(([sym, amount]) => (
-                <div className="ops-score" key={sym}><span>{tf(t("Total {sym}"), {sym})}</span><b>{money(amount, sym)}</b></div>
+                <div className="ops-score" key={sym}><span>{tf(t("Total {sym}"), {sym})}</span><b>{moneyExact(amount, sym)}</b></div>
               ))}
         </FormSection>
         {mode !== "view" && (
