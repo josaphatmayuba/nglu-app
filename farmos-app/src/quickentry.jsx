@@ -8,6 +8,7 @@ import { defaultCurrencyId, defaultSymbol } from "./currency";
 import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
 import { animalQty } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
+import { Spinner } from "./loading.jsx";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
@@ -340,7 +341,8 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
           maxHeight: 260, overflowY: "auto", zIndex: 200,
         }}>
           {loading && (
-            <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)" }}>
+            <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)", display: "flex", alignItems: "center", gap: 8 }}>
+              <Spinner size={13}/>
               {lang === "fr" ? "Chargement…" : "Loading…"}
             </div>
           )}

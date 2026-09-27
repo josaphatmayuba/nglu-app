@@ -775,7 +775,9 @@ export function Loyers({ go }) {
         </span>
       </div>
 
-      {rows.length === 0 ? (
+      {/* Vue « Par locataire » : un bail actif sans aucun paiement doit quand
+          meme afficher sa carte (retard + bouton Generer les echeances). */}
+      {rows.length === 0 && (view !== "locataire" || cards.length === 0) ? (
         <div className="immo-empty">
           <Wallet size={28} />
           <h3>{t("Aucun paiement")}</h3>

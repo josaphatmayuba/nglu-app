@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { api } from "./api";
 import { MaterialLineChart } from "./material-charts.jsx";
 import { symbolFor, currencyOptions, currencyIdOf } from "./currency";
+import { SectionLoader } from "./loading.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SIMULATEUR D'ELEVAGE — projection cheptel 5 ans, strategies P1/P2,
@@ -1137,6 +1138,9 @@ const SimulatorScreen = ({ lang }) => {
             )}
           </div>
         </div>
+        {loading && zoneComparisonRows.length === 0 && (
+          <SectionLoader lang={lang} compact/>
+        )}
         {zoneComparisonRows.length > 0 && (
           <div style={{ overflowX: "auto", marginTop: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
@@ -1176,7 +1180,7 @@ const SimulatorScreen = ({ lang }) => {
       {/* En-tete + cheptel detecte */}
       <div className="card" style={card}>
         <div style={upper}>{L("Cheptel de depart (detecte)", "Starting herd (detected)")}</div>
-        {loading ? <div>{L("Chargement…", "Loading…")}</div> : (
+        {loading ? <SectionLoader lang={lang} compact/> : (
           <div style={{ fontSize: 13 }}>
             {L("Total", "Total")}: <b>{females + males}</b>
             {" · "}{L("Femelles", "Females")}: <b>{females}</b> · {L("Males", "Males")}: <b>{males}</b>

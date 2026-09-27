@@ -4,6 +4,7 @@
 
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
+import { AnimalAvatar } from "./animal-avatar.jsx";
 import { speciesById, SPECIES, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
@@ -12,6 +13,7 @@ import { AutocompleteDB, Autocomplete } from "./quickentry";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { animalStatusColor, animalStatusLabel, isDeceasedStatus, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
+import { SectionLoader } from "./loading.jsx";
 
 const FIELD_DEFS = {
   // generic
@@ -574,7 +576,11 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         )}
 
         {/* Table */}
-        <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
+        {loadState === "loading" && animals.length === 0 ? (
+          <SectionLoader lang={lang}/>
+        ) : (
+          <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
+        )}
 
         {/* Note about adaptation */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--fg-3)", }}>
@@ -744,9 +750,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
               borderRadius: 10, padding: "10px 12px", cursor: "pointer",
               display: "flex", gap: 10, alignItems: "center", boxShadow: "var(--shadow-1)",
             }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: sp.accentBg, color: sp.accent, border: `1px solid ${sp.accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <AnimalGlyph kind={sp.glyph} size={27} color="currentColor" strokeWidth={1.9}/>
-              </div>
+              <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={44} accentBg={sp.accentBg} deceasedOrSold={locked} title={a.name}/>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                   <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
@@ -821,9 +825,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
             position: "relative",
           }}>
             {sel && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--oxblood-700)" }}/>}
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: sp.accentBg, color: sp.accent, border: `1px solid ${sp.accent}22`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <AnimalGlyph kind={sp.glyph} size={22} color="currentColor" strokeWidth={1.9}/>
-            </div>
+            <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={36} accentBg={sp.accentBg} deceasedOrSold={locked} title={a.name}/>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                 <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
@@ -1564,15 +1566,15 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           </div>
         </div>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 12,
-            background: photos[0]?.dataUrl ? `center/cover no-repeat url(${photos[0].dataUrl}), ${sp.accentBg}` : sp.accentBg,
-            color: sp.accent,
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            border: "1px solid var(--border-1)", overflow: "hidden",
-          }}>
-            {!photos[0] && <AnimalGlyph kind={sp.glyph} size={40} color="currentColor"/>}
-          </div>
+          <AnimalAvatar
+            species={animal.species}
+            tagNumber={animal.tagNumber}
+            size={64}
+            accentBg={sp.accentBg}
+            photoUrl={photos[0]?.dataUrl}
+            deceasedOrSold={readOnly}
+            title={animal.name}
+          />
           <div style={{ minWidth: 0 }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 26,  color: "var(--ink-950)", letterSpacing: "-0.015em", margin: 0 }}>{animal.name}</h2>
             <div className="mono" style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 2 }}>{animal.id} · {animal.race}</div>
@@ -1777,7 +1779,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             emptyFr="Aucune intervention enregistrée pour cet animal." emptyEn="No operation recorded for this animal."/>
         )}
         {!editing && tab === "finance" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           const f = related.finance;
           if (!f) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée financière pour cet animal (ni vente ni dépense liée)." : "No financial data for this animal (no linked sale or expense)."}</div>;
           const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
@@ -1816,7 +1818,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <AnimalProfitabilityTab lang={lang} animalId={animal._pk}/>
         )}
         {!editing && tab === "documents" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (related.documents.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun document pour cet animal." : "No document for this animal."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1835,7 +1837,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           );
         })()}
         {!editing && tab === "alerts" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (related.alerts.length === 0) return <div style={{ color: "var(--health-700)", fontSize: 13 }}>{lang === "fr" ? "Aucune alerte active (pas de délai de retrait en cours)." : "No active alert (no ongoing withdrawal period)."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1884,7 +1886,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               };
             }),
           ].filter((e) => e.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (events.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun historique." : "No history."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1923,7 +1925,7 @@ const AnimalProfitabilityTab = ({ lang, animalId }) => {
     return () => { cancel = true; };
   }, [animalId]);
 
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} compact/>;
   if (!data) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée de rentabilité pour cet animal." : "No profitability data for this animal."}</div>;
 
   const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
@@ -2017,7 +2019,7 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
       )}
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
 
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang} compact/>}
       {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
       {!loading && rows.length > 0 && (
         <>
@@ -2439,6 +2441,11 @@ const SEVERITY_OPTIONS = [
 const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, healthAction, setHealthAction, onChanged }) => {
   const hasOpenEpisode = !!(episode && episode.episode);
   const ep = hasOpenEpisode ? episode.episode : null;
+  // Un statut malade/quarantaine pose sans episode ouvert (import, correction de
+  // masse, PATCH direct) laissait la fiche dans une impasse : l'UI ne proposait
+  // que "Declarer une maladie" sur un animal deja malade, et jamais la sortie.
+  const ailingWithoutEpisode = !hasOpenEpisode
+    && ["sick", "quarantine"].includes(String(animal.status || "").toLowerCase());
   const observations = hasOpenEpisode ? (episode.observations || []) : [];
   const deceased = isDeceasedStatus(animal.status);
   const runningTreatments = (treatments || []).filter((t) => t.status === "running");
@@ -2480,13 +2487,13 @@ const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, health
             </span>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            {!hasOpenEpisode && !readOnly && !deceased && (
+            {!hasOpenEpisode && !ailingWithoutEpisode && !readOnly && !deceased && (
               <button className="btn btn-sm" onClick={() => setHealthAction(healthAction === "declare" ? null : "declare")}>
                 <Icon name="plus" size={13} color="var(--ink-700)"/>
                 {lang === "fr" ? "Déclarer une maladie" : "Declare illness"}
               </button>
             )}
-            {hasOpenEpisode && !readOnly && (
+            {(hasOpenEpisode || ailingWithoutEpisode) && !readOnly && (
               <button className="btn btn-sm btn-primary" onClick={() => setHealthAction(healthAction === "heal" ? null : "heal")}>
                 <Icon name="check" size={13} color="#ECF1EC"/>
                 {lang === "fr" ? "Déclarer guéri" : "Declare recovered"}
@@ -2541,8 +2548,9 @@ const HealthStatusPanel = ({ lang, animal, readOnly, episode, treatments, health
         {healthAction === "declare" && !hasOpenEpisode && (
           <HealthDeclareForm lang={lang} animal={animal} onCancel={close} onSaved={afterSubmit}/>
         )}
-        {healthAction === "heal" && hasOpenEpisode && (
-          <HealthHealForm lang={lang} animal={animal} runningTreatments={runningTreatments} onCancel={close} onSaved={afterSubmit}/>
+        {healthAction === "heal" && (hasOpenEpisode || ailingWithoutEpisode) && (
+          <HealthHealForm lang={lang} animal={animal} runningTreatments={runningTreatments}
+            hasOpenEpisode={hasOpenEpisode} onCancel={close} onSaved={afterSubmit}/>
         )}
       </div>
 
@@ -2852,7 +2860,7 @@ const HealthObservationForm = ({ lang, animal, minDate, onCancel, onSaved }) => 
   );
 };
 
-const HealthHealForm = ({ lang, animal, runningTreatments, onCancel, onSaved }) => {
+const HealthHealForm = ({ lang, animal, runningTreatments, hasOpenEpisode = true, onCancel, onSaved }) => {
   const today = new Date().toISOString().slice(0, 10);
   const [recoveredAt, setRecoveredAt] = React.useState(today);
   const [closeIds, setCloseIds] = React.useState(() => new Set());
@@ -2865,11 +2873,24 @@ const HealthHealForm = ({ lang, animal, runningTreatments, onCancel, onSaved }) 
     setSaving(true);
     setErr(null);
     try {
-      await api.declareAnimalRecovery(animal._pk, {
-        recovered_at: recoveredAt || undefined,
-        note: note || undefined,
-        close_treatment_ids: closeIds.size > 0 ? [...closeIds] : undefined,
-      });
+      if (hasOpenEpisode) {
+        await api.declareAnimalRecovery(animal._pk, {
+          recovered_at: recoveredAt || undefined,
+          note: note || undefined,
+          close_treatment_ids: closeIds.size > 0 ? [...closeIds] : undefined,
+        });
+      } else {
+        // Sans episode ouvert, health-heal refuse (400) : le PATCH generique
+        // trace le changement dans l'historique de statut et refermerait un
+        // episode s'il en existait un. Le delai de retrait n'est pas touche,
+        // il se recalcule depuis les traitements.
+        // Pas de status_cause : STATUS_CAUSE_OPTIONS decrit l'entree en maladie,
+        // pas la sortie, et declareAnimalRecovery n'en envoie pas non plus.
+        await api.updateAnimal(animal._pk, {
+          status: "healthy",
+          status_note: note || undefined,
+        });
+      }
       onSaved();
     } catch (e) {
       setErr(e.message);
@@ -2883,7 +2904,7 @@ const HealthHealForm = ({ lang, animal, runningTreatments, onCancel, onSaved }) 
         <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date de guérison" : "Recovery date"}</span>
         <input className="input" type="date" max={today} value={recoveredAt} onChange={(e) => setRecoveredAt(e.target.value)}/>
       </label>
-      {runningTreatments.length > 0 && (
+      {hasOpenEpisode && runningTreatments.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Clôturer les traitements en cours" : "Close ongoing treatments"}</span>
           {runningTreatments.map((t) => (
@@ -2920,7 +2941,7 @@ const UpcomingBadge = ({ lang }) => (
 const isFutureDate = (d) => !!d && String(d).slice(0, 10) > new Date().toISOString().slice(0, 10);
 
 const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} compact/>;
   if (!items || items.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? emptyFr : emptyEn}</div>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

@@ -5,6 +5,7 @@ import { speciesById } from "./data";
 import { api, adaptAnimal } from "./api";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { loadFaceModel, buildFaceIndex, findBestFace } from "./face-recognition";
+import { SectionLoader } from "./loading.jsx";
 
 // ─── Hardware hooks (camera, zxing, web speech, NFC) ────────────────────
 // useCamera — getUserMedia + facing toggle + torch (Android Chrome only).
@@ -454,9 +455,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
       {!found && !boxCtx && !boxLoading && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => acceptResult(a)}/>}
 
       {boxLoading && (
-        <div style={{ padding: 24, textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
-          {lang === "fr" ? "Chargement du box…" : "Loading box…"}
-        </div>
+        <SectionLoader lang={lang} label={lang === "fr" ? "Chargement du box…" : "Loading box…"} minHeight={120}/>
       )}
 
       {boxCtx && <BoxResultCard lang={lang} ctx={boxCtx} onClose={reset} onNav={onNav}/>}

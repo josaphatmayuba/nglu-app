@@ -51,7 +51,13 @@ function bearerTokenFromRequest(req) {
 app.set('trust proxy', 1);
 
 // ── Logging ───────────────────────────────────────────────
-app.use(morgan(':method :url :status :response-time ms - :remote-addr'));
+// EventSource ne pouvant pas envoyer d'en-tete, /events/me recoit le JWT en
+// query string : journaliser :url tel quel ecrivait un jeton valide en clair
+// dans les logs (et donc dans toute sauvegarde ou export de ceux-ci). On
+// masque la valeur, sans toucher a la requete elle-meme.
+morgan.token('safeurl', (req) => String(req.originalUrl || req.url || '')
+  .replace(/([?&](?:token|access_token|refresh_token)=)[^&]*/gi, '$1[REDACTED]'));
+app.use(morgan(':method :safeurl :status :response-time ms - :remote-addr'));
 
 // ── Rate limiting global (100 req/min) ────────────────────
 const limiter = rateLimit({
@@ -110,6 +116,18 @@ app.use((req, res, next) => {
     try {
       jwt.verify(token, JWT_SECRET);
       req.headers.authorization = `Bearer ${token}`;
+      // Le jeton est desormais porte par l'en-tete : le retirer de l'URL avant
+      // de proxyfier, sinon le backend le journalise a son tour (et il partirait
+      // aussi dans le Referer d'une eventuelle redirection).
+      if (req.query && req.query.token) {
+        delete req.query.token;
+        const [path, qs] = String(req.url).split('?');
+        const rest = (qs || '')
+          .split('&')
+          .filter((p) => p && !/^token=/i.test(p))
+          .join('&');
+        req.url = rest ? `${path}?${rest}` : path;
+      }
     } catch (err) {
       return res.status(401).json({
         error: 'Unauthorized',

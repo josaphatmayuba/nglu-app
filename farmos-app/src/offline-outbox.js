@@ -6,7 +6,7 @@
 // (ex: créer un animal puis lui attacher un traitement).
 
 import { db as cacheDb, replaceCache } from "./offline-db";
-import { getToken } from "./auth.jsx";
+import { ensureFreshToken } from "./auth.jsx";
 
 // Le store "outbox" est déclaré dans offline-db.js (version 2) — toutes les
 // versions Dexie de cette base doivent vivre dans ce seul fichier, voir le
@@ -136,7 +136,9 @@ async function rawFetch(method, path, body) {
   const NATIVE = typeof window !== "undefined" && (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
   const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
   const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
-  const token = getToken(); // SCRUM-119 — token en mémoire
+  // SCRUM-119 — token en mémoire, renouvelé s il est périmé : sinon un 401
+  // classerait la mutation en erreur fatale (4xx) et elle ne serait plus rejouée.
+  const token = await ensureFreshToken();
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {

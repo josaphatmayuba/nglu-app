@@ -678,7 +678,9 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
   React.useEffect(() => {
     if (animals) return;
     let cancel = false;
-    api.listAnimals().then((rows) => { if (!cancel && Array.isArray(rows)) setFetched(rows); }).catch(() => {});
+    api.listAnimals()
+      .then((rows) => { if (!cancel) setFetched(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancel) setFetched((f) => f || []); });
     const reload = () => api.listAnimals().then((rows) => { if (!cancel && Array.isArray(rows)) setFetched(rows); }).catch(() => {});
     window.addEventListener("farmos:animal-created", reload);
     return () => { cancel = true; window.removeEventListener("farmos:animal-created", reload); };
@@ -696,6 +698,8 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
     return () => { cancel = true; window.removeEventListener("farmos:settings-updated", load); };
   }, [enabledSpecies]);
   const source = animals || fetched || [];
+  // Cheptel pas encore arrivé : l'icône de chaque espèce sautille et le compteur est remplacé par « … » (pas de faux 0).
+  const loading = !animals && fetched === null;
   const { counts, sick, total } = deriveSpeciesCounts(source);
   const activeIds = enabledSpecies || settingsSpecies;
   const visibleSpecies = (activeIds && activeIds.length)
@@ -707,12 +711,16 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
         <button onClick={() => onChange(null)}
           className={`species-pill ${value === null ? "active" : ""}`}
           style={{ height: compact ? 30 : 36, fontSize: 12.5 }}>
-          <Icon name="grid" size={14} color={value === null ? "var(--parchment-50)" : "var(--ink-600)"}/>
+          <span className={loading ? "fl-hop" : undefined} style={{ display: "inline-flex" }}>
+            <Icon name="grid" size={14} color={value === null ? "var(--parchment-50)" : "var(--ink-600)"}/>
+          </span>
           <span>{t(lang, "allSpecies")}</span>
-          <span className="mono" style={{ fontSize: 11, opacity: 0.75 }}>{total.toLocaleString("fr-CA")}</span>
+          {loading
+            ? <span className="mono fl-dots" style={{ fontSize: 11 }} aria-label={lang === "fr" ? "Chargement" : "Loading"}>…</span>
+            : <span className="mono" style={{ fontSize: 11, opacity: 0.75 }}>{total.toLocaleString("fr-CA")}</span>}
         </button>
       )}
-      {visibleSpecies.map((s) => {
+      {visibleSpecies.map((s, i) => {
         const active = value === s.id;
         const n = counts[s.id] || 0;
         const sickN = sick[s.id] || 0;
@@ -720,9 +728,13 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
           <button key={s.id} onClick={() => onChange(s.id)}
             className={`species-pill ${active ? "active" : ""}`}
             style={{ height: compact ? 30 : 36, fontSize: 12.5 }}>
-            <AnimalGlyph kind={s.glyph} size={16} color={active ? "var(--parchment-50)" : "var(--ink-700)"}/>
+            <span className={loading ? "fl-hop" : undefined} style={{ display: "inline-flex", animationDelay: loading ? `${(i + 1) * 0.09}s` : undefined }}>
+              <AnimalGlyph kind={s.glyph} size={16} color={active ? "var(--parchment-50)" : "var(--ink-700)"}/>
+            </span>
             <span>{lang === "fr" ? s.fr : s.en}</span>
-            <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{n.toLocaleString("fr-CA")}</span>
+            {loading
+              ? <span className="mono fl-dots" style={{ fontSize: 11 }}>…</span>
+              : <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{n.toLocaleString("fr-CA")}</span>}
             {sickN > 0 && <span style={{ width: 5, height: 5, borderRadius: 999, background: "var(--oxblood-700)", marginLeft: 2 }}/>}
           </button>
         );
@@ -786,7 +798,7 @@ const Sparkline = ({ data, color = "var(--ink-400)", height = 28, fill = true })
 };
 
 // ─── 3-axis score (Santé · Production · Finances) ─────────────────────────
-const FarmScore = ({ sante, prod, finance, size = "md" }) => {
+const FarmScore = ({ sante, prod, finance, size = "md", loading = false }) => {
   const small = size === "sm";
   const cell = { display: "flex", flexDirection: "column", alignItems: "center", padding: small ? "5px 9px" : "7px 11px", minWidth: small ? 46 : 56 };
   const lbl = { fontSize: small ? 8.5 : 9.5, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 600, opacity: 0.85 };
@@ -801,11 +813,18 @@ const FarmScore = ({ sante, prod, finance, size = "md" }) => {
     if (axis === "finance") return { bg: "var(--solidite-50)", fg: "var(--solidite-900)" };
   };
   const a = rangeColor("sante", sante), b = rangeColor("prod", prod), c = rangeColor("finance", finance);
+  // En chargement : cœur qui bat (Santé), œuf qui oscille (Prod), pièce qui tourne ($) au lieu d'un faux 0.
+  const iconSize = small ? 14 : 18;
+  const show = (v, icon, anim) => loading
+    ? <span style={{ ...val, display: "inline-flex", height: small ? 16 : 22, alignItems: "center" }} className={anim} aria-label="Chargement"><Icon name={icon} size={iconSize} color="currentColor"/></span>
+    : <span style={val}>{v}</span>;
+  const neutral = { bg: "var(--bg-sunken)", fg: "var(--fg-2)" };
+  const ca = loading ? neutral : a, cb = loading ? neutral : b, cc = loading ? neutral : c;
   return (
     <div style={{ display: "inline-flex", border: "1px solid var(--border-1)", borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
-      <div style={{ ...cell, background: a.bg, color: a.fg }}><span style={lbl}>Santé</span><span style={val}>{sante}</span></div>
-      <div style={{ ...cell, background: b.bg, color: b.fg }}><span style={lbl}>Prod</span><span style={val}>{prod}</span></div>
-      <div style={{ ...cell, background: c.bg, color: c.fg }}><span style={lbl}>$</span><span style={val}>{finance}</span></div>
+      <div style={{ ...cell, background: ca.bg, color: ca.fg }}><span style={lbl}>Santé</span>{show(sante, "pulse", "fl-beat")}</div>
+      <div style={{ ...cell, background: cb.bg, color: cb.fg }}><span style={lbl}>Prod</span>{show(prod, "egg", "fl-wobble")}</div>
+      <div style={{ ...cell, background: cc.bg, color: cc.fg }}><span style={lbl}>$</span>{show(finance, "coins", "fl-coin")}</div>
     </div>
   );
 };

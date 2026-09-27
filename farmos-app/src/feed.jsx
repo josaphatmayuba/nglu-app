@@ -10,6 +10,7 @@ import { api } from "./api";
 import { useDataRefresh } from "./use-data-refresh";
 import { defaultCurrencyId, defaultSymbol, formatMoney, symbolFor } from "./currency";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
+import { SectionLoader } from "./loading.jsx";
 
 function useCurrencyCatalog() {
   const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
@@ -53,7 +54,7 @@ function fmtQty(v, unit) {
 }
 
 // ─── Onglet Stock ────────────────────────────────────────────────────────
-function FeedStockTab({ lang, speciesFilter, stock, currencyMeta, onCreateReference, onOpenLots }) {
+function FeedStockTab({ lang, speciesFilter, stock, loading, currencyMeta, onCreateReference, onOpenLots }) {
   const [newOpen, setNewOpen] = React.useState(false);
   const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
   const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
@@ -68,7 +69,9 @@ function FeedStockTab({ lang, speciesFilter, stock, currencyMeta, onCreateRefere
         </button>
       </div>
 
-      {visible.length === 0 ? (
+      {loading ? (
+        <SectionLoader lang={lang}/>
+      ) : visible.length === 0 ? (
         <EmptyState icon="wheat" title={lang === "fr" ? "Aucun aliment référencé" : "No feed item referenced"}/>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -338,7 +341,7 @@ function LotsDrawer({ lang, medicine, onClose, onChanged }) {
           </button>
         </div>
         {loading ? (
-          <div style={{ padding: 20, textAlign: "center", color: "var(--fg-3)" }}>…</div>
+          <SectionLoader lang={lang}/>
         ) : lots.length === 0 ? (
           <EmptyState icon="package" title={lang === "fr" ? "Aucun lot" : "No lots"}/>
         ) : (
@@ -446,7 +449,7 @@ function FeedMovementsTab({ lang, stockItems, buildings, currencyMeta }) {
       </div>
 
       {loading ? (
-        <div style={{ padding: 20, textAlign: "center", color: "var(--fg-3)" }}>…</div>
+        <SectionLoader lang={lang}/>
       ) : filtered.length === 0 ? (
         <EmptyState icon="wheat" title={lang === "fr" ? "Aucun mouvement" : "No movement"}/>
       ) : (
@@ -610,15 +613,23 @@ function FeedDistributionTab({ lang, stockItems, buildings, speciesFilter, onSav
 export function FeedStockScreen({ lang, speciesFilter, onSpeciesFilter }) {
   const [tab, setTab] = React.useState("stock");
   const [stock, setStock] = React.useState([]);
+  const [stockLoading, setStockLoading] = React.useState(true);
+  const hasStockRef = React.useRef(false);
   const [buildings, setBuildings] = React.useState([]);
   const [lotsFor, setLotsFor] = React.useState(null);
   const currencyMeta = useCurrencyCatalog();
   const refresh = useDataRefresh(["medicines", "feedLots", "feedMovements"]);
 
   const loadStock = React.useCallback(() => {
+    if (!hasStockRef.current) setStockLoading(true);
     api.feedStock()
-      .then((rows) => setStock(Array.isArray(rows) ? rows : []))
-      .catch(() => setStock([]));
+      .then((rows) => {
+        const arr = Array.isArray(rows) ? rows : [];
+        setStock(arr);
+        hasStockRef.current = true;
+      })
+      .catch(() => setStock([]))
+      .finally(() => setStockLoading(false));
   }, []);
   React.useEffect(() => { loadStock(); }, [loadStock, refresh]);
   React.useEffect(() => {
@@ -640,11 +651,17 @@ export function FeedStockScreen({ lang, speciesFilter, onSpeciesFilter }) {
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
-      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Stock total" : "Total stock"} value={`${(totalKg / 1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>
-        <KpiCard label={lang === "fr" ? "Stock bas/critique" : "Low/critical stock"} value={lowCount} icon="clock" accent={lowCount ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Aliments périmés" : "Expired feed"} value={expiredCount} icon="wheat" accent={expiredCount ? "var(--rust-700)" : "var(--ink-500)"}/>
-      </div>
+      {stockLoading && stock.length === 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
+          {Array.from({ length: 3 }).map((_, i) => <SectionLoader key={i} lang={lang} tile minHeight={112}/>)}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
+          <KpiCard label={lang === "fr" ? "Stock total" : "Total stock"} value={`${(totalKg / 1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>
+          <KpiCard label={lang === "fr" ? "Stock bas/critique" : "Low/critical stock"} value={lowCount} icon="clock" accent={lowCount ? "var(--rust-700)" : "var(--ink-500)"}/>
+          <KpiCard label={lang === "fr" ? "Aliments périmés" : "Expired feed"} value={expiredCount} icon="wheat" accent={expiredCount ? "var(--rust-700)" : "var(--ink-500)"}/>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
         {[
@@ -660,7 +677,7 @@ export function FeedStockScreen({ lang, speciesFilter, onSpeciesFilter }) {
       </div>
 
       {tab === "stock" && (
-        <FeedStockTab lang={lang} speciesFilter={speciesFilter} stock={stock} currencyMeta={currencyMeta}
+        <FeedStockTab lang={lang} speciesFilter={speciesFilter} stock={stock} loading={stockLoading && stock.length === 0} currencyMeta={currencyMeta}
           onCreateReference={loadStock} onOpenLots={setLotsFor}/>
       )}
       {tab === "movements" && (
