@@ -5,7 +5,7 @@
 // Capacitor (Android/iOS) : la WebView a pour origin capacitor://localhost,
 // donc les URLs relatives ne marcheraient pas. On détecte Capacitor et on
 // préfixe avec l'hôte API configuré (FARMOS_API_HOST, sinon dev par défaut).
-import { getToken, restoreSession, clearAuth } from "./auth.jsx";
+import { getToken, restoreSession, clearAuth, ensureFreshToken } from "./auth.jsx";
 
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
@@ -33,6 +33,9 @@ function enqueueRequest(task) {
 }
 
 async function doJsonFetch(path, init = {}, retried = false) {
+  // Attend le bootstrap / un refresh en vol / renouvelle un token perime
+  // AVANT d envoyer, au lieu de partir sans Authorization et prendre un 401.
+  if (!retried) await ensureFreshToken();
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -75,6 +78,7 @@ async function jsonFetch(path, init = {}) {
 }
 
 async function doGlobalJsonFetch(path, init = {}, retried = false) {
+  if (!retried) await ensureFreshToken();
   const res = await fetch(`${API_ROOT}${path}`, {
     ...init,
     headers: {
@@ -113,6 +117,7 @@ async function globalJsonFetch(path, init = {}) {
 // Télécharge un binaire (PDF / fichier) en portant le token via header (pas en
 // <a href>, qui perdrait l'auth). Déclenche le téléchargement navigateur.
 async function downloadBlob(path, fallbackName = "download") {
+  await ensureFreshToken();
   const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
   if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
   const blob = await res.blob();
@@ -134,6 +139,7 @@ async function printServerHtml(path) {
   w.document.write('<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#666;margin:40px">Chargement du rapport…</body></html>');
   w.document.close();
   try {
+    await ensureFreshToken();
     const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
     if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
     let html = await res.text();
@@ -381,6 +387,7 @@ export const api = {
   // Projets/bailleurs (axe analytique) — endpoint racine /api/projects (hors /farmos).
   listProjects: async () => {
     const root = (NATIVE ? API_HOST : "") + "/api/projects";
+    await ensureFreshToken();
     const res = await fetch(root, { headers: { ...authHeaders() } });
     if (!res.ok) return [];
     return res.json();
