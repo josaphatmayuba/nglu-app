@@ -23,14 +23,42 @@ const REFRESH_URL = (NATIVE ? API_HOST : "") + "/api/auth/refresh-token";
 // pour limiter l'impact d'une faille XSS. La session est restaurée au chargement
 // via le cookie httpOnly `refreshToken` (même backend que le CRM).
 let accessToken = null;
+// Echeance du token exprimee en horloge LOCALE (Date.now()), calculee a la
+// reception a partir de la duree de vie (exp - iat) du JWT : insensible a un
+// decalage d'horloge entre le telephone et le serveur. null = inconnue.
+let accessTokenExpiresAt = null;
+// Marge : on rafraichit un peu avant l'expiration reelle (15 min cote backend).
+const REFRESH_MARGIN_MS = 30 * 1000;
 
 // Lit le token courant (en mémoire).
 export function getToken() {
   return accessToken;
 }
 
+function decodeJwtPayload(t) {
+  try {
+    const part = String(t).split(".")[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b64 + "===".slice((b64.length + 3) % 4)));
+  } catch {
+    return null;
+  }
+}
+
 function setToken(t) {
   accessToken = t || null;
+  accessTokenExpiresAt = null;
+  if (!accessToken) return;
+  const p = decodeJwtPayload(accessToken);
+  if (p && Number.isFinite(p.exp)) {
+    const lifetimeMs = Number.isFinite(p.iat) ? (p.exp - p.iat) * 1000 : p.exp * 1000 - Date.now();
+    accessTokenExpiresAt = Date.now() + lifetimeMs;
+  }
+}
+
+function tokenIsStale() {
+  return !!accessToken && accessTokenExpiresAt != null && Date.now() >= accessTokenExpiresAt - REFRESH_MARGIN_MS;
 }
 
 // Restaure une session via le cookie refresh httpOnly. Renvoie le token ou null.
@@ -83,7 +111,34 @@ async function doRestoreSession() {
 
 // Bootstrap au démarrage : consomme un éventuel ?qc= (handoff CRM), sinon
 // tente la restauration via le cookie refresh. À appeler avant le rendu.
-export async function bootstrapAuth() {
+let bootstrapPromise = null;
+
+export function bootstrapAuth() {
+  if (!bootstrapPromise) bootstrapPromise = doBootstrapAuth();
+  return bootstrapPromise;
+}
+
+// A appeler AVANT chaque requete authentifiee (api.js, outbox, realtime).
+// Evite l'aller-retour « 401 puis refresh puis rejeu » :
+//  - bootstrap en cours (aucun token encore) -> on attend sa fin ;
+//  - refresh deja en vol -> on attend la meme promesse (pas de 2e refresh) ;
+//  - token expire ou sur le point de l'etre (app rouverte apres > 15 min en
+//    arriere-plan, onglet restaure, ?qc= perime) -> refresh mutualise d'abord.
+// Sans token ni restauration en cours (deconnecte) : rend null tout de suite,
+// aucun refresh n'est lance. Ne jamais l'appeler depuis doRestoreSession ni
+// le login (deadlock : le refresh s'attendrait lui-meme).
+// Hors ligne ou refresh refuse : rend le token courant, la requete part comme
+// avant et le filet 401 existant d'api.js s'applique.
+export async function ensureFreshToken() {
+  try {
+    if (!accessToken && bootstrapPromise) await bootstrapPromise;
+    if (inFlightRefresh) await inFlightRefresh;
+    if (tokenIsStale()) await restoreSession();
+  } catch {}
+  return accessToken;
+}
+
+async function doBootstrapAuth() {
   try {
     if (typeof window !== "undefined") {
       const q = new URLSearchParams(window.location.search).get("qc");

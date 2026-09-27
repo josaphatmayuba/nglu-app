@@ -115,9 +115,18 @@ function FarmCritter({ animal, label, compact }) {
   );
 }
 
-export function SectionLoader({ lang = "fr", label, minHeight = 96, compact = false, animal }) {
+export function SectionLoader({ lang = "fr", label, minHeight = 96, compact = false, tile = false, animal }) {
   const tx = t(lang);
   const text = label || tx.loading;
+  // tile : carte KPI fantôme (même cadre que .card) avec l'animal centré au-dessus du texte.
+  if (tile) {
+    return (
+      <div className="card fl-tile" style={{ minHeight }} role="status" aria-live="polite" aria-busy="true">
+        <FarmCritter animal={animal} label={text} />
+        <span className="fl-section-text">{text}</span>
+      </div>
+    );
+  }
   if (compact) {
     return (
       <div className="fl-section fl-section--compact" role="status" aria-live="polite" aria-busy="true">
@@ -130,6 +139,33 @@ export function SectionLoader({ lang = "fr", label, minHeight = 96, compact = fa
     <div className="fl-section" style={{ minHeight }} role="status" aria-live="polite" aria-busy="true">
       <FarmCritter animal={animal} label={text} />
       <span className="fl-section-text">{text}</span>
+    </div>
+  );
+}
+
+// Grille de cartes KPI fantômes : un cochon traverse la grille au trot, une poule picore dans la dernière carte.
+// Même colonnes que la vraie grille → rien ne saute à l'arrivée des chiffres.
+export function KpiGridLoader({ lang = "fr", count = 8, columns = "var(--cols-4)", minHeight = 142 }) {
+  const text = t(lang).loading;
+  return (
+    <div className="fl-kpigrid" role="status" aria-live="polite" aria-busy="true" aria-label={text}>
+      <div className="fl-kpigrid-cards" style={{ gridTemplateColumns: columns }}>
+        {Array.from({ length: count }).map((_, i) => (
+          i === count - 1 ? (
+            <div key={i} className="card fl-kpighost fl-kpighost--hen" style={{ minHeight }}>
+              <FarmCritter animal="hen" label={text} />
+            </div>
+          ) : (
+            <div key={i} className="card fl-kpighost" style={{ minHeight }}>
+              <span className="fl-sk" style={{ width: "58%" }} />
+              <span className="fl-sk fl-sk--big" style={{ width: "36%" }} />
+              <span className="fl-sk fl-sk--line" />
+            </div>
+          )
+        ))}
+      </div>
+      {/* Le cochon marche dans l espace entre la 1re et la 2e rangée (22px), quel que soit le nombre de colonnes. */}
+      <div className="fl-runway" style={{ top: minHeight + 11 }} aria-hidden="true"><FarmCritter animal="pig" label="" /></div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // Expected SSE payload from /api/farmos/events:
 // { kind, tables, action, id, updatedAt }
 
-import { getToken } from "./auth.jsx";
+import { getToken, ensureFreshToken } from "./auth.jsx";
 
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
@@ -17,6 +17,7 @@ let pollTimer = null;
 let reconnectTimer = null;
 let reconnectAttempt = 0;
 let lastSeen = null;
+let connecting = false;
 
 export function startFarmosRealtime() {
   if (started || typeof window === "undefined") return;
@@ -48,9 +49,14 @@ export function startFarmosRealtime() {
   if (navigator.onLine && hasToken()) online();
 }
 
-function connectSse() {
+async function connectSse() {
   if (!hasToken()) return;
-  if (source) return;
+  if (source || connecting) return;
+  // Le JWT part dans l URL de l EventSource : s il a expire (app rouverte apres
+  // > 15 min, reconnexion auto), le renouveler avant, sinon 401 a chaque essai.
+  connecting = true;
+  try { await ensureFreshToken(); } catch {} finally { connecting = false; }
+  if (!hasToken() || source) return;
   if (typeof EventSource === "undefined") {
     startPolling();
     return;
@@ -117,6 +123,8 @@ function clearReconnect() {
 }
 
 async function pollEvents() {
+  if (!hasToken()) return;
+  await ensureFreshToken();
   if (!hasToken()) return;
   const res = await fetch(`${FARMOS_BASE}/events/version${lastSeen ? `?since=${encodeURIComponent(lastSeen)}` : ""}`, {
     headers: {

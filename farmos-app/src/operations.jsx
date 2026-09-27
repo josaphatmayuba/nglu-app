@@ -108,7 +108,7 @@ export function OperationsScreen({ lang, speciesFilter, onSpeciesFilter }) {
 
       {loading ? (
         <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
-          {Array.from({ length: 3 }).map((_, i) => <SectionLoader key={i} lang={lang} compact minHeight={72}/>)}
+          {Array.from({ length: 3 }).map((_, i) => <SectionLoader key={i} lang={lang} tile minHeight={112}/>)}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>

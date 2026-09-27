@@ -11,7 +11,7 @@ import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./cu
 import { useDataRefresh } from "./use-data-refresh";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
 import { MaterialLineChart } from "./material-charts.jsx";
-import { SectionLoader } from "./loading.jsx";
+import { SectionLoader, KpiGridLoader } from "./loading.jsx";
 
 function formatLongDate(d, lang) {
   try {
@@ -405,7 +405,7 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
               }
             </h1>
           </div>
-          <FarmScore {...computeFarmScore(live, speciesFilter, dateRange)}/>
+          <FarmScore {...computeFarmScore(live, speciesFilter, dateRange)} loading={!live.ready}/>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -425,9 +425,7 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
           {kpis.map((k, i) => <KpiCard key={i} {...k}/>)}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-          {Array.from({ length: 8 }).map((_, i) => <SectionLoader key={i} lang={lang} compact minHeight={84}/>)}
-        </div>
+        <KpiGridLoader lang={lang} count={8} columns="var(--cols-4)"/>
       )}
 
       {/* Two-column main area */}
