@@ -1933,6 +1933,13 @@
       "when": 1781071200051,
       "tag": "0300_repair_maintenance_costs_receipt_url",
       "breakpoints": true
+    },
+    {
+      "idx": 276,
+      "version": "5",
+      "when": 1781071200052,
+      "tag": "0301_farmos_animal_tag_number",
+      "breakpoints": true
     }
   ]
 }
