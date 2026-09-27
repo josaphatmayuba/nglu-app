@@ -17,6 +17,7 @@ import { api } from "./api";
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange } from "./date-range-filter.jsx";
 import { defaultCurrencyId, defaultSymbol, formatMoney, symbolFor } from "./currency";
+import { SectionLoader, Spinner } from "./loading.jsx";
 
 function useCurrencyCatalogLocal() {
   const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
@@ -101,7 +102,7 @@ function driverLabel(d, lang) {
 
 // ─── Vue Synthèse ───────────────────────────────────────────────────────
 function SummaryView({ lang, summary, drivers, currencyMeta, loading }) {
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13, padding: 18 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} minHeight={140}/>;
   if (!summary.length) return <EmptyState title={lang === "fr" ? "Aucune donnée" : "No data"} hint={lang === "fr" ? "Aucune vente ni dépense sur la période." : "No sale or expense in this period."} icon="coins"/>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -145,7 +146,7 @@ function ByLotView({ lang, rows, currencyMeta, loading, isMobile }) {
     else copy.sort((a, b) => b.profit - a.profit);
     return copy;
   }, [rows, sortBy]);
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13, padding: 18 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} minHeight={140}/>;
   if (!sorted.length) return <EmptyState title={lang === "fr" ? "Aucun lot" : "No lot"} hint={lang === "fr" ? "Aucune donnée liée à un lot sur la période." : "No lot-linked data in this period."} icon="layers"/>;
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -228,7 +229,7 @@ function AnimalDrilldown({ lang, animalId, currencyMeta, onClose }) {
           <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 19 }}>{data?.animal?.name || `#${animalId}`}</h3>
           <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={14} color="var(--ink-700)"/></button>
         </div>
-        {loading ? <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div> : !data ? (
+        {loading ? <SectionLoader lang={lang}/> : !data ? (
           <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée." : "No data."}</div>
         ) : (
           <>
@@ -310,7 +311,7 @@ function ByAnimalView({ lang, params, currencyMeta, isMobile }) {
         </select>
       </div>
       {loading && offset === 0 ? (
-        <div style={{ color: "var(--fg-3)", fontSize: 13, padding: 18 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>
+        <SectionLoader lang={lang} minHeight={140}/>
       ) : page.rows.length === 0 ? (
         <EmptyState title={lang === "fr" ? "Aucun animal" : "No animal"} hint={lang === "fr" ? "Aucune vente ni dépense liée sur la période." : "No linked sale or expense in this period."} icon="layers"/>
       ) : isMobile ? (
@@ -361,7 +362,7 @@ function ByAnimalView({ lang, params, currencyMeta, isMobile }) {
       {canLoadMore && (
         <div style={{ padding: 14, textAlign: "center", borderTop: "1px solid var(--border-1)" }}>
           <button className="btn btn-sm" disabled={loading} onClick={() => setOffset((o) => o + LIMIT)}>
-            {loading ? (lang === "fr" ? "Chargement…" : "Loading…") : (lang === "fr" ? "Charger plus" : "Load more")}
+            {loading ? <Spinner size={13} label={lang === "fr" ? "Chargement…" : "Loading…"}/> : (lang === "fr" ? "Charger plus" : "Load more")}
           </button>
         </div>
       )}

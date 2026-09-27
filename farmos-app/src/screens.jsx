@@ -14,6 +14,7 @@ import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
+import { SectionLoader } from "./loading.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -56,10 +57,12 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [vetExams, setVetExams] = React.useState([]);
   const [allDiseases, setAllDiseases] = React.useState([]);
   const [vets, setVets] = React.useState([]);
+  const [vetsReady, setVetsReady] = React.useState(false);
   const [editingDisease, setEditingDisease] = React.useState(null); // null=fermé, {}=nouveau, row=édition
   const [viewingDisease, setViewingDisease] = React.useState(null); // null=fermé, row=vue lecture seule
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
+  const [ready, setReady] = React.useState(false);
   const currencyMeta = useCurrencyCatalog();
   const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
   const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
@@ -79,10 +82,12 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         setAllExpenses(Array.isArray(expenses) ? expenses : []);
         setVetExams(Array.isArray(exams) ? exams : []);
       })
-      .catch((e) => console.warn("listTreatments failed:", e.message));
+      .catch((e) => console.warn("listTreatments failed:", e.message))
+      .finally(() => { if (!cancel) setReady(true); });
     api.listFarmosStaff("vet")
       .then((r) => { if (!cancel) setVets(Array.isArray(r) ? r : []); })
-      .catch((e) => console.warn("listFarmosStaff(vet) failed:", e.message));
+      .catch((e) => console.warn("listFarmosStaff(vet) failed:", e.message))
+      .finally(() => { if (!cancel) setVetsReady(true); });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
@@ -144,12 +149,18 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       </div>
 
       {/* KPI row — dérivés des vraies données + filtrés par espèce. */}
-      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)"/>
-        <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value={quarantineCount} unit="" icon="shield" accent={quarantineCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value={withdrawalCount} unit="" icon="clock" accent={withdrawalCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Coût médicaments · période" : "Medicine cost · period"} sublabel={rangeLabel(dateRange, lang)} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit={moneyUnit} icon="coins"/>
-      </div>
+      {!ready ? (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {Array.from({ length: 4 }).map((_, i) => <SectionLoader key={i} lang={lang} compact minHeight={72}/>)}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)"/>
+          <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value={quarantineCount} unit="" icon="shield" accent={quarantineCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
+          <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value={withdrawalCount} unit="" icon="clock" accent={withdrawalCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
+          <KpiCard label={lang === "fr" ? "Coût médicaments · période" : "Medicine cost · period"} sublabel={rangeLabel(dateRange, lang)} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit={moneyUnit} icon="coins"/>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main-15)", gap: 16 }}>
         {/* Treatments list */}
@@ -165,7 +176,9 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             </div>
           </div>
           <div style={{ borderTop: "1px solid var(--border-1)" }}>
-            {treatments.map((tr, i) => {
+            {!ready ? (
+              <SectionLoader lang={lang}/>
+            ) : treatments.map((tr, i) => {
               const sp = speciesById(tr.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", fr: "—", en: "—" };
               const ongoing = tr.status === "running";
               const locked = isSaleLockedStatus(tr.animalStatus);
@@ -234,6 +247,10 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               </div>
               <button className="btn btn-sm btn-ghost"><Icon name="filter" size={12} color="var(--ink-700)"/></button>
             </div>
+            {!ready ? (
+              <SectionLoader lang={lang} compact/>
+            ) : (
+            <>
             {activeBySpecies.length === 0 && <EmptyState title={lang === "fr" ? "Aucun statut sanitaire actif en base" : "No active health status in database"} />}
             {activeBySpecies.map((s) => (
               <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
@@ -251,6 +268,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 </div>
               </div>
             ))}
+            </>
+            )}
           </div>
 
           {/* Disease library editor (bibliothèque maladies enrichie) */}
@@ -264,6 +283,10 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 <Icon name="plus" size={12} color="var(--paper)"/>{lang === "fr" ? "Ajouter" : "Add"}
               </button>
             </div>
+            {!ready ? (
+              <SectionLoader lang={lang} compact/>
+            ) : (
+            <>
             {allDiseases.length === 0 && <EmptyState title={lang === "fr" ? "Aucune maladie référencée" : "No disease referenced"} />}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflow: "auto" }}>
               {allDiseases
@@ -286,6 +309,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   );
                 })}
             </div>
+            </>
+            )}
           </div>
 
           {/* Vet card */}
@@ -296,7 +321,9 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             return (
               <div className="card" style={{ background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-800)" }}>
                 <div className="overline" style={{ color: "rgba(251,248,242,0.6)", marginBottom: 8 }}>{lang === "fr" ? "Vétérinaire de garde" : "On-call veterinarian"}</div>
-                {!vet ? (
+                {!vetsReady ? (
+                  <SectionLoader lang={lang} compact/>
+                ) : !vet ? (
                   <div style={{ fontSize: 12, color: "var(--ink-300)" }}>{lang === "fr" ? "Aucun vétérinaire enregistré." : "No veterinarian registered."}</div>
                 ) : (
                   <>
@@ -324,6 +351,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         lang={lang}
         animals={animalsFiltered}
         exams={vetExams.filter((e) => !speciesFilter || e.species === speciesFilter)}
+        loading={!ready}
         onChanged={() => setReloadKey((k) => k + 1)}
       />
 
@@ -401,7 +429,7 @@ const MortalityStatsSection = ({ lang, speciesFilter }) => {
         <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Mortalité — statistiques" : "Mortality — statistics"}</h3>
         <span className="sec">{lang === "fr" ? "Décès enregistrés, par cause/espèce/mois" : "Recorded deaths, by cause/species/month"}</span>
       </div>
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang}/>}
       {!loading && (!stats || stats.eventsCount === 0) && (
         <EmptyState title={lang === "fr" ? "Aucun décès enregistré" : "No death recorded"} />
       )}
@@ -4755,7 +4783,7 @@ const TasksScreen = ({ lang }) => {
       </div>
 
       {err && <div style={{ color: "var(--oxblood-700)", fontSize: 13 }}>{err}</div>}
-      {loading && <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{fr ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={fr ? "fr" : "en"}/>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, alignItems: "start" }}>
         {TASK_STATUSES.map((col) => {
@@ -4952,7 +4980,7 @@ const FieldNotesScreen = ({ lang }) => {
       </div>
 
       {err && <div style={{ color: "var(--oxblood-700)", fontSize: 13 }}>{err}</div>}
-      {loading && <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{fr ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={fr ? "fr" : "en"}/>}
 
       {/* Liste */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -5060,7 +5088,7 @@ const EmployeesScreen = ({ lang }) => {
         </div>
       </div>
 
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang}/>}
       {err && <div style={{ color: "var(--rust-700)", fontSize: 13 }}>{err}</div>}
       {!loading && filtered.length === 0 && (
         <EmptyState
@@ -6075,7 +6103,7 @@ const OperationTypesCatalogCard = ({ lang }) => {
         </button>
       </div>
 
-      {loading && <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang} compact/>}
       {!loading && types.length === 0 && <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun type configuré." : "No type configured."}</div>}
       {!loading && types.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -6660,7 +6688,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
           </button>
         </div>
 
-        {loading && <div style={{ padding: 32, textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>{L("Chargement…", "Loading…")}</div>}
+        {loading && <SectionLoader lang={lang}/>}
 
         {!loading && !hasBoxes && (
           <div style={{ padding: "36px 24px", textAlign: "center" }}>

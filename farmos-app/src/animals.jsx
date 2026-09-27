@@ -12,6 +12,7 @@ import { AutocompleteDB, Autocomplete } from "./quickentry";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { animalStatusColor, animalStatusLabel, isDeceasedStatus, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
+import { SectionLoader } from "./loading.jsx";
 
 const FIELD_DEFS = {
   // generic
@@ -574,7 +575,11 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         )}
 
         {/* Table */}
-        <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
+        {loadState === "loading" && animals.length === 0 ? (
+          <SectionLoader lang={lang}/>
+        ) : (
+          <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
+        )}
 
         {/* Note about adaptation */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--fg-3)", }}>
@@ -1777,7 +1782,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             emptyFr="Aucune intervention enregistrée pour cet animal." emptyEn="No operation recorded for this animal."/>
         )}
         {!editing && tab === "finance" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           const f = related.finance;
           if (!f) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée financière pour cet animal (ni vente ni dépense liée)." : "No financial data for this animal (no linked sale or expense)."}</div>;
           const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
@@ -1816,7 +1821,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <AnimalProfitabilityTab lang={lang} animalId={animal._pk}/>
         )}
         {!editing && tab === "documents" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (related.documents.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun document pour cet animal." : "No document for this animal."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1835,7 +1840,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           );
         })()}
         {!editing && tab === "alerts" && (() => {
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (related.alerts.length === 0) return <div style={{ color: "var(--health-700)", fontSize: 13 }}>{lang === "fr" ? "Aucune alerte active (pas de délai de retrait en cours)." : "No active alert (no ongoing withdrawal period)."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1884,7 +1889,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               };
             }),
           ].filter((e) => e.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.loading) return <SectionLoader lang={lang} compact/>;
           if (events.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun historique." : "No history."}</div>;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -1923,7 +1928,7 @@ const AnimalProfitabilityTab = ({ lang, animalId }) => {
     return () => { cancel = true; };
   }, [animalId]);
 
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} compact/>;
   if (!data) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée de rentabilité pour cet animal." : "No profitability data for this animal."}</div>;
 
   const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
@@ -2017,7 +2022,7 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
       )}
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
 
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang} compact/>}
       {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
       {!loading && rows.length > 0 && (
         <>
@@ -2920,7 +2925,7 @@ const UpcomingBadge = ({ lang }) => (
 const isFutureDate = (d) => !!d && String(d).slice(0, 10) > new Date().toISOString().slice(0, 10);
 
 const RelatedList = ({ lang, loading, items, kind, emptyFr, emptyEn }) => {
-  if (loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+  if (loading) return <SectionLoader lang={lang} compact/>;
   if (!items || items.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? emptyFr : emptyEn}</div>;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

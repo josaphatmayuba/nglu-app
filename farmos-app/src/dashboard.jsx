@@ -11,6 +11,7 @@ import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./cu
 import { useDataRefresh } from "./use-data-refresh";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
 import { MaterialLineChart } from "./material-charts.jsx";
+import { SectionLoader } from "./loading.jsx";
 
 function formatLongDate(d, lang) {
   try {
@@ -141,7 +142,8 @@ function useDashboardData() {
           finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true,
         });
       })
-      .catch(() => {});
+      // En erreur on sort quand même de l'état « chargement » (sinon spinner infini) : les sections montrent leur état vide.
+      .catch(() => { if (!cancel) setData((d) => ({ ...d, ready: true })); });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
@@ -418,9 +420,15 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
       )}
 
       {/* KPI grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        {kpis.map((k, i) => <KpiCard key={i} {...k}/>)}
-      </div>
+      {live.ready ? (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {kpis.map((k, i) => <KpiCard key={i} {...k}/>)}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {Array.from({ length: 8 }).map((_, i) => <SectionLoader key={i} lang={lang} compact minHeight={84}/>)}
+        </div>
+      )}
 
       {/* Two-column main area */}
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main)", gap: 16, alignItems: "start" }}>
@@ -433,13 +441,13 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
           {isAll ? <SpeciesBreakdown lang={lang} onSelect={onSpeciesFilter} live={live} onAll={() => onNav("animals")}/> : <SpeciesDetailPanel lang={lang} species={species}/>}
 
           {/* AI Insights */}
-          <AIPanel lang={lang} insights={aiFiltered} onNav={onNav}/>
+          <AIPanel lang={lang} insights={aiFiltered} onNav={onNav} ready={live.ready}/>
         </div>
 
         {/* Right column: alerts + upcoming */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <AlertsPanel lang={lang} alerts={alertsFiltered} onAll={() => onNav("alerts")}/>
-          <UpcomingPanel lang={lang} vaccines={vaccinesUpcoming} onAll={() => onNav("calendar")}/>
+          <AlertsPanel lang={lang} alerts={alertsFiltered} onAll={() => onNav("alerts")} ready={live.ready}/>
+          <UpcomingPanel lang={lang} vaccines={vaccinesUpcoming} onAll={() => onNav("calendar")} ready={live.ready}/>
         </div>
       </div>
     </div>
@@ -603,7 +611,9 @@ const ProductionPanel = ({ lang, species, live }) => {
           ))}
         </div>
       </div>
-      {series.length === 0 ? (
+      {!live?.ready ? (
+        <SectionLoader lang={lang} minHeight={140}/>
+      ) : series.length === 0 ? (
         <div style={{ padding: "32px 0", textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
           {lang === "fr" ? "Aucune production enregistrée pour cette période" : "No production recorded for this period"}
         </div>
@@ -664,6 +674,9 @@ const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
         <Icon name="arrowRight" size={12} color="var(--ink-600)"/>
       </button>
     </div>
+    {!live?.ready ? (
+      <SectionLoader lang={lang} minHeight={110}/>
+    ) : (
     <div style={{ display: "grid", gridTemplateColumns: "var(--cols-5)", gap: 8 }}>
       {SPECIES.map((s_orig) => {
         const liveN = liveCounts ? (liveCounts[s_orig.id] ?? 0) : 0;
@@ -698,6 +711,7 @@ const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
         );
       })}
     </div>
+    )}
   </div>
   );
 };
@@ -746,7 +760,7 @@ const SpeciesDetailPanel = ({ lang, species }) => (
 );
 
 const AI_INSIGHT_DEST = { predict: "alerts", feed: "stock", repro: "repro", anomaly: "alerts" };
-const AIPanel = ({ lang, insights, onNav }) => (
+const AIPanel = ({ lang, insights, onNav, ready = true }) => (
   <div className="card" style={{ padding: "16px 18px" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -760,6 +774,9 @@ const AIPanel = ({ lang, insights, onNav }) => (
       </div>
       <span className="tag" style={{ background: "var(--ink-900)", color: "var(--parchment-50)" }}>ChatGPT</span>
     </div>
+    {!ready ? (
+      <SectionLoader lang={lang} minHeight={100}/>
+    ) : (
     <div className="rule-lines" style={{ background: "var(--parchment-50)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {insights.map((ins) => (
@@ -785,6 +802,7 @@ const AIPanel = ({ lang, insights, onNav }) => (
         ))}
       </div>
     </div>
+    )}
     <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 10, }}>
       {lang === "fr"
         ? "L'assistant cite ses sources. Vérifiez chaque recommandation avant action vétérinaire."
@@ -794,7 +812,7 @@ const AIPanel = ({ lang, insights, onNav }) => (
 );
 
 // ─── Alerts panel ────────────────────────────────────────────────────────
-const AlertsPanel = ({ lang, alerts, onAll }) => (
+const AlertsPanel = ({ lang, alerts, onAll, ready = true }) => (
   <div className="card" style={{ padding: "14px 16px" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
       <div className="bilang">
@@ -806,6 +824,9 @@ const AlertsPanel = ({ lang, alerts, onAll }) => (
         <Icon name="arrowRight" size={11} color="var(--ink-600)"/>
       </button>
     </div>
+    {!ready ? (
+      <SectionLoader lang={lang} minHeight={90}/>
+    ) : (
     <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {alerts.slice(0, 6).map((a, i, arr) => {
         const sevColor = a.severity === "critical" ? "var(--rust-700)" : a.severity === "high" ? "var(--wheat-500)" : "var(--sky-500)";
@@ -834,11 +855,12 @@ const AlertsPanel = ({ lang, alerts, onAll }) => (
         </div>
       )}
     </div>
+    )}
   </div>
 );
 
 // ─── Upcoming actions panel ──────────────────────────────────────────────
-const UpcomingPanel = ({ lang, vaccines, onAll }) => (
+const UpcomingPanel = ({ lang, vaccines, onAll, ready = true }) => (
   <div className="card" style={{ padding: "14px 16px" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
       <div className="bilang">
@@ -850,6 +872,9 @@ const UpcomingPanel = ({ lang, vaccines, onAll }) => (
         {lang === "fr" ? "Calendrier" : "Calendar"}
       </button>
     </div>
+    {!ready ? (
+      <SectionLoader lang={lang} minHeight={90}/>
+    ) : (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {vaccines.map((v) => {
         const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
@@ -877,6 +902,7 @@ const UpcomingPanel = ({ lang, vaccines, onAll }) => (
         );
       })}
     </div>
+    )}
   </div>
 );
 

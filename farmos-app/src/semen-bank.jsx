@@ -8,6 +8,7 @@ import { nextStrawCode } from "./id-gen";
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { Autocomplete } from "./quickentry";
+import { SectionLoader } from "./loading.jsx";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -78,7 +79,7 @@ const SemenBankScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       {err && <div className="card" style={{ background: "var(--oxblood-50)", color: "var(--oxblood-800)" }}>{err}</div>}
       {loading ? (
-        <div className="card" style={{ textAlign: "center", color: "var(--fg-3)" }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>
+        <div className="card"><SectionLoader lang={lang}/></div>
       ) : filtered.length === 0 ? (
         <EmptyBank lang={lang} onAdd={() => { setSelected(null); setShowForm(true); }}/>
       ) : (

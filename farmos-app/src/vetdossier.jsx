@@ -3,6 +3,7 @@ import React from "react";
 import { Icon } from "./icons";
 import { api } from "./api";
 import { AutocompleteDB, Autocomplete } from "./quickentry";
+import { SectionLoader } from "./loading.jsx";
 
 // ─── Dossier vétérinaire complet (#2) ────────────────────────────────────────
 // Examen clinique enrichi + ordonnance (lignes médicament/dose/durée) + signature
@@ -343,7 +344,7 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
 };
 
 // Section à insérer dans l'écran Santé : liste des dossiers + bouton nouveau.
-export const VetDossierSection = ({ lang, animals, exams, onChanged }) => {
+export const VetDossierSection = ({ lang, animals, exams, onChanged, loading: examsLoading = false }) => {
   const [editing, setEditing] = React.useState(null); // exam object | "new" | null
   const [loading, setLoading] = React.useState(false);
 
@@ -370,7 +371,9 @@ export const VetDossierSection = ({ lang, animals, exams, onChanged }) => {
         </button>
       </div>
 
-      {list.length === 0 ? (
+      {examsLoading ? (
+        <SectionLoader lang={lang} compact/>
+      ) : list.length === 0 ? (
         <div style={{ fontSize: 12, color: "var(--fg-3)", padding: "8px 0" }}>
           {lang === "fr" ? "Aucun dossier vétérinaire pour l'instant." : "No vet dossiers yet."}
         </div>
@@ -415,13 +418,17 @@ const docTypeLabel = (id, lang) => { const t = DOC_TYPES.find((d) => d.id === id
 
 export const FarmosDocumentsSection = ({ lang, animals }) => {
   const [docs, setDocs] = React.useState([]);
+  const [docsLoading, setDocsLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const [form, setForm] = React.useState({ title: "", doc_type: "certificate", animal_id: "", issued_date: "" });
   const fileRef = React.useRef(null);
 
   const load = React.useCallback(() => {
-    api.listDocuments().then((d) => setDocs(Array.isArray(d) ? d : [])).catch((e) => console.warn("listDocuments:", e.message));
+    api.listDocuments()
+      .then((d) => setDocs(Array.isArray(d) ? d : []))
+      .catch((e) => console.warn("listDocuments:", e.message))
+      .finally(() => setDocsLoading(false));
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
@@ -483,7 +490,9 @@ export const FarmosDocumentsSection = ({ lang, animals }) => {
       </div>
       {err && <div style={{ color: "var(--oxblood-700)", fontSize: 12 }}>{err}</div>}
 
-      {docs.length === 0 ? (
+      {docsLoading ? (
+        <SectionLoader lang={lang} compact/>
+      ) : docs.length === 0 ? (
         <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun document." : "No documents."}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

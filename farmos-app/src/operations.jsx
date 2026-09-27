@@ -13,6 +13,7 @@ import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId } from "./currency";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
+import { SectionLoader } from "./loading.jsx";
 
 function useCurrencyCatalogLocal() {
   const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
@@ -105,11 +106,17 @@ export function OperationsScreen({ lang, speciesFilter, onSpeciesFilter }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Interventions" : "Operations"} sublabel={rangeLabel(dateRange, lang)} value={filtered.length} unit="" icon="scissors"/>
-        <KpiCard label={lang === "fr" ? "Coût · période" : "Cost · period"} value={totalCost > 0 ? totalCost.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit={currencies.length ? "" : ""} icon="coins"/>
-        <KpiCard label={lang === "fr" ? "Tontes (laine)" : "Shearings (wool)"} value={woolCount} unit="" icon="scissors"/>
-      </div>
+      {loading ? (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
+          {Array.from({ length: 3 }).map((_, i) => <SectionLoader key={i} lang={lang} compact minHeight={72}/>)}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-3)", gap: 12 }}>
+          <KpiCard label={lang === "fr" ? "Interventions" : "Operations"} sublabel={rangeLabel(dateRange, lang)} value={filtered.length} unit="" icon="scissors"/>
+          <KpiCard label={lang === "fr" ? "Coût · période" : "Cost · period"} value={totalCost > 0 ? totalCost.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit={currencies.length ? "" : ""} icon="coins"/>
+          <KpiCard label={lang === "fr" ? "Tontes (laine)" : "Shearings (wool)"} value={woolCount} unit="" icon="scissors"/>
+        </div>
+      )}
 
       {types.length === 0 && !loading && (
         <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 14 }}>
@@ -129,7 +136,7 @@ export function OperationsScreen({ lang, speciesFilter, onSpeciesFilter }) {
           value={lotFilter} onChange={(e) => setLotFilter(e.target.value)}/>
       </div>
 
-      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {loading && <SectionLoader lang={lang}/>}
       {!loading && filtered.length === 0 && (
         <EmptyState title={lang === "fr" ? "Aucune intervention enregistrée" : "No operation recorded"}
           hint={lang === "fr" ? "Utilisez « Nouvel acte » pour enregistrer une castration, tonte, écornage…" : "Use “New operation” to record a castration, shearing, dehorning…"}/>
