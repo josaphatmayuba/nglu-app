@@ -5,6 +5,20 @@
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { AnimalAvatar, tagColorForAnimal } from "./animal-avatar.jsx";
+import { formatAnimalAge, AGE_TONES } from "./animal-category";
+
+// Pastille d'âge (cartes mobiles + fiche) : icône calendrier + âge, date exacte au survol.
+const AgePill = ({ animal, lang, size = "sm" }) => {
+  const age = formatAnimalAge(animal, lang);
+  const tone = AGE_TONES[age.tone];
+  const big = size === "md";
+  return (
+    <span title={age.birth} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: big ? "2px 9px" : "1px 7px", borderRadius: 999, background: tone.bg, color: tone.fg, fontSize: big ? 12.5 : 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+      <Icon name="calendar" size={big ? 11 : 10} color="currentColor"/>
+      {age.label}
+    </span>
+  );
+};
 import { speciesById, SPECIES, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
@@ -726,7 +740,20 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
   const [shown, setShown] = React.useState(ANIMAL_PAGE_SIZE);
   // Reset du cap quand la liste filtree change de taille (recherche/filtre/tri).
   React.useEffect(() => { setShown(ANIMAL_PAGE_SIZE); }, [animals.length]);
-  const visible = animals.slice(0, shown);
+  // Tri par âge au clic sur l'en-tête « Âge » : null → plus jeunes d'abord → plus âgés d'abord → null.
+  // Les animaux sans date de naissance restent en fin de liste.
+  const [ageSort, setAgeSort] = React.useState(null);
+  const sorted = React.useMemo(() => {
+    if (!ageSort) return animals;
+    const d = (a) => formatAnimalAge(a, lang).days;
+    return [...animals].sort((x, y) => {
+      const dx = d(x), dy = d(y);
+      if (dx == null) return dy == null ? 0 : 1;
+      if (dy == null) return -1;
+      return ageSort === "asc" ? dx - dy : dy - dx;
+    });
+  }, [animals, ageSort, lang]);
+  const visible = sorted.slice(0, shown);
   const hasMore = animals.length > shown;
   const remaining = animals.length - shown;
   const moreLabel = lang === "fr"
@@ -763,6 +790,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.id}</div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4, fontSize: 11.5, color: "var(--fg-2)", flexWrap: "wrap" }}>
+                  <AgePill animal={a} lang={lang}/>
                   {a.race && <span>{a.race}</span>}
                   {a.weight != null && <span className="mono tnum">{a.weight} kg</span>}
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -793,16 +821,22 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 
   return (
     <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 10, overflow: "auto", boxShadow: "var(--shadow-1)" }}>
-      <div style={{ minWidth: 880 }}>
+      <div style={{ minWidth: 990 }}>
       {/* Header */}
       <div style={{
-        display: "grid", gridTemplateColumns: "44px 1fr 130px 80px 100px 130px 120px 80px",
+        display: "grid", gridTemplateColumns: "44px 1fr 130px 110px 80px 100px 130px 120px 80px",
         padding: "10px 14px", borderBottom: "1px solid var(--border-1)",
         background: "var(--bg-sunken)", fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--fg-2)",
       }}>
         <span/>
         <span>{lang === "fr" ? "Animal" : "Animal"}</span>
         <span>{lang === "fr" ? "Race" : "Breed"}</span>
+        <button type="button" onClick={() => setAgeSort((s) => (s === null ? "asc" : s === "asc" ? "desc" : null))}
+          title={lang === "fr" ? "Trier par âge" : "Sort by age"}
+          style={{ all: "unset", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, color: ageSort ? "var(--ink-950)" : "inherit" }}>
+          {lang === "fr" ? "Âge" : "Age"}
+          <span aria-hidden="true" style={{ fontSize: 10 }}>{ageSort === "asc" ? "▲" : ageSort === "desc" ? "▼" : "↕"}</span>
+        </button>
         <span style={{ textAlign: "right" }}>{lang === "fr" ? "Poids" : "Weight"}</span>
         <span>{lang === "fr" ? "Statut" : "Status"}</span>
         <span>{lang === "fr" ? "Localisation" : "Location"}</span>
@@ -817,7 +851,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
         const statusLbl = animalStatusLabel(a.status, lang);
         return (
           <div key={a.id} onClick={() => onSelect(a.id)} style={{
-            display: "grid", gridTemplateColumns: "44px 1fr 130px 80px 100px 130px 120px 80px",
+            display: "grid", gridTemplateColumns: "44px 1fr 130px 110px 80px 100px 130px 120px 80px",
             padding: `${Math.max(5, (rowH-36)/2)}px 14px`, alignItems: "center",
             borderBottom: "1px solid var(--border-1)",
             background: sel ? "var(--bg-sunken)" : locked || a.withdrawal ? "rgba(122, 31, 43, 0.03)" : "var(--paper)",
@@ -837,6 +871,15 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
               <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 1 }}>{a.id}</div>
             </div>
             <span style={{ fontSize: 12.5, color: "var(--ink-700)" }}>{a.race}</span>
+            {(() => {
+              const age = formatAnimalAge(a, lang);
+              return (
+                <span title={age.birth} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: AGE_TONES[age.tone].fg }}>{age.label}</span>
+                  <span style={{ fontSize: 10.5, color: "var(--fg-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{age.birth}</span>
+                </span>
+              );
+            })()}
             <span className="mono tnum" style={{ fontSize: 12.5, color: "var(--ink-800)", textAlign: "right" }}>
               {a.weight}<span style={{ color: "var(--fg-3)", marginLeft: 2 }}>{typeof a.weight === "number" && a.weight > 50 ? "kg" : a.species === "fish" ? "g" : "kg"}</span>
             </span>
@@ -1578,7 +1621,11 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           />
           <div style={{ minWidth: 0 }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 26,  color: "var(--ink-950)", letterSpacing: "-0.015em", margin: 0 }}>{animal.name}</h2>
-            <div className="mono" style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 2 }}>{animal.id} · {animal.race}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+              <span className="mono" style={{ fontSize: 12, color: "var(--fg-2)" }}>{animal.id} · {animal.race}</span>
+              <AgePill animal={animal} lang={lang} size="md"/>
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 2 }}>{formatAnimalAge(animal, lang).birth}</div>
             <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
               {(() => {
                 const sick = animal.status && animal.status !== "healthy";
