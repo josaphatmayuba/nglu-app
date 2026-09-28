@@ -118,6 +118,19 @@ export class FarmosService {
   ): Promise<number | null> {
     if (buildingId == null) return null;
     const runner = tx ?? this.db;
+    // Anti-doublon : deux arrivées simultanées dans le même bâtiment calculeraient le même
+    // « plus petit numéro libre ». On verrouille la ligne du bâtiment (sérialise les
+    // attributions par bâtiment) et on lit les numéros pris en lecture verrouillante
+    // (sinon REPEATABLE READ peut servir un instantané antérieur au verrou).
+    // Pas d'index unique possible : un animal sorti garde son ancien tag_number.
+    if (tx) {
+      await tx
+        .select({ id: farmosBuildings.id })
+        .from(farmosBuildings)
+        .where(eq(farmosBuildings.id, buildingId))
+        .limit(1)
+        .for("update");
+    }
     const conds = [
       eq(farmosAnimals.organizationId, orgId),
       eq(farmosAnimals.buildingId, buildingId),
@@ -125,10 +138,11 @@ export class FarmosService {
       this.activeLivestockSqlCondition(),
     ];
     if (excludeAnimalId != null) conds.push(sql`${farmosAnimals.id} <> ${excludeAnimalId}`);
-    const rows = await runner
+    const tagQuery = runner
       .select({ tagNumber: farmosAnimals.tagNumber })
       .from(farmosAnimals)
       .where(and(...conds));
+    const rows = await (tx ? tagQuery.for("update") : tagQuery);
     const taken = new Set(
       (rows as { tagNumber: number | null }[])
         .map((r) => Number(r.tagNumber))
