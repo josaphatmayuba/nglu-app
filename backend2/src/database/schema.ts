@@ -2756,6 +2756,9 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   reproStatusSince: date("repro_status_since", { mode: "string" }),
   bodyConditionScore: decimal("body_condition_score", { precision: 3, scale: 1 }),
   parity: int("parity"),
+  // Numero de boucle d oreille (1, 2, 3...), unique par batiment, reattribue
+  // au plus petit numero libre. NULL si l animal n a pas de batiment.
+  tagNumber: int("tag_number"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

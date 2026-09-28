@@ -788,6 +788,7 @@ export function adaptAnimal(row) {
     buildingId: row.buildingId ?? row.building_id ?? null,
     boxId: row.boxId ?? row.box_id ?? null,
     zoneId: row.zoneId ?? row.zone_id ?? null,
+    tagNumber: (row.tagNumber ?? row.tag_number) != null ? Number(row.tagNumber ?? row.tag_number) : null,
     status: row.status || "healthy",
     motherId: row.motherId ?? row.mother_id ?? null,
     fatherId: row.fatherId ?? row.father_id ?? null,

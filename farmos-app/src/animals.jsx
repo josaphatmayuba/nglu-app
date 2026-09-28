@@ -750,7 +750,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
               borderRadius: 10, padding: "10px 12px", cursor: "pointer",
               display: "flex", gap: 10, alignItems: "center", boxShadow: "var(--shadow-1)",
             }}>
-              <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={44} accentBg={sp.accentBg} deceasedOrSold={locked} title={a.name}/>
+              <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={44} deceasedOrSold={locked} title={a.name}/>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                   <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
@@ -825,7 +825,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
             position: "relative",
           }}>
             {sel && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "var(--oxblood-700)" }}/>}
-            <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={36} accentBg={sp.accentBg} deceasedOrSold={locked} title={a.name}/>
+            <AnimalAvatar species={a.species} tagNumber={a.tagNumber} size={36} deceasedOrSold={locked} title={a.name}/>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                 <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
@@ -1329,6 +1329,7 @@ const BatchSplitModal = ({ lang, animal, onClose, onSaved }) => {
 };
 
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
+  const isMobile = useIsMobile();
   const sp = speciesById(animal.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", frSing: animal.species, enSing: animal.species, fields: [] };
   const groups = groupFields(sp.fields);
   const readOnly = isSaleLockedAnimal(animal);
@@ -1569,8 +1570,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <AnimalAvatar
             species={animal.species}
             tagNumber={animal.tagNumber}
-            size={64}
-            accentBg={sp.accentBg}
+            size={isMobile ? 64 : 104}
             photoUrl={photos[0]?.dataUrl}
             deceasedOrSold={readOnly}
             title={animal.name}

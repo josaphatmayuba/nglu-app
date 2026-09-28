@@ -14,7 +14,7 @@ import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
-import { SectionLoader } from "./loading.jsx";
+import { SectionLoader, RefreshBadge } from "./loading.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -7934,15 +7934,22 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
   const [planDisplay, setPlanDisplay] = React.useState("occupation"); // "occupation" | "simple"
   const refresh = useDataRefresh(["buildings", "animals", "land-features"]);
+  // loaded : 1er chargement terminé (avant → loaders animés, pas de faux « Aucun bâtiment »).
+  // refreshing : rechargement en arrière-plan → badge « Mise à jour… », les données restent affichées.
+  const [loaded, setLoaded] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const loadedRef = React.useRef(false);
   React.useEffect(() => {
     let cancel = false;
+    if (loadedRef.current) setRefreshing(true);
     Promise.all([
       api.listBuildings().catch(() => []),
       api.listZones().catch(() => []),
       api.listLandFeatures().catch(() => []),
       api.listFarms().catch(() => []),
       api.listAnimals().catch(() => []),
-    ]).then(([b, z, f, fm, an]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); setAnimals(Array.isArray(an) ? an : []); } });
+    ]).then(([b, z, f, fm, an]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); setAnimals(Array.isArray(an) ? an : []); } })
+      .finally(() => { if (!cancel) { loadedRef.current = true; setLoaded(true); setRefreshing(false); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   // Persistance d'un déplacement sur le plan (bâtiment ou élément de terrain)
@@ -8016,6 +8023,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
           <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
             {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
+            {" "}<span style={{ verticalAlign: "middle", display: "inline-flex" }}><RefreshBadge active={refreshing} lang={lang}/></span>
           </h1>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -8046,6 +8054,12 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       </div>
 
       {/* Sélecteur de ferme (Mes fermes) */}
+      {!loaded && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+          <SectionLoader lang={lang} tile minHeight={110} label={lang === "fr" ? "Chargement des fermes…" : "Loading farms…"}/>
+          <SectionLoader lang={lang} tile minHeight={110} label={lang === "fr" ? "Chargement des fermes…" : "Loading farms…"}/>
+        </div>
+      )}
       {farms.length > 0 && (
         <div style={{
           display: "grid",
@@ -8160,7 +8174,9 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       {/* Species filter */}
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
-      {filtered.length === 0 ? (
+      {!loaded ? (
+        <SectionLoader lang={lang} minHeight={260} label={lang === "fr" ? "Chargement des bâtiments…" : "Loading buildings…"}/>
+      ) : filtered.length === 0 ? (
         <EmptyState lang={lang} title={lang === "fr" ? "Aucun bâtiment" : "No building"} hint={lang === "fr" ? "Ajoute un bâtiment pour suivre capacité et occupation." : "Add a building to track capacity and occupancy."}/>
       ) : viewMode === "zones" ? (
         /* ── Vue Zones ── */

@@ -104,6 +104,55 @@ export class FarmosService {
     return this.assertAnimalWritableById(animalId, orgId);
   }
 
+  // ─── Boucle d oreille numerotee (avatar) ────────────────────────────────
+  // Plus petit entier >=1 non deja pris par un animal ACTIF du batiment donne.
+  // A appeler dans une transaction (tx) autour de l ecriture qui fixe le
+  // batiment de l animal, pour eviter deux animaux qui recoivent le meme
+  // numero en cas d ecriture concurrente (verrou implicite de la transaction
+  // MySQL sur les lignes lues via SELECT ... puis UPDATE dans la meme tx).
+  private async nextFreeTagNumber(
+    buildingId: number | null | undefined,
+    orgId: number,
+    tx?: any,
+    excludeAnimalId?: number | null,
+  ): Promise<number | null> {
+    if (buildingId == null) return null;
+    const runner = tx ?? this.db;
+    // Anti-doublon : deux arrivées simultanées dans le même bâtiment calculeraient le même
+    // « plus petit numéro libre ». On verrouille la ligne du bâtiment (sérialise les
+    // attributions par bâtiment) et on lit les numéros pris en lecture verrouillante
+    // (sinon REPEATABLE READ peut servir un instantané antérieur au verrou).
+    // Pas d'index unique possible : un animal sorti garde son ancien tag_number.
+    if (tx) {
+      await tx
+        .select({ id: farmosBuildings.id })
+        .from(farmosBuildings)
+        .where(eq(farmosBuildings.id, buildingId))
+        .limit(1)
+        .for("update");
+    }
+    const conds = [
+      eq(farmosAnimals.organizationId, orgId),
+      eq(farmosAnimals.buildingId, buildingId),
+      eq(farmosAnimals.isActive, 1),
+      this.activeLivestockSqlCondition(),
+    ];
+    if (excludeAnimalId != null) conds.push(sql`${farmosAnimals.id} <> ${excludeAnimalId}`);
+    const tagQuery = runner
+      .select({ tagNumber: farmosAnimals.tagNumber })
+      .from(farmosAnimals)
+      .where(and(...conds));
+    const rows = await (tx ? tagQuery.for("update") : tagQuery);
+    const taken = new Set(
+      (rows as { tagNumber: number | null }[])
+        .map((r) => Number(r.tagNumber))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    );
+    let candidate = 1;
+    while (taken.has(candidate)) candidate++;
+    return candidate;
+  }
+
   async getDashboardSnapshot(orgId: number) {
     // Resilience: une sous-requete qui echoue (ex. table manquante / drift Drizzle)
     // ne doit PAS faire tomber tout le tableau de bord. On isole chaque source.
@@ -706,6 +755,11 @@ export class FarmosService {
     if (input.father_id !== undefined) patch.fatherId = input.father_id;
     if (input.estimated_value !== undefined) patch.estimatedValue = input.estimated_value != null ? String(input.estimated_value) : null;
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
+    // Statut mort/vendu/en-vente : la boucle numerotee n'a plus de sens sur un
+    // animal sorti du cheptel actif, on libere son numero pour le batiment.
+    if (input.status !== undefined && this.isSaleLockedStatus(input.status) && !this.isSaleLockedStatus(current.status)) {
+      patch.tagNumber = null;
+    }
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
 
     const statusChanged = input.status !== undefined && input.status !== current.status;
@@ -1832,14 +1886,19 @@ export class FarmosService {
     // que la détection de consanguinité (quickentry.jsx) fonctionne sur
     // les portées suivantes.
     const ids: number[] = [];
-    for (const g of groups) {
-      const suffix = groups.length > 1 ? `-${g.label}` : "";
-      const externalId = `${motherId}-${input.event_date}${suffix}`;
-      const [row] = await this.db.insert(farmosAnimals)
-        .values({ ...base, sex: g.sex, count: g.count, externalId })
-        .$returningId();
-      ids.push(row.id);
-    }
+    await this.db.transaction(async (tx) => {
+      for (const g of groups) {
+        const suffix = groups.length > 1 ? `-${g.label}` : "";
+        const externalId = `${motherId}-${input.event_date}${suffix}`;
+        // Boucle numerotee seulement pour un individu (count=1) : un lot
+        // (portee groupee) n'a pas une tete unique a badger.
+        const tagNumber = g.count === 1 ? await this.nextFreeTagNumber(base.buildingId, orgId, tx) : null;
+        const [row] = await tx.insert(farmosAnimals)
+          .values({ ...base, sex: g.sex, count: g.count, externalId, tagNumber })
+          .$returningId();
+        ids.push(row.id);
+      }
+    });
     return ids;
   }
 
@@ -2874,13 +2933,18 @@ export class FarmosService {
     const force = input.force === true || input.force === "true";
 
     if (targetBoxId == null) {
-      const [res]: any = await this.db.update(farmosAnimals)
-        .set({ boxId: null })
-        .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
-      // Pas de controle d'erreur ici : MySQL renvoie 0 ligne affectee quand
-      // l'animal n'avait deja aucun box, ce qui est un retrait sans effet mais
-      // legitime (idempotent). Le nombre reel est simplement remonte a l'appelant.
-      const affected = Number(res?.affectedRows ?? animalIds.length);
+      // Retrait de box = plus de batiment connu pour ces animaux : la boucle
+      // numerotee n'a plus de sens, on la libere (NULL) pour que le numero
+      // redevienne disponible pour un autre animal du batiment quitte.
+      const affected = await this.db.transaction(async (tx) => {
+        const [res]: any = await tx.update(farmosAnimals)
+          .set({ boxId: null, buildingId: null, tagNumber: null })
+          .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+        // Pas de controle d'erreur ici : MySQL renvoie 0 ligne affectee quand
+        // l'animal n'avait deja aucun box, ce qui est un retrait sans effet mais
+        // legitime (idempotent). Le nombre reel est simplement remonte a l'appelant.
+        return Number(res?.affectedRows ?? animalIds.length);
+      });
       await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", 0, orgId);
       return { assigned: affected, boxId: null };
     }
@@ -2888,7 +2952,7 @@ export class FarmosService {
     const box = await this.getBox(targetBoxId, orgId);
     // Têtes à placer (somme des count des animaux ciblés), en excluant ceux déjà dans ce box.
     const animals = await this.db
-      .select({ id: farmosAnimals.id, count: farmosAnimals.count, boxId: farmosAnimals.boxId })
+      .select({ id: farmosAnimals.id, count: farmosAnimals.count, boxId: farmosAnimals.boxId, buildingId: farmosAnimals.buildingId })
       .from(farmosAnimals)
       .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1),
         this.activeLivestockSqlCondition(),
@@ -2917,12 +2981,27 @@ export class FarmosService {
       });
     }
 
-    const [res]: any = await this.db.update(farmosAnimals)
-      .set({ boxId: targetBoxId })
-      .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
-    // MySQL compte 0 ligne affectee quand la valeur ecrite est deja en place :
-    // ne signaler l'echec que s'il restait vraiment quelque chose a deplacer.
-    const affected = Number(res?.affectedRows ?? animalIds.length);
+    const targetBuildingId = box.buildingId ?? null;
+    const affected = await this.db.transaction(async (tx) => {
+      let count = 0;
+      for (const a of animals) {
+        // Deja dans ce batiment (meme box ou un autre box du meme batiment) :
+        // ne pas retirer un numero de boucle valide pour lui en donner un
+        // nouveau sans raison.
+        if (a.buildingId === targetBuildingId && a.boxId === targetBoxId) continue;
+        const changesBuilding = a.buildingId !== targetBuildingId;
+        const tagNumber = changesBuilding
+          ? await this.nextFreeTagNumber(targetBuildingId, orgId, tx, a.id)
+          : undefined;
+        const patch: Record<string, unknown> = { boxId: targetBoxId, buildingId: targetBuildingId };
+        if (tagNumber !== undefined) patch.tagNumber = tagNumber;
+        const [res]: any = await tx.update(farmosAnimals)
+          .set(patch)
+          .where(and(eq(farmosAnimals.id, a.id), eq(farmosAnimals.organizationId, orgId)));
+        count += Number(res?.affectedRows ?? 1);
+      }
+      return count;
+    });
     if (affected === 0 && alreadyHere.length < animalIds.length) {
       throw new BadRequestException("L'affectation n'a modifie aucun animal : rien n'a ete enregistre.");
     }
@@ -3667,9 +3746,11 @@ export class FarmosService {
       // Un lot entierement extrait n'a plus d'animal derriere lui : le desactiver,
       // sinon la fiche vide continue de peser une tete fantome dans l'occupation
       // du batiment (le comptage fait `Number(count ?? 0) || 1`, donc 0 vaut 1).
+      // Lot source entierement vide : desactive + tagNumber libere (plus rien
+      // a badger derriere, et son numero redevient disponible dans le batiment).
       await tx
         .update(farmosAnimals)
-        .set(countAfter === 0 ? { count: 0, isActive: 0 } : { count: countAfter })
+        .set(countAfter === 0 ? { count: 0, isActive: 0, tagNumber: null } : { count: countAfter })
         .where(and(eq(farmosAnimals.id, fromRow.id), eq(farmosAnimals.organizationId, orgId)));
 
       const motherId = fromRow.motherId ?? null;
@@ -3682,6 +3763,10 @@ export class FarmosService {
         const externalId = count === 1
           ? (input.external_id || `${baseSourceId}-split-${input.split_date}`)
           : `${input.external_id || baseSourceId}-split-${input.split_date}${suffix}`;
+        // Chaque individu extrait est une tete unique (count:1) : boucle
+        // numerotee dans le batiment herite du lot source (plus petit numero
+        // libre, en excluant rien car pas encore insere).
+        const tagNumber = await this.nextFreeTagNumber(fromRow.buildingId, orgId, tx);
         const [row] = await tx.insert(farmosAnimals).values({
           organizationId: orgId,
           externalId,
@@ -3706,6 +3791,7 @@ export class FarmosService {
           status: "healthy",
           motherId,
           fatherId,
+          tagNumber,
         }).$returningId();
         createdAnimalIds.push(row.id);
       }
