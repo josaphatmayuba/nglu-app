@@ -1,4 +1,5 @@
 import React from "react";
+import { isFatteningType } from "./animal-category";
 
 // ─── Avatar animal : tête 2D plate + boucle d'oreille numérotée ──────────
 // Dessin repris à l'identique de la maquette validée (viewBox 0..120).
@@ -7,6 +8,20 @@ import React from "react";
 // nextFreeTagNumber). NULL => boucle vide (animal sans bâtiment).
 
 const TAG_YELLOW = "#F2C230";
+
+// Couleur de boucle selon l'animal (règle du propriétaire) :
+//  - déclaré à engraisser (type engraissement/abattage…) → orange, quel que soit le sexe ;
+//  - sinon mâle → bleu, femelle → rose ; sexe inconnu → jaune (défaut).
+// Le texte du numéro passe en blanc automatiquement sur les fonds foncés (textColorFor).
+export const TAG_COLORS = { fattening: "#F08A24", male: "#2F6FB3", female: "#D63F8C", unknown: TAG_YELLOW };
+export function tagColorForAnimal(a) {
+  if (!a) return TAG_COLORS.unknown;
+  if (isFatteningType(a)) return TAG_COLORS.fattening;
+  const sx = String(a.sex || "").trim().toLowerCase();
+  if (sx.startsWith("m")) return TAG_COLORS.male;
+  if (sx.startsWith("f")) return TAG_COLORS.female;
+  return TAG_COLORS.unknown;
+}
 
 // Luminance perçue -> texte noir ou blanc selon le fond.
 function textColorFor(bgHex) {
