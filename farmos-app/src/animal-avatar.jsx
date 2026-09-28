@@ -130,12 +130,13 @@ function HeadGeneric() {
   return <circle cx="60" cy="60" r="54" fill="#EFE8DA" />;
 }
 
-// Position du bouton de la boucle (viewBox 120) + rotation, par espèce.
+// Position du bouton de la boucle (viewBox 120) + rotation, par espèce —
+// valeurs exactes de la maquette validée (artifact « AnimalAvatar »).
 const TAG_POS = {
   pig: [24, 18, -12],
-  cow: [24, 49, 2],
-  goat: [24, 58, 2],
-  sheep: [24, 60, 2],
+  cow: [18, 49, 3],
+  goat: [19, 58, 5],
+  sheep: [22, 60, 3],
 };
 
 const HEAD_BY_SPECIES = {
@@ -151,10 +152,13 @@ const HEAD_BY_SPECIES = {
 const BIRDS = new Set(["chicken", "duck", "turkey"]);
 
 // Boucle : tige + bouton rond + panneau arrondi, numéro centré en gros.
-function EarTag({ tagNumber, tagColor, transform }) {
+function EarTag({ tagNumber, tagColor, transform, isSmall }) {
   const text = tagNumber != null ? String(tagNumber) : "";
   const len = text.length;
-  const fontSize = len <= 2 ? 16 : len === 3 ? 12.5 : 10;
+  // Tailles de la maquette : plus gros en liste (petit avatar), dégressif selon le nombre de chiffres.
+  const fontSize = isSmall
+    ? (len <= 2 ? 17 : len === 3 ? 13 : 10)
+    : (len <= 2 ? 14 : len === 3 ? 12 : len === 4 ? 10 : 8);
   return (
     <g transform={transform}>
       <path
@@ -168,7 +172,7 @@ function EarTag({ tagNumber, tagColor, transform }) {
       {text && (
         <text
           x="0"
-          y="22"
+          y="21.5"
           textAnchor="middle"
           dominantBaseline="central"
           fontSize={fontSize}
@@ -208,16 +212,19 @@ function LegBand({ tagNumber, tagColor }) {
 }
 
 function TagFor({ species, tagNumber, tagColor, isSmall }) {
+  // Sans numéro (animal hors bâtiment) : pas de boucle vide, qui se lisait comme un objet posé sur la tête.
+  if (tagNumber == null) return null;
   if (BIRDS.has(species)) return <LegBand tagNumber={tagNumber} tagColor={tagColor} />;
   const pos = TAG_POS[species];
   if (!pos) {
-    return <EarTag tagNumber={tagNumber} tagColor={tagColor} transform="translate(60 18) scale(2.2)" />;
+    return <EarTag tagNumber={tagNumber} tagColor={tagColor} isSmall={isSmall} transform="translate(60 18) scale(2.2)" />;
   }
   const scale = isSmall ? 1.45 : 1.25;
   return (
     <EarTag
       tagNumber={tagNumber}
       tagColor={tagColor}
+      isSmall={isSmall}
       transform={`translate(${pos[0]} ${pos[1]}) rotate(${pos[2]}) scale(${scale})`}
     />
   );
@@ -271,12 +278,13 @@ const AnimalAvatarBase = ({
     >
       <svg
         viewBox="0 0 120 120"
-        width="100%"
-        height="100%"
-        style={photoUrl ? { position: "absolute", inset: 0, pointerEvents: "none" } : { display: "block" }}
+        width={photoUrl ? "100%" : "94%"}
+        height={photoUrl ? "100%" : "94%"}
+        // Comme la maquette : l'animal occupe 94 % du cadre et la boucle peut déborder de la tête sans être coupée.
+        style={photoUrl ? { position: "absolute", inset: 0, pointerEvents: "none" } : { display: "block", overflow: "visible" }}
       >
         {!photoUrl && <Head />}
-        {(!photoUrl || tagNumber != null) && (
+        {tagNumber != null && (
           <TagFor species={species} tagNumber={tagNumber} tagColor={tagColor} isSmall={isSmall} />
         )}
       </svg>
