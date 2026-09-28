@@ -58,12 +58,47 @@ export const isFatteningType = (a) => {
   return !!t && FATTEN_TYPE_KW.some((k) => t.includes(k));
 };
 
-const ageDays = (a) => {
+export const ageDays = (a) => {
   const dobStr = a?.dateOfBirth || a?.date_of_birth;
   if (!dobStr) return null;
   const dob = new Date(dobStr);
   if (isNaN(dob)) return null;
   return (Date.now() - dob.getTime()) / 86400000;
+};
+
+// Âge lisible depuis la date de naissance, en mois calendaires :
+// < 1 mois → « 12 j », < 1 an → « 5 mois », sinon « 3 ans 2 mois ».
+// tone : "young" | "adult" (seuil espèce, isAdultAnimal) | "none" (date absente ou future).
+// birth : « Née le 14/07/2023 » (accord selon le sexe), pour le survol / la 2e ligne.
+export const formatAnimalAge = (a, lang = "fr") => {
+  const fr = lang !== "en";
+  const dobStr = a?.dateOfBirth || a?.date_of_birth;
+  const dob = dobStr ? new Date(dobStr) : null;
+  const unknown = { label: fr ? "Âge inconnu" : "Unknown age", birth: fr ? "Date de naissance manquante" : "Birth date missing", days: null, tone: "none" };
+  if (!dob || isNaN(dob)) return unknown;
+  const now = new Date();
+  const days = Math.floor((now - dob) / 86400000);
+  if (days < 0) return { ...unknown, birth: fr ? "Date de naissance dans le futur (à corriger)" : "Birth date in the future (to fix)" };
+  let months = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+  if (now.getDate() < dob.getDate()) months -= 1;
+  let label;
+  if (months < 1) label = fr ? `${days} j` : `${days} d`;
+  else if (months < 12) label = fr ? `${months} mois` : `${months} mo`;
+  else {
+    const y = Math.floor(months / 12), m = months % 12;
+    label = fr ? `${y} an${y > 1 ? "s" : ""}${m ? ` ${m} mois` : ""}` : `${y} y${m ? ` ${m} mo` : ""}`;
+  }
+  const female = String(a?.sex || "").trim().toLowerCase().startsWith("f");
+  const dateTxt = dob.toLocaleDateString(fr ? "fr-FR" : "en-GB");
+  const birth = fr ? `${female ? "Née" : "Né"} le ${dateTxt}` : `Born ${dateTxt}`;
+  return { label, birth, days, tone: isAdultAnimal(a) ? "adult" : "young" };
+};
+
+// Couleurs de la pastille d'âge (bleu = jeune, vert = adulte, neutre = inconnu).
+export const AGE_TONES = {
+  young: { bg: "#DDE9F2", fg: "#1D4466" },
+  adult: { bg: "#DCE5DD", fg: "#1E4A2E" },
+  none:  { bg: "#EFE8DA", fg: "#5E6B63" },
 };
 
 // Un animal est-il adulte ? Basé UNIQUEMENT sur l'âge (date de naissance + seuil espèce).
