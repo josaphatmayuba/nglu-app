@@ -72,8 +72,11 @@ export const ageDays = (a) => {
 // birth : « Née le 14/07/2023 » (accord selon le sexe), pour le survol / la 2e ligne.
 export const formatAnimalAge = (a, lang = "fr") => {
   const fr = lang !== "en";
-  const dobStr = a?.dateOfBirth || a?.date_of_birth;
-  const dob = dobStr ? new Date(dobStr) : null;
+  // `dob` = champ des animaux adaptés par api.js (adaptAnimal) ; dateOfBirth / date_of_birth = lignes brutes de l'API.
+  const dobStr = a?.dob || a?.dateOfBirth || a?.date_of_birth;
+  // « AAAA-MM-JJ » lu en date LOCALE (new Date("2023-07-14") = minuit UTC → la veille en Amérique).
+  const ymd = typeof dobStr === "string" && /^(\d{4})-(\d{2})-(\d{2})/.exec(dobStr);
+  const dob = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : dobStr ? new Date(dobStr) : null;
   const unknown = { label: fr ? "Âge inconnu" : "Unknown age", birth: fr ? "Date de naissance manquante" : "Birth date missing", days: null, tone: "none" };
   if (!dob || isNaN(dob)) return unknown;
   const now = new Date();
@@ -91,7 +94,7 @@ export const formatAnimalAge = (a, lang = "fr") => {
   const female = String(a?.sex || "").trim().toLowerCase().startsWith("f");
   const dateTxt = dob.toLocaleDateString(fr ? "fr-FR" : "en-GB");
   const birth = fr ? `${female ? "Née" : "Né"} le ${dateTxt}` : `Born ${dateTxt}`;
-  return { label, birth, days, tone: isAdultAnimal(a) ? "adult" : "young" };
+  return { label, birth, days, tone: isAdultAnimal({ ...a, dateOfBirth: dobStr }) ? "adult" : "young" };
 };
 
 // Couleurs de la pastille d'âge (bleu = jeune, vert = adulte, neutre = inconnu).
