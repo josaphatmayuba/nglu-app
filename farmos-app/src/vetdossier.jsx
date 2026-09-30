@@ -4,6 +4,7 @@ import { Icon } from "./icons";
 import { api } from "./api";
 import { AutocompleteDB, Autocomplete } from "./quickentry";
 import { SectionLoader } from "./loading.jsx";
+import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 // ─── Dossier vétérinaire complet (#2) ────────────────────────────────────────
 // Examen clinique enrichi + ordonnance (lignes médicament/dose/durée) + signature
@@ -422,6 +423,7 @@ export const FarmosDocumentsSection = ({ lang, animals }) => {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const [form, setForm] = React.useState({ title: "", doc_type: "certificate", animal_id: "", issued_date: "" });
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const fileRef = React.useRef(null);
 
   const load = React.useCallback(() => {
@@ -459,7 +461,11 @@ export const FarmosDocumentsSection = ({ lang, animals }) => {
     }
   };
 
-  const remove = async (id) => {
+  const remove = (id) => { setConfirmDeleteId(id); };
+  const confirmRemove = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
     try { await api.deleteDocument(id); load(); } catch (e) { setErr(e.message); }
   };
 
@@ -509,6 +515,13 @@ export const FarmosDocumentsSection = ({ lang, animals }) => {
           ))}
         </div>
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce document ?" : "Delete this document?"}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 };

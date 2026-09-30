@@ -11,6 +11,7 @@ import { useDataRefresh } from "./use-data-refresh";
 import { defaultCurrencyId, defaultSymbol, formatMoney, symbolFor } from "./currency";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { SectionLoader } from "./loading.jsx";
+import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 function useCurrencyCatalog() {
   const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
@@ -308,6 +309,7 @@ function LotsDrawer({ lang, medicine, onClose, onChanged }) {
   const [lots, setLots] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [receiveOpen, setReceiveOpen] = React.useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const currencyMeta = useCurrencyCatalog();
 
   const load = React.useCallback(() => {
@@ -319,8 +321,11 @@ function LotsDrawer({ lang, medicine, onClose, onChanged }) {
   }, [medicine.id]);
   React.useEffect(() => { load(); }, [load]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm(lang === "fr" ? "Supprimer ce lot ?" : "Delete this lot?")) return;
+  const handleDelete = (id) => { setConfirmDeleteId(id); };
+  const confirmDelete = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
     try {
       await api.deleteFeedLot(id);
       load();
@@ -389,6 +394,13 @@ function LotsDrawer({ lang, medicine, onClose, onChanged }) {
           onSaved={() => { setReceiveOpen(false); load(); onChanged && onChanged(); }}
         />
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce lot ?" : "Delete this lot?"}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }
@@ -408,6 +420,7 @@ function FeedMovementsTab({ lang, stockItems, buildings, currencyMeta }) {
   const [typeFilter, setTypeFilter] = React.useState("");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const refresh = useDataRefresh(["feedMovements", "medicines"]);
 
   const load = React.useCallback(() => {
@@ -423,8 +436,11 @@ function FeedMovementsTab({ lang, stockItems, buildings, currencyMeta }) {
   const medicineById = new Map((stockItems || []).map((m) => [m.id, m.name]));
   const filtered = movements.filter((m) => !typeFilter || m.movementType === typeFilter);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm(lang === "fr" ? "Supprimer ce mouvement ?" : "Delete this movement?")) return;
+  const handleDelete = (id) => { setConfirmDeleteId(id); };
+  const confirmDelete = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
     try {
       await api.deleteFeedMovement(id);
       load();
@@ -488,6 +504,13 @@ function FeedMovementsTab({ lang, stockItems, buildings, currencyMeta }) {
           </table>
         </div>
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce mouvement ?" : "Delete this movement?"}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

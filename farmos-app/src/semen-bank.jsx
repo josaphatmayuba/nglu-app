@@ -9,6 +9,7 @@ import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { Autocomplete } from "./quickentry";
 import { SectionLoader } from "./loading.jsx";
+import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -178,12 +179,14 @@ const EmptyBank = ({ lang, onAdd }) => (
 
 const StrawDetail = ({ lang, straw, onClose, onEdit, onChanged }) => {
   const [full, setFull] = React.useState(null);
+  const [confirmArchiveOpen, setConfirmArchiveOpen] = React.useState(false);
   React.useEffect(() => {
     api.getSemenStraw(straw.id).then(setFull).catch(() => setFull(null));
   }, [straw.id]);
 
-  const archive = async () => {
-    if (!window.confirm(lang === "fr" ? "Archiver cette paillette ?" : "Archive this straw?")) return;
+  const archive = () => { setConfirmArchiveOpen(true); };
+  const confirmArchive = async () => {
+    setConfirmArchiveOpen(false);
     try { await api.deleteSemenStraw(straw.id); onChanged(); onClose(); }
     catch (e) { alert(e.message); }
   };
@@ -266,6 +269,15 @@ const StrawDetail = ({ lang, straw, onClose, onEdit, onChanged }) => {
           </div>
         )}
       </div>
+      <ConfirmDeleteModal
+        open={confirmArchiveOpen}
+        lang={lang}
+        message={lang === "fr" ? "Archiver cette paillette ?" : "Archive this straw?"}
+        confirmLabel={lang === "fr" ? "Archiver" : "Archive"}
+        danger={false}
+        onConfirm={confirmArchive}
+        onCancel={() => setConfirmArchiveOpen(false)}
+      />
     </div>
   );
 };
