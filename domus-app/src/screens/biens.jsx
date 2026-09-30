@@ -822,6 +822,7 @@ function PropertyMap({ rows }) {
 }
 
 function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, onDeletePhoto, onEdit, go }) {
+  const [moreOpen, setMoreOpen] = useState(false);
   const photos = Array.isArray(property.photos) ? property.photos : [];
   const cover = photos[0];
   const propertyId = property.propertyId || property.id;
@@ -871,6 +872,20 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
                 <span>Aucune photo</span>
               </div>
             )}
+            <label className="domus-photo-add-hero">
+              <Upload size={14} />
+              <span>Ajouter une photo</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) onUploadPhoto(file);
+                }}
+              />
+            </label>
           </div>
           <div className="domus-photo-strip">
             {photos.map((photo) => (
@@ -1003,39 +1018,46 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
         {error && <div className="api-error">{error}</div>}
       </div>
       <div className="domus-modal-footer">
-        <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Fermer</button>
-        <div>
+        <div className="domus-modal-footer-primary">
           <button
-            className="domus-modal-draft"
-            onClick={() => { onClose(); go?.("depenses"); }}
-            disabled={busy}
-          ><Wallet size={14} /> Dépenses</button>
-          <button
-            className="domus-modal-draft"
-            onClick={() => { onClose(); go?.("hypotheque"); }}
-            disabled={busy}
-          ><Landmark size={14} /> Hypothèque</button>
-          <button
-            className="domus-modal-draft"
-            onClick={() => { setPnlPrefill(property.propertyId || property.id); onClose(); go?.("pnl"); }}
-            disabled={busy}
-          ><BarChart3 size={14} /> P&amp;L</button>
-          <button
-            className="domus-modal-draft"
-            onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}
-            disabled={busy}
-          ><BedDouble size={14} /> Réserver</button>
-          <button
-            className="domus-modal-draft"
+            className={property.status === "Libre" ? "domus-modal-submit" : "domus-modal-draft"}
             onClick={() => { setLeasePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("baux"); }}
             disabled={busy}
           ><FileText size={14} /> Créer un bail</button>
-          <button className="domus-modal-draft" onClick={() => go?.("loyers")} disabled={busy}><DollarSign size={14} /> Loyers</button>
           <button
-            className="domus-modal-draft"
-            onClick={() => { setMaintenancePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("maintenance"); }}
+            className={property.status === "Libre" ? "domus-modal-draft highlight" : "domus-modal-draft"}
+            onClick={() => { setReservationPrefill(property.propertyId || property.id); onClose(); go?.("reservations"); }}
             disabled={busy}
-          ><Wrench size={14} /> Declarer un probleme</button>
+          ><BedDouble size={14} /> Réserver</button>
+        </div>
+        <div className="domus-modal-footer-secondary">
+          <button className="domus-modal-draft" onClick={() => { onClose(); go?.("depenses"); }} disabled={busy}>
+            <Wallet size={14} /> Dépenses
+          </button>
+          <button className="domus-modal-draft" onClick={() => go?.("loyers")} disabled={busy}>
+            <DollarSign size={14} /> Loyers
+          </button>
+          <div className="domus-modal-more">
+            <button
+              className="domus-modal-draft"
+              onClick={() => setMoreOpen((v) => !v)}
+              disabled={busy}
+              aria-label="Plus d'actions"
+            ><MoreHorizontal size={14} /> Plus</button>
+            {moreOpen && (
+              <div className="property-menu domus-modal-more-menu">
+                <button onClick={() => { setMoreOpen(false); onClose(); go?.("hypotheque"); }} disabled={busy}>
+                  <Landmark size={16} /> Hypothèque
+                </button>
+                <button onClick={() => { setMoreOpen(false); setPnlPrefill(property.propertyId || property.id); onClose(); go?.("pnl"); }} disabled={busy}>
+                  <BarChart3 size={16} /> P&amp;L
+                </button>
+                <button onClick={() => { setMoreOpen(false); setMaintenancePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("maintenance"); }} disabled={busy}>
+                  <Wrench size={16} /> Déclarer un problème
+                </button>
+              </div>
+            )}
+          </div>
           <button className="domus-modal-submit" onClick={onEdit} disabled={busy}>
             <Edit3 size={14} /> Modifier
           </button>

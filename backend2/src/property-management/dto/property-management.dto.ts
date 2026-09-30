@@ -13,6 +13,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
 } from "class-validator";
@@ -439,6 +440,12 @@ export class CreateRentPaymentDto {
   @IsOptional()
   @IsString()
   reference?: string | null;
+
+  @ApiPropertyOptional({ example: "Jean Kabila", description: "Nom de la personne qui a physiquement perçu l'argent (paiement cash)." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  receivedBy?: string | null;
 
   @ApiPropertyOptional({ example: "Payment for rent" })
   @IsOptional()
