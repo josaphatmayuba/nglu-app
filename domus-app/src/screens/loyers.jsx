@@ -296,6 +296,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
   const [amount, setAmount] = useState(String(fullBalance || monthRent || ""));
   const [method, setMethod] = useState(null);
+  const [receivedBy, setReceivedBy] = useState("");
   const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -313,6 +314,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         amount: Number(amount),
         method: m?.label || method,
         reference: null,
+        receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(card.currencyId ? { currencyId: Number(card.currencyId) } : {}),
       }, proofFile);
       onPaid(`Paiement de ${money(Number(amount), card.symbol)} enregistré pour ${card.name}`);
@@ -370,6 +372,13 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
               </button>
             ))}
           </div>
+          {activeKey === "cash" && (
+            <>
+              <label className="immo-field-label">Reçu par</label>
+              <input className="immo-input" type="text" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}
+                placeholder="Nom de la personne ayant perçu l'argent" maxLength={255} />
+            </>
+          )}
           <label className="immo-field-label">Preuve de paiement (optionnel)</label>
           <input
             id="quickpay-proof-input"
@@ -411,6 +420,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
     return d.toISOString().slice(0, 10);
   });
   const [method, setMethod] = useState(null);
+  const [receivedBy, setReceivedBy] = useState("");
   const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -428,6 +438,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
         amount: Number(amount),
         method: m?.label || method,
         reference: null,
+        receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(payment.currencyId ? { currencyId: Number(payment.currencyId) } : {}),
       }, proofFile);
       onConfirmed(`Paiement de ${money(Number(amount), payment.currencySymbol)} confirmé pour ${tenant}`);
@@ -464,6 +475,13 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
               </button>
             ))}
           </div>
+          {activeKey === "cash" && (
+            <>
+              <label className="immo-field-label">Reçu par</label>
+              <input className="immo-input" type="text" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}
+                placeholder="Nom de la personne ayant perçu l'argent" maxLength={255} />
+            </>
+          )}
           <label className="immo-field-label">Preuve de paiement (optionnel)</label>
           <input
             id="confirmpay-proof-input"
@@ -888,6 +906,8 @@ export function Paiement({ go }) {
   // numéro de reçu (auto-généré) — deux champs distincts selon la méthode.
   const [mobileNumber, setMobileNumber] = useState("");
   const [receiptRef, setReceiptRef] = useState(genReceiptRef);
+  // Nom de la personne ayant physiquement perçu l'argent — uniquement en espèces.
+  const [receivedBy, setReceivedBy] = useState("");
   // Preuve de paiement (photo/scan reçu, capture mobile money) — optionnelle, tous moyens.
   const [proofFile, setProofFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -928,6 +948,7 @@ export function Paiement({ go }) {
         amount: Number(amount),
         method: methodMeta?.label || method,
         reference: (methodMeta?.mobile ? mobileNumber : receiptRef) || null,
+        receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(lease?.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
       }, proofFile);
       setDone(payment || { amount, method: methodMeta?.label });
@@ -941,7 +962,7 @@ export function Paiement({ go }) {
 
   const reset = () => {
     setStep(1); setLeaseId(null); setAmount(""); setMethod(null);
-    setMobileNumber(""); setReceiptRef(genReceiptRef()); setProofFile(null); setDone(null); setErr(null);
+    setMobileNumber(""); setReceiptRef(genReceiptRef()); setReceivedBy(""); setProofFile(null); setDone(null); setErr(null);
   };
 
   return (
@@ -1006,6 +1027,13 @@ export function Paiement({ go }) {
               ? "Numéro du locataire (pré-rempli) — modifiable."
               : "Numéro du reçu remis au locataire (généré automatiquement) — modifiable."}
           </div>
+          {activeKey === "cash" && (
+            <>
+              <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Reçu par</div>
+              <input value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}
+                placeholder="Nom de la personne ayant perçu l'argent" style={inputStyle} maxLength={255} />
+            </>
+          )}
           <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Preuve de paiement (optionnel)</div>
           <input
             id="rent-proof-input"

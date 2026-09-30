@@ -1940,6 +1940,13 @@
       "when": 1781071200052,
       "tag": "0301_farmos_animal_tag_number",
       "breakpoints": true
+    },
+    {
+      "idx": 277,
+      "version": "5",
+      "when": 1781071200053,
+      "tag": "0302_domus_rent_payment_received_by",
+      "breakpoints": true
     }
   ]
 }

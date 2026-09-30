@@ -1122,6 +1122,8 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   // 'pending' = échéance de loyer générée mais pas encore encaissée.
   status: varchar("status", { length: 20 }).default("paid").notNull(),
   reference: varchar("reference", { length: 255 }),
+  // Nom de la personne ayant physiquement perçu l'argent (paiement en espèces).
+  receivedBy: varchar("received_by", { length: 255 }),
   notes: text("notes"),
   // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
   taxAmount: decimal("tax_amount", { precision: 15, scale: 2 }),
