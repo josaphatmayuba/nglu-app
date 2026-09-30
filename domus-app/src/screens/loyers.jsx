@@ -31,6 +31,10 @@ function uiMethodsFrom(raw) {
   const rows = paymentMethodRows(raw).filter((m) => m.active);
   if (!rows.length) return METHODS;
   return rows.map((m) => {
+    const isCash = m.name.toLowerCase() === "espèces"
+      || m.name.toLowerCase() === "cash"
+      || String(m.subAccount || "").toLowerCase() === "cash";
+    if (isCash) return { key: "cash", label: m.name, color: m.color, short: m.short, mobile: false };
     const known = METHODS.find((d) => d.label.toLowerCase() === m.name.toLowerCase());
     return known || { key: String(m.id), label: m.name, color: m.color, short: m.short, mobile: m.mobile };
   });
