@@ -4,7 +4,7 @@
 // native du navigateur avec @page/break-inside plus fiable qu'un rendu jsPDF).
 import QRCode from "qrcode";
 import { escapeHtml } from "./contractUtils.js";
-import { money, moneyExact } from "./data.js";
+import { moneyExact } from "./data.js";
 
 const MONTHS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -213,11 +213,13 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-header .ref { color: #e4ede6; opacity: .9; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
   .rent-book .cover-header .qr { text-align: center; flex: none; }
   .rent-book .cover-header .qr img { background: #fff; padding: 6px; border-radius: 4px; display: block; }
-  .rent-book .cover-header .qr span { display: block; color: #fff; opacity: .9; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 110px; margin-top: 6px; font-family: 'Source Sans 3', Arial, sans-serif; }
+  .rent-book .cover-header .qr span { display: block; color: #fff; opacity: .9; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
   .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-  .rent-book .cover-grid .cell { padding: 14px 24px; border-top: 1px solid #c9c2b2; }
+  .rent-book .cover-grid .cell { padding: 14px 24px; border-bottom: 1px solid #e3ddce; }
+  .rent-book .cover-grid .cell.full { grid-column: 1 / -1; }
   .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
   .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
+  .rent-book .cover-grid .cell strong.accent { color: #2f6e4e; }
   .rent-book .dash { flex: 1; border-top: 1px dashed #b7afa0; }
   .rent-book .receipts-title { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; white-space: nowrap; }
   .rent-book .cut-line { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: #9a9385; font-size: 11px; }
@@ -257,16 +259,16 @@ function coverHtml(lease, qrDataUrl) {
     <div class="cover-header">
       <div>
         <h1>${escapeHtml(lease.propertyName || "Bien")}</h1>
-        <div class="ref">Bail ${escapeHtml(lease.reference || `#${lease.id}`)}</div>
+        <div class="ref">Carnet du locataire · Bail n° ${escapeHtml(lease.reference || `#${lease.id}`)}</div>
       </div>
       ${qrDataUrl ? `<div class="qr"><img src="${qrDataUrl}" width="90" height="90" alt="QR portail" /><span>Scanner pour envoyer la preuve de paiement</span></div>` : ""}
     </div>
     <div class="cover-grid">
       <div class="cell"><span>Locataire</span><strong>${escapeHtml([lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "—")}</strong></div>
       <div class="cell"><span>Contact</span><strong>${escapeHtml(lease.tenantPhone || "—")}</strong></div>
-      <div class="cell"><span>Adresse</span><strong>${escapeHtml(fullAddressLine(lease) || "—")}</strong></div>
+      <div class="cell full"><span>Adresse</span><strong>${escapeHtml(fullAddressLine(lease) || "—")}</strong></div>
       <div class="cell"><span>Durée du bail</span><strong>${fmtDateLong(lease.startDate)} → ${lease.endDate ? fmtDateLong(lease.endDate) : "indéterminée"}</strong></div>
-      <div class="cell"><span>Loyer mensuel</span><strong>${escapeHtml(money(lease.rentAmount, lease.currencySymbol || "CDF"))}</strong></div>
+      <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyExact(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
       <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong></div>
       <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.organizationName || "—")}</strong></div>
     </div>
