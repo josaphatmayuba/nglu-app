@@ -242,6 +242,9 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
   .rent-book .receipt-sign .box .line { height: 48px; border: 1px dashed #c9c2b2; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
   .rent-book .receipt-sign .box .line span { margin: 0; font-size: 10.5px; font-style: italic; text-transform: none; letter-spacing: 0; color: #a39d8e; }
+  .rent-book .receipt-qr { display: flex; align-items: center; gap: 10px; padding: 0 18px 16px; }
+  .rent-book .receipt-qr img { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 4px; display: block; }
+  .rent-book .receipt-qr span { font-size: 9px; color: #5a655d; text-transform: uppercase; letter-spacing: .05em; line-height: 1.4; }
   .rent-book .footer { break-before: page; page-break-before: always; background: #eef0ea; border: 1px solid #c9c2b2; border-radius: 4px; padding: 16px 24px; margin-top: 10px; }
   .rent-book .footer h2 { font-family: 'Fraunces', Georgia, serif; font-size: 13px; letter-spacing: .04em; margin: 0 0 10px; }
   .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 14px; }
@@ -275,7 +278,7 @@ function coverHtml(lease, qrDataUrl) {
   </div>`;
 }
 
-function receiptHtml(payment, index) {
+function receiptHtml(payment, index, receiptQrDataUrl) {
   const isPaid = payment.status === "paid";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   const headerLine = isPaid
@@ -283,6 +286,13 @@ function receiptHtml(payment, index) {
     : `${escapeHtml(monthLabel(payment.paymentDate))} · En attente de paiement`;
   const cutLine = index > 0
     ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici<span class="dash"></span></div>`
+    : "";
+  // QR propre à CETTE quittance : scanner envoie directement la photo de la
+  // preuve de paiement de ce mois (pas le dossier complet du locataire,
+  // contrairement au QR de couverture). N'existe que si le paiement a déjà
+  // une ligne réelle en base (payment.id non null, cf. openRentBookPrint).
+  const receiptQr = receiptQrDataUrl
+    ? `<div class="receipt-qr"><img src="${receiptQrDataUrl}" width="56" height="56" alt="QR photo quittance" /><span>Scanner pour<br/>envoyer la photo<br/>de cette quittance</span></div>`
     : "";
   return `
   <div class="receipt-wrap">
@@ -309,6 +319,7 @@ function receiptHtml(payment, index) {
       <div class="box"><span>Signature du locataire</span><div class="line"><span>Signature + nom du locataire</span></div></div>
       <div class="box"><span>Signature du percepteur</span><div class="line"><span>Signature + nom de la personne qui perçoit</span></div></div>
     </div>
+    ${receiptQr}
   </div>
   </div>`;
 }
@@ -334,16 +345,16 @@ function footerHtml(lease, payments) {
   </div>`;
 }
 
-export function rentBookPrintBody(lease, payments, qrDataUrl) {
+export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
   const schedule = buildFullRentSchedule(lease, payments);
   return `
   ${coverHtml(lease, qrDataUrl)}
   <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
-  ${schedule.map((p, i) => receiptHtml(lease, p, i)).join("")}
+  ${schedule.map((p, i) => receiptHtml(p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}
   ${footerHtml(lease, schedule)}`;
 }
 
-export function rentBookPrintHtml(lease, payments, qrDataUrl) {
+export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
   return `<!doctype html>
 <html>
 <head>
@@ -360,7 +371,7 @@ ${RENT_BOOK_PRINT_CSS}
 </head>
 <body class="rent-book">
   <div class="print-actions"><button type="button">Imprimer / Enregistrer en PDF</button></div>
-${rentBookPrintBody(lease, payments, qrDataUrl)}
+${rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId)}
 </body>
 </html>`;
 }
@@ -370,6 +381,12 @@ ${rentBookPrintBody(lease, payments, qrDataUrl)}
 // portalUrl : lien du portail locataire DE CE BAIL (token réel, renvoyé par
 // GET .../rent-book), pas window.location.origin — un QR pointant sur la
 // racine du site ne menait nulle part d'utile pour le locataire qui scanne.
+// Le QR de couverture ouvre le dossier complet (portalUrl seul) ; chaque
+// quittance ayant un paiement réel en base (id non null) reçoit SON PROPRE
+// QR (portalUrl + &pay=<id>) qui déclenche directement l'envoi de la photo
+// pour CE mois précis, sans passer par le dossier général — les mois
+// "virtuels" générés par buildFullRentSchedule (sans id, pas encore de ligne
+// de paiement en base) n'ont pas de QR tant qu'ils n'existent pas réellement.
 export async function openRentBookPrint(lease, payments, portalUrl, { onError } = {}) {
   const win = window.open("", "_blank", "width=920,height=1100");
   if (!win) {
@@ -378,8 +395,19 @@ export async function openRentBookPrint(lease, payments, portalUrl, { onError } 
     return;
   }
   const qrDataUrl = portalUrl ? await buildRentBookQrDataUrl(portalUrl) : null;
+  const receiptQrByPaymentId = {};
+  if (portalUrl) {
+    const sep = portalUrl.includes("?") ? "&" : "?";
+    await Promise.all(
+      payments
+        .filter((p) => p.id != null)
+        .map(async (p) => {
+          receiptQrByPaymentId[p.id] = await buildRentBookQrDataUrl(`${portalUrl}${sep}pay=${p.id}`);
+        }),
+    );
+  }
   win.document.open();
-  win.document.write(rentBookPrintHtml(lease, payments, qrDataUrl));
+  win.document.write(rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId));
   win.document.close();
   win.focus();
   const triggerPrint = () => {

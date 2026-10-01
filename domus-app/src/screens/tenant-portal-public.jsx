@@ -165,6 +165,17 @@ export function TenantPortalPublic({ token }) {
     const fromQuery = new URLSearchParams(window.location.search || "").get("lease");
     return fromQuery || null;
   });
+  // Paiement cible via ?pay=<id> dans l'URL : QR code imprimé sur CHAQUE
+  // quittance du carnet (contrairement au QR de couverture, qui ouvre le
+  // dossier complet du locataire). Scanner ce QR doit ouvrir directement le
+  // sélecteur de photo pour CE mois précis, sans que le locataire ait à
+  // chercher la bonne ligne dans la liste des échéances.
+  const [autoProofPaymentId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const fromQuery = new URLSearchParams(window.location.search || "").get("pay");
+    return fromQuery || null;
+  });
+  const autoProofTriggered = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -184,6 +195,23 @@ export function TenantPortalPublic({ token }) {
     })();
     return () => { alive = false; };
   }, [token]);
+
+  // Déclenche automatiquement le sélecteur de fichier pour le paiement visé
+  // par ?pay= dès que les données du portail sont chargées (une seule fois).
+  // Si le paiement n'appartient pas à ce locataire (ou a déjà une preuve), on
+  // ne force rien : le backend revalide de toute façon l'appartenance à
+  // l'upload, et pickProofFile reste accessible normalement depuis la liste.
+  useEffect(() => {
+    if (autoProofTriggered.current || !autoProofPaymentId || !data) return;
+    const payments = Array.isArray(data.payments) ? data.payments : [];
+    const target = payments.find((p) => String(p.id) === String(autoProofPaymentId));
+    if (target && !target.hasProof) {
+      autoProofTriggered.current = true;
+      setProofTargetId(target.id);
+      setUploadError("");
+      proofInputRef.current?.click();
+    }
+  }, [autoProofPaymentId, data]);
 
   // Soumet une DEMANDE de modification : le dossier n'est pas modifie tant
   // qu'un gestionnaire n'a pas approuve (le lien portail n'ayant pas de mot de
