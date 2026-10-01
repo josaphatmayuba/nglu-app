@@ -111,6 +111,61 @@ export function amountToWordsFr(amount, currencySymbol = "CDF") {
   return cents > 0 ? `${base} et ${cents}/100` : base;
 }
 
+// ── Carnet complet : une quittance par mois du bail, du mois de début au
+// mois de fin (ou, bail à durée indéterminée, jusqu'au dernier paiement
+// connu sinon 12 mois) — pas seulement les mois où un paiement existe déjà
+// en base. Les mois sans paiement réel sont rendus "en attente" (à remplir
+// à la main au moment du paiement), fusionnés avec les paiements réels
+// quand ils existent pour ce mois. ──────────────────────────────────────
+export function buildFullRentSchedule(lease, payments) {
+  const start = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
+  if (!start) return payments; // pas de date de début exploitable : fallback paiements réels
+
+  const byMonth = new Map();
+  for (const p of payments) {
+    const key = /^(\d{4})-(\d{2})/.exec(String(p.paymentDate || ""))?.[0];
+    if (key) byMonth.set(key, p);
+  }
+
+  const startIdx = Number(start[1]) * 12 + (Number(start[2]) - 1);
+  const end = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+  let endIdx;
+  if (end) {
+    endIdx = Number(end[1]) * 12 + (Number(end[2]) - 1);
+  } else {
+    // Bail à durée indéterminée : couvrir au moins jusqu'au dernier paiement
+    // connu, sinon 12 mois par défaut à partir du début.
+    const lastPaid = payments.reduce((max, p) => {
+      const key = /^(\d{4})-(\d{2})/.exec(String(p.paymentDate || ""));
+      if (!key) return max;
+      const idx = Number(key[1]) * 12 + (Number(key[2]) - 1);
+      return idx > max ? idx : max;
+    }, startIdx);
+    endIdx = Math.max(lastPaid, startIdx + 11);
+  }
+
+  const schedule = [];
+  for (let idx = startIdx; idx <= endIdx; idx += 1) {
+    const year = Math.floor(idx / 12);
+    const month = (idx % 12) + 1;
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    const existing = byMonth.get(key);
+    if (existing) {
+      schedule.push(existing);
+    } else {
+      schedule.push({
+        paymentDate: `${key}-01`,
+        amount: lease.rentAmount,
+        currencySymbol: lease.currencySymbol || "CDF",
+        status: "pending",
+        method: null,
+        receivedBy: null,
+      });
+    }
+  }
+  return schedule;
+}
+
 // ── Numéro de quittance : séquence calculée sur les paiements du bail,
 // triés chronologiquement — pas besoin de le stocker en DB. ────────────────
 export function receiptNumber(lease, index) {
@@ -259,11 +314,12 @@ function footerHtml(lease, payments) {
 }
 
 export function rentBookPrintBody(lease, payments, qrDataUrl) {
+  const schedule = buildFullRentSchedule(lease, payments);
   return `
   ${coverHtml(lease, qrDataUrl)}
   <div class="receipts-title">Quittances de loyer</div>
-  ${payments.map((p, i) => receiptHtml(lease, p, i)).join("")}
-  ${footerHtml(lease, payments)}`;
+  ${schedule.map((p, i) => receiptHtml(lease, p, i)).join("")}
+  ${footerHtml(lease, schedule)}`;
 }
 
 export function rentBookPrintHtml(lease, payments, qrDataUrl) {
