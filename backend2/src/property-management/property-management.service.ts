@@ -4035,7 +4035,9 @@ export class PropertyManagementService {
     // locataire n'a pas de tenantId (bail sans locataire rattache) ou si la
     // generation du lien echoue, le carnet s'affiche quand meme sans QR plutot
     // que de bloquer le telechargement.
-    const portalUrl = lease.tenantId ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId) : "";
+    const portalUrl = lease.tenantId
+      ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId, lease.id)
+      : "";
 
     return { lease, payments, portalUrl: portalUrl || null };
   }

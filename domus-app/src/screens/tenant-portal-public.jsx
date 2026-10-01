@@ -155,6 +155,16 @@ export function TenantPortalPublic({ token }) {
   const [uploadError, setUploadError] = useState("");
   const proofInputRef = useRef(null);
   const [proofTargetId, setProofTargetId] = useState(null);
+  // Bail pre-selectionne via ?lease=<id> dans l'URL (ex: QR code du carnet de
+  // quittances genere pour un bail precis) : simple parametre de query, lu une
+  // fois au montage, jamais stocke en DB. Si absent ou introuvable parmi les
+  // baux actifs du locataire, le selecteur retombe sur le premier bail (plus
+  // recent), comportement inchange pour un locataire a bail unique.
+  const [selectedLeaseId, setSelectedLeaseId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const fromQuery = new URLSearchParams(window.location.search || "").get("lease");
+    return fromQuery || null;
+  });
 
   useEffect(() => {
     let alive = true;
@@ -248,10 +258,23 @@ export function TenantPortalPublic({ token }) {
     }
   };
 
-  const activeLease = useMemo(() => {
+  const activeLeases = useMemo(() => {
     const leases = Array.isArray(data?.leases) ? data.leases : [];
-    return leases.find((l) => (l.status || "active") === "active") || leases[0] || null;
+    return leases.filter((l) => (l.status || "active") === "active");
   }, [data]);
+
+  // Bail affiche : celui demande par ?lease=, sinon le premier (le plus
+  // recent, meme ordre que le backend). Un seul bail actif => comportement
+  // identique a avant (pas de selecteur affiche).
+  const activeLease = useMemo(() => {
+    const leases = activeLeases.length ? activeLeases : (Array.isArray(data?.leases) ? data.leases : []);
+    if (!leases.length) return null;
+    if (selectedLeaseId) {
+      const found = leases.find((l) => String(l.id) === String(selectedLeaseId));
+      if (found) return found;
+    }
+    return leases[0];
+  }, [data, activeLeases, selectedLeaseId]);
 
   const leasePayments = useMemo(() => {
     if (!activeLease) return [];
@@ -363,6 +386,27 @@ export function TenantPortalPublic({ token }) {
             </div>
           ) : (
             <>
+              {activeLeases.length > 1 && (
+                <div className="portail-lease-tabs" role="tablist" aria-label={t("Choisir un bail")} style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "0 0 4px" }}>
+                  {activeLeases.map((l) => {
+                    const label = [l.propertyName || l.propertyAddress, l.unitName].filter(Boolean).join(" · ") || l.reference || `#${l.id}`;
+                    const isActive = String(activeLease?.id) === String(l.id);
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`chip ${isActive ? "chip-iris" : "chip-ink"}`}
+                        style={{ border: "none", cursor: "pointer" }}
+                        onClick={() => setSelectedLeaseId(l.id)}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <section className="onb-card">
                 <div className="onb-card-head">
                   <span className="onb-card-icon tone-iris"><Building2 size={18} /></span>

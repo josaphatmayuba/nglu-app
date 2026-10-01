@@ -56,8 +56,12 @@ export class TenantPortalService {
     return token;
   }
 
-  private portalUrl(token: string) {
-    return `${env.appUrl.replace(/\/$/, "")}/domus/mon-espace?token=${token}`;
+  private portalUrl(token: string, leaseId?: number) {
+    const base = `${env.appUrl.replace(/\/$/, "")}/domus/mon-espace?token=${token}`;
+    // leaseId optionnel : simple parametre de query (pas de colonne DB), pour
+    // pre-selectionner le bon onglet quand un locataire a plusieurs baux actifs
+    // (ex: QR code du carnet de quittances genere pour un bail precis).
+    return leaseId ? `${base}&lease=${leaseId}` : base;
   }
 
   private async findTenant(tenantId: number, orgId: number) {
@@ -92,7 +96,7 @@ export class TenantPortalService {
    * bienvenue, rappel de retard automatique) invaliderait le lien précédemment
    * envoyé au locataire, cassant tout message déjà reçu.
    */
-  async generateTenantPortalLink(tenantId: number, orgId: number) {
+  async generateTenantPortalLink(tenantId: number, orgId: number, leaseId?: number) {
     await this.findTenant(tenantId, orgId);
 
     const [existing] = await this.db
@@ -107,7 +111,7 @@ export class TenantPortalService {
       .limit(1);
 
     if (existing?.token) {
-      return { token: existing.token, url: this.portalUrl(existing.token) };
+      return { token: existing.token, url: this.portalUrl(existing.token, leaseId) };
     }
 
     const token = this.newPortalToken();
@@ -121,7 +125,7 @@ export class TenantPortalService {
       updatedAt: new Date(),
     });
 
-    return { token, url: this.portalUrl(token) };
+    return { token, url: this.portalUrl(token, leaseId) };
   }
 
   /**
@@ -160,9 +164,9 @@ export class TenantPortalService {
    * appendPortalFooterToSms, ne touche pas au texte : c'est le template qui
    * decide ou placer le lien.
    */
-  async portalUrlForTenant(tenantId: number, orgId: number): Promise<string> {
+  async portalUrlForTenant(tenantId: number, orgId: number, leaseId?: number): Promise<string> {
     try {
-      return (await this.generateTenantPortalLink(tenantId, orgId)).url;
+      return (await this.generateTenantPortalLink(tenantId, orgId, leaseId)).url;
     } catch (error) {
       this.logger.warn(
         `Portal url unavailable for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -647,8 +651,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         eq(realEstateLeases.organizationId, organizationId),
         eq(realEstateLeases.status, "active"),
       ))
-      .orderBy(desc(realEstateLeases.id))
-      .limit(1);
+      .orderBy(desc(realEstateLeases.id));
+      // Pas de .limit(1) : un locataire peut avoir plusieurs baux actifs
+      // simultanement (ex: 2 logements loues en parallele). Le front affiche
+      // un selecteur si leases.length > 1, sinon comportement inchange.
 
     const leaseIds = leases.map((l) => l.id);
     const payments = leaseIds.length
