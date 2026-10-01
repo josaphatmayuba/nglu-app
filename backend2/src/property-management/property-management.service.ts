@@ -2245,7 +2245,12 @@ export class PropertyManagementService {
   // ledger. status='pending' — a confirmer individuellement ensuite via
   // confirmPendingPayment. Idempotent : un mois deja couvert par une ligne
   // (paid OU pending) n'est jamais duplique.
-  async generateMissingPayments(leaseId: number, orgId: number) {
+  // upToEnd : étend la génération jusqu'à endDate du bail au lieu du mois
+  // courant — utilisé uniquement par rentBook() pour que CHAQUE quittance du
+  // carnet imprimé (y compris les mois futurs) ait une ligne réelle en base,
+  // donc un id, donc un QR individuel scannable. Comportement par défaut
+  // (upToEnd=false) inchangé pour l'appel API existant (baux rétroactifs).
+  async generateMissingPayments(leaseId: number, orgId: number, upToEnd = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     const existing = await this.db
@@ -2269,7 +2274,14 @@ export class PropertyManagementService {
 
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    // upToEnd : va jusqu'à endDate (ou 12 mois par défaut si bail à durée
+    // indéterminée) plutôt que de s'arrêter au mois courant — mêmes bornes
+    // que buildFullRentSchedule côté frontend (rentBookUtils.js), pour que
+    // le carnet et la base restent cohérents.
+    const limit = upToEnd
+      ? (boundary || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
+      : today;
+    const lastMonth = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth(), 1));
     let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
       if (!boundary || cursor.getTime() <= boundary.getTime()) {
@@ -4026,6 +4038,13 @@ export class PropertyManagementService {
       .limit(1);
     if (!lease) throw new NotFoundException("Lease not found.");
     this.ensurePropertyInScope(lease.propertyId, propertyScope);
+
+    // Materialise les echeances manquantes jusqu'a la fin du bail (status
+    // 'pending', pas de transaction comptable) AVANT de lire les paiements :
+    // sans ca, les mois futurs du carnet n'ont pas d'id reel en base, donc pas
+    // de QR individuel possible pour envoyer la preuve de ce mois precis.
+    // Idempotent (generateMissingPayments ne duplique jamais un mois deja couvert).
+    await this.generateMissingPayments(leaseId, orgId, true);
 
     const payments = await this.paymentQuery(undefined, orgId, "all", leaseId)
       .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
