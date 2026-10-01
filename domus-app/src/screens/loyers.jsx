@@ -11,6 +11,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { openRentBookPrint } from "../rentBookUtils.js";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -917,8 +918,23 @@ export function Paiement({ go }) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
   const [err, setErr] = useState(null);
+  const [rentBookBusy, setRentBookBusy] = useState(false);
+  const toast = useToast();
 
   const lease = active.find((l) => String(l.id) === String(leaseId)) || null;
+
+  async function handleRentBookPdf() {
+    if (!lease?.id) return;
+    setRentBookBusy(true);
+    try {
+      const { lease: leaseData, payments } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, { onError: toast.error });
+    } catch (e) {
+      toast.error(e?.message || "Génération du carnet de quittances impossible.");
+    } finally {
+      setRentBookBusy(false);
+    }
+  }
   const activeKey = method ?? methods[0]?.key;
   const methodMeta = methods.find((m) => m.key === activeKey) || methods[0] || null;
 
@@ -1125,7 +1141,9 @@ export function Paiement({ go }) {
             <Line k="Méthode" v={methodMeta?.label} />
             <Line k="Date" v={today()} />
             <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button className="btn" style={{ flex: 1, justifyContent: "center" }}><FileDown size={16} /> PDF</button>
+              <button className="btn" style={{ flex: 1, justifyContent: "center" }} disabled={rentBookBusy} onClick={handleRentBookPdf}>
+                <FileDown size={16} /> {rentBookBusy ? "Génération…" : "PDF"}
+              </button>
               <button className="btn" style={{ flex: 1, justifyContent: "center" }}><Send size={16} /> Envoyer</button>
             </div>
             <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={reset}>

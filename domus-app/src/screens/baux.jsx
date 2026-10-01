@@ -28,6 +28,7 @@ import {
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
 import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
+import { openRentBookPrint } from "../rentBookUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
 import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -999,9 +1000,23 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   ];
 
   const confirm = useConfirm();
+  const toast = useToast();
   const [documents, setDocuments] = useState([]);
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState("");
+  const [rentBookBusy, setRentBookBusy] = useState(false);
+
+  async function handleRentBook() {
+    setRentBookBusy(true);
+    try {
+      const { lease: leaseData, payments } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, { onError: toast.error });
+    } catch (err) {
+      toast.error(err?.message || "Génération du carnet de quittances impossible.");
+    } finally {
+      setRentBookBusy(false);
+    }
+  }
 
   async function reloadDocuments() {
     try {
@@ -1115,6 +1130,9 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
         {go && (
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
+            <button className="immo-btn" disabled={rentBookBusy} onClick={handleRentBook}>
+              <FileDown size={15} /> {rentBookBusy ? "Génération…" : "Carnet de quittances"}
+            </button>
             <button className="immo-btn" onClick={() => { onClose(); go("maintenance"); }}><Wrench size={15} /> Tickets maintenance</button>
           </div>
         )}

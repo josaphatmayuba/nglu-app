@@ -839,6 +839,18 @@ export class PropertyManagementController {
     return this.propertyManagementService.findLease(id);
   }
 
+  @ApiOperation({ summary: "Rent book (carnet de quittances) data for a lease: lease/tenant/property/unit + all payments" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/rent-book")
+  rentBook(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.rentBook(id, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Permissions("create-propertyManagement")
   @Post("leases")

@@ -226,6 +226,9 @@ export const api = {
   deleteLeaseDocument: (documentId) => del(`/leases/documents/${documentId}`),
   leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
 
+  // Carnet de quittances (PDF imprimable) : lease enrichi + tous les paiements du bail.
+  rentBook: (id) => get(`/leases/${id}/rent-book`),
+
   payments: () => get("/payments"),
   // proofFile optionnel (photo/scan recu, capture mobile money) — meme
   // pattern multipart que markContractSignedManually / uploadMaintenancePhoto.

@@ -23,6 +23,7 @@ import {
   realEstateMortgagePayments,
   realEstateOwners,
   realEstateProperties,
+  organizations,
   realEstatePropertyExpenses,
   realEstatePropertyPhotos,
   realEstateReservations,
@@ -2071,7 +2072,7 @@ export class PropertyManagementService {
     return this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
   }
 
-  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all") {
+  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all", leaseId?: number) {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -2110,6 +2111,7 @@ export class PropertyManagementService {
         eq(paymentUnit.isActive, 1),
         ...(id ? [eq(realEstateRentPayments.id, id)] : []),
         ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
+        ...(leaseId !== undefined ? [eq(realEstateRentPayments.leaseId, leaseId)] : []),
         // RBAC bien : loyers du bien (via le bail). "all" => pas de filtre.
         ...(propertyScope !== "all"
           ? [propertyScope.length ? inArray(paymentLease.propertyId, propertyScope) : sql`1 = 0`]
@@ -3981,6 +3983,54 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Lease not found.");
     const [enriched] = await this.withOverdueStats(rows);
     return enriched;
+  }
+
+  // Carnet de quittances (PDF cote front) : une page de garde + une quittance
+  // par paiement/echeance du bail. Filtrage strict organisation + scope bien
+  // (meme garde que findReservation/ensurePropertyInScope) pour eviter toute
+  // fuite inter-org, contrairement a findLease() qui ne filtre pas par org.
+  async rentBook(leaseId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const [lease] = await this.db
+      .select({
+        id: realEstateLeases.id,
+        reference: realEstateLeases.reference,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        rentAmount: realEstateLeases.rentAmount,
+        currencyId: realEstateLeases.currencyId,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+        propertyId: realEstateLeases.propertyId,
+        propertyName: leaseProperty.name,
+        propertyAddress: leaseProperty.address,
+        ownerName: realEstateOwners.displayName,
+        unitId: realEstateLeases.unitId,
+        unitName: leaseUnit.name,
+        tenantId: realEstateLeases.tenantId,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantPhone: customers.phone,
+        organizationName: organizations.name,
+      })
+      .from(realEstateLeases)
+      .leftJoin(leaseProperty, eq(leaseProperty.id, realEstateLeases.propertyId))
+      .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, leaseProperty.ownerId))
+      .leftJoin(organizations, eq(organizations.id, realEstateLeases.organizationId))
+      .where(and(
+        eq(realEstateLeases.id, leaseId),
+        eq(realEstateLeases.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!lease) throw new NotFoundException("Lease not found.");
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+
+    const payments = await this.paymentQuery(undefined, orgId, "all", leaseId)
+      .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
+
+    return { lease, payments };
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
