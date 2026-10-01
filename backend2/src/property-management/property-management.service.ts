@@ -2254,23 +2254,32 @@ export class PropertyManagementService {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     const existing = await this.db
-      .select({ amount: realEstateRentPayments.amount })
+      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
       ));
-    // Couverture par MONTANT cumulé (paid + pending), pas par mois calendaire :
-    // un seul virement de plusieurs mois de loyer daté d'un seul mois doit quand
-    // meme couvrir plusieurs echeances, sinon on regenere a tort des "manquantes"
-    // deja payees. Coherent avec le calcul de couverture du frontend (loyers.jsx).
-    const rent = Number(lease.rentAmount) || 0;
-    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
-    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
 
     const start = this.parseDateOnly(lease.startDate);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
     const boundary = lease.endDate ? this.parseDateOnly(lease.endDate) : null;
+
+    // upToEnd=false (appel API existant, baux retroactifs) : couverture par
+    // MONTANT cumulé, pas par mois calendaire — un seul virement de plusieurs
+    // mois de loyer daté d'un seul mois doit quand meme couvrir plusieurs
+    // echeances, coherent avec le calcul de couverture du frontend (loyers.jsx).
+    // upToEnd=true (rentBook, carnet) : couverture par MOIS CALENDAIRE exact
+    // (YYYY-MM deja represente par une ligne, paid ou pending) — plus robuste
+    // quand des paiements a montants/dates irreguliers (ex. paiement de test)
+    // desynchronisent un simple decompte par montant cumulé, ce qui sautait a
+    // tort des mois reels (ex. octobre/novembre) sans jamais leur creer de ligne.
+    const existingMonthKeys = new Set(
+      existing.map((p) => String(p.paymentDate).slice(0, 7)),
+    );
+    const rent = Number(lease.rentAmount) || 0;
+    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
 
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
@@ -2285,7 +2294,11 @@ export class PropertyManagementService {
     let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
       if (!boundary || cursor.getTime() <= boundary.getTime()) {
-        if (monthIndex >= monthsAlreadyCovered) monthsToCreate.push(new Date(cursor.getTime()));
+        const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+        const covered = upToEnd
+          ? existingMonthKeys.has(monthKey)
+          : monthIndex < monthsAlreadyCovered;
+        if (!covered) monthsToCreate.push(new Date(cursor.getTime()));
       }
       monthIndex += 1;
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
