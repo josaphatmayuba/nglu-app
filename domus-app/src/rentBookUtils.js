@@ -219,7 +219,10 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
   .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
   .rent-book .receipts-title { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; }
-  .rent-book .receipt { break-inside: avoid; page-break-inside: avoid; background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; margin-bottom: 14px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
+  .rent-book .receipt-wrap { break-inside: avoid; page-break-inside: avoid; }
+  .rent-book .cut-line { display: flex; align-items: center; gap: 8px; margin: 10px 2px 6px; color: #9a9385; font-size: 10px; }
+  .rent-book .cut-line .dash { flex: 1; border-top: 1px dashed #b7afa0; }
+  .rent-book .receipt { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; margin-bottom: 4px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
   .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: center; background: #eef0ea; border-bottom: 1px solid #c9c2b2; padding: 12px 18px; }
   .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 13px; }
   .rent-book .receipt-head .period { font-size: 11px; color: #5a655d; display: block; margin-top: 1px; text-transform: uppercase; letter-spacing: .08em; }
@@ -269,7 +272,12 @@ function coverHtml(lease, qrDataUrl) {
 function receiptHtml(lease, payment, index) {
   const isPaid = payment.status === "paid";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
+  const cutLine = index > 0
+    ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici&nbsp;&nbsp;<span class="dash"></span></div>`
+    : "";
   return `
+  <div class="receipt-wrap">
+  ${cutLine}
   <div class="receipt">
     <div class="receipt-head">
       <span class="num">Quittance ${escapeHtml(receiptNumber(lease, index))}</span>
@@ -289,6 +297,7 @@ function receiptHtml(lease, payment, index) {
       <div class="box"><span>Signature du locataire</span><div class="line"></div></div>
       <div class="box"><span>Signature du percepteur</span><div class="line"></div></div>
     </div>
+  </div>
   </div>`;
 }
 
