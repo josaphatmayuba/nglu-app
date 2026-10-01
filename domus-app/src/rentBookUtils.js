@@ -234,7 +234,7 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-head .status.pending { background: #f3e8d2; color: #b8862f; }
   .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 14px 18px 0; }
   .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 6px; }
-  .rent-book .receipt-row span:last-child { font-size: 13.5px; font-weight: 600; border-top: 1px solid #e3ddce; display: block; padding-top: 6px; }
+  .rent-book .receipt-row span:last-child { font-size: 13.5px; font-weight: 600; display: block; }
   .rent-book .receipt-amount { margin: 14px 18px; padding: 16px 18px; background: #e4ede6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   .rent-book .receipt-amount strong { font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: #2f6e4e; font-weight: 600; white-space: nowrap; }
   .rent-book .receipt-amount .words { font-style: italic; font-weight: 400; color: #5a655d; font-size: 11.5px; text-align: right; }
