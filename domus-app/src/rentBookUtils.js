@@ -196,7 +196,10 @@ function fullAddressLine(lease) {
 
 export async function buildRentBookQrDataUrl(portalUrl) {
   try {
-    return await QRCode.toDataURL(portalUrl, { width: 130, margin: 1 });
+    // errorCorrectionLevel "M" (defaut "medium" serait trop bas vu la longueur
+    // de l'URL avec token+lease+pay) : plus de redondance pour rester lisible
+    // meme imprime petit (QR individuel par quittance, cf. receiptHtml).
+    return await QRCode.toDataURL(portalUrl, { width: 130, margin: 1, errorCorrectionLevel: "M" });
   } catch {
     return null;
   }
@@ -293,8 +296,12 @@ function receiptHtml(payment, index, receiptQrDataUrl) {
   // preuve de paiement de ce mois (pas le dossier complet du locataire,
   // contrairement au QR de couverture). N'existe que si le paiement a déjà
   // une ligne réelle en base (payment.id non null, cf. openRentBookPrint).
+  // 56px etait trop petit pour scanner de maniere fiable une fois imprime :
+  // l'URL de ce QR (token+lease+pay) est plus longue que celle du QR de
+  // couverture (90px), donc plus de modules, donc une taille d'affichage
+  // minimale plus elevee pour rester lisible au meme niveau de contraste.
   const receiptQr = receiptQrDataUrl
-    ? `<div class="receipt-qr"><img src="${receiptQrDataUrl}" width="56" height="56" alt="QR photo quittance" /><span>Scanner pour<br/>envoyer la photo<br/>de cette quittance</span></div>`
+    ? `<div class="receipt-qr"><img src="${receiptQrDataUrl}" width="90" height="90" alt="QR photo quittance" /><span>Scanner pour<br/>envoyer la photo<br/>de cette quittance</span></div>`
     : "";
   return `
   <div class="receipt-wrap">
