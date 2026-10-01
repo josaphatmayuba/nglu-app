@@ -218,24 +218,28 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-grid .cell { padding: 14px 24px; border-top: 1px solid #c9c2b2; }
   .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
   .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
-  .rent-book .receipts-title { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; }
-  .rent-book .receipt-wrap { break-inside: avoid; page-break-inside: avoid; }
-  .rent-book .cut-line { display: flex; align-items: center; gap: 8px; margin: 10px 2px 6px; color: #9a9385; font-size: 10px; }
-  .rent-book .cut-line .dash { flex: 1; border-top: 1px dashed #b7afa0; }
-  .rent-book .receipt { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; margin-bottom: 4px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
+  .rent-book .dash { flex: 1; border-top: 1px dashed #b7afa0; }
+  .rent-book .receipts-title { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; white-space: nowrap; }
+  .rent-book .cut-line { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: #9a9385; font-size: 11px; }
+  .rent-book .receipt-wrap { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+  .rent-book .receipt { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
   .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: center; background: #eef0ea; border-bottom: 1px solid #c9c2b2; padding: 12px 18px; }
-  .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 13px; }
-  .rent-book .receipt-head .period { font-size: 11px; color: #5a655d; display: block; margin-top: 1px; text-transform: uppercase; letter-spacing: .08em; }
-  .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 15px; display: block; }
+  .rent-book .receipt-head .period { font-size: 11px; color: #5a655d; display: block; margin-top: 2px; letter-spacing: .02em; }
+  .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
+  .rent-book .receipt-head .status::before { content: "●"; margin-right: 5px; font-size: 8px; }
   .rent-book .receipt-head .status.paid { background: #e4ede6; color: #2f6e4e; }
   .rent-book .receipt-head .status.pending { background: #f3e8d2; color: #b8862f; }
-  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 10px 18px 0; }
-  .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
-  .rent-book .receipt-amount { margin: 12px 18px; padding: 12px 16px; background: #e4ede6; border-radius: 4px; font-size: 16px; color: #2f6e4e; font-weight: 700; }
-  .rent-book .receipt-amount .words { display: block; font-style: italic; font-weight: 400; color: #5a655d; font-size: 11px; margin-top: 3px; }
-  .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 18px 16px; }
+  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 14px 18px 0; }
+  .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 6px; }
+  .rent-book .receipt-row span:last-child { font-size: 13.5px; font-weight: 600; border-top: 1px solid #e3ddce; display: block; padding-top: 6px; }
+  .rent-book .receipt-amount { margin: 14px 18px; padding: 16px 18px; background: #e4ede6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .rent-book .receipt-amount strong { font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: #2f6e4e; font-weight: 600; white-space: nowrap; }
+  .rent-book .receipt-amount .words { font-style: italic; font-weight: 400; color: #5a655d; font-size: 11.5px; text-align: right; }
+  .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 18px 18px; }
   .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
-  .rent-book .receipt-sign .box .line { height: 34px; border: 1px dashed #c9c2b2; border-radius: 3px; }
+  .rent-book .receipt-sign .box .line { height: 48px; border: 1px dashed #c9c2b2; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
+  .rent-book .receipt-sign .box .line span { margin: 0; font-size: 10.5px; font-style: italic; text-transform: none; letter-spacing: 0; color: #a39d8e; }
   .rent-book .footer { break-before: page; page-break-before: always; background: #eef0ea; border: 1px solid #c9c2b2; border-radius: 4px; padding: 16px 24px; margin-top: 10px; }
   .rent-book .footer h2 { font-family: 'Fraunces', Georgia, serif; font-size: 13px; letter-spacing: .04em; margin: 0 0 10px; }
   .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 14px; }
@@ -269,33 +273,39 @@ function coverHtml(lease, qrDataUrl) {
   </div>`;
 }
 
-function receiptHtml(lease, payment, index) {
+function receiptHtml(payment, index) {
   const isPaid = payment.status === "paid";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
+  const headerLine = isPaid
+    ? `${escapeHtml(monthLabel(payment.paymentDate))} · Payée le ${fmtDateShort(payment.paymentDate)}`
+    : `${escapeHtml(monthLabel(payment.paymentDate))} · En attente de paiement`;
   const cutLine = index > 0
-    ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici&nbsp;&nbsp;<span class="dash"></span></div>`
+    ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici<span class="dash"></span></div>`
     : "";
   return `
   <div class="receipt-wrap">
   ${cutLine}
   <div class="receipt">
     <div class="receipt-head">
-      <span class="num">Quittance ${escapeHtml(receiptNumber(lease, index))}</span>
-      <span class="period">${escapeHtml(monthLabel(payment.paymentDate))}</span>
-      <span class="status ${isPaid ? "paid" : "pending"}">${isPaid ? `Payé le ${fmtDateShort(payment.paymentDate)}` : "En attente"}</span>
+      <div>
+        <span class="num">Quittance n° ${String(index + 1).padStart(4, "0")}</span>
+        <span class="period">${headerLine}</span>
+      </div>
+      <span class="status ${isPaid ? "paid" : "pending"}">${isPaid ? "Payé" : "En attente"}</span>
     </div>
     ${isPaid
       ? `<div class="receipt-row"><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div>
          <div class="receipt-row"><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div>`
-      : `<div class="receipt-row"><span colspan="2">À remplir par le percepteur</span></div>`
+      : `<div class="receipt-row"><span>Moyen de paiement</span><span>—</span></div>
+         <div class="receipt-row"><span>Perçu par</span><span>—</span></div>`
     }
     <div class="receipt-amount">
-      <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong><br />
+      <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong>
       <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
     </div>
     <div class="receipt-sign">
-      <div class="box"><span>Signature du locataire</span><div class="line"></div></div>
-      <div class="box"><span>Signature du percepteur</span><div class="line"></div></div>
+      <div class="box"><span>Signature du locataire</span><div class="line"><span>Signature + nom du locataire</span></div></div>
+      <div class="box"><span>Signature du percepteur</span><div class="line"><span>Signature + nom de la personne qui perçoit</span></div></div>
     </div>
   </div>
   </div>`;
@@ -326,7 +336,7 @@ export function rentBookPrintBody(lease, payments, qrDataUrl) {
   const schedule = buildFullRentSchedule(lease, payments);
   return `
   ${coverHtml(lease, qrDataUrl)}
-  <div class="receipts-title">Quittances de loyer</div>
+  <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
   ${schedule.map((p, i) => receiptHtml(lease, p, i)).join("")}
   ${footerHtml(lease, schedule)}`;
 }
