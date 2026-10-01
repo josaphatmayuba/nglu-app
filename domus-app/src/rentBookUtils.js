@@ -236,7 +236,9 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 6px; }
   .rent-book .receipt-row span:last-child { font-size: 13.5px; font-weight: 600; display: block; }
   .rent-book .receipt-amount { margin: 14px 18px; padding: 16px 18px; background: #e4ede6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .rent-book .receipt-amount.pending { background: #f3e8d2; }
   .rent-book .receipt-amount strong { font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: #2f6e4e; font-weight: 600; white-space: nowrap; }
+  .rent-book .receipt-amount.pending strong { color: #b8862f; }
   .rent-book .receipt-amount .words { font-style: italic; font-weight: 400; color: #5a655d; font-size: 11.5px; text-align: right; }
   .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 18px 18px; }
   .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
@@ -311,7 +313,7 @@ function receiptHtml(payment, index, receiptQrDataUrl) {
       : `<div class="receipt-row"><span>Moyen de paiement</span><span>—</span></div>
          <div class="receipt-row"><span>Perçu par</span><span>—</span></div>`
     }
-    <div class="receipt-amount">
+    <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong>
       <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
     </div>
