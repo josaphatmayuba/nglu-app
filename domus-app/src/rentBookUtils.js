@@ -97,15 +97,16 @@ export function integerToWordsFr(value) {
 // Montant + devise en toutes lettres, ex: "cent cinquante dollars américains".
 // On reste volontairement simple (pas de gestion des centimes en lettres,
 // rares sur des loyers) : la partie décimale est indiquée en chiffres si présente.
-export function amountToWordsFr(amount, currencySymbol = "") {
+export function amountToWordsFr(amount, currencySymbol = "CDF") {
   const value = Number(amount || 0);
   const intPart = Math.trunc(Math.abs(value));
   const cents = Math.round((Math.abs(value) - intPart) * 100);
-  const currencyWord = /usd|\$/i.test(currencySymbol || "")
+  const symbol = currencySymbol || "CDF";
+  const currencyWord = /usd|\$/i.test(symbol)
     ? "dollars américains"
-    : /cdf|fc/i.test(currencySymbol || "")
+    : /cdf|fc/i.test(symbol)
       ? "francs congolais"
-      : (currencySymbol || "unités").trim();
+      : symbol.trim();
   const base = `${integerToWordsFr(intPart)} ${currencyWord}`;
   return cents > 0 ? `${base} et ${cents}/100` : base;
 }
@@ -147,47 +148,45 @@ export async function buildRentBookQrDataUrl(portalUrl) {
 }
 
 export const RENT_BOOK_PRINT_CSS = `
-  .rent-book { background: #fff; color: #1a1a1a; font-family: Georgia, "Times New Roman", serif; font-size: 12.5px; line-height: 1.55; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rent-book { background: #f7f5f0; color: #1f2a24; font-family: 'Source Sans 3', Arial, sans-serif; font-size: 12.5px; line-height: 1.55; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .rent-book * { box-sizing: border-box; }
   .rent-book .print-actions { margin: 16px 0 24px; text-align: right; }
-  .rent-book .print-actions button { background: #1a1a1a; border: 1px solid #b08d3e; color: #f6f1e7; cursor: pointer; font-family: Georgia, serif; font-size: 12px; letter-spacing: .12em; padding: 9px 22px; text-transform: uppercase; }
-  .rent-book .cover { break-after: page; page-break-after: always; }
-  .rent-book .cover-header { background: #1a1a1a; color: #f6f1e7; padding: 22px 26px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-  .rent-book .cover-header h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: .04em; }
-  .rent-book .cover-header .ref { color: #d6c39a; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+  .rent-book .print-actions button { background: #2f6e4e; border: none; color: #fff; cursor: pointer; font-family: 'Source Sans 3', Arial, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 10px 20px; border-radius: 4px; text-transform: uppercase; }
+  .rent-book .cover { break-after: page; page-break-after: always; background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .rent-book .cover-header { background: #2f6e4e; color: #fff; padding: 22px 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  .rent-book .cover-header h1 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; margin: 0 0 4px; letter-spacing: .02em; font-weight: 700; }
+  .rent-book .cover-header .ref { color: #e4ede6; opacity: .9; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
   .rent-book .cover-header .qr { text-align: center; flex: none; }
   .rent-book .cover-header .qr img { background: #fff; padding: 6px; border-radius: 4px; display: block; }
-  .rent-book .cover-header .qr span { display: block; color: #f6f1e7; font-size: 9.5px; max-width: 120px; margin-top: 6px; font-family: Arial, sans-serif; }
-  .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #d6d3d1; border-top: none; }
-  .rent-book .cover-grid .cell { padding: 14px 18px; border-top: 1px solid #d6d3d1; border-right: 1px solid #d6d3d1; }
-  .rent-book .cover-grid .cell:nth-child(2n) { border-right: none; }
-  .rent-book .cover-grid .cell span { display: block; color: #78716c; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
-  .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: normal; }
-  .rent-book .receipts-title { text-align: center; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: #78716c; margin: 0 0 18px; }
-  .rent-book .receipt { break-inside: avoid; page-break-inside: avoid; border: 1px solid #d6c39a; margin-bottom: 16px; padding: 14px 18px; position: relative; }
-  .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #e7e2d6; padding-bottom: 8px; margin-bottom: 10px; }
-  .rent-book .receipt-head .num { font-variant: small-caps; letter-spacing: .08em; color: #b08d3e; font-size: 11px; }
-  .rent-book .receipt-head .period { font-size: 14px; }
-  .rent-book .receipt-head .status { font-size: 10.5px; padding: 2px 8px; border-radius: 10px; }
-  .rent-book .receipt-head .status.paid { background: #ecfdf5; color: #047857; }
-  .rent-book .receipt-head .status.pending { background: #fff7ed; color: #c2410c; }
-  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; }
-  .rent-book .receipt-row span:first-child { color: #78716c; }
-  .rent-book .receipt-amount { margin: 10px 0 4px; font-size: 13.5px; }
-  .rent-book .receipt-amount .words { font-style: italic; color: #57534e; font-size: 11.5px; }
-  .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
-  .rent-book .receipt-sign .box { text-align: center; }
-  .rent-book .receipt-sign .box span { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #78716c; margin-bottom: 26px; }
-  .rent-book .receipt-sign .box .line { border-bottom: 1px solid #1a1a1a; }
-  .rent-book .footer { break-before: page; page-break-before: always; padding-top: 4px; }
-  .rent-book .footer h2 { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid #d6c39a; padding-bottom: 6px; }
-  .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0 20px; }
-  .rent-book .footer-totals .box { border: 1px solid #d6d3d1; padding: 12px 16px; min-width: 180px; }
-  .rent-book .footer-totals .box span { display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #78716c; }
-  .rent-book .footer-totals .box strong { font-size: 15px; }
-  .rent-book .footer-totals .box .due { color: #be123c; }
-  .rent-book .footer-meta { font-size: 11px; color: #78716c; margin-top: 24px; }
-  @media print { .rent-book .print-actions { display: none; } }
+  .rent-book .cover-header .qr span { display: block; color: #fff; opacity: .9; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 110px; margin-top: 6px; font-family: 'Source Sans 3', Arial, sans-serif; }
+  .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .rent-book .cover-grid .cell { padding: 14px 24px; border-top: 1px solid #c9c2b2; }
+  .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
+  .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
+  .rent-book .receipts-title { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; }
+  .rent-book .receipt { break-inside: avoid; page-break-inside: avoid; background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; margin-bottom: 14px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
+  .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: center; background: #eef0ea; border-bottom: 1px solid #c9c2b2; padding: 12px 18px; }
+  .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 13px; }
+  .rent-book .receipt-head .period { font-size: 11px; color: #5a655d; display: block; margin-top: 1px; text-transform: uppercase; letter-spacing: .08em; }
+  .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .rent-book .receipt-head .status.paid { background: #e4ede6; color: #2f6e4e; }
+  .rent-book .receipt-head .status.pending { background: #f3e8d2; color: #b8862f; }
+  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 10px 18px 0; }
+  .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+  .rent-book .receipt-amount { margin: 12px 18px; padding: 12px 16px; background: #e4ede6; border-radius: 4px; font-size: 16px; color: #2f6e4e; font-weight: 700; }
+  .rent-book .receipt-amount .words { display: block; font-style: italic; font-weight: 400; color: #5a655d; font-size: 11px; margin-top: 3px; }
+  .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 18px 16px; }
+  .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
+  .rent-book .receipt-sign .box .line { height: 34px; border: 1px dashed #c9c2b2; border-radius: 3px; }
+  .rent-book .footer { break-before: page; page-break-before: always; background: #eef0ea; border: 1px solid #c9c2b2; border-radius: 4px; padding: 16px 24px; margin-top: 10px; }
+  .rent-book .footer h2 { font-family: 'Fraunces', Georgia, serif; font-size: 13px; letter-spacing: .04em; margin: 0 0 10px; }
+  .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 14px; }
+  .rent-book .footer-totals .box { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 12px 16px; min-width: 180px; }
+  .rent-book .footer-totals .box span { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; }
+  .rent-book .footer-totals .box strong { font-family: 'Fraunces', Georgia, serif; font-size: 16px; }
+  .rent-book .footer-totals .box .due { color: #b8862f; }
+  .rent-book .footer-meta { font-size: 10.5px; color: #5a655d; }
+  @media print { .rent-book { background: #fff; } .rent-book .print-actions { display: none; } }
 `;
 
 function coverHtml(lease, qrDataUrl) {
@@ -273,6 +272,9 @@ export function rentBookPrintHtml(lease, payments, qrDataUrl) {
 <head>
   <meta charset="utf-8" />
   <title>Carnet de quittances — ${escapeHtml(lease.reference || `Bail ${lease.id}`)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     @page { size: A4; margin: 14mm 14mm; }
     body { margin: 0; }
@@ -288,14 +290,16 @@ ${rentBookPrintBody(lease, payments, qrDataUrl)}
 
 // Ouvre une fenêtre d'impression avec le carnet de quittances du bail
 // (même pattern que openContractPrint dans contractUtils.js).
-export async function openRentBookPrint(lease, payments, { onError } = {}) {
+// portalUrl : lien du portail locataire DE CE BAIL (token réel, renvoyé par
+// GET .../rent-book), pas window.location.origin — un QR pointant sur la
+// racine du site ne menait nulle part d'utile pour le locataire qui scanne.
+export async function openRentBookPrint(lease, payments, portalUrl, { onError } = {}) {
   const win = window.open("", "_blank", "width=920,height=1100");
   if (!win) {
     const msg = "Autorisez les fenêtres popup pour imprimer le carnet de quittances.";
     if (onError) onError(msg); else window.alert(msg);
     return;
   }
-  const portalUrl = typeof window !== "undefined" ? window.location.origin : "";
   const qrDataUrl = portalUrl ? await buildRentBookQrDataUrl(portalUrl) : null;
   win.document.open();
   win.document.write(rentBookPrintHtml(lease, payments, qrDataUrl));

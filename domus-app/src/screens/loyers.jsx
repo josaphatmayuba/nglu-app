@@ -927,8 +927,8 @@ export function Paiement({ go }) {
     if (!lease?.id) return;
     setRentBookBusy(true);
     try {
-      const { lease: leaseData, payments } = await api.rentBook(lease.id);
-      await openRentBookPrint(leaseData, payments, { onError: toast.error });
+      const { lease: leaseData, payments, portalUrl } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
     } catch (e) {
       toast.error(e?.message || "Génération du carnet de quittances impossible.");
     } finally {

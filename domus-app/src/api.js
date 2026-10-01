@@ -533,6 +533,23 @@ export const publicApi = {
   // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
   tenantPaymentProof: (token, paymentId) =>
     publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // Envoi de la preuve de paiement par le locataire (photo ou PDF) : multipart,
+  // meme fetch dedie que submitDelegateRentCheck car publicFetch force un
+  // Content-Type JSON incompatible avec FormData.
+  uploadTenantPaymentProof: async (token, paymentId, file) => {
+    const form = new FormData();
+    form.append("proof", file);
+    const res = await fetch(`${API_ROOT}/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(cleanApiError(res, body));
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
   // Copie du bail : une seule URL selon `copySource` renvoye par le portail
   // ('scan' = bail papier numerise, 'electronic' = bail signe en ligne rendu en
   // HTML imprimable). Le backend revalide que le bail appartient au porteur du

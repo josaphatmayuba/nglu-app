@@ -4,8 +4,8 @@
 // échéance et historique des paiements, en lecture seule.
 // dueChip/daysUntil/buildLeaseCards dupliqués/réutilisés depuis portail.jsx —
 // on ne touche pas au portail gestionnaire existant.
-import { useEffect, useMemo, useState } from "react";
-import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature, Pencil } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature, Pencil, Upload } from "lucide-react";
 import { publicApi } from "../api.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { money } from "../data.js";
@@ -146,6 +146,15 @@ export function TenantPortalPublic({ token }) {
   // Erreur du justificatif : separee de formMsg, sinon elle s'affichait dans
   // le formulaire d'informations personnelles, hors contexte.
   const [proofMsg, setProofMsg] = useState("");
+  // Envoi de preuve de paiement (fonctionnalite scannee via le QR code du
+  // carnet de quittances) : id du paiement en cours d'envoi + id du dernier
+  // paiement dont la preuve vient d'etre envoyee avec succes, pour feedback
+  // inline sans bloquer le reste de la page.
+  const [uploadingProofId, setUploadingProofId] = useState(null);
+  const [uploadedProofId, setUploadedProofId] = useState(null);
+  const [uploadError, setUploadError] = useState("");
+  const proofInputRef = useRef(null);
+  const [proofTargetId, setProofTargetId] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -209,6 +218,34 @@ export function TenantPortalPublic({ token }) {
     if (!contract?.copySource) return;
     const url = publicApi.tenantContractCopyUrl(token, contract.id, contract.copySource);
     window.open(url, "_blank", "noopener");
+  };
+
+  // Ouvre le selecteur de fichier pour UN paiement donne (photo ou PDF).
+  // L'input est unique et partage (ref), reutilise pour chaque ligne de
+  // paiement en attente plutot qu'un <input> par ligne.
+  const pickProofFile = (paymentId) => {
+    setProofTargetId(paymentId);
+    setUploadError("");
+    proofInputRef.current?.click();
+  };
+
+  const onProofFileChosen = async (e) => {
+    const file = e.target.files?.[0] || null;
+    e.target.value = "";
+    if (!file || !proofTargetId) return;
+    setUploadingProofId(proofTargetId);
+    setUploadError("");
+    try {
+      await publicApi.uploadTenantPaymentProof(token, proofTargetId, file);
+      setUploadedProofId(proofTargetId);
+      const rec = await publicApi.tenantPortal(token);
+      setData(rec);
+    } catch (err) {
+      setUploadError(err?.message || t("Envoi de la preuve impossible."));
+    } finally {
+      setUploadingProofId(null);
+      setProofTargetId(null);
+    }
   };
 
   const activeLease = useMemo(() => {
@@ -373,6 +410,12 @@ export function TenantPortalPublic({ token }) {
                           {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
                         </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                        <ProofUploadButton
+                          payment={p}
+                          busy={uploadingProofId === p.id}
+                          done={uploadedProofId === p.id}
+                          onClick={() => pickProofFile(p.id)}
+                        />
                       </div>
                     ))}
                   </div>
@@ -395,11 +438,29 @@ export function TenantPortalPublic({ token }) {
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
                         <span className="muted">{dueChip(daysUntil(p.paymentDate)).text}</span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                        <ProofUploadButton
+                          payment={p}
+                          busy={uploadingProofId === p.id}
+                          done={uploadedProofId === p.id}
+                          onClick={() => pickProofFile(p.id)}
+                        />
                       </div>
                     ))}
                   </div>
+                  {uploadError ? (
+                    <p role="status" aria-live="polite" className="muted text-rose" style={{ fontSize: 13, margin: "8px 0 0", padding: "0 16px 12px" }}>
+                      {uploadError}
+                    </p>
+                  ) : null}
                 </section>
               )}
+              <input
+                ref={proofInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                style={{ display: "none" }}
+                onChange={onProofFileChosen}
+              />
 
               {(data?.contracts || []).length > 0 && (
                 <section className="onb-card">
@@ -589,6 +650,32 @@ export function TenantPortalPublic({ token }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Bouton d'envoi de preuve pour UNE echeance en attente. Trois etats : envoi
+// disponible, en cours (spinner), ou deja envoyee pour ce paiement dans cette
+// session (p.hasProof reflete aussi l'etat persiste apres rechargement). Une
+// preuve deja presente desactive le bouton : le backend refuse de toute facon
+// d'ecraser un justificatif existant (voir submitPaymentProof cote serveur).
+function ProofUploadButton({ payment, busy, done, onClick }) {
+  if (payment.hasProof || done) {
+    return (
+      <span className="chip chip-emerald" title={t("Preuve envoyee")}>
+        <CheckCircle2 size={12} /> {t("Envoyée")}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost btn-xs"
+      disabled={busy}
+      onClick={onClick}
+      title={t("Envoyer une preuve de paiement (photo ou PDF)")}
+    >
+      {busy ? <Loader2 size={14} className="domus-spin" /> : <Upload size={14} />}
+    </button>
   );
 }
 

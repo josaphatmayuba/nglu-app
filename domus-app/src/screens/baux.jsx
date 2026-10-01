@@ -1009,8 +1009,8 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   async function handleRentBook() {
     setRentBookBusy(true);
     try {
-      const { lease: leaseData, payments } = await api.rentBook(lease.id);
-      await openRentBookPrint(leaseData, payments, { onError: toast.error });
+      const { lease: leaseData, payments, portalUrl } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
     } catch (err) {
       toast.error(err?.message || "Génération du carnet de quittances impossible.");
     } finally {

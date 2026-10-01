@@ -5,6 +5,8 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { join } from "path";
+import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -317,6 +319,60 @@ export class TenantPortalService {
     if (!row) throw new NotFoundException("Demande introuvable.");
     return row;
   }
+
+  /**
+   * Preuve de paiement envoyee par le locataire lui-meme, depuis le portail
+   * public (token opaque, pas de JWT). Reutilise exactement le meme stockage
+   * que les preuves saisies cote gestionnaire (storage/app/uploads, servi par
+   * la route statique /uploads) et que le portail delegue
+   * (DelegatePortalPublicController.saveProof) : un seul mecanisme d'upload de
+   * justificatif dans tout le module Domus.
+   * Scope strict : le paiement doit appartenir a un bail du locataire porteur
+   * du token, sinon un id change dans la requete permettrait d'ecraser le
+   * justificatif de n'importe quel paiement de l'organisation.
+   * N'ecrase jamais un justificatif deja present — un justificatif valide par
+   * le gestionnaire ne doit pas pouvoir etre remplace silencieusement par un
+   * nouvel envoi du locataire.
+   */
+  async submitPaymentProof(token: string, paymentId: number, file: any, publicApiBase: string) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    if (!file?.buffer) throw new BadRequestException("Fichier requis.");
+    const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
+
+    const [payment] = await this.db
+      .select({ id: realEstateRentPayments.id, proofUrl: realEstateRentPayments.proofUrl, status: realEstateRentPayments.status })
+      .from(realEstateRentPayments)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
+      .where(and(
+        eq(realEstateRentPayments.id, paymentId),
+        eq(realEstateRentPayments.organizationId, organizationId),
+        eq(realEstateLeases.tenantId, tenantId),
+      ))
+      .limit(1);
+    if (!payment) throw new NotFoundException("Paiement introuvable.");
+    if (payment.proofUrl) {
+      throw new BadRequestException("Un justificatif a deja ete envoye pour ce paiement.");
+    }
+
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+      prefix: "tenant-proof",
+      maxBytes: 5 * 1024 * 1024,
+    });
+    const proofUrl = `${publicApiBase}/uploads/${name}`;
+
+    await this.db
+      .update(realEstateRentPayments)
+      .set({ proofUrl, updatedAt: new Date() })
+      .where(eq(realEstateRentPayments.id, paymentId));
+
+    return { submitted: true, paymentId };
+  }
+
+  // Meme dossier que les preuves de paiement saisies cote gestionnaire et que
+  // le portail delegue (PropertyManagementService.uploadDir), pour que le
+  // fichier soit servi par la meme route statique /uploads.
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
   /**
    * Retourne l'URL du justificatif d'UN paiement, apres avoir verifie que ce

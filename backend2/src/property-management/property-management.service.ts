@@ -4030,7 +4030,14 @@ export class PropertyManagementService {
     const payments = await this.paymentQuery(undefined, orgId, "all", leaseId)
       .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
 
-    return { lease, payments };
+    // URL du portail locataire pour le QR code du carnet : best-effort, comme
+    // les autres usages de portalUrlForTenant (rappel SMS/email). Si le
+    // locataire n'a pas de tenantId (bail sans locataire rattache) ou si la
+    // generation du lien echoue, le carnet s'affiche quand meme sans QR plutot
+    // que de bloquer le telechargement.
+    const portalUrl = lease.tenantId ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId) : "";
+
+    return { lease, payments, portalUrl: portalUrl || null };
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
