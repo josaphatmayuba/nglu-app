@@ -111,7 +111,18 @@ function FeedStockTab({ lang, speciesFilter, stock, loading, currencyMeta, onCre
 
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--fg-3)" }}>
                   <span><Icon name="clock" size={11}/> {lang === "fr" ? "Couverture" : "Coverage"}: {item.coverageDays != null ? `${item.coverageDays} j` : "—"}</span>
-                  <span><Icon name="coins" size={11}/> {item.unitPrice != null ? formatMoney(item.unitPrice, item.currencyId ?? activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2) : "—"}/{item.unit || "u"}</span>
+                  {Array.isArray(item.unitPrices) && item.unitPrices.length > 1 ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Icon name="coins" size={11}/>
+                      {item.unitPrices.map((p, idx) => (
+                        <span key={p.currencyId ?? idx} className="tag" style={{ fontSize: 11 }}>
+                          {formatMoney(p.amount, p.currencyId ?? activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}/{item.unit || "u"}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    <span><Icon name="coins" size={11}/> {item.unitPrice != null ? formatMoney(item.unitPrice, item.currencyId ?? activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2) : "—"}/{item.unit || "u"}</span>
+                  )}
                   {item.expiryDate && <span>{lang === "fr" ? "Péremption" : "Expiry"}: {String(item.expiryDate).slice(0, 10)}</span>}
                 </div>
               </div>
