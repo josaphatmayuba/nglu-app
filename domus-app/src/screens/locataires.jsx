@@ -137,8 +137,14 @@ function unitKindIcon(kind) {
 }
 
 function leaseDueLabel(activeLease) {
-  if (!activeLease?.nextInvoiceDate) return "—";
-  const d = new Date(activeLease.nextInvoiceDate);
+  // En retard : afficher la 1ere echeance impayee (overdueDueDate), pas
+  // nextInvoiceDate qui peut deja pointer sur une echeance future (avance par
+  // total paye, sans rapprochement mois par mois cote backend).
+  const dateStr = activeLease?.isOverdue && activeLease?.overdueDueDate
+    ? activeLease.overdueDueDate
+    : activeLease?.nextInvoiceDate;
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
   if (!Number.isFinite(d.getTime())) return "—";
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
 }

@@ -5938,7 +5938,7 @@ export class PropertyManagementService {
 
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
-  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean }>> {
+  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
     if (!rows.length) return [];
     const leaseIds = rows.map((r) => r.id);
     const payments = await this.db
@@ -5984,7 +5984,7 @@ export class PropertyManagementService {
     billingCycle: string | null,
     paymentDates: string[],
     today: Date,
-  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean } {
+  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
     const start = this.parseDateOnly(startDate);
     const boundary = endDate ? this.parseDateOnly(endDate) : null;
     const payments = paymentDates.map((d) => this.parseDateOnly(d));
@@ -5993,6 +5993,11 @@ export class PropertyManagementService {
     let dueCount = 0;
     let lateCount = 0;
     let isOverdue = false;
+    // Date de la 1ere echeance non couverte en retard (affichee au front a la
+    // place de nextInvoiceDate quand isOverdue=true, qui peut deja pointer sur
+    // une echeance future si le total paye couvre la fenetre sans rapprochement
+    // mois par mois - voir advanceLeaseInvoiceDateIfCovered).
+    let overdueDueDate: string | null = null;
     // Chaque échéance est ancrée sur `start` + N cycles (et non chaînée sur la
     // date précédente) pour éviter que le clamp fin-de-mois (ex. 31 -> 28 en
     // février) ne fige les échéances suivantes sur le jour raboté.
@@ -6024,6 +6029,7 @@ export class PropertyManagementService {
         if (today.getTime() > graceLimit.getTime()) {
           lateCount += 1;
           isOverdue = true;
+          if (overdueDueDate === null) overdueDueDate = this.formatDateOnly(dueDate);
         }
       }
 
@@ -6036,6 +6042,7 @@ export class PropertyManagementService {
       dueCount,
       lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
       isOverdue,
+      overdueDueDate,
     };
   }
 
