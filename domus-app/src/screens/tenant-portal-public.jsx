@@ -610,7 +610,7 @@ export function TenantPortalPublic({ token }) {
                           onClick={() => openProof(p.id)}
                           title={t("Voir le justificatif")}
                         >
-                          <Download size={14} />
+                          <Download size={14} /> {t("Voir")}
                         </button>
                       ) : null}
                     </div>
@@ -749,7 +749,7 @@ function ProofUploadButton({ payment, busy, done, onClick, onView }) {
           onClick={() => onView?.(payment.id)}
           title={t("Voir la quittance envoyée")}
         >
-          <Download size={14} />
+          <Download size={14} /> {t("Voir")}
         </button>
       </span>
     );
