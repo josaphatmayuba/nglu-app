@@ -1130,6 +1130,8 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   taxName: varchar("tax_name", { length: 255 }),
   // Preuve de paiement (photo/scan recu, capture mobile money) — optionnelle.
   proofUrl: varchar("proof_url", { length: 500 }),
+  // Nombre d'envois de preuve via le portail locataire (QR public) — plafonné à 2.
+  proofUploadCount: int("proof_upload_count").default(0).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

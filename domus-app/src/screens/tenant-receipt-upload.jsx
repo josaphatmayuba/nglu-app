@@ -106,7 +106,10 @@ export function TenantReceiptUpload({ token, paymentId }) {
     );
   }
 
-  const already = summary?.hasProof && !sent;
+  // Blocage definitif uniquement quand le plafond d'envois (2, cf. backend
+  // submitPaymentProof) est atteint — sinon le locataire garde un droit a
+  // l'erreur (mauvais angle, flou) tant que canResend est vrai.
+  const blocked = summary?.hasProof && summary?.canResend === false && !sent;
 
   return (
     <div className="onb-page">
@@ -139,7 +142,7 @@ export function TenantReceiptUpload({ token, paymentId }) {
                 </p>
               </div>
             </section>
-          ) : already ? (
+          ) : blocked ? (
             <section className="onb-card">
               <div className="onb-card-body" style={{ textAlign: "center", padding: "28px 20px" }}>
                 <CheckCircle2 size={36} color="#2f6e4e" />
@@ -149,6 +152,11 @@ export function TenantReceiptUpload({ token, paymentId }) {
           ) : (
             <section className="onb-card">
               <div className="onb-card-body" style={{ padding: 20 }}>
+                {summary?.hasProof ? (
+                  <p className="muted" style={{ fontSize: 13, margin: "0 0 14px", display: "flex", gap: 6, alignItems: "center" }}>
+                    <AlertTriangle size={14} /> {t("Une photo a déjà été envoyée. En renvoyer une la remplacera.")}
+                  </p>
+                ) : null}
                 {previewUrl ? (
                   <img src={previewUrl} alt={t("Aperçu de la photo")} style={{ width: "100%", borderRadius: 8, marginBottom: 14, display: "block" }} />
                 ) : null}
@@ -167,7 +175,7 @@ export function TenantReceiptUpload({ token, paymentId }) {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
                 >
-                  <Camera size={18} /> {file ? t("Reprendre la photo") : t("Prendre une photo")}
+                  <Camera size={18} /> {file ? t("Reprendre la photo") : t("Prendre une photo de la quittance signée")}
                 </button>
                 {error ? (
                   <p role="status" aria-live="polite" className="muted text-rose" style={{ fontSize: 13, margin: "10px 0 0", display: "flex", gap: 6, alignItems: "center" }}>

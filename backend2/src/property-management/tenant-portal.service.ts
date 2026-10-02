@@ -344,7 +344,12 @@ export class TenantPortalService {
     const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
 
     const [payment] = await this.db
-      .select({ id: realEstateRentPayments.id, proofUrl: realEstateRentPayments.proofUrl, status: realEstateRentPayments.status })
+      .select({
+        id: realEstateRentPayments.id,
+        proofUrl: realEstateRentPayments.proofUrl,
+        status: realEstateRentPayments.status,
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+      })
       .from(realEstateRentPayments)
       .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
       .where(and(
@@ -354,8 +359,12 @@ export class TenantPortalService {
       ))
       .limit(1);
     if (!payment) throw new NotFoundException("Paiement introuvable.");
-    if (payment.proofUrl) {
-      throw new BadRequestException("Un justificatif a deja ete envoye pour ce paiement.");
+    // Le QR individuel est imprime sur la quittance papier : n'importe qui en
+    // possession du papier peut scanner et envoyer la photo, pas seulement le
+    // locataire. Plafond a 2 envois (droit a l'erreur : mauvais angle, flou) —
+    // le 2e REMPLACE le 1er (meme fichier ecrase), un 3e est refuse.
+    if ((payment.proofUploadCount ?? 0) >= 2) {
+      throw new BadRequestException("Nombre maximum d'envois atteint pour cette quittance.");
     }
 
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
@@ -367,7 +376,7 @@ export class TenantPortalService {
 
     await this.db
       .update(realEstateRentPayments)
-      .set({ proofUrl, updatedAt: new Date() })
+      .set({ proofUrl, proofUploadCount: (payment.proofUploadCount ?? 0) + 1, updatedAt: new Date() })
       .where(eq(realEstateRentPayments.id, paymentId));
 
     return { submitted: true, paymentId };
@@ -421,6 +430,7 @@ export class TenantPortalService {
         amount: realEstateRentPayments.amount,
         status: realEstateRentPayments.status,
         hasProof: sql<number>`(${realEstateRentPayments.proofUrl} is not null)`,
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
         currencySymbol: currencies.currencySymbol,
         propertyName: realEstateProperties.name,
         unitName: realEstateUnits.name,
@@ -438,7 +448,10 @@ export class TenantPortalService {
       .limit(1);
 
     if (!row) throw new NotFoundException("Quittance introuvable.");
-    return { ...row, hasProof: Boolean(row.hasProof) };
+    // canResend : la page /domus/quittance autorise un 2e envoi (droit a
+    // l'erreur, le QR etant sur papier accessible a quiconque le detient) tant
+    // que le plafond de submitPaymentProof (2) n'est pas atteint.
+    return { ...row, hasProof: Boolean(row.hasProof), canResend: (row.proofUploadCount ?? 0) < 2 };
   }
 
   // ── Copie du bail exposee au locataire ──
