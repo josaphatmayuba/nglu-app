@@ -5,7 +5,7 @@
 // locataire annonce par SMS, plus ses baux situes sur les biens de CE
 // proprietaire. Strictement en lecture seule : aucune action d'ecriture.
 import { useEffect, useState } from "react";
-import { Building2, Loader2, User, FileSignature, Wallet, Receipt } from "lucide-react";
+import { Building2, Loader2, User, FileSignature, Wallet, Receipt, Download } from "lucide-react";
 import { publicApi } from "../api.js";
 import { money } from "../data.js";
 import { t } from "../i18n.js";
@@ -66,6 +66,18 @@ export function OwnerPortalPublic({ token }) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [token]);
+
+  // Ouvre le justificatif dans un nouvel onglet. L'URL n'est jamais dans la
+  // page : elle est demandee au backend, qui verifie d'abord que le paiement
+  // appartient bien a un bien du porteur du token.
+  const openProof = async (paymentId) => {
+    try {
+      const res = await publicApi.ownerPaymentProof(token, paymentId);
+      if (res?.url) window.open(res.url, "_blank", "noopener");
+    } catch {
+      // Silencieux : pas de zone de message dediee sur ce portail en lecture seule.
+    }
+  };
 
   if (loading) {
     return (
@@ -183,6 +195,32 @@ export function OwnerPortalPublic({ token }) {
                           <span className="flex-1">{fmtDate(d.paymentDate)}</span>
                           <span className="muted">{d.status === "returned" ? t("restituée") : t("détenue")}</span>
                           <strong>{money(d.amount, d.currencySymbol || symbol)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(lease.payments || []).length > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <p className="muted" style={{ fontSize: 12, margin: "0 0 6px" }}>
+                        {t("Paiements")}
+                      </p>
+                      {lease.payments.map((p) => (
+                        <div key={p.id} className="portail-hist-row">
+                          <Receipt size={14} className="muted" />
+                          <span className="flex-1">{fmtDate(p.paymentDate)}</span>
+                          <span className="muted">{p.status === "paid" ? t("payé") : t("en attente")}</span>
+                          <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                          {p.hasProof ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              onClick={() => openProof(p.id)}
+                              title={t("Voir la quittance")}
+                            >
+                              <Download size={14} />
+                            </button>
+                          ) : null}
                         </div>
                       ))}
                     </div>

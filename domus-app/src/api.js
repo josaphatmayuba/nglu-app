@@ -564,6 +564,10 @@ export const publicApi = {
   // Portail proprietaire (lecture seule, token opaque fait autorisation) :
   // le bailleur ouvre la fiche du locataire annonce par SMS.
   ownerPortal: (token) => publicFetch(`/owner-portal?token=${encodeURIComponent(token)}`),
+  // Justificatif d'un paiement cote proprietaire : le backend verifie que le
+  // paiement appartient bien a un bien du porteur du token avant de renvoyer l'URL.
+  ownerPaymentProof: (token, paymentId) =>
+    publicFetch(`/owner-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
   // Demande de mise a jour des donnees personnelles : rien n'est applique, la
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>

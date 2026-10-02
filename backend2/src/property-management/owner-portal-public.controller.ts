@@ -1,7 +1,7 @@
 // Route publique du portail proprietaire (/domus/proprietaire?token=...).
 // Lecture seule : contrairement au portail locataire, aucune route d'ecriture
 // n'est exposee — le proprietaire consulte, il ne modifie rien.
-import { BadRequestException, Controller, Get, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Param, ParseIntPipe, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { OwnerPortalService } from "./owner-portal.service";
 
@@ -15,5 +15,12 @@ export class OwnerPortalPublicController {
   getByToken(@Query("token") token: string) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     return this.ownerPortalService.getPublicOwnerPortal(token);
+  }
+
+  @ApiOperation({ summary: "Get the proof file URL of one payment on the owner's own properties" })
+  @Get("payments/:id/proof")
+  paymentProof(@Param("id", ParseIntPipe) id: number, @Query("token") token: string) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    return this.ownerPortalService.getPublicOwnerPaymentProof(token, id);
   }
 }
