@@ -487,6 +487,7 @@ export function TenantPortalPublic({ token }) {
                           busy={uploadingProofId === p.id}
                           done={uploadedProofId === p.id}
                           onClick={() => pickProofFile(p.id)}
+                          onView={openProof}
                         />
                       </div>
                     ))}
@@ -515,6 +516,7 @@ export function TenantPortalPublic({ token }) {
                           busy={uploadingProofId === p.id}
                           done={uploadedProofId === p.id}
                           onClick={() => pickProofFile(p.id)}
+                          onView={openProof}
                         />
                       </div>
                     ))}
@@ -730,11 +732,25 @@ export function TenantPortalPublic({ token }) {
 // session (p.hasProof reflete aussi l'etat persiste apres rechargement). Une
 // preuve deja presente desactive le bouton : le backend refuse de toute facon
 // d'ecraser un justificatif existant (voir submitPaymentProof cote serveur).
-function ProofUploadButton({ payment, busy, done, onClick }) {
+function ProofUploadButton({ payment, busy, done, onClick, onView }) {
   if (payment.hasProof || done) {
     return (
-      <span className="chip chip-emerald" title={t("Preuve envoyee")}>
-        <CheckCircle2 size={12} /> {t("Envoyée")}
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span className="chip chip-emerald" title={t("Preuve envoyee")}>
+          <CheckCircle2 size={12} /> {t("Envoyée")}
+        </span>
+        {/* La preuve envoyee via le QR reste visible ici tant que le paiement
+            n'est pas confirme par le gestionnaire (encore "pending", donc pas
+            dans la section Historique) : sans ce bouton le locataire n'avait
+            aucun moyen de revoir sa propre photo apres l'envoi. */}
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs"
+          onClick={() => onView?.(payment.id)}
+          title={t("Voir la quittance envoyée")}
+        >
+          <Download size={14} />
+        </button>
       </span>
     );
   }
