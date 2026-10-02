@@ -31,6 +31,7 @@ import { Prescreening } from "./screens/prescreening.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { TenantPortalPublic } from "./screens/tenant-portal-public.jsx";
+import { TenantReceiptUpload } from "./screens/tenant-receipt-upload.jsx";
 import { OwnerPortalPublic } from "./screens/owner-portal-public.jsx";
 import { DelegatePortalPublic } from "./screens/delegate-portal-public.jsx";
 import { PrescreeningPublic } from "./screens/prescreening-public.jsx";
@@ -183,6 +184,38 @@ function useTenantPortalRoute() {
   return token;
 }
 
+// Route publique dediee a UNE quittance (/domus/quittance?token=...&pay=<id>)
+// — ouverte par le QR individuel imprime sur chaque quittance du carnet
+// (contrairement a useTenantPortalRoute, qui ouvre le dossier complet). Meme
+// mecanique de lecture, renvoie {token, paymentId} ou null si hors de cette route.
+function useReceiptUploadRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/quittance\/?$/.test(pathname || "")) {
+      const params = new URLSearchParams(search || "");
+      return { token: params.get("token") || "", paymentId: params.get("pay") || "" };
+    }
+    const m = (hash || "").match(/^#\/quittance(?:\?(.*))?$/);
+    if (m) {
+      const params = new URLSearchParams(m[1] || "");
+      return { token: params.get("token") || "", paymentId: params.get("pay") || "" };
+    }
+    return null;
+  };
+  const [route, setRoute] = useState(read);
+  useEffect(() => {
+    const on = () => setRoute(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return route;
+}
+
 // Route publique du portail proprietaire (/domus/proprietaire?token=...) —
 // meme mecanique que useTenantPortalRoute, cote bailleur.
 function useOwnerPortalRoute() {
@@ -263,6 +296,7 @@ export default function App() {
   const onboardingToken = useOnboardingRoute();
   const prescreeningToken = usePrescreeningRoute();
   const tenantPortalToken = useTenantPortalRoute();
+  const receiptUploadRoute = useReceiptUploadRoute();
   const ownerPortalToken = useOwnerPortalRoute();
   const delegatePortalToken = useDelegatePortalRoute();
   const publicReservationsKey = usePublicReservationsRoute();
@@ -275,14 +309,15 @@ export default function App() {
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token || onboardingToken !== null || prescreeningToken !== null || tenantPortalToken !== null) return undefined;
+    if (!token || onboardingToken !== null || prescreeningToken !== null || tenantPortalToken !== null || receiptUploadRoute !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token, onboardingToken, prescreeningToken, tenantPortalToken]);
+  }, [token, onboardingToken, prescreeningToken, tenantPortalToken, receiptUploadRoute]);
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
   if (prescreeningToken !== null) return <PrescreeningPublic token={prescreeningToken} />;
+  if (receiptUploadRoute !== null) return <TenantReceiptUpload token={receiptUploadRoute.token} paymentId={receiptUploadRoute.paymentId} />;
   if (tenantPortalToken !== null) return <TenantPortalPublic token={tenantPortalToken} />;
   if (ownerPortalToken !== null) return <OwnerPortalPublic token={ownerPortalToken} />;
   if (delegatePortalToken !== null) return <DelegatePortalPublic token={delegatePortalToken} />;

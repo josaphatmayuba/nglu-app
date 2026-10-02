@@ -403,6 +403,44 @@ export class TenantPortalService {
     return { url: row.proofUrl };
   }
 
+  /**
+   * Resume minimal d'UN paiement (mois, montant, statut, preuve deja envoyee
+   * ou non) pour la page dediee /domus/quittance (QR individuel par quittance
+   * du carnet) : contrairement a getPublicTenantPortal, n'expose jamais le
+   * dossier complet du locataire ni ses autres echeances, uniquement CE
+   * paiement precis. Meme controle d'appartenance que submitPaymentProof.
+   */
+  async getPublicPaymentSummary(token: string, paymentId: number) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
+
+    const [row] = await this.db
+      .select({
+        id: realEstateRentPayments.id,
+        paymentDate: realEstateRentPayments.paymentDate,
+        amount: realEstateRentPayments.amount,
+        status: realEstateRentPayments.status,
+        hasProof: sql<number>`(${realEstateRentPayments.proofUrl} is not null)`,
+        currencySymbol: currencies.currencySymbol,
+        propertyName: realEstateProperties.name,
+        unitName: realEstateUnits.name,
+      })
+      .from(realEstateRentPayments)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .where(and(
+        eq(realEstateRentPayments.id, paymentId),
+        eq(realEstateRentPayments.organizationId, organizationId),
+        eq(realEstateLeases.tenantId, tenantId),
+      ))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("Quittance introuvable.");
+    return { ...row, hasProof: Boolean(row.hasProof) };
+  }
+
   // ── Copie du bail exposee au locataire ──
   // Une seule copie est servie, par ordre de priorite : le scan du bail papier
   // s'il existe, sinon le bail signe electroniquement (contract_content rendu

@@ -38,6 +38,13 @@ export class TenantPortalPublicController {
     return this.tenantPortalService.getPublicPaymentProof(token, id);
   }
 
+  @ApiOperation({ summary: "Get a minimal summary of one of the tenant's own payments (month/amount/status), for the dedicated QR-per-receipt page" })
+  @Get("payments/:id/summary")
+  paymentSummary(@Param("id", ParseIntPipe) id: number, @Query("token") token: string) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    return this.tenantPortalService.getPublicPaymentSummary(token, id);
+  }
+
   @ApiOperation({ summary: "Download the tenant's own lease: scanned paper contract from object storage" })
   @Get("contracts/:id/scan")
   async contractScan(

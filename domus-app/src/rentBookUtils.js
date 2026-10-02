@@ -405,13 +405,26 @@ export async function openRentBookPrint(lease, payments, portalUrl, { onError } 
   }
   const qrDataUrl = portalUrl ? await buildRentBookQrDataUrl(portalUrl) : null;
   const receiptQrByPaymentId = {};
-  if (portalUrl) {
-    const sep = portalUrl.includes("?") ? "&" : "?";
+  // Le QR individuel pointe vers /domus/quittance (page dediee, PAS le dossier
+  // complet du locataire) : meme origine + meme token que portalUrl, dont on
+  // extrait juste le token pour reconstruire une URL /quittance?token=&pay=.
+  const receiptBaseUrl = (() => {
+    if (!portalUrl) return null;
+    try {
+      const u = new URL(portalUrl);
+      const token = u.searchParams.get("token");
+      if (!token) return null;
+      return `${u.origin}/domus/quittance?token=${encodeURIComponent(token)}`;
+    } catch {
+      return null;
+    }
+  })();
+  if (receiptBaseUrl) {
     await Promise.all(
       payments
         .filter((p) => p.id != null)
         .map(async (p) => {
-          receiptQrByPaymentId[p.id] = await buildRentBookQrDataUrl(`${portalUrl}${sep}pay=${p.id}`);
+          receiptQrByPaymentId[p.id] = await buildRentBookQrDataUrl(`${receiptBaseUrl}&pay=${p.id}`);
         }),
     );
   }

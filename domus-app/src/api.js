@@ -533,6 +533,10 @@ export const publicApi = {
   // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
   tenantPaymentProof: (token, paymentId) =>
     publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // Resume minimal d'UNE quittance (mois/montant/statut), pour la page dediee
+  // /domus/quittance ouverte par le QR individuel du carnet — pas le dossier complet.
+  tenantPaymentSummary: (token, paymentId) =>
+    publicFetch(`/tenant-portal/payments/${paymentId}/summary?token=${encodeURIComponent(token)}`),
   // Envoi de la preuve de paiement par le locataire (photo ou PDF) : multipart,
   // meme fetch dedie que submitDelegateRentCheck car publicFetch force un
   // Content-Type JSON incompatible avec FormData.
