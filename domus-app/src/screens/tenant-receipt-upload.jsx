@@ -12,10 +12,15 @@ import { t } from "../i18n.js";
 
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
+// Parse "YYYY-MM-..." par regex, jamais via `new Date()` : une date seule
+// ("2026-09-01") serait lue comme minuit UTC, et un affichage dans un fuseau
+// a l'ouest de Greenwich reculerait au mois precedent (meme piege deja
+// documente dans rentBookUtils.js / tenant-portal-public.jsx).
 function monthLabel(dateLike) {
-  const d = dateLike ? new Date(dateLike) : null;
-  if (!d || Number.isNaN(d.getTime())) return "—";
-  return `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
+  const m = /^(\d{4})-(\d{2})/.exec(String(dateLike || ""));
+  if (!m) return "—";
+  const monthIdx = Number(m[2]) - 1;
+  return `${MONTHS_FR[monthIdx] || "—"} ${m[1]}`;
 }
 
 function PortalMark() {
@@ -157,9 +162,6 @@ export function TenantReceiptUpload({ token, paymentId }) {
                     <AlertTriangle size={14} /> {t("Une photo a déjà été envoyée. En renvoyer une la remplacera.")}
                   </p>
                 ) : null}
-                {previewUrl ? (
-                  <img src={previewUrl} alt={t("Aperçu de la photo")} style={{ width: "100%", borderRadius: 8, marginBottom: 14, display: "block" }} />
-                ) : null}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -168,29 +170,59 @@ export function TenantReceiptUpload({ token, paymentId }) {
                   style={{ display: "none" }}
                   onChange={onFileChosen}
                 />
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  style={{ width: "100%", justifyContent: "center", display: "flex", gap: 8, alignItems: "center" }}
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={sending}
-                >
-                  <Camera size={18} /> {file ? t("Reprendre la photo") : t("Prendre une photo de la quittance signée")}
-                </button>
+                {/* Action principale de l'ecran (rien d'autre a faire avant) :
+                    grande zone cliquable avec icone dominante, pas un petit
+                    bouton texte qui se fondait dans la carte (signale par
+                    l'utilisateur comme "trop grand et invisible"). */}
+                {previewUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sending}
+                    style={{ width: "100%", padding: 0, border: "none", background: "none", cursor: "pointer", display: "block" }}
+                  >
+                    <img src={previewUrl} alt={t("Aperçu de la photo")} style={{ width: "100%", borderRadius: 10, display: "block" }} />
+                    <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, fontSize: 13, fontWeight: 600, color: "#6366f1" }}>
+                      <Camera size={16} /> {t("Reprendre la photo")}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sending}
+                    style={{
+                      width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+                      padding: "36px 16px", borderRadius: 12, border: "2px dashed #6366f1", background: "#f5f5ff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 56, height: 56, borderRadius: "50%", background: "#6366f1",
+                    }}>
+                      <Camera size={28} color="#fff" />
+                    </span>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>{t("Prendre la photo")}</span>
+                    <span className="muted" style={{ fontSize: 12.5 }}>{t("de la quittance signée")}</span>
+                  </button>
+                )}
                 {error ? (
                   <p role="status" aria-live="polite" className="muted text-rose" style={{ fontSize: 13, margin: "10px 0 0", display: "flex", gap: 6, alignItems: "center" }}>
                     <AlertTriangle size={14} /> {error}
                   </p>
                 ) : null}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%", justifyContent: "center", display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}
-                  onClick={send}
-                  disabled={!file || sending}
-                >
-                  {sending ? <Loader2 className="domus-spin" size={18} /> : <Send size={18} />} {t("Envoyer")}
-                </button>
+                {file ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: "100%", justifyContent: "center", display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}
+                    onClick={send}
+                    disabled={sending}
+                  >
+                    {sending ? <Loader2 className="domus-spin" size={18} /> : <Send size={18} />} {t("Envoyer")}
+                  </button>
+                ) : null}
               </div>
             </section>
           )}
