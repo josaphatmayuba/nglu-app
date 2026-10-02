@@ -608,7 +608,7 @@ export function TenantPortalPublic({ token }) {
                           type="button"
                           className="btn btn-ghost btn-xs"
                           onClick={() => openProof(p.id)}
-                          title={t("Télécharger le justificatif")}
+                          title={t("Voir le justificatif")}
                         >
                           <Download size={14} />
                         </button>
