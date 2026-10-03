@@ -91,3 +91,6 @@ farmos_inventaire_animaux_reorganise.csv
 
 # Playwright MCP (artefacts locaux de session, pas du code projet)
 .playwright-mcp/
+
+# Secrets locaux (token API Jira) — ne jamais versionner
+JIRA.md

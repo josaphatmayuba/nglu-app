@@ -5,6 +5,8 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { IMAGE_OR_PDF_MIME_TYPES } from "../common/upload-security";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -54,8 +56,12 @@ export class TenantPortalService {
     return token;
   }
 
-  private portalUrl(token: string) {
-    return `${env.appUrl.replace(/\/$/, "")}/domus/mon-espace?token=${token}`;
+  private portalUrl(token: string, leaseId?: number) {
+    const base = `${env.appUrl.replace(/\/$/, "")}/domus/mon-espace?token=${token}`;
+    // leaseId optionnel : simple parametre de query (pas de colonne DB), pour
+    // pre-selectionner le bon onglet quand un locataire a plusieurs baux actifs
+    // (ex: QR code du carnet de quittances genere pour un bail precis).
+    return leaseId ? `${base}&lease=${leaseId}` : base;
   }
 
   private async findTenant(tenantId: number, orgId: number) {
@@ -90,7 +96,7 @@ export class TenantPortalService {
    * bienvenue, rappel de retard automatique) invaliderait le lien précédemment
    * envoyé au locataire, cassant tout message déjà reçu.
    */
-  async generateTenantPortalLink(tenantId: number, orgId: number) {
+  async generateTenantPortalLink(tenantId: number, orgId: number, leaseId?: number) {
     await this.findTenant(tenantId, orgId);
 
     const [existing] = await this.db
@@ -105,7 +111,7 @@ export class TenantPortalService {
       .limit(1);
 
     if (existing?.token) {
-      return { token: existing.token, url: this.portalUrl(existing.token) };
+      return { token: existing.token, url: this.portalUrl(existing.token, leaseId) };
     }
 
     const token = this.newPortalToken();
@@ -119,7 +125,7 @@ export class TenantPortalService {
       updatedAt: new Date(),
     });
 
-    return { token, url: this.portalUrl(token) };
+    return { token, url: this.portalUrl(token, leaseId) };
   }
 
   /**
@@ -158,9 +164,9 @@ export class TenantPortalService {
    * appendPortalFooterToSms, ne touche pas au texte : c'est le template qui
    * decide ou placer le lien.
    */
-  async portalUrlForTenant(tenantId: number, orgId: number): Promise<string> {
+  async portalUrlForTenant(tenantId: number, orgId: number, leaseId?: number): Promise<string> {
     try {
-      return (await this.generateTenantPortalLink(tenantId, orgId)).url;
+      return (await this.generateTenantPortalLink(tenantId, orgId, leaseId)).url;
     } catch (error) {
       this.logger.warn(
         `Portal url unavailable for tenant ${tenantId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -319,6 +325,61 @@ export class TenantPortalService {
   }
 
   /**
+   * Preuve de paiement envoyee par le locataire lui-meme, depuis le portail
+   * public (token opaque, pas de JWT). Stockee sur MinIO (objectKey), seul
+   * stockage persistant entre deploiements : le disque local du conteneur
+   * backend2 n'a pas de volume et est recree a chaque deploiement.
+   * Scope strict : le paiement doit appartenir a un bail du locataire porteur
+   * du token, sinon un id change dans la requete permettrait d'ecraser le
+   * justificatif de n'importe quel paiement de l'organisation.
+   * N'ecrase jamais un justificatif deja present — un justificatif valide par
+   * le gestionnaire ne doit pas pouvoir etre remplace silencieusement par un
+   * nouvel envoi du locataire.
+   */
+  async submitPaymentProof(token: string, paymentId: number, file: any) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    if (!file?.buffer) throw new BadRequestException("Fichier requis.");
+    const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
+
+    const [payment] = await this.db
+      .select({
+        id: realEstateRentPayments.id,
+        proofUrl: realEstateRentPayments.proofUrl,
+        status: realEstateRentPayments.status,
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+      })
+      .from(realEstateRentPayments)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
+      .where(and(
+        eq(realEstateRentPayments.id, paymentId),
+        eq(realEstateRentPayments.organizationId, organizationId),
+        eq(realEstateLeases.tenantId, tenantId),
+      ))
+      .limit(1);
+    if (!payment) throw new NotFoundException("Paiement introuvable.");
+    // Le QR individuel est imprime sur la quittance papier : n'importe qui en
+    // possession du papier peut scanner et envoyer la photo, pas seulement le
+    // locataire. Plafond a 2 envois (droit a l'erreur : mauvais angle, flou) —
+    // le 2e REMPLACE le 1er (meme fichier ecrase), un 3e est refuse.
+    if ((payment.proofUploadCount ?? 0) >= 2) {
+      throw new BadRequestException("Nombre maximum d'envois atteint pour cette quittance.");
+    }
+
+    const { objectKey } = await this.objectStorage.putDocument(file, `domus/payments/${organizationId}/proofs`);
+    // Ne stocke plus de nom de fichier local (perdu a chaque redeploiement,
+    // voir upload-security.ts) : la cle objet MinIO est resolue derriere
+    // getPublicPaymentProof apres verification d'appartenance au token.
+    const proofUrl = objectKey;
+
+    await this.db
+      .update(realEstateRentPayments)
+      .set({ proofUrl, proofUploadCount: (payment.proofUploadCount ?? 0) + 1, updatedAt: new Date() })
+      .where(eq(realEstateRentPayments.id, paymentId));
+
+    return { submitted: true, paymentId };
+  }
+
+  /**
    * Retourne l'URL du justificatif d'UN paiement, apres avoir verifie que ce
    * paiement appartient bien a un bail du locataire porteur du token. Sans ce
    * controle, un token valide permettrait de lire le justificatif de n'importe
@@ -340,7 +401,49 @@ export class TenantPortalService {
       .limit(1);
 
     if (!row?.proofUrl) throw new NotFoundException("Justificatif introuvable.");
-    return { url: row.proofUrl };
+    return readStoredDocument(this.objectStorage, row.proofUrl);
+  }
+
+  /**
+   * Resume minimal d'UN paiement (mois, montant, statut, preuve deja envoyee
+   * ou non) pour la page dediee /domus/quittance (QR individuel par quittance
+   * du carnet) : contrairement a getPublicTenantPortal, n'expose jamais le
+   * dossier complet du locataire ni ses autres echeances, uniquement CE
+   * paiement precis. Meme controle d'appartenance que submitPaymentProof.
+   */
+  async getPublicPaymentSummary(token: string, paymentId: number) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
+
+    const [row] = await this.db
+      .select({
+        id: realEstateRentPayments.id,
+        paymentDate: realEstateRentPayments.paymentDate,
+        amount: realEstateRentPayments.amount,
+        status: realEstateRentPayments.status,
+        hasProof: sql<number>`(${realEstateRentPayments.proofUrl} is not null)`,
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+        currencySymbol: currencies.currencySymbol,
+        propertyName: realEstateProperties.name,
+        unitName: realEstateUnits.name,
+      })
+      .from(realEstateRentPayments)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .where(and(
+        eq(realEstateRentPayments.id, paymentId),
+        eq(realEstateRentPayments.organizationId, organizationId),
+        eq(realEstateLeases.tenantId, tenantId),
+      ))
+      .limit(1);
+
+    if (!row) throw new NotFoundException("Quittance introuvable.");
+    // canResend : la page /domus/quittance autorise un 2e envoi (droit a
+    // l'erreur, le QR etant sur papier accessible a quiconque le detient) tant
+    // que le plafond de submitPaymentProof (2) n'est pas atteint.
+    return { ...row, hasProof: Boolean(row.hasProof), canResend: (row.proofUploadCount ?? 0) < 2 };
   }
 
   // ── Copie du bail exposee au locataire ──
@@ -591,8 +694,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         eq(realEstateLeases.organizationId, organizationId),
         eq(realEstateLeases.status, "active"),
       ))
-      .orderBy(desc(realEstateLeases.id))
-      .limit(1);
+      .orderBy(desc(realEstateLeases.id));
+      // Pas de .limit(1) : un locataire peut avoir plusieurs baux actifs
+      // simultanement (ex: 2 logements loues en parallele). Le front affiche
+      // un selecteur si leases.length > 1, sinon comportement inchange.
 
     const leaseIds = leases.map((l) => l.id);
     const payments = leaseIds.length

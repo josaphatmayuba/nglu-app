@@ -82,6 +82,41 @@ export const api = {
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   },
+  // Ouverture authentifiée dans un nouvel onglet (même nécessité que downloadAuth :
+  // un <a href> direct ne porte pas le JWT -> 401). L'onglet est ouvert de
+  // façon SYNCHRONE (avant tout await) : Safari/mobile bloquent un
+  // window.open() appelé après une promesse resolue (popup blocker).
+  openAuth: async (path) => {
+    const win = window.open("", "_blank");
+    try {
+      const res = await fetch(`${API_ROOT}${path}`, { headers: { ...authHeaders() } });
+      if (!res.ok) {
+        let msg = `API ${res.status} ${res.statusText}`;
+        try {
+          const body = await res.clone().json();
+          if (body?.message) msg = body.message;
+        } catch { /* corps non-JSON */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      if (win) win.location = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      if (win) win.close();
+      throw err;
+    }
+  },
+  // Recupere un fichier authentifie et renvoie une URL blob locale (ou null si
+  // absent/erreur) — utilise pour les <img> (photo d'employe) qui ne peuvent
+  // pas porter l'en-tete Authorization directement. L'appelant doit revoke()
+  // l'URL au demontage.
+  fetchAuthBlobUrl: async (path) => {
+    const res = await fetch(`${API_ROOT}${path}`, { headers: { ...authHeaders() } });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  },
   payrollSummary: (period) => jsonFetch(`/hr/payrolls/summary${period ? `?period=${period}` : ""}`),
   generatePayroll: (userId, period) => jsonFetch(`/hr/payrolls/generate?userId=${userId}${period ? `&period=${period}` : ""}`),
   generateMonthPayrolls: (period) => jsonFetch("/hr/payrolls/generate-month", { method: "POST", body: JSON.stringify(period ? { period } : {}) }),

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { Throttle } from "@nestjs/throttler";
@@ -475,13 +475,30 @@ export class HrCandidateController {
   @UseInterceptors(FileInterceptor("file", {
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf", "image/gif"];
-      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF, GIF."), false);
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
     },
   }))
-  upload(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @Body("kind") kind: string) {
+  upload(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @Body("kind") kind: string, @CurrentOrg() orgId: number) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    return this.service.uploadCandidateFile(id, file, kind || "cv");
+    return this.service.uploadCandidateFile(id, file, kind || "cv", orgId);
+  }
+
+  @Get(":id/files/:kind")
+  async candidateFile(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("kind") kind: string,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.service.candidateFileFile(id, kind, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @Get(":id/evaluations") listEvaluations(@Param("id", ParseIntPipe) id: number) { return this.service.listCandidateEvaluations(id); }
@@ -518,13 +535,28 @@ export class HrEmployeesController {
   @UseInterceptors(FileInterceptor("photo", {
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, GIF."), false);
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP."), false);
     },
   }))
-  uploadPhoto(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any) {
+  uploadPhoto(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @CurrentOrg() orgId: number) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
-    return this.service.uploadEmployeePhoto(id, file);
+    return this.service.uploadEmployeePhoto(id, file, orgId);
+  }
+
+  @Get(":id/photo")
+  async employeePhotoFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.service.employeePhotoFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @Get(":id/personal-documents")
@@ -536,8 +568,8 @@ export class HrEmployeesController {
   @UseInterceptors(FileInterceptor("file", {
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf", "image/gif"];
-      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF, GIF."), false);
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
     },
   }))
   uploadDoc(
@@ -548,6 +580,22 @@ export class HrEmployeesController {
   ) {
     if (!file) throw new BadRequestException("Aucun fichier reçu.");
     return this.service.createPersonalDocument(file, { ...body, userId: id }, orgId);
+  }
+
+  @Get("personal-documents/:docId/file")
+  async personalDocumentFile(
+    @Param("docId", ParseIntPipe) docId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.service.personalDocumentFile(docId, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @Delete("personal-documents/:docId")

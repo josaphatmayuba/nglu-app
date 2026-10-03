@@ -20,6 +20,7 @@ import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActio
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { setPretsPrefill } from "./reservationPrefill.js";
+import { useAuthenticatedImage } from "../useAuthenticatedImage.js";
 import { t, tf } from "../i18n.js";
 
 const PAYMENT_METHOD_OPTIONS = [
@@ -471,6 +472,7 @@ function MortgagePaymentModal({ value, properties, units, loans = [], currencyOp
             </div>
           )}
           <ReceiptField
+            paymentId={form.id}
             receiptUrl={form.receiptUrl}
             receiptFile={form.receiptFile}
             onPick={(receiptFile) => set({ receiptFile })}
@@ -487,8 +489,19 @@ function MortgagePaymentModal({ value, properties, units, loans = [], currencyOp
 
 // Justificatif (SCRUM-311) — upload fichier (image/PDF), meme pattern que
 // ReceiptField dans depenses.jsx (SCRUM-310).
-function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
+function ReceiptField({ paymentId, receiptUrl, receiptFile, onPick, onClear }) {
   const isImage = receiptUrl && /\.(jpe?g|png|webp)$/i.test(receiptUrl);
+  // receiptUrl n'est que l'objectKey stocke (pas une URL utilisable) : on
+  // streame via la route dediee, verifiee par organisation (SCRUM-311 fix
+  // securite). Jamais de token dans l'URL : apercu image via blob (hook),
+  // ouverture PDF via openAuthenticatedFile (fetch+blob dans un nouvel onglet).
+  const receiptPath = paymentId ? `/mortgage-payments/${paymentId}/receipt-file` : null;
+  const { src: previewSrc, error: previewError } = useAuthenticatedImage(!receiptFile && isImage ? receiptPath : null);
+  const [openError, setOpenError] = useState(null);
+  const openReceipt = () => {
+    setOpenError(null);
+    api.mortgagePaymentReceiptUrl(paymentId).catch((e) => setOpenError(e.message || String(e)));
+  };
   return (
     <label className="domus-property-field">
       <span>{t("Justificatif")}</span>
@@ -508,11 +521,27 @@ function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
           <X size={14} /> {t("Retirer le fichier")}
         </button>
       )}
-      {!receiptFile && receiptUrl && (
+      {!receiptFile && receiptUrl && paymentId && (
         isImage
-          ? <a href={receiptUrl} target="_blank" rel="noreferrer"><img src={receiptUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
-          : <a href={receiptUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
+          ? (
+            previewSrc
+              ? <img src={previewSrc} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6, cursor: "pointer" }} onClick={openReceipt} />
+              : previewError
+                ? <span style={{ display: "block", marginTop: 8, fontSize: 12, color: "#be123c" }}>{previewError}</span>
+                : null
+          )
+          : (
+            <button
+              type="button"
+              className="btn"
+              style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}
+              onClick={openReceipt}
+            >
+              {t("Voir le justificatif")}
+            </button>
+          )
       )}
+      {openError && <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "#be123c" }}>{openError}</span>}
     </label>
   );
 }

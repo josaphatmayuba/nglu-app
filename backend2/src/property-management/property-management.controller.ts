@@ -839,6 +839,18 @@ export class PropertyManagementController {
     return this.propertyManagementService.findLease(id);
   }
 
+  @ApiOperation({ summary: "Rent book (carnet de quittances) data for a lease: lease/tenant/property/unit + all payments" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/rent-book")
+  rentBook(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.rentBook(id, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Permissions("create-propertyManagement")
   @Post("leases")
@@ -985,6 +997,25 @@ export class PropertyManagementController {
   @Get("payments/:id")
   findPayment(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findPayment(id);
+  }
+
+  @ApiOperation({ summary: "Stream the proof file of one rent payment (verified against the current org, no public URL)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/payments/:id/proof-file")
+  async paymentProofFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.paymentProofFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
@@ -1168,6 +1199,25 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteMaintenanceCost(costId, orgId);
   }
 
+  @ApiOperation({ summary: "Stream the receipt file of one maintenance cost (verified against the current org, no public URL)" })
+  @ApiParam({ name: "costId", type: Number })
+  @Permissions("readAll-maintenance-cost")
+  @Get("maintenance/costs/:costId/receipt-file")
+  async maintenanceCostReceiptFile(
+    @Param("costId", ParseIntPipe) costId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.maintenanceCostReceiptFile(costId, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
   // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
 
   @ApiOperation({ summary: "List property expenses (filters: propertyId, category, dateFrom, dateTo)" })
@@ -1242,6 +1292,25 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.uploadPropertyExpenseReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  @ApiOperation({ summary: "Stream the receipt file of one property expense (verified against the current org, no public URL)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("property-expenses/:id/receipt-file")
+  async propertyExpenseReceiptFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.propertyExpenseReceiptFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
@@ -1336,6 +1405,25 @@ export class PropertyManagementController {
     return this.propertyManagementService.uploadExpenseInstallmentReceipt(installmentId, orgId, receipt, this.publicApiBase(req));
   }
 
+  @ApiOperation({ summary: "Stream the receipt file of one expense installment (verified against the current org, no public URL)" })
+  @ApiParam({ name: "installmentId", type: Number })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-expenses/installments/:installmentId/receipt-file")
+  async expenseInstallmentReceiptFile(
+    @Param("installmentId", ParseIntPipe) installmentId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.expenseInstallmentReceiptFile(installmentId, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
   // ── Mortgage Payments (SCRUM-311) ───────────────────────────────────────────
 
   @ApiOperation({ summary: "List mortgage payments (principal / interest split)" })
@@ -1408,6 +1496,25 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.uploadMortgagePaymentReceipt(id, orgId, receipt, this.publicApiBase(req));
+  }
+
+  @ApiOperation({ summary: "Stream the receipt file of one mortgage payment (verified against the current org, no public URL)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("mortgage-payments/:id/receipt-file")
+  async mortgagePaymentReceiptFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.mortgagePaymentReceiptFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   // ── Prets hypothecaires (SCRUM-311 phase 2) ─────────────────────────────────

@@ -6,7 +6,8 @@
 // jamais un autre locataire, jamais une autre organisation.
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -16,17 +17,22 @@ import {
   realEstateOwnerPortalLinks,
   realEstateOwners,
   realEstateProperties,
+  realEstateRentPayments,
   realEstateSecurityDeposits,
   realEstateUnits,
   tenantDetails,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "./object-storage.service";
 
 @Injectable()
 export class OwnerPortalService {
   private readonly logger = new Logger(OwnerPortalService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly objectStorage: ObjectStorageService,
+  ) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -111,7 +117,7 @@ export class OwnerPortalService {
    */
   async getPublicOwnerPortal(token: string) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
-    const { ownerId, tenantId, organizationId } = await this.resolveLinkByToken(token);
+    const { ownerId, tenantId, organizationId, propertyId } = await this.resolveLinkByToken(token);
 
     const [owner] = await this.db
       .select({ id: realEstateOwners.id, displayName: realEstateOwners.displayName })
@@ -194,6 +200,9 @@ export class OwnerPortalService {
         eq(realEstateLeases.tenantId, tenantId),
         eq(realEstateLeases.organizationId, organizationId),
         eq(realEstateProperties.ownerId, ownerId),
+        // Si le lien portail est restreint a UN bien precis (propertyId renseigne),
+        // ne jamais exposer les baux des autres biens du meme proprietaire.
+        propertyId != null ? eq(realEstateLeases.propertyId, propertyId) : undefined,
       ))
       .orderBy(desc(realEstateLeases.id));
 
@@ -218,14 +227,82 @@ export class OwnerPortalService {
           ))
       : [];
 
+    // Paiements recents par bail : uniquement les champs necessaires a
+    // l'affichage (jamais proofUrl brut, jamais method/notes internes). Les
+    // 12 derniers par bail suffisent au proprietaire pour verifier le carnet.
+    const payments = leaseIds.length
+      ? await this.db
+          .select({
+            id: realEstateRentPayments.id,
+            leaseId: realEstateRentPayments.leaseId,
+            paymentDate: realEstateRentPayments.paymentDate,
+            amount: realEstateRentPayments.amount,
+            status: realEstateRentPayments.status,
+            currencySymbol: currencies.currencySymbol,
+            hasProof: sql<boolean>`${realEstateRentPayments.proofUrl} IS NOT NULL AND ${realEstateRentPayments.proofUrl} <> ''`,
+          })
+          .from(realEstateRentPayments)
+          .leftJoin(currencies, eq(currencies.id, realEstateRentPayments.currencyId))
+          .where(and(
+            eq(realEstateRentPayments.organizationId, organizationId),
+            inArray(realEstateRentPayments.leaseId, leaseIds),
+          ))
+          .orderBy(desc(realEstateRentPayments.paymentDate))
+      : [];
+
+    const PAYMENTS_PER_LEASE = 12;
+    const paymentsByLease = new Map<number, typeof payments>();
+    for (const p of payments) {
+      const key = Number(p.leaseId);
+      const list = paymentsByLease.get(key) ?? [];
+      if (list.length < PAYMENTS_PER_LEASE) list.push(p);
+      paymentsByLease.set(key, list);
+    }
+
     return {
       owner: { name: owner.displayName },
       tenant,
       leases: leases.map((lease) => ({
         ...lease,
         depositsPaid: deposits.filter((d) => Number(d.leaseId) === Number(lease.id)),
+        payments: (paymentsByLease.get(Number(lease.id)) ?? []).map((p) => ({
+          id: p.id,
+          paymentDate: p.paymentDate,
+          amount: p.amount,
+          currencySymbol: p.currencySymbol,
+          status: p.status,
+          hasProof: p.hasProof,
+        })),
       })),
     };
+  }
+
+  /**
+   * Retourne l'URL du justificatif d'UN paiement pour le proprietaire. Verifie
+   * en une seule requete, via jointures, que le paiement appartient a un bail
+   * dont le bien a pour ownerId celui resolu depuis le token, ET (si le lien
+   * est restreint a un bien precis) que ce bail est bien sur CE bien. Jamais
+   * de distinction "n'existe pas" / "pas a toi" dans l'erreur (anti-enumeration).
+   */
+  async getPublicOwnerPaymentProof(token: string, paymentId: number) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    const { ownerId, organizationId, propertyId } = await this.resolveLinkByToken(token);
+
+    const [row] = await this.db
+      .select({ proofUrl: realEstateRentPayments.proofUrl })
+      .from(realEstateRentPayments)
+      .innerJoin(realEstateLeases, eq(realEstateLeases.id, realEstateRentPayments.leaseId))
+      .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
+      .where(and(
+        eq(realEstateRentPayments.id, paymentId),
+        eq(realEstateRentPayments.organizationId, organizationId),
+        eq(realEstateProperties.ownerId, ownerId),
+        propertyId != null ? eq(realEstateLeases.propertyId, propertyId) : undefined,
+      ))
+      .limit(1);
+
+    if (!row?.proofUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, row.proofUrl);
   }
 
   /** Invalidation douce du lien (jamais de DELETE physique). */

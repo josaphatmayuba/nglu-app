@@ -1,3 +1,0 @@
-RL Jira = https://14735340canadainc.atlassian.net
-Email = josaphatmayuba@gmail.com
-API Token = ATATT3xFfGF0B9pZl6l2NUKchI6L_F5qvrsKxRa5TowaI5jgeAcgUphIJyGUrWlN8eMKBt-QyZSdUnEoRqE1bwhymJEpdV6q4n6Oczv1vgm_myfqVYadbXmA6fufKYuQc828JanH3nDIb45LgpDrWdFLkL9dICCp1CI6LWSqldLhUVuOhJ3XpeA=1F4A0C5D

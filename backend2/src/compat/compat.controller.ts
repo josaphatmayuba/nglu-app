@@ -32,11 +32,21 @@ export class CompatController {
     return this.compat.googleLogin(body);
   }
 
+  // Allowlist de prefixes reellement publics (logos d'organisation, images
+  // produits/sliders e-commerce, photos de profil client — tous uploades via
+  // ObjectStorageService/saveValidatedUploadFile avec ces prefixes). HR
+  // (documents personnels) et Transactions (pieces comptables) ont leurs
+  // propres routes authentifiees dediees et ne passent plus par ici.
+  private static readonly PUBLIC_FILE_PREFIXES = ["logo-", "compat-"];
+
   @Get(["files/:id", "product-image/:id", "slider-images/:id", "customer-profileImage/:id", "customer-profile-image/:id"])
   showFile(@Param("id") id: string, @Res() res: Response) {
     // Reject path traversal attempts
     if (id.includes("..") || id.includes("/") || id.includes("\\")) {
       return res.status(400).json({ error: "Invalid file name" });
+    }
+    if (!CompatController.PUBLIC_FILE_PREFIXES.some((prefix) => id.startsWith(prefix))) {
+      return res.status(404).json({ error: "File Not found" });
     }
     const path = filePath(id);
     if (!existsSync(path)) return res.status(404).json({ error: "File Not found" });

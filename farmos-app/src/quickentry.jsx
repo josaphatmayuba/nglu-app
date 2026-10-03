@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React from "react";
+import { createPortal } from "react-dom";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
 import { api, GESTATION_DAYS_BY_SPECIES } from "./api";
@@ -138,6 +139,24 @@ function toNumericId(row) {
   return null;
 }
 
+// Positionne un menu déroulant en portal (document.body) sous un champ,
+// pour ne pas être coupé par l'overflow:auto d'une modale parente.
+const useDropdownPos = (open, anchorRef) => {
+  const [pos, setPos] = React.useState(null);
+  React.useLayoutEffect(() => {
+    if (!open || !anchorRef.current) { setPos(null); return; }
+    const update = () => {
+      const r = anchorRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => { window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
+  }, [open, anchorRef]);
+  return pos;
+};
+
 // ─── Autocomplete (replaces native <select> across forms) ───────────────
 const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true }) => {
   const norm = (options || []).map((o) =>
@@ -147,6 +166,8 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
   const [query, setQuery] = React.useState("");
   const wrapRef = React.useRef(null);
   const inputRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  const pos = useDropdownPos(open, wrapRef);
 
   const selected = norm.find((o) => String(o.value) === String(value));
   const display = open ? query : (selected ? selected.label : "");
@@ -157,7 +178,11 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
     : (q ? norm.filter((o) => o.label.toLowerCase().includes(q) || (o.group || "").toLowerCase().includes(q)) : norm);
 
   React.useEffect(() => {
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(""); } };
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target) && menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false); setQuery("");
+      }
+    };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
@@ -192,12 +217,12 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
           <Icon name="x" size={11} color="currentColor"/>
         </button>
       )}
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{
+          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
           background: "var(--bg-card, #fff)", border: "1px solid var(--border-1)",
           borderRadius: 8, boxShadow: "0 8px 24px -8px rgba(14,36,24,0.18)",
-          maxHeight: 240, overflowY: "auto", zIndex: 200,
+          maxHeight: 240, overflowY: "auto", zIndex: 10000,
         }}>
           {filtered.length === 0 && (
             <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)" }}>—</div>
@@ -226,7 +251,8 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
               </React.Fragment>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -244,6 +270,8 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
   const [error, setError] = React.useState(null);
   const wrapRef = React.useRef(null);
   const inputRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  const pos = useDropdownPos(open, wrapRef);
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -274,7 +302,11 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
   const canAdd = !noAdd && open && q.length > 0 && !exact && !adding;
 
   React.useEffect(() => {
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(""); } };
+    const onDoc = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target) && menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false); setQuery("");
+      }
+    };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
@@ -333,12 +365,12 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
           <Icon name="x" size={11} color="currentColor"/>
         </button>
       )}
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{
+          position: "fixed", top: pos.top, left: pos.left, width: pos.width,
           background: "var(--bg-card, #fff)", border: "1px solid var(--border-1)",
           borderRadius: 8, boxShadow: "0 8px 24px -8px rgba(14,36,24,0.18)",
-          maxHeight: 260, overflowY: "auto", zIndex: 200,
+          maxHeight: 260, overflowY: "auto", zIndex: 10000,
         }}>
           {loading && (
             <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -380,7 +412,8 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
           {error && (
             <div style={{ padding: "8px 12px", fontSize: 11.5, color: "var(--rust-700)" }}>{error}</div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

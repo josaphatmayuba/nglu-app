@@ -1,10 +1,9 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { join } from "path";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
-import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -23,6 +22,7 @@ import {
   realEstateMortgagePayments,
   realEstateOwners,
   realEstateProperties,
+  organizations,
   realEstatePropertyExpenses,
   realEstatePropertyPhotos,
   realEstateReservations,
@@ -2071,7 +2071,7 @@ export class PropertyManagementService {
     return this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
   }
 
-  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all") {
+  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all", leaseId?: number) {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -2087,6 +2087,10 @@ export class PropertyManagementService {
         taxAmount: realEstateRentPayments.taxAmount,
         taxName: realEstateRentPayments.taxName,
         proofUrl: realEstateRentPayments.proofUrl,
+        // > 0 = proofUrl vient du locataire (QR de quittance) et non d'une
+        // preuve jointe par le gestionnaire a l'encaissement (meme colonne).
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+        updatedAt: realEstateRentPayments.updatedAt,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -2110,6 +2114,7 @@ export class PropertyManagementService {
         eq(paymentUnit.isActive, 1),
         ...(id ? [eq(realEstateRentPayments.id, id)] : []),
         ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
+        ...(leaseId !== undefined ? [eq(realEstateRentPayments.leaseId, leaseId)] : []),
         // RBAC bien : loyers du bien (via le bail). "all" => pas de filtre.
         ...(propertyScope !== "all"
           ? [propertyScope.length ? inArray(paymentLease.propertyId, propertyScope) : sql`1 = 0`]
@@ -2118,7 +2123,7 @@ export class PropertyManagementService {
   }
 
   async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
@@ -2243,35 +2248,60 @@ export class PropertyManagementService {
   // ledger. status='pending' — a confirmer individuellement ensuite via
   // confirmPendingPayment. Idempotent : un mois deja couvert par une ligne
   // (paid OU pending) n'est jamais duplique.
-  async generateMissingPayments(leaseId: number, orgId: number) {
+  // upToEnd : étend la génération jusqu'à endDate du bail au lieu du mois
+  // courant — utilisé uniquement par rentBook() pour que CHAQUE quittance du
+  // carnet imprimé (y compris les mois futurs) ait une ligne réelle en base,
+  // donc un id, donc un QR individuel scannable. Comportement par défaut
+  // (upToEnd=false) inchangé pour l'appel API existant (baux rétroactifs).
+  async generateMissingPayments(leaseId: number, orgId: number, upToEnd = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     const existing = await this.db
-      .select({ amount: realEstateRentPayments.amount })
+      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
       ));
-    // Couverture par MONTANT cumulé (paid + pending), pas par mois calendaire :
-    // un seul virement de plusieurs mois de loyer daté d'un seul mois doit quand
-    // meme couvrir plusieurs echeances, sinon on regenere a tort des "manquantes"
-    // deja payees. Coherent avec le calcul de couverture du frontend (loyers.jsx).
-    const rent = Number(lease.rentAmount) || 0;
-    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
-    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
 
     const start = this.parseDateOnly(lease.startDate);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
     const boundary = lease.endDate ? this.parseDateOnly(lease.endDate) : null;
 
+    // upToEnd=false (appel API existant, baux retroactifs) : couverture par
+    // MONTANT cumulé, pas par mois calendaire — un seul virement de plusieurs
+    // mois de loyer daté d'un seul mois doit quand meme couvrir plusieurs
+    // echeances, coherent avec le calcul de couverture du frontend (loyers.jsx).
+    // upToEnd=true (rentBook, carnet) : couverture par MOIS CALENDAIRE exact
+    // (YYYY-MM deja represente par une ligne, paid ou pending) — plus robuste
+    // quand des paiements a montants/dates irreguliers (ex. paiement de test)
+    // desynchronisent un simple decompte par montant cumulé, ce qui sautait a
+    // tort des mois reels (ex. octobre/novembre) sans jamais leur creer de ligne.
+    const existingMonthKeys = new Set(
+      existing.map((p) => String(p.paymentDate).slice(0, 7)),
+    );
+    const rent = Number(lease.rentAmount) || 0;
+    const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
+
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-    const lastMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    // upToEnd : va jusqu'à endDate (ou 12 mois par défaut si bail à durée
+    // indéterminée) plutôt que de s'arrêter au mois courant — mêmes bornes
+    // que buildFullRentSchedule côté frontend (rentBookUtils.js), pour que
+    // le carnet et la base restent cohérents.
+    const limit = upToEnd
+      ? (boundary || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
+      : today;
+    const lastMonth = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth(), 1));
     let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
       if (!boundary || cursor.getTime() <= boundary.getTime()) {
-        if (monthIndex >= monthsAlreadyCovered) monthsToCreate.push(new Date(cursor.getTime()));
+        const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+        const covered = upToEnd
+          ? existingMonthKeys.has(monthKey)
+          : monthIndex < monthsAlreadyCovered;
+        if (!covered) monthsToCreate.push(new Date(cursor.getTime()));
       }
       monthIndex += 1;
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
@@ -2309,7 +2339,7 @@ export class PropertyManagementService {
   // en creant la transaction comptable + ecriture ledger comme createPayment.
   // Reutilise integralement le meme calcul de taxe / compte de paiement.
   async confirmPendingPayment(paymentId: number, input: ConfirmPendingPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
 
     const [pending] = await this.db
       .select()
@@ -2461,7 +2491,7 @@ export class PropertyManagementService {
   }
 
   async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     // Une seule caution active détenue par bail.
@@ -2544,7 +2574,7 @@ export class PropertyManagementService {
   }
 
   async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const returnProofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
     const rows = await this.db
       .select()
@@ -3983,6 +4013,70 @@ export class PropertyManagementService {
     return enriched;
   }
 
+  // Carnet de quittances (PDF cote front) : une page de garde + une quittance
+  // par paiement/echeance du bail. Filtrage strict organisation + scope bien
+  // (meme garde que findReservation/ensurePropertyInScope) pour eviter toute
+  // fuite inter-org, contrairement a findLease() qui ne filtre pas par org.
+  async rentBook(leaseId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const [lease] = await this.db
+      .select({
+        id: realEstateLeases.id,
+        reference: realEstateLeases.reference,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        rentAmount: realEstateLeases.rentAmount,
+        currencyId: realEstateLeases.currencyId,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+        propertyId: realEstateLeases.propertyId,
+        propertyName: leaseProperty.name,
+        propertyAddress: leaseProperty.address,
+        ownerName: realEstateOwners.displayName,
+        unitId: realEstateLeases.unitId,
+        unitName: leaseUnit.name,
+        tenantId: realEstateLeases.tenantId,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantPhone: customers.phone,
+        organizationName: organizations.name,
+      })
+      .from(realEstateLeases)
+      .leftJoin(leaseProperty, eq(leaseProperty.id, realEstateLeases.propertyId))
+      .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(realEstateOwners, eq(realEstateOwners.id, leaseProperty.ownerId))
+      .leftJoin(organizations, eq(organizations.id, realEstateLeases.organizationId))
+      .where(and(
+        eq(realEstateLeases.id, leaseId),
+        eq(realEstateLeases.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!lease) throw new NotFoundException("Lease not found.");
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+
+    // Materialise les echeances manquantes jusqu'a la fin du bail (status
+    // 'pending', pas de transaction comptable) AVANT de lire les paiements :
+    // sans ca, les mois futurs du carnet n'ont pas d'id reel en base, donc pas
+    // de QR individuel possible pour envoyer la preuve de ce mois precis.
+    // Idempotent (generateMissingPayments ne duplique jamais un mois deja couvert).
+    await this.generateMissingPayments(leaseId, orgId, true);
+
+    const payments = await this.paymentQuery(undefined, orgId, "all", leaseId)
+      .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
+
+    // URL du portail locataire pour le QR code du carnet : best-effort, comme
+    // les autres usages de portalUrlForTenant (rappel SMS/email). Si le
+    // locataire n'a pas de tenantId (bail sans locataire rattache) ou si la
+    // generation du lien echoue, le carnet s'affiche quand meme sans QR plutot
+    // que de bloquer le telechargement.
+    const portalUrl = lease.tenantId
+      ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId, lease.id)
+      : "";
+
+    return { lease, payments, portalUrl: portalUrl || null };
+  }
+
   async leaseDocuments(leaseId: number, orgId: number) {
     await this.findLease(leaseId);
     return this.db
@@ -4297,6 +4391,20 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  /**
+   * Streame le justificatif (preuve de paiement) d'UN loyer, apres verification
+   * que ce paiement appartient bien a l'organisation du JWT courant — meme
+   * pattern que TenantPortalService.getPublicPaymentProof / OwnerPortalService.
+   * getPublicOwnerPaymentProof, cote gestionnaire authentifie cette fois.
+   */
+  async paymentProofFile(id: number, orgId: number) {
+    const rows = await this.paymentQuery(id, orgId).limit(1);
+    if (!rows.length) throw new NotFoundException("Payment not found.");
+    const proofUrl = rows[0].proofUrl;
+    if (!proofUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, proofUrl);
+  }
+
   async findMaintenance(id: number, orgId?: number) {
     const where = orgId !== undefined
       ? and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId))
@@ -4321,28 +4429,25 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
 
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
-
-  private saveReceiptFile(file: any, publicApiBase?: string): string | null {
+  // Stockage MinIO (ObjectStorageService), seul stockage persistant entre
+  // deploiements — le disque local du conteneur backend2 n'a pas de volume et
+  // est recree a chaque deploiement. Ne stocke que l'objectKey. Le fichier est
+  // ensuite streame via les routes dediees *ReceiptFile
+  // (propertyExpenseReceiptFile / expenseInstallmentReceiptFile /
+  // mortgagePaymentReceiptFile / maintenanceCostReceiptFile) apres verification
+  // d'appartenance a l'organisation — meme pattern que paymentProofFile.
+  // `prefix` est le chemin MinIO complet, deja scope par organisation
+  // (ex. "domus/payments/42/proofs", "domus/deposits/42").
+  private async saveReceiptFile(file: any, prefix: string): Promise<string | null> {
     if (!file?.buffer) return null;
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "receipt",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    const base = publicApiBase ?? "";
-    return `${base}/uploads/${name}`;
+    const { objectKey } = await this.objectStorage.putDocument(file, prefix);
+    return objectKey;
   }
 
-  private saveProofFile(file: any, publicApiBase?: string): string | null {
+  private async saveProofFile(file: any, prefix: string): Promise<string | null> {
     if (!file?.buffer) return null;
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "rent-proof",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    const base = publicApiBase ?? "";
-    return `${base}/uploads/${name}`;
+    const { objectKey } = await this.objectStorage.putDocument(file, prefix);
+    return objectKey;
   }
 
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
@@ -4356,7 +4461,7 @@ export class PropertyManagementService {
       .limit(1);
     const projectId = ticket?.projectId ?? null;
 
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
+    const receiptUrl = (await this.saveReceiptFile(receipt, `domus/maintenance/${orgId}/costs`)) ?? input.receiptUrl ?? null;
 
     const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
       ticketId,
@@ -4454,6 +4559,23 @@ export class PropertyManagementService {
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  /**
+   * Streame le justificatif (recu) d'un cout de maintenance, apres
+   * verification que ce cout appartient a l'organisation du JWT courant —
+   * meme pattern que paymentProofFile.
+   */
+  async maintenanceCostReceiptFile(costId: number, orgId: number) {
+    const rows = await this.db
+      .select({ receiptUrl: realEstateMaintenanceCosts.receiptUrl })
+      .from(realEstateMaintenanceCosts)
+      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
+    const receiptUrl = rows[0].receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
@@ -4691,13 +4813,30 @@ export class PropertyManagementService {
 
   async uploadPropertyExpenseReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/expenses/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstatePropertyExpenses)
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
     return this.getPropertyExpense(id, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'une depense de propriete, apres
+   * verification que cette depense appartient a l'organisation du JWT
+   * courant — meme pattern que paymentProofFile.
+   */
+  async propertyExpenseReceiptFile(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    const [row] = await this.db
+      .select({ receiptUrl: realEstatePropertyExpenses.receiptUrl })
+      .from(realEstatePropertyExpenses)
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)))
+      .limit(1);
+    const receiptUrl = row?.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
@@ -4956,13 +5095,25 @@ export class PropertyManagementService {
 
   async uploadExpenseInstallmentReceipt(installmentId: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.findActiveInstallmentForOrg(installmentId, orgId);
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/expenses/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstateExpenseInstallments)
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
     return this.findActiveInstallmentForOrg(installmentId, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'une echeance de depense, apres
+   * verification que cette echeance appartient a l'organisation du JWT
+   * courant — meme pattern que paymentProofFile.
+   */
+  async expenseInstallmentReceiptFile(installmentId: number, orgId: number) {
+    const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
+    const receiptUrl = installment.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Remboursements hypothecaires (SCRUM-311) ──────────────────────────────
@@ -5604,13 +5755,30 @@ export class PropertyManagementService {
 
   async uploadMortgagePaymentReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/mortgages/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstateMortgagePayments)
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
     return this.getMortgagePayment(id, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'un remboursement hypothecaire, apres
+   * verification que ce paiement appartient a l'organisation du JWT courant
+   * — meme pattern que paymentProofFile.
+   */
+  async mortgagePaymentReceiptFile(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const [row] = await this.db
+      .select({ receiptUrl: realEstateMortgagePayments.receiptUrl })
+      .from(realEstateMortgagePayments)
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)))
+      .limit(1);
+    const receiptUrl = row?.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────
@@ -5888,7 +6056,7 @@ export class PropertyManagementService {
 
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
-  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean }>> {
+  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
     if (!rows.length) return [];
     const leaseIds = rows.map((r) => r.id);
     const payments = await this.db
@@ -5934,7 +6102,7 @@ export class PropertyManagementService {
     billingCycle: string | null,
     paymentDates: string[],
     today: Date,
-  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean } {
+  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
     const start = this.parseDateOnly(startDate);
     const boundary = endDate ? this.parseDateOnly(endDate) : null;
     const payments = paymentDates.map((d) => this.parseDateOnly(d));
@@ -5943,6 +6111,11 @@ export class PropertyManagementService {
     let dueCount = 0;
     let lateCount = 0;
     let isOverdue = false;
+    // Date de la 1ere echeance non couverte en retard (affichee au front a la
+    // place de nextInvoiceDate quand isOverdue=true, qui peut deja pointer sur
+    // une echeance future si le total paye couvre la fenetre sans rapprochement
+    // mois par mois - voir advanceLeaseInvoiceDateIfCovered).
+    let overdueDueDate: string | null = null;
     // Chaque échéance est ancrée sur `start` + N cycles (et non chaînée sur la
     // date précédente) pour éviter que le clamp fin-de-mois (ex. 31 -> 28 en
     // février) ne fige les échéances suivantes sur le jour raboté.
@@ -5974,6 +6147,7 @@ export class PropertyManagementService {
         if (today.getTime() > graceLimit.getTime()) {
           lateCount += 1;
           isOverdue = true;
+          if (overdueDueDate === null) overdueDueDate = this.formatDateOnly(dueDate);
         }
       }
 
@@ -5986,6 +6160,7 @@ export class PropertyManagementService {
       dueCount,
       lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
       isOverdue,
+      overdueDueDate,
     };
   }
 

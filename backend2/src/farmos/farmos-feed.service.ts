@@ -89,24 +89,49 @@ export class FarmosFeedService {
       .orderBy(desc(farmosFeedLots.receivedDate), desc(farmosFeedLots.id));
   }
 
-  // Recalcule le CMP (cout moyen pondere) sur les lots actifs restants et le
-  // reporte dans farmos_medicines.unit_price (reference d'affichage/alerte).
-  private async recomputeAverageCost(medicineId: number, orgId: number) {
-    const lots = await this.db
-      .select({ quantityRemaining: farmosFeedLots.quantityRemaining, unitCost: farmosFeedLots.unitCost })
-      .from(farmosFeedLots)
-      .where(and(eq(farmosFeedLots.medicineId, medicineId), eq(farmosFeedLots.organizationId, orgId), eq(farmosFeedLots.isActive, 1)));
-    let totalQty = 0;
-    let totalValue = 0;
+  // Calcule le CMP (cout moyen pondere) sur les lots actifs restants,
+  // GROUPE PAR DEVISE (currencyId) — ne jamais mélanger des montants de
+  // devises différentes dans un seul nombre (cf. ledger/exchange.service.ts :
+  // aucune conversion silencieuse, chaque montant reste dans sa devise).
+  // Retourne un groupe par devise ; le groupe "principal" (plus grosse
+  // quantité restante) sert de fallback pour farmos_medicines.unit_price/
+  // currency_id (compat champs existants utilisés ailleurs : factures,
+  // dépenses, movement out fallback L296-298...).
+  private computeCostGroups(lots: { quantityRemaining: unknown; unitCost: unknown; currencyId: unknown }[]) {
+    const groups = new Map<string, { currencyId: number | null; totalQty: number; totalValue: number }>();
     for (const lot of lots) {
       const qty = Number(lot.quantityRemaining || 0);
       const cost = Number(lot.unitCost || 0);
-      totalQty += qty;
-      totalValue += qty * cost;
+      const currencyId = lot.currencyId != null ? Number(lot.currencyId) : null;
+      const key = String(currencyId);
+      const g = groups.get(key) || { currencyId, totalQty: 0, totalValue: 0 };
+      g.totalQty += qty;
+      g.totalValue += qty * cost;
+      groups.set(key, g);
     }
-    if (totalQty > 0) {
-      const avg = totalValue / totalQty;
-      await this.db.update(farmosMedicines).set({ unitPrice: String(avg.toFixed(2)) }).where(and(eq(farmosMedicines.id, medicineId), eq(farmosMedicines.organizationId, orgId)));
+    return Array.from(groups.values())
+      .filter((g) => g.totalQty > 0)
+      .map((g) => ({ currencyId: g.currencyId, amount: g.totalValue / g.totalQty, totalQty: g.totalQty }))
+      .sort((a, b) => b.totalQty - a.totalQty);
+  }
+
+  // Recalcule le CMP (cout moyen pondere) sur les lots actifs restants et le
+  // reporte dans farmos_medicines.unit_price (reference d'affichage/alerte).
+  // Ne mélange plus des devises différentes : le groupe avec la plus grosse
+  // quantité restante devient le "prix principal" (compat champs existants) ;
+  // les autres devises sont exposées séparément via getFeedStock (unitPrices).
+  private async recomputeAverageCost(medicineId: number, orgId: number) {
+    const lots = await this.db
+      .select({ quantityRemaining: farmosFeedLots.quantityRemaining, unitCost: farmosFeedLots.unitCost, currencyId: farmosFeedLots.currencyId })
+      .from(farmosFeedLots)
+      .where(and(eq(farmosFeedLots.medicineId, medicineId), eq(farmosFeedLots.organizationId, orgId), eq(farmosFeedLots.isActive, 1)));
+    const groups = this.computeCostGroups(lots);
+    if (groups.length > 0) {
+      const main = groups[0];
+      await this.db
+        .update(farmosMedicines)
+        .set({ unitPrice: String(main.amount.toFixed(2)), currencyId: main.currencyId ?? undefined })
+        .where(and(eq(farmosMedicines.id, medicineId), eq(farmosMedicines.organizationId, orgId)));
     }
   }
 
@@ -413,6 +438,16 @@ export class FarmosFeedService {
       const quantity = Number(item.quantity || 0);
       const coverageDays = avgDaily > 0 ? Math.round(quantity / avgDaily) : null;
 
+      // CMP par devise réellement présente parmi les lots actifs (voir
+      // computeCostGroups) : évite d'afficher un prix qui mélange des
+      // devises différentes derrière une seule étiquette. unitPrice/currencyId
+      // existants restent inchangés (compat), unitPrices est le détail fiable.
+      const activeLots = await this.db
+        .select({ quantityRemaining: farmosFeedLots.quantityRemaining, unitCost: farmosFeedLots.unitCost, currencyId: farmosFeedLots.currencyId })
+        .from(farmosFeedLots)
+        .where(and(eq(farmosFeedLots.medicineId, item.id), eq(farmosFeedLots.organizationId, orgId), eq(farmosFeedLots.isActive, 1)));
+      const unitPrices = this.computeCostGroups(activeLots).map((g) => ({ currencyId: g.currencyId, amount: Math.round(g.amount * 100) / 100 }));
+
       let status: "ok" | "low" | "critical" | "expired" = "ok";
       const expiry = item.expiryDate ? new Date(item.expiryDate) : null;
       const daysToExpiry = expiry ? Math.ceil((expiry.getTime() - today.getTime()) / 86400000) : null;
@@ -429,6 +464,7 @@ export class FarmosFeedService {
         coverageDays,
         daysToExpiry,
         status,
+        unitPrices,
       });
     }
     return results;

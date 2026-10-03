@@ -6,6 +6,7 @@ import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { AnimalAvatar, tagColorForAnimal } from "./animal-avatar.jsx";
 import { formatAnimalAge, AGE_TONES } from "./animal-category";
+import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 // Pastille d'âge (cartes mobiles + fiche) : icône calendrier + âge, date exacte au survol.
 const AgePill = ({ animal, lang, size = "sm" }) => {
@@ -1391,6 +1392,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const deceased = isDeceasedStatus(animal.status);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], operations: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   React.useEffect(() => {
     if (readOnly && editing) setEditing(false);
   }, [readOnly, editing]);
@@ -1491,13 +1493,16 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     window.addEventListener("farmos:animal-created", onCreated);
     return () => { cancel = true; window.removeEventListener("farmos:animal-created", onCreated); };
   }, [animal._pk, lang]);
-  const onDelete = async () => {
+  const onDelete = () => {
     if (!animal._pk) return;
     if (readOnly) {
       window.alert(lockedAnimalMessage(lang));
       return;
     }
-    if (!window.confirm(lang === "fr" ? `Supprimer ${animal.name || animal.id} ?` : `Delete ${animal.name || animal.id}?`)) return;
+    setConfirmDeleteOpen(true);
+  };
+  const confirmDeleteAnimal = async () => {
+    setConfirmDeleteOpen(false);
     try {
       await api.deleteAnimal(animal._pk);
       window.dispatchEvent(new CustomEvent("farmos:animal-created"));
@@ -1952,6 +1957,13 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           );
         })()}
       </div>
+      <ConfirmDeleteModal
+        open={confirmDeleteOpen}
+        lang={lang}
+        message={lang === "fr" ? `Supprimer ${animal.name || animal.id} ?` : `Delete ${animal.name || animal.id}?`}
+        onConfirm={confirmDeleteAnimal}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </aside>
   );
 };
@@ -2028,6 +2040,7 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), weight: "" });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const rows = (weighings || []).slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
   const curvePoints = rows
     .map((w) => ({ date: String(w.weighDate || w.weigh_date).slice(0, 10), weight: Number(w.weight) }))
@@ -2042,9 +2055,14 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
       onChanged && onChanged();
     } catch (e) { setErr(e.message); } finally { setSaving(false); }
   };
-  const del = async (id) => {
+  const del = (id) => {
     if (readOnly) return;
-    if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
+    setConfirmDeleteId(id);
+  };
+  const confirmDel = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
     try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
   };
   return (
@@ -2089,6 +2107,13 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = fal
           </div>
         </>
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?"}
+        onConfirm={confirmDel}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 };

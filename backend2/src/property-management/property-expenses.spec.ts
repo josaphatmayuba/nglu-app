@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { PropertyManagementService } from "./property-management.service";
 import { realEstateProperties, realEstatePropertyExpenses, subAccounts } from "../database/schema";
 import { PROPERTY_EXPENSE_CATEGORIES } from "./dto/property-management.dto";
+import { IMAGE_OR_PDF_MIME_TYPES, validateUploadedFile } from "../common/upload-security";
 
 // Depenses par propriete (SCRUM-310) — Tests cibles (pas de couverture exhaustive) :
 // validation de categorie, creation (routage compte + ledger + workflow),
@@ -86,7 +87,13 @@ function makeService(opts: {
   const workflow: any = { submit: workflowSubmit };
   const projectsCreate = jest.fn().mockResolvedValue(opts.projectExisting ?? { id: 77, updated: false });
   const projects: any = { create: projectsCreate };
-  const objectStorage: any = {};
+  // Reutilise la vraie validation (signature de fichier) comme le ferait
+  // ObjectStorageService.putDocument, sans ecrire sur disque ni reseau.
+  const putDocument = jest.fn().mockImplementation((file: any, prefix: string) => {
+    const validated = validateUploadedFile(file, { allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES, maxBytes: 15 * 1024 * 1024 });
+    return Promise.resolve({ objectKey: `${prefix}/test-object.${validated.extension}` });
+  });
+  const objectStorage: any = { putDocument };
   const whatsapp: any = {};
 
   const service = new PropertyManagementService(
@@ -104,7 +111,7 @@ function makeService(opts: {
     {} as any, // ownerNotifications
   );
 
-  return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate };
+  return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate, putDocument };
 }
 
 const baseInput = (overrides: Partial<any> = {}) => ({
@@ -345,27 +352,35 @@ describe("PropertyManagementService — uploadPropertyExpenseReceipt", () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it("accepte une image valide et met a jour receiptUrl", async () => {
-    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG } });
+  it("accepte une image valide, l'envoie sur MinIO (scope organisation) et met a jour receiptUrl avec l'objectKey", async () => {
+    const { service, updates, putDocument } = makeService({ expenseRow: { id: 5, organizationId: ORG } });
     await service.uploadPropertyExpenseReceipt(5, ORG, {
       buffer: JPEG_BYTES,
       mimetype: "image/jpeg",
       originalname: "recu.jpg",
       size: JPEG_BYTES.length,
     });
+    expect(putDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ mimetype: "image/jpeg" }),
+      `domus/expenses/${ORG}/receipts`,
+    );
     const receiptUpdate = updates.find((u) => u.table === realEstatePropertyExpenses && u.vals.receiptUrl);
-    expect(receiptUpdate?.vals.receiptUrl).toMatch(/^\/uploads\//);
+    expect(receiptUpdate?.vals.receiptUrl).toBe(`domus/expenses/${ORG}/receipts/test-object.jpg`);
   });
 
-  it("accepte un PDF valide et met a jour receiptUrl", async () => {
-    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG } });
+  it("accepte un PDF valide et met a jour receiptUrl avec l'objectKey MinIO", async () => {
+    const { service, updates, putDocument } = makeService({ expenseRow: { id: 5, organizationId: ORG } });
     await service.uploadPropertyExpenseReceipt(5, ORG, {
       buffer: PDF_BYTES,
       mimetype: "application/pdf",
       originalname: "recu.pdf",
       size: PDF_BYTES.length,
     });
+    expect(putDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ mimetype: "application/pdf" }),
+      `domus/expenses/${ORG}/receipts`,
+    );
     const receiptUpdate = updates.find((u) => u.table === realEstatePropertyExpenses && u.vals.receiptUrl);
-    expect(receiptUpdate?.vals.receiptUrl).toMatch(/^\/uploads\//);
+    expect(receiptUpdate?.vals.receiptUrl).toBe(`domus/expenses/${ORG}/receipts/test-object.pdf`);
   });
 });

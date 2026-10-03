@@ -1,5 +1,20 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Query, Res, StreamableFile } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { TenantPortalService } from "./tenant-portal.service";
 
@@ -15,11 +30,29 @@ export class TenantPortalPublicController {
     return this.tenantPortalService.getPublicTenantPortal(token);
   }
 
-  @ApiOperation({ summary: "Get the proof file URL of one of the tenant's own payments" })
+  @ApiOperation({ summary: "Stream the proof file of one of the tenant's own payments (verified, no public URL)" })
   @Get("payments/:id/proof")
-  paymentProof(@Param("id", ParseIntPipe) id: number, @Query("token") token: string) {
+  async paymentProof(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("token") token: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
-    return this.tenantPortalService.getPublicPaymentProof(token, id);
+    const file = await this.tenantPortalService.getPublicPaymentProof(token, id);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Get a minimal summary of one of the tenant's own payments (month/amount/status), for the dedicated QR-per-receipt page" })
+  @Get("payments/:id/summary")
+  paymentSummary(@Param("id", ParseIntPipe) id: number, @Query("token") token: string) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    return this.tenantPortalService.getPublicPaymentSummary(token, id);
   }
 
   @ApiOperation({ summary: "Download the tenant's own lease: scanned paper contract from object storage" })
@@ -61,5 +94,32 @@ export class TenantPortalPublicController {
   submitChangeRequest(@Query("token") token: string, @Body() body: Record<string, unknown>) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     return this.tenantPortalService.submitChangeRequest(token, body);
+  }
+
+  // Throttle dedie : route d'ecriture publique sans mot de passe, meme garde
+  // que DelegatePortalPublicController (20 req/min) pour limiter l'abus d'un
+  // token devine ou partage.
+  @ApiOperation({ summary: "Upload a payment proof (image/PDF) for one of the tenant's own payments" })
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @UseInterceptors(FileInterceptor("proof", {
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      // Controle definitif fait par saveValidatedUploadFile (signature reelle
+      // du fichier) ; ce filtre n'ecarte que tot les types manifestement
+      // non voulus, meme pattern que DelegatePortalPublicController.
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("payments/:id/proof")
+  uploadPaymentProof(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("token") token: string,
+    @UploadedFile() proof: any,
+  ) {
+    if (!token?.trim()) throw new BadRequestException("Token requis.");
+    if (!proof) throw new BadRequestException("Fichier requis.");
+    return this.tenantPortalService.submitPaymentProof(token, id, proof);
   }
 }

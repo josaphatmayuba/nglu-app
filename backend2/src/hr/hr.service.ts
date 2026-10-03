@@ -1,9 +1,8 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
 import { createHash, randomBytes } from "crypto";
+import { ObjectStorageService } from "../property-management/object-storage.service";
 
 type HrUploadedFile = { originalname: string; buffer: Buffer; size: number; mimetype: string };
 import { DRIZZLE } from "../database/database.constants";
@@ -112,6 +111,7 @@ export class HrService {
     private readonly emails: SystemEmailService,
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   /** Approuve une paie ; comptabilise l'ecriture en attente a l'approbation finale. */
@@ -3088,46 +3088,38 @@ ${footer}`;
     return { skip: (page - 1) * cnt, limit: cnt };
   }
 
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
-
-  private validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
-    const s = buffer.subarray(0, 12);
-    switch (mimetype) {
-      case "image/jpeg":  return s[0] === 0xff && s[1] === 0xd8 && s[2] === 0xff;
-      case "image/png":   return s.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-      case "image/webp":  return s.slice(0, 4).toString("ascii") === "RIFF" && s.slice(8, 12).toString("ascii") === "WEBP";
-      case "image/gif":   return s.slice(0, 6).toString("ascii").startsWith("GIF8");
-      case "application/pdf": return s.slice(0, 4).toString("ascii") === "%PDF";
-      default:            return false;
-    }
+  /**
+   * Photo d'employe : stockage objet (MinIO), verification d'appartenance a
+   * l'organisation du JWT (IDOR en ecriture corrige : ensureExists seul ne
+   * verifiait pas l'org). Meme pattern que uploadTenantIdDocument.
+   */
+  async uploadEmployeePhoto(userId: number, file: HrUploadedFile, orgId: number) {
+    await this.findOneInOrg(users, userId, orgId, "Employee not found.");
+    const stored = await this.objectStorage.putImage(file, `hr/employees/${orgId}/${userId}/photo`);
+    await this.db.update(users).set({ image: stored.objectKey, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(users.id, userId));
+    return { image: stored.objectKey };
   }
 
-  private saveFile(file: HrUploadedFile): { name: string; path: string } {
-    if (!this.validateMagicBytes(file.buffer, file.mimetype)) {
-      throw new BadRequestException("Le contenu du fichier ne correspond pas au type déclaré.");
+  /**
+   * Streame la photo d'employe depuis le stockage objet, apres verification
+   * d'appartenance a l'organisation du JWT courant. Ancienne valeur disque
+   * local (/files/...) ou absente -> 404 explicite (pas de fallback disque).
+   */
+  async employeePhotoFile(userId: number, orgId: number) {
+    const [row] = await this.db.select({ image: users.image }).from(users)
+      .where(and(eq(users.id, userId), eq(users.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Employee not found.");
+    if (!row.image || /^\/?(files|uploads)\//.test(row.image)) {
+      throw new NotFoundException("Photo indisponible, a re-televerser.");
     }
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-    const mimeToExt: Record<string, string> = {
-      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
-      "image/gif": "gif", "application/pdf": "pdf",
-    };
-    const ext = mimeToExt[file.mimetype] || "bin";
-    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    writeFileSync(join(this.uploadDir, name), file.buffer);
-    return { name, path: `/files/${name}` };
-  }
-
-  async uploadEmployeePhoto(userId: number, file: HrUploadedFile) {
-    await this.ensureExists(users, userId, "Employee not found.");
-    const { path } = this.saveFile(file);
-    await this.db.update(users).set({ image: path, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(users.id, userId));
-    return { image: path };
+    const object = await this.objectStorage.getObject(row.image);
+    return { ...object, mimeType: object.contentType, originalName: `photo-${userId}` };
   }
 
   // Upload d'une pièce candidat (CV, lettre de motivation, portfolio).
-  // Réutilise saveFile (magic bytes + nom sécurisé) et écrit l'URL dans le champ dédié.
-  async uploadCandidateFile(candidateId: number, file: HrUploadedFile, kind: string) {
-    await this.ensureExists(hrCandidates, candidateId, "Candidate not found.");
+  // Stockage objet (MinIO), verification d'appartenance a l'organisation.
+  async uploadCandidateFile(candidateId: number, file: HrUploadedFile, kind: string, orgId: number) {
+    await this.findOneInOrg(hrCandidates, candidateId, orgId, "Candidate not found.");
     const fieldByKind: Record<string, "cvUrl" | "coverLetterUrl" | "portfolioUrl"> = {
       cv: "cvUrl",
       coverLetter: "coverLetterUrl",
@@ -3135,9 +3127,32 @@ ${footer}`;
     };
     const field = fieldByKind[kind];
     if (!field) throw new BadRequestException('Invalid file kind. Use "cv", "coverLetter" or "portfolio".');
-    const { path } = this.saveFile(file);
-    await this.db.update(hrCandidates).set({ [field]: path, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(hrCandidates.id, candidateId));
-    return { [field]: path };
+    const stored = await this.objectStorage.putDocument(file, `hr/candidates/${orgId}/${candidateId}`);
+    await this.db.update(hrCandidates).set({ [field]: stored.objectKey, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(hrCandidates.id, candidateId));
+    return { [field]: stored.objectKey };
+  }
+
+  /**
+   * Streame une piece candidat (CV/lettre/portfolio) depuis le stockage
+   * objet, apres verification d'appartenance a l'organisation du JWT.
+   */
+  async candidateFileFile(candidateId: number, kind: string, orgId: number) {
+    const fieldByKind: Record<string, "cvUrl" | "coverLetterUrl" | "portfolioUrl"> = {
+      cv: "cvUrl",
+      coverLetter: "coverLetterUrl",
+      portfolio: "portfolioUrl",
+    };
+    const field = fieldByKind[kind];
+    if (!field) throw new BadRequestException('Invalid file kind. Use "cv", "coverLetter" or "portfolio".');
+    const [row] = await this.db.select().from(hrCandidates)
+      .where(and(eq(hrCandidates.id, candidateId), eq(hrCandidates.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Candidate not found.");
+    const value = (row as any)[field] as string | null;
+    if (!value || /^\/?(files|uploads)\//.test(value)) {
+      throw new NotFoundException("Fichier indisponible, a re-televerser.");
+    }
+    const object = await this.objectStorage.getObject(value);
+    return { ...object, mimeType: object.contentType, originalName: `${kind}-${candidateId}` };
   }
 
   async listPersonalDocuments(userId: number, orgId: number) {
@@ -3147,8 +3162,10 @@ ${footer}`;
   }
 
   async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto, orgId: number) {
-    await this.ensureExists(users, dto.userId, "Employee not found.");
-    const { name, path } = this.saveFile(file);
+    await this.findOneInOrg(users, dto.userId, orgId, "Employee not found.");
+    // Stockage objet (MinIO) : le disque local du conteneur est ephemere et
+    // efface a chaque deploiement — meme pattern que uploadTenantIdDocument.
+    const stored = await this.objectStorage.putDocument(file, `hr/personal-documents/${orgId}/${dto.userId}`);
     const [existing] = await this.db.select({ version: hrPersonalDocuments.version })
       .from(hrPersonalDocuments)
       .where(and(eq(hrPersonalDocuments.organizationId, orgId), eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
@@ -3160,9 +3177,9 @@ ${footer}`;
       userId: dto.userId,
       documentType: dto.documentType,
       fileName: file.originalname,
-      filePath: path,
+      filePath: stored.objectKey,
       fileSize: file.size,
-      mimeType: file.mimetype,
+      mimeType: stored.mimeType,
       version,
       notes: dto.notes ?? null,
       uploadedBy: dto.uploadedBy ?? null,
@@ -3172,12 +3189,29 @@ ${footer}`;
       .limit(1).then((r) => r[0]);
   }
 
+  /**
+   * Streame un document personnel RH depuis le stockage objet, apres
+   * verification d'appartenance a l'organisation du JWT courant — meme
+   * pattern que PropertyManagementService.tenantIdDocumentFile.
+   * Les anciennes valeurs disque local (/files/..., /uploads/...) sont
+   * perdues (pas de volume Docker persistant) : on renvoie un 404 explicite
+   * plutot que de tenter une lecture disque qui echouerait silencieusement.
+   */
+  async personalDocumentFile(docId: number, orgId: number) {
+    const [doc] = await this.db.select().from(hrPersonalDocuments)
+      .where(and(eq(hrPersonalDocuments.id, docId), eq(hrPersonalDocuments.organizationId, orgId))).limit(1);
+    if (!doc) throw new NotFoundException("Document not found.");
+    if (!doc.filePath || /^\/?(files|uploads)\//.test(doc.filePath)) {
+      throw new NotFoundException("Fichier indisponible, a re-televerser.");
+    }
+    const object = await this.objectStorage.getObject(doc.filePath);
+    return { ...object, mimeType: doc.mimeType || object.contentType, originalName: doc.fileName || `document-${docId}` };
+  }
+
   async deletePersonalDocument(id: number, orgId: number) {
     const [doc] = await this.db.select().from(hrPersonalDocuments)
       .where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId))).limit(1);
     if (!doc) throw new NotFoundException("Document not found.");
-    const localFile = join(this.uploadDir, doc.filePath.replace(/^\/files\//, ""));
-    if (existsSync(localFile)) unlinkSync(localFile);
     await this.db.delete(hrPersonalDocuments).where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId)));
     return { deleted: true };
   }

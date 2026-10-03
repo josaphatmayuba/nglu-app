@@ -30,6 +30,7 @@ import {
   HrTrainingSessionController,
 } from "./hr.controller";
 import { HrService } from "./hr.service";
+import { ObjectStorageService } from "../property-management/object-storage.service";
 
 @Module({
   imports: [DatabaseModule, SystemEmailModule, LedgerModule, WorkflowModule],
@@ -59,6 +60,6 @@ import { HrService } from "./hr.service";
     HrAiController,
     HrEmployeesController,
   ],
-  providers: [HrService],
+  providers: [HrService, ObjectStorageService],
 })
 export class HrModule {}

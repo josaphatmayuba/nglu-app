@@ -15,6 +15,7 @@ import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBr
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
 import { SectionLoader, RefreshBadge } from "./loading.jsx";
+import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -63,6 +64,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const [ready, setReady] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // { message, onConfirm } | null
   const currencyMeta = useCurrencyCatalog();
   const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
   const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
@@ -223,9 +225,14 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     </span>
                     {tr._pk && !locked && (
                       <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} title={lang === "fr" ? "Supprimer" : "Delete"}
-                        onClick={async () => {
-                          if (!window.confirm(lang === "fr" ? `Supprimer le traitement ${tr.id} ?` : `Delete treatment ${tr.id}?`)) return;
-                          try { await api.deleteTreatment(tr._pk); window.dispatchEvent(new CustomEvent("farmos:treatment-created")); } catch (e) { window.alert(e.message); }
+                        onClick={() => {
+                          setConfirmDelete({
+                            message: lang === "fr" ? `Supprimer le traitement ${tr.id} ?` : `Delete treatment ${tr.id}?`,
+                            onConfirm: async () => {
+                              try { await api.deleteTreatment(tr._pk); window.dispatchEvent(new CustomEvent("farmos:treatment-created")); } catch (e) { window.alert(e.message); }
+                              setConfirmDelete(null);
+                            },
+                          });
                         }}>
                         <Icon name="trash" size={13} color="var(--oxblood-700)"/>
                       </button>
@@ -377,6 +384,13 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           onSaved={() => { setEditingDisease(null); setReloadKey((k) => k + 1); }}
         />
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDelete}
+        lang={lang}
+        message={confirmDelete?.message}
+        onConfirm={confirmDelete?.onConfirm}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
@@ -863,6 +877,7 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const toggleSpecies = (sp) => setSpecies(s => s.includes(sp) ? s.filter(x => x !== sp) : [...s, sp]);
   const handleSave = async () => {
     if (!name.trim() || quantity === "" || quantity == null) { setError(lang === "fr" ? "Nom et quantité requis." : "Name and quantity required."); return; }
@@ -891,7 +906,10 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
   };
   const handleDelete = async () => {
     if (!isEdit) return;
-    if (!window.confirm(lang === "fr" ? `Supprimer définitivement "${name}" ?` : `Permanently delete "${name}"?`)) return;
+    setConfirmDeleteOpen(true);
+  };
+  const confirmDelete = async () => {
+    setConfirmDeleteOpen(false);
     setDeleting(true); setError("");
     try {
       await api.deleteMedicine(medicine._pk);
@@ -985,6 +1003,14 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
           </div>
         </div>
       </div>
+      <ConfirmDeleteModal
+        open={confirmDeleteOpen}
+        lang={lang}
+        message={lang === "fr" ? `Supprimer définitivement "${name}" ?` : `Permanently delete "${name}"?`}
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </div>
   );
 }
@@ -1165,6 +1191,7 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
 
   const handleSave = async () => {
     if (!nameFr.trim() || !species) { setError(lang === "fr" ? "Nom (FR) et espèce requis." : "Name (FR) and species required."); return; }
@@ -1198,7 +1225,10 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
   };
   const handleDelete = async () => {
     if (!isEdit) return;
-    if (!window.confirm(lang === "fr" ? `Retirer "${nameFr}" de la bibliothèque ?` : `Remove "${nameFr}" from library?`)) return;
+    setConfirmDeleteOpen(true);
+  };
+  const confirmDelete = async () => {
+    setConfirmDeleteOpen(false);
     setDeleting(true); setError("");
     try { await api.deleteDisease(disease.id); onSaved(); }
     catch (e) { setError(e.message || "Erreur"); setDeleting(false); }
@@ -1289,6 +1319,15 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
           </div>
         </div>
       </div>
+      <ConfirmDeleteModal
+        open={confirmDeleteOpen}
+        lang={lang}
+        message={lang === "fr" ? `Retirer "${nameFr}" de la bibliothèque ?` : `Remove "${nameFr}" from library?`}
+        confirmLabel={lang === "fr" ? "Retirer" : "Remove"}
+        busy={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </div>
   );
 }
@@ -1348,6 +1387,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [gestationExpanded, setGestationExpanded] = React.useState(false);
   const [sowWatchlist, setSowWatchlist] = React.useState([]);
   const [isNarrow, setIsNarrow] = React.useState(() => typeof window !== "undefined" ? window.innerWidth < 1120 : false);
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // { message, onConfirm } | null
   const refresh = useDataRefresh(["reproductionEvents", "animals"]);
   React.useEffect(() => {
     const onResize = () => setIsNarrow(window.innerWidth < 1120);
@@ -1604,9 +1644,14 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   )}
                   {g._pk && !locked ? (
                     <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Supprimer" : "Delete"}
-                      onClick={async () => {
-                        if (!window.confirm(lang === "fr" ? `Supprimer l'événement ${g.animal} ?` : `Delete event ${g.animal}?`)) return;
-                        try { await api.deleteReproductionEvent(g._pk); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
+                      onClick={() => {
+                        setConfirmDelete({
+                          message: lang === "fr" ? `Supprimer l'événement ${g.animal} ?` : `Delete event ${g.animal}?`,
+                          onConfirm: async () => {
+                            try { await api.deleteReproductionEvent(g._pk); window.dispatchEvent(new CustomEvent("farmos:repro-created")); } catch (e) { window.alert(e.message); }
+                            setConfirmDelete(null);
+                          },
+                        });
                       }}>
                       <Icon name="trash" size={13} color="var(--oxblood-700)"/>
                     </button>
@@ -1691,6 +1736,13 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </div>
         )}
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDelete}
+        lang={lang}
+        message={confirmDelete?.message}
+        onConfirm={confirmDelete?.onConfirm}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
@@ -3752,6 +3804,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const currencyMeta = useCurrencyCatalog();
   const [currencyFilter, setCurrencyFilter] = React.useState("");
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // { message, onConfirm } | null
   React.useEffect(() => {
     if (!currencyFilter && currencyMeta.defaultCurrencyId) setCurrencyFilter(String(currencyMeta.defaultCurrencyId));
   }, [currencyFilter, currencyMeta.defaultCurrencyId]);
@@ -3901,13 +3954,18 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
             <span className="mono tnum" style={{ fontSize: 14, fontWeight: 600, color: tr.kind === "rev" ? "var(--solidite-700)" : "var(--oxblood-700)", textAlign: "right" }}>{tr.amount} {symbolFor(tr.currencyId || activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol)}</span>
             {tr._pk && tr._kind ? (
               <button className="btn btn-sm btn-ghost" style={{ justifySelf: "end" }} title={lang === "fr" ? "Supprimer" : "Delete"}
-                onClick={async () => {
-                  if (!window.confirm(lang === "fr" ? `Supprimer cette transaction ?` : `Delete this transaction?`)) return;
-                  try {
-                    if (tr._kind === "sale") await api.deleteSale(tr._pk);
-                    else if (tr._kind === "expense") await api.deleteExpense(tr._pk);
-                    window.dispatchEvent(new CustomEvent(tr._kind === "sale" ? "farmos:sale-created" : "farmos:expense-created"));
-                  } catch (e) { window.alert(e.message); }
+                onClick={() => {
+                  setConfirmDelete({
+                    message: lang === "fr" ? `Supprimer cette transaction ?` : `Delete this transaction?`,
+                    onConfirm: async () => {
+                      try {
+                        if (tr._kind === "sale") await api.deleteSale(tr._pk);
+                        else if (tr._kind === "expense") await api.deleteExpense(tr._pk);
+                        window.dispatchEvent(new CustomEvent(tr._kind === "sale" ? "farmos:sale-created" : "farmos:expense-created"));
+                      } catch (e) { window.alert(e.message); }
+                      setConfirmDelete(null);
+                    },
+                  });
                 }}>
                 <Icon name="trash" size={13} color="var(--oxblood-700)"/>
               </button>
@@ -3915,6 +3973,13 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
           </div>
         ))}
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDelete}
+        lang={lang}
+        message={confirmDelete?.message}
+        onConfirm={confirmDelete?.onConfirm}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
@@ -4442,6 +4507,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
   const exporterByType = { inventory: exportInventoryCsv, mortality: exportMortalityCsv, reproduction: exportReproCsv, lot_performance: exportLotPerfCsv };
   const baseTypeLabel = (bt) => (csvExports.find((e) => e.baseType === bt) || {})[lang === "fr" ? "fr" : "en"] || bt;
   const [savedReports, setSavedReports] = React.useState([]);
+  const [confirmDeleteReport, setConfirmDeleteReport] = React.useState(null); // saved report row | null
   const reloadSaved = React.useCallback(() => { api.listSavedReports().then((r) => setSavedReports(Array.isArray(r) ? r : [])).catch(() => {}); }, []);
   React.useEffect(() => { reloadSaved(); }, [reloadSaved]);
   const saveCurrentReport = async (exp) => {
@@ -4453,8 +4519,11 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     } catch (e) { alert(e.message); }
   };
   const runSavedReport = (rep) => { const fn = exporterByType[rep.baseType]; if (fn) fn(); };
-  const deleteSavedReport = async (rep) => {
-    if (!window.confirm(lang === "fr" ? "Supprimer ce rapport sauvegardé ?" : "Delete this saved report?")) return;
+  const deleteSavedReport = (rep) => { setConfirmDeleteReport(rep); };
+  const confirmDeleteSavedReport = async () => {
+    const rep = confirmDeleteReport;
+    setConfirmDeleteReport(null);
+    if (!rep) return;
     try { await api.deleteSavedReport(rep.id); reloadSaved(); } catch (e) { alert(e.message); }
   };
   return (
@@ -4602,6 +4671,13 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
           </div>
         ))}
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteReport}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce rapport sauvegardé ?" : "Delete this saved report?"}
+        onConfirm={confirmDeleteSavedReport}
+        onCancel={() => setConfirmDeleteReport(null)}
+      />
     </div>
   );
 };
@@ -4734,6 +4810,7 @@ const TasksScreen = ({ lang }) => {
   const [err, setErr] = React.useState(null);
   const [addOpen, setAddOpen] = React.useState(false);
   const [assigneeFilter, setAssigneeFilter] = React.useState("");
+  const [confirmDeleteTask, setConfirmDeleteTask] = React.useState(null); // task row | null
   const refresh = useDataRefresh(["tasks", "staff"]);
 
   const reload = React.useCallback(() => {
@@ -4756,8 +4833,11 @@ const TasksScreen = ({ lang }) => {
     try { await api.updateTask(task.id, { status }); reload(); }
     catch (e) { alert(e.message); }
   };
-  const removeTask = async (task) => {
-    if (!window.confirm(fr ? "Supprimer cette tâche ?" : "Delete this task?")) return;
+  const removeTask = (task) => { setConfirmDeleteTask(task); };
+  const confirmRemoveTask = async () => {
+    const task = confirmDeleteTask;
+    setConfirmDeleteTask(null);
+    if (!task) return;
     try { await api.deleteTask(task.id); reload(); }
     catch (e) { alert(e.message); }
   };
@@ -4826,6 +4906,13 @@ const TasksScreen = ({ lang }) => {
       </div>
 
       {addOpen && <TaskCreateModal lang={lang} staff={staff} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }}/>}
+      <ConfirmDeleteModal
+        open={!!confirmDeleteTask}
+        lang={lang}
+        message={fr ? "Supprimer cette tâche ?" : "Delete this task?"}
+        onConfirm={confirmRemoveTask}
+        onCancel={() => setConfirmDeleteTask(null)}
+      />
     </div>
   );
 };
@@ -4897,6 +4984,7 @@ const FieldNotesScreen = ({ lang }) => {
   const [coords, setCoords] = React.useState(null); // { latitude, longitude, accuracy }
   const [geoState, setGeoState] = React.useState("idle"); // idle | locating | ok | error
   const [busy, setBusy] = React.useState(false);
+  const [confirmDeleteNote, setConfirmDeleteNote] = React.useState(null); // note row | null
   const refresh = useDataRefresh(["fieldNotes", "zones"]);
 
   const reload = React.useCallback(() => {
@@ -4939,8 +5027,11 @@ const FieldNotesScreen = ({ lang }) => {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  const removeNote = async (n) => {
-    if (!window.confirm(fr ? "Supprimer cette note ?" : "Delete this note?")) return;
+  const removeNote = (n) => { setConfirmDeleteNote(n); };
+  const confirmRemoveNote = async () => {
+    const n = confirmDeleteNote;
+    setConfirmDeleteNote(null);
+    if (!n) return;
     try { await api.deleteFieldNote(n.id); reload(); } catch (e) { alert(e.message); }
   };
 
@@ -5005,6 +5096,13 @@ const FieldNotesScreen = ({ lang }) => {
           );
         })}
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteNote}
+        lang={lang}
+        message={fr ? "Supprimer cette note ?" : "Delete this note?"}
+        onConfirm={confirmRemoveNote}
+        onCancel={() => setConfirmDeleteNote(null)}
+      />
     </div>
   );
 };
@@ -5249,6 +5347,7 @@ const RoomManager = ({ lang, building }) => {
   const [rooms, setRooms] = React.useState([]);
   const [val, setVal] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const load = React.useCallback(() => {
     api.listLookups("room", building).then((r) => setRooms(Array.isArray(r) ? r : [])).catch(() => {});
   }, [building]);
@@ -5260,7 +5359,13 @@ const RoomManager = ({ lang, building }) => {
     try { await api.createLookup({ category: "room", scope_key: building, value_fr: v, value_en: v }); setVal(""); load(); }
     finally { setBusy(false); }
   };
-  const remove = async (id) => { try { await api.deleteLookup(id); } catch {} load(); };
+  const remove = (id) => { setConfirmDeleteId(id); };
+  const confirmRemove = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
+    try { await api.deleteLookup(id); } catch {} load();
+  };
   return (
     <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: "2px solid var(--border-1)", display: "flex", flexDirection: "column", gap: 6 }}>
       <div className="overline" style={{ fontSize: 10 }}>{lang === "fr" ? "Salles" : "Rooms"}</div>
@@ -5285,6 +5390,13 @@ const RoomManager = ({ lang, building }) => {
           <Icon name="plus" size={12} color="currentColor"/>{lang === "fr" ? "Ajouter" : "Add"}
         </button>
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer cette salle ?" : "Delete this room?"}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 };
@@ -5296,6 +5408,7 @@ const LocationsManager = ({ lang, enabledSpecies }) => {
   const [val, setVal] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [openId, setOpenId] = React.useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
   const load = React.useCallback(() => {
     api.listLookups("building", species).then((r) => setBuildings(Array.isArray(r) ? r : [])).catch(() => {});
   }, [species]);
@@ -5307,7 +5420,13 @@ const LocationsManager = ({ lang, enabledSpecies }) => {
     try { await api.createLookup({ category: "building", scope_key: species, value_fr: v, value_en: v }); setVal(""); load(); }
     finally { setBusy(false); }
   };
-  const remove = async (id) => { try { await api.deleteLookup(id); } catch {} if (openId === id) setOpenId(null); load(); };
+  const remove = (id) => { setConfirmDeleteId(id); };
+  const confirmRemove = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
+    try { await api.deleteLookup(id); } catch {} if (openId === id) setOpenId(null); load();
+  };
   return (
     <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
@@ -5361,6 +5480,13 @@ const LocationsManager = ({ lang, enabledSpecies }) => {
           <Icon name="plus" size={13} color="currentColor"/>{lang === "fr" ? "Ajouter" : "Add"}
         </button>
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce bâtiment ?" : "Delete this building?"}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </section>
   );
 };
@@ -5789,6 +5915,7 @@ function PriceListSettings({ lang }) {
   const [form, setForm] = React.useState(empty);
   const [saving, setSaving] = React.useState(false);
   const [message, setMessage] = React.useState(null);
+  const [confirmDeleteRow, setConfirmDeleteRow] = React.useState(null); // price row | null
   const load = React.useCallback(() => {
     api.listPrices().then((rows) => setPrices(Array.isArray(rows) ? rows : [])).catch((e) => setMessage({ type: "err", text: e.message }));
   }, []);
@@ -5843,8 +5970,11 @@ function PriceListSettings({ lang }) {
     currency_id: row.currencyId ?? row.currency_id ?? currencyMeta.defaultCurrencyId ?? "",
     notes: row.notes || "",
   });
-  const remove = async (row) => {
-    if (!window.confirm(lang === "fr" ? "Supprimer ce prix ?" : "Delete this price?")) return;
+  const remove = (row) => { setConfirmDeleteRow(row); };
+  const confirmRemove = async () => {
+    const row = confirmDeleteRow;
+    setConfirmDeleteRow(null);
+    if (!row) return;
     await api.deletePrice(row.id);
     load();
   };
@@ -5922,6 +6052,13 @@ function PriceListSettings({ lang }) {
           );
         })}
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteRow}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce prix ?" : "Delete this price?"}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmDeleteRow(null)}
+      />
     </section>
   );
 }
@@ -6043,6 +6180,7 @@ const OperationTypesCatalogCard = ({ lang }) => {
   const [busy, setBusy] = React.useState(false);
   const [message, setMessage] = React.useState(null);
   const [form, setForm] = React.useState({ code: "", label_fr: "", label_en: "", default_unit: "", species: [] });
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -6079,8 +6217,11 @@ const OperationTypesCatalogCard = ({ lang }) => {
     } finally { setBusy(false); }
   };
 
-  const remove = async (id) => {
-    if (!window.confirm(lang === "fr" ? "Supprimer ce type d'opération ?" : "Delete this operation type?")) return;
+  const remove = (id) => { setConfirmDeleteId(id); };
+  const confirmRemove = async () => {
+    const id = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!id) return;
     try { await api.deleteOperationType(id); load(); } catch (e) { window.alert(e.message); }
   };
 
@@ -6145,6 +6286,13 @@ const OperationTypesCatalogCard = ({ lang }) => {
           </button>
         </div>
       </div>
+      <ConfirmDeleteModal
+        open={!!confirmDeleteId}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer ce type d'opération ?" : "Delete this operation type?"}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </section>
   );
 };
@@ -6499,6 +6647,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
   const [checked, setChecked] = React.useState(() => new Set()); // ids de box cochés
   const [diseaseBoxId, setDiseaseBoxId] = React.useState(null); // box ciblé par "Déclarer une maladie"
   const [labelBoxId, setLabelBoxId] = React.useState(null); // box ciblé par "Étiquette QR"
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // { message, onConfirm } | null
 
   const reload = React.useCallback(() => {
     if (!building) return;
@@ -6609,27 +6758,38 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
   };
 
   // Suppression d'un box (individuel). Désassigne ses animaux côté backend (soft delete).
-  const deleteOne = async (box) => {
+  const deleteOne = (box) => {
     const n = headsIn(box.id);
     const warn = n > 0
       ? L(`Le box ${box.name} contient ${n} tête(s) : elles seront retirées du box. Supprimer ?`, `Box ${box.name} holds ${n} head(s): they will be removed from the box. Delete?`)
       : L(`Supprimer le box ${box.name} ?`, `Delete box ${box.name}?`);
-    if (!window.confirm(warn)) return;
-    setBusy(true);
-    try {
-      await api.deleteBox(box.id);
-      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "deleteBox", tables: ["boxes", "animals"] } }));
-      setSelBoxId(null);
-      reload();
-    } catch (e) { window.alert(String(e.message || e)); }
-    setBusy(false);
+    setConfirmDelete({
+      message: warn,
+      onConfirm: async () => {
+        setConfirmDelete(null);
+        setBusy(true);
+        try {
+          await api.deleteBox(box.id);
+          window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "deleteBox", tables: ["boxes", "animals"] } }));
+          setSelBoxId(null);
+          reload();
+        } catch (e) { window.alert(String(e.message || e)); }
+        setBusy(false);
+      },
+    });
   };
 
   // Suppression en lot des box cochés.
-  const deleteChecked = async () => {
+  const deleteChecked = () => {
     const ids = [...checked];
     if (ids.length === 0) return;
-    if (!window.confirm(L(`Supprimer ${ids.length} box ? Les animaux concernés seront retirés de leur box.`, `Delete ${ids.length} boxes? Affected animals will be removed from their box.`))) return;
+    setConfirmDelete({
+      message: L(`Supprimer ${ids.length} box ? Les animaux concernés seront retirés de leur box.`, `Delete ${ids.length} boxes? Affected animals will be removed from their box.`),
+      onConfirm: () => doDeleteChecked(ids),
+    });
+  };
+  const doDeleteChecked = async (ids) => {
+    setConfirmDelete(null);
     setBusy(true);
     try {
       await api.deleteBoxes(ids);
@@ -6914,6 +7074,13 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
       {labelBoxId != null && (
         <BoxLabelModal lang={lang} boxId={labelBoxId} onClose={() => setLabelBoxId(null)}/>
       )}
+      <ConfirmDeleteModal
+        open={!!confirmDelete}
+        lang={lang}
+        message={confirmDelete?.message}
+        onConfirm={confirmDelete?.onConfirm}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
@@ -7933,6 +8100,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [planEdit, setPlanEdit] = React.useState(false);
   const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
   const [planDisplay, setPlanDisplay] = React.useState("occupation"); // "occupation" | "simple"
+  const [confirmDeleteFeature, setConfirmDeleteFeature] = React.useState(null); // feature id | null
   const refresh = useDataRefresh(["buildings", "animals", "land-features"]);
   // loaded : 1er chargement terminé (avant → loaders animés, pas de faux « Aucun bâtiment »).
   // refreshing : rechargement en arrière-plan → badge « Mise à jour… », les données restent affichées.
@@ -7971,10 +8139,16 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     }).catch(() => {});
   }, [planZoneId]);
   const removeFeature = React.useCallback((id) => {
+    setConfirmDeleteFeature(id);
+  }, []);
+  const confirmRemoveFeature = React.useCallback(() => {
+    const id = confirmDeleteFeature;
+    setConfirmDeleteFeature(null);
+    if (id == null) return;
     setFeatures((fs) => fs.filter((f) => f.id !== id));
     if (selectedId === id) setSelectedId(null);
     api.deleteLandFeature(id).catch(() => {});
-  }, [selectedId]);
+  }, [confirmDeleteFeature, selectedId]);
   // Ouverture d'un box (résolu depuis un scan) → ouvre le plan du bâtiment
   // avec le box sélectionné. La résolution du QR se fait dans le scanner
   // existant (écran Identification), qui émet "farmos:open-box".
@@ -8377,6 +8551,13 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} initialBoxId={interiorBoxId}
           onClose={() => { setInteriorBuilding(null); setInteriorBoxId(null); }}/>
       )}
+      <ConfirmDeleteModal
+        open={confirmDeleteFeature != null}
+        lang={lang}
+        message={lang === "fr" ? "Supprimer cet élément du plan ?" : "Delete this map element?"}
+        onConfirm={confirmRemoveFeature}
+        onCancel={() => setConfirmDeleteFeature(null)}
+      />
     </div>
   );
 };
@@ -8395,6 +8576,7 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
   const [zones, setZones] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   React.useEffect(() => { api.listZones().then((z) => setZones(Array.isArray(z) ? z : [])).catch(() => {}); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const num = (v) => (v === "" || v == null ? null : Number(v));
@@ -8409,7 +8591,14 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
       onSaved();
     } catch (e) { setErr((lang === "fr" ? "Échec : " : "Failed: ") + (e.message || e)); } finally { setBusy(false); }
   };
-  const del = async () => { if (!building?.id) return; try { await api.deleteBuilding(building.id); onSaved(); } catch (e) { setErr(e.message); } };
+  const del = () => {
+    if (!building?.id) return;
+    setConfirmDeleteOpen(true);
+  };
+  const confirmDel = async () => {
+    setConfirmDeleteOpen(false);
+    try { await api.deleteBuilding(building.id); onSaved(); } catch (e) { setErr(e.message); }
+  };
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 1000, padding: 20, overflowY: "auto" }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 520, padding: 20, display: "flex", flexDirection: "column", gap: 12, margin: "20px 0" }}>
@@ -8456,6 +8645,13 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
           <button className="btn btn-primary" onClick={save} disabled={busy}><Icon name="check" size={13} color="#FBF8F2"/>{lang === "fr" ? "Enregistrer" : "Save"}</button>
         </div>
       </div>
+      <ConfirmDeleteModal
+        open={confirmDeleteOpen}
+        lang={lang}
+        message={lang === "fr" ? `Supprimer le bâtiment "${building?.name || ""}" ?` : `Delete building "${building?.name || ""}"?`}
+        onConfirm={confirmDel}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </div>
   );
 };

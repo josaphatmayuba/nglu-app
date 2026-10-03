@@ -103,8 +103,56 @@ function authenticatedFileUrl(path) {
   return `${BASE}${path}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
 }
 
+/**
+ * Ouvre un fichier protege par JWT dans un nouvel onglet SANS jamais mettre
+ * le token dans l'URL (SCRUM-119 : access-token en memoire uniquement). Le
+ * token en `?token=` finirait en clair dans les logs d'acces nginx.
+ *
+ * `window.open("", "_blank")` doit etre appele de façon SYNCHRONE dans le
+ * handler de clic — un appel apres un `await` est bloque par les navigateurs
+ * (ouverture de popup hors interaction utilisateur directe).
+ *
+ * En cas d'erreur (ex. 404 "a re-televerser"), ferme l'onglet et renvoie le
+ * message d'erreur a l'appelant (pour un toast/alert existant de l'ecran) au
+ * lieu de laisser un onglet vide ouvert.
+ */
+async function openAuthenticatedFile(path) {
+  const win = window.open("", "_blank");
+  try {
+    const blob = await fetchAuthenticatedBlob(path);
+    const blobUrl = URL.createObjectURL(blob);
+    if (win) win.location = blobUrl;
+    return { opened: true };
+  } catch (err) {
+    if (win) win.close();
+    throw err;
+  }
+}
+
+/**
+ * Recupere un fichier protege par JWT comme Blob, sans jamais mettre le token
+ * dans l'URL. Utilise par les apercus <img> (ReceiptField) via un hook qui
+ * cree un object URL et le revoque au demontage.
+ */
+async function fetchAuthenticatedBlob(path) {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+  if (!res.ok) {
+    if (res.status === 401) clearToken();
+    const body = await res.text().catch(() => "");
+    throw new Error(cleanApiError(res, body));
+  }
+  return res.blob();
+}
+
 // ── Endpoints (alignés sur property-management.controller.ts) ──
 export const api = {
+  // Ouvre un fichier protege par JWT dans un nouvel onglet via fetch+blob
+  // (jamais de token dans l'URL). A appeler directement dans le handler de
+  // clic (ouverture synchrone de la fenetre avant l'await interne).
+  openAuthenticatedFile: (path) => openAuthenticatedFile(path),
+  // Pour les apercus <img> (ReceiptField) : recupere le fichier en Blob avec
+  // l'en-tete Authorization, sans jamais mettre le token dans l'URL.
+  fetchAuthenticatedBlob: (path) => fetchAuthenticatedBlob(path),
   currencies: () => jsonFetch("/currency?query=all", { method: "GET", base: API_ROOT }),
   allCurrencies: () => jsonFetch("/currency?query=all&status=all", { method: "GET", base: API_ROOT }),
   setting: () => jsonFetch("/setting", { method: "GET", base: API_ROOT }),
@@ -201,6 +249,11 @@ export const api = {
   },
   deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),
   propertyPhotoUrl: (photoId) => authenticatedFileUrl(`/properties/photos/${photoId}/file`),
+  // Justificatif de paiement (quittance signee envoyee par le locataire ou
+  // declaree par un delegue) : verifie l'appartenance a l'organisation du JWT
+  // avant de streamer le fichier — jamais de route statique /uploads publique,
+  // jamais de token dans l'URL (fetch+blob via openAuthenticatedFile).
+  paymentProofUrl: (paymentId) => openAuthenticatedFile(`/leases/payments/${paymentId}/proof-file`),
 
   units: () => get("/units"),
   unit: (id) => get(`/units/${id}`),
@@ -225,6 +278,9 @@ export const api = {
   },
   deleteLeaseDocument: (documentId) => del(`/leases/documents/${documentId}`),
   leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
+
+  // Carnet de quittances (PDF imprimable) : lease enrichi + tous les paiements du bail.
+  rentBook: (id) => get(`/leases/${id}/rent-book`),
 
   payments: () => get("/payments"),
   // proofFile optionnel (photo/scan recu, capture mobile money) — meme
@@ -293,6 +349,9 @@ export const api = {
   },
   deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
   maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
+  // Justificatif (recu) d'un cout de maintenance — verifie l'appartenance a
+  // l'organisation du JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  maintenanceCostReceiptUrl: (costId) => openAuthenticatedFile(`/maintenance/costs/${costId}/receipt-file`),
 
   // Dépenses par propriété (SCRUM-310) — filtres query optionnels.
   propertyExpenses: ({ propertyId, category, dateFrom, dateTo } = {}) => {
@@ -314,6 +373,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/property-expenses/${id}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  propertyExpenseReceiptUrl: (id) => openAuthenticatedFile(`/property-expenses/${id}/receipt-file`),
 
   // Echeancier de paiement des dépenses de propriété (SCRUM-313).
   expenseInstallments: (expenseId) => get(`/property-expenses/${expenseId}/installments`),
@@ -327,6 +389,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/property-expenses/installments/${installmentId}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  expenseInstallmentReceiptUrl: (installmentId) => openAuthenticatedFile(`/property-expenses/installments/${installmentId}/receipt-file`),
 
   // Remboursement hypothèque par propriété (SCRUM-311) — filtres query optionnels.
   mortgagePayments: ({ propertyId, dateFrom, dateTo } = {}) => {
@@ -347,6 +412,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/mortgage-payments/${id}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  mortgagePaymentReceiptUrl: (id) => openAuthenticatedFile(`/mortgage-payments/${id}/receipt-file`),
 
   // Prêts hypothécaires (SCRUM-311 phase 2) — filtres query optionnels.
   mortgageLoans: ({ propertyId, status } = {}) => {
@@ -527,9 +595,31 @@ export const publicApi = {
   // Portail locataire (accès public sans login, token opaque fait autorisation).
   tenantPortal: (token) => publicFetch(`/tenant-portal?token=${encodeURIComponent(token)}`),
   // Justificatif d'un paiement : le backend verifie que le paiement appartient
-  // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
-  tenantPaymentProof: (token, paymentId) =>
-    publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // bien au locataire porteur du token puis streame directement le fichier
+  // (plus de JSON intermediaire) — meme pattern que tenantContractCopyUrl.
+  tenantPaymentProofUrl: (token, paymentId) =>
+    `${API_ROOT}/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`,
+  // Resume minimal d'UNE quittance (mois/montant/statut), pour la page dediee
+  // /domus/quittance ouverte par le QR individuel du carnet — pas le dossier complet.
+  tenantPaymentSummary: (token, paymentId) =>
+    publicFetch(`/tenant-portal/payments/${paymentId}/summary?token=${encodeURIComponent(token)}`),
+  // Envoi de la preuve de paiement par le locataire (photo ou PDF) : multipart,
+  // meme fetch dedie que submitDelegateRentCheck car publicFetch force un
+  // Content-Type JSON incompatible avec FormData.
+  uploadTenantPaymentProof: async (token, paymentId, file) => {
+    const form = new FormData();
+    form.append("proof", file);
+    const res = await fetch(`${API_ROOT}/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(cleanApiError(res, body));
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  },
   // Copie du bail : une seule URL selon `copySource` renvoye par le portail
   // ('scan' = bail papier numerise, 'electronic' = bail signe en ligne rendu en
   // HTML imprimable). Le backend revalide que le bail appartient au porteur du
@@ -540,6 +630,11 @@ export const publicApi = {
   // Portail proprietaire (lecture seule, token opaque fait autorisation) :
   // le bailleur ouvre la fiche du locataire annonce par SMS.
   ownerPortal: (token) => publicFetch(`/owner-portal?token=${encodeURIComponent(token)}`),
+  // Justificatif d'un paiement cote proprietaire : le backend verifie que le
+  // paiement appartient bien a un bien du porteur du token puis streame
+  // directement le fichier (plus de JSON intermediaire).
+  ownerPaymentProofUrl: (token, paymentId) =>
+    `${API_ROOT}/owner-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`,
   // Demande de mise a jour des donnees personnelles : rien n'est applique, la
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>
