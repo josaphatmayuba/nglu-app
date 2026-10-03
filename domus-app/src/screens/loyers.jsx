@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Download, Plus, Check, Clock, Smartphone, ArrowRight, ArrowLeft,
-  Banknote, BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera,
+  BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -11,7 +11,8 @@ import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
-import { openRentBookPrint } from "../rentBookUtils.js";
+import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
+import { DomusPhoneField } from "../components/PhoneField.jsx";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -41,7 +42,12 @@ function uiMethodsFrom(raw) {
   });
 }
 const tenantName = (r) => [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-const today = () => new Date().toISOString().slice(0, 10);
+// Date LOCALE (toISOString = UTC → la veille en debut de journee a Kinshasa).
+const today = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 // N° de reçu auto-généré (modifiable) : REC-AAMMJJ-HHMM.
 const genReceiptRef = () => {
   const d = new Date();
@@ -316,7 +322,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
       await api.createPayment({
         leaseId: card.lease.id,
         paymentDate: today(),
-        amount: Number(amount),
+        amount: amountNum,
         method: m?.label || method,
         reference: null,
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
@@ -1062,6 +1068,27 @@ export function Paiement({ go }) {
   const toast = useToast();
 
   const lease = active.find((l) => String(l.id) === String(leaseId)) || null;
+  const [q, setQ] = useState("");
+  // Baux tries par urgence (retard → en attente → a jour) avec leur solde du.
+  const cards = useMemo(() => {
+    const order = { late: 0, pending: 1, ok: 2 };
+    const pays = Array.isArray(data?.payments) ? data.payments : [];
+    return buildLeaseCards(Array.isArray(leases) ? leases : [], pays)
+      .sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || a.name.localeCompare(b.name));
+  }, [leases, data?.payments]);
+  const needle = q.trim().toLowerCase();
+  const filteredCards = needle
+    ? cards.filter((c) => `${c.name} ${c.unit || ""} ${c.lease.reference || ""}`.toLowerCase().includes(needle))
+    : cards;
+  const selCard = cards.find((c) => String(c.lease.id) === String(leaseId)) || null;
+  const pendingReceipts = useMemo(() => receivedReceipts(data?.payments).pending.length, [data?.payments]);
+  // Accepte « 250,5 » et « 1 200 » (saisie mobile).
+  const amountNum = Number(String(amount).replace(/[s ]/g, "").replace(",", "."));
+  const amountValid = Number.isFinite(amountNum) && amountNum > 0;
+  const amountChips = [
+    selCard?.rent > 0 && { label: "Loyer", value: Number(selCard.rent) },
+    selCard?.balance > 0 && Number(selCard.balance) !== Number(selCard.rent) && { label: "Solde dû", value: Number(selCard.balance) },
+  ].filter(Boolean);
 
   async function handleRentBookPdf() {
     if (!lease?.id) return;
@@ -1111,7 +1138,7 @@ export function Paiement({ go }) {
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(lease?.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
       }, proofFile);
-      setDone(payment || { amount, method: methodMeta?.label });
+      setDone(payment || { amount: amountNum, method: methodMeta?.label });
       setStep(4);
     } catch (e) {
       setErr(e.message || String(e));
@@ -1121,211 +1148,307 @@ export function Paiement({ go }) {
   };
 
   const reset = () => {
-    setStep(1); setLeaseId(null); setAmount(""); setMethod(null);
+    setStep(1); setLeaseId(null); setAmount(""); setMethod(null); setQ("");
     setMobileNumber(""); setReceiptRef(genReceiptRef()); setReceivedBy(""); setProofFile(null); setDone(null); setErr(null);
   };
 
+  const symbol = lease?.currencySymbol || selCard?.symbol || "$";
+  const fmt = (v) => money(v, symbol);
+  const leaseName = lease ? tenantName(lease) : "—";
+  const leaseUnit = lease ? [lease.propertyName, lease.unitName].filter(Boolean).join(" · ") || "—" : "—";
+  const refLabel = methodMeta?.mobile ? "Numéro mobile money" : "N° de reçu";
+  const refValue = methodMeta?.mobile ? mobileNumber : receiptRef;
+  const doneAmount = done?.amount ?? amountNum;
+  const doneRef = done?.reference || refValue;
+  // Partage WhatsApp de l'accuse de reception (numero du locataire, s'il est connu).
+  const waDigits = String(lease?.tenantPhone || "").replace(/\D/g, "");
+  const waHref = waDigits
+    ? `https://wa.me/${waDigits}?text=${encodeURIComponent(
+      `Bonjour ${leaseName}, nous confirmons la réception de votre loyer de ${fmt(doneAmount)} (${methodMeta?.label || ""}) le ${fmtDateLong(today())}.`
+      + `${doneRef ? ` Réf. ${doneRef}.` : ""} Logement : ${leaseUnit}. Merci.`,
+    )}`
+    : null;
+
+  // Bandeau du bail selectionne (etapes 2 et 3), avec retour rapide au choix du bail.
+  const leaseBar = lease && (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--ink-50, #f8fafc)", marginBottom: 16 }}>
+      <span className={`mini-avatar ${PAY_AVATARS[0]}`} style={{ width: 34, height: 34, fontSize: 12, flex: "none" }}>{initials(leaseName)}</span>
+      <span style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>{leaseName}</div>
+        <div className="muted" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{leaseUnit}</div>
+      </span>
+      {step === 2 && (
+        <button type="button" className="btn" style={{ border: "none", fontSize: 13, minHeight: 36 }} onClick={() => setStep(1)}>Changer</button>
+      )}
+    </div>
+  );
+
+  const receipts = <ReceivedReceipts payments={data?.payments} methods={methods} onChanged={reload} />;
+
   return (
-    <div style={{ maxWidth: 480 }}>
-      {/* Quittances recues : visibles au debut du parcours seulement, pour ne
-          pas encombrer l'assistant d'encaissement une fois lance. */}
-      {step === 1 && <ReceivedReceipts payments={data?.payments} methods={methods} onChanged={reload} />}
+    <div style={{ maxWidth: 560 }}>
       <div style={{ marginBottom: 16 }}>
-        <div className="eyebrow">Encaissement · pas à pas</div>
+        <div className="eyebrow">Paiement & quittance</div>
         <h2 className="title">Encaisser un loyer</h2>
+        <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>
+          Enregistrez un paiement : la quittance et l'écriture comptable sont créées automatiquement.
+        </p>
       </div>
 
-      <Stepper step={step} />
+      {/* Quittances a verifier = urgent → en tete ; sinon releguees sous l'assistant. */}
+      {step === 1 && pendingReceipts > 0 && receipts}
 
-      {/* ÉTAPE 1 — bail */}
-      {step === 1 && (
-        <div className="card" style={{ padding: 20 }}>
-          <div className="kpi-label" style={{ marginBottom: 8 }}>Choisir le bail</div>
-          {active.length === 0 && <p className="muted">Aucun bail actif.</p>}
-          <div style={{ display: "grid", gap: 8 }}>
-            {active.map((l) => (
-              <button key={l.id} className="btn" style={{ height: "auto", padding: 12, justifyContent: "space-between", textAlign: "left" }}
-                onClick={() => pickLease(l)}>
-                <span>
-                  <div style={{ fontWeight: 600 }}>{[l.tenantFirstName, l.tenantLastName].filter(Boolean).join(" ") || l.reference}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>{[l.propertyName, l.unitName].filter(Boolean).join(" · ")}</div>
+      <div className="card" style={{ padding: 20 }}>
+        <Stepper step={step} />
+
+        {/* ÉTAPE 1 — bail */}
+        {step === 1 && (
+          <>
+            {cards.length > 5 && (
+              <div style={{ position: "relative", marginBottom: 12 }}>
+                <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--ink-500)" }} />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un locataire, un logement…"
+                  aria-label="Rechercher un bail" style={{ ...inputStyle, paddingLeft: 36 }} />
+              </div>
+            )}
+            {cards.length === 0 && <p className="muted" style={{ margin: 0 }}>Aucun bail actif.</p>}
+            {cards.length > 0 && filteredCards.length === 0 && <p className="muted" style={{ margin: 0 }}>Aucun bail ne correspond à « {q} ».</p>}
+            <div style={{ display: "grid", gap: 8 }}>
+              {filteredCards.map((c, i) => {
+                const meta = STATUS_META[c.status] || STATUS_META.ok;
+                return (
+                  <button key={c.lease.id} type="button" className="btn"
+                    style={{ height: "auto", minHeight: 60, padding: "10px 12px", justifyContent: "space-between", textAlign: "left", gap: 10 }}
+                    onClick={() => pickLease(c.lease)}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <span className={`mini-avatar ${PAY_AVATARS[i % PAY_AVATARS.length]}`} style={{ width: 36, height: 36, fontSize: 12, flex: "none" }}>{initials(c.name)}</span>
+                      <span style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{c.name}</div>
+                        <div className="muted" style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.unit || c.lease.reference || "—"}</div>
+                      </span>
+                    </span>
+                    <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
+                      <span style={{ fontWeight: 700 }}>{money(c.rent, c.symbol)}<span className="muted" style={{ fontSize: 11, fontWeight: 400 }}> /mois</span></span>
+                      <span className={`immo-pill ${meta.pill}`} style={{ fontSize: 11, padding: "2px 7px" }}>
+                        {c.balance > 0 ? `Reste ${money(c.balance, c.symbol)}` : meta.label}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ÉTAPE 2 — montant + moyen */}
+        {step === 2 && (
+          <>
+            {leaseBar}
+            <label className="kpi-label" htmlFor="pay-amount">Montant reçu</label>
+            <div style={{ position: "relative", marginTop: 6 }}>
+              <input id="pay-amount" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" autoComplete="off"
+                aria-invalid={amount !== "" && !amountValid}
+                style={{ ...inputStyle, height: 54, fontSize: 22, fontWeight: 700, paddingRight: 64, ...(amount !== "" && !amountValid ? { borderColor: "#dc2626" } : {}) }} />
+              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--ink-500)", fontWeight: 600 }}>{symbol}</span>
+            </div>
+            {amount !== "" && !amountValid && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>Saisissez un montant supérieur à 0.</div>}
+            {amountChips.length > 1 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {amountChips.map((chip) => (
+                  <button key={chip.label} type="button" className="btn"
+                    aria-pressed={amountNum === chip.value}
+                    style={{ minHeight: 36, fontSize: 12, padding: "0 10px", ...(amountNum === chip.value ? tileOn : {}) }}
+                    onClick={() => setAmount(String(chip.value))}>
+                    {chip.label} · <b>{fmt(chip.value)}</b>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="kpi-label" style={{ margin: "18px 0 8px" }}>Moyen de paiement</div>
+            <div role="group" aria-label="Moyen de paiement"
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 8 }}>
+              {methods.map((m) => {
+                const on = activeKey === m.key;
+                return (
+                  <button key={m.key} type="button" aria-pressed={on} onClick={() => setMethod(m.key)}
+                    style={{ ...tileStyle, ...(on ? tileOn : {}), position: "relative", minHeight: 72 }}>
+                    {on && <Check size={14} style={{ position: "absolute", top: 6, right: 6, color: "var(--iris-500)" }} />}
+                    <span style={{ width: 30, height: 30, borderRadius: 8, background: m.color, color: "#fff",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, margin: "0 auto" }}>{m.short}</span>
+                    <div style={{ fontSize: 12, marginTop: 6, fontWeight: on ? 600 : 400 }}>{m.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              {methodMeta?.mobile ? (
+                <DomusPhoneField label="Numéro mobile money" value={mobileNumber} onChange={setMobileNumber} placeholder="+243 …" />
+              ) : (
+                <>
+                  <label className="kpi-label" htmlFor="pay-ref">N° de reçu</label>
+                  <input id="pay-ref" value={receiptRef} onChange={(e) => setReceiptRef(e.target.value)} placeholder="REC-…" style={{ ...inputStyle, marginTop: 6 }} />
+                </>
+              )}
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>
+                {methodMeta?.mobile
+                  ? "Numéro du locataire (pré-rempli) — modifiable."
+                  : "Généré automatiquement — modifiable si vous utilisez un carnet papier."}
+              </div>
+            </div>
+
+            {activeKey === "cash" && (
+              <div style={{ marginTop: 14 }}>
+                <label className="kpi-label" htmlFor="pay-received-by">Reçu par</label>
+                <input id="pay-received-by" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}
+                  placeholder="Nom de la personne ayant perçu l'argent" style={{ ...inputStyle, marginTop: 6 }} maxLength={255} />
+              </div>
+            )}
+
+            <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Preuve de paiement <span className="muted" style={{ fontWeight: 400 }}>(optionnel)</span></div>
+            <input id="rent-proof-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+              style={{ display: "none" }} onChange={(e) => { setProofFile(e.target.files?.[0] || null); e.target.value = ""; }} />
+            {proofFile ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid #a7f3d0", background: "#ecfdf5" }}>
+                <CheckCircle2 size={18} color="#10b981" style={{ flex: "none" }} />
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proofFile.name}</div>
+                  <div className="muted" style={{ fontSize: 11 }}>{Math.max(1, Math.round(proofFile.size / 1024))} Ko</div>
                 </span>
-                <span style={{ fontWeight: 700 }}>{money(l.rentAmount, l.currencySymbol || "$")}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ÉTAPE 2 — montant + méthode */}
-      {step === 2 && (
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
-            <span className="muted" style={{ fontSize: 13 }}>{lease ? [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") : ""}</span>
-            <span className="muted" style={{ fontSize: 12 }}>{lease ? [lease.propertyName, lease.unitName].filter(Boolean).join(" · ") : ""}</span>
-          </div>
-          <label className="kpi-label">Montant</label>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal"
-            style={inputStyle} />
-          <div className="kpi-label" style={{ margin: "14px 0 8px" }}>Moyen de paiement</div>
-          <div className="grid g4 keep" style={{ gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-            {methods.map((m) => (
-              <button key={m.key} onClick={() => setMethod(m.key)}
-                style={{ ...tileStyle, ...(activeKey === m.key ? tileOn : {}) }}>
-                <span style={{ width: 30, height: 30, borderRadius: 8, background: m.color, color: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, margin: "0 auto" }}>{m.short}</span>
-                <div style={{ fontSize: 11, marginTop: 6, fontWeight: activeKey === m.key ? 600 : 400 }}>{m.label}</div>
-              </button>
-            ))}
-          </div>
-          <div className="kpi-label" style={{ margin: "14px 0 6px" }}>
-            {methodMeta?.mobile ? "Numéro mobile money" : "N° de reçu"}
-          </div>
-          <input
-            value={methodMeta?.mobile ? mobileNumber : receiptRef}
-            onChange={(e) => (methodMeta?.mobile ? setMobileNumber(e.target.value) : setReceiptRef(e.target.value))}
-            placeholder={methodMeta?.mobile ? "+243 …" : "REC-…"} style={inputStyle} />
-          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-            {methodMeta?.mobile
-              ? "Numéro du locataire (pré-rempli) — modifiable."
-              : "Numéro du reçu remis au locataire (généré automatiquement) — modifiable."}
-          </div>
-          {activeKey === "cash" && (
-            <>
-              <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Reçu par</div>
-              <input value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)}
-                placeholder="Nom de la personne ayant perçu l'argent" style={inputStyle} maxLength={255} />
-            </>
-          )}
-          <div className="kpi-label" style={{ margin: "14px 0 6px" }}>Preuve de paiement (optionnel)</div>
-          <input
-            id="rent-proof-input"
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            style={{ display: "none" }}
-            onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-          />
-          <label htmlFor="rent-proof-input" className="btn" style={{ ...inputStyle, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <FileDown size={16} />
-            {proofFile ? proofFile.name : "Photo, scan ou capture (JPEG, PNG, PDF)"}
-          </label>
-          {proofFile && (
-            <button type="button" className="btn" style={{ marginTop: 6, fontSize: 12 }} onClick={() => setProofFile(null)}>
-              <X size={14} /> Retirer le fichier
-            </button>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button className="btn" onClick={() => setStep(1)}><ArrowLeft size={16} /></button>
-            <button className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}
-              disabled={!amount} onClick={() => setStep(3)}>
-              {methodMeta?.mobile ? <><Smartphone size={16} /> Demander le paiement</> : <>Continuer <ArrowRight size={16} /></>}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ÉTAPE 3 — validation / confirmation */}
-      {step === 3 && (
-        <div className="card" style={{ padding: 20, textAlign: "center" }}>
-          {methodMeta?.mobile ? (
-            <>
-              <div style={{ width: 60, height: 60, borderRadius: 999, background: "var(--iris-50)", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Smartphone size={26} color="#4f46e5" />
+                <button type="button" className="btn" aria-label="Retirer le fichier" style={{ border: "none", minHeight: 36, padding: "0 8px" }} onClick={() => setProofFile(null)}>
+                  <X size={16} />
+                </button>
               </div>
-              <div className="font-display" style={{ fontWeight: 700, fontSize: 16 }}>Demande envoyée</div>
-              <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-                Demande <b>{methodMeta.label}</b> de <b>{money(amount, lease?.currencySymbol || "$")}</b>
-                {mobileNumber ? <> au <span style={{ fontFamily: "monospace" }}>{mobileNumber}</span></> : null}. En attente de validation du locataire…
-              </p>
-              <div className="grad-dark" style={{ borderRadius: 16, padding: 14, textAlign: "left", color: "#fff", margin: "14px 0", fontFamily: "monospace", fontSize: 12, lineHeight: 1.5 }}>
-                *150*1#<br />DOMUS demande {money(amount, lease?.currencySymbol || "CDF")}<br />
-                <span style={{ color: "#fcd34d" }}>Entrez votre code PIN pour confirmer :</span> ••••
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ width: 60, height: 60, borderRadius: 999, background: "#ecfdf5", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Banknote size={26} color="#10b981" />
-              </div>
-              <div className="font-display" style={{ fontWeight: 700, fontSize: 16 }}>Confirmer l'encaissement</div>
-              <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-                {money(amount, lease?.currencySymbol || "$")} en espèces · {lease ? [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") : ""}
-              </p>
-            </>
-          )}
-          {err && <p style={{ color: "#be123c", fontSize: 12 }}>{err}</p>}
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 6 }}
-            disabled={submitting} onClick={submit}>
-            {submitting ? "Enregistrement…" : <><Check size={16} /> {methodMeta?.mobile ? "Valider le paiement" : "Confirmer"}</>}
-          </button>
-          <button className="btn" style={{ marginTop: 8, border: "none" }} onClick={() => setStep(2)}>Retour</button>
-        </div>
-      )}
+            ) : (
+              <label htmlFor="rent-proof-input"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 56, borderRadius: 12, border: "1.5px dashed var(--ink-200)", color: "var(--ink-500)", fontSize: 13, cursor: "pointer", padding: "0 12px", textAlign: "center" }}>
+                <Camera size={18} /> Photo du reçu, scan ou capture (JPEG, PNG, PDF)
+              </label>
+            )}
 
-      {/* ÉTAPE 4 — quittance */}
-      {step === 4 && (
-        <>
-          <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, marginBottom: 12, borderColor: "#a7f3d0", background: "#ecfdf5" }}>
-            <span style={{ width: 40, height: 40, borderRadius: 999, background: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
-              <Check size={20} color="#fff" />
-            </span>
-            <div>
-              <div style={{ fontWeight: 600, color: "#065f46" }}>Paiement reçu · {money(done?.amount ?? amount, lease?.currencySymbol || "$")}</div>
-              <div style={{ fontSize: 12, color: "#047857" }}>Écriture comptable créée automatiquement</div>
-            </div>
-          </div>
-          <div className="card" style={{ padding: 20 }}>
-            <div style={{ textAlign: "center", margin: "8px 0 14px" }}>
-              <div className="eyebrow">Quittance de loyer</div>
-              <div className="kpi-value" style={{ fontSize: 28 }}>{money(done?.amount ?? amount, lease?.currencySymbol || "$")}</div>
-            </div>
-            <Line k="Locataire" v={lease ? [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") : "—"} />
-            <Line k="Logement" v={lease ? [lease.propertyName, lease.unitName].filter(Boolean).join(" · ") : "—"} />
-            <Line k="Méthode" v={methodMeta?.label} />
-            <Line k="Date" v={today()} />
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button className="btn" style={{ flex: 1, justifyContent: "center" }} disabled={rentBookBusy} onClick={handleRentBookPdf}>
-                <FileDown size={16} /> {rentBookBusy ? "Génération…" : "PDF"}
+            <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+              <button type="button" className="btn" aria-label="Retour au choix du bail" style={{ minHeight: 44 }} onClick={() => setStep(1)}><ArrowLeft size={16} /></button>
+              <button type="button" className="btn btn-primary" style={{ flex: 1, justifyContent: "center", minHeight: 44 }}
+                disabled={!amountValid} onClick={() => setStep(3)}>
+                Vérifier <ArrowRight size={16} />
               </button>
-              <button className="btn" style={{ flex: 1, justifyContent: "center" }}><Send size={16} /> Envoyer</button>
             </div>
-            <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={reset}>
+          </>
+        )}
+
+        {/* ÉTAPE 3 — récapitulatif avant enregistrement */}
+        {step === 3 && (
+          <>
+            {leaseBar}
+            <div style={{ textAlign: "center", margin: "4px 0 14px" }}>
+              <div className="eyebrow">Montant à enregistrer</div>
+              <div className="kpi-value" style={{ fontSize: 30 }}>{fmt(amountNum)}</div>
+            </div>
+            <Line k="Moyen de paiement" v={methodMeta?.label || "—"} />
+            <Line k={refLabel} v={refValue || "—"} />
+            {activeKey === "cash" && <Line k="Reçu par" v={receivedBy.trim() || "—"} />}
+            <Line k="Preuve jointe" v={proofFile ? proofFile.name : "Aucune"} />
+            <Line k="Date" v={fmtDateLong(today())} />
+            <p className="muted" style={{ fontSize: 12, margin: "12px 0 0", display: "flex", gap: 6, alignItems: "flex-start" }}>
+              <CheckCircle2 size={14} style={{ flex: "none", marginTop: 1 }} />
+              La quittance et l'écriture comptable seront créées automatiquement.
+            </p>
+            {err && (
+              <div role="alert" style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, padding: "10px 12px", borderRadius: 10, background: "#fef2f2", color: "#b91c1c", fontSize: 13 }}>
+                <AlertTriangle size={16} style={{ flex: "none", marginTop: 1 }} /> {err}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button type="button" className="btn" style={{ minHeight: 44 }} disabled={submitting} onClick={() => setStep(2)}>
+                <ArrowLeft size={16} /> Modifier
+              </button>
+              <button type="button" className="btn btn-primary" style={{ flex: 1, justifyContent: "center", minHeight: 44 }}
+                disabled={submitting} onClick={submit}>
+                {submitting ? "Enregistrement…" : <><Check size={16} /> Enregistrer le paiement</>}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ÉTAPE 4 — quittance */}
+        {step === 4 && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, background: "#ecfdf5", border: "1px solid #a7f3d0", marginBottom: 16 }}>
+              <span style={{ width: 40, height: 40, borderRadius: 999, background: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+                <Check size={20} color="#fff" />
+              </span>
+              <div>
+                <div style={{ fontWeight: 600, color: "#065f46" }}>Paiement enregistré · {fmt(doneAmount)}</div>
+                <div style={{ fontSize: 12, color: "#047857" }}>Quittance et écriture comptable créées</div>
+              </div>
+            </div>
+            <div style={{ border: "1px dashed var(--ink-200)", borderRadius: 14, padding: 16 }}>
+              <div style={{ textAlign: "center", margin: "0 0 12px" }}>
+                <div className="eyebrow">Quittance de loyer</div>
+                <div className="kpi-value" style={{ fontSize: 28 }}>{fmt(doneAmount)}</div>
+              </div>
+              <Line k="Locataire" v={leaseName} />
+              <Line k="Logement" v={leaseUnit} />
+              <Line k="Moyen de paiement" v={methodMeta?.label || "—"} />
+              {doneRef && <Line k={refLabel} v={doneRef} />}
+              <Line k="Date" v={fmtDateLong(today())} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
+              <button type="button" className="btn" style={{ justifyContent: "center", minHeight: 44 }} disabled={rentBookBusy} onClick={handleRentBookPdf}>
+                <FileDown size={16} /> {rentBookBusy ? "Génération…" : "Carnet PDF"}
+              </button>
+              {waHref ? (
+                <a className="btn" href={waHref} target="_blank" rel="noopener noreferrer" style={{ justifyContent: "center", minHeight: 44, textDecoration: "none" }}>
+                  <Send size={16} /> WhatsApp
+                </a>
+              ) : (
+                <button type="button" className="btn" disabled title="Aucun téléphone enregistré pour ce locataire" style={{ justifyContent: "center", minHeight: 44 }}>
+                  <Send size={16} /> WhatsApp
+                </button>
+              )}
+            </div>
+            <button type="button" className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 10, minHeight: 44 }} onClick={reset}>
               <Plus size={16} /> Nouvel encaissement
             </button>
-            <button className="btn" style={{ width: "100%", justifyContent: "center", marginTop: 8, border: "none" }} onClick={() => go("loyers")}>
+            <button type="button" className="btn" style={{ width: "100%", justifyContent: "center", marginTop: 6, border: "none" }} onClick={() => go("loyers")}>
               Voir les loyers
             </button>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
+
+      {step === 1 && pendingReceipts === 0 && <div style={{ marginTop: 20 }}>{receipts}</div>}
     </div>
   );
 }
 
 function Stepper({ step }) {
-  const labels = ["Bail", "Moyen", "Validation", "Quittance"];
+  const labels = ["Bail", "Montant", "Vérification", "Quittance"];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16 }}>
+    <ol aria-label="Étapes de l'encaissement" style={{ display: "flex", gap: 6, listStyle: "none", padding: 0, margin: "0 0 18px" }}>
       {labels.map((l, i) => {
         const n = i + 1;
-        const active = n <= step;
+        const current = n === step;
         return (
-          <div key={l} style={{ display: "flex", alignItems: "center", gap: 6, flex: i < 3 ? 1 : "none" }}>
-            <span style={{ width: 26, height: 26, borderRadius: 999, fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
-              background: active ? "var(--grad-iris)" : "var(--ink-100)", color: active ? "#fff" : "var(--ink-500)" }}>{n}</span>
-            {i < 3 && <span style={{ flex: 1, height: 1, background: "var(--ink-200)" }} />}
-          </div>
+          <li key={l} aria-current={current ? "step" : undefined} style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+            <span style={{ height: 4, borderRadius: 4, background: n <= step ? "var(--iris-500)" : "var(--ink-200)" }} />
+            <span style={{ fontSize: 11.5, fontWeight: current ? 700 : 500, color: current ? "var(--ink-900)" : "var(--ink-500)",
+              display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {n < step ? <Check size={12} style={{ flex: "none" }} /> : `${n}.`} {l}
+            </span>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
 
 function Line({ k, v }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderTop: "1px solid var(--ink-100)" }}>
-      <span className="muted">{k}</span><span style={{ fontWeight: 500 }}>{v}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13, padding: "8px 0", borderTop: "1px solid var(--ink-100)" }}>
+      <span className="muted" style={{ flex: "none" }}>{k}</span>
+      <span style={{ fontWeight: 500, textAlign: "right", minWidth: 0, overflowWrap: "anywhere" }}>{v}</span>
     </div>
   );
 }
