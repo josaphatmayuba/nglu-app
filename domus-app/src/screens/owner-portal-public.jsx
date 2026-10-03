@@ -70,13 +70,8 @@ export function OwnerPortalPublic({ token }) {
   // Ouvre le justificatif dans un nouvel onglet. L'URL n'est jamais dans la
   // page : elle est demandee au backend, qui verifie d'abord que le paiement
   // appartient bien a un bien du porteur du token.
-  const openProof = async (paymentId) => {
-    try {
-      const res = await publicApi.ownerPaymentProof(token, paymentId);
-      if (res?.url) window.open(res.url, "_blank", "noopener");
-    } catch {
-      // Silencieux : pas de zone de message dediee sur ce portail en lecture seule.
-    }
+  const openProof = (paymentId) => {
+    window.open(publicApi.ownerPaymentProofUrl(token, paymentId), "_blank", "noopener");
   };
 
   if (loading) {

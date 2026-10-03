@@ -471,6 +471,7 @@ function MortgagePaymentModal({ value, properties, units, loans = [], currencyOp
             </div>
           )}
           <ReceiptField
+            paymentId={form.id}
             receiptUrl={form.receiptUrl}
             receiptFile={form.receiptFile}
             onPick={(receiptFile) => set({ receiptFile })}
@@ -487,8 +488,11 @@ function MortgagePaymentModal({ value, properties, units, loans = [], currencyOp
 
 // Justificatif (SCRUM-311) — upload fichier (image/PDF), meme pattern que
 // ReceiptField dans depenses.jsx (SCRUM-310).
-function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
+function ReceiptField({ paymentId, receiptUrl, receiptFile, onPick, onClear }) {
   const isImage = receiptUrl && /\.(jpe?g|png|webp)$/i.test(receiptUrl);
+  // receiptUrl n'est que le nom du fichier stocke (pas une URL utilisable) :
+  // on streame via la route dediee, verifiee par organisation (SCRUM-311 fix securite).
+  const viewUrl = paymentId ? api.mortgagePaymentReceiptUrl(paymentId) : null;
   return (
     <label className="domus-property-field">
       <span>{t("Justificatif")}</span>
@@ -508,10 +512,10 @@ function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
           <X size={14} /> {t("Retirer le fichier")}
         </button>
       )}
-      {!receiptFile && receiptUrl && (
+      {!receiptFile && viewUrl && (
         isImage
-          ? <a href={receiptUrl} target="_blank" rel="noreferrer"><img src={receiptUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
-          : <a href={receiptUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
+          ? <a href={viewUrl} target="_blank" rel="noreferrer"><img src={viewUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
+          : <a href={viewUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
       )}
     </label>
   );

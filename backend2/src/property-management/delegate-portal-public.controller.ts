@@ -13,14 +13,12 @@ import {
   Get,
   Post,
   Query,
-  Req,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import type { Request } from "express";
 import { join } from "path";
 import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { DelegatePortalService } from "./delegate-portal.service";
@@ -55,34 +53,27 @@ export class DelegatePortalPublicController {
     @Query("token") token: string,
     @Body() body: { answer?: string; amount?: string; comment?: string },
     @UploadedFile() proof: any,
-    @Req() req: Request,
   ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
-    const proofUrl = this.saveProof(proof, this.publicApiBase(req));
+    const proofUrl = this.saveProof(proof);
     return this.delegatePortalService.submitRentCheck(token, body, proofUrl);
   }
 
   // Meme dossier que les preuves de paiement du CRM
-  // (PropertyManagementService.uploadDir), pour que le fichier soit servi par
-  // la meme route statique /uploads.
+  // (PropertyManagementService.uploadDir). Le fichier n'est plus servi par une
+  // route statique /uploads (non authentifiee, supprimee) : seul le nom est
+  // garde, resolu derriere une route verifiee (meme pattern que
+  // TenantPortalService.getPublicPaymentProof).
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
   /** Meme stockage et memes bornes que les preuves de paiement du CRM. */
-  private saveProof(file: any, publicApiBase: string): string | null {
+  private saveProof(file: any): string | null {
     if (!file?.buffer) return null;
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
       allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
       prefix: "delegate-proof",
       maxBytes: 5 * 1024 * 1024,
     });
-    return `${publicApiBase}/uploads/${name}`;
-  }
-
-  private publicApiBase(req: Request): string {
-    const pickFirst = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
-    const proto = pickFirst(req.headers["x-forwarded-proto"]);
-    const host = pickFirst(req.headers["x-forwarded-host"]) ?? req.headers.host;
-    if (proto && host) return `${proto}://${host}/api`;
-    return `${req.protocol}://${req.headers.host}`;
+    return name;
   }
 }

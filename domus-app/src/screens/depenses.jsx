@@ -445,6 +445,7 @@ function ExpenseModal({ value, properties, units, currencyOptions, defaultCurren
             onRecurrenceChange={(recurrenceMonths) => set({ recurrenceMonths })}
           />
           <ReceiptField
+            expenseId={form.id}
             receiptUrl={form.receiptUrl}
             receiptFile={form.receiptFile}
             onPick={(receiptFile) => set({ receiptFile })}
@@ -489,8 +490,11 @@ function PaymentPlanField({ value, recurrenceMonths, onPlanChange, onRecurrenceC
 
 // Justificatif (SCRUM-310) — upload fichier (image/PDF), meme pattern que la
 // preuve de paiement de loyer (loyers.jsx) et le recu de cout de maintenance.
-function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
+function ReceiptField({ expenseId, receiptUrl, receiptFile, onPick, onClear }) {
   const isImage = receiptUrl && /\.(jpe?g|png|webp)$/i.test(receiptUrl);
+  // receiptUrl n'est que le nom du fichier stocke (pas une URL utilisable) :
+  // on streame via la route dediee, verifiee par organisation (SCRUM-310 fix securite).
+  const viewUrl = expenseId ? api.propertyExpenseReceiptUrl(expenseId) : null;
   return (
     <label className="domus-property-field">
       <span>{t("Justificatif")}</span>
@@ -510,10 +514,10 @@ function ReceiptField({ receiptUrl, receiptFile, onPick, onClear }) {
           <X size={14} /> {t("Retirer le fichier")}
         </button>
       )}
-      {!receiptFile && receiptUrl && (
+      {!receiptFile && viewUrl && (
         isImage
-          ? <a href={receiptUrl} target="_blank" rel="noreferrer"><img src={receiptUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
-          : <a href={receiptUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
+          ? <a href={viewUrl} target="_blank" rel="noreferrer"><img src={viewUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
+          : <a href={viewUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
       )}
     </label>
   );

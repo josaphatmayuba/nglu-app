@@ -4,7 +4,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { join } from "path";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
-import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
+import { extractStoredFileName, IMAGE_OR_PDF_MIME_TYPES, readValidatedUploadFile, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -4388,6 +4388,20 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  /**
+   * Streame le justificatif (preuve de paiement) d'UN loyer, apres verification
+   * que ce paiement appartient bien a l'organisation du JWT courant — meme
+   * pattern que TenantPortalService.getPublicPaymentProof / OwnerPortalService.
+   * getPublicOwnerPaymentProof, cote gestionnaire authentifie cette fois.
+   */
+  async paymentProofFile(id: number, orgId: number) {
+    const rows = await this.paymentQuery(id, orgId).limit(1);
+    if (!rows.length) throw new NotFoundException("Payment not found.");
+    const proofUrl = rows[0].proofUrl;
+    if (!proofUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(proofUrl));
+  }
+
   async findMaintenance(id: number, orgId?: number) {
     const where = orgId !== undefined
       ? and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId))
@@ -4414,26 +4428,30 @@ export class PropertyManagementService {
 
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
-  private saveReceiptFile(file: any, publicApiBase?: string): string | null {
+  // NB: ne stocke plus d'URL publique /uploads (route statique non
+  // authentifiee, supprimee du perimetre Domus) : seul le nom du fichier est
+  // garde. Le fichier est ensuite streame via les routes dediees
+  // *ReceiptFile (propertyExpenseReceiptFile / expenseInstallmentReceiptFile /
+  // mortgagePaymentReceiptFile / maintenanceCostReceiptFile) apres verification
+  // d'appartenance a l'organisation — meme pattern que paymentProofFile.
+  private saveReceiptFile(file: any, _publicApiBase?: string): string | null {
     if (!file?.buffer) return null;
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
       allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
       prefix: "receipt",
       maxBytes: 5 * 1024 * 1024,
     });
-    const base = publicApiBase ?? "";
-    return `${base}/uploads/${name}`;
+    return name;
   }
 
-  private saveProofFile(file: any, publicApiBase?: string): string | null {
+  private saveProofFile(file: any, _publicApiBase?: string): string | null {
     if (!file?.buffer) return null;
     const { name } = saveValidatedUploadFile(file, this.uploadDir, {
       allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
       prefix: "rent-proof",
       maxBytes: 5 * 1024 * 1024,
     });
-    const base = publicApiBase ?? "";
-    return `${base}/uploads/${name}`;
+    return name;
   }
 
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
@@ -4545,6 +4563,23 @@ export class PropertyManagementService {
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
+  }
+
+  /**
+   * Streame le justificatif (recu) d'un cout de maintenance, apres
+   * verification que ce cout appartient a l'organisation du JWT courant —
+   * meme pattern que paymentProofFile.
+   */
+  async maintenanceCostReceiptFile(costId: number, orgId: number) {
+    const rows = await this.db
+      .select({ receiptUrl: realEstateMaintenanceCosts.receiptUrl })
+      .from(realEstateMaintenanceCosts)
+      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
+    const receiptUrl = rows[0].receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
   }
 
   // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
@@ -4789,6 +4824,23 @@ export class PropertyManagementService {
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
     return this.getPropertyExpense(id, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'une depense de propriete, apres
+   * verification que cette depense appartient a l'organisation du JWT
+   * courant — meme pattern que paymentProofFile.
+   */
+  async propertyExpenseReceiptFile(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
+    const [row] = await this.db
+      .select({ receiptUrl: realEstatePropertyExpenses.receiptUrl })
+      .from(realEstatePropertyExpenses)
+      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)))
+      .limit(1);
+    const receiptUrl = row?.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
   }
 
   // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
@@ -5054,6 +5106,18 @@ export class PropertyManagementService {
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateExpenseInstallments.id, installmentId), eq(realEstateExpenseInstallments.organizationId, orgId)));
     return this.findActiveInstallmentForOrg(installmentId, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'une echeance de depense, apres
+   * verification que cette echeance appartient a l'organisation du JWT
+   * courant — meme pattern que paymentProofFile.
+   */
+  async expenseInstallmentReceiptFile(installmentId: number, orgId: number) {
+    const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
+    const receiptUrl = installment.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
   }
 
   // ── Remboursements hypothecaires (SCRUM-311) ──────────────────────────────
@@ -5702,6 +5766,23 @@ export class PropertyManagementService {
       .set({ receiptUrl, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)));
     return this.getMortgagePayment(id, orgId);
+  }
+
+  /**
+   * Streame le justificatif (recu) d'un remboursement hypothecaire, apres
+   * verification que ce paiement appartient a l'organisation du JWT courant
+   * — meme pattern que paymentProofFile.
+   */
+  async mortgagePaymentReceiptFile(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
+    const [row] = await this.db
+      .select({ receiptUrl: realEstateMortgagePayments.receiptUrl })
+      .from(realEstateMortgagePayments)
+      .where(and(eq(realEstateMortgagePayments.id, id), eq(realEstateMortgagePayments.organizationId, orgId)))
+      .limit(1);
+    const receiptUrl = row?.receiptUrl;
+    if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────

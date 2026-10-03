@@ -6,7 +6,7 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException } fr
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { join } from "path";
-import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
+import { extractStoredFileName, IMAGE_OR_PDF_MIME_TYPES, readValidatedUploadFile, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -338,7 +338,7 @@ export class TenantPortalService {
    * le gestionnaire ne doit pas pouvoir etre remplace silencieusement par un
    * nouvel envoi du locataire.
    */
-  async submitPaymentProof(token: string, paymentId: number, file: any, publicApiBase: string) {
+  async submitPaymentProof(token: string, paymentId: number, file: any) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     if (!file?.buffer) throw new BadRequestException("Fichier requis.");
     const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
@@ -372,7 +372,10 @@ export class TenantPortalService {
       prefix: "tenant-proof",
       maxBytes: 5 * 1024 * 1024,
     });
-    const proofUrl = `${publicApiBase}/uploads/${name}`;
+    // Ne stocke plus d'URL publique /uploads (route statique non authentifiee,
+    // supprimee) : seul le nom de fichier est garde, resolu derriere
+    // getPublicPaymentProof apres verification d'appartenance au token.
+    const proofUrl = name;
 
     await this.db
       .update(realEstateRentPayments)
@@ -409,7 +412,7 @@ export class TenantPortalService {
       .limit(1);
 
     if (!row?.proofUrl) throw new NotFoundException("Justificatif introuvable.");
-    return { url: row.proofUrl };
+    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(row.proofUrl));
   }
 
   /**

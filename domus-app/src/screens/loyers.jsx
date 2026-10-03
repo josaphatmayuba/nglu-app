@@ -470,7 +470,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
           {payment.proofUrl && (
             <div className="immo-pay-row" style={{ alignItems: "center" }}>
               <span>Quittance signée envoyée par le locataire</span>
-              <a href={payment.proofUrl} target="_blank" rel="noopener noreferrer" className="immo-btn" style={{ fontSize: 12 }}>
+              <a href={api.paymentProofUrl(payment.id)} target="_blank" rel="noopener noreferrer" className="immo-btn" style={{ fontSize: 12 }}>
                 <FileDown size={14} /> Voir
               </a>
             </div>
@@ -860,7 +860,7 @@ export function Loyers({ go }) {
                     <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}</td>
                     <td style={{ display: "flex", gap: 6 }}>
                       {p.proofUrl && (
-                        <a className="immo-btn" style={{ fontSize: 12 }} href={p.proofUrl} target="_blank" rel="noopener noreferrer" title="Voir la quittance signée envoyée par le locataire">
+                        <a className="immo-btn" style={{ fontSize: 12 }} href={api.paymentProofUrl(p.id)} target="_blank" rel="noopener noreferrer" title="Voir la quittance signée envoyée par le locataire">
                           <FileDown size={14} /> Quittance signée
                         </a>
                       )}

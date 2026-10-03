@@ -240,13 +240,8 @@ export function TenantPortalPublic({ token }) {
   // Ouvre le justificatif dans un nouvel onglet. L'URL n'est jamais dans la
   // page : elle est demandee au backend, qui verifie d'abord que le paiement
   // appartient bien au porteur du token.
-  const openProof = async (paymentId) => {
-    try {
-      const res = await publicApi.tenantPaymentProof(token, paymentId);
-      if (res?.url) window.open(res.url, "_blank", "noopener");
-    } catch {
-      setProofMsg(t("Justificatif indisponible."));
-    }
+  const openProof = (paymentId) => {
+    window.open(publicApi.tenantPaymentProofUrl(token, paymentId), "_blank", "noopener");
   };
 
   // Copie du bail. Le scan s'ouvre tel quel (PDF/image) ; la version

@@ -201,6 +201,10 @@ export const api = {
   },
   deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),
   propertyPhotoUrl: (photoId) => authenticatedFileUrl(`/properties/photos/${photoId}/file`),
+  // Justificatif de paiement (quittance signee envoyee par le locataire ou
+  // declaree par un delegue) : verifie l'appartenance a l'organisation du JWT
+  // avant de streamer le fichier — jamais de route statique /uploads publique.
+  paymentProofUrl: (paymentId) => authenticatedFileUrl(`/leases/payments/${paymentId}/proof-file`),
 
   units: () => get("/units"),
   unit: (id) => get(`/units/${id}`),
@@ -296,6 +300,9 @@ export const api = {
   },
   deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
   maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
+  // Justificatif (recu) d'un cout de maintenance — verifie l'appartenance a
+  // l'organisation du JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  maintenanceCostReceiptUrl: (costId) => authenticatedFileUrl(`/maintenance/costs/${costId}/receipt-file`),
 
   // Dépenses par propriété (SCRUM-310) — filtres query optionnels.
   propertyExpenses: ({ propertyId, category, dateFrom, dateTo } = {}) => {
@@ -317,6 +324,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/property-expenses/${id}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  propertyExpenseReceiptUrl: (id) => authenticatedFileUrl(`/property-expenses/${id}/receipt-file`),
 
   // Echeancier de paiement des dépenses de propriété (SCRUM-313).
   expenseInstallments: (expenseId) => get(`/property-expenses/${expenseId}/installments`),
@@ -330,6 +340,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/property-expenses/installments/${installmentId}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  expenseInstallmentReceiptUrl: (installmentId) => authenticatedFileUrl(`/property-expenses/installments/${installmentId}/receipt-file`),
 
   // Remboursement hypothèque par propriété (SCRUM-311) — filtres query optionnels.
   mortgagePayments: ({ propertyId, dateFrom, dateTo } = {}) => {
@@ -350,6 +363,9 @@ export const api = {
     form.append("receipt", file);
     return multipartFetch(`/mortgage-payments/${id}/receipt`, form);
   },
+  // Justificatif (recu/facture) — verifie l'appartenance a l'organisation du
+  // JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
+  mortgagePaymentReceiptUrl: (id) => authenticatedFileUrl(`/mortgage-payments/${id}/receipt-file`),
 
   // Prêts hypothécaires (SCRUM-311 phase 2) — filtres query optionnels.
   mortgageLoans: ({ propertyId, status } = {}) => {
@@ -530,9 +546,10 @@ export const publicApi = {
   // Portail locataire (accès public sans login, token opaque fait autorisation).
   tenantPortal: (token) => publicFetch(`/tenant-portal?token=${encodeURIComponent(token)}`),
   // Justificatif d'un paiement : le backend verifie que le paiement appartient
-  // bien au locataire porteur du token avant de renvoyer l'URL du fichier.
-  tenantPaymentProof: (token, paymentId) =>
-    publicFetch(`/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // bien au locataire porteur du token puis streame directement le fichier
+  // (plus de JSON intermediaire) — meme pattern que tenantContractCopyUrl.
+  tenantPaymentProofUrl: (token, paymentId) =>
+    `${API_ROOT}/tenant-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`,
   // Resume minimal d'UNE quittance (mois/montant/statut), pour la page dediee
   // /domus/quittance ouverte par le QR individuel du carnet — pas le dossier complet.
   tenantPaymentSummary: (token, paymentId) =>
@@ -565,9 +582,10 @@ export const publicApi = {
   // le bailleur ouvre la fiche du locataire annonce par SMS.
   ownerPortal: (token) => publicFetch(`/owner-portal?token=${encodeURIComponent(token)}`),
   // Justificatif d'un paiement cote proprietaire : le backend verifie que le
-  // paiement appartient bien a un bien du porteur du token avant de renvoyer l'URL.
-  ownerPaymentProof: (token, paymentId) =>
-    publicFetch(`/owner-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`),
+  // paiement appartient bien a un bien du porteur du token puis streame
+  // directement le fichier (plus de JSON intermediaire).
+  ownerPaymentProofUrl: (token, paymentId) =>
+    `${API_ROOT}/owner-portal/payments/${paymentId}/proof?token=${encodeURIComponent(token)}`,
   // Demande de mise a jour des donnees personnelles : rien n'est applique, la
   // demande attend la validation d'un gestionnaire.
   submitTenantChangeRequest: (token, values) =>

@@ -7,7 +7,6 @@ import {
   ParseIntPipe,
   Post,
   Query,
-  Req,
   Res,
   StreamableFile,
   UploadedFile,
@@ -16,7 +15,7 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import type { Request, Response } from "express";
+import type { Response } from "express";
 import { TenantPortalService } from "./tenant-portal.service";
 
 @ApiTags("tenant-portal")
@@ -31,11 +30,22 @@ export class TenantPortalPublicController {
     return this.tenantPortalService.getPublicTenantPortal(token);
   }
 
-  @ApiOperation({ summary: "Get the proof file URL of one of the tenant's own payments" })
+  @ApiOperation({ summary: "Stream the proof file of one of the tenant's own payments (verified, no public URL)" })
   @Get("payments/:id/proof")
-  paymentProof(@Param("id", ParseIntPipe) id: number, @Query("token") token: string) {
+  async paymentProof(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("token") token: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
-    return this.tenantPortalService.getPublicPaymentProof(token, id);
+    const file = await this.tenantPortalService.getPublicPaymentProof(token, id);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @ApiOperation({ summary: "Get a minimal summary of one of the tenant's own payments (month/amount/status), for the dedicated QR-per-receipt page" })
@@ -107,21 +117,9 @@ export class TenantPortalPublicController {
     @Param("id", ParseIntPipe) id: number,
     @Query("token") token: string,
     @UploadedFile() proof: any,
-    @Req() req: Request,
   ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     if (!proof) throw new BadRequestException("Fichier requis.");
-    return this.tenantPortalService.submitPaymentProof(token, id, proof, this.publicApiBase(req));
-  }
-
-  // Meme logique que DelegatePortalPublicController.publicApiBase : construit
-  // l'URL publique de /uploads a partir des en-tetes proxy (nginx/middleware)
-  // pour que le lien renvoye au navigateur soit resolvable depuis l'exterieur.
-  private publicApiBase(req: Request): string {
-    const pickFirst = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
-    const proto = pickFirst(req.headers["x-forwarded-proto"]);
-    const host = pickFirst(req.headers["x-forwarded-host"]) ?? req.headers.host;
-    if (proto && host) return `${proto}://${host}/api`;
-    return `${req.protocol}://${req.headers.host}`;
+    return this.tenantPortalService.submitPaymentProof(token, id, proof);
   }
 }
