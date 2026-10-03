@@ -1,12 +1,11 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
 import { DRIZZLE } from "../database/database.constants";
 import { LedgerService } from "../ledger/ledger.service";
 import { currencies, subAccounts, transactionAttachments, transactions } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "../property-management/object-storage.service";
 
 interface UploadedFile {
   buffer: Buffer;
@@ -28,6 +27,7 @@ export class TransactionsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly ledger: LedgerService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   async create(input: CreateTransactionDto, orgId: number) {
@@ -378,48 +378,53 @@ export class TransactionsService {
 
   // ─────────────── Justificatifs (recus/factures) ───────────────
 
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
-
-  private validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
-    const s = buffer.subarray(0, 12);
-    switch (mimetype) {
-      case "image/jpeg": return s[0] === 0xff && s[1] === 0xd8 && s[2] === 0xff;
-      case "image/png":  return s.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-      case "image/webp": return s.subarray(0, 4).toString("ascii") === "RIFF" && s.subarray(8, 12).toString("ascii") === "WEBP";
-      case "application/pdf": return s.subarray(0, 4).toString("ascii") === "%PDF";
-      default: return false;
-    }
-  }
-
-  private saveFile(file: UploadedFile): { name: string; path: string } {
-    if (!this.validateMagicBytes(file.buffer, file.mimetype)) {
-      throw new BadRequestException("Le contenu du fichier ne correspond pas au type declare (jpg/png/webp/pdf).");
-    }
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-    const mimeToExt: Record<string, string> = {
-      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
-    };
-    const ext = mimeToExt[file.mimetype] || "bin";
-    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    writeFileSync(join(this.uploadDir, name), file.buffer);
-    return { name, path: `/files/${name}` };
-  }
-
-  /** Attache un justificatif a une transaction (apres validation d'existence). */
+  /**
+   * Attache un justificatif a une transaction (apres validation d'existence).
+   * Stockage objet (MinIO) : le disque local du conteneur est ephemere et
+   * efface a chaque deploiement — meme pattern que uploadTenantIdDocument.
+   */
   async addAttachment(transactionId: number, file: UploadedFile, orgId: number, userId?: number) {
     if (!file) throw new BadRequestException("Aucun fichier recu.");
     await this.ensureTransactionExists(transactionId, orgId);
-    const { path } = this.saveFile(file);
+    const stored = await this.objectStorage.putDocument(file, `transactions/attachments/${orgId}/${transactionId}`);
     const [result] = await this.db.insert(transactionAttachments).values({
       organizationId: orgId,
       transactionId,
-      url: path,
+      url: stored.objectKey,
       filename: file.originalname ?? null,
-      mimetype: file.mimetype,
+      mimetype: stored.mimeType,
       sizeBytes: file.size ?? null,
       createdBy: userId,
     });
-    return { id: Number(result.insertId), url: path };
+    return { id: Number(result.insertId), url: stored.objectKey };
+  }
+
+  /**
+   * Streame un justificatif de transaction depuis le stockage objet, apres
+   * verification qu'il appartient bien a l'organisation du JWT courant —
+   * meme pattern que PropertyManagementService.tenantIdDocumentFile.
+   * Les anciennes valeurs disque local (/files/..., /uploads/...) sont
+   * perdues (pas de volume Docker persistant) : 404 explicite plutot qu'une
+   * lecture disque qui echouerait silencieusement.
+   */
+  async attachmentFile(attachmentId: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(transactionAttachments)
+      .where(
+        and(
+          eq(transactionAttachments.id, attachmentId),
+          eq(transactionAttachments.organizationId, orgId),
+          eq(transactionAttachments.status, "true"),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundException("Attachment not found.");
+    if (!row.url || /^\/?(files|uploads)\//.test(row.url)) {
+      throw new NotFoundException("Fichier indisponible, a re-televerser.");
+    }
+    const object = await this.objectStorage.getObject(row.url);
+    return { ...object, mimeType: row.mimetype || object.contentType, originalName: row.filename || `justificatif-${attachmentId}` };
   }
 
   /** Liste les justificatifs actifs d'une transaction. */

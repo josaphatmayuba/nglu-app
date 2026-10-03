@@ -10,10 +10,13 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -105,6 +108,25 @@ export class TransactionsController {
   }))
   addAttachment(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @CurrentOrg() orgId: number) {
     return this.transactionsService.addAttachment(id, file, orgId);
+  }
+
+  @ApiOperation({ summary: "Streame le fichier d'un justificatif (verifie contre l'org courante)" })
+  @ApiParam({ name: "attachmentId", example: 1, type: Number })
+  @Permissions("readSingle-transaction", "readAll-transaction")
+  @Get("attachments/:attachmentId/file")
+  async attachmentFile(
+    @Param("attachmentId", ParseIntPipe) attachmentId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.transactionsService.attachmentFile(attachmentId, orgId);
+    res.set({
+      "Content-Type": file.mimeType,
+      "Content-Disposition": `inline; filename="${file.originalName.replace(/["\\\r\n]/g, "")}"`,
+      "Cache-Control": "private, no-store",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @ApiOperation({ summary: "Supprime (soft) un justificatif" })

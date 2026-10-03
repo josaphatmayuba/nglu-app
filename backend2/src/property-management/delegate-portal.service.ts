@@ -23,6 +23,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import type { UploadedBufferFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -36,12 +37,16 @@ import {
   realEstateUnits,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "./object-storage.service";
 
 @Injectable()
 export class DelegatePortalService {
   private readonly logger = new Logger(DelegatePortalService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly objectStorage: ObjectStorageService,
+  ) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -236,7 +241,7 @@ export class DelegatePortalService {
   async submitRentCheck(
     token: string,
     body: { answer?: string; amount?: unknown; comment?: string },
-    proofUrl?: string | null,
+    proofFile?: UploadedBufferFile | null,
   ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     const check = await this.resolveCheckByToken(token);
@@ -299,6 +304,15 @@ export class DelegatePortalService {
       throw new BadRequestException("Montant anormalement eleve : verifiez la saisie.");
     }
 
+    // Upload fait ICI, APRES resolution du token et tous les controles
+    // ci-dessus (lien actif, delegue actif, montant valide) — jamais avant,
+    // sinon un token invalide permettrait quand meme de deposer un fichier.
+    let proofUrl: string | null = null;
+    if (proofFile?.buffer) {
+      const { objectKey } = await this.objectStorage.putDocument(proofFile, `domus/payments/${orgId}/delegate-proofs`);
+      proofUrl = objectKey;
+    }
+
     const paymentDate = new Date().toISOString().slice(0, 10);
     const [inserted] = await this.db.insert(realEstateRentPayments).values({
       organizationId: orgId,
@@ -313,7 +327,7 @@ export class DelegatePortalService {
       notes: comment
         ? `Declare par le delegue : ${comment}`
         : "Declare par le delegue (a valider)",
-      proofUrl: proofUrl ?? null,
+      proofUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });

@@ -1,4 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
+import axios from "axios";
+import toast from "react-hot-toast";
 import { X, Plus, Trash2, AlertCircle, CheckCircle, Paperclip, FileText } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -8,6 +10,34 @@ import {
   uploadAttachment,
   deleteAttachment,
 } from "@/redux/rtk/features/transaction/transactionSlice";
+
+// Ouverture authentifiee d'un justificatif : un <a href> direct ne porte pas
+// le JWT (401) et le fichier n'est plus servi par une route publique /files/.
+// L'instance axios globale porte deja l'Authorization Bearer (intercepteur
+// index.jsx). L'onglet est ouvert de façon SYNCHRONE (avant tout await) :
+// Safari/mobile bloquent un window.open() appele apres une promesse resolue.
+async function openAttachment(attachmentId) {
+  const win = window.open("", "_blank");
+  try {
+    const res = await axios.get(`transaction/attachments/${attachmentId}/file`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    if (win) win.location = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    if (win) win.close();
+    let msg = "Impossible d'ouvrir le justificatif.";
+    try {
+      const body = err?.response?.data;
+      if (body instanceof Blob) {
+        const text = await body.text();
+        msg = JSON.parse(text)?.message || msg;
+      } else if (body?.message) {
+        msg = body.message;
+      }
+    } catch { /* corps non-JSON */ }
+    toast.error(msg);
+  }
+}
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
@@ -424,9 +454,10 @@ export default function EcritureFormModal({
                 {attachments.map((a) => (
                   <li key={a.id} className="flex items-center gap-2 text-xs border border-ink-100 rounded-lg px-3 py-2">
                     <FileText className="w-4 h-4 text-ink-400 shrink-0" />
-                    <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-brand-600 hover:underline">
+                    <button type="button" onClick={() => openAttachment(a.id)}
+                      className="flex-1 truncate text-left text-brand-600 hover:underline">
                       {a.filename || a.url?.split("/").pop()}
-                    </a>
+                    </button>
                     <button type="button" onClick={() => handleDeleteAttachment(a.id)}
                       className="p-1 rounded hover:bg-rose-50 text-ink-400 hover:text-rose-500 transition">
                       <Trash2 className="w-3.5 h-3.5" />

@@ -15,7 +15,7 @@ import { Locataires } from "./screens/locataires.jsx";
 import { Proprietaires } from "./screens/proprietaires.jsx";
 import { Delegues } from "./screens/delegues.jsx";
 import { SousTraitants } from "./screens/sous-traitants.jsx";
-import { Loyers, Paiement } from "./screens/loyers.jsx";
+import { Loyers, Paiement, PendingReceiptsBadge } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Depenses } from "./screens/depenses.jsx";
 import { Hypotheque } from "./screens/hypotheque.jsx";
@@ -350,6 +350,7 @@ export default function App() {
               return (
                 <button key={i.key} className={`navlink ${view === i.key ? "active" : ""}`} onClick={() => go(i.key)}>
                   <Icon size={16} /> {t(i.label)}
+                  {i.key === "paiement" && !device.isMobile && <PendingReceiptsBadge />}
                 </button>
               );
             })}
@@ -422,6 +423,7 @@ export default function App() {
             return (
               <div key={k} className="mrow" onClick={() => go(k)}>
                 <Icon size={20} /> {t(item.label)}
+                {k === "paiement" && device.isMobile && <PendingReceiptsBadge />}
               </div>
             );
           })}

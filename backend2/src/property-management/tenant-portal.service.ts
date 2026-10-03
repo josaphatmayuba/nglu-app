@@ -5,8 +5,8 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { join } from "path";
-import { extractStoredFileName, IMAGE_OR_PDF_MIME_TYPES, readValidatedUploadFile, saveValidatedUploadFile } from "../common/upload-security";
+import { IMAGE_OR_PDF_MIME_TYPES } from "../common/upload-security";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -326,11 +326,9 @@ export class TenantPortalService {
 
   /**
    * Preuve de paiement envoyee par le locataire lui-meme, depuis le portail
-   * public (token opaque, pas de JWT). Reutilise exactement le meme stockage
-   * que les preuves saisies cote gestionnaire (storage/app/uploads, servi par
-   * la route statique /uploads) et que le portail delegue
-   * (DelegatePortalPublicController.saveProof) : un seul mecanisme d'upload de
-   * justificatif dans tout le module Domus.
+   * public (token opaque, pas de JWT). Stockee sur MinIO (objectKey), seul
+   * stockage persistant entre deploiements : le disque local du conteneur
+   * backend2 n'a pas de volume et est recree a chaque deploiement.
    * Scope strict : le paiement doit appartenir a un bail du locataire porteur
    * du token, sinon un id change dans la requete permettrait d'ecraser le
    * justificatif de n'importe quel paiement de l'organisation.
@@ -367,15 +365,11 @@ export class TenantPortalService {
       throw new BadRequestException("Nombre maximum d'envois atteint pour cette quittance.");
     }
 
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "tenant-proof",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    // Ne stocke plus d'URL publique /uploads (route statique non authentifiee,
-    // supprimee) : seul le nom de fichier est garde, resolu derriere
+    const { objectKey } = await this.objectStorage.putDocument(file, `domus/payments/${organizationId}/proofs`);
+    // Ne stocke plus de nom de fichier local (perdu a chaque redeploiement,
+    // voir upload-security.ts) : la cle objet MinIO est resolue derriere
     // getPublicPaymentProof apres verification d'appartenance au token.
-    const proofUrl = name;
+    const proofUrl = objectKey;
 
     await this.db
       .update(realEstateRentPayments)
@@ -384,11 +378,6 @@ export class TenantPortalService {
 
     return { submitted: true, paymentId };
   }
-
-  // Meme dossier que les preuves de paiement saisies cote gestionnaire et que
-  // le portail delegue (PropertyManagementService.uploadDir), pour que le
-  // fichier soit servi par la meme route statique /uploads.
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
   /**
    * Retourne l'URL du justificatif d'UN paiement, apres avoir verifie que ce
@@ -412,7 +401,7 @@ export class TenantPortalService {
       .limit(1);
 
     if (!row?.proofUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(row.proofUrl));
+    return readStoredDocument(this.objectStorage, row.proofUrl);
   }
 
   /**

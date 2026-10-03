@@ -154,6 +154,41 @@ export function TenantReceiptUpload({ token, paymentId }) {
                 <p style={{ margin: "12px 0 0", fontWeight: 600 }}>{t("Une photo a déjà été envoyée pour cette quittance.")}</p>
               </div>
             </section>
+          ) : summary?.hasProof && !file ? (
+            // Photo deja envoyee mais 2e envoi encore permis : on confirme
+            // d'abord (sinon le grand bouton camera laissait croire que rien
+            // n'avait ete envoye) et le remplacement passe en action secondaire.
+            <section className="onb-card">
+              <div className="onb-card-body" style={{ textAlign: "center", padding: "28px 20px" }}>
+                <CheckCircle2 size={36} color="#2f6e4e" />
+                <p style={{ margin: "12px 0 0", fontWeight: 600 }}>{t("Photo déjà envoyée")}</p>
+                <p className="muted" style={{ margin: "4px 0 0" }}>
+                  {t("Votre gestionnaire va la vérifier.")}
+                </p>
+                <div style={{ borderTop: "1px solid #e5e7eb", margin: "20px 0 16px" }} />
+                <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>{t("Photo floue ou mauvaise ?")}</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={onFileChosen}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 18px", minHeight: 44,
+                    borderRadius: 10, border: "1.5px solid #6366f1", background: "#fff", color: "#6366f1",
+                    fontWeight: 600, fontSize: 14, cursor: "pointer",
+                  }}
+                >
+                  <Camera size={16} /> {t("Remplacer la photo")}
+                </button>
+                <p className="muted" style={{ fontSize: 12.5, margin: "8px 0 0" }}>{t("Il vous reste 1 envoi.")}</p>
+              </div>
+            </section>
           ) : (
             <section className="onb-card">
               <div className="onb-card-body" style={{ padding: 20 }}>
@@ -203,8 +238,8 @@ export function TenantReceiptUpload({ token, paymentId }) {
                     }}>
                       <Camera size={28} color="#fff" />
                     </span>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{t("Prendre la photo")}</span>
-                    <span className="muted" style={{ fontSize: 12.5 }}>{t("de la quittance signée")}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>{t("Appuyez ici pour prendre la photo")}</span>
+                    <span className="muted" style={{ fontSize: 12.5 }}>{t("de votre quittance signée")}</span>
                   </button>
                 )}
                 {error ? (

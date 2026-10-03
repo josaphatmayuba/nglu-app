@@ -7,8 +7,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { join } from "path";
-import { extractStoredFileName, readValidatedUploadFile } from "../common/upload-security";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -24,16 +23,16 @@ import {
   tenantDetails,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ObjectStorageService } from "./object-storage.service";
 
 @Injectable()
 export class OwnerPortalService {
   private readonly logger = new Logger(OwnerPortalService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
-
-  // Meme dossier que les preuves de paiement du CRM / portail locataire
-  // (storage/app/uploads), pour lire le meme fichier physique.
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly objectStorage: ObjectStorageService,
+  ) {}
 
   private hashToken(token: string) {
     return createHash("sha256").update(token).digest("hex");
@@ -303,7 +302,7 @@ export class OwnerPortalService {
       .limit(1);
 
     if (!row?.proofUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(row.proofUrl));
+    return readStoredDocument(this.objectStorage, row.proofUrl);
   }
 
   /** Invalidation douce du lien (jamais de DELETE physique). */

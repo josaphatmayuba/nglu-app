@@ -20,6 +20,7 @@ import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActio
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { ExpenseInstallmentsModal } from "./expenseInstallments.jsx";
+import { useAuthenticatedImage } from "../useAuthenticatedImage.js";
 import { t, tf } from "../i18n.js";
 
 // Catégories autorisées côté backend (PROPERTY_EXPENSE_CATEGORIES) — mortgage
@@ -492,9 +493,17 @@ function PaymentPlanField({ value, recurrenceMonths, onPlanChange, onRecurrenceC
 // preuve de paiement de loyer (loyers.jsx) et le recu de cout de maintenance.
 function ReceiptField({ expenseId, receiptUrl, receiptFile, onPick, onClear }) {
   const isImage = receiptUrl && /\.(jpe?g|png|webp)$/i.test(receiptUrl);
-  // receiptUrl n'est que le nom du fichier stocke (pas une URL utilisable) :
-  // on streame via la route dediee, verifiee par organisation (SCRUM-310 fix securite).
-  const viewUrl = expenseId ? api.propertyExpenseReceiptUrl(expenseId) : null;
+  // receiptUrl n'est que l'objectKey stocke (pas une URL utilisable) : on
+  // streame via la route dediee, verifiee par organisation (SCRUM-310 fix
+  // securite). Jamais de token dans l'URL : apercu image via blob (hook),
+  // ouverture PDF via openAuthenticatedFile (fetch+blob dans un nouvel onglet).
+  const receiptPath = expenseId ? `/property-expenses/${expenseId}/receipt-file` : null;
+  const { src: previewSrc, error: previewError } = useAuthenticatedImage(!receiptFile && isImage ? receiptPath : null);
+  const [openError, setOpenError] = useState(null);
+  const openReceipt = () => {
+    setOpenError(null);
+    api.propertyExpenseReceiptUrl(expenseId).catch((e) => setOpenError(e.message || String(e)));
+  };
   return (
     <label className="domus-property-field">
       <span>{t("Justificatif")}</span>
@@ -514,11 +523,27 @@ function ReceiptField({ expenseId, receiptUrl, receiptFile, onPick, onClear }) {
           <X size={14} /> {t("Retirer le fichier")}
         </button>
       )}
-      {!receiptFile && viewUrl && (
+      {!receiptFile && receiptUrl && expenseId && (
         isImage
-          ? <a href={viewUrl} target="_blank" rel="noreferrer"><img src={viewUrl} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6 }} /></a>
-          : <a href={viewUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}>{t("Voir le justificatif")}</a>
+          ? (
+            previewSrc
+              ? <img src={previewSrc} alt={t("Justificatif")} style={{ maxWidth: 160, marginTop: 8, borderRadius: 6, cursor: "pointer" }} onClick={openReceipt} />
+              : previewError
+                ? <span style={{ display: "block", marginTop: 8, fontSize: 12, color: "#be123c" }}>{previewError}</span>
+                : null
+          )
+          : (
+            <button
+              type="button"
+              className="btn"
+              style={{ display: "inline-block", marginTop: 8, fontSize: 13 }}
+              onClick={openReceipt}
+            >
+              {t("Voir le justificatif")}
+            </button>
+          )
       )}
+      {openError && <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "#be123c" }}>{openError}</span>}
     </label>
   );
 }

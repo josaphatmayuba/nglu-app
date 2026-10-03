@@ -19,8 +19,6 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
-import { join } from "path";
-import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { DelegatePortalService } from "./delegate-portal.service";
 
 @Throttle({ default: { ttl: 60000, limit: 20 } })
@@ -40,9 +38,10 @@ export class DelegatePortalPublicController {
   @UseInterceptors(FileInterceptor("proof", {
     limits: { fileSize: 5 * 1024 * 1024, files: 1 },
     fileFilter: (_req, file, cb) => {
-      // Le controle definitif est fait par saveValidatedUploadFile, qui verifie
-      // la signature reelle du fichier : ce filtre ne fait qu ecarter tot les
-      // types manifestement non voulus.
+      // Le controle definitif (signature reelle du fichier) est fait par
+      // ObjectStorageService.putDocument, APRES verification du token dans le
+      // service : ce filtre ne fait qu ecarter tot les types manifestement non
+      // voulus, il n'ecrit jamais sur disque.
       const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
       if (allowed.includes(file.mimetype)) cb(null, true);
       else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
@@ -55,25 +54,10 @@ export class DelegatePortalPublicController {
     @UploadedFile() proof: any,
   ) {
     if (!token?.trim()) throw new BadRequestException("Token requis.");
-    const proofUrl = this.saveProof(proof);
-    return this.delegatePortalService.submitRentCheck(token, body, proofUrl);
-  }
-
-  // Meme dossier que les preuves de paiement du CRM
-  // (PropertyManagementService.uploadDir). Le fichier n'est plus servi par une
-  // route statique /uploads (non authentifiee, supprimee) : seul le nom est
-  // garde, resolu derriere une route verifiee (meme pattern que
-  // TenantPortalService.getPublicPaymentProof).
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
-
-  /** Meme stockage et memes bornes que les preuves de paiement du CRM. */
-  private saveProof(file: any): string | null {
-    if (!file?.buffer) return null;
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "delegate-proof",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    return name;
+    // Le fichier n'est plus ecrit avant verification : il est transmis tel
+    // quel au service, qui ne l'enverra sur MinIO qu'APRES avoir resolu et
+    // valide le token (sinon un token invalide permettrait deja de deposer
+    // des fichiers).
+    return this.delegatePortalService.submitRentCheck(token, body, proof);
   }
 }

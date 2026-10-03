@@ -1004,8 +1004,32 @@ function KPI({ label, value, sub, subClass = "", icon, tone }) {
 function Mini({ label, value, valueClass = "" }) {
   return <div className="card pad"><div className="kpi-label">{label}</div><div className={`font-display ${valueClass}`} style={{ fontSize: 22, fontWeight: 700, marginTop: 2 }}>{value}</div></div>;
 }
-function Avatar({ name, color, size = 36, sq = false, text, src }) {
-  return <span className={`av ${sq ? "sq" : ""}`} style={{ width: size, height: size, background: color || colorFor(name), fontSize: size <= 30 ? 10 : 12 }}>{src ? <img src={src} alt="" /> : text || initials(name)}</span>;
+// Charge la photo d'employe en authentifie (blob) : un <img src="/hr/employees/:id/photo">
+// direct ne porte pas le JWT (401), et la route /files/:id generique est fermee
+// depuis la correction de securite (allowlist logo-/compat-). Repli silencieux sur
+// les initiales si la photo est absente, ancienne (404) ou en erreur reseau.
+function useEmployeePhoto(userId, version) {
+  const [url, setUrl] = React.useState(null);
+  React.useEffect(() => {
+    if (!userId) { setUrl(null); return; }
+    let blobUrl = null;
+    let cancelled = false;
+    api.fetchAuthBlobUrl(`/hr/employees/${userId}/photo`).then((u) => {
+      if (cancelled) { if (u) URL.revokeObjectURL(u); return; }
+      blobUrl = u;
+      setUrl(u);
+    }).catch(() => { if (!cancelled) setUrl(null); });
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [userId, version]);
+  return url;
+}
+function Avatar({ name, color, size = 36, sq = false, text, src, userId, photoVersion }) {
+  const photoUrl = useEmployeePhoto(userId, photoVersion);
+  const imgSrc = photoUrl || src;
+  return <span className={`av ${sq ? "sq" : ""}`} style={{ width: size, height: size, background: color || colorFor(name), fontSize: size <= 30 ? 10 : 12 }}>{imgSrc ? <img src={imgSrc} alt="" /> : text || initials(name)}</span>;
 }
 function Bar({ pct, cls = "grad-accent" }) {
   const bg = { amber: "var(--amber-400)", sky: "var(--sky-400)", ink: "var(--ink-300)", teal: "var(--teal-400)" }[cls];
@@ -1734,7 +1758,7 @@ function Employes({ data, staff, setModal }) {
           <thead><tr><th>Employé</th><th>Poste</th><th>Département</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
           <tbody>{filtered.map((u) => { const name = fullName(u); return (
             <tr key={u.id}>
-              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} src={u.image} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)} · {displayPhone(u)}</div><EmployeeActions user={u} setModal={setModal} /></div></div></td>
+              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} userId={u.id} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)} · {displayPhone(u)}</div><EmployeeActions user={u} setModal={setModal} /></div></div></td>
               <td>{u.designation?.name || "—"}</td>
               <td className="muted">{u.department?.name || "—"}</td>
               <td className="r num">{fc(u.currentSalary, salarySym(u))}</td>
@@ -1750,7 +1774,7 @@ function Employes({ data, staff, setModal }) {
           return (
             <div className="card pad" key={u.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar name={name} color={colorFor(name)} size={48} sq src={u.image} />
+                <Avatar name={name} color={colorFor(name)} size={48} sq userId={u.id} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
                   <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.designation?.name || "Poste non assigné"}</div>
@@ -1813,7 +1837,7 @@ function EmployeeProfileModal({ user, onClose, onEdit, onCloseAccount }) {
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div className="employee-profile-head">
-          <Avatar name={name} color={colorFor(name)} size={54} sq src={user.image} />
+          <Avatar name={name} color={colorFor(name)} size={54} sq userId={user.id} />
           <div>
             <div className="chip emerald">{user.status === "false" ? "Inactif" : "Actif"}</div>
             <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || fallbackEmployeeId(user)}</div>
@@ -1876,7 +1900,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
   const [docUploading, setDocUploading] = React.useState(false);
   const [photoError, setPhotoError] = React.useState(null);
   const [docError, setDocError] = React.useState(null);
-  const [userImage, setUserImage] = React.useState(user.image);
+  const [photoVersion, setPhotoVersion] = React.useState(0);
   React.useEffect(() => {
     api.listPersonalDocuments(userId).then(setPersonalDocs).catch(() => setPersonalDocs([]));
   }, [userId]);
@@ -1885,8 +1909,8 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
     if (!file) return;
     setPhotoUploading(true); setPhotoError(null);
     try {
-      const res = await api.uploadEmployeePhoto(userId, file);
-      setUserImage(res.image);
+      await api.uploadEmployeePhoto(userId, file);
+      setPhotoVersion((v) => v + 1);
     } catch (err) { setPhotoError(err.message); }
     finally { setPhotoUploading(false); }
   };
@@ -1928,7 +1952,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
 
         <div className="employee-profile-head">
           <div style={{ position: "relative", display: "inline-block" }}>
-            <Avatar name={name} color={colorFor(name)} size={54} sq src={userImage} />
+            <Avatar name={name} color={colorFor(name)} size={54} sq userId={userId} photoVersion={photoVersion} />
             <label title="Changer la photo" style={{ position: "absolute", bottom: -4, right: -4, background: "#14b8a6", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", fontSize: 12 }}>
               <Icon name="edit" style={{ width: 11, height: 11 }} />
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} disabled={photoUploading} />
@@ -2070,7 +2094,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
                   <div className="tiny">{doc.fileName} &middot; v{doc.version} &middot; {dateOnly(doc.createdAt)}</div>
                   {doc.notes && <div className="tiny" style={{ color: "#64748b" }}>{doc.notes}</div>}
                 </div>
-                <a className="link" href={`${API_ROOT}${doc.filePath}`} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Ouvrir</a>
+                <button type="button" className="link" style={{ fontSize: 12, background: "none", border: "none", padding: 0, cursor: "pointer" }} onClick={() => api.openAuth(`/hr/employees/personal-documents/${doc.id}/file`).catch((e) => setDocError(e.message))}>Ouvrir</button>
                 <button type="button" className="icon-btn" style={{ color: "#ef4444" }} onClick={() => handleDeleteDoc(doc.id)}><Icon name="trash" style={{ width: 14, height: 14 }} /></button>
               </div>
             ))}

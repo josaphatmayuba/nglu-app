@@ -1,10 +1,9 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { join } from "path";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
-import { extractStoredFileName, IMAGE_OR_PDF_MIME_TYPES, readValidatedUploadFile, saveValidatedUploadFile } from "../common/upload-security";
+import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -2088,6 +2087,10 @@ export class PropertyManagementService {
         taxAmount: realEstateRentPayments.taxAmount,
         taxName: realEstateRentPayments.taxName,
         proofUrl: realEstateRentPayments.proofUrl,
+        // > 0 = proofUrl vient du locataire (QR de quittance) et non d'une
+        // preuve jointe par le gestionnaire a l'encaissement (meme colonne).
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+        updatedAt: realEstateRentPayments.updatedAt,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -2120,7 +2123,7 @@ export class PropertyManagementService {
   }
 
   async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
@@ -2336,7 +2339,7 @@ export class PropertyManagementService {
   // en creant la transaction comptable + ecriture ledger comme createPayment.
   // Reutilise integralement le meme calcul de taxe / compte de paiement.
   async confirmPendingPayment(paymentId: number, input: ConfirmPendingPaymentDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
 
     const [pending] = await this.db
       .select()
@@ -2488,7 +2491,7 @@ export class PropertyManagementService {
   }
 
   async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
 
     // Une seule caution active détenue par bail.
@@ -2571,7 +2574,7 @@ export class PropertyManagementService {
   }
 
   async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const returnProofUrl = this.saveProofFile(proof, publicApiBase) ?? input.proofUrl ?? null;
+    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
     const rows = await this.db
       .select()
@@ -4399,7 +4402,7 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Payment not found.");
     const proofUrl = rows[0].proofUrl;
     if (!proofUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(proofUrl));
+    return readStoredDocument(this.objectStorage, proofUrl);
   }
 
   async findMaintenance(id: number, orgId?: number) {
@@ -4426,32 +4429,25 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
 
-  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
-
-  // NB: ne stocke plus d'URL publique /uploads (route statique non
-  // authentifiee, supprimee du perimetre Domus) : seul le nom du fichier est
-  // garde. Le fichier est ensuite streame via les routes dediees
-  // *ReceiptFile (propertyExpenseReceiptFile / expenseInstallmentReceiptFile /
+  // Stockage MinIO (ObjectStorageService), seul stockage persistant entre
+  // deploiements — le disque local du conteneur backend2 n'a pas de volume et
+  // est recree a chaque deploiement. Ne stocke que l'objectKey. Le fichier est
+  // ensuite streame via les routes dediees *ReceiptFile
+  // (propertyExpenseReceiptFile / expenseInstallmentReceiptFile /
   // mortgagePaymentReceiptFile / maintenanceCostReceiptFile) apres verification
   // d'appartenance a l'organisation — meme pattern que paymentProofFile.
-  private saveReceiptFile(file: any, _publicApiBase?: string): string | null {
+  // `prefix` est le chemin MinIO complet, deja scope par organisation
+  // (ex. "domus/payments/42/proofs", "domus/deposits/42").
+  private async saveReceiptFile(file: any, prefix: string): Promise<string | null> {
     if (!file?.buffer) return null;
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "receipt",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    return name;
+    const { objectKey } = await this.objectStorage.putDocument(file, prefix);
+    return objectKey;
   }
 
-  private saveProofFile(file: any, _publicApiBase?: string): string | null {
+  private async saveProofFile(file: any, prefix: string): Promise<string | null> {
     if (!file?.buffer) return null;
-    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
-      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
-      prefix: "rent-proof",
-      maxBytes: 5 * 1024 * 1024,
-    });
-    return name;
+    const { objectKey } = await this.objectStorage.putDocument(file, prefix);
+    return objectKey;
   }
 
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
@@ -4465,7 +4461,7 @@ export class PropertyManagementService {
       .limit(1);
     const projectId = ticket?.projectId ?? null;
 
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
+    const receiptUrl = (await this.saveReceiptFile(receipt, `domus/maintenance/${orgId}/costs`)) ?? input.receiptUrl ?? null;
 
     const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
       ticketId,
@@ -4579,7 +4575,7 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
     const receiptUrl = rows[0].receiptUrl;
     if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Depenses par propriete (SCRUM-310) ──────────────────────────────────────
@@ -4817,7 +4813,7 @@ export class PropertyManagementService {
 
   async uploadPropertyExpenseReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.ensureOrgOwned(realEstatePropertyExpenses, id, orgId, "Property expense not found.");
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/expenses/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstatePropertyExpenses)
@@ -4840,7 +4836,7 @@ export class PropertyManagementService {
       .limit(1);
     const receiptUrl = row?.receiptUrl;
     if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Echeancier de paiement des depenses de propriete (SCRUM-313) ───────────
@@ -5099,7 +5095,7 @@ export class PropertyManagementService {
 
   async uploadExpenseInstallmentReceipt(installmentId: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.findActiveInstallmentForOrg(installmentId, orgId);
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/expenses/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstateExpenseInstallments)
@@ -5117,7 +5113,7 @@ export class PropertyManagementService {
     const installment = await this.findActiveInstallmentForOrg(installmentId, orgId);
     const receiptUrl = installment.receiptUrl;
     if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Remboursements hypothecaires (SCRUM-311) ──────────────────────────────
@@ -5759,7 +5755,7 @@ export class PropertyManagementService {
 
   async uploadMortgagePaymentReceipt(id: number, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.ensureOrgOwned(realEstateMortgagePayments, id, orgId, "Mortgage payment not found.");
-    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase);
+    const receiptUrl = await this.saveReceiptFile(receipt, `domus/mortgages/${orgId}/receipts`);
     if (!receiptUrl) throw new BadRequestException("Aucun fichier reçu.");
     await this.db
       .update(realEstateMortgagePayments)
@@ -5782,7 +5778,7 @@ export class PropertyManagementService {
       .limit(1);
     const receiptUrl = row?.receiptUrl;
     if (!receiptUrl) throw new NotFoundException("Justificatif introuvable.");
-    return readValidatedUploadFile(this.uploadDir, extractStoredFileName(receiptUrl));
+    return readStoredDocument(this.objectStorage, receiptUrl);
   }
 
   // ── Maintenance Photos (miroir de propertyPhotos, liees a ticketId) ────────

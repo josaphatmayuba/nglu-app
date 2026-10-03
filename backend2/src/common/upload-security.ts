@@ -1,7 +1,7 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException } from "@nestjs/common";
 import { randomBytes } from "crypto";
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from "fs";
-import { basename, extname, join } from "path";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 
 export type UploadedBufferFile = {
   buffer?: Buffer;
@@ -89,45 +89,3 @@ export function saveValidatedUploadFile(
   return { name, mimetype: validated.mimetype, extension: validated.extension };
 }
 
-const EXT_TO_MIME: Record<string, string> = {
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".pdf": "application/pdf",
-};
-
-/**
- * Lit un fichier precedemment ecrit par saveValidatedUploadFile et prepare un
- * flux prêt a streamer (StreamableFile) avec son Content-Type devine depuis
- * l'extension. `basename()` empeche toute remontee de chemin (../) : seul un
- * nom de fichier a plat dans uploadDir peut etre lu, jamais un chemin arbitraire.
- * A utiliser uniquement APRES verification d'appartenance (token/JWT + scope),
- * jamais directement depuis une entree utilisateur non verifiee.
- */
-export function readValidatedUploadFile(uploadDir: string, storedName: string) {
-  const safeName = basename(storedName);
-  const fullPath = join(uploadDir, safeName);
-  if (!existsSync(fullPath)) throw new NotFoundException("Fichier introuvable.");
-
-  const stat = statSync(fullPath);
-  const mimeType = EXT_TO_MIME[extname(safeName).toLowerCase()] || "application/octet-stream";
-  return {
-    body: createReadStream(fullPath),
-    mimeType,
-    originalName: safeName,
-    contentLength: stat.size,
-  };
-}
-
-/**
- * Extrait le nom de fichier stocke depuis une valeur de colonne proofUrl/receiptUrl,
- * qui peut etre soit l'ancien format URL complete (`.../uploads/<nom>`), soit le
- * nouveau format (juste `<nom>`) — lecture transitoire pour ne pas casser les
- * justificatifs deja envoyes avant ce correctif.
- */
-export function extractStoredFileName(value: string): string {
-  const trimmed = value.trim();
-  const idx = trimmed.lastIndexOf("/");
-  return idx >= 0 ? trimmed.slice(idx + 1) : trimmed;
-}

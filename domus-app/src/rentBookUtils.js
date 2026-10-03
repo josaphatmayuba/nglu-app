@@ -196,10 +196,7 @@ function fullAddressLine(lease) {
 
 export async function buildRentBookQrDataUrl(portalUrl) {
   try {
-    // errorCorrectionLevel "M" (defaut "medium" serait trop bas vu la longueur
-    // de l'URL avec token+lease+pay) : plus de redondance pour rester lisible
-    // meme imprime petit (QR individuel par quittance, cf. receiptHtml).
-    return await QRCode.toDataURL(portalUrl, { width: 130, margin: 1, errorCorrectionLevel: "M" });
+    return await QRCode.toDataURL(portalUrl, { width: 130, margin: 1 });
   } catch {
     return null;
   }
@@ -269,7 +266,7 @@ function coverHtml(lease, qrDataUrl) {
         <h1>${escapeHtml(lease.propertyName || "Bien")}</h1>
         <div class="ref">Carnet du locataire · Bail n° ${escapeHtml(lease.reference || `#${lease.id}`)}</div>
       </div>
-      ${qrDataUrl ? `<div class="qr"><img src="${qrDataUrl}" width="90" height="90" alt="QR portail" /><span>Scanner pour envoyer la preuve de paiement</span></div>` : ""}
+      ${qrDataUrl ? `<div class="qr"><img src="${qrDataUrl}" width="90" height="90" alt="QR portail" /><span>Scanner pour voir le dossier</span></div>` : ""}
     </div>
     <div class="cover-grid">
       <div class="cell"><span>Locataire</span><strong>${escapeHtml([lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "—")}</strong></div>

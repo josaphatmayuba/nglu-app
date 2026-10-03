@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Download, Plus, Check, Clock, Smartphone, ArrowRight, ArrowLeft,
-  Banknote, BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search,
+  Banknote, BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -470,9 +470,14 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
           {payment.proofUrl && (
             <div className="immo-pay-row" style={{ alignItems: "center" }}>
               <span>Quittance signée envoyée par le locataire</span>
-              <a href={api.paymentProofUrl(payment.id)} target="_blank" rel="noopener noreferrer" className="immo-btn" style={{ fontSize: 12 }}>
+              <button
+                type="button"
+                className="immo-btn"
+                style={{ fontSize: 12 }}
+                onClick={() => { setErr(null); api.paymentProofUrl(payment.id).catch((e) => setErr(e.message || String(e))); }}
+              >
                 <FileDown size={14} /> Voir
-              </a>
+              </button>
             </div>
           )}
           <label className="immo-field-label">Date du paiement</label>
@@ -860,9 +865,15 @@ export function Loyers({ go }) {
                     <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}</td>
                     <td style={{ display: "flex", gap: 6 }}>
                       {p.proofUrl && (
-                        <a className="immo-btn" style={{ fontSize: 12 }} href={api.paymentProofUrl(p.id)} target="_blank" rel="noopener noreferrer" title="Voir la quittance signée envoyée par le locataire">
+                        <button
+                          type="button"
+                          className="immo-btn"
+                          style={{ fontSize: 12 }}
+                          title="Voir la quittance signée envoyée par le locataire"
+                          onClick={() => api.paymentProofUrl(p.id).catch((e) => toast.error(e.message || String(e)))}
+                        >
                           <FileDown size={14} /> Quittance signée
-                        </a>
+                        </button>
                       )}
                       {isPending && (
                         <button className="immo-btn" style={{ fontSize: 12 }} onClick={() => setConfirmTarget(p)}>
@@ -885,15 +896,131 @@ export function Loyers({ go }) {
   );
 }
 
+// ───────────────── QUITTANCES REÇUES (photos via QR) ─────────────────
+// proofUrl sert aussi a la preuve jointe par le gestionnaire a l'encaissement :
+// seul proofUploadCount > 0 garantit que la photo vient du locataire (QR).
+const isTenantReceipt = (p) => Boolean(p?.proofUrl) && Number(p?.proofUploadCount || 0) > 0;
+const RECEIPT_PAID_DAYS = 30;
+
+// Quittances a afficher : toutes celles en attente (a verifier) puis les
+// payees des 30 derniers jours, pour que le gestionnaire retrouve ce qu'il
+// vient de confirmer. Au-dela, l'historique reste dans Loyers & paiements.
+function receivedReceipts(payments) {
+  const since = Date.now() - RECEIPT_PAID_DAYS * 86400000;
+  const list = (Array.isArray(payments) ? payments : []).filter(isTenantReceipt);
+  const ts = (p) => new Date(p.updatedAt || p.paymentDate || 0).getTime() || 0;
+  const pending = list.filter((p) => p.status === "pending").sort((a, b) => ts(b) - ts(a));
+  const paid = list.filter((p) => p.status !== "pending" && ts(p) >= since).sort((a, b) => ts(b) - ts(a));
+  return { pending, paid };
+}
+
+// Compteur du menu « Paiement & quittance » : quittances recues en attente
+// de verification. Le perimetre (organisation, biens du delegue) est deja
+// applique cote serveur par GET /payments.
+export function PendingReceiptsBadge() {
+  const { data, reload } = useApi(() => api.payments().catch(() => []), []);
+  useRealtimeReload(reload, ["payments"]);
+  const n = receivedReceipts(data).pending.length;
+  if (!n) return null;
+  return (
+    <span
+      title={tf("{n} quittance(s) reçue(s) à vérifier", { n })}
+      style={{ marginLeft: "auto", minWidth: 20, height: 20, padding: "0 6px", borderRadius: 10, background: "#ef4444", color: "#fff", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+    >
+      {n}
+    </span>
+  );
+}
+
+const shortDate = (d) => {
+  const x = new Date(d);
+  return Number.isNaN(x.getTime()) ? "" : x.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+};
+const paymentMonth = (d) => {
+  const m = /^(\d{4})-(\d{2})/.exec(String(d || ""));
+  return m ? `${MONTHS_FR[Number(m[2]) - 1] || ""} ${m[1]}` : "—";
+};
+
+function ReceivedReceiptCard({ p, onConfirm }) {
+  const toast = useToast();
+  const pending = p.status === "pending";
+  const btn = { minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 };
+  return (
+    <div style={{ padding: "12px 0", borderTop: "1px solid var(--line, #e5e7eb)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>{tenantName(p)}</div>
+          <div className="muted" style={{ fontSize: 12 }}>{[p.propertyName, p.unitName].filter(Boolean).join(" · ") || "—"}</div>
+        </div>
+        <span className={`immo-pill ${pending ? "warning" : "success"}`}>{pending ? t("À vérifier") : t("Payé")}</span>
+      </div>
+      <div className="muted" style={{ fontSize: 13, margin: "6px 0 10px" }}>
+        {paymentMonth(p.paymentDate)} · <strong style={{ color: "var(--ink-900, inherit)" }}>{money(p.amount, p.currencySymbol || "$")}</strong>
+        {pending && p.updatedAt ? ` · ${t("reçue le")} ${shortDate(p.updatedAt)}` : ""}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" className="immo-btn" style={btn}
+          onClick={() => api.paymentProofUrl(p.id).catch((e) => toast.error(e.message || String(e)))}>
+          <Camera size={16} /> {t("Voir la photo")}
+        </button>
+        {pending && (
+          <button type="button" className="immo-btn primary" style={btn} onClick={() => onConfirm(p)}>
+            <Check size={16} /> {t("Confirmer le paiement")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReceivedReceipts({ payments, methods, onChanged }) {
+  const { pending, paid } = useMemo(() => receivedReceipts(payments), [payments]);
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [showPaid, setShowPaid] = useState(false);
+  const toast = useToast();
+  return (
+    <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Camera size={18} />
+        <h3 style={{ margin: 0, fontSize: 16 }}>{t("Quittances reçues")}{pending.length ? ` (${pending.length})` : ""}</h3>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: "4px 0 8px" }}>
+        {t("Photos envoyées par vos locataires avec le QR de la quittance.")}
+      </p>
+      {pending.length === 0 && (
+        <p className="muted" style={{ fontSize: 13, margin: "8px 0 0" }}>{t("Aucune quittance à vérifier pour le moment.")}</p>
+      )}
+      {pending.map((p) => <ReceivedReceiptCard key={p.id} p={p} onConfirm={setConfirmTarget} />)}
+      {paid.length > 0 && (
+        <button type="button" className="immo-btn" style={{ marginTop: 10, minHeight: 44, width: "100%", justifyContent: "center" }}
+          onClick={() => setShowPaid((v) => !v)}>
+          {showPaid ? t("Masquer les quittances déjà payées") : tf("Voir les quittances déjà payées ({n})", { n: paid.length })}
+        </button>
+      )}
+      {showPaid && paid.map((p) => <ReceivedReceiptCard key={p.id} p={p} onConfirm={setConfirmTarget} />)}
+      {confirmTarget && (
+        <ConfirmPayModal
+          payment={confirmTarget}
+          methods={methods}
+          onClose={() => setConfirmTarget(null)}
+          onConfirmed={(msg) => { setConfirmTarget(null); toast.success?.(msg); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ───────────────────── PAIEMENT (wizard Encaisser) ─────────────────────
 export function Paiement({ go }) {
   const { data, loading, error, reload } = useApi(
     async () => {
-      const [leases, paymentMethods] = await Promise.all([
+      const [leases, paymentMethods, payments] = await Promise.all([
         api.leases(),
         api.paymentMethods().catch(() => []),
+        // Tolerant : un echec ne doit pas bloquer l'encaissement.
+        api.payments().catch(() => []),
       ]);
-      return { leases, paymentMethods };
+      return { leases, paymentMethods, payments };
     },
     [],
   );
@@ -1000,6 +1127,9 @@ export function Paiement({ go }) {
 
   return (
     <div style={{ maxWidth: 480 }}>
+      {/* Quittances recues : visibles au debut du parcours seulement, pour ne
+          pas encombrer l'assistant d'encaissement une fois lance. */}
+      {step === 1 && <ReceivedReceipts payments={data?.payments} methods={methods} onChanged={reload} />}
       <div style={{ marginBottom: 16 }}>
         <div className="eyebrow">Encaissement · pas à pas</div>
         <h2 className="title">Encaisser un loyer</h2>
