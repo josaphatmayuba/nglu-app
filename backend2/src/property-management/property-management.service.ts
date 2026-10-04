@@ -4078,7 +4078,10 @@ export class PropertyManagementService {
 
     // Gestionnaire du carnet = delegue(s) actif(s) qui suivent ce bien, ou le
     // portefeuille de son proprietaire (memes portees que les notifications).
-    // Sans delegue affecte, repli sur le nom de l'organisation.
+    // Sans delegue affecte, repli sur le nom de l'organisation, sauf si c'est
+    // encore le nom par defaut "Default Organization" (pas un vrai gestionnaire).
+    const orgName = (lease.organizationName || "").trim();
+    const realOrgName = orgName && orgName.toLowerCase() !== "default organization" ? orgName : null;
     const [propOwner] = await this.db
       .select({ ownerId: realEstateProperties.ownerId })
       .from(realEstateProperties)
@@ -4105,7 +4108,7 @@ export class PropertyManagementService {
         eq(realEstateDelegates.isActive, 1),
         scopeMatch,
       ));
-    const managerName = [...new Set(delegateRows.map((d) => d.displayName).filter(Boolean))].join(", ") || lease.organizationName || null;
+    const managerName = [...new Set(delegateRows.map((d) => d.displayName).filter(Boolean))].join(", ") || realOrgName || null;
 
     // Ou payer : "Nom · telephone" par delegue, dedoublonne (un delegue
     // affecte au bien ET a son proprietaire remonte deux fois).

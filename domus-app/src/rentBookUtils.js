@@ -4,7 +4,14 @@
 // native du navigateur avec @page/break-inside plus fiable qu'un rendu jsPDF).
 import QRCode from "qrcode";
 import { escapeHtml } from "./contractUtils.js";
-import { moneyExact } from "./data.js";
+import { decodeCurrencyText } from "./data.js";
+
+// Montant du carnet : « 300 $ » (devise apres le nombre, usage francophone),
+// et non « $ 300 » comme moneyExact utilise ailleurs dans l'app.
+function moneyAfter(n, currency = "CDF") {
+  const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
+  return `${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${symbol}`;
+}
 
 const MONTHS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -275,7 +282,7 @@ function coverHtml(lease, qrDataUrl) {
       <div class="cell"><span>Contact</span><strong>${escapeHtml(lease.tenantPhone || "—")}</strong></div>
       <div class="cell full"><span>Adresse</span><strong>${escapeHtml(fullAddressLine(lease) || "—")}</strong></div>
       <div class="cell"><span>Durée du bail</span><strong>${fmtDateLong(lease.startDate)} → ${lease.endDate ? fmtDateLong(lease.endDate) : "indéterminée"}</strong></div>
-      <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyExact(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
+      <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyAfter(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
       <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong></div>
       <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.managerName || "—")}</strong></div>
     </div>
@@ -322,10 +329,10 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
     <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
     ${isPaid
       ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div><div><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div></div>`
-      : `<div class="receipt-row"><span>Où payer</span><span>${escapeHtml(lease.payTo || lease.managerName || "—")}</span></div>`
+      : `<div class="receipt-row"><div><span>Où payer</span><span>${escapeHtml(lease.payTo || lease.managerName || "—")}</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
     }
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
-      <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong>
+      <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
       <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
     </div>
     <div class="receipt-bottom">
@@ -349,8 +356,8 @@ function footerHtml(lease, payments) {
     <div class="footer-totals">
       ${totals.map((t) => `
         <div class="box">
-          <span>Total payé (${escapeHtml(t.symbol)})</span><strong>${escapeHtml(moneyExact(t.paid, t.symbol))}</strong><br />
-          <span style="margin-top:8px;">Restant dû (${escapeHtml(t.symbol)})</span><strong class="due">${escapeHtml(moneyExact(t.pending, t.symbol))}</strong>
+          <span>Total payé (${escapeHtml(t.symbol)})</span><strong>${escapeHtml(moneyAfter(t.paid, t.symbol))}</strong><br />
+          <span style="margin-top:8px;">Restant dû (${escapeHtml(t.symbol)})</span><strong class="due">${escapeHtml(moneyAfter(t.pending, t.symbol))}</strong>
         </div>
       `).join("")}
     </div>
