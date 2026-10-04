@@ -12,12 +12,6 @@ import { t } from "../i18n.js";
 // « Ouvrir dans un onglet » de charger le document.
 const REVOKE_DELAY_MS = 60000;
 
-function isMobileDevice() {
-  if (typeof window === "undefined") return false;
-  if (window.Capacitor?.isNativePlatform?.()) return true;
-  return /Android|iPhone|iPad/i.test(navigator.userAgent || "");
-}
-
 const FOCUSABLE = 'a[href],button:not([disabled]),iframe,[tabindex]:not([tabindex="-1"])';
 
 // Bouton/lien + modal integre, pour les endroits sans etat a porter (le modal
@@ -99,31 +93,30 @@ export function ProofModal({ path, title, onClose }) {
   const type = file?.type || "";
   const isPdf = /pdf/i.test(type) || /\.pdf$/i.test(title || "");
   const isImg = /^image\//.test(type);
-  const mobile = isMobileDevice();
   const btnStyle = { minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6 };
 
   let content = null;
   if (file) {
-    if (isPdf && mobile) {
+    // Pas d'iframe pour les PDF : la CSP du serveur (default-src 'self', pas de
+    // frame-src blob:) bloque l'apercu integre, sur desktop comme sur mobile.
+    if (isPdf) {
       content = (
         <div style={{ padding: "32px 12px" }}>
           <FileText size={40} aria-hidden="true" />
           <p style={{ fontWeight: 600, margin: "10px 0 4px" }}>{t("Document PDF")}</p>
           <p className="muted" style={{ margin: "0 0 14px" }}>{t("Le PDF s'ouvre dans l'application de votre appareil.")}</p>
-          <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" download={title || undefined} style={{ ...btnStyle, background: "var(--iris-600)", color: "#fff" }}>
+          <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" download={title || undefined} style={{ ...btnStyle, background: "var(--iris-600)", color: "#fff", textDecoration: "none" }}>
             <Download size={16} /> {t("Télécharger")} / {t("Ouvrir")}
           </a>
         </div>
       );
-    } else if (isPdf) {
-      content = <iframe src={file.url} title={label} style={{ width: "100%", flex: 1, minHeight: 0, border: 0 }} />;
     } else if (isImg) {
       content = <img src={file.url} alt={label} style={{ maxWidth: "100%", maxHeight: "calc(92dvh - 160px)", objectFit: "contain", height: "auto", borderRadius: 8 }} />;
     } else {
       content = (
         <div style={{ padding: "32px 12px" }}>
           <p style={{ fontWeight: 600, margin: "0 0 14px" }}>{t("Aperçu indisponible")}</p>
-          <a className="immo-btn" href={file.url} download={title || t("Document")} style={btnStyle}>
+          <a className="immo-btn" href={file.url} download={title || t("Document")} style={{ ...btnStyle, textDecoration: "none" }}>
             <Download size={16} /> {t("Télécharger")}
           </a>
         </div>
@@ -169,7 +162,7 @@ export function ProofModal({ path, title, onClose }) {
         </div>
         <div className="immo-modal-foot">
           {file && (
-            <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" style={btnStyle}>
+            <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" style={{ ...btnStyle, textDecoration: "none" }}>
               <ExternalLink size={16} /> {t("Ouvrir dans un onglet")}
             </a>
           )}
