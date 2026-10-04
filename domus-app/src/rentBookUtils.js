@@ -125,7 +125,7 @@ export function amountToWordsFr(amount, currencySymbol = "CDF") {
 // à la main au moment du paiement), fusionnés avec les paiements réels
 // quand ils existent pour ce mois. ──────────────────────────────────────
 export function buildFullRentSchedule(lease, payments) {
-  const start = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const start = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.startDate || ""));
   if (!start) return payments; // pas de date de début exploitable : fallback paiements réels
 
   const byMonth = new Map();
@@ -135,10 +135,14 @@ export function buildFullRentSchedule(lease, payments) {
   }
 
   const startIdx = Number(start[1]) * 12 + (Number(start[2]) - 1);
-  const end = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+  const end = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.endDate || ""));
   let endIdx;
   if (end) {
     endIdx = Number(end[1]) * 12 + (Number(end[2]) - 1);
+    // Bail de N mois = N echeances (meme regle que generateMissingPayments) :
+    // le mois de la date de fin n'est du que si elle tombe APRES le jour de debut.
+    if (Number(end[3] || 31) <= Number(start[3] || 1)) endIdx -= 1;
+    endIdx = Math.max(endIdx, startIdx);
   } else {
     // Bail à durée indéterminée : couvrir au moins jusqu'au dernier paiement
     // connu, sinon 12 mois par défaut à partir du début.

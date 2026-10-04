@@ -2292,13 +2292,28 @@ export class PropertyManagementService {
     // indéterminée) plutôt que de s'arrêter au mois courant — mêmes bornes
     // que buildFullRentSchedule côté frontend (rentBookUtils.js), pour que
     // le carnet et la base restent cohérents.
+    // Un bail de N mois a N echeances, pas N+1 : l'echeance d'un mois commence
+    // le jour de debut du bail, donc le mois de endDate n'est facturable que si
+    // endDate tombe STRICTEMENT apres ce jour (debut 15/01/2026 + fin 15/01/2027
+    // ou 14/01/2027 = 12 mois, le mois de janvier 2027 n'est pas du).
+    const lastBillableMonth = boundary
+      ? new Date(Date.UTC(
+          boundary.getUTCFullYear(),
+          boundary.getUTCMonth() - (boundary.getUTCDate() <= start.getUTCDate() ? 1 : 0),
+          1,
+        ))
+      : null;
+    const firstMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const billableEnd = lastBillableMonth && lastBillableMonth.getTime() >= firstMonth.getTime()
+      ? lastBillableMonth
+      : firstMonth;
     const limit = upToEnd
-      ? (boundary || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
+      ? (boundary ? billableEnd : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
       : today;
     const lastMonth = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth(), 1));
     let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
-      if (!boundary || cursor.getTime() <= boundary.getTime()) {
+      if (!boundary || cursor.getTime() <= billableEnd.getTime()) {
         const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
         const covered = upToEnd
           ? existingMonthKeys.has(monthKey)
