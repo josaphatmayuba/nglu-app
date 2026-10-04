@@ -567,6 +567,17 @@ const EN = {
   "Bien, description, montant et date obligatoires.": "Property, description, amount and date required.",
   "Supprimer la dépense": "Delete expense",
   "Supprimer la dépense {description} ?": "Delete expense {description}?",
+  // Composant: ProofModal.jsx
+  "Chargement…": "Loading…",
+  "Chargement du document": "Loading document",
+  "Ouvrir dans un onglet": "Open in a tab",
+  "Ouvrir": "Open",
+  "Aperçu indisponible": "Preview unavailable",
+  "Télécharger": "Download",
+  "Document PDF": "PDF document",
+  "Le PDF s'ouvre dans l'application de votre appareil.": "The PDF opens in your device's app.",
+  "Bail signé": "Signed lease",
+  "Quittance": "Receipt",
 };
 
 const DICT = { fr: {}, en: EN };

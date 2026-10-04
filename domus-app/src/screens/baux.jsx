@@ -36,6 +36,7 @@ import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
+import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
@@ -1101,9 +1102,9 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
             <ul className="domus-lease-documents">
               {documents.map((doc) => (
                 <li key={doc.id}>
-                  <a href={api.leaseDocumentUrl(doc.id)} target="_blank" rel="noreferrer">
+                  <ProofButton className="immo-linklike" path={`/leases/documents/${doc.id}/file`} title={doc.originalName}>
                     <FileText size={14} /> {doc.originalName || `Document ${doc.id}`}
-                  </a>
+                  </ProofButton>
                   <button
                     className="domus-lease-document-remove"
                     disabled={docBusy}
@@ -1213,9 +1214,9 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
         )}
         {contract.signedDocumentId && (
           <div className="domus-contract-manual-sign">
-            <a className="immo-btn" href={api.leaseDocumentUrl(contract.signedDocumentId)} target="_blank" rel="noreferrer">
+            <ProofButton className="immo-btn" path={`/leases/documents/${contract.signedDocumentId}/file`} title={t("Bail signé")}>
               <FileText size={15} /> Voir le bail signe importe
-            </a>
+            </ProofButton>
           </div>
         )}
         <div
