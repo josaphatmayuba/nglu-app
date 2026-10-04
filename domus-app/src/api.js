@@ -133,15 +133,35 @@ async function openAuthenticatedFile(path) {
  * Recupere un fichier protege par JWT comme Blob, sans jamais mettre le token
  * dans l'URL. Utilise par les apercus <img> (ReceiptField) via un hook qui
  * cree un object URL et le revoque au demontage.
+ *
+ * @param {string} path
+ * @param {(p: number|null) => void} [onProgress] pourcentage 0-100, null = taille inconnue
+ * @param {AbortSignal} [signal] annulation (AbortError a ignorer par l'appelant)
  */
-async function fetchAuthenticatedBlob(path) {
-  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
+async function fetchAuthenticatedBlob(path, onProgress, signal) {
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders(), signal });
   if (!res.ok) {
     if (res.status === 401) clearToken();
     const body = await res.text().catch(() => "");
     throw new Error(cleanApiError(res, body));
   }
-  return res.blob();
+  // Content-Length = taille compressee si content-encoding : ne pas s'y fier.
+  const total = res.headers.get("content-encoding") ? 0 : Number(res.headers.get("content-length")) || 0;
+  if (!onProgress || !res.body?.getReader) return res.blob();
+  // Lecture en flux pour remonter un pourcentage (0-100) ; sans Content-Length
+  // le total est inconnu et onProgress recoit null (barre indeterminee).
+  const reader = res.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    onProgress(total ? Math.min(100, Math.round((loaded / total) * 100)) : null);
+  }
+  onProgress(100);
+  return new Blob(chunks, { type: res.headers.get("content-type") || "" });
 }
 
 // ── Endpoints (alignés sur property-management.controller.ts) ──
@@ -152,7 +172,8 @@ export const api = {
   openAuthenticatedFile: (path) => openAuthenticatedFile(path),
   // Pour les apercus <img> (ReceiptField) : recupere le fichier en Blob avec
   // l'en-tete Authorization, sans jamais mettre le token dans l'URL.
-  fetchAuthenticatedBlob: (path) => fetchAuthenticatedBlob(path),
+  // onProgress et signal (AbortSignal) optionnels.
+  fetchAuthenticatedBlob: (path, onProgress, signal) => fetchAuthenticatedBlob(path, onProgress, signal),
   currencies: () => jsonFetch("/currency?query=all", { method: "GET", base: API_ROOT }),
   allCurrencies: () => jsonFetch("/currency?query=all&status=all", { method: "GET", base: API_ROOT }),
   setting: () => jsonFetch("/setting", { method: "GET", base: API_ROOT }),

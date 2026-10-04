@@ -27,6 +27,8 @@ import {
   realEstatePropertyPhotos,
   realEstateReservations,
   realEstateCoupons,
+  realEstateDelegateAssignments,
+  realEstateDelegates,
   realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
@@ -2290,13 +2292,28 @@ export class PropertyManagementService {
     // indéterminée) plutôt que de s'arrêter au mois courant — mêmes bornes
     // que buildFullRentSchedule côté frontend (rentBookUtils.js), pour que
     // le carnet et la base restent cohérents.
+    // Un bail de N mois a N echeances, pas N+1 : l'echeance d'un mois commence
+    // le jour de debut du bail, donc le mois de endDate n'est facturable que si
+    // endDate tombe STRICTEMENT apres ce jour (debut 15/01/2026 + fin 15/01/2027
+    // ou 14/01/2027 = 12 mois, le mois de janvier 2027 n'est pas du).
+    const lastBillableMonth = boundary
+      ? new Date(Date.UTC(
+          boundary.getUTCFullYear(),
+          boundary.getUTCMonth() - (boundary.getUTCDate() <= start.getUTCDate() ? 1 : 0),
+          1,
+        ))
+      : null;
+    const firstMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const billableEnd = lastBillableMonth && lastBillableMonth.getTime() >= firstMonth.getTime()
+      ? lastBillableMonth
+      : firstMonth;
     const limit = upToEnd
-      ? (boundary || new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
+      ? (boundary ? billableEnd : new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 11, 1)))
       : today;
     const lastMonth = new Date(Date.UTC(limit.getUTCFullYear(), limit.getUTCMonth(), 1));
     let monthIndex = 0;
     while (cursor.getTime() <= lastMonth.getTime()) {
-      if (!boundary || cursor.getTime() <= boundary.getTime()) {
+      if (!boundary || cursor.getTime() <= billableEnd.getTime()) {
         const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
         const covered = upToEnd
           ? existingMonthKeys.has(monthKey)
@@ -4032,6 +4049,8 @@ export class PropertyManagementService {
         propertyName: leaseProperty.name,
         propertyAddress: leaseProperty.address,
         ownerName: realEstateOwners.displayName,
+        ownerPhone: realEstateOwners.phone,
+        ownerPhone2: realEstateOwners.phone2,
         unitId: realEstateLeases.unitId,
         unitName: leaseUnit.name,
         tenantId: realEstateLeases.tenantId,
@@ -4074,7 +4093,49 @@ export class PropertyManagementService {
       ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId, lease.id)
       : "";
 
-    return { lease, payments, portalUrl: portalUrl || null };
+    // Gestionnaire du carnet = delegue(s) actif(s) qui suivent ce bien, ou le
+    // portefeuille de son proprietaire (memes portees que les notifications).
+    // Sans delegue affecte, repli sur le nom de l'organisation, sauf si c'est
+    // encore le nom par defaut "Default Organization" (pas un vrai gestionnaire).
+    const orgName = (lease.organizationName || "").trim();
+    const realOrgName = orgName && orgName.toLowerCase() !== "default organization" ? orgName : null;
+    const [propOwner] = await this.db
+      .select({ ownerId: realEstateProperties.ownerId })
+      .from(realEstateProperties)
+      .where(and(eq(realEstateProperties.id, lease.propertyId), eq(realEstateProperties.organizationId, orgId)))
+      .limit(1);
+    const scopeMatch = propOwner?.ownerId
+      ? or(
+          and(eq(realEstateDelegateAssignments.scopeType, "property"), eq(realEstateDelegateAssignments.scopeId, lease.propertyId)),
+          and(eq(realEstateDelegateAssignments.scopeType, "owner"), eq(realEstateDelegateAssignments.scopeId, Number(propOwner.ownerId))),
+        )
+      : and(eq(realEstateDelegateAssignments.scopeType, "property"), eq(realEstateDelegateAssignments.scopeId, lease.propertyId));
+    const delegateRows = await this.db
+      .select({
+        displayName: realEstateDelegates.displayName,
+        phone: realEstateDelegates.phone,
+        phone2: realEstateDelegates.phone2,
+      })
+      .from(realEstateDelegateAssignments)
+      .innerJoin(realEstateDelegates, eq(realEstateDelegates.id, realEstateDelegateAssignments.delegateId))
+      .where(and(
+        eq(realEstateDelegateAssignments.organizationId, orgId),
+        eq(realEstateDelegateAssignments.isActive, 1),
+        eq(realEstateDelegates.organizationId, orgId),
+        eq(realEstateDelegates.isActive, 1),
+        scopeMatch,
+      ));
+    const managerName = [...new Set(delegateRows.map((d) => d.displayName).filter(Boolean))].join(", ") || realOrgName || null;
+
+    // Ou payer : "Nom · telephone" par delegue, dedoublonne (un delegue
+    // affecte au bien ET a son proprietaire remonte deux fois).
+    const payTo = [...new Set(
+      delegateRows
+        .filter((d) => d.displayName)
+        .map((d) => [d.displayName, (d.phone || d.phone2 || "").trim()].filter(Boolean).join(" · ")),
+    )].join(" / ") || null;
+
+    return { lease: { ...lease, managerName, payTo }, payments, portalUrl: portalUrl || null };
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {

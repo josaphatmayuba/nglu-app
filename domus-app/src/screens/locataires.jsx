@@ -15,6 +15,7 @@ import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { ProofButton } from "../components/ProofModal.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -704,9 +705,9 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
 
           {tenant.idDocumentName && (
             <div className="action-strip" style={{ marginTop: 8 }}>
-              <a className="btn" href={api.tenantIdDocumentUrl(tenant.id)} target="_blank" rel="noreferrer">
+              <ProofButton className="btn" path={`/tenants/${tenant.id}/id-document/file`} title={tenant.idDocumentName}>
                 <IdCard size={16} /> Voir la copie de la piece
-              </a>
+              </ProofButton>
             </div>
           )}
 
@@ -1222,7 +1223,7 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
               : form._idDocumentName
                 ? (
                   <small className="muted">
-                    Copie actuelle : <a href={api.tenantIdDocumentUrl(form.id)} target="_blank" rel="noreferrer">{form._idDocumentName}</a>
+                    Copie actuelle : <ProofButton className="immo-linklike" path={`/tenants/${form.id}/id-document/file`} title={form._idDocumentName}>{form._idDocumentName}</ProofButton>
                   </small>
                 )
                 : <small className="muted">Aucune copie importee.</small>}

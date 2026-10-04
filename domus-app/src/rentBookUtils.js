@@ -4,7 +4,14 @@
 // native du navigateur avec @page/break-inside plus fiable qu'un rendu jsPDF).
 import QRCode from "qrcode";
 import { escapeHtml } from "./contractUtils.js";
-import { moneyExact } from "./data.js";
+import { decodeCurrencyText } from "./data.js";
+
+// Montant du carnet : « 300 $ » (devise apres le nombre, usage francophone),
+// et non « $ 300 » comme moneyExact utilise ailleurs dans l'app.
+function moneyAfter(n, currency = "CDF") {
+  const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
+  return `${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${symbol}`;
+}
 
 const MONTHS_FR = [
   "janvier", "février", "mars", "avril", "mai", "juin",
@@ -118,7 +125,7 @@ export function amountToWordsFr(amount, currencySymbol = "CDF") {
 // à la main au moment du paiement), fusionnés avec les paiements réels
 // quand ils existent pour ce mois. ──────────────────────────────────────
 export function buildFullRentSchedule(lease, payments) {
-  const start = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const start = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.startDate || ""));
   if (!start) return payments; // pas de date de début exploitable : fallback paiements réels
 
   const byMonth = new Map();
@@ -128,10 +135,14 @@ export function buildFullRentSchedule(lease, payments) {
   }
 
   const startIdx = Number(start[1]) * 12 + (Number(start[2]) - 1);
-  const end = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+  const end = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.endDate || ""));
   let endIdx;
   if (end) {
     endIdx = Number(end[1]) * 12 + (Number(end[2]) - 1);
+    // Bail de N mois = N echeances (meme regle que generateMissingPayments) :
+    // le mois de la date de fin n'est du que si elle tombe APRES le jour de debut.
+    if (Number(end[3] || 31) <= Number(start[3] || 1)) endIdx -= 1;
+    endIdx = Math.max(endIdx, startIdx);
   } else {
     // Bail à durée indéterminée : couvrir au moins jusqu'au dernier paiement
     // connu, sinon 12 mois par défaut à partir du début.
@@ -220,45 +231,53 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
   .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
   .rent-book .cover-grid .cell strong.accent { color: #2f6e4e; }
+  .rent-book .cover-grid .cell .phone { font-size: 12px; color: #5a655d; margin-top: 2px; }
   .rent-book .dash { flex: 1; border-top: 1px dashed #b7afa0; }
   .rent-book .receipts-title { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; white-space: nowrap; }
   .rent-book .cut-line { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: #9a9385; font-size: 11px; }
   .rent-book .receipt-wrap { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+  .rent-book .receipt-wrap.page-end { break-after: page; page-break-after: always; margin-bottom: 0; }
   .rent-book .receipt { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; }
   .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: center; background: #eef0ea; border-bottom: 1px solid #c9c2b2; padding: 12px 18px; }
   .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 15px; display: block; }
-  .rent-book .receipt-head .period { font-size: 11px; color: #5a655d; display: block; margin-top: 2px; letter-spacing: .02em; }
+  .rent-book .receipt-head .period { font-size: 13px; font-weight: 700; color: #1f2a24; display: block; margin-top: 3px; letter-spacing: .04em; }
   .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
   .rent-book .receipt-head .status::before { content: "●"; margin-right: 5px; font-size: 8px; }
   .rent-book .receipt-head .status.paid { background: #e4ede6; color: #2f6e4e; }
   .rent-book .receipt-head .status.pending { background: #f3e8d2; color: #b8862f; }
-  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 14px 18px 0; }
-  .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 6px; }
+  .rent-book .receipt-row { display: flex; justify-content: space-between; font-size: 12px; padding: 8px 18px 0; }
+  .rent-book .receipt-row span:first-child { color: #5a655d; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 3px; }
   .rent-book .receipt-row span:last-child { font-size: 13.5px; font-weight: 600; display: block; }
-  .rent-book .receipt-amount { margin: 14px 18px; padding: 16px 18px; background: #e4ede6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .rent-book .receipt-amount { margin: 10px 18px; padding: 10px 18px; background: #e4ede6; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
   .rent-book .receipt-amount.pending { background: #f3e8d2; }
   .rent-book .receipt-amount strong { font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: #2f6e4e; font-weight: 600; white-space: nowrap; }
   .rent-book .receipt-amount.pending strong { color: #b8862f; }
   .rent-book .receipt-amount .words { font-style: italic; font-weight: 400; color: #5a655d; font-size: 11.5px; text-align: right; }
-  .rent-book .receipt-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 18px 18px; }
+  .rent-book .receipt-bottom { display: flex; align-items: flex-start; gap: 14px; padding: 0 18px 12px; }
+  .rent-book .receipt-sign { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
   .rent-book .receipt-sign .box .line { height: 48px; border: 1px dashed #c9c2b2; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
   .rent-book .receipt-sign .box .line span { margin: 0; font-size: 10.5px; font-style: italic; text-transform: none; letter-spacing: 0; color: #a39d8e; }
-  .rent-book .receipt-qr { display: flex; align-items: center; gap: 10px; padding: 0 18px 16px; }
+  .rent-book .receipt-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
   .rent-book .receipt-qr img { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 4px; display: block; }
   .rent-book .receipt-qr span { font-size: 9px; color: #5a655d; text-transform: uppercase; letter-spacing: .05em; line-height: 1.4; }
-  .rent-book .footer { break-before: page; page-break-before: always; background: #eef0ea; border: 1px solid #c9c2b2; border-radius: 4px; padding: 16px 24px; margin-top: 10px; }
-  .rent-book .footer h2 { font-family: 'Fraunces', Georgia, serif; font-size: 13px; letter-spacing: .04em; margin: 0 0 10px; }
-  .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 14px; }
-  .rent-book .footer-totals .box { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 12px 16px; min-width: 180px; }
-  .rent-book .footer-totals .box span { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; }
-  .rent-book .footer-totals .box strong { font-family: 'Fraunces', Georgia, serif; font-size: 16px; }
-  .rent-book .footer-totals .box .due { color: #b8862f; }
-  .rent-book .footer-meta { font-size: 10.5px; color: #5a655d; }
-  @media print { .rent-book { background: #fff; } .rent-book .print-actions { display: none; } }
+  @media print {
+    .rent-book { background: #fff; }
+    .rent-book .print-actions, .rent-book .receipts-title { display: none; }
+    /* Couverture : la marge de page est a 0 (voir @page), on la remet ici. */
+    .rent-book .cover { margin: 14mm; }
+    /* Chaque quittance occupe EXACTEMENT une moitie de la feuille (A4 ou
+       Letter : on se base sur la hauteur reelle de la page, pas sur une taille
+       fixe) pour qu'on puisse couper au milieu sans toucher une information.
+       La ligne « Detacher ici » ferme la moitie haute ; rien ne depasse. */
+    .rent-book .receipt-wrap { height: calc(50vh - 0.5mm); padding: 6mm 12mm 0; margin: 0; display: flex; flex-direction: column; }
+    .rent-book .receipt-wrap .cut-line { margin: auto 0 0; }
+    .rent-book .receipt-wrap.page-end .cut-line { display: none; }
+  }
 `;
 
 function coverHtml(lease, qrDataUrl) {
+  const ownerPhone = (lease.ownerPhone || lease.ownerPhone2 || "").trim();
   return `
   <div class="cover">
     <div class="cover-header">
@@ -273,20 +292,28 @@ function coverHtml(lease, qrDataUrl) {
       <div class="cell"><span>Contact</span><strong>${escapeHtml(lease.tenantPhone || "—")}</strong></div>
       <div class="cell full"><span>Adresse</span><strong>${escapeHtml(fullAddressLine(lease) || "—")}</strong></div>
       <div class="cell"><span>Durée du bail</span><strong>${fmtDateLong(lease.startDate)} → ${lease.endDate ? fmtDateLong(lease.endDate) : "indéterminée"}</strong></div>
-      <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyExact(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
-      <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong></div>
-      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.organizationName || "—")}</strong></div>
+      <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyAfter(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
+      <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong>${ownerPhone ? `<div class="phone">${escapeHtml(ownerPhone)}</div>` : ""}</div>
+      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.payTo || lease.managerName || "—")}</strong></div>
     </div>
   </div>`;
 }
 
-function receiptHtml(payment, index, receiptQrDataUrl) {
+function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const isPaid = payment.status === "paid";
+  // Quittance detachable : elle doit s'identifier seule (locataire + logement).
+  // paymentDate = echeance tant que non paye, date du paiement une fois paye.
+  const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "—";
+  const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
+  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
+  const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
-  const headerLine = isPaid
-    ? `${escapeHtml(monthLabel(payment.paymentDate))} · Payée le ${fmtDateShort(payment.paymentDate)}`
-    : `${escapeHtml(monthLabel(payment.paymentDate))} · En attente de paiement`;
-  const cutLine = index > 0
+  const headerLine = escapeHtml(monthLabel(payment.paymentDate).toLocaleUpperCase("fr"));
+  // Deux quittances par page (A4 ou Letter), chacune dans une MOITIE exacte de
+  // la feuille pour pouvoir couper au milieu sans toucher d'information : la
+  // ligne « Détacher ici » ferme la moitie haute (index pair), jamais le haut
+  // d'une nouvelle page.
+  const cutLine = index % 2 === 0
     ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici<span class="dash"></span></div>`
     : "";
   // QR propre à CETTE quittance : scanner envoie directement la photo de la
@@ -301,53 +328,33 @@ function receiptHtml(payment, index, receiptQrDataUrl) {
     ? `<div class="receipt-qr"><img src="${receiptQrDataUrl}" width="90" height="90" alt="QR photo quittance" /><span>Scanner pour<br/>envoyer la photo<br/>de cette quittance</span></div>`
     : "";
   return `
-  <div class="receipt-wrap">
-  ${cutLine}
+  <div class="receipt-wrap${index % 2 === 1 ? " page-end" : ""}">
   <div class="receipt">
     <div class="receipt-head">
       <div>
         <span class="num">Quittance n° ${String(index + 1).padStart(4, "0")}</span>
         <span class="period">${headerLine}</span>
       </div>
-      <span class="status ${isPaid ? "paid" : "pending"}">${isPaid ? "Payé" : "En attente"}</span>
     </div>
+    <div class="receipt-row"><div><span>Locataire</span><span>${escapeHtml(tenantName)}</span></div><div><span>Logement</span><span>${escapeHtml(dwelling)}</span></div></div>
+    <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
     ${isPaid
-      ? `<div class="receipt-row"><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div>
-         <div class="receipt-row"><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div>`
-      : `<div class="receipt-row"><span>Moyen de paiement</span><span>—</span></div>
-         <div class="receipt-row"><span>Perçu par</span><span>—</span></div>`
+      ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div><div><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div></div>`
+      : `<div class="receipt-row"><div><span>Moyen de paiement</span><span>........................................</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
     }
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
-      <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong>
+      <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
       <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
     </div>
-    <div class="receipt-sign">
-      <div class="box"><span>Signature du locataire</span><div class="line"><span>Signature + nom du locataire</span></div></div>
-      <div class="box"><span>Signature du percepteur</span><div class="line"><span>Signature + nom de la personne qui perçoit</span></div></div>
+    <div class="receipt-bottom">
+      <div class="receipt-sign">
+        <div class="box"><span>Signature du locataire</span><div class="line"><span>Signature + nom du locataire</span></div></div>
+        <div class="box"><span>Signature du percepteur</span><div class="line"><span>Signature + nom de la personne qui perçoit</span></div></div>
+      </div>
+      ${receiptQr}
     </div>
-    ${receiptQr}
   </div>
-  </div>`;
-}
-
-function footerHtml(lease, payments) {
-  const totals = totalsByCurrency(payments);
-  const today = fmtDateShort(new Date().toISOString().slice(0, 10));
-  const bookRef = `${lease.reference || `BAIL-${lease.id}`}-${today.replace(/\//g, "")}`;
-  return `
-  <div class="footer">
-    <h2>Récapitulatif</h2>
-    <div class="footer-totals">
-      ${totals.map((t) => `
-        <div class="box">
-          <span>Total payé (${escapeHtml(t.symbol)})</span><strong>${escapeHtml(moneyExact(t.paid, t.symbol))}</strong><br />
-          <span style="margin-top:8px;">Restant dû (${escapeHtml(t.symbol)})</span><strong class="due">${escapeHtml(moneyExact(t.pending, t.symbol))}</strong>
-        </div>
-      `).join("")}
-    </div>
-    <div class="footer-meta">
-      Document généré le ${today} — Référence carnet : ${escapeHtml(bookRef)}
-    </div>
+  ${cutLine}
   </div>`;
 }
 
@@ -356,8 +363,7 @@ export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPayment
   return `
   ${coverHtml(lease, qrDataUrl)}
   <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
-  ${schedule.map((p, i) => receiptHtml(p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}
-  ${footerHtml(lease, schedule)}`;
+  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}`;
 }
 
 export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
@@ -370,7 +376,9 @@ export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPayment
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4; margin: 14mm 14mm; }
+    /* Pas de size fixe : A4 ou Letter au choix de l'imprimante ; marge 0 pour
+       que 50vh = la moitie exacte de la feuille (cf. .receipt-wrap). */
+    @page { margin: 0; }
     body { margin: 0; }
 ${RENT_BOOK_PRINT_CSS}
   </style>

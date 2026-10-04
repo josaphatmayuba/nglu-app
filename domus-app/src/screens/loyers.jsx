@@ -13,6 +13,7 @@ import { Loading, ApiError } from "./dashboard.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { ProofModal } from "../components/ProofModal.jsx";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -435,6 +436,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
   const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [viewingProof, setViewingProof] = useState(false);
 
   const activeKey = method ?? methods[0]?.key;
   const tenant = tenantName(payment);
@@ -480,7 +482,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
                 type="button"
                 className="immo-btn"
                 style={{ fontSize: 12 }}
-                onClick={() => { setErr(null); api.paymentProofUrl(payment.id).catch((e) => setErr(e.message || String(e))); }}
+                onClick={() => setViewingProof(true)}
               >
                 <FileDown size={14} /> Voir
               </button>
@@ -532,6 +534,7 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
           </button>
         </div>
       </div>
+      {viewingProof && <ProofModal path={`/leases/payments/${payment.id}/proof-file`} title={tenant} onClose={() => setViewingProof(false)} />}
     </div>
   );
 }
@@ -557,6 +560,7 @@ export function Loyers({ go }) {
   const dateRange = useDateRange();
   const toast = useToast();
   const confirm = useConfirm();
+  const [proofView, setProofView] = useState(null);
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -876,7 +880,7 @@ export function Loyers({ go }) {
                           className="immo-btn"
                           style={{ fontSize: 12 }}
                           title="Voir la quittance signée envoyée par le locataire"
-                          onClick={() => api.paymentProofUrl(p.id).catch((e) => toast.error(e.message || String(e)))}
+                          onClick={() => setProofView(p)}
                         >
                           <FileDown size={14} /> Quittance signée
                         </button>
@@ -897,6 +901,7 @@ export function Loyers({ go }) {
 
       {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
       {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
+      {proofView && <ProofModal path={`/leases/payments/${proofView.id}/proof-file`} title={tenantName(proofView)} onClose={() => setProofView(null)} />}
       {flash && <div className="immo-toast"><Check size={16} /> {flash}</div>}
     </>
   );
@@ -948,7 +953,7 @@ const paymentMonth = (d) => {
 };
 
 function ReceivedReceiptCard({ p, onConfirm }) {
-  const toast = useToast();
+  const [viewing, setViewing] = useState(false);
   const pending = p.status === "pending";
   const btn = { minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 };
   return (
@@ -966,9 +971,10 @@ function ReceivedReceiptCard({ p, onConfirm }) {
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="immo-btn" style={btn}
-          onClick={() => api.paymentProofUrl(p.id).catch((e) => toast.error(e.message || String(e)))}>
+          onClick={() => setViewing(true)}>
           <Camera size={16} /> {t("Voir la photo")}
         </button>
+        {viewing && <ProofModal path={`/leases/payments/${p.id}/proof-file`} title={tenantName(p)} onClose={() => setViewing(false)} />}
         {pending && (
           <button type="button" className="immo-btn primary" style={btn} onClick={() => onConfirm(p)}>
             <Check size={16} /> {t("Confirmer le paiement")}
