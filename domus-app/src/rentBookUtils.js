@@ -275,17 +275,21 @@ function coverHtml(lease, qrDataUrl) {
       <div class="cell"><span>Durée du bail</span><strong>${fmtDateLong(lease.startDate)} → ${lease.endDate ? fmtDateLong(lease.endDate) : "indéterminée"}</strong></div>
       <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyExact(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
       <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong></div>
-      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.organizationName || "—")}</strong></div>
+      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.managerName || "—")}</strong></div>
     </div>
   </div>`;
 }
 
-function receiptHtml(payment, index, receiptQrDataUrl) {
+function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const isPaid = payment.status === "paid";
+  // Quittance detachable : elle doit s'identifier seule (locataire + logement).
+  // paymentDate = echeance tant que non paye, date du paiement une fois paye.
+  const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "—";
+  const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
+  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
+  const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
-  const headerLine = isPaid
-    ? `${escapeHtml(monthLabel(payment.paymentDate))} · Payée le ${fmtDateShort(payment.paymentDate)}`
-    : `${escapeHtml(monthLabel(payment.paymentDate))} · En attente de paiement`;
+  const headerLine = escapeHtml(monthLabel(payment.paymentDate).toLocaleUpperCase("fr"));
   const cutLine = index > 0
     ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici<span class="dash"></span></div>`
     : "";
@@ -309,13 +313,13 @@ function receiptHtml(payment, index, receiptQrDataUrl) {
         <span class="num">Quittance n° ${String(index + 1).padStart(4, "0")}</span>
         <span class="period">${headerLine}</span>
       </div>
-      <span class="status ${isPaid ? "paid" : "pending"}">${isPaid ? "Payé" : "En attente"}</span>
     </div>
+    <div class="receipt-row"><div><span>Locataire</span><span>${escapeHtml(tenantName)}</span></div><div><span>Logement</span><span>${escapeHtml(dwelling)}</span></div></div>
+    <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
     ${isPaid
       ? `<div class="receipt-row"><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div>
          <div class="receipt-row"><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div>`
-      : `<div class="receipt-row"><span>Moyen de paiement</span><span>—</span></div>
-         <div class="receipt-row"><span>Perçu par</span><span>—</span></div>`
+      : `<div class="receipt-row"><span>Où payer</span><span>${escapeHtml(lease.payTo || lease.managerName || "—")}</span></div>`
     }
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyExact(payment.amount, payment.currencySymbol || "CDF"))}</strong>
@@ -356,7 +360,7 @@ export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPayment
   return `
   ${coverHtml(lease, qrDataUrl)}
   <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
-  ${schedule.map((p, i) => receiptHtml(p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}
+  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}
   ${footerHtml(lease, schedule)}`;
 }
 

@@ -27,6 +27,8 @@ import {
   realEstatePropertyPhotos,
   realEstateReservations,
   realEstateCoupons,
+  realEstateDelegateAssignments,
+  realEstateDelegates,
   realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
@@ -4074,7 +4076,46 @@ export class PropertyManagementService {
       ? await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId, lease.id)
       : "";
 
-    return { lease, payments, portalUrl: portalUrl || null };
+    // Gestionnaire du carnet = delegue(s) actif(s) qui suivent ce bien, ou le
+    // portefeuille de son proprietaire (memes portees que les notifications).
+    // Sans delegue affecte, repli sur le nom de l'organisation.
+    const [propOwner] = await this.db
+      .select({ ownerId: realEstateProperties.ownerId })
+      .from(realEstateProperties)
+      .where(and(eq(realEstateProperties.id, lease.propertyId), eq(realEstateProperties.organizationId, orgId)))
+      .limit(1);
+    const scopeMatch = propOwner?.ownerId
+      ? or(
+          and(eq(realEstateDelegateAssignments.scopeType, "property"), eq(realEstateDelegateAssignments.scopeId, lease.propertyId)),
+          and(eq(realEstateDelegateAssignments.scopeType, "owner"), eq(realEstateDelegateAssignments.scopeId, Number(propOwner.ownerId))),
+        )
+      : and(eq(realEstateDelegateAssignments.scopeType, "property"), eq(realEstateDelegateAssignments.scopeId, lease.propertyId));
+    const delegateRows = await this.db
+      .select({
+        displayName: realEstateDelegates.displayName,
+        phone: realEstateDelegates.phone,
+        phone2: realEstateDelegates.phone2,
+      })
+      .from(realEstateDelegateAssignments)
+      .innerJoin(realEstateDelegates, eq(realEstateDelegates.id, realEstateDelegateAssignments.delegateId))
+      .where(and(
+        eq(realEstateDelegateAssignments.organizationId, orgId),
+        eq(realEstateDelegateAssignments.isActive, 1),
+        eq(realEstateDelegates.organizationId, orgId),
+        eq(realEstateDelegates.isActive, 1),
+        scopeMatch,
+      ));
+    const managerName = [...new Set(delegateRows.map((d) => d.displayName).filter(Boolean))].join(", ") || lease.organizationName || null;
+
+    // Ou payer : "Nom · telephone" par delegue, dedoublonne (un delegue
+    // affecte au bien ET a son proprietaire remonte deux fois).
+    const payTo = [...new Set(
+      delegateRows
+        .filter((d) => d.displayName)
+        .map((d) => [d.displayName, (d.phone || d.phone2 || "").trim()].filter(Boolean).join(" · ")),
+    )].join(" / ") || null;
+
+    return { lease: { ...lease, managerName, payTo }, payments, portalUrl: portalUrl || null };
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
