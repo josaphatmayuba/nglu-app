@@ -336,7 +336,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
     <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
     ${isPaid
       ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div><div><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div></div>`
-      : `<div class="receipt-row"><div><span>Où payer</span><span>${escapeHtml(lease.payTo || lease.managerName || "—")}</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
+      : `<div class="receipt-row"><div><span>Moyen de paiement</span><span>........................................</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
     }
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
