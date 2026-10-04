@@ -4034,6 +4034,8 @@ export class PropertyManagementService {
         propertyName: leaseProperty.name,
         propertyAddress: leaseProperty.address,
         ownerName: realEstateOwners.displayName,
+        ownerPhone: realEstateOwners.phone,
+        ownerPhone2: realEstateOwners.phone2,
         unitId: realEstateLeases.unitId,
         unitName: leaseUnit.name,
         tenantId: realEstateLeases.tenantId,

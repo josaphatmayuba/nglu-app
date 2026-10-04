@@ -227,6 +227,7 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-grid .cell span { display: block; color: #5a655d; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
   .rent-book .cover-grid .cell strong { font-size: 13.5px; font-weight: 600; }
   .rent-book .cover-grid .cell strong.accent { color: #2f6e4e; }
+  .rent-book .cover-grid .cell .phone { font-size: 12px; color: #5a655d; margin-top: 2px; }
   .rent-book .dash { flex: 1; border-top: 1px dashed #b7afa0; }
   .rent-book .receipts-title { display: flex; align-items: center; gap: 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #5a655d; margin: 22px 0 10px; font-weight: 600; white-space: nowrap; }
   .rent-book .cut-line { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: #9a9385; font-size: 11px; }
@@ -248,7 +249,7 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-amount strong { font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: #2f6e4e; font-weight: 600; white-space: nowrap; }
   .rent-book .receipt-amount.pending strong { color: #b8862f; }
   .rent-book .receipt-amount .words { font-style: italic; font-weight: 400; color: #5a655d; font-size: 11.5px; text-align: right; }
-  .rent-book .receipt-bottom { display: flex; align-items: flex-end; gap: 14px; padding: 0 18px 12px; }
+  .rent-book .receipt-bottom { display: flex; align-items: flex-start; gap: 14px; padding: 0 18px 12px; }
   .rent-book .receipt-sign { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .rent-book .receipt-sign .box span { display: block; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; margin-bottom: 6px; }
   .rent-book .receipt-sign .box .line { height: 48px; border: 1px dashed #c9c2b2; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
@@ -256,18 +257,23 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
   .rent-book .receipt-qr img { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 4px; display: block; }
   .rent-book .receipt-qr span { font-size: 9px; color: #5a655d; text-transform: uppercase; letter-spacing: .05em; line-height: 1.4; }
-  .rent-book .footer { break-before: page; page-break-before: always; background: #eef0ea; border: 1px solid #c9c2b2; border-radius: 4px; padding: 16px 24px; margin-top: 10px; }
-  .rent-book .footer h2 { font-family: 'Fraunces', Georgia, serif; font-size: 13px; letter-spacing: .04em; margin: 0 0 10px; }
-  .rent-book .footer-totals { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 14px; }
-  .rent-book .footer-totals .box { background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; padding: 12px 16px; min-width: 180px; }
-  .rent-book .footer-totals .box span { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #5a655d; }
-  .rent-book .footer-totals .box strong { font-family: 'Fraunces', Georgia, serif; font-size: 16px; }
-  .rent-book .footer-totals .box .due { color: #b8862f; }
-  .rent-book .footer-meta { font-size: 10.5px; color: #5a655d; }
-  @media print { .rent-book { background: #fff; } .rent-book .print-actions { display: none; } }
+  @media print {
+    .rent-book { background: #fff; }
+    .rent-book .print-actions, .rent-book .receipts-title { display: none; }
+    /* Couverture : la marge de page est a 0 (voir @page), on la remet ici. */
+    .rent-book .cover { margin: 14mm; }
+    /* Chaque quittance occupe EXACTEMENT une moitie de la feuille (A4 ou
+       Letter : on se base sur la hauteur reelle de la page, pas sur une taille
+       fixe) pour qu'on puisse couper au milieu sans toucher une information.
+       La ligne « Detacher ici » ferme la moitie haute ; rien ne depasse. */
+    .rent-book .receipt-wrap { height: calc(50vh - 0.5mm); padding: 6mm 12mm 0; margin: 0; display: flex; flex-direction: column; }
+    .rent-book .receipt-wrap .cut-line { margin: auto 0 0; }
+    .rent-book .receipt-wrap.page-end .cut-line { display: none; }
+  }
 `;
 
 function coverHtml(lease, qrDataUrl) {
+  const ownerPhone = (lease.ownerPhone || lease.ownerPhone2 || "").trim();
   return `
   <div class="cover">
     <div class="cover-header">
@@ -283,8 +289,8 @@ function coverHtml(lease, qrDataUrl) {
       <div class="cell full"><span>Adresse</span><strong>${escapeHtml(fullAddressLine(lease) || "—")}</strong></div>
       <div class="cell"><span>Durée du bail</span><strong>${fmtDateLong(lease.startDate)} → ${lease.endDate ? fmtDateLong(lease.endDate) : "indéterminée"}</strong></div>
       <div class="cell"><span>Loyer mensuel</span><strong class="accent">${escapeHtml(moneyAfter(lease.rentAmount, lease.currencySymbol || "CDF"))} ${escapeHtml(lease.currencyName || lease.currencySymbol || "CDF")}</strong></div>
-      <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong></div>
-      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.managerName || "—")}</strong></div>
+      <div class="cell"><span>Propriétaire</span><strong>${escapeHtml(lease.ownerName || "—")}</strong>${ownerPhone ? `<div class="phone">${escapeHtml(ownerPhone)}</div>` : ""}</div>
+      <div class="cell"><span>Gestionnaire</span><strong>${escapeHtml(lease.payTo || lease.managerName || "—")}</strong></div>
     </div>
   </div>`;
 }
@@ -299,9 +305,11 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   const headerLine = escapeHtml(monthLabel(payment.paymentDate).toLocaleUpperCase("fr"));
-  // Deux quittances par page A4 : la ligne « Détacher ici » n'a de sens qu'entre
-  // les deux d'une meme page (index impair), pas en haut d'une nouvelle page.
-  const cutLine = index % 2 === 1
+  // Deux quittances par page (A4 ou Letter), chacune dans une MOITIE exacte de
+  // la feuille pour pouvoir couper au milieu sans toucher d'information : la
+  // ligne « Détacher ici » ferme la moitie haute (index pair), jamais le haut
+  // d'une nouvelle page.
+  const cutLine = index % 2 === 0
     ? `<div class="cut-line"><span class="dash"></span>&#9986; Détacher ici<span class="dash"></span></div>`
     : "";
   // QR propre à CETTE quittance : scanner envoie directement la photo de la
@@ -317,7 +325,6 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
     : "";
   return `
   <div class="receipt-wrap${index % 2 === 1 ? " page-end" : ""}">
-  ${cutLine}
   <div class="receipt">
     <div class="receipt-head">
       <div>
@@ -343,27 +350,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
       ${receiptQr}
     </div>
   </div>
-  </div>`;
-}
-
-function footerHtml(lease, payments) {
-  const totals = totalsByCurrency(payments);
-  const today = fmtDateShort(new Date().toISOString().slice(0, 10));
-  const bookRef = `${lease.reference || `BAIL-${lease.id}`}-${today.replace(/\//g, "")}`;
-  return `
-  <div class="footer">
-    <h2>Récapitulatif</h2>
-    <div class="footer-totals">
-      ${totals.map((t) => `
-        <div class="box">
-          <span>Total payé (${escapeHtml(t.symbol)})</span><strong>${escapeHtml(moneyAfter(t.paid, t.symbol))}</strong><br />
-          <span style="margin-top:8px;">Restant dû (${escapeHtml(t.symbol)})</span><strong class="due">${escapeHtml(moneyAfter(t.pending, t.symbol))}</strong>
-        </div>
-      `).join("")}
-    </div>
-    <div class="footer-meta">
-      Document généré le ${today} — Référence carnet : ${escapeHtml(bookRef)}
-    </div>
+  ${cutLine}
   </div>`;
 }
 
@@ -372,8 +359,7 @@ export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPayment
   return `
   ${coverHtml(lease, qrDataUrl)}
   <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
-  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}
-  ${footerHtml(lease, schedule)}`;
+  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}`;
 }
 
 export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
@@ -386,7 +372,9 @@ export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPayment
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4; margin: 14mm 14mm; }
+    /* Pas de size fixe : A4 ou Letter au choix de l'imprimante ; marge 0 pour
+       que 50vh = la moitie exacte de la feuille (cf. .receipt-wrap). */
+    @page { margin: 0; }
     body { margin: 0; }
 ${RENT_BOOK_PRINT_CSS}
   </style>
