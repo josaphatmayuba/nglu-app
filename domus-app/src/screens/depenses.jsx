@@ -21,6 +21,7 @@ import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { ExpenseInstallmentsModal } from "./expenseInstallments.jsx";
 import { useAuthenticatedImage } from "../useAuthenticatedImage.js";
+import { ProofModal } from "../components/ProofModal.jsx";
 import { t, tf } from "../i18n.js";
 
 // Catégories autorisées côté backend (PROPERTY_EXPENSE_CATEGORIES) — mortgage
@@ -499,11 +500,8 @@ function ReceiptField({ expenseId, receiptUrl, receiptFile, onPick, onClear }) {
   // ouverture PDF via openAuthenticatedFile (fetch+blob dans un nouvel onglet).
   const receiptPath = expenseId ? `/property-expenses/${expenseId}/receipt-file` : null;
   const { src: previewSrc, error: previewError } = useAuthenticatedImage(!receiptFile && isImage ? receiptPath : null);
-  const [openError, setOpenError] = useState(null);
-  const openReceipt = () => {
-    setOpenError(null);
-    api.propertyExpenseReceiptUrl(expenseId).catch((e) => setOpenError(e.message || String(e)));
-  };
+  const [viewing, setViewing] = useState(false);
+  const openReceipt = () => setViewing(true);
   return (
     <label className="domus-property-field">
       <span>{t("Justificatif")}</span>
@@ -543,7 +541,7 @@ function ReceiptField({ expenseId, receiptUrl, receiptFile, onPick, onClear }) {
             </button>
           )
       )}
-      {openError && <span style={{ display: "block", marginTop: 6, fontSize: 12, color: "#be123c" }}>{openError}</span>}
+      {viewing && <ProofModal path={receiptPath} title={t("Justificatif")} onClose={() => setViewing(false)} />}
     </label>
   );
 }
