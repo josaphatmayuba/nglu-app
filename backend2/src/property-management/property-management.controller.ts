@@ -1075,6 +1075,19 @@ export class PropertyManagementController {
     return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req));
   }
 
+  @ApiOperation({ summary: "Annule (soft) un paiement de loyer saisi par erreur — contre-passe la compta" })
+  @Permissions("update-propertyManagement")
+  @Post("payments/:id/void")
+  @HttpCode(200)
+  voidPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { reason: string },
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.voidPayment(id, body?.reason, orgId, userId);
+  }
+
   @ApiOperation({ summary: "Send payment reminder email to tenant" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/reminder")

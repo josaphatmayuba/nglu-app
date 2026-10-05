@@ -648,6 +648,19 @@ export function Loyers({ go }) {
     setTimeout(() => setFlash(null), 4000);
   };
 
+  const handleVoid = async (p) => {
+    const reason = window.prompt(`Annuler le paiement de ${money(p.amount, p.currencySymbol || "$")} (${tenantName(p)}) saisi par erreur ?\nLa compta sera contre-passée. Motif obligatoire :`);
+    if (!reason || !reason.trim()) return;
+    try {
+      await api.voidPayment(p.id, reason.trim());
+      setFlash("Paiement annulé, compta contre-passée.");
+      reload();
+    } catch (e) {
+      setFlash(e?.message || "Annulation impossible.");
+    }
+    setTimeout(() => setFlash(null), 4000);
+  };
+
   const handleGenerateMissing = async (card) => {
     if (!card.lease?.id || generatingLeaseId) return;
     setGeneratingLeaseId(card.lease.id);
@@ -888,6 +901,11 @@ export function Loyers({ go }) {
                       {isPending && (
                         <button className="immo-btn" style={{ fontSize: 12 }} onClick={() => setConfirmTarget(p)}>
                           <Check size={14} /> Confirmer
+                        </button>
+                      )}
+                      {p.status === "paid" && (
+                        <button className="immo-btn" style={{ fontSize: 12, color: "#b91c1c" }} title="Annuler un paiement saisi par erreur" onClick={() => handleVoid(p)}>
+                          Annuler
                         </button>
                       )}
                     </td>
