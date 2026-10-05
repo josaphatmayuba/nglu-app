@@ -6,7 +6,7 @@
 // jamais un autre locataire, jamais une autre organisation.
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -246,6 +246,7 @@ export class OwnerPortalService {
           .where(and(
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
+            ne(realEstateRentPayments.status, "voided"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];

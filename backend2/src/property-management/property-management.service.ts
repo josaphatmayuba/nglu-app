@@ -30,6 +30,7 @@ import {
   realEstateDelegateAssignments,
   realEstateDelegates,
   realEstatePropertyAssignments,
+  journalEntries,
   realEstateRentPayments,
   realEstateSecurityDeposits,
   realEstateUnits,
@@ -2114,6 +2115,7 @@ export class PropertyManagementService {
         eq(paymentProperty.isActive, 1),
         ne(paymentUnit.status, "false"),
         eq(paymentUnit.isActive, 1),
+        ne(realEstateRentPayments.status, "voided"),
         ...(id ? [eq(realEstateRentPayments.id, id)] : []),
         ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
         ...(leaseId !== undefined ? [eq(realEstateRentPayments.leaseId, leaseId)] : []),
@@ -2264,9 +2266,10 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
+        ne(realEstateRentPayments.status, "voided"),
       ));
 
-    const start = this.parseDateOnly(lease.startDate);
+    const start =this.parseDateOnly(lease.startDate);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
     const boundary = lease.endDate ? this.parseDateOnly(lease.endDate) : null;
 
@@ -3558,7 +3561,11 @@ export class PropertyManagementService {
     const payments = await this.db
       .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
       .from(realEstateRentPayments)
-      .where(and(eq(realEstateRentPayments.leaseId, leaseId), eq(realEstateRentPayments.organizationId, orgId)));
+      .where(and(
+        eq(realEstateRentPayments.leaseId, leaseId),
+        eq(realEstateRentPayments.organizationId, orgId),
+        ne(realEstateRentPayments.status, "voided"),
+      ));
     const rent = Number(lease.rentAmount) || 0;
     const totalPaid = payments
       .filter((p) => p.status !== "pending")
@@ -4444,6 +4451,88 @@ export class PropertyManagementService {
       relatedId: log.relatedId ?? undefined,
     });
     return { success: Boolean(res?.success), message: res?.message ?? null };
+  }
+
+  // Annule un paiement de loyer saisi par erreur (soft : status='voided', aucune
+  // suppression physique). Contre-passe l'ecriture ledger, neutralise les
+  // transactions legacy (loyer + taxe) et recule nextInvoiceDate des cycles que
+  // ce paiement avait fait avancer. Les paiements 'voided' sont exclus des
+  // listes/totaux ; le mois redevient une echeance a regenerer (pending).
+  async voidPayment(paymentId: number, reason: string, orgId: number, userId?: number) {
+    if (!reason || !reason.trim()) {
+      throw new BadRequestException("Un motif d'annulation est obligatoire.");
+    }
+    const [payment] = await this.db
+      .select()
+      .from(realEstateRentPayments)
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)))
+      .limit(1);
+    if (!payment) throw new NotFoundException("Payment not found.");
+    if (payment.status !== "paid") {
+      throw new BadRequestException("Seul un paiement encaisse (paid) peut etre annule.");
+    }
+    const lease = await this.getLeaseOrThrow(payment.leaseId, orgId);
+
+    // 1. Ledger : contre-passation (jamais de DELETE).
+    const [entry] = await this.db
+      .select({ id: journalEntries.id, status: journalEntries.status })
+      .from(journalEntries)
+      .where(and(
+        eq(journalEntries.organizationId, orgId),
+        eq(journalEntries.idempotencyKey, `rent-payment:${paymentId}`),
+      ))
+      .limit(1);
+    if (entry && entry.status !== "reversed") {
+      await this.ledger.reverse(entry.id, `Annulation paiement loyer #${paymentId} - ${reason.trim()}`, orgId, userId);
+    }
+
+    // 2. Transactions legacy : loyer (lie par transactionId) + taxe (meme bail/date/montant).
+    if (payment.transactionId) {
+      await this.db
+        .update(transactions)
+        .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(eq(transactions.id, payment.transactionId), eq(transactions.organizationId, orgId)));
+    }
+    if (payment.taxAmount != null && Number(payment.taxAmount) > 0) {
+      await this.db
+        .update(transactions)
+        .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(
+          eq(transactions.organizationId, orgId),
+          eq(transactions.type, "Real Estate Tax"),
+          eq(transactions.relatedId, String(lease.id)),
+          eq(transactions.amount, Number(payment.taxAmount)),
+          eq(transactions.date, new Date(payment.paymentDate)),
+        ));
+    }
+
+    // 3. Statut du paiement.
+    await this.db
+      .update(realEstateRentPayments)
+      .set({
+        status: "voided",
+        notes: `${payment.notes ?? ""} [ANNULE: ${reason.trim()}]`.trim(),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    // 4. Recule la prochaine facture des cycles que ce paiement couvrait.
+    const rent = Number(lease.rentAmount) || 0;
+    const cycles = rent > 0 ? Math.floor((Number(payment.amount) + 0.0001) / rent) : 0;
+    if (cycles > 0 && lease.nextInvoiceDate) {
+      const back = this.addBillingCycle(this.parseDateOnly(lease.nextInvoiceDate), lease.billingCycle, -cycles);
+      const minDate = this.parseDateOnly(lease.startDate);
+      await this.db
+        .update(realEstateLeases)
+        .set({
+          nextInvoiceDate: this.formatDateOnly(back < minDate ? minDate : back),
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
+    }
+
+    await this.publishPaymentUpdate("updated", paymentId, { propertyId: lease.propertyId, unitId: lease.unitId });
+    return { id: paymentId, status: "voided", ledgerReversed: !!entry };
   }
 
   async findPayment(id: number) {

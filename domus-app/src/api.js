@@ -336,6 +336,9 @@ export const api = {
     return multipartFetch(`/payments/${paymentId}/confirm`, form);
   },
 
+  // Annule (soft) un paiement saisi par erreur : contre-passe la compta.
+  voidPayment: (paymentId, reason) => post(`/payments/${paymentId}/void`, { reason }),
+
   maintenance: () => get("/maintenance"),
   maintenanceItem: (id) => get(`/maintenance/${id}`),
   createMaintenance: (b) => post("/maintenance", b),

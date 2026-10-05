@@ -94,6 +94,11 @@ export function ProofModal({ path, title, onClose }) {
   const isPdf = /pdf/i.test(type) || /\.pdf$/i.test(title || "");
   const isImg = /^image\//.test(type);
   const btnStyle = { minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6 };
+  // Nom du fichier telecharge : le titre (nom du locataire, « Justificatif »…)
+  // n'a pas d'extension, sinon le PC ne reconnait pas le PDF/l'image.
+  const ext = isPdf ? "pdf" : ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" })[type] || "";
+  const base = (title || t("Document")).replace(/[\\/:*?"<>|]+/g, "-").trim();
+  const downloadName = !ext || new RegExp(`\\.${ext}$`, "i").test(base) ? base : `${base}.${ext}`;
 
   let content = null;
   if (file) {
@@ -105,7 +110,7 @@ export function ProofModal({ path, title, onClose }) {
           <FileText size={40} aria-hidden="true" />
           <p style={{ fontWeight: 600, margin: "10px 0 4px" }}>{t("Document PDF")}</p>
           <p className="muted" style={{ margin: "0 0 14px" }}>{t("Le PDF s'ouvre dans l'application de votre appareil.")}</p>
-          <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" download={title || undefined} style={{ ...btnStyle, background: "var(--iris-600)", color: "#fff", textDecoration: "none" }}>
+          <a className="immo-btn" href={file.url} target="_blank" rel="noreferrer" download={downloadName} style={{ ...btnStyle, background: "var(--iris-600)", color: "#fff", textDecoration: "none" }}>
             <Download size={16} /> {t("Télécharger")} / {t("Ouvrir")}
           </a>
         </div>
@@ -116,7 +121,7 @@ export function ProofModal({ path, title, onClose }) {
       content = (
         <div style={{ padding: "32px 12px" }}>
           <p style={{ fontWeight: 600, margin: "0 0 14px" }}>{t("Aperçu indisponible")}</p>
-          <a className="immo-btn" href={file.url} download={title || t("Document")} style={{ ...btnStyle, textDecoration: "none" }}>
+          <a className="immo-btn" href={file.url} download={downloadName} style={{ ...btnStyle, textDecoration: "none" }}>
             <Download size={16} /> {t("Télécharger")}
           </a>
         </div>

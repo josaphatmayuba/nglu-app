@@ -4,7 +4,7 @@
 // rattaché au token — jamais de fuite inter-locataire ni inter-org.
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { IMAGE_OR_PDF_MIME_TYPES } from "../common/upload-security";
 import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
@@ -725,6 +725,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
           .where(and(
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
+            ne(realEstateRentPayments.status, "voided"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];

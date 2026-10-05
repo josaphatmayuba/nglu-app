@@ -74,11 +74,21 @@ const lastMonths = (n) => {
   return out;
 };
 
+// Premier du mois de la date de début. Annee/mois lus dans la chaine
+// "YYYY-MM-DD" : new Date("2026-01-01") est du minuit UTC, donc le 31/12 en
+// fuseau negatif (tout serait decale d'un mois).
+const leaseStartMonth = (startDate) => {
+  const m = /^(\d{4})-(\d{2})/.exec(String(startDate));
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+  const d = new Date(startDate);
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+};
+
 // N mois à partir d'une date de début (le plus ancien à gauche → la frise se
 // remplit de gauche à droite au fil du bail).
 const monthsFrom = (startDate, n) => {
   const out = [];
-  const s = new Date(startDate);
+  const s = leaseStartMonth(startDate);
   for (let i = 0; i < n; i++) out.push(new Date(s.getFullYear(), s.getMonth() + i, 1));
   return out;
 };
@@ -125,8 +135,7 @@ export function buildLeaseCards(leases, payments) {
       // Nombre de mois échus AVANT le mois courant (depuis le début du bail).
       let elapsedPast = 0;
       if (l.startDate) {
-        const s = new Date(l.startDate);
-        const sM = new Date(s.getFullYear(), s.getMonth(), 1);
+        const sM = leaseStartMonth(l.startDate);
         elapsedPast = Math.max(0, (thisM.getFullYear() - sM.getFullYear()) * 12 + (thisM.getMonth() - sM.getMonth()));
       }
       // late = un mois passé encore non couvert · pending = passés couverts mais pas le mois courant · ok = tout couvert.
@@ -143,7 +152,7 @@ export function buildLeaseCards(leases, payments) {
       // Mois jusqu'auquel le loyer est couvert (dernier mois plein payé).
       let coveredUntil = null;
       if (l.startDate && monthsCovered > 0) {
-        const s = new Date(l.startDate);
+        const s = leaseStartMonth(l.startDate);
         coveredUntil = new Date(s.getFullYear(), s.getMonth() + monthsCovered - 1, 1);
       }
 
@@ -648,6 +657,19 @@ export function Loyers({ go }) {
     setTimeout(() => setFlash(null), 4000);
   };
 
+  const handleVoid = async (p) => {
+    const reason = window.prompt(`Annuler le paiement de ${money(p.amount, p.currencySymbol || "$")} (${tenantName(p)}) saisi par erreur ?\nLa compta sera contre-passée. Motif obligatoire :`);
+    if (!reason || !reason.trim()) return;
+    try {
+      await api.voidPayment(p.id, reason.trim());
+      setFlash("Paiement annulé, compta contre-passée.");
+      reload();
+    } catch (e) {
+      setFlash(e?.message || "Annulation impossible.");
+    }
+    setTimeout(() => setFlash(null), 4000);
+  };
+
   const handleGenerateMissing = async (card) => {
     if (!card.lease?.id || generatingLeaseId) return;
     setGeneratingLeaseId(card.lease.id);
@@ -888,6 +910,11 @@ export function Loyers({ go }) {
                       {isPending && (
                         <button className="immo-btn" style={{ fontSize: 12 }} onClick={() => setConfirmTarget(p)}>
                           <Check size={14} /> Confirmer
+                        </button>
+                      )}
+                      {p.status === "paid" && (
+                        <button className="immo-btn" style={{ fontSize: 12, color: "#b91c1c" }} title="Annuler un paiement saisi par erreur" onClick={() => handleVoid(p)}>
+                          Annuler
                         </button>
                       )}
                     </td>
