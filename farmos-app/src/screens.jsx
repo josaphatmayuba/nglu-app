@@ -11,6 +11,8 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
+import { AnimalAvatar, tagColorForAnimal } from "./animal-avatar.jsx";
+import { DeathDeclareModal } from "./animals";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
@@ -6637,7 +6639,7 @@ const INTERIOR_CARD_BG    = { ok: "#E7F1E6", sick: "#FBE9E7", quarantine: "#FBF1
 // Box libre : on assigne N animaux (de n'importe quel lot, ou sans lot) à un box,
 // avec capacité max par box (blocage + possibilité de forcer). Cliquer un box ouvre
 // le panneau d'affectation ; bouton "Générer les box" si le bâtiment n'en a aucun.
-const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId = null }) => {
+const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId = null, stats = null, onEdit = null }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [boxes, setBoxes] = React.useState(null); // null = chargement
   const [selBoxId, setSelBoxId] = React.useState(initialBoxId);
@@ -6648,6 +6650,19 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
   const [diseaseBoxId, setDiseaseBoxId] = React.useState(null); // box ciblé par "Déclarer une maladie"
   const [labelBoxId, setLabelBoxId] = React.useState(null); // box ciblé par "Étiquette QR"
   const [confirmDelete, setConfirmDelete] = React.useState(null); // { message, onConfirm } | null
+  const [tab, setTab] = React.useState("plan"); // "plan" | "ronde" | "infos"
+  const ronde = tab === "ronde";
+  const [pensView, setPensView] = React.useState(true); // "Boucles" (défaut) : boucles par box, glisser-déposer ; sinon "Carte"
+  const [tagQuery, setTagQuery] = React.useState(""); // recherche par n° de boucle
+  const [selAnimalId, setSelAnimalId] = React.useState(null); // boucle sélectionnée en vue Boucles
+  const [overBoxId, setOverBoxId] = React.useState(null); // box survolé pendant un glisser
+  const [rondeIdx, setRondeIdx] = React.useState(0); // index du box en cours (= boxes.length → bilan)
+  const [rondeMarks, setRondeMarks] = React.useState({}); // { animalId: "ok" | "watch" | "sick" | "dead" } (état local, non enregistré)
+  const [rondeSel, setRondeSel] = React.useState(null); // boucle ouverte dans la ronde
+  const [deathAnimal, setDeathAnimal] = React.useState(null); // animal ciblé par le formulaire de décès
+  const [sickTarget, setSickTarget] = React.useState(null); // { boxId, ids } ciblé par le formulaire de maladie
+  const [addBoxId, setAddBoxId] = React.useState(null); // box ciblé par "+ Ajouter un animal"
+  const [addPicked, setAddPicked] = React.useState(() => new Set()); // animaux cochés dans le sélecteur d'ajout
 
   const reload = React.useCallback(() => {
     if (!building) return;
@@ -6725,11 +6740,54 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
       const res = await api.declareBoxDisease(boxId, payload);
       window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "declareBoxDisease", tables: ["animals", "treatments"] } }));
       setDiseaseBoxId(null);
+      setSickTarget(null);
+      setRondeMarks((m) => { const n = { ...m }; for (const id of payload.animal_ids || []) if (n[id] === "sick") delete n[id]; return n; });
       reload();
       const skipped = (res?.skipped || []).length;
       window.alert(L(`${res?.treated || 0} animal(aux) traité(s)${skipped ? `, ${skipped} ignoré(s)` : ""}.`,
         `${res?.treated || 0} animal(s) treated${skipped ? `, ${skipped} skipped` : ""}.`));
     } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+  // Déplacement d'une boucle vers un autre box (vue enclos) — même API et même gestion BOX_FULL que assign().
+  const moveAnimal = async (animalId, boxId, force = false) => {
+    const a = bldgAnimals.find((x) => x.id === animalId);
+    if (!a || a.boxId === boxId) return;
+    setBusy(true);
+    try {
+      await api.assignAnimalsToBox({ box_id: boxId, animal_ids: [animalId], force });
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
+      reload();
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes("BOX_FULL")) {
+        if (window.confirm(L("Box plein : la capacité sera dépassée. Forcer quand même ?", "Box full: capacity will be exceeded. Force anyway?"))) {
+          setBusy(false);
+          return moveAnimal(animalId, boxId, true);
+        }
+      } else window.alert(msg);
+    }
+    setBusy(false);
+  };
+  // Ajout de plusieurs animaux sans box dans un box (sélecteur "+ Ajouter un animal").
+  const placeAnimals = async (boxId, ids, force = false) => {
+    if (!boxId || ids.length === 0) return;
+    setBusy(true);
+    try {
+      await api.assignAnimalsToBox({ box_id: boxId, animal_ids: ids, force });
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
+      setAddBoxId(null);
+      setAddPicked(new Set());
+      reload();
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes("BOX_FULL")) {
+        if (window.confirm(L("Box plein : la capacité sera dépassée. Forcer quand même ?", "Box full: capacity will be exceeded. Force anyway?"))) {
+          setBusy(false);
+          return placeAnimals(boxId, ids, true);
+        }
+      } else window.alert(msg);
+    }
     setBusy(false);
   };
   const unassign = async (animalId) => {
@@ -6829,18 +6887,18 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
               {L("Plan intérieur · Affectation des box", "Interior plan · Box assignment")}
             </div>
           </div>
-          {hasBoxes && !selBox && (
+          {tab === "plan" && hasBoxes && !selBox && (
             <button className="btn btn-sm btn-ghost" disabled={busy}
-              onClick={() => { setSelectMode((v) => !v); setChecked(new Set()); }}
+              onClick={() => { setSelectMode((v) => !v); setChecked(new Set()); setTab("plan"); setPensView(false); }}
               style={{ marginRight: 6 }}>
               <Icon name={selectMode ? "x" : "trash"} size={12} color={selectMode ? "var(--ink-600)" : "var(--oxblood-700)"}/>
               {selectMode ? L("Annuler", "Cancel") : L("Sélectionner", "Select")}
             </button>
           )}
-          {hasBoxes && !selBox && <button className="btn btn-sm" disabled={busy} onClick={() => printBoxSheet(building, boxes, lang)} style={{ marginRight: 6 }} title={L("Imprimer toutes les étiquettes QR du bâtiment", "Print all building QR labels")}>
+          {tab === "plan" && hasBoxes && !selBox && <button className="btn btn-sm" disabled={busy} onClick={() => printBoxSheet(building, boxes, lang)} style={{ marginRight: 6 }} title={L("Imprimer toutes les étiquettes QR du bâtiment", "Print all building QR labels")}>
             <Icon name="qr" size={12} color="var(--ink-700)"/>{L("Étiquettes", "Labels")}
           </button>}
-          {hasBoxes && <button className="btn btn-sm" disabled={busy} onClick={onGenerate} style={{ marginRight: 6 }}>
+          {tab === "plan" && hasBoxes && <button className="btn btn-sm" disabled={busy} onClick={onGenerate} style={{ marginRight: 6 }}>
             <Icon name="plus" size={12} color="var(--ink-700)"/>{L("Box", "Box")}
           </button>}
           <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>
@@ -6848,9 +6906,24 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
           </button>
         </div>
 
+        {/* Onglets : Plan (par défaut) · Ronde · Infos */}
+        <div role="tablist" style={{ display: "flex", gap: 6, padding: "10px 18px", borderBottom: "1px solid var(--border-1)" }}>
+          {[["plan", L("Plan", "Plan")], ["ronde", L("Ronde", "Round")], ...(stats ? [["infos", "Infos"]] : [])].map(([k, lbl]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className="btn btn-sm"
+              onClick={() => { setTab(k); setSelBoxId(null); setSelectMode(false); setSelAnimalId(null); setRondeSel(null); }}
+              style={{ minHeight: 44, padding: "0 18px", borderRadius: 999, fontWeight: tab === k ? 700 : 500, background: tab === k ? "var(--ink-900)" : undefined, color: tab === k ? "var(--paper)" : undefined }}>{lbl}</button>
+          ))}
+        </div>
+
+        {tab === "infos" && stats && (
+          <div style={{ padding: "16px 20px" }}>
+            <BuildingViewer embedded building={building} lang={lang} stats={stats} onEdit={onEdit || (() => {})} onClose={onClose}/>
+          </div>
+        )}
+
         {loading && <SectionLoader lang={lang}/>}
 
-        {!loading && !hasBoxes && (
+        {!loading && !hasBoxes && tab !== "infos" && (
           <div style={{ padding: "36px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 4, fontWeight: 600 }}>{L("Aucun box configuré", "No box configured")}</div>
             <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 16 }}>
@@ -6862,19 +6935,239 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
           </div>
         )}
 
-        {hasBoxes && !selBox && <>
-          {/* Legend */}
-          <div style={{ display: "flex", gap: 18, padding: "11px 20px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
-            {Object.entries(statusLabels).map(([k, lbl]) => counts[k] ? (
-              <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ink-700)", fontWeight: 600 }}>
-                <span style={{ width: 13, height: 13, borderRadius: 4, background: INTERIOR_CARD_BG[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
-                {lbl}<span style={{ fontSize: 10.5, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+        {tab !== "infos" && hasBoxes && !selBox && <>
+          {/* Légende + bascule Boucles | Carte (onglet Plan) */}
+          {tab === "plan" && (
+            <div style={{ display: "flex", gap: 18, padding: "11px 20px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap", alignItems: "center" }}>
+              {Object.entries(statusLabels).map(([k, lbl]) => counts[k] ? (
+                <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ink-700)", fontWeight: 600 }}>
+                  <span style={{ width: 13, height: 13, borderRadius: 4, background: INTERIOR_CARD_BG[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
+                  {lbl}<span style={{ fontSize: 10.5, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+                </div>
+              ) : null)}
+              <div role="group" aria-label={L("Affichage du plan", "Plan display")} style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                {[[true, L("Boucles", "Tags")], [false, L("Carte", "Map")]].map(([v, lbl]) => (
+                  <button key={String(v)} type="button" aria-pressed={pensView === v} className="btn btn-sm"
+                    onClick={() => { setPensView(v); setSelAnimalId(null); setTagQuery(""); }}
+                    style={{ minHeight: 40, fontWeight: pensView === v ? 700 : 500, background: pensView === v ? "var(--surface-2, #F3F0E9)" : undefined, borderColor: pensView === v ? "var(--ink-900)" : undefined }}>{lbl}</button>
+                ))}
               </div>
-            ) : null)}
-          </div>
+            </div>
+          )}
+
+          {/* Ronde : un box à la fois ; un tap ouvre le choix OK / à surveiller / malade / décédée ; le bilan ouvre les vrais formulaires */}
+          {ronde && (() => {
+            const LBL = { ok: `✓ ${L("Vu OK", "Seen OK")}`, watch: `👁 ${L("À surveiller", "Watch")}`, sick: `✚ ${L("Malade", "Sick")}`, dead: `✝ ${L("Décédée", "Deceased")}` };
+            const BG = { ok: "#E4F1E3", watch: "#FBF0D5", sick: "#FBE3DD", dead: "#ECE8DD" };
+            const BD = { ok: "#3F8A4D", watch: "#C48A12", sick: "#B84040", dead: "var(--ink-900)" };
+            const atSummary = rondeIdx >= boxes.length;
+            const box = atSummary ? null : boxes[rondeIdx];
+            const list = box ? (animalsByBox.get(box.id) || []) : [];
+            const left = list.filter((a) => !rondeMarks[a.id]).length;
+            const tagLabel = (a) => (a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id));
+            const count = (s) => bldgAnimals.filter((a) => rondeMarks[a.id] === s).length;
+            const done = bldgAnimals.filter((a) => rondeMarks[a.id]).length;
+            const selR = bldgAnimals.find((a) => a.id === rondeSel && a.boxId === box?.id) || null;
+            const setMark = (id, s) => { setRondeMarks((m) => { const n = { ...m }; if (s) n[id] = s; else delete n[id]; return n; }); setRondeSel(null); };
+            const big = { minHeight: 48, justifyContent: "center", fontWeight: 600 };
+            return (
+              <div style={{ padding: "14px 20px", display: "grid", gap: 12 }}>
+                {!atSummary && <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button" className="btn btn-sm" disabled={rondeIdx === 0} aria-label={L("Box précédent", "Previous box")} onClick={() => { setRondeIdx((i) => i - 1); setRondeSel(null); }} style={{ minHeight: 48, minWidth: 48, justifyContent: "center" }}>‹</button>
+                    <b style={{ fontSize: 16 }}>Box {box.name} · {rondeIdx + 1}/{boxes.length}</b>
+                    <span className="mono" aria-live="polite" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{done}/{bldgAnimals.length} {L("vues", "seen")}</span>
+                    <button type="button" className="btn btn-sm" style={{ ...big, marginLeft: "auto" }}
+                      onClick={() => setRondeMarks((m) => { const n = { ...m }; list.forEach((a) => { if (!n[a.id]) n[a.id] = "ok"; }); return n; })}>{L("Tout le box OK", "Whole box OK")}</button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
+                    {list.length === 0 && <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{L("Box vide.", "Empty box.")}</div>}
+                    {list.map((a) => {
+                      const s = rondeMarks[a.id];
+                      return (
+                        <button key={a.id} type="button" onClick={() => setRondeSel(rondeSel === a.id ? null : a.id)} title={a.name || undefined}
+                          aria-label={`${tagLabel(a)}, ${s ? LBL[s] : L("pas encore vu", "not seen yet")}`}
+                          style={{ display: "grid", gap: 6, justifyItems: "center", padding: 10, borderRadius: 14, cursor: "pointer", minHeight: 108, font: "inherit",
+                            background: s ? BG[s] : "var(--paper)", border: `2px solid ${s ? BD[s] : "var(--border-1)"}`, color: "var(--ink-900)",
+                            outline: rondeSel === a.id ? "3px solid var(--ink-900)" : "none", outlineOffset: 1 }}>
+                          <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={56}/>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>{s ? LBL[s] : L("Touche pour noter", "Tap to mark")}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selR && (
+                    <div role="group" aria-label={tagLabel(selR)} style={{ border: "1px solid var(--border-1)", borderRadius: 14, padding: 12, background: "var(--surface-1, #F6F3EC)", display: "grid", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <AnimalAvatar species={selR.species} tagNumber={selR.tagNumber} tagColor={tagColorForAnimal(selR)} size={44}/>
+                        <div style={{ flex: 1, minWidth: 0 }}><b>{tagLabel(selR)}</b>{selR.name ? <div style={{ fontSize: 11.5, color: "var(--fg-2)" }}>{selR.name}</div> : null}</div>
+                        <button type="button" className="btn btn-sm" onClick={() => setMark(selR.id, null)} style={{ minHeight: 40 }}>{L("Effacer", "Clear")}</button>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+                        <button type="button" className="btn" style={big} onClick={() => setMark(selR.id, "ok")}>✓ OK</button>
+                        <button type="button" className="btn" style={big} onClick={() => setMark(selR.id, "watch")}>👁 {L("À surveiller", "Watch")}</button>
+                        <button type="button" className="btn" style={{ ...big, borderColor: "var(--oxblood-300)", background: "var(--oxblood-50)", color: "var(--oxblood-700)" }} onClick={() => setMark(selR.id, "sick")}>✚ {L("Malade", "Sick")}</button>
+                        <button type="button" className="btn" style={{ ...big, background: "var(--ink-900)", color: "var(--paper)" }} onClick={() => setMark(selR.id, "dead")}>✝ {L("Décédée", "Deceased")}</button>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button" className="btn btn-sm" style={big} onClick={() => { setRondeIdx((i) => i + 1); setRondeSel(null); }}>
+                      {left > 0 ? L(`Passer (${left} non vues)`, `Skip (${left} not seen)`) : (rondeIdx === boxes.length - 1 ? L("Voir le bilan", "See summary") : L("Box suivant", "Next box"))}
+                    </button>
+                  </div>
+                </>}
+
+                {atSummary && (() => {
+                  const sick = bldgAnimals.filter((a) => rondeMarks[a.id] === "sick");
+                  const sickBoxes = boxes.filter((b) => sick.some((a) => a.boxId === b.id));
+                  const dead = bldgAnimals.filter((a) => rondeMarks[a.id] === "dead");
+                  const watch = bldgAnimals.filter((a) => rondeMarks[a.id] === "watch");
+                  return (
+                    <>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10 }}>
+                        {[["ok", L("Vus OK", "Seen OK")], ["watch", L("À surveiller", "Watch")], ["sick", L("Malades", "Sick")], ["dead", L("Décédées", "Deceased")]].map(([s, lbl]) => (
+                          <div key={s} style={{ background: BG[s], border: "1px solid var(--border-1)", borderRadius: 12, padding: "10px 12px" }}>
+                            <div className="mono" style={{ fontSize: 26, fontWeight: 700 }}>{count(s)}</div>
+                            <div style={{ fontSize: 12 }}>{lbl}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {sickBoxes.map((b) => (
+                        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--border-1)", borderRadius: 12, padding: "9px 12px", fontSize: 13 }}>
+                          <span style={{ flex: 1, minWidth: 150 }}>Box {b.name} : {sick.filter((a) => a.boxId === b.id).map(tagLabel).join(", ")}</span>
+                          <button type="button" className="btn btn-sm" disabled={busy} style={{ ...big, borderColor: "var(--oxblood-300)", background: "var(--oxblood-50)", color: "var(--oxblood-700)" }}
+                            onClick={() => setSickTarget({ boxId: b.id, ids: sick.filter((a) => a.boxId === b.id).map((a) => a.id) })}>
+                            {L("Déclarer la maladie", "Declare disease")}
+                          </button>
+                        </div>
+                      ))}
+                      {dead.map((a) => (
+                        <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--border-1)", borderRadius: 12, padding: "9px 12px", fontSize: 13 }}>
+                          <span style={{ flex: 1, minWidth: 150 }}>{tagLabel(a)}</span>
+                          <button type="button" className="btn btn-sm" disabled={busy} style={{ ...big, background: "var(--ink-900)", color: "var(--paper)" }} onClick={() => setDeathAnimal(a)}>
+                            {L("Déclarer le décès", "Declare death")}
+                          </button>
+                        </div>
+                      ))}
+                      {watch.length > 0 && (
+                        <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{L("À revoir demain :", "Review tomorrow:")} {watch.map(tagLabel).join(", ")}</div>
+                      )}
+                      {sick.length + dead.length + watch.length === 0 && <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{L("Aucune alerte.", "No alert.")}</div>}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button type="button" className="btn btn-sm" style={big} onClick={() => setRondeIdx(Math.max(0, boxes.length - 1))}>{L("Revenir aux box", "Back to boxes")}</button>
+                        <button type="button" className="btn btn-sm" style={big} onClick={() => { setRondeMarks({}); setRondeIdx(0); setRondeSel(null); }}>{L("Nouvelle ronde", "New round")}</button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            );
+          })()}
+
+          {/* Vue Boucles : une boucle = un animal ; glisser vers un autre box, ou toucher puis « Déplacer ici » */}
+          {tab === "plan" && pensView && (() => {
+            const q = tagQuery.trim();
+            const selA = bldgAnimals.find((a) => a.id === selAnimalId) || null;
+            const tagLabel = (a) => (a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id));
+            const hits = q ? bldgAnimals.filter((a) => String(a.tagNumber) === q).length : 0;
+            const btnH = { minHeight: 44, justifyContent: "center" };
+            const chip = (a) => {
+              const hit = q && String(a.tagNumber) === q;
+              return (
+                <button key={a.id} type="button" draggable disabled={busy}
+                  title={a.name || undefined} aria-label={tagLabel(a)}
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", String(a.id))}
+                  onClick={() => setSelAnimalId(selAnimalId === a.id ? null : a.id)}
+                  style={{ background: selAnimalId === a.id ? "var(--surface-2, #F3F0E9)" : "none", border: 0, borderRadius: 10, padding: 3, cursor: "grab",
+                    outline: selAnimalId === a.id ? "2px solid var(--ink-900)" : (hit ? "2px solid #5A9A58" : "none"), opacity: q && !hit ? 0.25 : 1 }}>
+                  <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={48} title={a.name || undefined}/>
+                </button>
+              );
+            };
+            // Actions de la boucle sélectionnée : ouvrent les vrais formulaires (maladie du box, décès).
+            const actions = (a) => (
+              <div role="group" aria-label={tagLabel(a)} style={{ border: "2px solid var(--ink-900)", borderRadius: 12, padding: 10, background: "var(--paper)", display: "grid", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 12.5 }}><b>{tagLabel(a)}</b>{a.name ? <div style={{ color: "var(--fg-2)" }}>{a.name}</div> : null}</div>
+                  <button type="button" className="btn btn-sm" aria-label={L("Fermer", "Close")} onClick={() => setSelAnimalId(null)} style={{ minHeight: 40, minWidth: 40, justifyContent: "center" }}>✕</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {a.boxId != null && (
+                    <button type="button" className="btn btn-sm" disabled={busy} style={{ ...btnH, borderColor: "var(--oxblood-300)", background: "var(--oxblood-50)", color: "var(--oxblood-700)" }}
+                      onClick={() => setSickTarget({ boxId: a.boxId, ids: [a.id] })}>✚ {L("Malade", "Sick")}</button>
+                  )}
+                  <button type="button" className="btn btn-sm" disabled={busy} style={{ ...btnH, background: "var(--ink-900)", color: "var(--paper)" }}
+                    onClick={() => setDeathAnimal(a)}>✝ {L("Décédée", "Deceased")}</button>
+                  {a.boxId != null && (
+                    <button type="button" className="btn btn-sm" disabled={busy} style={btnH} onClick={() => { unassign(a.id); setSelAnimalId(null); }}>{L("Retirer du box", "Remove from box")}</button>
+                  )}
+                </div>
+              </div>
+            );
+            const unplaced = candidates;
+            return (
+              <div style={{ padding: "14px 20px" }}>
+                <input type="search" inputMode="numeric" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)}
+                  placeholder={L("Chercher la boucle n°…", "Find tag no. …")} aria-label={L("Chercher une boucle par numéro", "Find a tag by number")}
+                  style={{ border: "1px solid var(--border-2)", borderRadius: 9, padding: "8px 12px", minHeight: 44, width: "100%", maxWidth: 260, marginBottom: q && hits === 0 ? 4 : 12, background: "var(--paper)", font: "inherit" }}/>
+                {q && hits === 0 && <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 10 }}>{L(`Aucune boucle n°${q} dans ce bâtiment.`, `No tag no. ${q} in this building.`)}</div>}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, alignItems: "start" }}>
+                  {/* Zone « Sans box » : animaux du bâtiment pas encore placés */}
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setOverBoxId("none"); }}
+                    onDragLeave={() => setOverBoxId(null)}
+                    onDrop={(e) => { e.preventDefault(); setOverBoxId(null); const id = Number(e.dataTransfer.getData("text/plain")); const a = bldgAnimals.find((x) => x.id === id); if (a && a.boxId != null) unassign(id); }}
+                    style={{ border: `2px solid ${overBoxId === "none" ? "#5A9A58" : "var(--border-1)"}`, borderRadius: 12, padding: 10, minHeight: 110, background: "var(--surface-1, #F6F3EC)", display: "grid", gap: 8, alignContent: "start" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 700 }}>
+                      <span>{L("Sans box", "No box")}</span>
+                      <span className="mono" style={{ fontSize: 12, color: "var(--fg-2)" }}>{unplaced.length}</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {unplaced.map(chip)}
+                      {unplaced.length === 0 && <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{L("Tous les animaux sont placés.", "All animals are placed.")}</span>}
+                    </div>
+                    {selA && selA.boxId == null && actions(selA)}
+                    {unplaced.length > 0 && !selA && <span style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Glisse une boucle vers un box, ou touche + Ajouter dans le box.", "Drag a tag to a box, or tap + Add in the box.")}</span>}
+                  </div>
+                  {boxes.map((box) => {
+                    const list = animalsByBox.get(box.id) || [];
+                    const heads = headsIn(box.id);
+                    const cap = box.capacity != null ? box.capacity : null;
+                    const full = cap != null && heads >= cap;
+                    const canMoveHere = selA && selA.boxId !== box.id && !full;
+                    return (
+                      <div key={box.id}
+                        onDragOver={(e) => { e.preventDefault(); setOverBoxId(box.id); }}
+                        onDragLeave={() => setOverBoxId(null)}
+                        onDrop={(e) => { e.preventDefault(); setOverBoxId(null); moveAnimal(Number(e.dataTransfer.getData("text/plain")), box.id); }}
+                        style={{ border: `2px dashed ${overBoxId === box.id || canMoveHere ? "#5A9A58" : (full ? "#C89020" : "var(--border-1)")}`, borderRadius: 12, padding: 10, minHeight: 110, display: "grid", gap: 8, alignContent: "start",
+                          background: overBoxId === box.id || canMoveHere ? "#E4F1E3" : "var(--paper)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 700 }}>
+                          <span>Box {box.name}</span>
+                          <span className="mono" style={{ fontSize: 12, color: full ? "#C89020" : "var(--fg-2)" }}>{cap != null ? `${heads}/${cap}` : heads}</span>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{list.map(chip)}</div>
+                        {selA && selA.boxId === box.id && actions(selA)}
+                        {canMoveHere && (
+                          <button type="button" className="btn btn-sm" disabled={busy} style={{ ...btnH, borderColor: "#5A9A58", color: "#2E6B3A", fontWeight: 700 }} onClick={() => { moveAnimal(selA.id, box.id); setSelAnimalId(null); }}>{L("Déplacer ici", "Move here")}</button>
+                        )}
+                        {!full && (
+                          <button type="button" className="btn btn-sm" disabled={busy} style={btnH} onClick={() => { setAddBoxId(box.id); setAddPicked(new Set()); }}>
+                            <Icon name="plus" size={12} color="var(--ink-700)"/>{L("Ajouter un animal", "Add an animal")}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 12, color: "var(--fg-3)" }}>{L("Touche une boucle pour agir dessus (maladie, décès, déplacement), ou glisse-la vers un autre box.", "Tap a tag to act on it (disease, death, move), or drag it to another box.")}</div>
+              </div>
+            );
+          })()}
 
           {/* Grille de cartes box (tactile, lisible) */}
-          <div style={{ padding: "16px 20px", overflowY: "auto" }}>
+          {tab === "plan" && !pensView && <div style={{ padding: "16px 20px", overflowY: "auto" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 10 }}>
               {boxes.map((box) => {
                 const status = boxStatus(box);
@@ -6920,11 +7213,11 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                 );
               })}
             </div>
-          </div>
+          </div>}
         </>}
 
         {/* Panneau d'affectation du box sélectionné (remplace la grille, avec retour) */}
-        {hasBoxes && selBox && (
+        {tab === "plan" && hasBoxes && selBox && (
           <div style={{ padding: "16px 20px" }}>
             {(() => {
               const inBox = animalsByBox.get(selBox.id) || [];
@@ -6985,7 +7278,8 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                             onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2, #F3F0E9)"}
                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                             <span style={{ width: 9, height: 9, borderRadius: "50%", background: stColor[a.status === "sick" ? "sick" : a.status === "quarantine" ? "quarantine" : "ok"], flexShrink: 0 }}/>
-                            <span style={{ fontWeight: 600, color: "var(--ink-900)" }}>{a.name || a.id}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+                            <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={32} title={a.name || undefined}/>
+                            <span style={{ fontWeight: 700, color: "var(--ink-900)" }} title={a.name || undefined}>{a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id)}{a.count > 1 ? ` ×${a.count}` : ""}</span>
                             {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{a.lot}</span>}
                             <button className="btn btn-sm btn-ghost" disabled={busy} title={L("Retirer du box", "Remove from box")}
                               onClick={() => unassign(a.id)} style={{ marginLeft: "auto", padding: "3px 6px" }}>
@@ -7020,7 +7314,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                             placeholder={L("— choisir —", "— choose —")}
                             options={candidates.map((a) => ({
                               value: a.id,
-                              label: `${a.name || a.id}${a.lot ? ` (lot ${a.lot})` : ""}${a.count > 1 ? ` ×${a.count}` : ""}`,
+                              label: `${a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id)}${a.lot ? ` (lot ${a.lot})` : ""}${a.count > 1 ? ` ×${a.count}` : ""}`,
                             }))}
                           />
                         </>}
@@ -7071,6 +7365,80 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
           onConfirm={(payload) => declareDisease(diseaseBoxId, payload)}/>
       )}
 
+      {deathAnimal && (
+        <DeathDeclareModal
+          lang={lang}
+          animal={deathAnimal}
+          onClose={() => setDeathAnimal(null)}
+          onSaved={() => {
+            const id = deathAnimal.id;
+            setDeathAnimal(null);
+            setSelAnimalId(null);
+            setRondeMarks((m) => { const n = { ...m }; delete n[id]; return n; });
+            window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+            reload();
+          }}/>
+      )}
+
+      {sickTarget && (
+        <DeclareBoxDiseaseModal
+          lang={lang}
+          species={building?.species}
+          animals={animalsByBox.get(sickTarget.boxId) || []}
+          initialIds={sickTarget.ids}
+          busy={busy}
+          onCancel={() => setSickTarget(null)}
+          onConfirm={(payload) => declareDisease(sickTarget.boxId, payload)}/>
+      )}
+
+      {addBoxId != null && (() => {
+        const box = (boxes || []).find((b) => b.id === addBoxId);
+        if (!box) return null;
+        const cap = box.capacity != null ? box.capacity : null;
+        const free = cap != null ? Math.max(0, cap - headsIn(box.id)) : null;
+        const pickedList = candidates.filter((a) => addPicked.has(a.id));
+        const pickedHeads = pickedList.reduce((s, a) => s + animalQty(a), 0);
+        const over = free != null && pickedHeads > free;
+        const toggleAdd = (id) => setAddPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+        return (
+          <div onClick={() => setAddBoxId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 14, width: "min(460px,100%)", maxHeight: "90vh", overflowY: "auto", padding: 18, display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--ink-950)" }}>{L(`Ajouter au box ${box.name}`, `Add to box ${box.name}`)}</div>
+              {free != null && <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{L(`Il reste ${free} place(s) dans ce box.`, `${free} place(s) left in this box.`)}</div>}
+              {lotsAvailable.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {lotsAvailable.map((lot) => (
+                    <button key={lot} type="button" className="btn btn-sm" style={{ minHeight: 44 }}
+                      onClick={() => setAddPicked((p) => new Set([...p, ...candidates.filter((a) => a.lot === lot).map((a) => a.id)]))}>
+                      {L("Tout le lot", "Whole lot")} {lot} ({candidates.filter((a) => a.lot === lot).length})
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ border: "1px solid var(--border-1)", borderRadius: 10, padding: 4, maxHeight: 280, overflowY: "auto" }}>
+                {candidates.length === 0 && <div style={{ padding: 10, fontSize: 12.5, color: "var(--fg-3)" }}>{L("Aucun animal sans box dans ce bâtiment.", "No animal without a box in this building.")}</div>}
+                {candidates.map((a) => (
+                  <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", minHeight: 48, cursor: "pointer" }}>
+                    <input type="checkbox" checked={addPicked.has(a.id)} onChange={() => toggleAdd(a.id)} style={{ width: 20, height: 20 }}/>
+                    <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={36}/>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id)}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+                    {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20 }}>{a.lot}</span>}
+                  </label>
+                ))}
+              </div>
+              {over && <div style={{ fontSize: 12.5, color: "#8a5a00", background: "#FBF0D5", borderRadius: 8, padding: "8px 10px" }}>{L(`Capacité dépassée de ${pickedHeads - free}. Une confirmation sera demandée pour forcer.`, `Capacity exceeded by ${pickedHeads - free}. A confirmation will be asked to force.`)}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="btn btn-sm btn-ghost" style={{ flex: 1, minHeight: 48, justifyContent: "center" }} onClick={() => setAddBoxId(null)}>{L("Annuler", "Cancel")}</button>
+                <button type="button" className="btn btn-sm btn-primary" disabled={busy || pickedList.length === 0} style={{ flex: 1, minHeight: 48, justifyContent: "center" }}
+                  onClick={() => placeAnimals(box.id, pickedList.map((a) => a.id))}>
+                  {L("Ajouter", "Add")} {pickedList.length || ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {labelBoxId != null && (
         <BoxLabelModal lang={lang} boxId={labelBoxId} onClose={() => setLabelBoxId(null)}/>
       )}
@@ -7087,7 +7455,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
 
 // Modal "Déclarer une maladie sur tout le box" : choisit la maladie + le
 // traitement une seule fois, appliqués à tous les animaux cochés du box.
-const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, onConfirm }) => {
+const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, onConfirm, initialIds = null }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [diseases, setDiseases] = React.useState([]);
   const [medicines, setMedicines] = React.useState([]);
@@ -7098,7 +7466,7 @@ const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, o
   const [meatDays, setMeatDays] = React.useState("");
   const [notes, setNotes] = React.useState("");
   // Tous les animaux du box pré-cochés ; on peut en décocher.
-  const [picked, setPicked] = React.useState(() => new Set(animals.map((a) => a.id)));
+  const [picked, setPicked] = React.useState(() => new Set(initialIds || animals.map((a) => a.id)));
 
   React.useEffect(() => {
     api.listDiseases(species).then((d) => setDiseases(Array.isArray(d) ? d : [])).catch(() => setDiseases([]));
@@ -7167,7 +7535,8 @@ const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, o
           {animals.map((a) => (
             <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", fontSize: 12.5, cursor: "pointer" }}>
               <input type="checkbox" checked={picked.has(a.id)} onChange={() => toggle(a.id)}/>
-              <span style={{ fontWeight: 600 }}>{a.name || a.id}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+              <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={30}/>
+              <span style={{ fontWeight: 600 }}>{a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id)}{a.count > 1 ? ` ×${a.count}` : ""}</span>
               {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20 }}>{a.lot}</span>}
             </label>
           ))}
@@ -7793,7 +8162,7 @@ const CATEGORY_COLORS = {
 };
 
 // Modal "Visualiser le bâtiment" : KPIs en lecture seule + bouton Modifier
-const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior }) => {
+const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior, embedded = false }) => {
   if (!building) return null;
   const meta = bldgMeta(building.type);
   const rate = building.occupancyRate ?? 0;
@@ -7812,10 +8181,10 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
     ? (lang === "fr" ? `dont ${adult} adulte${adult > 1 ? "s" : ""}` : `incl. ${adult} adult${adult > 1 ? "s" : ""}`)
     : null;
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,16,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 16, padding: 20 }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+    <div onClick={embedded ? undefined : onClose} style={embedded ? undefined : { position: "fixed", inset: 0, background: "rgba(20,16,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className={embedded ? undefined : "card"} style={embedded ? { display: "flex", flexDirection: "column", gap: 16 } : { width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 16, padding: 20 }}>
+        {/* Header (masqué dans l'onglet Infos : l'en-tête du bâtiment est déjà affiché) */}
+        {!embedded && <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <div style={{ width: 42, height: 42, borderRadius: 10, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Icon name={meta.icon} size={21} color={meta.text}/>
           </div>
@@ -7829,7 +8198,7 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
           <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 7px", flexShrink: 0 }}>
             <Icon name="x" size={14} color="var(--ink-600)"/>
           </button>
-        </div>
+        </div>}
 
         {/* Occupation */}
         {cap != null && (
@@ -7944,7 +8313,7 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
         )}
 
         {/* Plan intérieur */}
-        {onViewInterior && (
+        {!embedded && onViewInterior && (
           <button className="btn btn-sm" onClick={() => onViewInterior(building)}
             style={{ background: "rgba(14,100,56,0.06)", border: "1.5px solid rgba(14,100,56,0.2)", color: "var(--forest-800)", fontWeight: 700, gap: 7, justifyContent: "center" }}>
             <Icon name="grid" size={13} color="var(--forest-700)"/>
@@ -7954,7 +8323,7 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
 
         {/* Actions */}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-          <button className="btn btn-sm btn-ghost" onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</button>
+          {!embedded && <button className="btn btn-sm btn-ghost" onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</button>}
           <button className="btn btn-sm" onClick={() => printBuildingReport(building, stats, lang)} style={{ gap: 6 }}>
             <Icon name="report" size={12} color="var(--ink-700)"/>
             {lang === "fr" ? "Rapport" : "Report"}
@@ -8176,6 +8545,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
   const bldgAnimalCounts = React.useMemo(() => bldgAnimalStats(selectedBuilding, animals), [selectedBuilding, animals]);
   const viewingStats = React.useMemo(() => bldgAnimalStats(viewing, animals), [viewing, animals]);
+  const interiorStats = React.useMemo(() => bldgAnimalStats(interiorBuilding, animals), [interiorBuilding, animals]);
   // Compteurs par ferme (bâtiments + occupation animaux)
   const farmStats = (fmId) => {
     const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
@@ -8538,17 +8908,17 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </div>
       )}
       {viewing && (
-        <BuildingViewer building={viewing} lang={lang} stats={viewingStats}
+        <BldgInteriorPlan building={viewing} animals={animals} lang={lang} stats={viewingStats}
           onEdit={() => { setEditing(viewing); setViewing(null); }}
-          onClose={() => setViewing(null)}
-          onViewInterior={(b) => { setInteriorBuilding(b); setViewing(null); }}/>
+          onClose={() => setViewing(null)}/>
       )}
       {editing && (
         <BuildingEditor lang={lang} building={editing === "new" ? null : editing}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
       )}
       {interiorBuilding && (
-        <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} initialBoxId={interiorBoxId}
+        <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} initialBoxId={interiorBoxId} stats={interiorStats}
+          onEdit={() => { setEditing(interiorBuilding); setInteriorBuilding(null); setInteriorBoxId(null); }}
           onClose={() => { setInteriorBuilding(null); setInteriorBoxId(null); }}/>
       )}
       <ConfirmDeleteModal

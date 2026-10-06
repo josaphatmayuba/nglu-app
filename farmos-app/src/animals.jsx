@@ -3285,4 +3285,4 @@ const QrPrintModal = ({ lang, animal, sp, onClose }) => {
   );
 };
 
-export { Animals };
+export { Animals, DeathDeclareModal };
