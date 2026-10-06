@@ -6884,7 +6884,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-950)" }}>{building.name}</div>
             <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 1 }}>
-              {L("Plan intérieur · Affectation des box", "Interior plan · Box assignment")}
+              {tab === "ronde" ? L("Ronde du bâtiment", "Building round") : tab === "infos" ? L("Informations du bâtiment", "Building information") : L("Plan intérieur · Affectation des box", "Interior plan · Box assignment")}
             </div>
           </div>
           {tab === "plan" && hasBoxes && !selBox && (
@@ -6960,8 +6960,9 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
             const LBL = { ok: `✓ ${L("Vu OK", "Seen OK")}`, watch: `👁 ${L("À surveiller", "Watch")}`, sick: `✚ ${L("Malade", "Sick")}`, dead: `✝ ${L("Décédée", "Deceased")}` };
             const BG = { ok: "#E4F1E3", watch: "#FBF0D5", sick: "#FBE3DD", dead: "#ECE8DD" };
             const BD = { ok: "#3F8A4D", watch: "#C48A12", sick: "#B84040", dead: "var(--ink-900)" };
-            const atSummary = rondeIdx >= boxes.length;
-            const box = atSummary ? null : boxes[rondeIdx];
+            const rBoxes = boxes.filter((b) => (animalsByBox.get(b.id) || []).length > 0); // la ronde saute les box vides
+            const atSummary = rondeIdx >= rBoxes.length;
+            const box = atSummary ? null : rBoxes[rondeIdx];
             const list = box ? (animalsByBox.get(box.id) || []) : [];
             const left = list.filter((a) => !rondeMarks[a.id]).length;
             const tagLabel = (a) => (a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id));
@@ -6975,7 +6976,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                 {!atSummary && <>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <button type="button" className="btn btn-sm" disabled={rondeIdx === 0} aria-label={L("Box précédent", "Previous box")} onClick={() => { setRondeIdx((i) => i - 1); setRondeSel(null); }} style={{ minHeight: 48, minWidth: 48, justifyContent: "center" }}>‹</button>
-                    <b style={{ fontSize: 16 }}>Box {box.name} · {rondeIdx + 1}/{boxes.length}</b>
+                    <b style={{ fontSize: 16 }}>Box {box.name} · {rondeIdx + 1}/{rBoxes.length}</b>
                     <span className="mono" aria-live="polite" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{done}/{bldgAnimals.length} {L("vues", "seen")}</span>
                     <button type="button" className="btn btn-sm" style={{ ...big, marginLeft: "auto" }}
                       onClick={() => setRondeMarks((m) => { const n = { ...m }; list.forEach((a) => { if (!n[a.id]) n[a.id] = "ok"; }); return n; })}>{L("Tout le box OK", "Whole box OK")}</button>
@@ -7013,7 +7014,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                   )}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button type="button" className="btn btn-sm" style={big} onClick={() => { setRondeIdx((i) => i + 1); setRondeSel(null); }}>
-                      {left > 0 ? L(`Passer (${left} non vues)`, `Skip (${left} not seen)`) : (rondeIdx === boxes.length - 1 ? L("Voir le bilan", "See summary") : L("Box suivant", "Next box"))}
+                      {left > 0 ? L(`Passer (${left} non vues)`, `Skip (${left} not seen)`) : (rondeIdx === rBoxes.length - 1 ? L("Voir le bilan", "See summary") : L("Box suivant", "Next box"))}
                     </button>
                   </div>
                 </>}
@@ -7055,7 +7056,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                       )}
                       {sick.length + dead.length + watch.length === 0 && <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>{L("Aucune alerte.", "No alert.")}</div>}
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button type="button" className="btn btn-sm" style={big} onClick={() => setRondeIdx(Math.max(0, boxes.length - 1))}>{L("Revenir aux box", "Back to boxes")}</button>
+                        <button type="button" className="btn btn-sm" style={big} onClick={() => setRondeIdx(Math.max(0, rBoxes.length - 1))}>{L("Revenir aux box", "Back to boxes")}</button>
                         <button type="button" className="btn btn-sm" style={big} onClick={() => { setRondeMarks({}); setRondeIdx(0); setRondeSel(null); }}>{L("Nouvelle ronde", "New round")}</button>
                       </div>
                     </>
@@ -7761,7 +7762,7 @@ const bldgAnimalStats = (building, animals) => {
     const adult = isAdultAnimal(a);
     if (a.sex === "F") { female += n; if (adult) femaleAdult += n; }
     else if (a.sex === "M") { male += n; if (adult) maleAdult += n; }
-    if (a.status && a.status !== "healthy") sick += n;
+    if (a.status === "sick") sick += n;
     if (a.lot) { if (!lotGroups.has(a.lot)) lotGroups.set(a.lot, []); lotGroups.get(a.lot).push(a); }
   });
   // Catégories (avec ratio reproducteur) calculées par groupe : le bâtiment entier,
