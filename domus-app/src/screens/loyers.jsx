@@ -197,9 +197,10 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
-function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
-  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, list = [] } = card;
+function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [] } = card;
   const [showMonths, setShowMonths] = useState(false);
+  const [selMonth, setSelMonth] = useState(null);
   // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
   // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
   // qui doit le seul mois en cours n'est pas en defaut : pas de bouton.
@@ -260,6 +261,19 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
   const firstSlot = totalMonths ? monthsFrom(lease.startDate, 1)[0] : null;
   const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
+  // Paiement ayant couvert le mois i : les paiements réglés se cumulent par date jusqu'à (i+1) loyers.
+  const paidSorted = list.filter((p) => p.status !== "pending").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
+  const payForMonth = (i) => {
+    const r = Number(rent) || 0;
+    if (!(r > 0)) return null;
+    let cum = 0;
+    for (const p of paidSorted) {
+      cum += Number(p.amount || 0);
+      if (cum + 0.0001 >= (i + 1) * r) return p;
+    }
+    return null;
+  };
+  const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
   const behindTxt = status === "late" ? tf("{n} en retard", { n: monthsBehind }) : status === "pending" ? t("1 à régler") : t("À jour");
   const frieseAria = totalMonths
     ? `${paidCount}${fixedTotal ? ` / ${totalMonths}` : ""} ${t("mois payés")}, ${behindTxt}`
@@ -332,14 +346,63 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
                 <div key={y}>
                   <div className="immo-pay-year">{y}</div>
                   <div className="immo-pay-months">
-                    {monthKinds.map((k, i) => ({ k, d: monthAt(i) })).filter((m) => m.d.getFullYear() === y).map(({ k, d }) => (
-                      <div key={d.getTime()} className={`immo-pay-m ${k}`} aria-label={`${fmtMonthYear(d)} : ${t(kindLabel[k])}`}>
+                    {monthKinds.map((k, i) => ({ k, i, d: monthAt(i) })).filter((m) => m.d.getFullYear() === y).map(({ k, i, d }) => (
+                      <button type="button" key={d.getTime()} className={`immo-pay-m ${k}${selMonth === i ? " sel" : ""}`}
+                        aria-pressed={selMonth === i}
+                        aria-label={`${fmtMonthYear(d)} : ${t(kindLabel[k])}`}
+                        onClick={() => setSelMonth(selMonth === i ? null : i)}>
                         <span>{MONTHS_FR[d.getMonth()]}</span><small>{t(kindLabel[k])}</small>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
               ))}
+              {selMonth != null && monthKinds[selMonth] && (() => {
+                const i = selMonth;
+                const k = monthKinds[i];
+                const d = monthAt(i);
+                const cur = symbol;
+                if (k === "paid") {
+                  const pp = payForMonth(i);
+                  return (
+                    <div className="immo-pay-panel">
+                      <strong>{fmtMonthYear(d)} · {t("payé")}</strong>
+                      {pp && <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{money(pp.amount, pp.currencySymbol || cur)}{pp.paymentDate ? ` · ${new Date(pp.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>}
+                      {pp?.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{pp.method}</strong></div>}
+                      {lease && (
+                        <button type="button" className="immo-btn primary" onClick={() => onReceipt?.(card)}>
+                          <FileDown size={14} /> {t("Quittances (PDF)")}
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+                const pend = k === "future" ? null : pendingForMonth(d);
+                const r = Number(rent) || 0;
+                const payAmount = Math.max(0, Math.round(((i + 1) * r - Number(totalPaid || 0)) * 100) / 100);
+                const kindTxt = { partial: t("payé en partie"), late: t("en retard"), cur: t("mois courant"), future: t("à venir") }[k];
+                return (
+                  <div className="immo-pay-panel">
+                    <strong>{fmtMonthYear(d)} · {kindTxt}</strong>
+                    {pend ? (
+                      <>
+                        <p className="muted">{t("Échéance générée automatiquement, pas encore confirmée.")}</p>
+                        <button type="button" className="immo-btn primary" onClick={() => onConfirm?.(pend)}>
+                          <Check size={14} /> {t("Confirmer le paiement")}
+                        </button>
+                      </>
+                    ) : payAmount > 0 ? (
+                      <>
+                        <p className="muted">{t("Les paiements couvrent d'abord les mois les plus anciens.")}</p>
+                        <button type="button" className="immo-btn primary"
+                          onClick={() => onPay({ ...card, payAmount, payLabel: fmtMonthYear(d), payAdvance: k === "future" })}>
+                          <Smartphone size={14} /> {k === "future" ? t("Payer d'avance") : t("Régler")} · {money(payAmount, cur)}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -402,7 +465,8 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   const monthRent = Number(card.rent ?? card.latest?.amount) || 0;
   // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
-  const [amount, setAmount] = useState(String(fullBalance || monthRent || ""));
+  // payAmount/payLabel : « jusqu'à ce mois » quand on arrive depuis le détail d'un mois de la frise.
+  const [amount, setAmount] = useState(String(card.payAmount ?? (fullBalance || monthRent || "")));
   const [method, setMethod] = useState(null);
   const [receivedBy, setReceivedBy] = useState("");
   const [proofFile, setProofFile] = useState(null);
@@ -441,7 +505,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         <div className="immo-modal-head">
           <div>
             <div className="eyebrow">Encaissement rapide</div>
-            <h3>{t("Régler le loyer en retard")}</h3>
+            <h3>{card.payAdvance ? t("Payer d'avance") : t("Régler le loyer en retard")}</h3>
           </div>
           <button className="immo-flat-icon" onClick={onClose} aria-label={t("Fermer")}><X size={16} /></button>
         </div>
@@ -457,6 +521,11 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
           <label className="immo-field-label">Montant</label>
           {(fullBalance > 0 || monthRent > 0) && (
             <div className="immo-quickpay-chips">
+              {card.payAmount > 0 && card.payAmount !== fullBalance && card.payAmount !== monthRent && (
+                <button type="button" className={Number(amount) === card.payAmount ? "active" : ""} onClick={() => setAmount(String(card.payAmount))}>
+                  {t("Jusqu'à")} {card.payLabel} · {money(card.payAmount, card.symbol)}
+                </button>
+              )}
               {fullBalance > 0 && (
                 <button type="button" className={Number(amount) === fullBalance ? "active" : ""} onClick={() => setAmount(String(fullBalance))}>
                   Tout le solde · {money(fullBalance, card.symbol)}
@@ -747,6 +816,17 @@ export function Loyers({ go }) {
     setTimeout(() => setFlash(null), 4000);
   };
 
+  // Carnet de quittances PDF du bail (même flux que l'étape « Quittance » de l'encaissement).
+  const handleReceipt = async (card) => {
+    if (!card?.lease?.id) return;
+    try {
+      const { lease: leaseData, payments, portalUrl } = await api.rentBook(card.lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
+    } catch (e) {
+      toast.error(e?.message || "Génération du carnet de quittances impossible.");
+    }
+  };
+
   const handleVoid = async (p) => {
     const reason = window.prompt(`Annuler le paiement de ${money(p.amount, p.currencySymbol || "$")} (${tenantName(p)}) saisi par erreur ?\nLa compta sera contre-passée. Motif obligatoire :`);
     if (!reason || !reason.trim()) return;
@@ -966,6 +1046,8 @@ export function Loyers({ go }) {
                 card={c}
                 index={i}
                 onPay={setPayTarget}
+                onConfirm={setConfirmTarget}
+                onReceipt={handleReceipt}
                 onGenerateMissing={handleGenerateMissing}
                 generating={Boolean(c.lease?.id) && generatingLeaseId === c.lease?.id}
                 onDefaultNotice={handleDefaultNotice}

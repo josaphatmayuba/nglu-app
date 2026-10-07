@@ -1202,6 +1202,14 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-pay-m.late { background:#fdecec; color:#dc2626; border:1px solid #ef4444; }
 .immo-pay-m.cur { background:#f59e0b; color:#2a1a00; }
 .immo-pay-m.future { border:2px dashed #d4d4dc; color:#71717a; }
+button.immo-pay-m { border:0; font-family:inherit; cursor:pointer; }
+button.immo-pay-m.late { border:1px solid #ef4444; }
+button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
+.immo-pay-m.sel { outline:2px solid #4f46e5; outline-offset:2px; }
+.immo-pay-panel { background:#f5f5ff; border:1px solid #e4e4e7; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.immo-pay-panel .immo-pay-row { margin-bottom:0; }
+.immo-pay-panel p { margin:0; font-size:12.5px; }
+.immo-pay-panel .immo-btn { justify-content:center; min-height:40px; }
 /* Boutons d'action sur une seule ligne (retour a la ligne si la carte est trop etroite). */
 .immo-pay-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .immo-pay-actions .immo-btn { flex:1 1 90px; justify-content:center; gap:5px; padding-inline:8px; font-size:13px; white-space:nowrap; min-height:40px; }
