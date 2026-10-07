@@ -320,6 +320,7 @@ export const api = {
   // mois de loyer (le backend revalide le seuil et refuse sinon).
   sendDefaultNotice: (leaseId) => post("/payments/default-notice", { leaseId }),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
+  remindLease: (leaseId) => post("/payments/remind-lease", { leaseId }),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
   // manquantes en statut pending, une ligne par mois calendaire ecoule non couvert.

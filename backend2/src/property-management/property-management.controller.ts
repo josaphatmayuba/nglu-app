@@ -1115,6 +1115,14 @@ export class PropertyManagementController {
     return this.rentReminderService.runOverdueReminders();
   }
 
+  @ApiOperation({ summary: "Send an overdue rent reminder to ONE lease's tenant now (manual, resends)" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("payments/remind-lease")
+  @HttpCode(200)
+  remindLease(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
+    return this.rentReminderService.runLeaseReminder(Number(body.leaseId), orgId);
+  }
+
   @ApiOperation({ summary: "List maintenance requests" })
   @Permissions("readAll-maintenance")
   @Get("maintenance")
