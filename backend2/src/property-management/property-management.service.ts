@@ -6213,6 +6213,7 @@ export class PropertyManagementService {
       .select({
         leaseId: realEstateRentPayments.leaseId,
         paymentDate: realEstateRentPayments.paymentDate,
+        amount: realEstateRentPayments.amount,
       })
       .from(realEstateRentPayments)
       .where(and(
@@ -6221,10 +6222,10 @@ export class PropertyManagementService {
       ))
       .orderBy(realEstateRentPayments.paymentDate);
 
-    const paymentsByLease = new Map<number, string[]>();
+    const paymentsByLease = new Map<number, Array<{ date: string; amount: number }>>();
     for (const p of payments) {
       const list = paymentsByLease.get(p.leaseId) ?? [];
-      list.push(p.paymentDate);
+      list.push({ date: p.paymentDate, amount: Number(p.amount || 0) });
       paymentsByLease.set(p.leaseId, list);
     }
 
@@ -6235,6 +6236,7 @@ export class PropertyManagementService {
         row.endDate,
         row.billingCycle,
         paymentsByLease.get(row.id) ?? [],
+        Number((row as { rentAmount?: string | number | null }).rentAmount || 0),
         today,
       );
       return { ...row, ...stats };
@@ -6250,13 +6252,15 @@ export class PropertyManagementService {
     startDate: string,
     endDate: string | null,
     billingCycle: string | null,
-    paymentDates: string[],
+    paymentRows: Array<{ date: string; amount: number }>,
+    rentAmount: number,
     today: Date,
   ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
     const start = this.parseDateOnly(startDate);
     const boundary = endDate ? this.parseDateOnly(endDate) : null;
-    const payments = paymentDates.map((d) => this.parseDateOnly(d));
-    const usedPaymentIndexes = new Set<number>();
+    // Sans loyer exploitable, chaque paiement vaut une échéance.
+    const unit = rentAmount > 0 ? rentAmount : 1;
+    const payments = paymentRows.map((p) => ({ date: this.parseDateOnly(p.date), amount: rentAmount > 0 ? p.amount : 1 }));
 
     let dueCount = 0;
     let lateCount = 0;
@@ -6275,17 +6279,18 @@ export class PropertyManagementService {
     while (dueDate.getTime() <= today.getTime() && (!boundary || dueDate.getTime() <= boundary.getTime())) {
       dueCount += 1;
 
-      // 1er paiement non consommé du même mois/année que l'échéance.
-      const matchIndex = payments.findIndex(
-        (p, idx) =>
-          !usedPaymentIndexes.has(idx) &&
-          p.getUTCFullYear() === dueDate.getUTCFullYear() &&
-          p.getUTCMonth() === dueDate.getUTCMonth(),
-      );
+      // Couverture par montants cumulés (comme la frise Loyers) : l'échéance N est
+      // couverte par le paiement qui fait atteindre N loyers cumulés. Un paiement
+      // groupé ou d'avance couvre donc plusieurs échéances.
+      let coveringPayment: Date | null = null;
+      let cumulated = 0;
+      for (const p of payments) {
+        cumulated += p.amount;
+        if (cumulated + 0.0001 >= (period + 1) * unit) { coveringPayment = p.date; break; }
+      }
 
-      if (matchIndex >= 0) {
-        usedPaymentIndexes.add(matchIndex);
-        const paidAt = payments[matchIndex];
+      if (coveringPayment) {
+        const paidAt = coveringPayment;
         const graceLimit = new Date(dueDate.getTime());
         graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
         if (paidAt.getTime() > graceLimit.getTime()) {
