@@ -1168,7 +1168,8 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-quickpay-note { color:#d97706; font-size:12px; margin:6px 0 0; }
 .immo-pay-bar-labels { display:flex; justify-content:space-between; font-size:10px; color:#a1a1aa; margin-top:6px; }
 /* Carte compacte + frise proportionnelle a la duree du bail. */
-.immo-pay-card { padding:14px; }
+.immo-pay-card { padding:14px; min-width:0; }
+.immo-pay-grid > * { min-width:0; }
 .immo-pay-head { margin-bottom:10px; }
 .immo-pay-row { margin-bottom:4px; }
 .immo-pay-friese { margin-top:8px; }

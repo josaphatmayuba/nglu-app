@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carte « Par locataire » : plus de débordement horizontal en mobile (v3.220.7, pas de ticket Jira).** La carte dépassait sa colonne de grille (451 px pour 328 px) : `min-width:0` sur la carte et ses cellules de grille. Détecté en QA dev à 360 px. Fichier : `domus-app/src/styles/app.css`.
+
 - **Domus — fix bouton principal de la carte étiré en mobile (v3.220.6, pas de ticket Jira).** La classe `main` du bouton d'action entrait en collision avec `.shell[data-layout="mobile"] .main { min-height:100vh }` (bouton haut comme l'écran sur téléphone). Renommée `pay-main`. Détecté en QA dev à 360 px. Fichiers : `domus-app/src/screens/loyers.jsx`, `domus-app/src/styles/app.css`.
 
 - **Domus — actions par mois depuis le détail de la frise (v3.220.5, pas de ticket Jira).** Chaque mois du détail est cliquable et ouvre un panneau : mois payé → paiement qui l'a couvert + « Quittances (PDF) » (carnet du bail) ; mois en retard/courant avec échéance pending → « Confirmer le paiement » (`ConfirmPayModal` existante) ; sinon → « Régler · montant » qui ouvre `QuickPayModal` avec le montant « jusqu'à ce mois » prérempli (puce « Jusqu'à Mois AAAA », titre « Payer d'avance » pour un mois à venir). Les paiements couvrent toujours d'abord les mois les plus anciens (règle de couverture inchangée). Front uniquement, aucune migration. Fichiers : `domus-app/src/screens/loyers.jsx`, `domus-app/src/styles/app.css`. Vérifié : `vite build` OK ; QA dev à faire.
