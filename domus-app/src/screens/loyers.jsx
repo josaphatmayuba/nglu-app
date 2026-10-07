@@ -84,6 +84,15 @@ const leaseStartMonth = (startDate) => {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 };
 
+// Durée du bail en mois (début et fin inclus) ; null si pas de date de fin (bail indéterminé).
+const leaseTotalMonths = (lease) => {
+  const s = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const e = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+  if (!s || !e) return null;
+  const n = (Number(e[1]) - Number(s[1])) * 12 + (Number(e[2]) - Number(s[2])) + 1;
+  return n > 0 ? n : null;
+};
+
 // N mois à partir d'une date de début (le plus ancien à gauche → la frise se
 // remplit de gauche à droite au fil du bail).
 const monthsFrom = (startDate, n) => {
@@ -189,7 +198,8 @@ const STATUS_META = {
 };
 
 function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
-  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null, list = [] } = card;
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, list = [] } = card;
+  const [showMonths, setShowMonths] = useState(false);
   // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
   // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
   // qui doit le seul mois en cours n'est pas en defaut : pas de bouton.
@@ -228,6 +238,33 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
   };
   const segTitle = { paid: "payé", pending: "en attente", late: "en retard", "": "à venir" };
 
+  // Frise proportionnelle à la durée du bail : un bloc par état (payé / partiel / retard / courant / à venir).
+  // Bail sans date de fin : mois écoulés + 6 mois à venir (12 au minimum).
+  const fixedTotal = lease?.startDate ? leaseTotalMonths(lease) : null;
+  const totalMonths = lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
+  const monthKinds = [];
+  if (totalMonths) {
+    for (let i = 0; i < totalMonths; i++) {
+      const fill = Math.max(0, Math.min(1, (monthsCoveredFloat || 0) - i));
+      monthKinds.push(fill >= 0.999 ? "paid" : fill > 0 ? "partial" : i < monthsDue - 1 ? "late" : i === monthsDue - 1 ? "cur" : "future");
+    }
+  }
+  const runs = [];
+  monthKinds.forEach((k, i) => {
+    const last = runs[runs.length - 1];
+    if (last && last.kind === k && k !== "partial") last.n += 1;
+    else runs.push({ kind: k, n: 1, fill: k === "partial" ? Math.round(((monthsCoveredFloat || 0) - i) * 100) : 0 });
+  });
+  const paidCount = monthKinds.filter((k) => k === "paid").length;
+  const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", cur: "courant", future: "à venir" };
+  const firstSlot = totalMonths ? monthsFrom(lease.startDate, 1)[0] : null;
+  const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
+  const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
+  const behindTxt = status === "late" ? tf("{n} en retard", { n: monthsBehind }) : status === "pending" ? t("1 à régler") : t("À jour");
+  const frieseAria = totalMonths
+    ? `${paidCount}${fixedTotal ? ` / ${totalMonths}` : ""} ${t("mois payés")}, ${behindTxt}`
+    : "";
+
   return (
     <div className={`immo-pay-card ${status}`}>
       <div className="immo-pay-head">
@@ -235,18 +272,17 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
           <span className={`mini-avatar ${PAY_AVATARS[index % PAY_AVATARS.length]}`} style={{ width: 40, height: 40, fontSize: 13 }}>{initials(name)}</span>
           <div style={{ minWidth: 0 }}>
             <div className="name">{name}</div>
-            <div className="unit">{unit || "—"}</div>
+            <div className="unit">{[unit, `${money(rent ?? latest?.amount, symbol)} / ${t("mois")}`].filter(Boolean).join(" · ")}</div>
           </div>
         </div>
         <span className={`immo-pill ${meta.pill}`}>{meta.label}</span>
       </div>
-      <div className="immo-pay-row">
-        <span>{meta.rowLabel}</span>
-        <strong style={meta.color ? { color: meta.color } : undefined}>
-          {status === "ok" ? latestDate : status === "pending" ? "À régler" : "Non payé"}
-        </strong>
-      </div>
-      <div className="immo-pay-row"><span>Montant mensuel</span><strong>{money(rent ?? latest?.amount, symbol)}</strong></div>
+      {status === "ok" && (
+        <div className="immo-pay-row">
+          <span>{meta.rowLabel}</span>
+          <strong>{latestDate}</strong>
+        </div>
+      )}
       {actionable && balance > 0 && (
         <div className="immo-pay-row">
           <span>Reste à payer{monthsBehind > 1 ? ` · ${monthsBehind} mois` : ""}</span>
@@ -268,6 +304,47 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
       {status === "ok" && monthsAhead > 0 && coveredUntilLabel && (
         <div className="immo-pay-row"><span>Couvert jusqu'à</span><strong style={{ color: "#16a34a", textTransform: "capitalize" }}>{coveredUntilLabel}</strong></div>
       )}
+      {totalMonths > 0 ? (
+        <div className="immo-pay-friese">
+          <button type="button" className="immo-pay-friese-btn" aria-expanded={showMonths} onClick={() => setShowMonths((v) => !v)}>
+            <div className="immo-pay-track" role="img" aria-label={frieseAria}>
+              {runs.map((r, i) => (
+                <div key={i} className={`immo-pay-run ${r.kind}`} style={{ flexGrow: r.n, ...(r.kind === "partial" ? { "--f": `${r.fill}%` } : null) }} />
+              ))}
+            </div>
+            <div className="immo-pay-bar-labels">
+              <span>{fmtMonthYear(monthAt(0))}</span>
+              <span>{fixedTotal ? fmtMonthYear(monthAt(totalMonths - 1)) : t("Sans date de fin")}</span>
+            </div>
+            <div className="immo-pay-summary">
+              <strong>{fixedTotal ? tf("{p} / {n} mois payés", { p: paidCount, n: totalMonths }) : tf("{p} mois payés", { p: paidCount })}</strong>
+              <span className={status === "late" ? "late" : status === "pending" ? "pending" : "ok"}>{behindTxt}</span>
+              <em>{showMonths ? t("Masquer") : t("Détail")}</em>
+            </div>
+          </button>
+          {showMonths && (
+            <div className="immo-pay-detail">
+              <div className="immo-pay-legend">
+                <span><i className="paid" />{t("Payé")}</span><span><i className="late" />{t("En retard")}</span>
+                <span><i className="cur" />{t("Mois courant")}</span><span><i className="future" />{t("À venir")}</span>
+              </div>
+              {Array.from(new Set(monthKinds.map((_, i) => monthAt(i).getFullYear()))).map((y) => (
+                <div key={y}>
+                  <div className="immo-pay-year">{y}</div>
+                  <div className="immo-pay-months">
+                    {monthKinds.map((k, i) => ({ k, d: monthAt(i) })).filter((m) => m.d.getFullYear() === y).map(({ k, d }) => (
+                      <div key={d.getTime()} className={`immo-pay-m ${k}`} aria-label={`${fmtMonthYear(d)} : ${t(kindLabel[k])}`}>
+                        <span>{MONTHS_FR[d.getMonth()]}</span><small>{t(kindLabel[k])}</small>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
       <div className="immo-pay-bar">
         {slots.map((d, i) => {
           const { fill, base } = segMeta(d, i);
@@ -286,30 +363,32 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
         <span>{MONTHS_FR[slots[0].getMonth()]}</span>
         <span>{MONTHS_FR[slots[slots.length - 1].getMonth()]}</span>
       </div>
-      {actionable && (
-        <button type="button" className="immo-btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} onClick={() => onPay(card)}>
-          <Smartphone size={16} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
-        </button>
+      </>
       )}
-      {(missingMonths || (status === "late" && lease) || canNotifyDefault) && (
-        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+      {(actionable || missingMonths || (status === "late" && lease) || canNotifyDefault) && (
+        <div className="immo-pay-actions">
+          {actionable && (
+            <button type="button" className="immo-btn primary main" onClick={() => onPay(card)}>
+              <Smartphone size={14} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
+            </button>
+          )}
           {status === "late" && lease && (
-            <button type="button" className="immo-btn" style={{ flex: "1 1 0", justifyContent: "center" }}
+            <button type="button" className="immo-btn"
               title={t("Relancer ce locataire")} disabled={reminding} onClick={() => onRemind?.(card)}>
-              <BellRing size={16} /> {reminding ? t("Envoi…") : t("Relancer")}
+              <BellRing size={14} /> {reminding ? t("Envoi…") : t("Relancer")}
             </button>
           )}
           {missingMonths && (
-            <button type="button" className="immo-btn" style={{ flex: "1 1 0", justifyContent: "center" }}
+            <button type="button" className="immo-btn"
               title={t("Générer les échéances")} disabled={generating} onClick={() => onGenerateMissing?.(card)}>
-              <CalendarRange size={16} /> {generating ? "…" : t("Échéances")}
+              <CalendarRange size={14} /> {generating ? "…" : t("Échéances")}
             </button>
           )}
           {canNotifyDefault && (
-            <button type="button" className="immo-btn danger" style={{ flex: "1 1 0", justifyContent: "center" }}
+            <button type="button" className="immo-btn danger"
               title={noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
               disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
-              <AlertTriangle size={16} /> {noticing ? "…" : t("Préavis")}
+              <AlertTriangle size={14} /> {noticing ? "…" : t("Préavis")}
             </button>
           )}
         </div>
