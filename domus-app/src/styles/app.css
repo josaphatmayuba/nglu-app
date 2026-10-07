@@ -1213,7 +1213,7 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 /* Boutons d'action sur une seule ligne (retour a la ligne si la carte est trop etroite). */
 .immo-pay-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .immo-pay-actions .immo-btn { flex:1 1 90px; justify-content:center; gap:5px; padding-inline:8px; font-size:13px; white-space:nowrap; min-height:40px; }
-.immo-pay-actions .immo-btn.main { flex:1.5 1 130px; }
+.immo-pay-actions .immo-btn.pay-main { flex:1.5 1 130px; }
 @media (hover:hover) and (pointer:fine) { .immo-pay-actions .immo-btn { min-height:34px; } }
 @media (prefers-reduced-motion:no-preference) { .immo-pay-run { transition:flex-grow .25s; } }
 

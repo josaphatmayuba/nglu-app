@@ -431,7 +431,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
       {(actionable || missingMonths || (status === "late" && lease) || canNotifyDefault) && (
         <div className="immo-pay-actions">
           {actionable && (
-            <button type="button" className="immo-btn primary main" onClick={() => onPay(card)}>
+            <button type="button" className="immo-btn primary pay-main" onClick={() => onPay(card)}>
               <Smartphone size={14} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
             </button>
           )}
