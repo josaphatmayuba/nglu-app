@@ -110,7 +110,10 @@ export class TenantPortalService {
       .orderBy(desc(realEstateTenantPortalLinks.id))
       .limit(1);
 
-    if (existing?.token) {
+    // Ancien token long (64 hex) : on en emet un court pour tenir dans un SMS.
+    // L'ancienne ligne reste active, donc les liens deja envoyes continuent de
+    // fonctionner ; le nouveau, plus recent, devient celui retourne ensuite.
+    if (existing?.token && existing.token.length <= 12) {
       return { token: existing.token, url: this.portalUrl(existing.token, leaseId) };
     }
 
