@@ -43,7 +43,15 @@ export class RentReminderService {
     }
   }
 
-  async runOverdueReminders() {
+  /**
+   * Relance MANUELLE d'un seul bail (bouton « Relancer » d'une carte en retard) :
+   * renvoie meme si une relance a deja ete envoyee pour cette periode.
+   */
+  runLeaseReminder(leaseId: number, orgId: number) {
+    return this.runOverdueReminders({ leaseId, orgId });
+  }
+
+  async runOverdueReminders(only?: { leaseId: number; orgId: number }) {
     const overdueDays = env.rentReminders.overdueDays;
     const cutoff = new Date();
     cutoff.setHours(0, 0, 0, 0);
@@ -88,7 +96,9 @@ export class RentReminderService {
         and(
           eq(realEstateLeases.status, "active"),
           isNotNull(realEstateLeases.nextInvoiceDate),
-          lte(realEstateLeases.nextInvoiceDate, cutoffStr),
+          only
+            ? and(eq(realEstateLeases.id, only.leaseId), eq(realEstateLeases.organizationId, only.orgId))
+            : lte(realEstateLeases.nextInvoiceDate, cutoffStr),
         ),
       );
 
@@ -98,7 +108,7 @@ export class RentReminderService {
     let sent = 0;
     for (const lease of rows) {
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
-      if (lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
+      if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
       if (!send) continue;
 
       const daysLate = Math.floor(

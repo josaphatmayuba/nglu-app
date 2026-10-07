@@ -94,3 +94,6 @@ farmos_inventaire_animaux_reorganise.csv
 
 # Secrets locaux (token API Jira) — ne jamais versionner
 JIRA.md
+
+# QA locale (captures, snapshots Playwright, reponses API de test) — par app : qa/<app>/
+/qa/

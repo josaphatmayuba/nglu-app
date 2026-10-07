@@ -188,7 +188,7 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
-function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false, onDefaultNotice, noticing = false }) {
+function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
   const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null, list = [] } = card;
   // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
   // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
@@ -287,24 +287,32 @@ function TenantPayCard({ card, index, onPay, onGenerateMissing, generating = fal
         <span>{MONTHS_FR[slots[slots.length - 1].getMonth()]}</span>
       </div>
       {actionable && (
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button className="immo-btn primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onPay(card)}>
-            <Smartphone size={16} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
-          </button>
+        <button type="button" className="immo-btn primary" style={{ width: "100%", justifyContent: "center", marginTop: 14 }} onClick={() => onPay(card)}>
+          <Smartphone size={16} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
+        </button>
+      )}
+      {(missingMonths || (status === "late" && lease) || canNotifyDefault) && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          {status === "late" && lease && (
+            <button type="button" className="immo-btn" style={{ flex: "1 1 0", justifyContent: "center" }}
+              title={t("Relancer ce locataire")} disabled={reminding} onClick={() => onRemind?.(card)}>
+              <BellRing size={16} /> {reminding ? t("Envoi…") : t("Relancer")}
+            </button>
+          )}
           {missingMonths && (
-            <button className="immo-btn" style={{ flex: 1, justifyContent: "center" }} disabled={generating}
-              onClick={() => onGenerateMissing?.(card)}>
-              <CalendarRange size={16} /> {generating ? "…" : "Générer les échéances"}
+            <button type="button" className="immo-btn" style={{ flex: "1 1 0", justifyContent: "center" }}
+              title={t("Générer les échéances")} disabled={generating} onClick={() => onGenerateMissing?.(card)}>
+              <CalendarRange size={16} /> {generating ? "…" : t("Échéances")}
+            </button>
+          )}
+          {canNotifyDefault && (
+            <button type="button" className="immo-btn danger" style={{ flex: "1 1 0", justifyContent: "center" }}
+              title={noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
+              disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
+              <AlertTriangle size={16} /> {noticing ? "…" : t("Préavis")}
             </button>
           )}
         </div>
-      )}
-      {canNotifyDefault && (
-        <button className="immo-btn danger" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-          disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
-          <AlertTriangle size={16} />
-          {noticing ? "…" : noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
-        </button>
       )}
     </div>
   );
@@ -323,9 +331,11 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const [err, setErr] = useState(null);
 
   const activeKey = method ?? methods[0]?.key;
+  const amountNum = Number(String(amount).replace(/\s/g, "").replace(",", "."));
 
   const submit = async () => {
     if (busy) return;
+    if (!Number.isFinite(amountNum) || amountNum <= 0) { setErr("Montant invalide."); return; }
     setBusy(true); setErr(null);
     try {
       const m = methods.find((x) => x.key === activeKey);
@@ -338,7 +348,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(card.currencyId ? { currencyId: Number(card.currencyId) } : {}),
       }, proofFile);
-      onPaid(`Paiement de ${money(Number(amount), card.symbol)} enregistré pour ${card.name}`);
+      onPaid(`Paiement de ${money(amountNum, card.symbol)} enregistré pour ${card.name}`);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -592,6 +602,7 @@ export function Loyers({ go }) {
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
   const [noticingLeaseId, setNoticingLeaseId] = useState(null);
+  const [remindingLeaseId, setRemindingLeaseId] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
 
@@ -718,6 +729,20 @@ export function Loyers({ go }) {
       toast.error(e.message || String(e));
     } finally {
       setNoticingLeaseId(null);
+    }
+  };
+
+  const handleRemind = async (card) => {
+    if (!card.lease?.id || remindingLeaseId) return;
+    setRemindingLeaseId(card.lease.id);
+    try {
+      const res = await api.remindLease(card.lease.id);
+      if (res?.enabled === false) toast.info?.(t("Envoi des rappels désactivé sur cet environnement."));
+      else toast.success(tf(t("Rappel envoyé à {name}."), { name: card.name }));
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setRemindingLeaseId(null);
     }
   };
 
@@ -866,6 +891,8 @@ export function Loyers({ go }) {
                 generating={Boolean(c.lease?.id) && generatingLeaseId === c.lease?.id}
                 onDefaultNotice={handleDefaultNotice}
                 noticing={Boolean(c.lease?.id) && noticingLeaseId === c.lease?.id}
+                onRemind={handleRemind}
+                reminding={Boolean(c.lease?.id) && remindingLeaseId === c.lease?.id}
               />
             ))}
           </div>
@@ -1116,7 +1143,7 @@ export function Paiement({ go }) {
   const selCard = cards.find((c) => String(c.lease.id) === String(leaseId)) || null;
   const pendingReceipts = useMemo(() => receivedReceipts(data?.payments).pending.length, [data?.payments]);
   // Accepte « 250,5 » et « 1 200 » (saisie mobile).
-  const amountNum = Number(String(amount).replace(/[s ]/g, "").replace(",", "."));
+  const amountNum = Number(String(amount).replace(/\s/g, "").replace(",", "."));
   const amountValid = Number.isFinite(amountNum) && amountNum > 0;
   const amountChips = [
     selCard?.rent > 0 && { label: "Loyer", value: Number(selCard.rent) },
@@ -1165,7 +1192,7 @@ export function Paiement({ go }) {
       const payment = await api.createPayment({
         leaseId,
         paymentDate: today(),
-        amount: Number(amount),
+        amount: amountNum,
         method: methodMeta?.label || method,
         reference: (methodMeta?.mobile ? mobileNumber : receiptRef) || null,
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
