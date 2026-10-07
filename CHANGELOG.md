@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — lien portail locataire court dans les SMS (v3.220.8, pas de ticket Jira).** Un locataire ayant un ancien token de 64 caractères le gardait indéfiniment, ce qui rendait l'URL trop longue pour un SMS. `generateTenantPortalLink` émet maintenant un token court (12 car.) quand l'actif est long ; l'ancien reste valide (résolution par hash). Fichier : `backend2/src/property-management/tenant-portal.service.ts`.
 - **Domus — carte « Par locataire » : plus de débordement horizontal en mobile (v3.220.7, pas de ticket Jira).** La carte dépassait sa colonne de grille (451 px pour 328 px) : `min-width:0` sur la carte et ses cellules de grille. Détecté en QA dev à 360 px. Fichier : `domus-app/src/styles/app.css`.
 
 - **Domus — fix bouton principal de la carte étiré en mobile (v3.220.6, pas de ticket Jira).** La classe `main` du bouton d'action entrait en collision avec `.shell[data-layout="mobile"] .main { min-height:100vh }` (bouton haut comme l'écran sur téléphone). Renommée `pay-main`. Détecté en QA dev à 360 px. Fichiers : `domus-app/src/screens/loyers.jsx`, `domus-app/src/styles/app.css`.
