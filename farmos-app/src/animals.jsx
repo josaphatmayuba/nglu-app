@@ -9,7 +9,7 @@ import { formatAnimalAge, AGE_TONES } from "./animal-category";
 import { ConfirmDeleteModal } from "./confirm-modal.jsx";
 
 // Pastille d'âge (cartes mobiles + fiche) : icône calendrier + âge, date exacte au survol.
-const AgePill = ({ animal, lang, size = "sm" }) => {
+export const AgePill = ({ animal, lang, size = "sm" }) => {
   const age = formatAnimalAge(animal, lang);
   const tone = AGE_TONES[age.tone];
   const big = size === "md";

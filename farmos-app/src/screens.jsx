@@ -12,7 +12,7 @@ import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
 import { AnimalAvatar, tagColorForAnimal } from "./animal-avatar.jsx";
-import { DeathDeclareModal } from "./animals";
+import { DeathDeclareModal, AgePill } from "./animals";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
@@ -7281,7 +7281,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId 
                             <span style={{ width: 9, height: 9, borderRadius: "50%", background: stColor[a.status === "sick" ? "sick" : a.status === "quarantine" ? "quarantine" : "ok"], flexShrink: 0 }}/>
                             <AnimalAvatar species={a.species} tagNumber={a.tagNumber} tagColor={tagColorForAnimal(a)} size={32} title={a.name || undefined}/>
                             <span style={{ fontWeight: 700, color: "var(--ink-900)" }} title={a.name || undefined}>{a.tagNumber != null ? `${L("Boucle", "Tag")} n°${a.tagNumber}` : (a.name || a.id)}{a.count > 1 ? ` ×${a.count}` : ""}</span>
-                            {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{a.lot}</span>}
+                            <AgePill animal={a} lang={lang}/>
                             <button className="btn btn-sm btn-ghost" disabled={busy} title={L("Retirer du box", "Remove from box")}
                               onClick={() => unassign(a.id)} style={{ marginLeft: "auto", padding: "3px 6px" }}>
                               <Icon name="trash" size={13} color="var(--oxblood-700)"/>
