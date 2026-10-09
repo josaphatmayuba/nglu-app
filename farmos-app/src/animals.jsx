@@ -97,6 +97,7 @@ const EMPTY_ADVANCED_FILTERS = {
   weightMax: "",
   withdrawal: "all",
   lock: "all",
+  pregnancy: "all",
 };
 
 const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
@@ -108,12 +109,18 @@ function uniqueSorted(values) {
 
 function countAdvancedAnimalFilters(filters) {
   return Object.entries(filters).reduce((count, [key, value]) => {
-    if (key === "withdrawal" || key === "lock") return count + (value !== "all" ? 1 : 0);
+    if (key === "withdrawal" || key === "lock" || key === "pregnancy") return count + (value !== "all" ? 1 : 0);
     return count + (String(value ?? "").trim() ? 1 : 0);
   }, 0);
 }
 
-function matchesAdvancedAnimalFilters(animal, filters) {
+function matchesAdvancedAnimalFilters(animal, filters, pregnantIds) {
+  if (filters.pregnancy && filters.pregnancy !== "all") {
+    const pregnant = Boolean(pregnantIds && pregnantIds.has(animal._pk));
+    if (filters.pregnancy === "pregnant" && !pregnant) return false;
+    if (filters.pregnancy === "not_pregnant" && pregnant) return false;
+  }
+
   if (filters.status && String(animal.status || "healthy") !== filters.status) return false;
   if (filters.sex && String(animal.sex || "") !== filters.sex) return false;
 
@@ -475,10 +482,32 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
     return () => window.removeEventListener("farmos:animal-created", onCreated);
   }, []);
 
+  // Animaux en gestation = même définition que l'écran Reproduction
+  // (insémination non terminée, non échouée).
+  const [pregnantIds, setPregnantIds] = React.useState(() => new Set());
+  const refreshRepro = useDataRefresh(["reproductionEvents"]);
+  React.useEffect(() => {
+    let cancelled = false;
+    api.listReproductionEvents()
+      .then((evs) => {
+        if (cancelled) return;
+        const ids = new Set();
+        (Array.isArray(evs) ? evs : []).forEach((e) => {
+          const type = e.eventType ?? e.event_type;
+          if (type === "insemination" && e.outcome !== "success" && e.outcome !== "failed") {
+            ids.add(e.animalId ?? e.animal_id);
+          }
+        });
+        setPregnantIds(ids);
+      })
+      .catch((err) => console.warn("listReproductionEvents failed:", err.message));
+    return () => { cancelled = true; };
+  }, [reloadKey, refreshRepro]);
+
   const filtered = animals.filter((a) => {
     if (speciesFilter && a.species !== speciesFilter) return false;
     if (a.dob && !inDateRange(a.dob, dateRange)) return false;
-    if (!matchesAdvancedAnimalFilters(a, advancedFilters)) return false;
+    if (!matchesAdvancedAnimalFilters(a, advancedFilters, pregnantIds)) return false;
     if (!query) return true;
     const q = query.toLowerCase();
     return [a.name, a.id, a.tag, a.externalId, a.lot, a.race, a.breed, a.barn, a.status]
@@ -716,6 +745,15 @@ const AdvancedAnimalFilters = ({ lang, value, onChange, onReset, statusOptions, 
             <option value="all">{fr ? "Tous" : "All"}</option>
             <option value="active">{fr ? "En retrait" : "In withdrawal"}</option>
             <option value="none">{fr ? "Sans retrait" : "No withdrawal"}</option>
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Gestation" : "Pregnancy"}
+          <select className="input" value={value.pregnancy} onChange={(e) => set("pregnancy", e.target.value)} style={inputStyle}>
+            <option value="all">{fr ? "Tous" : "All"}</option>
+            <option value="pregnant">{fr ? "En gestation" : "Pregnant"}</option>
+            <option value="not_pregnant">{fr ? "Pas en gestation" : "Not pregnant"}</option>
           </select>
         </label>
 

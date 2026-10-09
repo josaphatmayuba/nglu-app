@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **FarmOS — filtre « Gestation » dans les filtres avancés des animaux (v3.220.15, pas de ticket Jira).** Nouveau sélecteur Tous / En gestation / Pas en gestation ; même définition que l'écran Reproduction (insémination non terminée et non échouée). Fichier : `farmos-app/src/animals.jsx`. Vérifié : esbuild OK ; QA dev à faire.
 - **FarmOS — le bandeau « Délai de retrait » disparaît automatiquement une fois la date dépassée (v3.220.14, pas de ticket Jira).** `adaptAnimal` ignore `withdrawal_until` si la date est antérieure à aujourd'hui (bandeau fiche, alertes, filtre « En retrait », badges). L'historique (traitements, base) est inchangé. Fichier : `farmos-app/src/api.js`. QA dev à faire.
 - **Sécurité — correctif npm audit critique backend2 (v3.220.13, pas de ticket Jira).** Le deploy prod échouait sur `npm audit --audit-level=critical` (handlebars 4.0.0-4.7.9, dépendance transitive). `npm audit fix` met à jour `backend2/package-lock.json` uniquement ; le gate passe. Reste 1 vulnérabilité *high* (nodemailer ^9, correctif = passage en v10 majeur, non bloquant pour le pipeline) à traiter à part.
 
