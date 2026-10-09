@@ -261,6 +261,31 @@ const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true
 // AutocompleteDB — same UX as Autocomplete but loads options from the DB
 // (`farmos_lookups` for breed/pig_type/vet/route/death_cause OR `farmos_diseases`)
 // and exposes a "+ Ajouter" action so the user can add new values on the fly.
+// Valeurs proposées d'office par catégorie de `farmos_lookups` (la table est
+// vide en prod : le seed 03_lookups.sql est dev-only). Fusionnées avec la base
+// dans AutocompleteDB. Pas de vétérinaires ici (personnes), ni bâtiment/salle.
+const D = (fr, en = fr) => ({ fr, en });
+const LOOKUP_DEFAULTS = {
+  pig_type: [D("Verrat", "Boar"), D("Truie", "Sow"), D("Cochette", "Gilt"), D("Porcelet", "Piglet"), D("Sevré", "Weaned"), D("Engraissement", "Finishing")],
+  route: [D("Injection"), D("Voie orale", "Oral"), D("Eau de boisson", "Drinking water"), D("Alimentation", "Feed"), D("Bassin", "Pond"), D("Aérosol", "Spray")],
+  death_cause: [D("Maladie", "Disease"), D("Accident"), D("Vêlage / mise bas", "Birthing"), D("Stress thermique", "Heat stress"), D("Prédation", "Predation"), D("Inconnu", "Unknown"), D("Abattage sanitaire", "Sanitary cull")],
+  breed: {
+    cow: [D("Holstein"), D("Jersey"), D("Ayrshire"), D("Brown Swiss")],
+    pig: [D("Large White"), D("Landrace"), D("Duroc"), D("Duroc × LW")],
+    chicken: [D("Lohmann Brown"), D("Ross 308"), D("Cobb 500")],
+    fish: [D("Truite arc-en-ciel", "Rainbow trout"), D("Tilapia du Nil", "Nile tilapia"), D("Saumon atlantique", "Atlantic salmon")],
+    goat: [D("Saanen"), D("Alpine"), D("Toggenburg")],
+    sheep: [D("Mérinos", "Merino"), D("Suffolk"), D("Dorset")],
+    rabbit: [D("Néo-Zélandais", "New Zealand"), D("Californien", "Californian")],
+    duck: [D("Canard de Pékin", "Pekin duck"), D("Canard de Barbarie", "Muscovy duck")],
+    turkey: [D("Bronze des Prés", "Broad Breasted Bronze"), D("Blanc de Beltsville", "Beltsville Small White")],
+  },
+};
+const lookupDefaults = (category, scope) => {
+  const d = LOOKUP_DEFAULTS[category];
+  return Array.isArray(d) ? d : (d && d[scope]) || null;
+};
+
 const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, allowClear = true, customFetch, customCreate, onCreate, useLabel = false, noAdd = false }) => {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
@@ -286,7 +311,18 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
 
   React.useEffect(() => { reload(); }, [reload]);
 
-  const norm = rows.map((r) => {
+  // Valeurs par défaut (LOOKUP_DEFAULTS) fusionnées avec celles de la base
+  // (la base prime, sans doublon sur le libellé FR). Pas pour customFetch.
+  const defaults = customFetch ? null : lookupDefaults(category, scope);
+  const allRows = React.useMemo(() => {
+    if (!defaults || !defaults.length) return rows;
+    const have = new Set(rows.map((r) => String(r.valueFr || r.value_fr || r.nameFr || r.name_fr || r.name || "").toLowerCase()));
+    const extra = defaults
+      .filter((d) => !have.has(d.fr.toLowerCase()))
+      .map((d) => ({ valueFr: d.fr, valueEn: d.en }));
+    return [...rows, ...extra];
+  }, [rows, defaults]);
+  const norm = allRows.map((r) => {
     const lbl = lang === "fr"
       ? (r.valueFr || r.value_fr || r.nameFr || r.name_fr || r.name)
       : (r.valueEn || r.value_en || r.nameEn || r.name_en || r.valueFr || r.value_fr || r.nameFr || r.name_fr || r.name);
