@@ -1068,6 +1068,69 @@ export class OwnerNotificationsService implements OnModuleInit {
     }
   }
 
+  /**
+   * SMS au locataire quand le gestionnaire refuse son justificatif : il doit
+   * savoir pourquoi et pouvoir renvoyer depuis son espace. Best-effort.
+   */
+  async notifyProofRejectedTenant(paymentId: number, leaseId: number, reason: string, orgId: number) {
+    try {
+      const [lease] = await this.db
+        .select({
+          id: realEstateLeases.id,
+          reference: realEstateLeases.reference,
+          tenantId: realEstateLeases.tenantId,
+          tenantFirstName: customers.firstName,
+          tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
+          tenantPhone: customers.phone,
+        })
+        .from(realEstateLeases)
+        .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+        .limit(1);
+      if (!lease?.tenantPhone) return;
+
+      const tenantName = this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName);
+      const fallback =
+        "Bonjour {tenantName}, votre justificatif de paiement (bail {reference}) a ete refuse : {reason}. " +
+        "Merci de le renvoyer depuis votre espace : {url}";
+      let portalUrl = "";
+      try {
+        portalUrl = (await this.tenantPortal.generateTenantPortalLink(Number(lease.tenantId), orgId)).url;
+      } catch {
+        portalUrl = "";
+      }
+      const message = await this.renderMessage("payment_proof_rejected", fallback, {
+        tenantName,
+        firstName: tenantName,
+        reference: lease.reference || String(lease.id),
+        reason,
+        url: portalUrl,
+      });
+      const withFooter = this.fitOneSms(
+        portalUrl && message.includes(portalUrl)
+          ? message
+          : await this.tenantPortal.appendPortalFooterToSms(message, Number(lease.tenantId), orgId),
+      );
+      const res = await this.sms.sendSms({
+        phone: lease.tenantPhone,
+        message: withFooter,
+        organizationId: orgId,
+        smsType: "payment_proof_rejected",
+        relatedType: "real-estate-rent-payment",
+        relatedId: paymentId,
+      });
+      if (!res?.success) {
+        this.logger.warn(`Proof rejection SMS not sent (payment ${paymentId}): ${res?.message}`);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `notifyProofRejectedTenant failed (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // ── 4. Loyer en retard sur un bien du proprietaire ───────────────────────
 
   /**

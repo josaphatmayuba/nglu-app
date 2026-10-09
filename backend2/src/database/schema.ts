@@ -1132,6 +1132,9 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   proofUrl: varchar("proof_url", { length: 500 }),
   // Nombre d'envois de preuve via le portail locataire (QR public) — plafonné à 2.
   proofUploadCount: int("proof_upload_count").default(0).notNull(),
+  // Refus du justificatif par le gestionnaire : motif affiche au locataire (efface a son nouvel envoi).
+  proofRejectedReason: varchar("proof_rejected_reason", { length: 500 }),
+  proofRejectedAt: timestamp("proof_rejected_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

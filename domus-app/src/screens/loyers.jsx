@@ -604,9 +604,25 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [viewingProof, setViewingProof] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   const activeKey = method ?? methods[0]?.key;
   const tenant = tenantName(payment);
+
+  // Refus du justificatif : motif obligatoire, montre au locataire (portail + SMS).
+  const reject = async () => {
+    if (busy || !rejectReason.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      await api.rejectPaymentProof(payment.id, rejectReason.trim());
+      onConfirmed(`Justificatif de ${tenant} refusé — le locataire a été prévenu`);
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (busy) return;
@@ -694,11 +710,30 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
           )}
           {err && <div className="api-error" style={{ marginTop: 10 }}>{err}</div>}
         </div>
+        {rejecting && (
+          <div className="immo-modal-body" style={{ paddingTop: 0 }}>
+            <label className="immo-field-label">Motif du refus (visible par le locataire)</label>
+            <textarea className="immo-input" rows={3} maxLength={500} value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Ex. : capture illisible, montant différent, mauvais mois…" />
+          </div>
+        )}
         <div className="immo-modal-foot">
-          <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
-          <button className="immo-btn primary" onClick={submit} disabled={busy || !amount || !paymentDate}>
-            {busy ? "Confirmation…" : <><Check size={16} /> Confirmer</>}
-          </button>
+          <button className="immo-btn" onClick={rejecting ? () => setRejecting(false) : onClose} disabled={busy}>{rejecting ? "Retour" : "Annuler"}</button>
+          {payment.proofUrl && !rejecting && (
+            <button className="immo-btn" onClick={() => setRejecting(true)} disabled={busy} style={{ color: "#be123c" }}>
+              <X size={16} /> Refuser le justificatif
+            </button>
+          )}
+          {rejecting ? (
+            <button className="immo-btn primary" onClick={reject} disabled={busy || !rejectReason.trim()} style={{ background: "#be123c" }}>
+              {busy ? "Refus…" : "Confirmer le refus"}
+            </button>
+          ) : (
+            <button className="immo-btn primary" onClick={submit} disabled={busy || !amount || !paymentDate}>
+              {busy ? "Confirmation…" : <><Check size={16} /> Confirmer</>}
+            </button>
+          )}
         </div>
       </div>
       {viewingProof && <ProofModal path={`/leases/payments/${payment.id}/proof-file`} title={tenant} onClose={() => setViewingProof(false)} />}

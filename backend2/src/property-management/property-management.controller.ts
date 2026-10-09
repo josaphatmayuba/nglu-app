@@ -56,6 +56,7 @@ import {
   CreatePropertyDto,
   CreateRentPaymentDto,
   ConfirmPendingPaymentDto,
+  RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -1073,6 +1074,18 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req));
+  }
+
+  @ApiOperation({ summary: "Refuse le justificatif d'une echeance pending (motif obligatoire) — sans impact comptable, locataire prevenu" })
+  @Permissions("update-propertyManagement")
+  @Post("payments/:id/reject-proof")
+  @HttpCode(200)
+  rejectPendingPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: RejectPendingPaymentDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.rejectPendingPayment(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Annule (soft) un paiement de loyer saisi par erreur — contre-passe la compta" })

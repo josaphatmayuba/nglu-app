@@ -65,6 +65,7 @@ import {
   CreatePropertyDto,
   CreateRentPaymentDto,
   ConfirmPendingPaymentDto,
+  RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
   CreateTenantDto,
@@ -2243,6 +2244,49 @@ export class PropertyManagementService {
     // proprietaire du bien. Best-effort, jamais bloquant pour le paiement.
     await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), input.amount, orgId);
     await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), input.amount, orgId);
+    return this.findPayment(paymentId);
+  }
+
+  // Refuse le justificatif envoye par le locataire sur une echeance 'pending'
+  // (illisible, mauvais montant...). Aucune ecriture comptable : la ligne reste
+  // pending, redevient une echeance impayee, et le locataire est prevenu avec
+  // le motif. Le compteur d'envois est remis a zero pour qu'il puisse renvoyer.
+  // Le fichier objet n'est pas supprime (trace en cas de litige).
+  async rejectPendingPayment(paymentId: number, input: RejectPendingPaymentDto, orgId: number) {
+    const reason = input.reason?.trim();
+    if (!reason) throw new BadRequestException("Un motif de refus est requis.");
+
+    const [pending] = await this.db
+      .select()
+      .from(realEstateRentPayments)
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)))
+      .limit(1);
+    if (!pending) throw new NotFoundException("Payment not found.");
+    if (pending.status !== "pending") {
+      throw new BadRequestException("Ce paiement n'est pas en attente de confirmation.");
+    }
+    if (!pending.proofUrl) {
+      throw new BadRequestException("Aucun justificatif a refuser sur cette echeance.");
+    }
+
+    await this.db
+      .update(realEstateRentPayments)
+      .set({
+        proofUrl: null,
+        proofUploadCount: 0,
+        proofRejectedReason: reason,
+        proofRejectedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    const lease = await this.getLeaseOrThrow(pending.leaseId, orgId);
+    await this.publishPaymentUpdate("updated", paymentId, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    // Best-effort, jamais bloquant pour le refus.
+    await this.ownerNotifications.notifyProofRejectedTenant(paymentId, Number(lease.id), reason, orgId);
     return this.findPayment(paymentId);
   }
 

@@ -376,7 +376,7 @@ export class TenantPortalService {
 
     await this.db
       .update(realEstateRentPayments)
-      .set({ proofUrl, proofUploadCount: (payment.proofUploadCount ?? 0) + 1, updatedAt: new Date() })
+      .set({ proofUrl, proofUploadCount: (payment.proofUploadCount ?? 0) + 1, proofRejectedReason: null, proofRejectedAt: null, updatedAt: new Date() })
       .where(eq(realEstateRentPayments.id, paymentId));
 
     return { submitted: true, paymentId };
@@ -716,6 +716,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
             // status distingue un paiement reellement encaisse ('paid') d'une
             // echeance a venir generee mais non reglee ('pending').
             status: realEstateRentPayments.status,
+            // Motif du refus du dernier justificatif (null si aucun refus en cours).
+            proofRejectedReason: realEstateRentPayments.proofRejectedReason,
             // Presence d'un justificatif : l'URL brute n'est jamais exposee au
             // public, le telechargement passe par l'endpoint token (voir
             // getPublicPaymentProof).

@@ -519,7 +519,7 @@ export function TenantPortalPublic({ token }) {
                   </div>
                   <div className="onb-card-body">
                     {overdue.map((p) => (
-                      <div key={p.id} className="portail-hist-row">
+                      <div key={p.id} className="portail-hist-row" style={p.proofRejectedReason ? { flexWrap: "wrap" } : undefined}>
                         <AlertTriangle size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
                         <span className="chip chip-rose">
@@ -533,6 +533,11 @@ export function TenantPortalPublic({ token }) {
                           onClick={() => pickProofFile(p.id)}
                           onView={openProof}
                         />
+                        {p.proofRejectedReason ? (
+                          <p className="text-rose" style={{ flexBasis: "100%", fontSize: 13, margin: "4px 0 0" }}>
+                            {t("Justificatif refusé")} : {p.proofRejectedReason}. {t("Merci de le renvoyer.")}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
