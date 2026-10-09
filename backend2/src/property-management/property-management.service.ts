@@ -3588,7 +3588,16 @@ export class PropertyManagementService {
    * COUVERTURE EN MONTANT) et non repris du client, pour qu'un appel direct a
    * l'API ne puisse pas notifier un locataire a jour.
    */
-  async sendDefaultNotice(leaseId: number, orgId: number) {
+  async sendDefaultNotice(
+    leaseId: number,
+    orgId: number,
+    targetsIn?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean },
+  ) {
+    // Defaut = comportement historique (tout le monde) ; l'UI envoie le choix du gestionnaire.
+    const targets = { tenant: true, emergency: true, owner: true, delegates: true, ...targetsIn };
+    if (!targets.tenant && !targets.emergency && !targets.owner && !targets.delegates) {
+      throw new BadRequestException("Aucun destinataire selectionne.");
+    }
     const [lease] = await this.db
       .select({
         id: realEstateLeases.id,
@@ -3685,15 +3694,14 @@ export class PropertyManagementService {
     // Texte pilote depuis Reglages > Messages (evenement "default_notice").
     const tenantMsg = await this.ownerNotifications.renderMessage(
       "default_notice",
-      "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour " +
-        "{address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis " +
-        "pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+      "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). " +
+        "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
       vars,
       { tenantId: lease.tenantId },
     );
 
     let smsSent = false;
-    if (lease.tenantPhone) {
+    if (targets.tenant && lease.tenantPhone) {
       const smsWithFooter = this.ownerNotifications.fitOneSms(
         vars.url && tenantMsg.includes(vars.url)
           ? tenantMsg
@@ -3703,7 +3711,7 @@ export class PropertyManagementService {
     }
 
     let emailSent = false;
-    if (lease.tenantEmail) {
+    if (targets.tenant && lease.tenantEmail) {
       const html = await this.tenantPortal.appendPortalFooterToEmail(
         `<p>${tenantMsg}</p>`,
         lease.tenantId,
@@ -3726,43 +3734,49 @@ export class PropertyManagementService {
       }
     }
 
-    if (!smsSent && !emailSent) {
+    if (targets.tenant && !smsSent && !emailSent) {
       throw new BadRequestException("Aucun contact (telephone ou email) disponible pour ce locataire.");
     }
 
     // La personne de contact est informee, sans lien portail : le message ne
     // s'adresse pas au locataire (meme principe que les relances de retard).
     let contactNotified = false;
-    if (lease.emergencyPhone) {
+    if (targets.emergency && lease.emergencyPhone) {
       const contactMsg = await this.ownerNotifications.renderMessage(
         "default_notice_contact",
-        "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois " +
-          "de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de " +
-          "paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+        "Bonjour, {tenantName} a {monthsBehind} mois de loyer impayes ({amount}). " +
+          "Un preavis sera depose sans paiement. Merci de l'inviter a contacter {contacts}",
         vars,
+        { tenantId: lease.tenantId },
       );
       contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId);
     }
 
     // Le proprietaire est prevenu qu'un preavis a ete notifie sur son bien.
-    const ownerNotified = await this.ownerNotifications.notifyDefaultNotice(
-      leaseId,
-      Number(lease.propertyId),
-      Number(lease.tenantId),
-      vars,
-      orgId,
-    );
+    const ownerNotified =
+      targets.owner || targets.delegates
+        ? await this.ownerNotifications.notifyDefaultNotice(
+            leaseId,
+            Number(lease.propertyId),
+            Number(lease.tenantId),
+            vars,
+            orgId,
+            { owner: targets.owner, delegates: targets.delegates },
+          )
+        : false;
 
     // Trace : date d'envoi (preuve que le locataire a ete averti) + mois dus a
     // cet instant. Ecrite seulement si au moins un canal locataire a abouti.
-    await this.db
-      .update(realEstateLeases)
-      .set({
-        defaultNoticeSentAt: sql`CURRENT_TIMESTAMP`,
-        defaultNoticeMonthsBehind: monthsBehind,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
-      })
-      .where(eq(realEstateLeases.id, leaseId));
+    if (targets.tenant) {
+      await this.db
+        .update(realEstateLeases)
+        .set({
+          defaultNoticeSentAt: sql`CURRENT_TIMESTAMP`,
+          defaultNoticeMonthsBehind: monthsBehind,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(realEstateLeases.id, leaseId));
+    }
 
     return {
       message: "success",

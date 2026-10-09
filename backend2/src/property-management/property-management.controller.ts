@@ -1116,8 +1116,11 @@ export class PropertyManagementController {
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/default-notice")
   @HttpCode(200)
-  sendDefaultNotice(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId);
+  sendDefaultNotice(
+    @Body() body: { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId, body.targets);
   }
 
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
@@ -1132,8 +1135,11 @@ export class PropertyManagementController {
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/remind-lease")
   @HttpCode(200)
-  remindLease(@Body() body: { leaseId: number }, @CurrentOrg() orgId: number) {
-    return this.rentReminderService.runLeaseReminder(Number(body.leaseId), orgId);
+  remindLease(
+    @Body() body: { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.rentReminderService.runLeaseReminder(Number(body.leaseId), orgId, body.targets);
   }
 
   @ApiOperation({ summary: "List maintenance requests" })
