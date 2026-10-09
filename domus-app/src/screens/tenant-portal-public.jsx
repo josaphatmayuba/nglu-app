@@ -373,10 +373,6 @@ export function TenantPortalPublic({ token }) {
     () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !isCoveredByPayments(p)),
     [pending, monthsCovered, activeLease],
   );
-  const upcoming = useMemo(
-    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) >= 0 && !isCoveredByPayments(p)),
-    [pending, monthsCovered, activeLease],
-  );
 
   if (loading) {
     return (
@@ -505,35 +501,6 @@ export function TenantPortalPublic({ token }) {
                       </div>
                     ))}
                   </div>
-                </section>
-              )}
-
-              {upcoming.length > 0 && (
-                <section className="onb-card">
-                  <div className="onb-card-head">
-                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
-                    <div className="onb-card-heading">
-                      <h3>{t("Paiements à venir")}</h3>
-                      <p>{t("Prochaines échéances de votre bail")}</p>
-                    </div>
-                  </div>
-                  <div className="onb-card-body">
-                    {upcoming.slice(0, 12).map((p) => (
-                      <div key={p.id} className="portail-hist-row">
-                        <Clock size={14} className="muted" />
-                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
-                        <span className="muted">{dueChip(daysUntil(p.paymentDate)).text}</span>
-                        <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
-                        <ProofUploadButton
-                          payment={p}
-                          busy={uploadingProofId === p.id}
-                          done={uploadedProofId === p.id}
-                          onClick={() => pickProofFile(p.id)}
-                          onView={openProof}
-                        />
-                      </div>
-                    ))}
-                  </div>
                   {uploadError ? (
                     <p role="status" aria-live="polite" className="muted text-rose" style={{ fontSize: 13, margin: "8px 0 0", padding: "0 16px 12px" }}>
                       {uploadError}
@@ -541,6 +508,7 @@ export function TenantPortalPublic({ token }) {
                   ) : null}
                 </section>
               )}
+
               <input
                 ref={proofInputRef}
                 type="file"
