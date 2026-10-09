@@ -369,9 +369,16 @@ export function TenantPortalPublic({ token }) {
     const idx = (Number(d[1]) - Number(s[1])) * 12 + (Number(d[2]) - Number(s[2]));
     return idx < monthsCovered;
   };
+  // Justificatif deja envoye : le locataire a declare avoir paye, le
+  // gestionnaire n'a pas encore confirme. Ce n'est donc pas un impaye.
+  const proofSent = (p) => Boolean(p.hasProof) || uploadedProofId === p.id;
+  const awaitingValidation = useMemo(
+    () => pending.filter((p) => proofSent(p) && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease, uploadedProofId],
+  );
   const overdue = useMemo(
-    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !isCoveredByPayments(p)),
-    [pending, monthsCovered, activeLease],
+    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !proofSent(p) && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease, uploadedProofId],
   );
 
   if (loading) {
@@ -473,13 +480,41 @@ export function TenantPortalPublic({ token }) {
                 </div>
               </section>
 
+              {awaitingValidation.length > 0 && (
+                <section className="onb-card">
+                  <div className="onb-card-head">
+                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
+                    <div className="onb-card-heading">
+                      <h3>{t("Paiements en attente de validation")}</h3>
+                      <p>{t("Justificatif envoyé — en attente de confirmation par le gestionnaire")}</p>
+                    </div>
+                  </div>
+                  <div className="onb-card-body">
+                    {awaitingValidation.map((p) => (
+                      <div key={p.id} className="portail-hist-row">
+                        <Clock size={14} className="muted" />
+                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                        <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                        <ProofUploadButton
+                          payment={p}
+                          busy={uploadingProofId === p.id}
+                          done={uploadedProofId === p.id}
+                          onClick={() => pickProofFile(p.id)}
+                          onView={openProof}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {overdue.length > 0 && (
                 <section className="onb-card">
                   <div className="onb-card-head">
                     <span className="onb-card-icon tone-rose"><AlertTriangle size={18} /></span>
                     <div className="onb-card-heading">
                       <h3>{t("Loyers en retard")}</h3>
-                      <p>{t("Échéances non réglées à ce jour")}</p>
+                      <p>{t("Aucun paiement ni justificatif reçu pour ces échéances")}</p>
                     </div>
                   </div>
                   <div className="onb-card-body">
@@ -487,15 +522,9 @@ export function TenantPortalPublic({ token }) {
                       <div key={p.id} className="portail-hist-row">
                         <AlertTriangle size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
-                        {/* Preuve deja envoyee : le paiement attend la validation du
-                            gestionnaire, ce n'est plus un simple retard. */}
-                        {p.hasProof || uploadedProofId === p.id ? (
-                          <span className="chip chip-amber">{t("En attente de validation")}</span>
-                        ) : (
-                          <span className="chip chip-rose">
-                            {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
-                          </span>
-                        )}
+                        <span className="chip chip-rose">
+                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                        </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
                           payment={p}
