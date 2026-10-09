@@ -487,9 +487,15 @@ export function TenantPortalPublic({ token }) {
                       <div key={p.id} className="portail-hist-row">
                         <AlertTriangle size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
-                        <span className="chip chip-rose">
-                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
-                        </span>
+                        {/* Preuve deja envoyee : le paiement attend la validation du
+                            gestionnaire, ce n'est plus un simple retard. */}
+                        {p.hasProof || uploadedProofId === p.id ? (
+                          <span className="chip chip-amber">{t("En attente de validation")}</span>
+                        ) : (
+                          <span className="chip chip-rose">
+                            {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                          </span>
+                        )}
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
                           payment={p}
