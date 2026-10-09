@@ -357,8 +357,26 @@ export function TenantPortalPublic({ token }) {
       .sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0)),
     [leasePayments],
   );
-  const overdue = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0), [pending]);
-  const upcoming = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) >= 0), [pending]);
+  // Une echeance 'pending' n'est en retard que si le montant cumule deja verse
+  // ne la couvre pas (meme regle que le gestionnaire : la couverture se remplit
+  // du debut du bail vers le present). Sinon un virement multi-mois ou un
+  // paiement date d'un autre mois laisserait des mois soldes affiches en retard.
+  const monthsCovered = card?.monthsCovered ?? 0;
+  const isCoveredByPayments = (p) => {
+    const s = /^(\d{4})-(\d{2})/.exec(String(activeLease?.startDate || ""));
+    const d = /^(\d{4})-(\d{2})/.exec(String(p.paymentDate || ""));
+    if (!s || !d) return false;
+    const idx = (Number(d[1]) - Number(s[1])) * 12 + (Number(d[2]) - Number(s[2]));
+    return idx < monthsCovered;
+  };
+  const overdue = useMemo(
+    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease],
+  );
+  const upcoming = useMemo(
+    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) >= 0 && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease],
+  );
 
   if (loading) {
     return (
