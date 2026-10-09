@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **FarmOS — le bandeau « Délai de retrait » disparaît automatiquement une fois la date dépassée (v3.220.14, pas de ticket Jira).** `adaptAnimal` ignore `withdrawal_until` si la date est antérieure à aujourd'hui (bandeau fiche, alertes, filtre « En retrait », badges). L'historique (traitements, base) est inchangé. Fichier : `farmos-app/src/api.js`. QA dev à faire.
 - **Sécurité — correctif npm audit critique backend2 (v3.220.13, pas de ticket Jira).** Le deploy prod échouait sur `npm audit --audit-level=critical` (handlebars 4.0.0-4.7.9, dépendance transitive). `npm audit fix` met à jour `backend2/package-lock.json` uniquement ; le gate passe. Reste 1 vulnérabilité *high* (nodemailer ^9, correctif = passage en v10 majeur, non bloquant pour le pipeline) à traiter à part.
 
 - **Domus — relance de loyer : échec/absence de SMS visible et renvoi possible (v3.220.12, pas de ticket Jira).** Le SMS au locataire pouvait échouer (passerelle/Twilio) ou être sauté (locataire sans téléphone) tout en affichant « Rappel envoyé », et la période était marquée relancée même après échec (jamais renvoyé par la passe auto). `runLeaseReminder` renvoie `smsStatus` (sent/failed/no_phone) + `smsError` ; l'écran Loyers affiche une erreur explicite ; `last_overdue_reminder_date` n'est plus posé si le SMS échoue. Fichiers : `backend2/src/property-management/rent-reminder.service.ts`, `domus-app/src/screens/loyers.jsx`. Vérifié : `tsc --noEmit` OK ; QA dev à faire.
