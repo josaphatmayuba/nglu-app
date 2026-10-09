@@ -357,8 +357,29 @@ export function TenantPortalPublic({ token }) {
       .sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0)),
     [leasePayments],
   );
-  const overdue = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0), [pending]);
-  const upcoming = useMemo(() => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) >= 0), [pending]);
+  // Une echeance 'pending' n'est en retard que si le montant cumule deja verse
+  // ne la couvre pas (meme regle que le gestionnaire : la couverture se remplit
+  // du debut du bail vers le present). Sinon un virement multi-mois ou un
+  // paiement date d'un autre mois laisserait des mois soldes affiches en retard.
+  const monthsCovered = card?.monthsCovered ?? 0;
+  const isCoveredByPayments = (p) => {
+    const s = /^(\d{4})-(\d{2})/.exec(String(activeLease?.startDate || ""));
+    const d = /^(\d{4})-(\d{2})/.exec(String(p.paymentDate || ""));
+    if (!s || !d) return false;
+    const idx = (Number(d[1]) - Number(s[1])) * 12 + (Number(d[2]) - Number(s[2]));
+    return idx < monthsCovered;
+  };
+  // Justificatif deja envoye : le locataire a declare avoir paye, le
+  // gestionnaire n'a pas encore confirme. Ce n'est donc pas un impaye.
+  const proofSent = (p) => Boolean(p.hasProof) || uploadedProofId === p.id;
+  const awaitingValidation = useMemo(
+    () => pending.filter((p) => proofSent(p) && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease, uploadedProofId],
+  );
+  const overdue = useMemo(
+    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !proofSent(p) && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease, uploadedProofId],
+  );
 
   if (loading) {
     return (
@@ -459,23 +480,20 @@ export function TenantPortalPublic({ token }) {
                 </div>
               </section>
 
-              {overdue.length > 0 && (
+              {awaitingValidation.length > 0 && (
                 <section className="onb-card">
                   <div className="onb-card-head">
-                    <span className="onb-card-icon tone-rose"><AlertTriangle size={18} /></span>
+                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
                     <div className="onb-card-heading">
-                      <h3>{t("Loyers en retard")}</h3>
-                      <p>{t("Échéances non réglées à ce jour")}</p>
+                      <h3>{t("Paiements en attente de validation")}</h3>
+                      <p>{t("Justificatif envoyé — en attente de confirmation par le gestionnaire")}</p>
                     </div>
                   </div>
                   <div className="onb-card-body">
-                    {overdue.map((p) => (
+                    {awaitingValidation.map((p) => (
                       <div key={p.id} className="portail-hist-row">
-                        <AlertTriangle size={14} className="muted" />
+                        <Clock size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
-                        <span className="chip chip-rose">
-                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
-                        </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
                           payment={p}
@@ -490,21 +508,23 @@ export function TenantPortalPublic({ token }) {
                 </section>
               )}
 
-              {upcoming.length > 0 && (
+              {overdue.length > 0 && (
                 <section className="onb-card">
                   <div className="onb-card-head">
-                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
+                    <span className="onb-card-icon tone-rose"><AlertTriangle size={18} /></span>
                     <div className="onb-card-heading">
-                      <h3>{t("Paiements à venir")}</h3>
-                      <p>{t("Prochaines échéances de votre bail")}</p>
+                      <h3>{t("Loyers en retard")}</h3>
+                      <p>{t("Aucun paiement ni justificatif reçu pour ces échéances")}</p>
                     </div>
                   </div>
                   <div className="onb-card-body">
-                    {upcoming.slice(0, 12).map((p) => (
-                      <div key={p.id} className="portail-hist-row">
-                        <Clock size={14} className="muted" />
+                    {overdue.map((p) => (
+                      <div key={p.id} className="portail-hist-row" style={p.proofRejectedReason ? { flexWrap: "wrap" } : undefined}>
+                        <AlertTriangle size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}</span>
-                        <span className="muted">{dueChip(daysUntil(p.paymentDate)).text}</span>
+                        <span className="chip chip-rose">
+                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                        </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
                           payment={p}
@@ -513,6 +533,11 @@ export function TenantPortalPublic({ token }) {
                           onClick={() => pickProofFile(p.id)}
                           onView={openProof}
                         />
+                        {p.proofRejectedReason ? (
+                          <p className="text-rose" style={{ flexBasis: "100%", fontSize: 13, margin: "4px 0 0" }}>
+                            {t("Justificatif refusé")} : {p.proofRejectedReason}. {t("Merci de le renvoyer.")}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -523,6 +548,7 @@ export function TenantPortalPublic({ token }) {
                   ) : null}
                 </section>
               )}
+
               <input
                 ref={proofInputRef}
                 type="file"

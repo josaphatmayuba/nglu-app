@@ -477,6 +477,16 @@ export class CreateRentPaymentDto {
 // de la ligne pending a confirmer).
 export class ConfirmPendingPaymentDto extends OmitType(CreateRentPaymentDto, ["leaseId"] as const) {}
 
+// Refus du justificatif d'une echeance 'pending' : le motif est obligatoire,
+// il est montre au locataire (portail + SMS) pour qu'il puisse renvoyer.
+export class RejectPendingPaymentDto {
+  @ApiProperty({ example: "Capture illisible, merci de renvoyer une photo nette." })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  reason!: string;
+}
+
 export class CollectDepositDto {
   @ApiProperty({ example: "2026-06-04" })
   @IsDateString()

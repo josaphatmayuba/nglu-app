@@ -1954,6 +1954,13 @@
       "when": 1781071200054,
       "tag": "0303_domus_rent_payment_proof_upload_count",
       "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "5",
+      "when": 1781071200055,
+      "tag": "0304_domus_rent_payment_proof_rejection",
+      "breakpoints": true
     }
   ]
 }

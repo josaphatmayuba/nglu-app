@@ -337,6 +337,10 @@ export const api = {
     return multipartFetch(`/payments/${paymentId}/confirm`, form);
   },
 
+  // Refuse le justificatif d'une echeance pending (motif obligatoire) : aucune
+  // ecriture comptable, le locataire est prevenu et peut renvoyer.
+  rejectPaymentProof: (paymentId, reason) => post(`/payments/${paymentId}/reject-proof`, { reason }),
+
   // Annule (soft) un paiement saisi par erreur : contre-passe la compta.
   voidPayment: (paymentId, reason) => post(`/payments/${paymentId}/void`, { reason }),
 
