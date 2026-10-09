@@ -2386,6 +2386,7 @@ export const appSettings = mysqlTable("appSetting", {
   rentReminderOverdueDays: int("rent_reminder_overdue_days"),
   leaseExpiryNoticeDays: int("lease_expiry_notice_days"),
   rentReminderHour: int("rent_reminder_hour"),
+  rentOverdueGraceDays: int("rent_overdue_grace_days"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

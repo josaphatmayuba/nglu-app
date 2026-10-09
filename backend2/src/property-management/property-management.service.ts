@@ -1798,7 +1798,7 @@ export class PropertyManagementService {
         scopeFilter,
       ))
       .orderBy(desc(realEstateLeases.id));
-    return this.withOverdueStats(rows);
+    return this.withOverdueStats(rows, orgId);
   }
 
   async createLease(input: CreateLeaseDto, orgId: number) {
@@ -1851,7 +1851,7 @@ export class PropertyManagementService {
       propertyId: input.propertyId,
       unitId: input.unitId,
     });
-    const lease = await this.findLease(leaseId);
+    const lease = await this.findLease(leaseId, orgId);
 
     // Bienvenue portail locataire : uniquement pour le bail fraichement cree
     // s'il est actif — jamais de backfill des locataires deja en place. Echec
@@ -2072,7 +2072,7 @@ export class PropertyManagementService {
       propertyId: input.propertyId ?? current.propertyId,
       unitId: input.unitId ?? current.unitId,
     });
-    return this.findLease(id);
+    return this.findLease(id, orgId);
   }
 
   async deleteLease(id: number, orgId: number) {
@@ -4101,11 +4101,12 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  async findLease(id: number) {
+  async findLease(id: number, orgId: number) {
     const rows = await this.leaseQuery()
       .where(and(
         ne(realEstateLeases.status, "cancelled"),
         eq(realEstateLeases.id, id),
+        eq(realEstateLeases.organizationId, orgId),
         ne(leaseProperty.status, "false"),
         eq(leaseProperty.isActive, 1),
         ne(leaseUnit.status, "false"),
@@ -4113,14 +4114,14 @@ export class PropertyManagementService {
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
-    const [enriched] = await this.withOverdueStats(rows);
+    const [enriched] = await this.withOverdueStats(rows, orgId);
     return enriched;
   }
 
   // Carnet de quittances (PDF cote front) : une page de garde + une quittance
   // par paiement/echeance du bail. Filtrage strict organisation + scope bien
   // (meme garde que findReservation/ensurePropertyInScope) pour eviter toute
-  // fuite inter-org, contrairement a findLease() qui ne filtre pas par org.
+  // fuite inter-org.
   async rentBook(leaseId: number, orgId: number, propertyScope: "all" | number[] = "all") {
     const [lease] = await this.db
       .select({
@@ -4226,7 +4227,7 @@ export class PropertyManagementService {
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
-    await this.findLease(leaseId);
+    await this.findLease(leaseId, orgId);
     return this.db
       .select()
       .from(realEstateLeaseDocuments)
@@ -4239,7 +4240,7 @@ export class PropertyManagementService {
   }
 
   async uploadLeaseDocument(leaseId: number, file: any, orgId: number, notes?: string | null) {
-    await this.findLease(leaseId);
+    await this.findLease(leaseId, orgId);
     const stored = await this.objectStorage.putDocument(file, `domus/leases/${orgId}/${leaseId}/documents`);
 
     const [result] = await this.db.insert(realEstateLeaseDocuments).values({
@@ -6282,15 +6283,24 @@ export class PropertyManagementService {
   // Retard historique par bail (badge "Mauvais payeur" côté front) :
   // dérive les échéances mensuelles (billingCycle) depuis startDate jusqu'à
   // aujourd'hui (bornées à endDate), rapproche par ordre chronologique avec
-  // les paiements du bail, délai de grâce 5 jours. Batch les paiements par
+  // les paiements du bail, délai de grâce configurable (défaut 5 jours). Batch les paiements par
   // leaseId en une seule requête (pas de N+1).
-  private static readonly OVERDUE_GRACE_DAYS = 5;
+  private static readonly DEFAULT_OVERDUE_GRACE_DAYS = 5;
+
+  // Delai de grace configurable par organisation (Reglages) ; NULL/invalide = 5.
+  private async overdueGraceDays(orgId: number): Promise<number> {
+    const row = await readOrgAppSetting(this.db, orgId, { days: appSettings.rentOverdueGraceDays });
+    const v = row?.days == null ? NaN : Number(row.days);
+    return Number.isInteger(v) && v >= 0 && v <= 60 ? v : PropertyManagementService.DEFAULT_OVERDUE_GRACE_DAYS;
+  }
 
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
+    orgId: number,
   ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
     if (!rows.length) return [];
     const leaseIds = rows.map((r) => r.id);
+    const graceDays = await this.overdueGraceDays(orgId);
     const payments = await this.db
       .select({
         leaseId: realEstateRentPayments.leaseId,
@@ -6320,6 +6330,7 @@ export class PropertyManagementService {
         paymentsByLease.get(row.id) ?? [],
         Number((row as { rentAmount?: string | number | null }).rentAmount || 0),
         today,
+        graceDays,
       );
       return { ...row, ...stats };
     });
@@ -6328,8 +6339,8 @@ export class PropertyManagementService {
   // Dérive les échéances mensuelles depuis startDate jusqu'à today (bornées à
   // endDate si présent) et rapproche avec les paiements par ordre chronologique :
   // une échéance est couverte par le 1er paiement non encore consommé dont la
-  // paymentDate correspond au mois de l'échéance. Retard si payé >5j après
-  // l'échéance, ou dépassée de >5j et toujours non couverte.
+  // paymentDate correspond au mois de l'échéance. Retard si payé > graceDays après
+  // l'échéance, ou dépassée de > graceDays et toujours non couverte.
   private computeLeaseOverdueStats(
     startDate: string,
     endDate: string | null,
@@ -6337,6 +6348,7 @@ export class PropertyManagementService {
     paymentRows: Array<{ date: string; amount: number }>,
     rentAmount: number,
     today: Date,
+    graceDays: number,
   ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
     const start = this.parseDateOnly(startDate);
     const boundary = endDate ? this.parseDateOnly(endDate) : null;
@@ -6374,13 +6386,13 @@ export class PropertyManagementService {
       if (coveringPayment) {
         const paidAt = coveringPayment;
         const graceLimit = new Date(dueDate.getTime());
-        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
         if (paidAt.getTime() > graceLimit.getTime()) {
           lateCount += 1;
         }
       } else {
         const graceLimit = new Date(dueDate.getTime());
-        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
         if (today.getTime() > graceLimit.getTime()) {
           lateCount += 1;
           isOverdue = true;

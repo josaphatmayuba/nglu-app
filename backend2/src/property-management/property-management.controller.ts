@@ -836,8 +836,8 @@ export class PropertyManagementController {
   @ApiParam({ name: "id", type: Number })
   @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("leases/:id")
-  findLease(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.findLease(id);
+  findLease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.findLease(id, orgId);
   }
 
   @ApiOperation({ summary: "Rent book (carnet de quittances) data for a lease: lease/tenant/property/unit + all payments" })

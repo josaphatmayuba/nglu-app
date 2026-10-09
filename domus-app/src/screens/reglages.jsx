@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
   MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard, UserRound,
-  Files, FilePen, FilePlus, Eye, HardHat, Info,
+  Files, FilePen, FilePlus, Eye, HardHat, Info, Clock,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -141,6 +141,7 @@ export function Reglages({ device, go }) {
         <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
+        <OverdueGraceCard setting={data?.setting} onSaved={reload} />
         <RemindersCard setting={data?.setting} onSaved={reload} />
         <TemplatesCard initial={data?.contractTemplates} onChanged={reload} />
       </SettingsGroup>
@@ -1255,6 +1256,55 @@ function LandlordInfoCard({ setting, onSaved }) {
           {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
         </button>
         {msg && <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {msg.type === "ok" && <Check size={14} />}{msg.text}
+        </span>}
+      </div>
+    </section>
+  );
+}
+
+function OverdueGraceCard({ setting, onSaved }) {
+  const [days, setDays] = useState(setting?.rentOverdueGraceDays ?? 5);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const save = async () => {
+    const n = Number(days);
+    if (days === "" || !Number.isInteger(n) || n < 0 || n > 60) {
+      setMsg({ type: "err", text: "Saisissez un nombre entier de jours entre 0 et 60." });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.updateSetting({ rentOverdueGraceDays: n });
+      setMsg({ type: "ok", text: "Parametres enregistres." });
+      onSaved?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><Clock size={17} /> Retards de loyer</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        Un loyer est considere en retard (badges « En retard » et « Mauvais payeur ») lorsqu&apos;il reste impaye plus de ce nombre de jours apres son echeance.
+        Le changement recalcule aussi les retards passes. Distinct du delai des rappels automatiques.
+      </p>
+      <div className="numbering-grid">
+        <label className="domus-property-field">
+          <span>Delai de grace avant retard (jours)</span>
+          <input type="number" inputMode="numeric" min="0" max="60" step="1" value={days} onChange={(e) => setDays(e.target.value)} />
+        </label>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={save}>
+          {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
+        </button>
+        {msg && <span role={msg.type === "err" ? "alert" : "status"} style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>
           {msg.type === "ok" && <Check size={14} />}{msg.text}
         </span>}
       </div>
