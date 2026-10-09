@@ -141,6 +141,7 @@ export function Reglages({ device, go }) {
         <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
+        <RemindersCard setting={data?.setting} onSaved={reload} />
         <TemplatesCard initial={data?.contractTemplates} onChanged={reload} />
       </SettingsGroup>
 
@@ -1249,6 +1250,80 @@ function LandlordInfoCard({ setting, onSaved }) {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder={setting?.companyName || "ex. Jean Mukendi"} />
       </label>
       <DomusPhoneField label={t("Telephone du bailleur")} value={phone} onChange={setPhone} />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={save}>
+          {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
+        </button>
+        {msg && <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {msg.type === "ok" && <Check size={14} />}{msg.text}
+        </span>}
+      </div>
+    </section>
+  );
+}
+
+function RemindersCard({ setting, onSaved }) {
+  const [form, setForm] = useState({
+    enabled: Number(setting?.rentReminderEnabled) === 1,
+    overdueDays: setting?.rentReminderOverdueDays ?? 15,
+    expiryDays: setting?.leaseExpiryNoticeDays ?? 90,
+    hour: setting?.rentReminderHour ?? 9,
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    const overdue = Number(form.overdueDays);
+    const expiry = Number(form.expiryDays);
+    if (!(overdue >= 1 && overdue <= 365) || !(expiry >= 1 && expiry <= 365)) {
+      setMsg({ type: "err", text: "Nombre de jours entre 1 et 365." });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.updateSetting({
+        rentReminderEnabled: form.enabled ? 1 : 0,
+        rentReminderOverdueDays: overdue,
+        leaseExpiryNoticeDays: expiry,
+        rentReminderHour: Number(form.hour),
+      });
+      setMsg({ type: "ok", text: "Parametres enregistres." });
+      onSaved?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><MessageSquare size={17} /> Rappels automatiques</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        Envoi automatique (SMS + email) au locataire, au proprietaire et aux delegues. Un seul rappel par periode de retard.
+      </p>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0" }}>
+        <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
+        <span>Activer les rappels automatiques</span>
+      </label>
+      <div className="numbering-grid">
+        <label className="domus-property-field">
+          <span>Rappel de loyer apres (jours de retard)</span>
+          <input type="number" min="1" max="365" disabled={!form.enabled} value={form.overdueDays} onChange={(e) => set("overdueDays", e.target.value)} />
+        </label>
+        <label className="domus-property-field">
+          <span>Rappel de fin de bail avant (jours)</span>
+          <input type="number" min="1" max="365" disabled={!form.enabled} value={form.expiryDays} onChange={(e) => set("expiryDays", e.target.value)} />
+        </label>
+        <label className="domus-property-field">
+          <span>Heure d&apos;envoi</span>
+          <select disabled={!form.enabled} value={form.hour} onChange={(e) => set("hour", e.target.value)}>
+            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}h00</option>)}
+          </select>
+        </label>
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
         <button className="btn btn-primary" disabled={busy} onClick={save}>
           {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}

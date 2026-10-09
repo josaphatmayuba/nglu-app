@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsInt, IsOptional, IsString } from "class-validator";
+import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class UpdateAppSettingDto {
   @ApiPropertyOptional({ example: "My Company" }) @IsOptional() @IsString() companyName?: string;
@@ -25,4 +25,8 @@ export class UpdateAppSettingDto {
   @ApiPropertyOptional({ example: "LEASE-" }) @IsOptional() @IsString() leasePrefix?: string;
   @ApiPropertyOptional({ example: 16 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() defaultVatRate?: number;
   @ApiPropertyOptional({ example: 14 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() defaultPaymentTermDays?: number;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Max(1) rentReminderEnabled?: number;
+  @ApiPropertyOptional({ example: 15 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Min(1) @Max(365) rentReminderOverdueDays?: number;
+  @ApiPropertyOptional({ example: 90 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Min(1) @Max(365) leaseExpiryNoticeDays?: number;
+  @ApiPropertyOptional({ example: 9 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Max(23) rentReminderHour?: number;
 }

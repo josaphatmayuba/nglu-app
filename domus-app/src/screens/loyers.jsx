@@ -10,7 +10,7 @@ import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRo
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
-import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { useToast } from "../components/Dialog.jsx";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
@@ -468,6 +468,78 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
 }
 
 // Mini-modale d'encaissement rapide depuis une carte en retard.
+// Relance manuelle : le gestionnaire choisit qui recoit un SMS (rien n'est
+// envoye au proprietaire ni aux delegues sans case cochee).
+const REMIND_TARGETS = [
+  { key: "tenant", label: "Locataire", hint: "SMS (+ courriel) de rappel de loyer" },
+  { key: "emergency", label: "Contact d'urgence du locataire", hint: "SMS sans lien portail" },
+  { key: "owner", label: "Propriétaire du bien", hint: "SMS d'information sur le retard" },
+  { key: "delegates", label: "Délégués du bien", hint: "1 SMS par délégué (question : a-t-il payé ?)" },
+];
+
+function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
+  const isNotice = kind === "notice";
+  const [sel, setSel] = useState({ tenant: true, emergency: true, owner: isNotice, delegates: false });
+  const [step, setStep] = useState("choose");
+  const chosen = REMIND_TARGETS.filter((o) => sel[o.key]);
+  const closeIfIdle = busy ? undefined : onClose;
+  return (
+    <div className="immo-modal-scrim" onClick={closeIfIdle}>
+      <div className="immo-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="immo-modal-head">
+          <div>
+            <div className="eyebrow">{card.name}</div>
+            <h3>{isNotice ? t("Préavis pour défaut de paiement") : t("Relancer")}{step === "choose" ? "" : ` — ${t("confirmation")}`}</h3>
+          </div>
+          <button className="immo-flat-icon" onClick={onClose} disabled={busy} aria-label={t("Fermer")}><X size={16} /></button>
+        </div>
+        <div className="immo-modal-body">
+          {step === "choose" ? (
+            <>
+              <p className="immo-quickpay-note">
+                {isNotice
+                  ? tf(t("{months} mois impayés ({balance}). Choisis qui reçoit un SMS."), { months: card.monthsBehind, balance: money(card.balance, card.symbol) })
+                  : t("Choisis qui reçoit un SMS.")}
+              </p>
+              {REMIND_TARGETS.map((o) => (
+                <label key={o.key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", cursor: "pointer" }}>
+                  <input type="checkbox" checked={sel[o.key]} onChange={(e) => setSel({ ...sel, [o.key]: e.target.checked })} style={{ marginTop: 3 }} />
+                  <span><strong>{t(o.label)}</strong><br /><small style={{ opacity: 0.7 }}>{t(o.hint)}</small></span>
+                </label>
+              ))}
+            </>
+          ) : (
+            <>
+              <p>
+                {isNotice
+                  ? t("Le préavis est tracé sur le bail (date d'envoi) et ne peut pas être annulé. Envoyer à :")
+                  : t("Les messages seront envoyés immédiatement à :")}
+              </p>
+              <ul style={{ margin: "6px 0 0 18px" }}>{chosen.map((o) => <li key={o.key}><strong>{t(o.label)}</strong></li>)}</ul>
+            </>
+          )}
+        </div>
+        <div className="immo-modal-foot">
+          {step === "choose" ? (
+            <>
+              <button className="immo-btn" onClick={onClose}>{t("Annuler")}</button>
+              <button className="immo-btn primary" onClick={() => setStep("confirm")} disabled={!chosen.length}>{t("Continuer")}</button>
+            </>
+          ) : (
+            <>
+              <button className="immo-btn" onClick={() => setStep("choose")} disabled={busy}>{t("Retour")}</button>
+              <button className={`immo-btn ${isNotice ? "danger" : "primary"}`} onClick={() => onSend(sel)} disabled={busy}
+                style={isNotice ? { background: "#dc2626", color: "#fff" } : undefined}>
+                {busy ? t("Envoi…") : <><BellRing size={16} /> {t("Confirmer l'envoi")}</>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   const monthRent = Number(card.rent ?? card.latest?.amount) || 0;
@@ -768,7 +840,6 @@ export function Loyers({ go }) {
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
   const toast = useToast();
-  const confirm = useConfirm();
   const [proofView, setProofView] = useState(null);
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
@@ -793,6 +864,8 @@ export function Loyers({ go }) {
   const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
   const [noticingLeaseId, setNoticingLeaseId] = useState(null);
   const [remindingLeaseId, setRemindingLeaseId] = useState(null);
+  const [remindTarget, setRemindTarget] = useState(null);
+  const [noticeTarget, setNoticeTarget] = useState(null);
   const [flash, setFlash] = useState(null);
   const [query, setQuery] = useState("");
 
@@ -904,20 +977,11 @@ export function Loyers({ go }) {
   // Preavis pour defaut de paiement. Action grave et tracee (date d'envoi
   // enregistree sur le bail) : on demande confirmation, en rappelant au
   // gestionnaire ce que le locataire va recevoir et qui d'autre est prevenu.
-  const handleDefaultNotice = async (card) => {
+  const handleDefaultNotice = async (card, targets) => {
     if (!card.lease?.id || noticingLeaseId) return;
-    if (!(await confirm({
-      title: t("Notifier un préavis pour défaut de paiement"),
-      message: tf(
-        t("{name} doit {months} mois de loyer ({balance}). Le locataire, sa personne de contact et le propriétaire seront prévenus qu'un préavis sera déposé faute de régularisation. Continuer ?"),
-        { name: card.name, months: card.monthsBehind, balance: money(card.balance, card.symbol) },
-      ),
-      confirmLabel: t("Notifier"),
-      danger: true,
-    }))) return;
     setNoticingLeaseId(card.lease.id);
     try {
-      const res = await api.sendDefaultNotice(card.lease.id);
+      const res = await api.sendDefaultNotice(card.lease.id, targets);
       const channels = [
         res?.smsSent ? "SMS" : null,
         res?.emailSent ? "email" : null,
@@ -930,15 +994,17 @@ export function Loyers({ go }) {
       toast.error(e.message || String(e));
     } finally {
       setNoticingLeaseId(null);
+      setNoticeTarget(null);
     }
   };
 
-  const handleRemind = async (card) => {
+  const handleRemind = async (card, targets) => {
     if (!card.lease?.id || remindingLeaseId) return;
     setRemindingLeaseId(card.lease.id);
     try {
-      const res = await api.remindLease(card.lease.id);
+      const res = await api.remindLease(card.lease.id, targets);
       if (res?.enabled === false) toast.info?.(t("Envoi des rappels désactivé sur cet environnement."));
+      else if (!targets?.tenant) toast.success(t("Rappel envoyé."));
       else if (res?.smsStatus === "no_phone") toast.error(tf(t("Aucun SMS : {name} n'a pas de numéro de téléphone (courriel seulement)."), { name: card.name }));
       else if (res?.smsStatus === "failed") toast.error(tf(t("SMS non envoyé à {name} : {reason}"), { name: card.name, reason: res.smsError || "" }));
       else toast.success(tf(t("Rappel envoyé à {name}."), { name: card.name }));
@@ -946,6 +1012,7 @@ export function Loyers({ go }) {
       toast.error(e.message || String(e));
     } finally {
       setRemindingLeaseId(null);
+      setRemindTarget(null);
     }
   };
 
@@ -1094,9 +1161,9 @@ export function Loyers({ go }) {
                 onReceipt={handleReceipt}
                 onGenerateMissing={handleGenerateMissing}
                 generating={Boolean(c.lease?.id) && generatingLeaseId === c.lease?.id}
-                onDefaultNotice={handleDefaultNotice}
+                onDefaultNotice={setNoticeTarget}
                 noticing={Boolean(c.lease?.id) && noticingLeaseId === c.lease?.id}
-                onRemind={handleRemind}
+                onRemind={setRemindTarget}
                 reminding={Boolean(c.lease?.id) && remindingLeaseId === c.lease?.id}
               />
             ))}
@@ -1158,6 +1225,8 @@ export function Loyers({ go }) {
         </div>
       )}
 
+      {remindTarget && <RemindModal card={remindTarget} busy={!!remindingLeaseId} onClose={() => setRemindTarget(null)} onSend={(targets) => handleRemind(remindTarget, targets)} />}
+      {noticeTarget && <RemindModal kind="notice" card={noticeTarget} busy={!!noticingLeaseId} onClose={() => setNoticeTarget(null)} onSend={(targets) => handleDefaultNotice(noticeTarget, targets)} />}
       {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
       {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
       {proofView && <ProofModal path={`/leases/payments/${proofView.id}/proof-file`} title={tenantName(proofView)} onClose={() => setProofView(null)} />}

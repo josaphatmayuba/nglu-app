@@ -48,6 +48,10 @@ export class AppSettingsService {
         leasePrefix: appSettings.leasePrefix,
         defaultVatRate: appSettings.defaultVatRate,
         defaultPaymentTermDays: appSettings.defaultPaymentTermDays,
+        rentReminderEnabled: appSettings.rentReminderEnabled,
+        rentReminderOverdueDays: appSettings.rentReminderOverdueDays,
+        leaseExpiryNoticeDays: appSettings.leaseExpiryNoticeDays,
+        rentReminderHour: appSettings.rentReminderHour,
         createdAt: appSettings.createdAt,
         updatedAt: appSettings.updatedAt,
         currencyName: currencies.currencyName,
@@ -111,6 +115,10 @@ export class AppSettingsService {
         leasePrefix: dto.leasePrefix ?? current.leasePrefix,
         defaultVatRate: dto.defaultVatRate ?? current.defaultVatRate,
         defaultPaymentTermDays: dto.defaultPaymentTermDays ?? current.defaultPaymentTermDays,
+        rentReminderEnabled: dto.rentReminderEnabled ?? current.rentReminderEnabled,
+        rentReminderOverdueDays: dto.rentReminderOverdueDays ?? current.rentReminderOverdueDays,
+        leaseExpiryNoticeDays: dto.leaseExpiryNoticeDays ?? current.leaseExpiryNoticeDays,
+        rentReminderHour: dto.rentReminderHour ?? current.rentReminderHour,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(appSettings.id, ownRow));
@@ -154,6 +162,10 @@ export class AppSettingsService {
       leasePrefix: base.leasePrefix,
       defaultVatRate: base.defaultVatRate,
       defaultPaymentTermDays: base.defaultPaymentTermDays,
+      rentReminderEnabled: base.rentReminderEnabled,
+      rentReminderOverdueDays: base.rentReminderOverdueDays,
+      leaseExpiryNoticeDays: base.leaseExpiryNoticeDays,
+      rentReminderHour: base.rentReminderHour,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     } as any);

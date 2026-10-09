@@ -96,71 +96,68 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "contract_signature",
       subject: "Votre contrat de bail est pret a etre signe",
       body:
-        "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. " +
-        "Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
+        "Bonjour {tenantName}, votre bail est pret. Signez-le ici : {url} (valable 7 j). {companyName}",
     },
     {
       name: "Confirmation de bail",
       eventType: "lease_created",
       subject: "Votre bail {reference} est confirme",
       body:
-        "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, " +
-        "loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
+        "Bonjour {tenantName}, bail {reference} actif : {address}, loyer {amount}. " +
+        "Proprietaire : {landlordName}. {companyName}",
     },
     {
       name: "Bienvenue apres signature",
       eventType: "contract_signed",
       subject: "Bienvenue ! Votre bail {reference} est signe et confirme",
       body:
-        "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. " +
-        "Bienvenue dans votre nouveau logement : {address}, appartement {unit}. " +
-        "Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). " +
-        "Pour toute question, contactez {contacts}. — {companyName}",
+        "Bonjour {tenantName}, bail {reference} signe. Bienvenue au {address}, appt {unit}, " +
+        "du {startDate} au {endDate}. Contact : {contacts}",
     },
     {
       name: "Quittance / paiement recu",
       eventType: "payment_received",
       subject: "Paiement recu — bail {reference}",
       body:
-        "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} " +
-        "pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
+        "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !",
     },
     {
       name: "Rappel de loyer en retard",
       eventType: "payment_reminder",
       subject: "Rappel : loyer en retard — bail {reference}",
       body:
-        "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), " +
-        "d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a " +
-        "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
-        "Pour tout reglement ou question, contactez {contacts}. — {companyName}",
+        "Bonjour {tenantName}, votre loyer de {amount} (bail {reference}) a {daysLate} j de retard. " +
+        "Merci de regulariser rapidement. Contact : {contacts}",
     },
     {
       name: "Rappel de loyer — personne de contact",
       eventType: "payment_reminder_contact",
       subject: "Loyer en retard de {tenantName}",
       body:
-        "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour " +
-        "{address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser " +
-        "ce paiement aupres de {contacts}. — {companyName}",
+        "Bonjour, {tenantName} a {daysLate} j de retard de loyer ({amount}). " +
+        "Merci de l'inviter a regulariser : {contacts}",
+    },
+    {
+      name: "Justificatif de paiement refuse",
+      eventType: "payment_proof_rejected",
+      subject: "Justificatif de paiement refuse — bail {reference}",
+      body: "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}",
     },
     {
       name: "Preavis pour defaut de paiement — locataire",
       eventType: "default_notice",
       subject: "Preavis pour defaut de paiement — bail {reference}",
       body:
-        "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour " +
-        "{address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis " +
-        "pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+        "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). " +
+        "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
     },
     {
       name: "Preavis defaut de paiement — personne de contact",
       eventType: "default_notice_contact",
       subject: "Preavis pour defaut de paiement de {tenantName}",
       body:
-        "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois " +
-        "de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de " +
-        "paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+        "Bonjour, {tenantName} a {monthsBehind} mois de loyer impayes ({amount}). " +
+        "Un preavis sera depose sans paiement. Merci de l'inviter a contacter {contacts}",
     },
     {
       name: "Proprietaire — preavis pour defaut de paiement",
@@ -175,9 +172,8 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "tenant_created_owner",
       subject: "Nouveau dossier locataire",
       body:
-        "Nouveau dossier locataire : {tenantName} ({tenantPhone}). " +
-        "{profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. " +
-        "{occupants} occupants. Contact : {emergencyContact}.",
+        "Nouveau locataire : {tenantName} ({tenantPhone}). " +
+        "{profession} chez {employer}, revenu {income}. Urgence : {emergencyContact}.",
     },
     {
       name: "Proprietaire — nouveau bail",
@@ -228,6 +224,19 @@ export class OwnerNotificationsService implements OnModuleInit {
     },
   ];
 
+  /** Anciens textes par defaut (trop longs pour 1 SMS) : remplaces au demarrage uniquement si la ligne est restee identique. */
+  private static readonly LEGACY_DEFAULT_BODIES: Record<string, string> = {
+    contract_signature: "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
+    lease_created: "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
+    contract_signed: "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). Pour toute question, contactez {contacts}. — {companyName}",
+    payment_received: "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
+    payment_reminder: "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
+    payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
+    default_notice: "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+    default_notice_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+    tenant_created_owner: "Nouveau dossier locataire : {tenantName} ({tenantPhone}). {profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. {occupants} occupants. Contact : {emergencyContact}.",
+  };
+
   /**
    * Reference de contact sortante : les anciens modeles renvoyaient le
    * locataire vers le numero generique de la societe. Elle est reecrite au
@@ -268,8 +277,16 @@ export class OwnerNotificationsService implements OnModuleInit {
         this.logger.log(`Message templates seeded: ${missing.map((t) => t.eventType).join(", ")}`);
       }
 
+      const norm = (v: string) => v.replace(/\s+/g, " ").trim();
       for (const row of existing) {
         const body = row.body || "";
+        const legacy = row.eventType ? OwnerNotificationsService.LEGACY_DEFAULT_BODIES[row.eventType] : undefined;
+        const fresh = OwnerNotificationsService.DEFAULT_TEMPLATES.find((t) => t.eventType === row.eventType);
+        if (legacy && fresh && norm(body) === norm(legacy)) {
+          await this.db.update(emailTemplates).set({ body: fresh.body }).where(eq(emailTemplates.id, row.id));
+          this.logger.log(`Message template shortened for SMS: ${row.eventType}`);
+          continue;
+        }
         let next = body;
         for (const [re, to] of OwnerNotificationsService.LEGACY_CONTACT_FRAGMENTS) {
           next = next.replace(re, to);
@@ -1062,8 +1079,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         url: portalUrl,
       };
       const fallback =
-        "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} " +
-        "pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !";
+        "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !";
       const message = await this.renderMessage("payment_received", fallback, vars);
       // Footer ajoute seulement si le template n'a pas deja place le lien :
       // sinon le locataire recevrait deux fois la meme URL (et 2 segments SMS).
@@ -1118,8 +1134,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const tenantName = this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName);
       const fallback =
-        "Bonjour {tenantName}, votre justificatif de paiement (bail {reference}) a ete refuse : {reason}. " +
-        "Merci de le renvoyer depuis votre espace : {url}";
+        "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}";
       let portalUrl = "";
       try {
         portalUrl = (await this.tenantPortal.generateTenantPortalLink(Number(lease.tenantId), orgId)).url;
@@ -1165,7 +1180,13 @@ export class OwnerNotificationsService implements OnModuleInit {
    * SON bien n'est pas rentre, sans avoir a consulter l'application.
    * Best-effort : un echec n'interrompt jamais la boucle de rappels.
    */
-  async notifyPaymentOverdue(leaseId: number, propertyId: number, daysLate: number, orgId: number) {
+  async notifyPaymentOverdue(
+    leaseId: number,
+    propertyId: number,
+    daysLate: number,
+    orgId: number,
+    only: { owner: boolean; delegates: boolean } = { owner: true, delegates: true },
+  ) {
     try {
       const owner = await this.resolveOwnerForProperty(propertyId, orgId);
       if (!owner) return;
@@ -1221,11 +1242,11 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
         "{daysLate} j de retard. {url}";
       const message = await this.renderMessage("payment_overdue_owner", fallback, vars);
-      await this.send(owner, message, "payment_overdue_owner", "real-estate-lease", leaseId, orgId);
+      if (only.owner) await this.send(owner, message, "payment_overdue_owner", "real-estate-lease", leaseId, orgId);
       // Le delegue ne recoit PAS le message du proprietaire : le sien porte une
       // question a laquelle il doit repondre (le locataire a-t-il paye ?) et un
       // lien d action, la ou celui du bailleur est purement informatif.
-      await this.notifyOverdueDelegates(leaseId, propertyId, orgId, vars);
+      if (only.delegates) await this.notifyOverdueDelegates(leaseId, propertyId, orgId, vars);
     } catch (error) {
       this.logger.warn(
         `notifyPaymentOverdue failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -1251,6 +1272,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     tenantId: number,
     tenantVars: Record<string, string>,
     orgId: number,
+    only: { owner: boolean; delegates: boolean } = { owner: true, delegates: true },
   ): Promise<boolean> {
     try {
       const owner = await this.resolveOwnerForProperty(propertyId, orgId);
@@ -1268,8 +1290,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Preavis pour defaut de paiement notifie a {tenantName} ({property}) : " +
         "{monthsBehind} mois impayes, {amount}. {url}";
       const message = await this.renderMessage("default_notice_owner", fallback, vars);
-      await this.send(owner, message, "default_notice_owner", "real-estate-lease", leaseId, orgId);
-      await this.sendToDelegates(
+      if (only.owner) await this.send(owner, message, "default_notice_owner", "real-estate-lease", leaseId, orgId);
+      if (only.delegates) await this.sendToDelegates(
         propertyId, orgId, "overdue", message,
         "default_notice_delegate", "real-estate-lease", leaseId,
       );

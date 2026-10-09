@@ -1961,6 +1961,13 @@
       "when": 1781071200055,
       "tag": "0304_domus_rent_payment_proof_rejection",
       "breakpoints": true
+    },
+    {
+      "idx": 280,
+      "version": "5",
+      "when": 1781071200056,
+      "tag": "0305_app_setting_rent_reminders",
+      "breakpoints": true
     }
   ]
 }

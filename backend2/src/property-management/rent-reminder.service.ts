@@ -18,6 +18,9 @@ import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
 
+type ReminderConfig = { enabled: boolean; overdueDays: number; expiryDays: number; hour: number };
+export type ReminderTargets = { tenant: boolean; emergency: boolean; owner: boolean; delegates: boolean };
+
 @Injectable()
 export class RentReminderService {
   private readonly logger = new Logger(RentReminderService.name);
@@ -30,13 +33,37 @@ export class RentReminderService {
     private readonly ownerNotifications: OwnerNotificationsService,
   ) {}
 
-  @Cron(env.rentReminders.cron)
+  /**
+   * Config des rappels, lue dans Reglages (appSetting) par organisation.
+   * NULL en base = valeur par defaut du code (env.rentReminders).
+   */
+  private async reminderConfig(orgId: number, cache: Map<number, ReminderConfig>): Promise<ReminderConfig> {
+    const hit = cache.get(orgId);
+    if (hit) return hit;
+    const row = await readOrgAppSetting(this.db, orgId, {
+      enabled: appSettings.rentReminderEnabled,
+      overdueDays: appSettings.rentReminderOverdueDays,
+      expiryDays: appSettings.leaseExpiryNoticeDays,
+      hour: appSettings.rentReminderHour,
+    });
+    const cfg: ReminderConfig = {
+      enabled: row?.enabled == null ? env.rentReminders.enabled : Number(row.enabled) === 1,
+      overdueDays: Number(row?.overdueDays) > 0 ? Number(row?.overdueDays) : env.rentReminders.overdueDays,
+      expiryDays: Number(row?.expiryDays) > 0 ? Number(row?.expiryDays) : env.rentReminders.expiryNoticeDays,
+      hour: row?.hour == null ? 9 : Number(row.hour),
+    };
+    cache.set(orgId, cfg);
+    return cfg;
+  }
+
+  // Passe chaque heure ; chaque organisation n'est traitee qu'a l'heure choisie dans Reglages.
+  @Cron("0 * * * *")
   async scheduledRun() {
-    if (!env.rentReminders.enabled) return;
     try {
-      const result = await this.runOverdueReminders();
+      const hour = new Date().getHours();
+      const result = await this.runOverdueReminders(undefined, { hour });
       this.logger.log(`Scheduled overdue reminders: ${JSON.stringify(result)}`);
-      const expiry = await this.runExpiryReminders();
+      const expiry = await this.runExpiryReminders({ hour });
       this.logger.log(`Scheduled expiry reminders: ${JSON.stringify(expiry)}`);
     } catch (error) {
       this.logger.error(`Scheduled overdue reminders failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -47,15 +74,25 @@ export class RentReminderService {
    * Relance MANUELLE d'un seul bail (bouton « Relancer » d'une carte en retard) :
    * renvoie meme si une relance a deja ete envoyee pour cette periode.
    */
-  runLeaseReminder(leaseId: number, orgId: number) {
-    return this.runOverdueReminders({ leaseId, orgId });
+  runLeaseReminder(leaseId: number, orgId: number, targets?: Partial<ReminderTargets>) {
+    return this.runOverdueReminders({
+      leaseId,
+      orgId,
+      targets: { tenant: true, emergency: true, owner: false, delegates: false, ...targets },
+    });
   }
 
-  async runOverdueReminders(only?: { leaseId: number; orgId: number }) {
-    const overdueDays = env.rentReminders.overdueDays;
+  async runOverdueReminders(
+    only?: { leaseId: number; orgId: number; targets?: ReminderTargets },
+    schedule?: { hour: number },
+  ) {
+    const configs = new Map<number, ReminderConfig>();
+    // Passe automatique : tout le monde. Relance manuelle : destinataires choisis.
+    const targets: ReminderTargets = only?.targets ?? { tenant: true, emergency: true, owner: true, delegates: true };
+    // Pre-filtre large (retard >= 1 jour) : le seuil exact est propre a chaque organisation.
     const cutoff = new Date();
     cutoff.setHours(0, 0, 0, 0);
-    cutoff.setDate(cutoff.getDate() - overdueDays);
+    cutoff.setDate(cutoff.getDate() - 1);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
 
     const company = await readOrgAppSetting(this.db, 1, {
@@ -102,18 +139,22 @@ export class RentReminderService {
         ),
       );
 
-    // When the feature is disabled (e.g. dev), never send anything — report candidates only.
-    const send = env.rentReminders.enabled;
-
     let sent = 0;
     let lastSms: { smsStatus: string; smsError: string | null; hasEmail: boolean } | null = null;
     for (const lease of rows) {
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
       if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
-      if (!send) continue;
+      // Reglages de l'organisation : relance manuelle = toujours envoyee ; automatique = si active,
+      // a l'heure choisie et au-dela du nombre de jours de retard choisi.
+      if (!only) {
+        const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
+        const late = Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000);
+        if (!cfg.enabled || late < cfg.overdueDays) continue;
+        if (schedule && schedule.hour !== cfg.hour) continue;
+      }
 
       // Etat du SMS au locataire (remonte a l'UI pour la relance manuelle).
-      let smsStatus: "sent" | "failed" | "no_phone" = "no_phone";
+      let smsStatus: "sent" | "failed" | "no_phone" | "skipped" = targets.tenant ? "no_phone" : "skipped";
       let smsError: string | null = null;
 
       const daysLate = Math.floor(
@@ -147,15 +188,13 @@ export class RentReminderService {
       };
       const tenantMsg = await this.ownerNotifications.renderMessage(
         "payment_reminder",
-        "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), " +
-          "d'un montant de {amount}, est en retard de {daysLate} jours. Nous vous invitons gentiment a " +
-          "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
-          "Pour tout reglement ou question, contactez {contacts}. Merci de votre comprehension. — {companyName}",
+        "Bonjour {tenantName}, votre loyer de {amount} (bail {reference}) a {daysLate} j de retard. " +
+          "Merci de regulariser rapidement. Contact : {contacts}",
         vars,
         { tenantId: lease.tenantId },
       );
 
-      if (lease.tenantPhone) {
+      if (targets.tenant && lease.tenantPhone) {
         // Footer seulement si le modele n'a pas deja place {url} lui-meme.
         const smsWithFooter = this.ownerNotifications.fitOneSms(
           vars.url && tenantMsg.includes(vars.url)
@@ -167,24 +206,23 @@ export class RentReminderService {
         if (err) smsError = err;
       }
 
-      if (lease.tenantEmail) {
+      if (targets.tenant && lease.tenantEmail) {
         // Meme contenu que le SMS (un seul texte configurable pour les deux canaux).
         const html = `<p>${tenantMsg}</p>`;
         const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
         await this.safeEmail(lease.tenantEmail, `Rappel: loyer en retard — bail ${lease.reference}`, htmlWithFooter, lease.leaseId);
       }
 
-      if (lease.emergencyPhone) {
+      if (targets.emergency && lease.emergencyPhone) {
         // Message distinct : il s'adresse au CONTACT D'URGENCE, pas au locataire
         // (aucun lien portail ne doit y figurer). Evenement dedie
         // "payment_reminder_contact" dans les Reglages.
         const emergencyMsg = await this.ownerNotifications.renderMessage(
           "payment_reminder_contact",
-          "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour " +
-            "{address} ({amount}) est en retard de {daysLate} jours. Merci de bien vouloir l'inviter a regulariser " +
-            "ce paiement aupres de {contacts}, afin d'eviter l'annulation de son contrat de location. " +
-            "Merci de votre comprehension. — {companyName}",
+          "Bonjour, {tenantName} a {daysLate} j de retard de loyer ({amount}). " +
+            "Merci de l'inviter a regulariser : {contacts}",
           vars,
+          { tenantId: lease.tenantId },
         );
         await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId);
       }
@@ -192,16 +230,19 @@ export class RentReminderService {
       // Le PROPRIETAIRE du bien est prevenu du retard au meme rythme que le
       // locataire (une fois par periode impayee) : c'est son loyer qui manque.
       // Best-effort, comme les autres envois de cette boucle.
-      await this.ownerNotifications.notifyPaymentOverdue(
-        lease.leaseId,
-        Number(lease.propertyId),
-        daysLate,
-        lease.organizationId,
-      );
+      if (targets.owner || targets.delegates) {
+        await this.ownerNotifications.notifyPaymentOverdue(
+          lease.leaseId,
+          Number(lease.propertyId),
+          daysLate,
+          lease.organizationId,
+          { owner: targets.owner, delegates: targets.delegates },
+        );
+      }
 
       // SMS echoue : on ne marque PAS la periode comme relancee, pour que la
       // prochaine passe automatique (ou un nouveau clic) puisse le renvoyer.
-      if (smsStatus !== "failed") {
+      if (targets.tenant && smsStatus !== "failed") {
         await this.db
           .update(realEstateLeases)
           .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
@@ -211,7 +252,7 @@ export class RentReminderService {
       lastSms = { smsStatus, smsError, hasEmail: Boolean(lease.tenantEmail) };
     }
 
-    return { candidates: rows.length, sent, enabled: send, ...(only ? lastSms : {}) };
+    return { candidates: rows.length, sent, ...(only ? lastSms : {}) };
   }
 
   /**
@@ -222,11 +263,12 @@ export class RentReminderService {
    * bail est prolonge, la nouvelle end_date reouvre l'envoi.
    * Best-effort : un echec n'interrompt jamais la boucle.
    */
-  async runExpiryReminders() {
-    const noticeDays = env.rentReminders.expiryNoticeDays;
+  async runExpiryReminders(schedule?: { hour: number }) {
+    const configs = new Map<number, ReminderConfig>();
+    // Pre-filtre large (1 an) : la fenetre exacte est propre a chaque organisation.
     const horizon = new Date();
     horizon.setHours(0, 0, 0, 0);
-    horizon.setDate(horizon.getDate() + noticeDays);
+    horizon.setDate(horizon.getDate() + 365);
     const horizonStr = horizon.toISOString().slice(0, 10);
     const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -266,13 +308,16 @@ export class RentReminderService {
         ),
       );
 
-    const send = env.rentReminders.enabled;
     let sent = 0;
 
     for (const lease of rows) {
       // Deja annonce pour CETTE echeance : on ne renvoie pas chaque jour.
       if (lease.lastExpiryReminder && lease.lastExpiryReminder === lease.endDate) continue;
-      if (!send) continue;
+      const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
+      if (!cfg.enabled) continue;
+      if (schedule && schedule.hour !== cfg.hour) continue;
+      const daysLeft = Math.ceil((new Date(`${lease.endDate}T00:00:00`).getTime() - Date.now()) / 86_400_000);
+      if (daysLeft > cfg.expiryDays) continue;
 
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
@@ -320,7 +365,7 @@ export class RentReminderService {
       sent += 1;
     }
 
-    return { candidates: rows.length, sent, enabled: send };
+    return { candidates: rows.length, sent };
   }
 
   private async safeSms(phone: string, message: string, leaseId: number, organizationId: number): Promise<string | null> {

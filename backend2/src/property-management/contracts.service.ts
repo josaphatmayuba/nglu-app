@@ -400,8 +400,7 @@ export class ContractsService {
       // Texte pilote depuis Reglages > Messages (evenement "contract_signature").
       const message = await this.ownerNotifications.renderMessage(
         "contract_signature",
-        "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. " +
-          "Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
+        "Bonjour {tenantName}, votre bail est pret. Signez-le ici : {url} (valable 7 j). {companyName}",
         {
           tenantName: contract.tenantName || "",
           firstName: contract.tenantName || "",

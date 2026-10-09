@@ -318,9 +318,9 @@ export const api = {
   sendReminder: (b) => post("/payments/reminder", b),
   // Preavis pour defaut de paiement : reserve aux baux qui doivent plus d'un
   // mois de loyer (le backend revalide le seuil et refuse sinon).
-  sendDefaultNotice: (leaseId) => post("/payments/default-notice", { leaseId }),
+  sendDefaultNotice: (leaseId, targets) => post("/payments/default-notice", { leaseId, targets }),
   runOverdueReminders: () => post("/payments/run-overdue-reminders"),
-  remindLease: (leaseId) => post("/payments/remind-lease", { leaseId }),
+  remindLease: (leaseId, targets) => post("/payments/remind-lease", { leaseId, targets }),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
   // manquantes en statut pending, une ligne par mois calendaire ecoule non couvert.

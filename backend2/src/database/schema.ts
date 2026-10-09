@@ -2381,6 +2381,11 @@ export const appSettings = mysqlTable("appSetting", {
   leasePrefix: varchar("leasePrefix", { length: 50 }).default("LEASE-"),
   defaultVatRate: int("defaultVatRate").default(16),
   defaultPaymentTermDays: int("defaultPaymentTermDays").default(14),
+  // Rappels automatiques (Reglages). NULL = valeur par defaut du code.
+  rentReminderEnabled: tinyint("rent_reminder_enabled"),
+  rentReminderOverdueDays: int("rent_reminder_overdue_days"),
+  leaseExpiryNoticeDays: int("lease_expiry_notice_days"),
+  rentReminderHour: int("rent_reminder_hour"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
