@@ -106,10 +106,15 @@ export class RentReminderService {
     const send = env.rentReminders.enabled;
 
     let sent = 0;
+    let lastSms: { smsStatus: string; smsError: string | null; hasEmail: boolean } | null = null;
     for (const lease of rows) {
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
       if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
       if (!send) continue;
+
+      // Etat du SMS au locataire (remonte a l'UI pour la relance manuelle).
+      let smsStatus: "sent" | "failed" | "no_phone" = "no_phone";
+      let smsError: string | null = null;
 
       const daysLate = Math.floor(
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
@@ -156,7 +161,9 @@ export class RentReminderService {
             ? tenantMsg
             : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, lease.organizationId),
         );
-        await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId, lease.organizationId);
+        const err = await this.safeSms(lease.tenantPhone, smsWithFooter, lease.leaseId, lease.organizationId);
+        smsStatus = err ? "failed" : "sent";
+        if (err) smsError = err;
       }
 
       if (lease.tenantEmail) {
@@ -191,14 +198,19 @@ export class RentReminderService {
         lease.organizationId,
       );
 
-      await this.db
-        .update(realEstateLeases)
-        .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(realEstateLeases.id, lease.leaseId));
+      // SMS echoue : on ne marque PAS la periode comme relancee, pour que la
+      // prochaine passe automatique (ou un nouveau clic) puisse le renvoyer.
+      if (smsStatus !== "failed") {
+        await this.db
+          .update(realEstateLeases)
+          .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateLeases.id, lease.leaseId));
+      }
       sent += 1;
+      lastSms = { smsStatus, smsError, hasEmail: Boolean(lease.tenantEmail) };
     }
 
-    return { candidates: rows.length, sent, enabled: send };
+    return { candidates: rows.length, sent, enabled: send, ...(only ? lastSms : {}) };
   }
 
   /**
@@ -309,7 +321,7 @@ export class RentReminderService {
     return { candidates: rows.length, sent, enabled: send };
   }
 
-  private async safeSms(phone: string, message: string, leaseId: number, organizationId: number) {
+  private async safeSms(phone: string, message: string, leaseId: number, organizationId: number): Promise<string | null> {
     try {
       const res = await this.sms.sendSms({
         phone,
@@ -321,9 +333,13 @@ export class RentReminderService {
       });
       if (!res?.success) {
         this.logger.warn(`Reminder SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
+        return res?.message || "SMS non envoye";
       }
+      return null;
     } catch (error) {
-      this.logger.warn(`Reminder SMS error (lease ${leaseId}, ${phone}): ${error instanceof Error ? error.message : String(error)}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Reminder SMS error (lease ${leaseId}, ${phone}): ${msg}`);
+      return msg;
     }
   }
 

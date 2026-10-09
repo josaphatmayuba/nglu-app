@@ -794,7 +794,8 @@ export function adaptAnimal(row) {
     fatherId: row.fatherId ?? row.father_id ?? null,
     estimatedValue: (row.estimatedValue ?? row.estimated_value) != null ? Number(row.estimatedValue ?? row.estimated_value) : null,
     lastEvent: last,
-    withdrawal: wUntil
+    // Delai expire (date < aujourd'hui) => plus de retrait affiche.
+    withdrawal: wUntil && String(wUntil).slice(0, 10) >= new Date().toLocaleDateString("sv-SE")
       ? { until: String(wUntil).slice(0, 10), kind: wKind, med: null }
       : undefined,
   };

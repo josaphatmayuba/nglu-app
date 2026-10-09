@@ -897,6 +897,8 @@ export function Loyers({ go }) {
     try {
       const res = await api.remindLease(card.lease.id);
       if (res?.enabled === false) toast.info?.(t("Envoi des rappels désactivé sur cet environnement."));
+      else if (res?.smsStatus === "no_phone") toast.error(tf(t("Aucun SMS : {name} n'a pas de numéro de téléphone (courriel seulement)."), { name: card.name }));
+      else if (res?.smsStatus === "failed") toast.error(tf(t("SMS non envoyé à {name} : {reason}"), { name: card.name, reason: res.smsError || "" }));
       else toast.success(tf(t("Rappel envoyé à {name}."), { name: card.name }));
     } catch (e) {
       toast.error(e.message || String(e));
