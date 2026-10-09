@@ -152,6 +152,7 @@ export class RentReminderService {
           "regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. " +
           "Pour tout reglement ou question, contactez {contacts}. Merci de votre comprehension. — {companyName}",
         vars,
+        { tenantId: lease.tenantId },
       );
 
       if (lease.tenantPhone) {
@@ -301,6 +302,7 @@ export class RentReminderService {
           "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
             "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
           vars,
+          { tenantId: lease.tenantId },
         );
         await this.safeSms(lease.tenantPhone, msg, lease.leaseId, lease.organizationId);
       }

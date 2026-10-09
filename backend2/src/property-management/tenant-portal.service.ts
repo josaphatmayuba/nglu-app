@@ -645,6 +645,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         phone: customers.phone,
         address: customers.address,
         entityName: tenantDetails.entityName,
+        sex: tenantDetails.sex,
       })
       .from(customers)
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
@@ -787,6 +788,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         phone: tenant.phone,
         address: tenant.address,
         entityName: tenant.entityName,
+        sex: tenant.sex,
       },
       leases,
       // payments contient a la fois les loyers regles (status 'paid') et les

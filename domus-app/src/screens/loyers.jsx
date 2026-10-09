@@ -43,6 +43,13 @@ function uiMethodsFrom(raw) {
   });
 }
 const tenantName = (r) => [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+// "Mr/Mme Prenom Nom" selon le sexe du locataire (nom seul si inconnu) ; pour les messages envoyes au locataire.
+const tenantCivilName = (r) => {
+  const name = tenantName(r);
+  const s = String(r?.tenantSex || "").trim().toUpperCase();
+  const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
+  return civility && name !== "Locataire" ? `${civility} ${name}` : name;
+};
 // Date LOCALE (toISOString = UTC → la veille en debut de journee a Kinshasa).
 const today = () => {
   const d = new Date();
@@ -1422,7 +1429,7 @@ export function Paiement({ go }) {
   const waDigits = String(lease?.tenantPhone || "").replace(/\D/g, "");
   const waHref = waDigits
     ? `https://wa.me/${waDigits}?text=${encodeURIComponent(
-      `Bonjour ${leaseName}, nous confirmons la réception de votre loyer de ${fmt(doneAmount)} (${methodMeta?.label || ""}) le ${fmtDateLong(today())}.`
+      `Bonjour ${lease ? tenantCivilName(lease) : leaseName}, nous confirmons la réception de votre loyer de ${fmt(doneAmount)} (${methodMeta?.label || ""}) le ${fmtDateLong(today())}.`
       + `${doneRef ? ` Réf. ${doneRef}.` : ""} Logement : ${leaseUnit}. Merci.`,
     )}`
     : null;

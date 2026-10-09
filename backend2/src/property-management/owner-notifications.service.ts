@@ -521,8 +521,18 @@ export class OwnerNotificationsService implements OnModuleInit {
     eventType: string,
     fallback: string,
     vars: Record<string, string>,
+    opts?: { tenantId?: number | null; sex?: string | null },
   ): Promise<string> {
     let text = fallback;
+    // Civilite (Mr/Mme) pour tout message ADRESSE au locataire : {tenantName} et
+    // {firstName} deviennent "Mr Prenom Nom" quand le sexe est connu (tenantId ->
+    // tenant_details.sex, ou sex fourni, ex. dossier d'inscription).
+    if (opts?.tenantId || opts?.sex) {
+      const civil = opts.tenantId
+        ? await this.civilNameForTenant(Number(opts.tenantId))
+        : this.civilName(opts.sex, vars.firstName, vars.lastName ?? "");
+      if (civil) vars = { ...vars, tenantName: civil, firstName: civil };
+    }
     try {
       const [tpl] = await this.db
         .select({ body: emailTemplates.body })
@@ -747,12 +757,27 @@ export class OwnerNotificationsService implements OnModuleInit {
 
   // "Mr Prenom Nom" / "Mme Prenom Nom" selon tenant_details.sex (M/F) ; sans
   // sexe renseigne, nom complet seul. Utilise pour {tenantName} dans les SMS.
-  private civilName(sex: string | null | undefined, firstName?: string | null, lastName?: string | null) {
+  civilName(sex: string | null | undefined, firstName?: string | null, lastName?: string | null) {
     const name = this.fullName(firstName, lastName);
     if (!name) return name;
     const s = String(sex || "").trim().toUpperCase();
     const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
     return civility ? `${civility} ${name}` : name;
+  }
+
+  /** "Mr/Mme Prenom Nom" d'un locataire (customers + tenant_details.sex) ; "" si introuvable. */
+  async civilNameForTenant(tenantId: number): Promise<string> {
+    try {
+      const [t] = await this.db
+        .select({ firstName: customers.firstName, lastName: customers.lastName, sex: tenantDetails.sex })
+        .from(customers)
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+        .where(eq(customers.id, tenantId))
+        .limit(1);
+      return t ? this.civilName(t.sex, t.firstName, t.lastName) : "";
+    } catch {
+      return "";
+    }
   }
 
   private money(amount: unknown, code?: string | null) {

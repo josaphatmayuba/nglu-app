@@ -449,7 +449,15 @@ export class PropertyManagementService {
     const message = await this.ownerNotifications.renderMessage(
       "tenant_onboarding",
       "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
-      { firstName: (data.firstName as string) || "", tenantName: "", url, reference: "", amount: "" },
+      {
+        firstName: (data.firstName as string) || "",
+        lastName: (data.lastName as string) || "",
+        tenantName: "",
+        url,
+        reference: "",
+        amount: "",
+      },
+      { sex: data.sex as string | undefined },
     );
     const result = await this.sms.sendSms({
       phone,
@@ -500,7 +508,15 @@ export class PropertyManagementService {
       "tenant_onboarding",
       "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}. " +
         `Merci de le faire des que possible. — ${companyName}`,
-      { firstName: (data.firstName as string) || "", tenantName: "", url, reference: "", amount: "" },
+      {
+        firstName: (data.firstName as string) || "",
+        lastName: (data.lastName as string) || "",
+        tenantName: "",
+        url,
+        reference: "",
+        amount: "",
+      },
+      { sex: data.sex as string | undefined },
     );
     const html = `<p>${text.replace(url, `<a href="${url}">${url}</a>`)}</p>`;
     try {
@@ -879,6 +895,7 @@ export class PropertyManagementService {
           reference: "",
           amount: "",
         },
+        { tenantId },
       );
 
       // fitOneSms apres le footer : le lien est ajoute hors du rendu, il ne
@@ -1911,6 +1928,7 @@ export class PropertyManagementService {
           companyName,
           url: portalUrl,
         },
+        { tenantId: lease.tenantId },
       );
 
       if (lease.tenantPhone) {
@@ -3492,7 +3510,10 @@ export class PropertyManagementService {
     const lease = rows[0];
     if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
 
-    const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const tenantName =
+      (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(Number(lease.tenantId)) : "") ||
+      [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") ||
+      "Locataire";
     // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
     const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
     // Le locataire est renvoyé vers les personnes en charge de SON immeuble
@@ -3533,7 +3554,7 @@ export class PropertyManagementService {
       const fill = (s: string | null) =>
         String(s || "")
           .replace(/\{tenantName\}/g, tenantName)
-          .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
+          .replace(/\{firstName\}/g, tenantName)
           .replace(/\{reference\}/g, lease.reference || "")
           .replace(/\{amount\}/g, rentDisplay)
           .replace(/\{companyName\}/g, companyName)
@@ -3668,6 +3689,7 @@ export class PropertyManagementService {
         "{address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis " +
         "pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
       vars,
+      { tenantId: lease.tenantId },
     );
 
     let smsSent = false;
@@ -6231,6 +6253,7 @@ export class PropertyManagementService {
         tenantLastName: customers.lastName,
         tenantPhone: customers.phone,
         tenantEmail: customers.email,
+        tenantSex: tenantDetails.sex,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })
@@ -6238,6 +6261,7 @@ export class PropertyManagementService {
       .leftJoin(leaseProperty, eq(leaseProperty.id, realEstateLeases.propertyId))
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
   }
 

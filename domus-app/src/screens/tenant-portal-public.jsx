@@ -128,7 +128,11 @@ function buildForm(rec) {
 
 function tenantName(tenant) {
   const n = [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ").trim();
-  return n || tenant?.entityName || t("Locataire");
+  if (!n) return tenant?.entityName || t("Locataire");
+  // Civilité Mr/Mme selon le sexe (nom seul si inconnu).
+  const s = String(tenant?.sex || "").trim().toUpperCase();
+  const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
+  return civility ? `${civility} ${n}` : n;
 }
 
 export function TenantPortalPublic({ token }) {
