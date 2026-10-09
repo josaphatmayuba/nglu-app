@@ -363,7 +363,9 @@ export function Baux({ go } = {}) {
                       : info.dueCount === null
                         ? "—"
                         : info.lateCount > 0
-                          ? `${info.paidOnTimeCount}/${info.dueCount} paiements · ${info.lateCount} en retard`
+                          ? info.paidOnTimeCount === 0
+                            ? `${info.lateCount} loyer${info.lateCount > 1 ? "s" : ""} impayé${info.lateCount > 1 ? "s" : ""}`
+                            : `${info.paidOnTimeCount} payé${info.paidOnTimeCount > 1 ? "s" : ""} sur ${info.dueCount} · ${info.lateCount} en retard`
                           : `${info.paidOnTimeCount || info.dueCount} paiements à jour`}
                   </small>
                 </div>

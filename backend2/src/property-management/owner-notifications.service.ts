@@ -745,6 +745,16 @@ export class OwnerNotificationsService implements OnModuleInit {
     return [firstName, lastName].filter(Boolean).join(" ").trim();
   }
 
+  // "Mr Prenom Nom" / "Mme Prenom Nom" selon tenant_details.sex (M/F) ; sans
+  // sexe renseigne, nom complet seul. Utilise pour {tenantName} dans les SMS.
+  private civilName(sex: string | null | undefined, firstName?: string | null, lastName?: string | null) {
+    const name = this.fullName(firstName, lastName);
+    if (!name) return name;
+    const s = String(sex || "").trim().toUpperCase();
+    const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
+    return civility ? `${civility} ${name}` : name;
+  }
+
   private money(amount: unknown, code?: string | null) {
     const n = Number(amount ?? 0);
     const formatted = Number.isFinite(n) ? n.toLocaleString("fr-FR") : String(amount ?? "");
@@ -903,12 +913,14 @@ export class OwnerNotificationsService implements OnModuleInit {
           unitName: realEstateUnits.name,
           tenantFirstName: customers.firstName,
           tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
         })
         .from(realEstateLeases)
         .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
         .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
@@ -938,7 +950,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.fullName(lease.tenantFirstName, lease.tenantLastName),
+        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
         reference: lease.reference || String(lease.id),
         address,
         unit: lease.unitName || "",
@@ -992,6 +1004,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           unitName: realEstateUnits.name,
           tenantFirstName: customers.firstName,
           tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
           tenantPhone: customers.phone,
         })
         .from(realEstateLeases)
@@ -999,11 +1012,12 @@ export class OwnerNotificationsService implements OnModuleInit {
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
         .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease?.tenantPhone) return;
 
-      const tenantName = this.fullName(lease.tenantFirstName, lease.tenantLastName);
+      const tenantName = this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName);
       // {url} = espace locataire public (/domus/mon-espace?token=...), ou il
       // retrouve le detail de SES paiements et quittances. On le resout ici
       // pour que le template puisse le placer ou il veut dans le texte ; s'il
@@ -1016,7 +1030,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       }
       const vars = {
         tenantName,
-        firstName: lease.tenantFirstName || tenantName,
+        firstName: tenantName,
         reference: lease.reference || String(lease.id),
         property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
         amount: this.money(amount, lease.currencySymbol),
@@ -1081,6 +1095,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           unitName: realEstateUnits.name,
           tenantFirstName: customers.firstName,
           tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
           tenantPhone: customers.phone,
         })
         .from(realEstateLeases)
@@ -1088,6 +1103,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
         .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
@@ -1101,7 +1117,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.fullName(lease.tenantFirstName, lease.tenantLastName),
+        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
         tenantPhone: lease.tenantPhone || "",
         reference: lease.reference || String(lease.id),
         address: [lease.propertyName, lease.unitName, lease.propertyAddress, lease.propertyCity]
@@ -1203,6 +1219,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           unitName: realEstateUnits.name,
           tenantFirstName: customers.firstName,
           tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
           tenantPhone: customers.phone,
         })
         .from(realEstateLeases)
@@ -1210,6 +1227,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
         .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
@@ -1223,7 +1241,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.fullName(lease.tenantFirstName, lease.tenantLastName),
+        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
         tenantPhone: lease.tenantPhone || "",
         reference: lease.reference || String(lease.id),
         address: lease.propertyAddress || lease.propertyName || "",
@@ -1267,12 +1285,14 @@ export class OwnerNotificationsService implements OnModuleInit {
           unitName: realEstateUnits.name,
           tenantFirstName: customers.firstName,
           tenantLastName: customers.lastName,
+          tenantSex: tenantDetails.sex,
         })
         .from(realEstateLeases)
         .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
         .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
@@ -1289,7 +1309,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.fullName(lease.tenantFirstName, lease.tenantLastName),
+        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
         reference: lease.reference || String(lease.id),
         property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
         unit: lease.unitName || "",
