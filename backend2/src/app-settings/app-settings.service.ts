@@ -52,6 +52,7 @@ export class AppSettingsService {
         rentReminderOverdueDays: appSettings.rentReminderOverdueDays,
         leaseExpiryNoticeDays: appSettings.leaseExpiryNoticeDays,
         rentReminderHour: appSettings.rentReminderHour,
+        rentOverdueGraceDays: appSettings.rentOverdueGraceDays,
         createdAt: appSettings.createdAt,
         updatedAt: appSettings.updatedAt,
         currencyName: currencies.currencyName,
@@ -119,6 +120,7 @@ export class AppSettingsService {
         rentReminderOverdueDays: dto.rentReminderOverdueDays ?? current.rentReminderOverdueDays,
         leaseExpiryNoticeDays: dto.leaseExpiryNoticeDays ?? current.leaseExpiryNoticeDays,
         rentReminderHour: dto.rentReminderHour ?? current.rentReminderHour,
+        rentOverdueGraceDays: dto.rentOverdueGraceDays ?? current.rentOverdueGraceDays,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(appSettings.id, ownRow));
@@ -166,6 +168,7 @@ export class AppSettingsService {
       rentReminderOverdueDays: base.rentReminderOverdueDays,
       leaseExpiryNoticeDays: base.leaseExpiryNoticeDays,
       rentReminderHour: base.rentReminderHour,
+      rentOverdueGraceDays: base.rentOverdueGraceDays,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     } as any);
