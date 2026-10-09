@@ -23,6 +23,15 @@ function tenantLabel(t) {
   return n || t?.entityName || t?.username || `Locataire #${t?.id}`;
 }
 
+// Libellé avec civilité Mr/Mme (selon le sexe) pour l'accueil ; nom seul si inconnu.
+function tenantCivilLabel(t) {
+  const label = tenantLabel(t);
+  const s = String(t?.sex || "").trim().toUpperCase();
+  const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
+  const hasName = [t?.firstName, t?.lastName].some(Boolean);
+  return civility && hasName ? `${civility} ${label}` : label;
+}
+
 function initials(name) {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "NA";
@@ -197,7 +206,7 @@ export function Portail({ go }) {
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
 
-  const name = tenant ? tenantLabel(tenant) : "Locataire";
+  const name = tenant ? tenantCivilLabel(tenant) : "Locataire";
   const unit = activeLease
     ? [activeLease.propertyName || activeLease.propertyAddress, activeLease.unitName].filter(Boolean).join(" · ")
     : "Aucun bail actif";
@@ -222,7 +231,7 @@ export function Portail({ go }) {
           <h1 className="portail-hero-title">{formatGreeting(name)}</h1>
           <div className="portail-hero-sub">{unit}</div>
         </div>
-        <div className="portail-hero-avatar">{initials(name)}</div>
+        <div className="portail-hero-avatar">{initials(tenant ? tenantLabel(tenant) : name)}</div>
       </div>
 
       {!activeLease ? (

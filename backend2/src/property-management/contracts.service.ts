@@ -379,7 +379,8 @@ export class ContractsService {
     }
 
     if (contract.tenantEmail) {
-      const signingHtml = this.signingEmailHtml(contract.tenantName ?? "", signingUrl);
+      const civilTenant = tenantId ? await this.ownerNotifications.civilNameForTenant(tenantId) : "";
+      const signingHtml = this.signingEmailHtml(civilTenant || contract.tenantName || "", signingUrl);
       const htmlWithFooter = tenantId
         ? await this.tenantPortal.appendPortalFooterToEmail(signingHtml, tenantId, orgId)
         : signingHtml;
@@ -409,6 +410,7 @@ export class ContractsService {
           reference: "",
           amount: "",
         },
+        { tenantId },
       );
       try {
         // fitOneSms apres le footer : le lien s'ajoute hors du rendu et ne doit
@@ -545,7 +547,11 @@ export class ContractsService {
     // Téléphone de contact : bailleur en priorité, sinon entreprise (même logique que les contrats).
     const contactPhone = company.landlordPhone || company.phone || "";
 
-    const tenantName = lease.tenantName || contract.tenantName || "Locataire";
+    const tenantName =
+      (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(lease.tenantId) : "") ||
+      lease.tenantName ||
+      contract.tenantName ||
+      "Locataire";
     const reference = lease.reference ?? "";
     const startDate = this.formatDate(lease.startDate);
     const endDate = this.formatDate(lease.endDate);
@@ -594,7 +600,7 @@ export class ContractsService {
       const fill = (s: string | null) =>
         String(s || "")
           .replace(/\{tenantName\}/g, tenantName)
-          .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
+          .replace(/\{firstName\}/g, tenantName)
           .replace(/\{reference\}/g, reference)
           .replace(/\{amount\}/g, rentDisplay)
           .replace(/\{address\}/g, `${address}${unitPart}`)
