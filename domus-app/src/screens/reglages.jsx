@@ -654,7 +654,7 @@ const DEFAULT_MESSAGES = [
     subject: "Loyer en retard — bail {reference}",
     body:
       "Loyer en retard : {tenantName} doit {amount} pour {property}, " +
-      "{daysLate} j de retard. {url}",
+      "{lateLabel} de retard. {url}",
   },
   {
     name: "Propriétaire — paiement reçu",
