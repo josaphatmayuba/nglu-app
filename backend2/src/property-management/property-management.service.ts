@@ -3681,7 +3681,10 @@ export class PropertyManagementService {
       reference: lease.reference || String(lease.id),
       address: place,
       property: place,
+      // totalDebt = dette TOTALE (loyers dus - verses) ; amount = meme valeur (ancien nom) ;
+      // rentAmount = loyer MENSUEL.
       amount: `${balance}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`,
+      totalDebt: `${balance}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`,
       rentAmount: `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim(),
       monthsBehind: String(monthsBehind),
       daysLate: String(daysLate),
@@ -3694,7 +3697,7 @@ export class PropertyManagementService {
     // Texte pilote depuis Reglages > Messages (evenement "default_notice").
     const tenantMsg = await this.ownerNotifications.renderMessage(
       "default_notice",
-      "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). " +
+      "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({totalDebt}). " +
         "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
       vars,
       { tenantId: lease.tenantId },
@@ -3744,7 +3747,7 @@ export class PropertyManagementService {
     if (targets.emergency && lease.emergencyPhone) {
       const contactMsg = await this.ownerNotifications.renderMessage(
         "default_notice_contact",
-        "Bonjour, {tenantName} a {monthsBehind} mois de loyer impayes ({amount}). " +
+        "Bonjour, {tenantName} a {monthsBehind} mois de loyer impayes ({totalDebt}). " +
           "Un preavis sera depose sans paiement. Merci de l'inviter a contacter {contacts}",
         vars,
         { tenantId: lease.tenantId },
