@@ -1134,7 +1134,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
             <button className="immo-btn" disabled={rentBookBusy} onClick={handleRentBook}>
-              <FileDown size={15} /> {rentBookBusy ? "Génération…" : "Carnet de quittances"}
+              <FileDown size={15} /> {rentBookBusy ? "Génération…" : "Imprimer le carnet"}
             </button>
             <button className="immo-btn" onClick={() => { onClose(); go("maintenance"); }}><Wrench size={15} /> Tickets maintenance</button>
           </div>
