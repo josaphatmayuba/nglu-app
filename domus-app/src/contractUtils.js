@@ -111,12 +111,22 @@ export function isRealSignature(sig) {
   return typeof sig === "string" && sig.startsWith("data:image") && sig.length > 600;
 }
 
-function landlordPrintBlock(contract) {
+// Signature du bailleur du contrat : celle du PROPRIETAIRE si le bail en a un
+// (jamais la signature générique des Réglages), sinon celle des Réglages. Vide = non signé d'avance.
+export function landlordSignatureOf(contract) {
+  const info = contract?.landlordInfo;
+  const sig = info?.source === "owner"
+    ? info.signature
+    : (info?.signature ?? contract?.companyInfo?.landlordSignature);
+  return isRealSignature(sig) ? sig : null;
+}
+
+function landlordPrintBlock(contract, withSignature = true) {
   const company = contract?.companyInfo || {};
   const landlordInfo = contract?.landlordInfo || {};
   const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
-  const sig = landlordInfo.signature ?? company.landlordSignature;
-  if (isRealSignature(sig)) {
+  const sig = withSignature ? landlordSignatureOf(contract) : null;
+  if (sig) {
     return `<img class="signature-image" src="${sig}" alt="Signature bailleur" /><div class="signature-name">${escapeHtml(name)}</div>`;
   }
   return `<div class="signature-line"></div><div class="signature-name">${escapeHtml(name)}</div>`;
@@ -260,11 +270,21 @@ export const CONTRACT_PRINT_CSS = `
     }
 `;
 
+// Bloc bailleur (signature + date) tel qu'imprimé, avec ou sans signature pré-apposée.
+function landlordSigInner(contract, withSignature) {
+  const dots = "..............................";
+  const sig = withSignature ? landlordSignatureOf(contract) : null;
+  const date = sig && (contract?.sentAt || contract?.createdAt)
+    ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
+    : dots;
+  return `${landlordPrintBlock(contract, withSignature)}
+        <div class="signature-date">Signé le : ${date}</div>`;
+}
+
 export function contractPrintBody(contract) {
   const dots = "..............................";
   const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
-  const landlordSignature = contract?.landlordInfo?.signature ?? contract?.companyInfo?.landlordSignature;
-  const landlordSignedDate = isRealSignature(landlordSignature) && (contract?.sentAt || contract?.createdAt)
+  const landlordSignedDate = landlordSignatureOf(contract) && (contract?.sentAt || contract?.createdAt)
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
     : dots;
   const tenantSignature = contract?.signatureData
@@ -279,8 +299,9 @@ export function contractPrintBody(contract) {
   <div class="signature">
     <div class="signature-grid">
       <div>
-        <h2>Signature du bailleur</h2>${landlordPrintBlock(contract)}
-        <div class="signature-date">Signé le : ${landlordSignedDate}</div>
+        <h2>Signature du bailleur</h2>
+        <div class="landlord-sig">${landlordPrintBlock(contract)}
+        <div class="signature-date">Signé le : ${landlordSignedDate}</div></div>
       </div>
       <div>
         <h2>Signature du locataire</h2>${tenantSignature}
@@ -300,11 +321,12 @@ export function contractPrintHtml(contract) {
     @page { size: A4; margin: 12mm 15mm; }
     body { margin: 0; }
 ${CONTRACT_PRINT_CSS}
+    .print-actions label { font-family: Arial, sans-serif; font-size: 12px; margin-right: 14px; }
     @media print { .print-actions { display: none; } }
   </style>
 </head>
 <body class="contract-doc">
-  <div class="print-actions"><button type="button">Imprimer / PDF</button></div>
+  <div class="print-actions">${landlordSignatureOf(contract) ? '<label><input type="checkbox" id="landlord-sig-toggle" checked /> Inclure la signature du bailleur (décochez pour signer à la main)</label> ' : ""}<button type="button">Imprimer / PDF</button></div>
 ${contractPrintBody(contract)}
 </body>
 </html>`;
@@ -327,7 +349,12 @@ export function openContractPrint(contract, { autoPrint = true, onError } = {}) 
   };
   const btn = win.document.querySelector(".print-actions button");
   if (btn) btn.addEventListener("click", triggerPrint);
-  if (autoPrint) {
+  const toggle = win.document.getElementById("landlord-sig-toggle");
+  const sigBox = win.document.querySelector(".landlord-sig");
+  if (toggle && sigBox) {
+    toggle.addEventListener("change", () => { sigBox.innerHTML = landlordSigInner(contract, toggle.checked); });
+  }
+  if (autoPrint && !toggle) {
     if (win.document.readyState === "complete") setTimeout(triggerPrint, 250);
     else win.addEventListener("load", () => setTimeout(triggerPrint, 250));
   }

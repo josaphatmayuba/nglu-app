@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { CONTRACT_PRINT_CSS, contractPrintBody, escapeHtml } from "./contractUtils.js";
+import { CONTRACT_PRINT_CSS, contractPrintBody, escapeHtml, landlordSignatureOf } from "./contractUtils.js";
 
 const formatDateTime = (value) => {
   if (!value) return "";
@@ -12,7 +12,7 @@ export const landlordSignatureHtml = (contract) => {
   const company = contract?.companyInfo || {};
   const landlordInfo = contract?.landlordInfo || {};
   const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Le Bailleur";
-  const signature = landlordInfo.signature ?? company.landlordSignature;
+  const signature = landlordSignatureOf(contract);
   const dateRef = contract?.sentAt || contract?.createdAt;
   const dateStr = formatDateTime(dateRef);
 
