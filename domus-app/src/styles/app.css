@@ -1784,3 +1784,7 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .shell[data-layout="mobile"] .leaflet-container { z-index:0; isolation:isolate; }
 .shell[data-layout="mobile"] .landlord-sig-current { flex-wrap:wrap; }
 .shell[data-layout="mobile"] .landlord-sig-current img { max-width:100%; min-width:0; }
+.shell[data-layout="mobile"] .reserve-gallery, .shell[data-layout="mobile"] .coupon-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.shell[data-layout="mobile"] .reserve-gallery > *, .shell[data-layout="mobile"] .coupon-grid > *, .shell[data-layout="mobile"] .reserve-card-body, .shell[data-layout="mobile"] .reserve-card-title { min-width:0; }
+.shell[data-layout="mobile"] .reserve-card-addr, .shell[data-layout="mobile"] .reserve-card-owner, .shell[data-layout="mobile"] .reserve-card-title > :first-child { overflow:hidden; text-overflow:ellipsis; }
+.shell[data-layout="mobile"] .reserve-card-specs { flex-wrap:wrap; }
