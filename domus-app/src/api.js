@@ -302,6 +302,8 @@ export const api = {
 
   // Carnet de quittances (PDF imprimable) : lease enrichi + tous les paiements du bail.
   rentBook: (id) => get(`/leases/${id}/rent-book`),
+  leaseProrationPreview: (id) => get(`/leases/${id}/proration-preview`),
+  leaseProrationRealign: (id) => post(`/leases/${id}/proration-realign`),
 
   payments: () => get("/payments"),
   // proofFile optionnel (photo/scan recu, capture mobile money) — meme

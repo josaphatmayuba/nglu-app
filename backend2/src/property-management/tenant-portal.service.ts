@@ -26,6 +26,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
+import { loadNextDueByLease } from "./lease-proration-db";
 
 @Injectable()
 export class TenantPortalService {
@@ -674,6 +675,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         billingCycle: realEstateLeases.billingCycle,
         rentAmount: realEstateLeases.rentAmount,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        currencyDecimals: currencies.decimalPlaces,
         currencyId: realEstateLeases.currencyId,
         status: realEstateLeases.status,
         propertyName: realEstateProperties.name,
@@ -779,6 +782,19 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
       .orderBy(desc(realEstateTenantChangeRequests.id))
       .limit(10);
 
+    // Prochaine echeance (prorata inclus) : champs additifs, loyer du bail si option off.
+    const nextDue = await loadNextDueByLease(this.db, organizationId, leases as any);
+    const leasesOut = leases.map(({ currencyDecimals: _d, ...l }) => {
+      const n = nextDue.get(l.id);
+      return {
+        ...l,
+        rentProrationEnabled: !!l.rentProrationEnabled,
+        nextDueDate: n?.nextDueDate ?? null,
+        nextDueAmount: n?.nextDueAmount ?? (Number(l.rentAmount) || 0),
+        isProratedNext: n?.isProratedNext ?? false,
+      };
+    });
+
     return {
       tenant: {
         id: tenant.id,
@@ -790,7 +806,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         entityName: tenant.entityName,
         sex: tenant.sex,
       },
-      leases,
+      leases: leasesOut,
       // payments contient a la fois les loyers regles (status 'paid') et les
       // echeances a venir / en retard (status 'pending'), que le front separe.
       // La caution n'y figure pas : elle vit dans real_estate_security_deposits

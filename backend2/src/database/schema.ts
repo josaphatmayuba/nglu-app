@@ -1089,6 +1089,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   // nombre de mois dus a ce moment-la pour retrouver la situation exacte.
   defaultNoticeSentAt: timestamp("default_notice_sent_at"),
   defaultNoticeMonthsBehind: int("default_notice_months_behind"),
+  // Prorata du loyer (opt-in par bail) : 0 = comportement historique inchange.
+  rentProrationEnabled: tinyint("rent_proration_enabled").default(0).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1135,6 +1137,9 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   // Refus du justificatif par le gestionnaire : motif affiche au locataire (efface a son nouvel envoi).
   proofRejectedReason: varchar("proof_rejected_reason", { length: 500 }),
   proofRejectedAt: timestamp("proof_rejected_at"),
+  // Periode de loyer couverte par ce paiement (optionnelle, NULL = historique).
+  periodStart: date("period_start", { mode: "string" }),
+  periodEnd: date("period_end", { mode: "string" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

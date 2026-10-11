@@ -24,6 +24,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
+import { loadNextDueByLease } from "./lease-proration-db";
 
 @Injectable()
 export class OwnerPortalService {
@@ -179,6 +180,9 @@ export class OwnerPortalService {
         endDate: realEstateLeases.endDate,
         billingCycle: realEstateLeases.billingCycle,
         rentAmount: realEstateLeases.rentAmount,
+        nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        currencyDecimals: currencies.decimalPlaces,
         securityDeposit: realEstateLeases.securityDeposit,
         status: realEstateLeases.status,
         taxName: realEstateLeases.taxName,
@@ -260,11 +264,17 @@ export class OwnerPortalService {
       paymentsByLease.set(key, list);
     }
 
+    const nextDue = await loadNextDueByLease(this.db, organizationId, leases as any);
+
     return {
       owner: { name: owner.displayName },
       tenant,
-      leases: leases.map((lease) => ({
+      leases: leases.map(({ currencyDecimals: _d, nextInvoiceDate: _n, ...lease }) => ({
         ...lease,
+        rentProrationEnabled: !!lease.rentProrationEnabled,
+        nextDueDate: nextDue.get(Number(lease.id))?.nextDueDate ?? null,
+        nextDueAmount: nextDue.get(Number(lease.id))?.nextDueAmount ?? (Number(lease.rentAmount) || 0),
+        isProratedNext: nextDue.get(Number(lease.id))?.isProratedNext ?? false,
         depositsPaid: deposits.filter((d) => Number(d.leaseId) === Number(lease.id)),
         payments: (paymentsByLease.get(Number(lease.id)) ?? []).map((p) => ({
           id: p.id,

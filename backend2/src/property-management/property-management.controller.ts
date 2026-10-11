@@ -852,6 +852,31 @@ export class PropertyManagementController {
     return this.propertyManagementService.rentBook(id, orgId, scope);
   }
 
+  @ApiOperation({ summary: "Apercu (sans ecriture) du prorata du loyer d'un bail, calcule comme si l'option etait activee" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/proration-preview")
+  prorationPreview(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.prorationPreview(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Realigne les echeances pending d'un bail au prorata actif (paid jamais modifie)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/proration-realign")
+  @HttpCode(200)
+  prorationRealign(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.prorationRealign(id, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Permissions("create-propertyManagement")
   @Post("leases")
@@ -862,8 +887,13 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Update a lease" })
   @Permissions("update-propertyManagement")
   @Put("leases/:id")
-  updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.updateLease(id, body, orgId);
+  updateLease(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateLeaseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.updateLease(id, body, orgId, scope);
   }
 
   @ApiOperation({ summary: "Delete a lease" })

@@ -38,6 +38,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
+import { loadNextDueByLease } from "./lease-proration-db";
 
 @Injectable()
 export class DelegatePortalService {
@@ -179,6 +180,12 @@ export class DelegatePortalService {
         id: realEstateLeases.id,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        billingCycle: realEstateLeases.billingCycle,
+        nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        currencyDecimals: currencies.decimalPlaces,
         currencyId: realEstateLeases.currencyId,
         currencySymbol: currencies.currencySymbol,
         currencyCode: currencies.currencyCode,
@@ -201,6 +208,8 @@ export class DelegatePortalService {
       .limit(1);
     if (!lease) throw new NotFoundException("Lien invalide ou expire.");
 
+    const nextDue = (await loadNextDueByLease(this.db, Number(check.organizationId), [lease as any])).get(lease.id);
+
     return {
       delegateName,
       periodMonth: check.periodMonth,
@@ -213,6 +222,11 @@ export class DelegatePortalService {
       lease: {
         reference: lease.reference || String(lease.id),
         rentAmount: lease.rentAmount,
+        // Additifs : echeance courante (prorata inclus) ; loyer du bail si option off.
+        rentProrationEnabled: !!lease.rentProrationEnabled,
+        nextDueDate: nextDue?.nextDueDate ?? null,
+        nextDueAmount: nextDue?.nextDueAmount ?? (Number(lease.rentAmount) || 0),
+        isProratedNext: nextDue?.isProratedNext ?? false,
         currencySymbol: lease.currencySymbol ?? null,
         currencyCode: lease.currencyCode ?? null,
         tenantName: [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ").trim(),

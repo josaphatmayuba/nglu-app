@@ -1989,6 +1989,13 @@
       "when": 1781157600000,
       "tag": "0308_app_setting_sms_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "5",
+      "when": 1781244000000,
+      "tag": "0309_rent_period_proration",
+      "breakpoints": true
     }
   ]
 }

@@ -410,6 +410,11 @@ export class CreateLeaseDto {
   @IsOptional()
   @IsIn(["auto", "never"])
   taxApplyMode?: "auto" | "never";
+
+  @ApiPropertyOptional({ default: false, description: "Prorata du loyer par periode (opt-in par bail)." })
+  @IsOptional()
+  @IsBoolean()
+  rentProrationEnabled?: boolean;
 }
 
 export class UpdateLeaseDto extends PartialType(CreateLeaseDto) {}
@@ -429,6 +434,7 @@ export class CreateRentPaymentDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(1e12)
   amount: number;
 
   @ApiPropertyOptional({ example: "cash", default: "cash" })

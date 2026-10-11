@@ -47,7 +47,8 @@ const emptyLease = {
   tenantId: "",
   startDate: todayISO(),
   endDate: addMonthsISO(todayISO(), 12, -1),
-  nextInvoiceDate: todayISO(),
+  nextInvoiceDate: todayISO(), // = startDate par defaut (suit startDate a la creation)
+  rentProrationEnabled: false,
   billingCycle: "monthly",
   rentAmount: "",
   securityDeposit: "",
@@ -811,6 +812,29 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
   const selectedUnit = units.find((unit) => String(unit.id) === String(form.unitId));
 
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
+  // Prorata : sur un bail existant, (de)cocher la case exige un apercu +
+  // une confirmation explicite avant l'enregistrement.
+  const prorationWas = Boolean(value.rentProrationEnabled);
+  const [proration, setProration] = useState({ status: "idle", data: null, error: "", confirmed: false });
+  const prorationChanged = Boolean(form.id) && Boolean(form.rentProrationEnabled) !== prorationWas;
+  const prorationBlocked = prorationChanged && (!proration.confirmed || proration.status === "loading" || (form.rentProrationEnabled && proration.status !== "ready"));
+  const loadProrationPreview = () => {
+    setProration({ status: "loading", data: null, error: "", confirmed: false });
+    api.leaseProrationPreview(form.id)
+      .then((data) => setProration({ status: "ready", data, error: "", confirmed: false }))
+      .catch((e) => setProration({ status: "error", data: null, error: e?.message || t("Impossible de calculer l'aperçu."), confirmed: false }));
+  };
+  const toggleProration = (checked) => {
+    set({ rentProrationEnabled: checked });
+    if (!form.id || checked === prorationWas) {
+      setProration({ status: "idle", data: null, error: "", confirmed: false });
+    } else if (checked) {
+      loadProrationPreview();
+    } else {
+      setProration({ status: "ready", data: null, error: "", confirmed: false });
+    }
+  };
+  const prorationSymbol = (currencyOptions.find((o) => String(o.value) === String(form.currencyId))?.symbol) || value.currencySymbol || "";
   const setUnit = (unitId) => {
     const unit = units.find((item) => String(item.id) === String(unitId));
     set({
@@ -877,9 +901,27 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
           <section className="domus-form-section">
             <h3><RefreshCw size={14} /> Periode</h3>
             <div className="domus-property-form-grid three">
-              <LeaseField label="Debut" type="date" value={form.startDate} required onChange={(startDate) => set({ startDate })} />
+              <LeaseField label="Debut" type="date" value={form.startDate} required onChange={(startDate) => set({ startDate, ...(!form.id && (!form.nextInvoiceDate || form.nextInvoiceDate === form.startDate) ? { nextInvoiceDate: startDate } : {}) })} />
               <LeaseField label="Fin" type="date" value={form.endDate} onChange={(endDate) => set({ endDate })} />
-              <LeaseField label="Prochaine facture" type="date" value={form.nextInvoiceDate} onChange={(nextInvoiceDate) => set({ nextInvoiceDate })} />
+              <LeaseField label="Prochaine facture" type="date" min={form.startDate || undefined} value={form.nextInvoiceDate} onChange={(nextInvoiceDate) => set({ nextInvoiceDate })} />
+            </div>
+            <div className="domus-lease-proration">
+              <label className="domus-lease-proration-toggle">
+                <input type="checkbox" checked={Boolean(form.rentProrationEnabled)} onChange={(e) => toggleProration(e.target.checked)} />
+                <span>
+                  <strong>{t("Loyer au prorata")}</strong>
+                  <small>{t("Facture la période partielle au prorata des jours (début ou fin de bail en cours de mois). Désactivé : loyer plein chaque mois.")}</small>
+                </span>
+              </label>
+              {prorationChanged && (
+                <ProrationPanel
+                  enabling={Boolean(form.rentProrationEnabled)}
+                  state={proration}
+                  symbol={prorationSymbol}
+                  onRetry={loadProrationPreview}
+                  onConfirm={(confirmed) => setProration((cur) => ({ ...cur, confirmed }))}
+                />
+              )}
             </div>
             <div className="domus-property-form-grid">
               <LeaseSelect
@@ -983,7 +1025,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
         <div className="domus-modal-footer">
           <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Annuler</button>
           <div>
-            <button className="domus-modal-submit" onClick={() => onSave(form)} disabled={busy || !canSaveLease(form)}>
+            <button className="domus-modal-submit" onClick={() => onSave(form)} disabled={busy || !canSaveLease(form) || prorationBlocked}>
               <Check size={14} /> {busy ? "Enregistrement..." : form.id ? "Enregistrer" : "Creer le bail"}
             </button>
           </div>
@@ -1015,8 +1057,8 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   async function handleRentBook() {
     setRentBookBusy(true);
     try {
-      const { lease: leaseData, payments, portalUrl } = await api.rentBook(lease.id);
-      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
+      const { lease: leaseData, payments, portalUrl, schedule } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error, schedule });
     } catch (err) {
       toast.error(err?.message || "Génération du carnet de quittances impossible.");
     } finally {
@@ -1233,14 +1275,63 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
   );
 }
 
-function LeaseField({ label, value, onChange, type = "text", placeholder = "", required = false, textarea = false }) {
+// Apercu + confirmation du passage au prorata (ou retour au loyer plein).
+function ProrationPanel({ enabling, state, symbol, onRetry, onConfirm }) {
+  const { status, data, error, confirmed } = state;
+  const rows = Array.isArray(data?.schedule) ? data.schedule : [];
+  const fullRows = rows.filter((r) => !r.prorated);
+  const partRows = rows.filter((r) => r.prorated);
+  const sameAmount = fullRows.length > 0 && fullRows.every((r) => Number(r.amount) === Number(fullRows[0].amount));
+  const parts = [];
+  if (fullRows.length) {
+    parts.push(sameAmount
+      ? tf("{n} échéances de {amount}", { n: fullRows.length, amount: moneyExact(fullRows[0].amount, symbol) })
+      : tf("{n} échéances", { n: fullRows.length }));
+  }
+  partRows.forEach((r) => {
+    parts.push(tf("1 échéance de {amount} ({d} jours sur {p})", { amount: moneyExact(r.amount, symbol), d: r.days, p: r.periodDays }));
+  });
+  const total = data?.totalProposed ?? rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  return (
+    <div className="domus-lease-proration-panel" role="group" aria-label={t("Aperçu du loyer au prorata")}>
+      {enabling && status === "loading" && <p className="muted" role="status">{t("Calcul de l'aperçu…")}</p>}
+      {enabling && status === "error" && (
+        <div className="api-error" role="alert">
+          {error}{" "}
+          <button type="button" className="immo-btn" style={{ minHeight: 44 }} onClick={onRetry}>{t("Réessayer")}</button>
+        </div>
+      )}
+      {enabling && status === "ready" && (
+        <>
+          <p><strong>{parts.length ? parts.join(" + ") : t("Aucune échéance à recalculer.")}</strong>{parts.length ? " — " + tf("total {amount}", { amount: moneyExact(total, symbol) }) : ""}</p>
+          <p className="muted">
+            {tf("{u} échéance(s) mise(s) à jour · {v} annulée(s) · {k} conservée(s)", {
+              u: data?.willUpdate ?? 0, v: data?.willVoid ?? 0, k: data?.willKeep ?? 0,
+            })}
+          </p>
+        </>
+      )}
+      {!enabling && (
+        <p><strong>{t("Retour au loyer plein : les échéances déjà générées gardent leur montant au prorata ; seuls les nouveaux calculs reviennent au loyer plein.")}</strong></p>
+      )}
+      {(!enabling || status === "ready") && (
+        <label className="domus-lease-proration-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(e) => onConfirm(e.target.checked)} />
+          <span>{t("Je confirme ce changement, appliqué à l'enregistrement du bail.")}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function LeaseField({ label, value, onChange, type = "text", placeholder = "", required = false, textarea = false, min }) {
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
       {textarea ? (
         <textarea value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input type={type} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <input type={type} value={value ?? ""} placeholder={placeholder} min={min} onChange={(e) => onChange(e.target.value)} />
       )}
     </label>
   );
@@ -1294,6 +1385,8 @@ function leaseToForm(lease) {
     startDate: dateOnly(lease.startDate) || todayISO(),
     endDate: dateOnly(lease.endDate),
     nextInvoiceDate: dateOnly(lease.nextInvoiceDate) || dateOnly(lease.startDate) || todayISO(),
+    rentProrationEnabled: Boolean(lease.rentProrationEnabled),
+    _prorationWas: Boolean(lease.rentProrationEnabled),
     billingCycle: lease.billingCycle || "monthly",
     rentAmount: lease.rentAmount ?? "",
     securityDeposit: lease.securityDeposit ?? "",
@@ -1317,6 +1410,9 @@ function leasePayload(form) {
     startDate: form.startDate,
     endDate: form.endDate || null,
     nextInvoiceDate: form.nextInvoiceDate || form.startDate,
+    // Additif : envoye seulement si l'option est active, ou vient d'etre
+    // decochee -> un ancien backend ne voit jamais ce champ.
+    ...(form.rentProrationEnabled ? { rentProrationEnabled: true } : form.id && form._prorationWas ? { rentProrationEnabled: false } : {}),
     billingCycle: form.billingCycle || "monthly",
     rentAmount: toNumber(form.rentAmount),
     securityDeposit: toNumber(form.securityDeposit),

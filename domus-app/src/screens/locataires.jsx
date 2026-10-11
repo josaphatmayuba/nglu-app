@@ -17,6 +17,7 @@ import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
+import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
 const avatarTones = ["iris", "orange", "purple", "emerald", "ink"];
@@ -143,15 +144,17 @@ function leaseDueLabel(activeLease) {
   // total paye, sans rapprochement mois par mois cote backend).
   const dateStr = activeLease?.isOverdue && activeLease?.overdueDueDate
     ? activeLease.overdueDueDate
-    : activeLease?.nextInvoiceDate;
+    : (nextDueDateOf(activeLease) || activeLease?.nextInvoiceDate);
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (!Number.isFinite(d.getTime())) return "—";
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
 }
 
-function leaseRentLabel(activeLease, activeUnit) {
-  const amount = activeLease?.rentAmount ?? activeUnit?.monthlyRent;
+function leaseRentLabel(activeLease, activeUnit, dueView = false) {
+  // dueView : montant de la prochaine echeance (loyer au prorata, opt-in) ;
+  // sinon loyer mensuel comme avant.
+  const amount = (dueView ? nextDueAmountOf(activeLease) : null) ?? activeLease?.rentAmount ?? activeUnit?.monthlyRent;
   if (amount == null || amount === "") return "—";
   const sym = activeLease?.currencySymbol || "";
   return `${sym} ${Number(amount).toLocaleString("fr-FR")}`.trim();
@@ -440,7 +443,7 @@ export function Locataires({ go } = {}) {
                   <p>{unitKindIcon(activeUnit?.unitKind)} {activeLease?.propertyName || activeUnit?.name || activeUnit?.code || "—"}</p>
                   <div>
                     <span className={isLate ? "danger" : ""}>Loyer · echeance {leaseDueLabel(activeLease)}</span>
-                    <strong className={isLate ? "danger" : ""}>{leaseRentLabel(activeLease, activeUnit)}</strong>
+                    <strong className={isLate ? "danger" : ""}>{leaseRentLabel(activeLease, activeUnit, true)}</strong>
                   </div>
                 </div>
               </button>

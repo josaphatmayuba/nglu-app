@@ -14,6 +14,10 @@ import { useToast } from "../components/Dialog.jsx";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
+import {
+  formatPeriod, isProrataRow, isProrationLease, nextDueAmountOf, nextDueDateOf,
+  nextUnpaidProrataRow, prorataBadgeText, prorataCalcText, startedPeriods,
+} from "../prorationUtils.js";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -144,9 +148,9 @@ export function buildLeaseCards(leases, payments) {
       // la couverture et met donc le statut à jour (corrige « reste en retard apres paiement »).
       const rent = Number(l.rentAmount) || 0;
       const totalPaid = paidList.reduce((s, p) => s + Number(p.amount || 0), 0);
-      const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : list.length;
+      let monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : list.length;
       // Couverture fractionnaire : un paiement partiel (ex. 50 sur 100) remplit une demi-case.
-      const monthsCoveredFloat = rent > 0 ? totalPaid / rent : monthsCovered;
+      let monthsCoveredFloat = rent > 0 ? totalPaid / rent : monthsCovered;
 
       // Nombre de mois échus AVANT le mois courant (depuis le début du bail).
       let elapsedPast = 0;
@@ -155,16 +159,16 @@ export function buildLeaseCards(leases, payments) {
         elapsedPast = Math.max(0, (thisM.getFullYear() - sM.getFullYear()) * 12 + (thisM.getMonth() - sM.getMonth()));
       }
       // late = un mois passé encore non couvert · pending = passés couverts mais pas le mois courant · ok = tout couvert.
-      const status = monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
+      let status = monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
 
       // Solde réel : total exigible (mois courant inclus) − total déjà versé.
       // Gère les paiements partiels : 2 mois dus à 100, 50 versé → reste 150.
-      const monthsDue = elapsedPast + 1;
-      const totalDue = monthsDue * rent;
-      const balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
-      const credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100); // avance éventuelle
-      const monthsBehind = Math.max(0, monthsDue - monthsCovered); // mois entiers encore dus
-      const monthsAhead = Math.max(0, monthsCovered - monthsDue);  // mois payés d'avance
+      let monthsDue = elapsedPast + 1;
+      let totalDue = monthsDue * rent;
+      let balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
+      let credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100); // avance éventuelle
+      let monthsBehind = Math.max(0, monthsDue - monthsCovered); // mois entiers encore dus
+      let monthsAhead = Math.max(0, monthsCovered - monthsDue);  // mois payés d'avance
       // Mois jusqu'auquel le loyer est couvert (dernier mois plein payé).
       let coveredUntil = null;
       if (l.startDate && monthsCovered > 0) {
@@ -172,11 +176,57 @@ export function buildLeaseCards(leases, payments) {
         coveredUntil = new Date(s.getFullYear(), s.getMonth() + monthsCovered - 1, 1);
       }
 
+      // Loyer au prorata (opt-in par bail) : l'exigible n'est plus « rent x mois »
+      // mais la somme des montants de période renvoyés par le backend (la
+      // dernière période peut etre partielle). Sans l'option, ou si le backend
+      // n'a pas fourni de periodes, ce bloc est ignoré (calcul historique).
+      let periodAmounts = null;
+      const prorationRows = isProrationLease(l)
+        ? list.filter((p) => p.periodStart && p.status !== "voided")
+            .sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)))
+        : [];
+      if (prorationRows.length) {
+        const pad2 = (n) => String(n).padStart(2, "0");
+        const nowIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+        const amountOf = (p) => Number(p.amount) || 0;
+        const dueRows = prorationRows.filter((p) => String(p.periodStart).slice(0, 10) <= nowIso);
+        // Periodes echues sans ligne en base : comblees au loyer plein.
+        const leaseOpen = !l.endDate || String(l.endDate).slice(0, 10) >= nowIso;
+        const missing = leaseOpen ? Math.max(0, startedPeriods(l, now) - dueRows.length) : 0;
+        const dueAmounts = [...dueRows.map(amountOf), ...Array(missing).fill(rent)];
+        periodAmounts = prorationRows.map(amountOf);
+        totalDue = dueAmounts.reduce((s, a) => s + a, 0);
+        monthsDue = Math.max(1, dueAmounts.length);
+        balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
+        credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100);
+        let rem = totalPaid;
+        let covered = 0;
+        let frac = 0;
+        for (const a of dueAmounts) {
+          if (a <= 0 || rem + 0.0001 >= a) { rem -= Math.max(a, 0); covered += 1; } else { frac = rem / a; break; }
+        }
+        const allCovered = covered >= dueAmounts.length;
+        monthsAhead = allCovered && rent > 0 ? Math.floor((credit + 0.0001) / rent) : 0;
+        monthsCovered = covered + monthsAhead;
+        monthsCoveredFloat = covered + (allCovered ? (rent > 0 ? credit / rent : 0) : frac);
+        monthsBehind = Math.max(0, monthsDue - covered);
+        const lastDue = dueAmounts.length ? dueAmounts[dueAmounts.length - 1] : rent;
+        status = balance <= 0.005 ? "ok" : balance > lastDue + 0.005 ? "late" : "pending";
+        const lastCovered = covered > 0 ? prorationRows[covered - 1] : null;
+        const endM = lastCovered?.periodEnd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lastCovered.periodEnd)) : null;
+        if (endM) coveredUntil = new Date(Number(endM[1]), Number(endM[2]) - 1, Number(endM[3]));
+      }
+
       return {
         lease: l,
         name: tenantName(l),
         unit: [l.propertyName || l.propertyAddress, l.unitName].filter(Boolean).join(" · ") || null,
         rent: l.rentAmount,
+        // Prorata (null/false hors option) : echeance suivante + montants par periode.
+        nextDueAmount: nextDueAmountOf(l),
+        nextDueDate: nextDueDateOf(l),
+        isProratedNext: Boolean(isProrationLease(l) && l.isProratedNext),
+        periodAmounts,
         currencyId: l.currencyId,
         symbol: l.currencySymbol || latest?.currencySymbol || "$",
         paidMonths,
@@ -205,7 +255,7 @@ const STATUS_META = {
 };
 
 function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
-  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [] } = card;
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [], periodAmounts = null } = card;
   const [showMonths, setShowMonths] = useState(false);
   const [proofOpen, setProofOpen] = useState(null); // paiement dont on affiche la preuve
   const [selMonth, setSelMonth] = useState(null);
@@ -276,13 +326,22 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
   // Paiement ayant couvert le mois i : les paiements réglés se cumulent par date jusqu'à (i+1) loyers.
   const paidSorted = list.filter((p) => p.status !== "pending").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
+  // Cumul exigible jusqu'au mois i inclus : (i+1) loyers, ou, au prorata, la
+  // somme des montants de période (loyer plein au-delà des périodes connues).
+  const cumDue = (i) => {
+    const r = Number(rent) || 0;
+    if (!periodAmounts) return (i + 1) * r;
+    let s = 0;
+    for (let k = 0; k <= i; k += 1) s += periodAmounts[k] ?? r;
+    return s;
+  };
   const payForMonth = (i) => {
     const r = Number(rent) || 0;
     if (!(r > 0)) return null;
     let cum = 0;
     for (const p of paidSorted) {
       cum += Number(p.amount || 0);
-      if (cum + 0.0001 >= (i + 1) * r) return p;
+      if (cum + 0.0001 >= cumDue(i)) return p;
     }
     return null;
   };
@@ -395,7 +454,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                 }
                 const pend = k === "future" ? null : pendingForMonth(d);
                 const r = Number(rent) || 0;
-                const payAmount = Math.max(0, Math.round(((i + 1) * r - Number(totalPaid || 0)) * 100) / 100);
+                const payAmount = Math.max(0, Math.round((cumDue(i) - Number(totalPaid || 0)) * 100) / 100);
                 const kindTxt = { partial: t("payé en partie"), late: t("en retard"), cur: t("mois courant"), future: t("à venir") }[k];
                 return (
                   <div className="immo-pay-panel">
@@ -555,12 +614,38 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
   );
 }
 
+// Bloc d'info d'une échéance au prorata (modales d'encaissement).
+function ProrataInfo({ row, fullAmount, symbol }) {
+  const calc = prorataCalcText(row, fullAmount, symbol);
+  return (
+    <div className="immo-prorata-info">
+      <div className="immo-pay-row"><span>{t("Période")}</span><strong>{formatPeriod(row.periodStart, row.periodEnd)}</strong></div>
+      <div className="immo-pay-row"><span>{t("Prorata")}</span><strong>{tf("{d} jours sur {p}", { d: row.prorataDays, p: row.periodDays })}</strong></div>
+      {calc && <div className="immo-pay-row"><span>{t("Calcul")}</span><strong>{calc}</strong></div>}
+    </div>
+  );
+}
+
+// Pastille « Prorata · 20 j / 30 » des listes d'échéances (ligne séparée).
+export function ProrataBadge({ p }) {
+  if (!isProrataRow(p)) return null;
+  return (
+    <span className="immo-prorata-badge" title={formatPeriod(p.periodStart, p.periodEnd)}>{prorataBadgeText(p)}</span>
+  );
+}
+
 function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
-  const monthRent = Number(card.rent ?? card.latest?.amount) || 0;
+  // Prorata : la « période » à régler est nextDueAmount (peut être partielle) ;
+  // sans l'option c'est le loyer mensuel, comme avant.
+  const nextDueAmount = Number(card.nextDueAmount) > 0 ? Number(card.nextDueAmount) : null;
+  const monthRent = Number(nextDueAmount ?? card.rent ?? card.latest?.amount) || 0;
+  const proratedNext = Boolean(card.isProratedNext && nextDueAmount);
+  const prorataRow = card.lease?.rentProrationEnabled ? nextUnpaidProrataRow(card.list) : null;
   // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
   // payAmount/payLabel : « jusqu'à ce mois » quand on arrive depuis le détail d'un mois de la frise.
-  const [amount, setAmount] = useState(String(card.payAmount ?? (fullBalance || monthRent || "")));
+  const computedAmount = String(card.payAmount ?? (fullBalance || monthRent || ""));
+  const [amount, setAmount] = useState(computedAmount);
   const [method, setMethod] = useState(null);
   const [receivedBy, setReceivedBy] = useState("");
   const [proofFile, setProofFile] = useState(null);
@@ -612,6 +697,9 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
               <strong style={{ color: "#dc2626" }}>{money(fullBalance, card.symbol)}</strong>
             </div>
           )}
+          {isProrataRow(prorataRow) && (
+            <ProrataInfo row={prorataRow} fullAmount={card.rent} symbol={card.symbol} />
+          )}
           <label className="immo-field-label">Montant</label>
           {(fullBalance > 0 || monthRent > 0) && (
             <div className="immo-quickpay-chips">
@@ -627,12 +715,17 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
               )}
               {monthRent > 0 && (
                 <button type="button" className={Number(amount) === monthRent ? "active" : ""} onClick={() => setAmount(String(monthRent))}>
-                  1 mois · {money(monthRent, card.symbol)}
+                  {proratedNext ? t("Dernière période") : "1 mois"} · {money(monthRent, card.symbol)}
                 </button>
               )}
             </div>
           )}
           <input className="immo-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          {card.lease?.rentProrationEnabled && computedAmount && String(amount) !== computedAmount && (
+            <button type="button" className="immo-btn immo-prorata-reset" onClick={() => setAmount(computedAmount)}>
+              {t("Rétablir le montant calculé")} · {money(Number(computedAmount), card.symbol)}
+            </button>
+          )}
           {fullBalance > 0 && Number(amount) > 0 && Number(amount) < fullBalance && (
             <p className="immo-quickpay-note">Paiement partiel — il restera {money(fullBalance - Number(amount), card.symbol)} à régler.</p>
           )}
@@ -686,8 +779,9 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
 // generate-missing-payments). Contrairement à QuickPayModal, la date par
 // défaut est celle DU MOIS CONCERNÉ (pas today()) — l'échéance de janvier
 // doit se confirmer avec une date de janvier, éditable par l'utilisateur.
-function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
-  const [amount, setAmount] = useState(String(payment.amount ?? ""));
+function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClose, onConfirmed }) {
+  const computedAmount = String(payment.amount ?? "");
+  const [amount, setAmount] = useState(computedAmount);
   const [paymentDate, setPaymentDate] = useState(() => {
     const d = payment.paymentDate ? new Date(payment.paymentDate) : new Date();
     return d.toISOString().slice(0, 10);
@@ -720,18 +814,20 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
 
   const submit = async () => {
     if (busy) return;
+    const amountNum = Number(String(amount).replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(amountNum) || amountNum <= 0) { setErr(t("Montant invalide.")); return; }
     setBusy(true); setErr(null);
     try {
       const m = methods.find((x) => x.key === activeKey);
       await api.confirmPayment(payment.id, {
         paymentDate,
-        amount: Number(amount),
+        amount: amountNum,
         method: m?.label || method,
         reference: null,
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(payment.currencyId ? { currencyId: Number(payment.currencyId) } : {}),
       }, proofFile);
-      onConfirmed(`Paiement de ${money(Number(amount), payment.currencySymbol)} confirmé pour ${tenant}`);
+      onConfirmed(`Paiement de ${money(amountNum, payment.currencySymbol)} confirmé pour ${tenant}`);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -765,10 +861,18 @@ function ConfirmPayModal({ payment, methods = METHODS, onClose, onConfirmed }) {
               </button>
             </div>
           )}
+          {isProrataRow(payment) && (
+            <ProrataInfo row={payment} fullAmount={fullAmount} symbol={payment.currencySymbol} />
+          )}
           <label className="immo-field-label">Date du paiement</label>
           <input className="immo-input" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
           <label className="immo-field-label">Montant</label>
           <input className="immo-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          {isProrataRow(payment) && computedAmount && amount !== computedAmount && (
+            <button type="button" className="immo-btn immo-prorata-reset" onClick={() => setAmount(computedAmount)}>
+              {t("Rétablir le montant calculé")} · {money(Number(computedAmount), payment.currencySymbol)}
+            </button>
+          )}
           <label className="immo-field-label">Moyen de paiement</label>
           <div className="immo-method-grid">
             {methods.map((m) => (
@@ -950,8 +1054,8 @@ export function Loyers({ go }) {
   const handleReceipt = async (card) => {
     if (!card?.lease?.id) return;
     try {
-      const { lease: leaseData, payments, portalUrl } = await api.rentBook(card.lease.id);
-      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
+      const { lease: leaseData, payments, portalUrl, schedule } = await api.rentBook(card.lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error, schedule });
     } catch (e) {
       toast.error(e?.message || "Génération du carnet de quittances impossible.");
     }
@@ -1208,7 +1312,7 @@ export function Loyers({ go }) {
                     <td className="muted">{p.paymentDate || "—"}</td>
                     <td><span className="chip chip-ink">{p.method || "—"}</span></td>
                     <td><span className={`immo-pill ${isPending ? "warning" : "success"}`}>{isPending ? "En attente" : "Payé"}</span></td>
-                    <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}</td>
+                    <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}<ProrataBadge p={p} /></td>
                     <td style={{ display: "flex", gap: 6 }}>
                       {p.proofUrl && (
                         <button
@@ -1243,7 +1347,7 @@ export function Loyers({ go }) {
       {remindTarget && <RemindModal card={remindTarget} busy={!!remindingLeaseId} onClose={() => setRemindTarget(null)} onSend={(targets) => handleRemind(remindTarget, targets)} />}
       {noticeTarget && <RemindModal kind="notice" card={noticeTarget} busy={!!noticingLeaseId} onClose={() => setNoticeTarget(null)} onSend={(targets) => handleDefaultNotice(noticeTarget, targets)} />}
       {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
-      {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
+      {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} fullAmount={leases.find((l) => String(l.id) === String(confirmTarget.leaseId))?.rentAmount ?? null} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
       {proofView && <ProofModal path={`/leases/payments/${proofView.id}/proof-file`} title={tenantName(proofView)} onClose={() => setProofView(null)} />}
       {flash && <div className="immo-toast"><Check size={16} /> {flash}</div>}
     </>
@@ -1311,6 +1415,7 @@ function ReceivedReceiptCard({ p, onConfirm }) {
       <div className="muted" style={{ fontSize: 13, margin: "6px 0 10px" }}>
         {paymentMonth(p.paymentDate)} · <strong style={{ color: "var(--ink-900, inherit)" }}>{money(p.amount, p.currencySymbol || "$")}</strong>
         {pending && p.updatedAt ? ` · ${t("reçue le")} ${shortDate(p.updatedAt)}` : ""}
+        <ProrataBadge p={p} />
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button type="button" className="immo-btn" style={btn}
@@ -1443,8 +1548,8 @@ export function Paiement({ go }) {
     if (!lease?.id) return;
     setRentBookBusy(true);
     try {
-      const { lease: leaseData, payments, portalUrl } = await api.rentBook(lease.id);
-      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error });
+      const { lease: leaseData, payments, portalUrl, schedule } = await api.rentBook(lease.id);
+      await openRentBookPrint(leaseData, payments, portalUrl, { onError: toast.error, schedule });
     } catch (e) {
       toast.error(e?.message || "Génération du carnet de quittances impossible.");
     } finally {
