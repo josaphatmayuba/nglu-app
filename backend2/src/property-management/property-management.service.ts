@@ -6300,7 +6300,7 @@ export class PropertyManagementService {
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
     orgId: number,
-  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
+  ): Promise<Array<T & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
     if (!rows.length) return [];
     const leaseIds = rows.map((r) => r.id);
     const graceDays = await this.overdueGraceDays(orgId);
@@ -6352,7 +6352,7 @@ export class PropertyManagementService {
     rentAmount: number,
     today: Date,
     graceDays: number,
-  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
+  ): { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
     const start = this.parseDateOnly(startDate);
     const boundary = endDate ? this.parseDateOnly(endDate) : null;
     // Sans loyer exploitable, chaque paiement vaut une échéance.
@@ -6361,6 +6361,7 @@ export class PropertyManagementService {
 
     let dueCount = 0;
     let lateCount = 0;
+    let unpaidCount = 0;
     let isOverdue = false;
     // Date de la 1ere echeance non couverte en retard (affichee au front a la
     // place de nextInvoiceDate quand isOverdue=true, qui peut deja pointer sur
@@ -6398,6 +6399,7 @@ export class PropertyManagementService {
         graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
         if (today.getTime() > graceLimit.getTime()) {
           lateCount += 1;
+          unpaidCount += 1;
           isOverdue = true;
           if (overdueDueDate === null) overdueDueDate = this.formatDateOnly(dueDate);
         }
@@ -6409,6 +6411,7 @@ export class PropertyManagementService {
 
     return {
       lateCount,
+      unpaidCount,
       dueCount,
       lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
       isOverdue,

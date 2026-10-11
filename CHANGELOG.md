@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus — carte de bail : « impayés » ne compte plus les loyers payés en retard (v3.220.32, pas de ticket Jira).** Le backend expose `unpaidCount` (échéances dépassées et non couvertes) en plus de `lateCount` ; la carte affiche « N impayé(s) · M payé(s) en retard ». Fichiers : `property-management.service.ts`, `domus-app/src/screens/baux.jsx`. Vérifié : `tsc --noEmit` OK ; QA dev à faire.
 - **Domus — mobile : cartes de Réservations plus coupées à droite (v3.220.31, pas de ticket Jira).** La galerie (2 colonnes `1fr`) s'élargissait au contenu ; colonnes `minmax(0,1fr)`, textes tronqués avec ellipse, specs qui passent à la ligne. CSS seul.
 - **Domus — mobile : bouton « Effacer » de la signature bailleur plus coupé (v3.220.30, pas de ticket Jira).** Réglages : la ligne signature actuelle passe à la ligne au lieu de déborder. CSS seul.
 - **Domus — mobile : fin du décalage à droite (v3.220.29, pas de ticket Jira).** Baux, Réservations et Réglages dépassaient la largeur de l'écran (grilles sans `min-width:0`, cartes à 24 px de padding) ; la page glissait et coupait badges/boutons. Blocage du débordement horizontal en mode mobile, recherche/filtres pleine largeur, padding des cartes de bail réduit, et carte Leaflet ramenée sous la barre de navigation (elle interceptait les clics sur « Plus »). CSS seul (`domus-app/src/styles/app.css`).
