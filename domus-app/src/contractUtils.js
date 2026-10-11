@@ -106,15 +106,27 @@ function contractContentHtml(value = "") {
     : plainContractHtml(content);
 }
 
-function landlordPrintBlock(contract) {
+// Une signature enregistrée quasi vide (point, image 1x1) ne compte pas comme signature.
+export function isRealSignature(sig) {
+  return typeof sig === "string" && sig.startsWith("data:image") && sig.length > 600;
+}
+
+// Signature du bailleur du contrat : uniquement celle du PROPRIETAIRE du bail
+// (la signature générique des Réglages n'est plus utilisée). Vide = non signé d'avance.
+export function landlordSignatureOf(contract) {
+  const sig = contract?.landlordInfo?.signature;
+  return isRealSignature(sig) ? sig : null;
+}
+
+function landlordPrintBlock(contract, withSignature = true) {
   const company = contract?.companyInfo || {};
   const landlordInfo = contract?.landlordInfo || {};
   const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
-  const sig = landlordInfo.signature ?? company.landlordSignature;
+  const sig = withSignature ? landlordSignatureOf(contract) : null;
   if (sig) {
     return `<img class="signature-image" src="${sig}" alt="Signature bailleur" /><div class="signature-name">${escapeHtml(name)}</div>`;
   }
-  return `<div class="typed-signature">${escapeHtml(name)}</div>`;
+  return `<div class="signature-line"></div><div class="signature-name">${escapeHtml(name)}</div>`;
 }
 
 export const CONTRACT_PRINT_CSS = `
@@ -122,15 +134,15 @@ export const CONTRACT_PRINT_CSS = `
       background: #ffffff;
       color: #1a1a1a;
       font-family: Georgia, "Times New Roman", serif;
-      font-size: 13px;
-      line-height: 1.7;
+      font-size: 12px;
+      line-height: 1.5;
       margin: 0;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .contract-doc * { box-sizing: border-box; }
     .contract-doc img { max-width: 100%; }
-    .print-actions { margin: 16px 0 28px; text-align: right; }
+    .print-actions { margin: 10px 0 14px; text-align: right; }
     .print-actions button {
       background: #1a1a1a;
       border: 1px solid #b08d3e;
@@ -149,8 +161,8 @@ export const CONTRACT_PRINT_CSS = `
       letter-spacing: .3em;
       text-transform: uppercase;
     }
-    .contract-doc .contract-content { color: #292524; font-size: 13px; line-height: 1.75; margin-top: 26px; }
-    .contract-doc .contract-content p { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
+    .contract-doc .contract-content { color: #292524; font-size: 12px; line-height: 1.5; margin-top: 12px; }
+    .contract-doc .contract-content p { margin: 0 0 7px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content li { margin-bottom: 6px; orphans: 3; widows: 3; }
     .contract-doc .contract-content ul, .contract-doc .contract-content ol { margin: 0 0 14px; padding-left: 26px; }
     .contract-doc .contract-content h1, .contract-doc .contract-content h2, .contract-doc .contract-content h3, .contract-doc .contract-content h4 {
@@ -169,15 +181,15 @@ export const CONTRACT_PRINT_CSS = `
     .contract-doc .contract-content th, .contract-doc .contract-content td { border: 1px solid #d6d3d1; padding: 7px 10px; text-align: left; vertical-align: top; }
     .contract-doc .contract-content th { background: #faf7f0; font-variant: small-caps; letter-spacing: .06em; }
     .contract-doc .contract-content hr { border: 0; border-top: 1px solid #d6c39a; margin: 22px auto; width: 60%; }
-    .contract-doc .contract-content .para { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
+    .contract-doc .contract-content .para { margin: 0 0 7px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content .doc-title {
       border-bottom: 3px double #b08d3e;
       color: #1a1a1a;
       font-size: 21px;
       font-weight: normal;
       letter-spacing: .16em;
-      margin: 6px auto 30px;
-      padding-bottom: 14px;
+      margin: 4px auto 16px;
+      padding-bottom: 8px;
       text-align: center;
       text-transform: uppercase;
       width: fit-content;
@@ -189,7 +201,7 @@ export const CONTRACT_PRINT_CSS = `
       font-variant: small-caps;
       font-weight: bold;
       letter-spacing: .14em;
-      margin: 32px 0 10px;
+      margin: 16px 0 6px;
       page-break-after: avoid;
       text-align: center;
     }
@@ -211,8 +223,8 @@ export const CONTRACT_PRINT_CSS = `
       margin: 0 0 12px;
       padding: 8px 14px;
     }
-    .contract-doc .plain-contract-content { font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.75; margin: 0; }
-    .contract-doc .signature { break-inside: avoid; margin-top: 44px; page-break-inside: avoid; padding-top: 24px; position: relative; }
+    .contract-doc .plain-contract-content { font-family: Georgia, "Times New Roman", serif; font-size: 12px; line-height: 1.5; margin: 0; }
+    .contract-doc .signature { break-inside: avoid; margin-top: 22px; page-break-inside: avoid; padding-top: 14px; position: relative; }
     .contract-doc .signature::before {
       border-top: 3px double #b08d3e;
       content: "";
@@ -236,7 +248,7 @@ export const CONTRACT_PRINT_CSS = `
     .contract-doc .signature-image {
       background: #fff;
       border: 1px solid #d6c39a;
-      max-height: 110px;
+      max-height: 80px;
       max-width: 300px;
       padding: 10px;
     }
@@ -255,34 +267,38 @@ export const CONTRACT_PRINT_CSS = `
     }
 `;
 
-export function contractPrintBody(contract) {
-  const dots = "..............................";
-  const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
-  const landlordSignature = contract?.landlordInfo?.signature ?? contract?.companyInfo?.landlordSignature;
-  const landlordSignedDate = landlordSignature && (contract?.sentAt || contract?.createdAt)
+const SIG_DOTS = "..............................";
+
+// Grille des deux signatures. withSignatures=false : emplacements vides, à signer à la main.
+function signatureGridHtml(contract, withSignatures = true) {
+  const landlordSig = withSignatures ? landlordSignatureOf(contract) : null;
+  const landlordDate = landlordSig && (contract?.sentAt || contract?.createdAt)
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
-    : dots;
-  const tenantSignature = contract?.signatureData
+    : SIG_DOTS;
+  const hasTenantSig = withSignatures && contract?.signatureData;
+  const tenantDate = hasTenantSig && contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : SIG_DOTS;
+  const tenantSignature = hasTenantSig
     ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
     : `<div class="signature-line"></div>`;
+  return `<div class="signature-grid">
+      <div>
+        <h2>Signature du bailleur</h2>${landlordPrintBlock(contract, withSignatures)}
+        <div class="signature-date">Signé le : ${landlordDate}</div>
+      </div>
+      <div>
+        <h2>Signature du locataire</h2>${tenantSignature}
+        <div class="signature-date">Signé le : ${tenantDate}</div>
+      </div>
+    </div>`;
+}
 
+export function contractPrintBody(contract) {
   return `
   <div class="header">
     <div class="doc-ref">${escapeHtml(contractRef(contract))}</div>
   </div>
   <div class="contract-content">${contractContentHtml(contract?.contractContent || "")}</div>
-  <div class="signature">
-    <div class="signature-grid">
-      <div>
-        <h2>Signature du bailleur</h2>${landlordPrintBlock(contract)}
-        <div class="signature-date">Signé le : ${landlordSignedDate}</div>
-      </div>
-      <div>
-        <h2>Signature du locataire</h2>${tenantSignature}
-        <div class="signature-date">Signé le : ${tenantSignedDate}</div>
-      </div>
-    </div>
-  </div>`;
+  <div class="signature">${signatureGridHtml(contract)}</div>`;
 }
 
 export function contractPrintHtml(contract) {
@@ -292,14 +308,15 @@ export function contractPrintHtml(contract) {
   <meta charset="utf-8" />
   <title>Contrat ${escapeHtml(contractRef(contract))}</title>
   <style>
-    @page { size: A4; margin: 20mm 18mm; }
+    @page { size: A4; margin: 12mm 15mm; }
     body { margin: 0; }
 ${CONTRACT_PRINT_CSS}
+    .print-actions label { font-family: Arial, sans-serif; font-size: 12px; margin-right: 14px; }
     @media print { .print-actions { display: none; } }
   </style>
 </head>
 <body class="contract-doc">
-  <div class="print-actions"><button type="button">Imprimer / PDF</button></div>
+  <div class="print-actions">${landlordSignatureOf(contract) || contract?.signatureData ? '<label><input type="checkbox" id="sig-toggle" checked /> Inclure les signatures électroniques (décochez pour signer à la main)</label> ' : ""}<button type="button">Imprimer / PDF</button></div>
 ${contractPrintBody(contract)}
 </body>
 </html>`;
@@ -322,7 +339,12 @@ export function openContractPrint(contract, { autoPrint = true, onError } = {}) 
   };
   const btn = win.document.querySelector(".print-actions button");
   if (btn) btn.addEventListener("click", triggerPrint);
-  if (autoPrint) {
+  const toggle = win.document.getElementById("sig-toggle");
+  const sigBox = win.document.querySelector(".signature");
+  if (toggle && sigBox) {
+    toggle.addEventListener("change", () => { sigBox.innerHTML = signatureGridHtml(contract, toggle.checked); });
+  }
+  if (autoPrint && !toggle) {
     if (win.document.readyState === "complete") setTimeout(triggerPrint, 250);
     else win.addEventListener("load", () => setTimeout(triggerPrint, 250));
   }

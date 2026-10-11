@@ -2387,6 +2387,8 @@ export const appSettings = mysqlTable("appSetting", {
   leaseExpiryNoticeDays: int("lease_expiry_notice_days"),
   rentReminderHour: int("rent_reminder_hour"),
   rentOverdueGraceDays: int("rent_overdue_grace_days"),
+  // Envoi des SMS (Reglages). NULL = actif ; 0 = desactive.
+  smsEnabled: tinyint("sms_enabled"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

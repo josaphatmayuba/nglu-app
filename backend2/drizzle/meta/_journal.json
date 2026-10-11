@@ -1982,6 +1982,13 @@
       "when": 1781071200058,
       "tag": "0307_message_templates_distinct_amount_vars",
       "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "5",
+      "when": 1781157600000,
+      "tag": "0308_app_setting_sms_enabled",
+      "breakpoints": true
     }
   ]
 }

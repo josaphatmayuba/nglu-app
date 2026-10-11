@@ -9,7 +9,7 @@ import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
   AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef,
-  formatAuditWhen, formatSignedAt, hasHtmlMarkup, openContractPrint, signingUrlFromContract,
+  formatAuditWhen, formatSignedAt, hasHtmlMarkup, landlordSignatureOf, openContractPrint, signingUrlFromContract,
 } from "../contractUtils.js";
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, useApi } from "../data.js";
@@ -409,9 +409,9 @@ export function Contrats() {
                   <div className="contrats-paper-sigs">
                     <div>
                       <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
-                      {detail?.landlordInfo?.signature || detail?.companyInfo?.landlordSignature || detail?.landlordSignature ? (
+                      {landlordSignatureOf(detail) ? (
                         <img
-                          src={detail.landlordInfo?.signature || detail.companyInfo?.landlordSignature || detail.landlordSignature}
+                          src={landlordSignatureOf(detail)}
                           alt="Signature bailleur"
                           className="contrats-sig-img"
                         />

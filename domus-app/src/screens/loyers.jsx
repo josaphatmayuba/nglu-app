@@ -207,7 +207,13 @@ const STATUS_META = {
 function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
   const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [] } = card;
   const [showMonths, setShowMonths] = useState(false);
+  const [proofOpen, setProofOpen] = useState(null); // paiement dont on affiche la preuve
   const [selMonth, setSelMonth] = useState(null);
+  const [bookBusy, setBookBusy] = useState(false);
+  const openBook = async () => {
+    setBookBusy(true);
+    try { await onReceipt?.(card); } finally { setBookBusy(false); }
+  };
   // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
   // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
   // qui doit le seul mois en cours n'est pas en defaut : pas de bouton.
@@ -376,11 +382,14 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                       <strong>{fmtMonthYear(d)} · {t("payé")}</strong>
                       {pp && <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{money(pp.amount, pp.currencySymbol || cur)}{pp.paymentDate ? ` · ${new Date(pp.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>}
                       {pp?.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{pp.method}</strong></div>}
-                      {lease && (
-                        <button type="button" className="immo-btn primary" onClick={() => onReceipt?.(card)}>
-                          <FileDown size={14} /> {t("Quittances (PDF)")}
+                      {pp?.proofUrl ? (
+                        <button type="button" className="immo-btn primary" onClick={() => setProofOpen(pp)}>
+                          <FileDown size={14} /> {t("Quittance signée")}
                         </button>
+                      ) : (
+                        <p className="muted">{t("Aucune quittance signée jointe.")}</p>
                       )}
+                      {proofOpen && <ProofModal path={`/leases/payments/${proofOpen.id}/proof-file`} title={`${t("Quittance signée")} · ${fmtMonthYear(d)}`} onClose={() => setProofOpen(null)} />}
                     </div>
                   );
                 }
@@ -435,7 +444,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
       </div>
       </>
       )}
-      {(actionable || missingMonths || (status === "late" && lease) || canNotifyDefault) && (
+      {(actionable || missingMonths || lease?.id || canNotifyDefault) && (
         <div className="immo-pay-actions">
           {actionable && (
             <button type="button" className="immo-btn primary pay-main" onClick={() => onPay(card)}>
@@ -459,6 +468,12 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
               title={noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
               disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
               <AlertTriangle size={14} /> {noticing ? "…" : t("Préavis")}
+            </button>
+          )}
+          {lease?.id && (
+            <button type="button" className="immo-btn"
+              title={t("Imprimer le carnet de quittances (PDF)")} disabled={bookBusy} onClick={openBook}>
+              <FileDown size={14} /> {bookBusy ? t("Génération…") : t("Imprimer le carnet")}
             </button>
           )}
         </div>
@@ -1730,7 +1745,7 @@ export function Paiement({ go }) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
               <button type="button" className="btn" style={{ justifyContent: "center", minHeight: 44 }} disabled={rentBookBusy} onClick={handleRentBookPdf}>
-                <FileDown size={16} /> {rentBookBusy ? "Génération…" : "Carnet PDF"}
+                <FileDown size={16} /> {rentBookBusy ? "Génération…" : "Imprimer le carnet"}
               </button>
               {waHref ? (
                 <a className="btn" href={waHref} target="_blank" rel="noopener noreferrer" style={{ justifyContent: "center", minHeight: 44, textDecoration: "none" }}>

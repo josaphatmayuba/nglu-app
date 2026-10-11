@@ -98,10 +98,13 @@ function leaseInfo(l) {
   const dueCount = Number.isFinite(l.dueCount) ? l.dueCount : null;
   const lateCount = Number.isFinite(l.lateCount) ? l.lateCount : null;
   const paidOnTimeCount = dueCount !== null && lateCount !== null ? Math.max(0, dueCount - lateCount) : null;
+  // unpaidCount = échéances réellement non payées ; le reste de lateCount = payées en retard.
+  const unpaidCount = Number.isFinite(l.unpaidCount) ? Math.min(l.unpaidCount, lateCount ?? l.unpaidCount) : (l.isOverdue ? lateCount : 0);
+  const paidLateCount = lateCount !== null ? Math.max(0, lateCount - (unpaidCount || 0)) : null;
 
   return {
     variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
-    dueCount, lateCount, paidOnTimeCount, isOverdue: !!l.isOverdue,
+    dueCount, lateCount, unpaidCount, paidLateCount, paidOnTimeCount, isOverdue: !!l.isOverdue,
     reference: `#${l.reference || `LEASE-${l.id}`}`,
     propertyLabel: [l.propertyAddress || l.propertyName, l.unitName].filter(Boolean).join(" · ") || "—",
   };
@@ -363,9 +366,9 @@ export function Baux({ go } = {}) {
                       : info.dueCount === null
                         ? "—"
                         : info.lateCount > 0
-                          ? info.paidOnTimeCount === 0
-                            ? `${info.lateCount} loyer${info.lateCount > 1 ? "s" : ""} impayé${info.lateCount > 1 ? "s" : ""}`
-                            : `${info.paidOnTimeCount} payé${info.paidOnTimeCount > 1 ? "s" : ""} sur ${info.dueCount} · ${info.lateCount} en retard`
+                          ? info.unpaidCount > 0
+                            ? `${info.unpaidCount} loyer${info.unpaidCount > 1 ? "s" : ""} impayé${info.unpaidCount > 1 ? "s" : ""}${info.paidLateCount > 0 ? ` · ${info.paidLateCount} payé${info.paidLateCount > 1 ? "s" : ""} en retard` : ""}`
+                            : `${info.paidLateCount} payé${info.paidLateCount > 1 ? "s" : ""} en retard sur ${info.dueCount}`
                           : `${info.paidOnTimeCount || info.dueCount} paiements à jour`}
                   </small>
                 </div>
@@ -1134,7 +1137,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
             <button className="immo-btn" disabled={rentBookBusy} onClick={handleRentBook}>
-              <FileDown size={15} /> {rentBookBusy ? "Génération…" : "Carnet de quittances"}
+              <FileDown size={15} /> {rentBookBusy ? "Génération…" : "Imprimer le carnet"}
             </button>
             <button className="immo-btn" onClick={() => { onClose(); go("maintenance"); }}><Wrench size={15} /> Tickets maintenance</button>
           </div>
