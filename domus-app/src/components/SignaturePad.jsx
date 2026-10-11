@@ -16,6 +16,8 @@ export function SignaturePad({
 }) {
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
+  const lastRef = useRef(null);
+  const lengthRef = useRef(0);
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -41,6 +43,8 @@ export function SignaturePad({
     drawingRef.current = true;
     const ctx = canvasRef.current.getContext("2d");
     const { x, y } = getPoint(e);
+    lastRef.current = { x, y };
+    lengthRef.current = 0;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.strokeStyle = "#18181b";
@@ -52,12 +56,17 @@ export function SignaturePad({
     e.preventDefault();
     const { x, y } = getPoint(e);
     const ctx = canvasRef.current.getContext("2d");
+    const last = lastRef.current;
+    if (last) lengthRef.current += Math.hypot(x - last.x, y - last.y);
+    lastRef.current = { x, y };
     ctx.lineTo(x, y);
     ctx.stroke();
   };
   const endDraw = () => {
     if (!drawingRef.current) return;
     drawingRef.current = false;
+    // Un simple clic/point n'est pas une signature : on n'enregistre qu'un vrai tracé.
+    if (lengthRef.current < 20) return;
     onChange?.(canvasRef.current.toDataURL("image/png"));
   };
 
