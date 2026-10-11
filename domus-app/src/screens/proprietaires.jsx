@@ -257,6 +257,7 @@ export function Proprietaires({ go } = {}) {
 
 function OwnerModal({ value, busy, error, onClose, onSave }) {
   const [form, setForm] = useState(value);
+  const [signEnabled, setSignEnabled] = useState(!!value.signature);
   const set = (patch) => setForm((cur) => ({ ...cur, ...patch }));
   const isCompany = form.ownerType === "company";
 
@@ -324,7 +325,15 @@ function OwnerModal({ value, busy, error, onClose, onSave }) {
         </FormSection>
 
         <FormSection icon={<FileSignature size={14} />} title={t("Signature")}>
-          <SignaturePad value={form.signature} onChange={(v) => set({ signature: v })} />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={signEnabled}
+              onChange={(e) => { setSignEnabled(e.target.checked); if (!e.target.checked) set({ signature: null }); }}
+            />
+            {t("Ajouter une signature électronique (sinon, signer à la main sur le contrat imprimé)")}
+          </label>
+          {signEnabled && <SignaturePad value={form.signature} onChange={(v) => set({ signature: v })} />}
         </FormSection>
 
         <FormSection icon={<Info size={14} />} title={t("Notes")}>
