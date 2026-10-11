@@ -177,6 +177,7 @@ export class RentReminderService {
         firstName: lease.tenantFirstName || tenantName,
         reference: lease.reference || "",
         amount,
+        monthlyRent: amount,
         address: place,
         daysLate: String(daysLate),
         companyName,
@@ -188,7 +189,7 @@ export class RentReminderService {
       };
       const tenantMsg = await this.ownerNotifications.renderMessage(
         "payment_reminder",
-        "Bonjour {tenantName}, votre loyer de {amount} (bail {reference}) a {daysLate} j de retard. " +
+        "Bonjour {tenantName}, votre loyer de {monthlyRent} (bail {reference}) a {lateLabel} de retard. " +
           "Merci de regulariser rapidement. Contact : {contacts}",
         vars,
         { tenantId: lease.tenantId },
@@ -219,7 +220,7 @@ export class RentReminderService {
         // "payment_reminder_contact" dans les Reglages.
         const emergencyMsg = await this.ownerNotifications.renderMessage(
           "payment_reminder_contact",
-          "Bonjour, {tenantName} a {daysLate} j de retard de loyer ({amount}). " +
+          "Bonjour, {tenantName} a {lateLabel} de retard de loyer ({monthlyRent}). " +
             "Merci de l'inviter a regulariser : {contacts}",
           vars,
           { tenantId: lease.tenantId },
