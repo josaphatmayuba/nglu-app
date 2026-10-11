@@ -1749,6 +1749,21 @@ export class PropertyManagementController {
     return this.contractsService.markSignedManually(id, document, orgId, createdByName);
   }
 
+  @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("contracts/:id/template")
+  @HttpCode(200)
+  changeContractTemplate(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { templateId?: number },
+    @CurrentOrg() orgId: number,
+  ) {
+    const templateId = Number(body?.templateId);
+    if (!Number.isInteger(templateId) || templateId <= 0) throw new BadRequestException("templateId invalide.");
+    return this.contractsService.changeContractTemplate(id, templateId, orgId);
+  }
+
   @ApiOperation({ summary: "Delete a contract" })
   @Permissions("delete-propertyManagement")
   @Delete("contracts/:id")

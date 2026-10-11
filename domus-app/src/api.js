@@ -516,6 +516,7 @@ export const api = {
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
   deleteContract: (id) => del(`/contracts/${id}`),
+  changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
   markContractSignedManually: (id, file) => {
     const form = new FormData();
     form.append("document", file);

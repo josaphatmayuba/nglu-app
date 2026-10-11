@@ -817,6 +817,35 @@ export class ContractsService {
     return { lease: { id: newLeaseId, reference }, contract: newContract };
   }
 
+  /** Re-genere le texte d'un contrat BROUILLON avec un autre modele (aucun effet une fois envoye/signe). */
+  async changeContractTemplate(id: number, templateId: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId, status: realEstateContracts.status })
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    if (rows[0].status !== "draft") {
+      throw new BadRequestException("Le modele ne peut etre change que sur un contrat en brouillon.");
+    }
+
+    const template = await this.templates.getById(templateId, orgId).catch(() => null);
+    if (!template) throw new NotFoundException("Template not found.");
+
+    const lease = await this.getLeaseDetails(rows[0].leaseId, orgId);
+    const company = await this.getCompanyInfo(orgId);
+    const content = await this.renderContent(lease, company, orgId, templateId);
+
+    await this.db
+      .update(realEstateContracts)
+      .set({ contractContent: content, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
+    await this.log(id, orgId, "template_changed", null, null, `Template changed to "${template.name}"`);
+    await this.publishContractUpdate("updated", id, rows[0].leaseId);
+    return this.getContract(id, orgId);
+  }
+
   async deleteContract(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId })
