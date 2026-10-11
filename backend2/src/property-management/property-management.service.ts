@@ -100,6 +100,14 @@ import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
+import { anchoredPeriodDays, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
+import {
+  assignPaidRows,
+  computeLeaseNextDue,
+  computeProratedOverdueStats,
+  planProrationRealign,
+  scheduleForLease,
+} from "./lease-proration";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -1822,7 +1830,11 @@ export class PropertyManagementService {
       currencyId,
       startDate: this.requiredDate(input.startDate),
       endDate: this.date(input.endDate),
-      nextInvoiceDate: this.date(input.nextInvoiceDate),
+      // Prorata actif : 1re echeance = startDate (jamais avant le debut du bail).
+      nextInvoiceDate: input.rentProrationEnabled
+        ? this.clampNextInvoiceToStart(input.nextInvoiceDate, input.startDate)
+        : this.date(input.nextInvoiceDate),
+      rentProrationEnabled: input.rentProrationEnabled ? 1 : 0,
       billingCycle: input.billingCycle ?? "monthly",
       rentAmount: this.money(input.rentAmount),
       securityDeposit: this.money(input.securityDeposit),
@@ -1993,8 +2005,12 @@ export class PropertyManagementService {
     }
   }
 
-  async updateLease(id: number, input: UpdateLeaseDto, orgId: number) {
+  async updateLease(id: number, input: UpdateLeaseDto, orgId: number, propertyScope: "all" | number[] = "all") {
     const current = await this.getLeaseOrThrow(id, orgId);
+    this.ensurePropertyInScope(current.propertyId, propertyScope);
+    if (input.propertyId !== undefined && input.propertyId !== current.propertyId) {
+      this.ensurePropertyInScope(input.propertyId, propertyScope);
+    }
     await this.ensureLeaseReferences(
       input.propertyId ?? current.propertyId,
       input.unitId ?? current.unitId,
@@ -2024,6 +2040,10 @@ export class PropertyManagementService {
       );
     }
 
+    const wasProration = !!(current as any).rentProrationEnabled;
+    const resultingProration =
+      input.rentProrationEnabled !== undefined ? !!input.rentProrationEnabled : wasProration;
+
     await this.db
       .update(realEstateLeases)
       .set({
@@ -2047,6 +2067,17 @@ export class PropertyManagementService {
         ...(input.startDate !== undefined ? { startDate: this.requiredDate(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: this.date(input.endDate) } : {}),
         ...(input.nextInvoiceDate !== undefined ? { nextInvoiceDate: this.date(input.nextInvoiceDate) } : {}),
+        ...(input.rentProrationEnabled !== undefined ? { rentProrationEnabled: input.rentProrationEnabled ? 1 : 0 } : {}),
+        // Prorata (deja ou nouvellement actif) : nextInvoiceDate absente -> 1re echeance,
+        // anterieure a startDate -> ramenee a startDate.
+        ...(resultingProration && (input.nextInvoiceDate !== undefined || !current.nextInvoiceDate)
+          ? {
+              nextInvoiceDate: this.clampNextInvoiceToStart(
+                input.nextInvoiceDate !== undefined ? input.nextInvoiceDate : current.nextInvoiceDate,
+                input.startDate !== undefined ? input.startDate : (current.startDate as string),
+              ),
+            }
+          : {}),
         ...(input.rentAmount !== undefined ? { rentAmount: this.money(input.rentAmount) } : {}),
         ...(input.securityDeposit !== undefined ? { securityDeposit: this.money(input.securityDeposit) } : {}),
         ...(input.moveInMeterReading !== undefined
@@ -2066,6 +2097,20 @@ export class PropertyManagementService {
     }
     if (["inactive", "ended", "cancelled"].includes(input.status ?? "")) {
       await this.setUnitStatus(nextUnitId, "vacant");
+    }
+
+    // Activation du prorata (0 -> 1) : realigne les echeances pending.
+    // Bail deja au prorata dont dates / cycle / loyer changent : realigne aussi
+    // (sinon doublons de pending a l'ancien periodStart).
+    // Desactivation (1 -> 0) : rien n'est reecrit.
+    const day = (v: unknown) => (v ? String(v).slice(0, 10) : null);
+    const scheduleChanged =
+      (input.startDate !== undefined && day(input.startDate) !== day(current.startDate)) ||
+      (input.endDate !== undefined && day(input.endDate) !== day(current.endDate)) ||
+      (input.billingCycle !== undefined && input.billingCycle !== current.billingCycle) ||
+      (input.rentAmount !== undefined && Number(input.rentAmount) !== Number(current.rentAmount));
+    if (resultingProration && (!wasProration || scheduleChanged)) {
+      await this.realignLeaseProration(id, orgId);
     }
 
     await this.publishLeaseUpdate("updated", id, {
@@ -2089,8 +2134,9 @@ export class PropertyManagementService {
     return { message: "Lease deleted successfully." };
   }
 
-  payments(orgId: number, propertyScope: "all" | number[] = "all") {
-    return this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
+  async payments(orgId: number, propertyScope: "all" | number[] = "all") {
+    const rows = await this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
+    return rows.map((r) => this.decoratePaymentRow(r));
   }
 
   private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all", leaseId?: number) {
@@ -2113,6 +2159,13 @@ export class PropertyManagementService {
         // preuve jointe par le gestionnaire a l'encaissement (meme colonne).
         proofUploadCount: realEstateRentPayments.proofUploadCount,
         updatedAt: realEstateRentPayments.updatedAt,
+        // Periode couverte (NULL = historique) ; leaseBillingCycle/leaseProrationEnabled
+        // servent uniquement a decoratePaymentRow et sont retires de la reponse.
+        periodStart: realEstateRentPayments.periodStart,
+        periodEnd: realEstateRentPayments.periodEnd,
+        leaseBillingCycle: paymentLease.billingCycle,
+        leaseProrationEnabled: paymentLease.rentProrationEnabled,
+        leaseStartDate: paymentLease.startDate,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -2164,13 +2217,19 @@ export class PropertyManagementService {
       ?? (lease as any).currencyId
       ?? (await this.resolveDefaultCurrency(orgId));
 
+    // Prorata actif : un seul arrondi (decimales de la devise du bail) AVANT
+    // transaction / ledger / table plate, pour qu'ils restent identiques.
+    const payAmount = (lease as any).rentProrationEnabled
+      ? roundMoney(Number(input.amount), await this.currencyDecimals(paymentCurrencyId))
+      : input.amount;
+
     const [transactionResult] = await this.db.insert(transactions).values({
       organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId: rentPaymentType.creditAccountId,
       particulars: input.notes || "Payment for rent",
-      amount: input.amount,
+      amount: payAmount,
       currencyId: paymentCurrencyId ?? null,
       type: "Rent Payment",
       relatedId: String(lease.id),
@@ -2181,7 +2240,7 @@ export class PropertyManagementService {
 
     // Taxe par bail (incluse/informative) : on enregistre la part de taxe
     // contenue dans le paiement, sans changer le montant payé.
-    const taxAmt = this.computeInclusiveTax(Number(input.amount), lease as any);
+    const taxAmt = this.computeInclusiveTax(Number(payAmount), lease as any);
 
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
       organizationId: orgId,
@@ -2189,7 +2248,7 @@ export class PropertyManagementService {
       currencyId: paymentCurrencyId,
       transactionId: Number(transactionResult.insertId),
       paymentDate: this.requiredDate(input.paymentDate),
-      amount: this.money(input.amount),
+      amount: this.money(payAmount),
       method: input.method ?? "cash",
       reference: input.reference ?? null,
       receivedBy: input.receivedBy ?? null,
@@ -2227,8 +2286,8 @@ export class PropertyManagementService {
     // Ecriture comptable moderne (partie double) via LedgerService — dual-write,
     // idempotent par paiement. Loyer + part de taxe regroupes dans une ecriture.
     const rentLines = [
-      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
-      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(payAmount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(payAmount), description: input.notes || "Payment for rent" },
     ];
     if (taxAmt != null && taxAmt > 0) {
       const taxType = await this.getRealEstateTaxTypeOptional(orgId);
@@ -2260,8 +2319,8 @@ export class PropertyManagementService {
     });
     // Confirmation d'encaissement : quittance au locataire, avis au
     // proprietaire du bien. Best-effort, jamais bloquant pour le paiement.
-    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), input.amount, orgId);
-    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), input.amount, orgId);
+    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), payAmount, orgId);
+    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), payAmount, orgId);
     return this.findPayment(paymentId);
   }
 
@@ -2321,6 +2380,12 @@ export class PropertyManagementService {
   // (upToEnd=false) inchangé pour l'appel API existant (baux rétroactifs).
   async generateMissingPayments(leaseId: number, orgId: number, upToEnd = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+
+    // Prorata opt-in : generation par periode de l'echeancier (branche dediee,
+    // le calcul historique ci-dessous reste strictement inchange).
+    if ((lease as any).rentProrationEnabled) {
+      return this.generateMissingPaymentsProrated(lease, orgId, upToEnd);
+    }
 
     const existing = await this.db
       .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate })
@@ -2416,6 +2481,291 @@ export class PropertyManagementService {
     return { createdCount: created.length, payments };
   }
 
+  // ─── Prorata du loyer (opt-in par bail : real_estate_leases.rentProrationEnabled) ───
+
+  /** Decimales de la devise (table currency.decimalPlaces) ; defaut 2. */
+  private async currencyDecimals(currencyId: number | null | undefined): Promise<number> {
+    if (!currencyId) return 2;
+    const [row] = await this.db
+      .select({ d: currencies.decimalPlaces })
+      .from(currencies)
+      .where(eq(currencies.id, Number(currencyId)))
+      .limit(1);
+    const d = row?.d == null ? NaN : Number(row.d);
+    // Plafonne a 2 : les colonnes montant sont decimal(..., 2).
+    return Number.isInteger(d) && d >= 0 ? Math.min(d, 2) : 2;
+  }
+
+  /** nextInvoiceDate d'un bail au prorata : absente -> startDate ; anterieure a startDate -> startDate. */
+  private clampNextInvoiceToStart(next: string | null | undefined, start: string): string {
+    return next && String(next).slice(0, 10) >= String(start).slice(0, 10)
+      ? String(next).slice(0, 10)
+      : String(start).slice(0, 10);
+  }
+
+  // Pas d'index unique (lease_id, period_start) possible : une ligne 'voided'
+  // garde son period_start et bloquerait la recreation. Anti-doublon applicatif :
+  // verrou de la ligne bail (FOR UPDATE) puis relecture + insertion dans la meme transaction.
+  private async generateMissingPaymentsProrated(
+    lease: typeof realEstateLeases.$inferSelect,
+    orgId: number,
+    upToEnd: boolean,
+  ) {
+    const decimals = await this.currencyDecimals(lease.currencyId);
+    return this.db.transaction(async (tx) => {
+      await tx
+        .select({ id: realEstateLeases.id })
+        .from(realEstateLeases)
+        .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)))
+        .for("update");
+      return this.generateMissingPaymentsProratedTx(tx as any, lease, orgId, upToEnd, decimals);
+    });
+  }
+
+  private async generateMissingPaymentsProratedTx(
+    db: any,
+    lease: typeof realEstateLeases.$inferSelect,
+    orgId: number,
+    upToEnd: boolean,
+    decimals: number,
+  ) {
+    const existing: Array<{ id: number; status: string; amount: any; paymentDate: any; periodStart: any }> = await db
+      .select({
+        id: realEstateRentPayments.id,
+        status: realEstateRentPayments.status,
+        amount: realEstateRentPayments.amount,
+        paymentDate: realEstateRentPayments.paymentDate,
+        periodStart: realEstateRentPayments.periodStart,
+      })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+        ne(realEstateRentPayments.status, "voided"),
+      ));
+
+    const todayStr = this.formatDateOnly(new Date());
+    const today = this.parseDateOnly(todayStr);
+    const paidTotal = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const full = scheduleForLease(lease as any, decimals, paidTotal, todayStr, 14);
+    // Bornes : upToEnd -> toute la duree (bail sans fin : jusqu'a la fin du mois
+    // courant + 11 mois, comme l'historique) ; sinon uniquement les echeances echues.
+    const horizonEnd = upToEnd
+      ? (lease.endDate ? null : this.formatDateOnly(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 12, 0))))
+      : todayStr;
+    const schedule = horizonEnd ? full.filter((p) => p.dueDate <= horizonEnd) : full;
+
+    // Idempotence : par periodStart ; repli sur la cle mois YYYY-MM pour les
+    // lignes sans period_* (historique ou creees avant l'activation).
+    // Les cles mois ne viennent QUE des pending sans periodStart : une ligne paid
+    // sans periodStart est rattachee par couverture cumulee (assignPaidRows), pas
+    // par le mois de sa date de paiement reelle.
+    const periodStarts = new Set(existing.filter((p) => p.periodStart).map((p) => String(p.periodStart).slice(0, 10)));
+    const monthKeys = new Set(
+      existing.filter((p) => p.status === "pending" && !p.periodStart).map((p) => String(p.paymentDate).slice(0, 7)),
+    );
+    const paidCovered = assignPaidRows(
+      full,
+      existing.filter((p) => p.status === "paid").map((p) => ({ ...p, id: p.id })),
+      decimals,
+    ).taken;
+
+    const created: number[] = [];
+    for (const period of schedule) {
+      if (periodStarts.has(period.periodStart)) continue;
+      if (monthKeys.has(period.dueDate.slice(0, 7))) continue;
+      if (paidCovered.has(period.index)) continue;
+      const [result] = await db.insert(realEstateRentPayments).values({
+        organizationId: orgId,
+        leaseId: lease.id,
+        currencyId: (lease as any).currencyId ?? null,
+        transactionId: null,
+        paymentDate: period.dueDate,
+        amount: this.money(period.amount),
+        method: "pending",
+        status: "pending",
+        reference: null,
+        notes: "Echeance generee automatiquement (prorata) — a confirmer.",
+        proofUrl: null,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+      created.push(Number((result as any).insertId));
+    }
+
+    const payments = created.length
+      ? await db.select().from(realEstateRentPayments).where(inArray(realEstateRentPayments.id, created))
+      : [];
+    return { createdCount: created.length, payments };
+  }
+
+  /** Lignes non annulees d'un bail + plan de realignement calcule comme si le prorata etait actif. */
+  private async buildProrationPlan(lease: typeof realEstateLeases.$inferSelect, orgId: number) {
+    const decimals = await this.currencyDecimals(lease.currencyId);
+    const rows = await this.db
+      .select({
+        id: realEstateRentPayments.id,
+        status: realEstateRentPayments.status,
+        paymentDate: realEstateRentPayments.paymentDate,
+        amount: realEstateRentPayments.amount,
+        transactionId: realEstateRentPayments.transactionId,
+        proofUrl: realEstateRentPayments.proofUrl,
+        proofUploadCount: realEstateRentPayments.proofUploadCount,
+        periodStart: realEstateRentPayments.periodStart,
+        periodEnd: realEstateRentPayments.periodEnd,
+      })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+        ne(realEstateRentPayments.status, "voided"),
+      ))
+      .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
+    const paidTotal = rows.filter((r) => r.status === "paid").reduce((s, r) => s + Number(r.amount || 0), 0);
+    const schedule = scheduleForLease(lease as any, decimals, paidTotal, this.formatDateOnly(new Date()), 14);
+    const actions = planProrationRealign(schedule, rows as any, decimals);
+    return { decimals, rows, schedule, actions };
+  }
+
+  // Apercu SANS ecriture du realignement (calcule comme si le prorata etait actif).
+  async prorationPreview(leaseId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const { decimals, rows, schedule, actions } = await this.buildProrationPlan(lease, orgId);
+    const byId = new Map(actions.map((a) => [a.rowId, a]));
+    return {
+      leaseId,
+      rentProrationEnabled: !!(lease as any).rentProrationEnabled,
+      currencyDecimals: decimals,
+      schedule,
+      currentRows: rows.map((r) => ({
+        id: r.id,
+        status: r.status,
+        paymentDate: r.paymentDate,
+        amount: Number(r.amount || 0),
+        periodStart: r.periodStart ?? null,
+        periodEnd: r.periodEnd ?? null,
+        action: byId.get(r.id)!.action,
+        proposed: byId.get(r.id)!.proposed,
+      })),
+      totalProposed: roundMoney(schedule.reduce((s, p) => s + p.amount, 0), decimals),
+      willUpdate: actions.filter((a) => a.action === "update").length,
+      willVoid: actions.filter((a) => a.action === "void").length,
+      willKeep: actions.filter((a) => a.action === "keep").length,
+      paidUntouched: actions.filter((a) => a.action === "untouched").length,
+    };
+  }
+
+  // Realignement a la demande (bail deja au prorata).
+  async prorationRealign(leaseId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    if (!(lease as any).rentProrationEnabled) {
+      throw new BadRequestException("Le prorata n'est pas active sur ce bail.");
+    }
+    return this.realignLeaseProration(leaseId, orgId);
+  }
+
+  // Applique le plan : UPDATE (id conserves => QR valides) des pending sans
+  // transaction ; pending en trop -> 'voided' (soft). Les paid ne sont jamais
+  // touchees (garde SQL status='pending' AND transaction_id IS NULL).
+  private async realignLeaseProration(leaseId: number, orgId: number) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    const { actions } = await this.buildProrationPlan(lease, orgId);
+    const guard = (id: number) => and(
+      eq(realEstateRentPayments.id, id),
+      eq(realEstateRentPayments.organizationId, orgId),
+      eq(realEstateRentPayments.leaseId, leaseId),
+      eq(realEstateRentPayments.status, "pending"),
+      isNull(realEstateRentPayments.transactionId),
+    );
+    let updated = 0;
+    let voided = 0;
+    let kept = 0;
+    const affected = (r: any) => Number((Array.isArray(r) ? r[0] : r)?.affectedRows ?? 0);
+    await this.db.transaction(async (tx) => {
+      for (const a of actions) {
+        if (a.action === "update" && a.proposed) {
+          const r = await tx.update(realEstateRentPayments).set({
+            paymentDate: a.proposed.paymentDate,
+            amount: this.money(a.proposed.amount),
+            periodStart: a.proposed.periodStart,
+            periodEnd: a.proposed.periodEnd,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          } as any).where(guard(a.rowId));
+          updated += affected(r);
+        } else if (a.action === "keep" && a.proposed) {
+          const r = await tx.update(realEstateRentPayments).set({
+            periodStart: a.proposed.periodStart,
+            periodEnd: a.proposed.periodEnd,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          } as any).where(guard(a.rowId));
+          kept += affected(r);
+        } else if (a.action === "keep") {
+          kept++;
+        } else if (a.action === "void") {
+          const r = await tx.update(realEstateRentPayments).set({
+            status: "voided",
+            notes: "[ANNULE: realignement prorata]",
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          } as any).where(guard(a.rowId));
+          voided += affected(r);
+        }
+      }
+    });
+    await this.syncProratedNextInvoiceDate(lease, orgId);
+    return { leaseId, updated, voided, kept, paidUntouched: actions.filter((a) => a.action === "untouched").length };
+  }
+
+  // nextInvoiceDate = echeance de la 1re periode non couverte par les paiements 'paid'.
+  // Recalcul complet (avance ET recul, ex. annulation d'un paiement). Toutes les
+  // periodes couvertes -> nextInvoiceDate inchangee.
+  private async syncProratedNextInvoiceDate(lease: typeof realEstateLeases.$inferSelect, orgId: number) {
+    const decimals = await this.currencyDecimals(lease.currencyId);
+    const paidRows = await this.db
+      .select({ amount: realEstateRentPayments.amount })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+        eq(realEstateRentPayments.status, "paid"),
+      ));
+    const amounts = paidRows.map((r) => Number(r.amount || 0));
+    const todayStr = this.formatDateOnly(new Date());
+    const schedule = scheduleForLease(lease as any, decimals, amounts.reduce((s, a) => s + a, 0), todayStr);
+    const cov = applyCoverage(schedule, amounts, todayStr, decimals);
+    if (!cov.nextDueDate || cov.nextDueDate === lease.nextInvoiceDate) return;
+    await this.db
+      .update(realEstateLeases)
+      .set({ nextInvoiceDate: cov.nextDueDate, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
+  }
+
+  /** Champs additifs periode/prorata d'une ligne de paiement (null si non applicable). */
+  private decoratePaymentRow<T extends Record<string, any>>(row: T) {
+    const { leaseBillingCycle, leaseProrationEnabled, leaseStartDate, ...rest } = row as any;
+    let isProrata = false;
+    let prorataDays: number | null = null;
+    let periodDays: number | null = null;
+    if (leaseProrationEnabled && row.periodStart && row.periodEnd) {
+      const s = parseScheduleDate(String(row.periodStart));
+      const e = parseScheduleDate(String(row.periodEnd));
+      prorataDays = Math.round((e.getTime() - s.getTime()) / 86_400_000) + 1;
+      // Periode calculee depuis l'ancre startDate (pas chainee depuis periodStart clampe).
+      periodDays = leaseStartDate
+        ? anchoredPeriodDays(String(leaseStartDate), leaseBillingCycle, String(row.periodStart))
+        : Math.round((addScheduleCycle(s, leaseBillingCycle, 1).getTime() - s.getTime()) / 86_400_000);
+      isProrata = prorataDays < periodDays;
+    }
+    return { ...rest, isProrata, prorataDays, periodDays } as Omit<T, "leaseBillingCycle" | "leaseProrationEnabled" | "leaseStartDate"> & {
+      isProrata: boolean;
+      prorataDays: number | null;
+      periodDays: number | null;
+    };
+  }
+
   // Confirme une echeance 'pending' generee retroactivement : transforme la
   // ligne existante en vrai paiement encaisse (UPDATE, pas de duplication),
   // en creant la transaction comptable + ecriture ledger comme createPayment.
@@ -2445,13 +2795,19 @@ export class PropertyManagementService {
       ?? (lease as any).currencyId
       ?? (await this.resolveDefaultCurrency(orgId));
 
+    // Prorata actif : un seul arrondi (decimales de la devise du bail) AVANT
+    // transaction / ledger / table plate, pour qu'ils restent identiques.
+    const payAmount = (lease as any).rentProrationEnabled
+      ? roundMoney(Number(input.amount), await this.currencyDecimals(paymentCurrencyId))
+      : input.amount;
+
     const [transactionResult] = await this.db.insert(transactions).values({
       organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId: rentPaymentType.creditAccountId,
       particulars: input.notes || "Payment for rent",
-      amount: input.amount,
+      amount: payAmount,
       currencyId: paymentCurrencyId ?? null,
       type: "Rent Payment",
       relatedId: String(lease.id),
@@ -2460,7 +2816,7 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    const taxAmt = this.computeInclusiveTax(Number(input.amount), lease as any);
+    const taxAmt = this.computeInclusiveTax(Number(payAmount), lease as any);
 
     await this.db
       .update(realEstateRentPayments)
@@ -2469,7 +2825,7 @@ export class PropertyManagementService {
         currencyId: paymentCurrencyId,
         transactionId: Number(transactionResult.insertId),
         paymentDate: this.requiredDate(input.paymentDate),
-        amount: this.money(input.amount),
+        amount: this.money(payAmount),
         method: input.method ?? "cash",
         reference: input.reference ?? null,
         receivedBy: input.receivedBy ?? null,
@@ -2502,8 +2858,8 @@ export class PropertyManagementService {
     }
 
     const rentLines = [
-      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
-      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(payAmount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(payAmount), description: input.notes || "Payment for rent" },
     ];
     if (taxAmt != null && taxAmt > 0) {
       const taxType = await this.getRealEstateTaxTypeOptional(orgId);
@@ -2535,8 +2891,8 @@ export class PropertyManagementService {
     });
     // Confirmation d'encaissement : quittance au locataire, avis au
     // proprietaire du bien. Best-effort, jamais bloquant pour le paiement.
-    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), input.amount, orgId);
-    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), input.amount, orgId);
+    await this.ownerNotifications.notifyPaymentReceivedTenant(paymentId, Number(lease.id), payAmount, orgId);
+    await this.ownerNotifications.notifyPaymentReceived(paymentId, Number(lease.id), payAmount, orgId);
     return this.findPayment(paymentId);
   }
 
@@ -3442,6 +3798,11 @@ export class PropertyManagementService {
     orgId: number,
     paymentDate: string,
   ) {
+    // Prorata opt-in : prochaine echeance = 1re periode non couverte (applyCoverage).
+    if ((lease as any).rentProrationEnabled) {
+      await this.syncProratedNextInvoiceDate(lease, orgId);
+      return;
+    }
     if (!lease.nextInvoiceDate) return;
 
     const due = this.parseDateOnly(lease.nextInvoiceDate);
@@ -3607,6 +3968,10 @@ export class PropertyManagementService {
         reference: realEstateLeases.reference,
         startDate: realEstateLeases.startDate,
         rentAmount: realEstateLeases.rentAmount,
+        endDate: realEstateLeases.endDate,
+        billingCycle: realEstateLeases.billingCycle,
+        currencyId: realEstateLeases.currencyId,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         noticeSentAt: realEstateLeases.defaultNoticeSentAt,
         currencySymbol: currencies.currencySymbol,
@@ -3654,8 +4019,20 @@ export class PropertyManagementService {
       (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()),
     );
     const monthsDue = elapsedPast + 1;
-    const monthsBehind = Math.max(0, monthsDue - monthsCovered);
-    const balance = Math.max(0, Math.round((monthsDue * rent - totalPaid) * 100) / 100);
+    let monthsBehind = Math.max(0, monthsDue - monthsCovered);
+    let balance = Math.max(0, Math.round((monthsDue * rent - totalPaid) * 100) / 100);
+    let nextDueForLate: string | null = lease.nextInvoiceDate;
+    if ((lease as any).rentProrationEnabled) {
+      // Prorata opt-in : solde et retard par montants dus de periode.
+      const decimals = await this.currencyDecimals((lease as any).currencyId);
+      const todayStr = this.formatDateOnly(new Date());
+      const schedule = scheduleForLease(lease as any, decimals, totalPaid, todayStr);
+      const cov = applyCoverage(schedule, [totalPaid], todayStr, decimals);
+      const dueCount = schedule.filter((p) => p.dueDate <= todayStr).length;
+      monthsBehind = Math.max(0, dueCount - Math.min(cov.coveredCount, dueCount));
+      balance = cov.balance;
+      nextDueForLate = cov.nextDueDate;
+    }
 
     if (monthsBehind <= 1) {
       throw new BadRequestException(
@@ -3668,8 +4045,8 @@ export class PropertyManagementService {
       [lease.propertyName, lease.unitName].filter(Boolean).join(", ") ||
       lease.propertyAddress ||
       "votre logement";
-    const daysLate = lease.nextInvoiceDate
-      ? Math.max(0, Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000))
+    const daysLate = nextDueForLate
+      ? Math.max(0, Math.floor((Date.now() - new Date(`${nextDueForLate}T00:00:00`).getTime()) / 86_400_000))
       : 0;
     const contacts = await this.ownerNotifications.propertyContactVars(
       lease.propertyId ? Number(lease.propertyId) : null,
@@ -4133,6 +4510,8 @@ export class PropertyManagementService {
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         rentAmount: realEstateLeases.rentAmount,
+        billingCycle: realEstateLeases.billingCycle,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         currencyId: realEstateLeases.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -4172,8 +4551,9 @@ export class PropertyManagementService {
     // Idempotent (generateMissingPayments ne duplique jamais un mois deja couvert).
     await this.generateMissingPayments(leaseId, orgId, true);
 
-    const payments = await this.paymentQuery(undefined, orgId, "all", leaseId)
-      .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
+    const payments = (await this.paymentQuery(undefined, orgId, "all", leaseId)
+      .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id))
+      .map((r) => this.decoratePaymentRow(r));
 
     // URL du portail locataire pour le QR code du carnet : best-effort, comme
     // les autres usages de portalUrlForTenant (rappel SMS/email). Si le
@@ -4226,7 +4606,22 @@ export class PropertyManagementService {
         .map((d) => [d.displayName, (d.phone || d.phone2 || "").trim()].filter(Boolean).join(" · ")),
     )].join(" / ") || null;
 
-    return { lease: { ...lease, managerName, payTo }, payments, portalUrl: portalUrl || null };
+    // Prorata actif : echeancier complet (periodes, montants prorata) pour le carnet.
+    let schedule: ReturnType<typeof scheduleForLease> | undefined;
+    if (lease.rentProrationEnabled) {
+      const decimals = await this.currencyDecimals(lease.currencyId);
+      const paidTotal = payments
+        .filter((p) => p.status === "paid")
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
+      schedule = scheduleForLease(lease as any, decimals, paidTotal, this.formatDateOnly(new Date()), 14);
+    }
+
+    return {
+      lease: { ...lease, rentProrationEnabled: !!lease.rentProrationEnabled, managerName, payTo },
+      payments,
+      portalUrl: portalUrl || null,
+      ...(schedule ? { schedule } : {}),
+    };
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
@@ -4601,8 +4996,13 @@ export class PropertyManagementService {
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
 
     // 4. Recule la prochaine facture des cycles que ce paiement couvrait.
+    // Prorata opt-in : recalcul via applyCoverage (pas de recul d'un cycle fixe).
     const rent = Number(lease.rentAmount) || 0;
-    const cycles = rent > 0 ? Math.floor((Number(payment.amount) + 0.0001) / rent) : 0;
+    const prorated = !!(lease as any).rentProrationEnabled;
+    if (prorated) {
+      await this.syncProratedNextInvoiceDate(lease, orgId);
+    }
+    const cycles = !prorated && rent > 0 ? Math.floor((Number(payment.amount) + 0.0001) / rent) : 0;
     if (cycles > 0 && lease.nextInvoiceDate) {
       const back = this.addBillingCycle(this.parseDateOnly(lease.nextInvoiceDate), lease.billingCycle, -cycles);
       const minDate = this.parseDateOnly(lease.startDate);
@@ -4622,7 +5022,7 @@ export class PropertyManagementService {
   async findPayment(id: number) {
     const rows = await this.paymentQuery(id).limit(1);
     if (!rows.length) throw new NotFoundException("Payment not found.");
-    return rows[0];
+    return this.decoratePaymentRow(rows[0]);
   }
 
   /**
@@ -6260,6 +6660,7 @@ export class PropertyManagementService {
         taxType: realEstateLeases.taxType,
         taxValue: realEstateLeases.taxValue,
         taxApplyMode: realEstateLeases.taxApplyMode,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         // Trace du preavis pour defaut de paiement : la page Loyers s'en sert
         // pour afficher la date du dernier preavis notifie sur ce bail.
         defaultNoticeSentAt: realEstateLeases.defaultNoticeSentAt,
@@ -6300,7 +6701,7 @@ export class PropertyManagementService {
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
     orgId: number,
-  ): Promise<Array<T & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null }>> {
+  ): Promise<Array<Omit<T, "rentProrationEnabled"> & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null; rentProrationEnabled: boolean; nextDueDate: string | null; nextDueAmount: number; isProratedNext: boolean }>> {
     if (!rows.length) return [];
     const leaseIds = rows.map((r) => r.id);
     const graceDays = await this.overdueGraceDays(orgId);
@@ -6324,18 +6725,63 @@ export class PropertyManagementService {
       paymentsByLease.set(p.leaseId, list);
     }
 
-    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const todayStr = this.formatDateOnly(new Date());
+    const today = this.parseDateOnly(todayStr);
+
+    // Decimales des devises, uniquement si au moins un bail est au prorata.
+    const decimalsByCurrency = new Map<number, number>();
+    const prorationCurrencyIds = [...new Set(
+      rows
+        .filter((r) => (r as any).rentProrationEnabled && (r as any).currencyId)
+        .map((r) => Number((r as any).currencyId)),
+    )];
+    if (prorationCurrencyIds.length) {
+      const cur = await this.db
+        .select({ id: currencies.id, d: currencies.decimalPlaces })
+        .from(currencies)
+        .where(inArray(currencies.id, prorationCurrencyIds));
+      for (const c of cur) {
+        const d = c.d == null ? NaN : Number(c.d);
+        decimalsByCurrency.set(Number(c.id), Number.isInteger(d) && d >= 0 && d <= 6 ? d : 2);
+      }
+    }
+
     return rows.map((row) => {
+      const r = row as any;
+      const leasePayments = paymentsByLease.get(row.id) ?? [];
+      if (r.rentProrationEnabled) {
+        // Prorata opt-in : couverture/retards par montants dus de periode.
+        const decimals = decimalsByCurrency.get(Number(r.currencyId)) ?? 2;
+        const paidTotal = leasePayments.reduce((s, p) => s + p.amount, 0);
+        const schedule = scheduleForLease(r, decimals, paidTotal, todayStr);
+        const stats = computeProratedOverdueStats(schedule, leasePayments, today, graceDays, decimals);
+        const next = computeLeaseNextDue(r, leasePayments.map((p) => p.amount), decimals, todayStr);
+        return {
+          ...row,
+          ...stats,
+          rentProrationEnabled: true,
+          nextDueDate: next.nextDueDate,
+          nextDueAmount: next.nextDueAmount,
+          isProratedNext: next.isProratedNext,
+        } as any;
+      }
       const stats = this.computeLeaseOverdueStats(
         row.startDate,
         row.endDate,
         row.billingCycle,
-        paymentsByLease.get(row.id) ?? [],
+        leasePayments,
         Number((row as { rentAmount?: string | number | null }).rentAmount || 0),
         today,
         graceDays,
       );
-      return { ...row, ...stats };
+      return {
+        ...row,
+        ...stats,
+        rentProrationEnabled: false,
+        nextDueDate: (r.nextInvoiceDate ?? null) as string | null,
+        nextDueAmount: Number(r.rentAmount) || 0,
+        isProratedNext: false,
+      } as any;
     });
   }
 

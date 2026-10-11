@@ -20,6 +20,7 @@ export const AUDIT_EVENT_LABEL = {
   viewed: "Consulté par le locataire",
   signed: "Signé électroniquement",
   welcome_sent: "Message de bienvenue envoyé",
+  template_changed: "Modèle de bail modifié",
   status_changed: "Statut mis à jour",
   deleted: "Contrat retiré",
 };

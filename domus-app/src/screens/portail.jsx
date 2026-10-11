@@ -11,7 +11,8 @@ import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { t } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { buildLeaseCards } from "./loyers.jsx";
+import { buildLeaseCards, ProrataBadge } from "./loyers.jsx";
+import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useToast } from "../components/Dialog.jsx";
 
@@ -139,7 +140,7 @@ export function Portail({ go }) {
     return cards[0] || null;
   }, [activeLease, payments]);
 
-  const dueDate = activeLease?.nextInvoiceDate || activeLease?.endDate || null;
+  const dueDate = nextDueDateOf(activeLease) || activeLease?.nextInvoiceDate || activeLease?.endDate || null;
   const dueDays = daysUntil(dueDate);
   const due = dueChip(dueDays);
 
@@ -249,8 +250,11 @@ export function Portail({ go }) {
                 <span className={`chip ${due.chip}`}>{due.text}</span>
               </div>
               <div className="portail-rent-amount">
-                {money(activeLease.rentAmount, card?.symbol || activeLease.currencySymbol || currency.defaultCurrencySymbol)}
+                {money(nextDueAmountOf(activeLease) ?? activeLease.rentAmount, card?.symbol || activeLease.currencySymbol || currency.defaultCurrencySymbol)}
               </div>
+              {activeLease.rentProrationEnabled && activeLease.isProratedNext && (
+                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>{t("Période partielle (prorata)")}</div>
+              )}
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
                 {dueDate
                   ? `${t("Échéance")} ${parseDomusDate(dueDate)?.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`
@@ -313,7 +317,7 @@ export function Portail({ go }) {
                 {history.map((p) => (
                   <div key={p.id} className="portail-hist-row">
                     <span className="portail-hist-dot" />
-                    <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                    <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                     <span className="muted">{p.method || "—"}</span>
                     <strong>{money(p.amount, p.currencySymbol || card?.symbol || "$")}</strong>
                   </div>

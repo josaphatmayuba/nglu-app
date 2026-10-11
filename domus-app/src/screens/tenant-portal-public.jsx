@@ -9,7 +9,8 @@ import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User
 import { publicApi } from "../api.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { money } from "../data.js";
-import { buildLeaseCards } from "./loyers.jsx";
+import { buildLeaseCards, ProrataBadge } from "./loyers.jsx";
+import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
 import { t } from "../i18n.js";
 
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -339,7 +340,7 @@ export function TenantPortalPublic({ token }) {
   }, [form, data]);
   const dirty = Object.keys(changed).length > 0;
 
-  const dueDate = activeLease?.nextInvoiceDate || activeLease?.endDate || null;
+  const dueDate = nextDueDateOf(activeLease) || activeLease?.nextInvoiceDate || activeLease?.endDate || null;
   const due = dueChip(daysUntil(dueDate));
 
   // Paiements reellement encaisses (status 'paid'). La caution n'apparait pas
@@ -465,7 +466,10 @@ export function TenantPortalPublic({ token }) {
                   <span className={`chip ${due.chip}`} style={{ marginLeft: "auto" }}>{due.text}</span>
                 </div>
                 <div className="onb-card-body">
-                  <div style={{ fontSize: 28, fontWeight: 600 }}>{money(activeLease.rentAmount, symbol)}</div>
+                  <div style={{ fontSize: 28, fontWeight: 600 }}>{money(nextDueAmountOf(activeLease) ?? activeLease.rentAmount, symbol)}</div>
+                  {activeLease.rentProrationEnabled && activeLease.isProratedNext && (
+                    <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>{t("Période partielle (prorata)")}</p>
+                  )}
                   {/* Nom du bailleur : masque si le bien n'a pas de proprietaire
                       renseigne, plutot qu'afficher un libelle vide. */}
                   {activeLease.landlordName ? (
@@ -497,7 +501,7 @@ export function TenantPortalPublic({ token }) {
                     {awaitingValidation.map((p) => (
                       <div key={p.id} className="portail-hist-row">
                         <Clock size={14} className="muted" />
-                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                        <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
                           payment={p}
@@ -525,7 +529,7 @@ export function TenantPortalPublic({ token }) {
                     {overdue.map((p) => (
                       <div key={p.id} className="portail-hist-row" style={p.proofRejectedReason ? { flexWrap: "wrap" } : undefined}>
                         <AlertTriangle size={14} className="muted" />
-                        <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                        <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                         <span className="chip chip-rose">
                           {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
                         </span>
@@ -625,7 +629,7 @@ export function TenantPortalPublic({ token }) {
                   {history.map((p) => (
                     <div key={p.id} className="portail-hist-row">
                       <Receipt size={14} className="muted" />
-                      <span className="flex-1">{monthLabel(p.paymentDate)}</span>
+                      <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                       <span className="muted">{p.method || "—"}</span>
                       <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                       {p.hasProof ? (

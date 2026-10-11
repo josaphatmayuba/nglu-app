@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Building2, Loader2, User, FileSignature, Wallet, Receipt, Download } from "lucide-react";
 import { publicApi } from "../api.js";
 import { money } from "../data.js";
+import { nextDueAmountOf } from "../prorationUtils.js";
 import { t } from "../i18n.js";
 
 function fmtDate(dateLike) {
@@ -174,6 +175,9 @@ export function OwnerPortalPublic({ token }) {
                   <Row label={t("Début")} value={fmtDate(lease.startDate)} />
                   <Row label={t("Fin")} value={lease.endDate ? fmtDate(lease.endDate) : t("Non renseignée")} />
                   <Row label={t("Loyer")} value={money(lease.rentAmount, symbol)} />
+                  {nextDueAmountOf(lease) != null && (
+                    <Row label={t("Prochaine échéance")} value={money(nextDueAmountOf(lease), symbol)} />
+                  )}
                   <Row label={t("Périodicité")} value={lease.billingCycle} />
                   <Row label={t("Caution contractuelle")} value={money(lease.securityDeposit, symbol)} />
                   <Row label={t("Charges")} value={charges} />

@@ -125,6 +125,12 @@ export function amountToWordsFr(amount, currencySymbol = "CDF") {
 // à la main au moment du paiement), fusionnés avec les paiements réels
 // quand ils existent pour ce mois. ──────────────────────────────────────
 export function buildFullRentSchedule(lease, payments) {
+  // Loyer au prorata (opt-in) : le backend fournit l'échéancier exact
+  // (dates, périodes, montants). Sans option ou sans échéancier -> calcul
+  // historique ci-dessous, inchangé.
+  if (Array.isArray(lease?.schedule) && lease.schedule.length) {
+    return buildProratedRentSchedule(lease, payments);
+  }
   const start = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.startDate || ""));
   if (!start) return payments; // pas de date de début exploitable : fallback paiements réels
 
@@ -177,6 +183,60 @@ export function buildFullRentSchedule(lease, payments) {
   return schedule;
 }
 
+const day10 = (v) => String(v || "").slice(0, 10);
+
+function buildProratedRentSchedule(lease, payments) {
+  const byStart = new Map();
+  for (const p of payments) {
+    if (p.periodStart) byStart.set(day10(p.periodStart), p);
+  }
+  const used = new Set();
+  const lines = lease.schedule.map((e) => {
+    const key = day10(e.periodStart);
+    const existing = byStart.get(key);
+    const period = {
+      periodStart: e.periodStart,
+      periodEnd: e.periodEnd,
+      isProrata: Boolean(e.prorated),
+      prorataDays: e.prorated ? e.days : null,
+      periodDays: e.prorated ? e.periodDays : null,
+    };
+    if (existing) {
+      used.add(existing);
+      // Les champs prorata de l'échéancier (ancré sur startDate) font foi.
+      return {
+        ...existing,
+        ...period,
+        periodStart: existing.periodStart || period.periodStart,
+        periodEnd: existing.periodEnd || period.periodEnd,
+      };
+    }
+    return {
+      ...period,
+      paymentDate: e.dueDate || e.periodStart,
+      amount: e.amount,
+      currencySymbol: lease.currencySymbol || "CDF",
+      status: "pending",
+      method: null,
+      receivedBy: null,
+    };
+  });
+  // Paiements réels hors échéancier (ex. anciens paiements) : jamais perdus.
+  for (const p of payments) {
+    if (!used.has(p) && p.status === "paid") lines.push(p);
+  }
+  return lines.sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")));
+}
+
+// « 11→30/09/2027 » (même mois) ou « 11/09/2027→10/10/2027 ».
+export function fmtPeriodShort(start, end) {
+  const s = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(start || ""));
+  const e = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(end || ""));
+  if (!s || !e) return "";
+  if (s[1] === e[1] && s[2] === e[2]) return `${s[3]}→${e[3]}/${e[2]}/${e[1]}`;
+  return `${s[3]}/${s[2]}/${s[1]}→${e[3]}/${e[2]}/${e[1]}`;
+}
+
 // ── Numéro de quittance : séquence calculée sur les paiements du bail,
 // triés chronologiquement — pas besoin de le stocker en DB. ────────────────
 export function receiptNumber(lease, index) {
@@ -185,7 +245,8 @@ export function receiptNumber(lease, index) {
 }
 
 // ── Totaux payés / restant dû, groupés par devise (ne JAMAIS mélanger
-// USD/CDF si le bail a vu plusieurs devises au fil du temps). ──────────────
+// USD/CDF si le bail a vu plusieurs devises au fil du temps). Somme des
+// montants de LIGNE (donc des périodes prorata) : passer buildFullRentSchedule(). ──
 export function totalsByCurrency(payments) {
   const byCurrency = new Map();
   for (const p of payments) {
@@ -241,6 +302,7 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-head { display: flex; justify-content: space-between; align-items: center; background: #eef0ea; border-bottom: 1px solid #c9c2b2; padding: 12px 18px; }
   .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 15px; display: block; }
   .rent-book .receipt-head .period { font-size: 13px; font-weight: 700; color: #1f2a24; display: block; margin-top: 3px; letter-spacing: .04em; }
+  .rent-book .receipt-head .period-range { font-size: 11px; font-weight: 600; color: #5a655d; display: block; margin-top: 2px; letter-spacing: .02em; }
   .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
   .rent-book .receipt-head .status::before { content: "●"; margin-right: 5px; font-size: 8px; }
   .rent-book .receipt-head .status.paid { background: #e4ede6; color: #2f6e4e; }
@@ -309,6 +371,13 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   const headerLine = escapeHtml(monthLabel(payment.paymentDate).toLocaleUpperCase("fr"));
+  // Loyer au prorata : période exacte + mention « 20 j / 30 » (jamais affiché
+  // pour un paiement sans periodStart/periodEnd, donc hors option).
+  const rangeText = payment.periodStart && payment.periodEnd ? fmtPeriodShort(payment.periodStart, payment.periodEnd) : "";
+  const prorataText = rangeText && payment.isProrata && payment.prorataDays != null && payment.periodDays != null
+    ? ` · ${payment.prorataDays} j / ${payment.periodDays}`
+    : "";
+  const rangeLine = rangeText ? `<span class="period-range">${escapeHtml(rangeText + prorataText)}</span>` : "";
   // Deux quittances par page (A4 ou Letter), chacune dans une MOITIE exacte de
   // la feuille pour pouvoir couper au milieu sans toucher d'information : la
   // ligne « Détacher ici » ferme la moitie haute (index pair), jamais le haut
@@ -334,6 +403,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
       <div>
         <span class="num">Quittance n° ${String(index + 1).padStart(4, "0")}</span>
         <span class="period">${headerLine}</span>
+        ${rangeLine}
       </div>
     </div>
     <div class="receipt-row"><div><span>Locataire</span><span>${escapeHtml(tenantName)}</span></div><div><span>Logement</span><span>${escapeHtml(dwelling)}</span></div></div>
@@ -401,7 +471,9 @@ ${rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId)}
 // pour CE mois précis, sans passer par le dossier général — les mois
 // "virtuels" générés par buildFullRentSchedule (sans id, pas encore de ligne
 // de paiement en base) n'ont pas de QR tant qu'ils n'existent pas réellement.
-export async function openRentBookPrint(lease, payments, portalUrl, { onError } = {}) {
+export async function openRentBookPrint(rawLease, payments, portalUrl, { onError, schedule } = {}) {
+  // `schedule` (réponse rent-book, option prorata) est rattaché au bail.
+  const lease = schedule && !rawLease?.schedule ? { ...rawLease, schedule } : rawLease;
   const win = window.open("", "_blank", "width=920,height=1100");
   if (!win) {
     const msg = "Autorisez les fenêtres popup pour imprimer le carnet de quittances.";

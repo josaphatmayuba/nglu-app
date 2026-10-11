@@ -10,6 +10,7 @@ import {
   customers,
   realEstateLeases,
   realEstateProperties,
+  realEstateRentPayments,
   tenantDetails,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -17,6 +18,7 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
+import { computeLeaseNextDue } from "./lease-proration";
 
 type ReminderConfig = { enabled: boolean; overdueDays: number; expiryDays: number; hour: number };
 export type ReminderTargets = { tenant: boolean; emergency: boolean; owner: boolean; delegates: boolean };
@@ -112,6 +114,11 @@ export class RentReminderService {
         tenantId: realEstateLeases.tenantId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        billingCycle: realEstateLeases.billingCycle,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        currencyDecimals: currencies.decimalPlaces,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         lastReminder: realEstateLeases.lastOverdueReminderDate,
         tenantFirstName: customers.firstName,
@@ -161,7 +168,30 @@ export class RentReminderService {
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
       );
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-      const amount = `${lease.rentAmount}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
+      // Prorata opt-in : montant = reste du de la 1re periode non couverte.
+      // Sinon : loyer du bail, strictement comme avant.
+      let amountValue: string | number = lease.rentAmount;
+      if (lease.rentProrationEnabled) {
+        const paid = await this.db
+          .select({ amount: realEstateRentPayments.amount })
+          .from(realEstateRentPayments)
+          .where(and(
+            eq(realEstateRentPayments.leaseId, lease.leaseId),
+            eq(realEstateRentPayments.organizationId, lease.organizationId),
+            eq(realEstateRentPayments.status, "paid"),
+          ));
+        const dec = Number(lease.currencyDecimals);
+        // Plafonne a 2 : colonnes decimal(..., 2).
+        const decimals = Number.isInteger(dec) && dec >= 0 ? Math.min(dec, 2) : 2;
+        const next = computeLeaseNextDue(
+          lease,
+          paid.map((p) => Number(p.amount || 0)),
+          decimals,
+          new Date().toISOString().slice(0, 10),
+        );
+        if (next.nextDueAmount > 0) amountValue = next.nextDueAmount.toFixed(decimals);
+      }
+      const amount = `${amountValue}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
       // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").

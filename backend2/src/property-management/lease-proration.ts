@@ -1,0 +1,316 @@
+/**
+ * Calculs PURS autour du prorata de loyer (opt-in par bail) : prochaine
+ * echeance, retards par periode, plan de realignement des echeances pending.
+ * Aucun acces DB / Nest : le service charge les donnees et applique le plan.
+ */
+import {
+  applyCoverage,
+  buildLeaseSchedule,
+  cycleMonths,
+  formatDateOnly,
+  parseDateOnly,
+  roundMoney,
+  type SchedulePeriod,
+} from "./lease-schedule";
+
+export interface ProrationLease {
+  rentProrationEnabled?: boolean | number | null;
+  startDate: string;
+  endDate?: string | null;
+  billingCycle?: string | null;
+  rentAmount?: string | number | null;
+  nextInvoiceDate?: string | null;
+}
+
+export interface LeaseNextDue {
+  rentProrationEnabled: boolean;
+  nextDueDate: string | null;
+  nextDueAmount: number;
+  isProratedNext: boolean;
+}
+
+function monthsBetween(a: Date, b: Date): number {
+  return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+}
+
+/** Echeancier d'un bail avec un horizon suffisant (bail sans fin : jusqu'a aujourd'hui + marge). */
+export function scheduleForLease(
+  lease: ProrationLease,
+  decimals: number,
+  paidTotal: number,
+  todayStr: string,
+  extraPeriods = 3,
+): SchedulePeriod[] {
+  const rent = Number(lease.rentAmount) || 0;
+  const cm = cycleMonths(lease.billingCycle);
+  const elapsed = Math.max(0, Math.floor(monthsBetween(parseDateOnly(lease.startDate), parseDateOnly(todayStr)) / cm)) + 1;
+  const paidPeriods = rent > 0 ? Math.ceil(paidTotal / rent) : 0;
+  const horizon = Math.min(1200, Math.max(12, elapsed + extraPeriods, paidPeriods + extraPeriods));
+  return buildLeaseSchedule({
+    startDate: lease.startDate,
+    endDate: lease.endDate ?? null,
+    billingCycle: lease.billingCycle as any,
+    rentAmount: rent,
+    currencyDecimals: decimals,
+    horizonPeriods: horizon,
+  });
+}
+
+export function computeLeaseNextDue(
+  lease: ProrationLease,
+  paidAmounts: number[],
+  decimals: number,
+  todayStr: string,
+): LeaseNextDue {
+  if (!lease.rentProrationEnabled) {
+    return {
+      rentProrationEnabled: false,
+      nextDueDate: lease.nextInvoiceDate ?? null,
+      nextDueAmount: Number(lease.rentAmount) || 0,
+      isProratedNext: false,
+    };
+  }
+  const paidTotal = paidAmounts.reduce((s, a) => s + (Number(a) || 0), 0);
+  const schedule = scheduleForLease(lease, decimals, paidTotal, todayStr);
+  const cov = applyCoverage(schedule, paidAmounts, todayStr, decimals);
+  return {
+    rentProrationEnabled: true,
+    nextDueDate: cov.nextDueDate,
+    nextDueAmount: cov.firstUncovered ? cov.nextDueAmount : 0,
+    isProratedNext: cov.firstUncovered ? cov.firstUncovered.prorated : false,
+  };
+}
+
+export interface OverdueStats {
+  lateCount: number;
+  unpaidCount: number;
+  dueCount: number;
+  lateRatio: number;
+  isOverdue: boolean;
+  overdueDueDate: string | null;
+}
+
+/**
+ * Meme logique que computeLeaseOverdueStats (couverture par montants cumules,
+ * delai de grace) mais le montant du par periode est celui de l'echeancier.
+ */
+export function computeProratedOverdueStats(
+  schedule: SchedulePeriod[],
+  paymentRows: Array<{ date: string; amount: number }>,
+  today: Date,
+  graceDays: number,
+  decimals: number,
+): OverdueStats {
+  let dueCount = 0;
+  let lateCount = 0;
+  let unpaidCount = 0;
+  let isOverdue = false;
+  let overdueDueDate: string | null = null;
+  let cumulDue = 0;
+  for (const period of schedule) {
+    const dueDate = parseDateOnly(period.dueDate);
+    if (dueDate.getTime() > today.getTime()) break;
+    dueCount += 1;
+    cumulDue = roundMoney(cumulDue + period.amount, decimals);
+    let coveringPayment: Date | null = null;
+    let cumulated = 0;
+    for (const p of paymentRows) {
+      cumulated += Number(p.amount) || 0;
+      if (cumulated + 0.005 >= cumulDue) {
+        coveringPayment = parseDateOnly(p.date);
+        break;
+      }
+    }
+    const graceLimit = new Date(dueDate.getTime());
+    graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
+    if (coveringPayment) {
+      if (coveringPayment.getTime() > graceLimit.getTime()) lateCount += 1;
+    } else if (today.getTime() > graceLimit.getTime()) {
+      lateCount += 1;
+      unpaidCount += 1;
+      isOverdue = true;
+      if (overdueDueDate === null) overdueDueDate = period.dueDate;
+    }
+  }
+  return {
+    lateCount,
+    unpaidCount,
+    dueCount,
+    lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
+    isOverdue,
+    overdueDueDate,
+  };
+}
+
+// ─── Plan de realignement des echeances ────────────────────────────────────
+
+export interface RealignRow {
+  id: number;
+  status: string;
+  paymentDate: string;
+  amount: string | number;
+  transactionId?: number | null;
+  proofUrl?: string | null;
+  proofUploadCount?: number | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+}
+
+export type RealignActionKind = "update" | "keep" | "aligned" | "void" | "untouched";
+
+export interface RealignAction {
+  rowId: number;
+  action: RealignActionKind;
+  /** Valeurs a ecrire (null si aucune ecriture). */
+  proposed: { paymentDate: string; amount: number; periodStart: string; periodEnd: string } | null;
+  /** Periode (index de l'echeancier) rattachee, si trouvee. */
+  periodIndex: number | null;
+}
+
+const monthKey = (d: string) => String(d).slice(0, 7);
+
+/**
+ * Periodes couvertes par les lignes 'paid' : par periodStart quand il existe
+ * (et correspond a l'echeancier), sinon par couverture cumulee (ordre de date)
+ * sur les premieres periodes restantes.
+ */
+export function assignPaidRows(
+  schedule: SchedulePeriod[],
+  paidRows: Array<{ id: number; paymentDate: string; amount: string | number; periodStart?: string | null }>,
+  decimals: number,
+): { taken: Set<number>; byRow: Map<number, number | null> } {
+  const taken = new Set<number>();
+  const byRow = new Map<number, number | null>();
+  const cumulative: typeof paidRows = [];
+  for (const r of paidRows) {
+    const ps = r.periodStart ? String(r.periodStart).slice(0, 10) : null;
+    const p = ps ? schedule.find((s) => !taken.has(s.index) && s.periodStart === ps) : null;
+    if (p) {
+      taken.add(p.index);
+      byRow.set(r.id, p.index);
+    } else {
+      cumulative.push(r);
+    }
+  }
+  cumulative.sort((a, b) => String(a.paymentDate).localeCompare(String(b.paymentDate)) || a.id - b.id);
+  const remaining = schedule.filter((s) => !taken.has(s.index));
+  let paid = 0;
+  let count = 0;
+  let cumulDue = 0;
+  for (const r of cumulative) {
+    paid = roundMoney(paid + (Number(r.amount) || 0), decimals);
+    while (count < remaining.length) {
+      const next = roundMoney(cumulDue + remaining[count].amount, decimals);
+      if (paid + 0.005 >= next) {
+        cumulDue = next;
+        count++;
+      } else break;
+    }
+    byRow.set(r.id, count > 0 ? remaining[count - 1].index : null);
+  }
+  for (let i = 0; i < count; i++) taken.add(remaining[i].index);
+  return { taken, byRow };
+}
+
+/**
+ * Rattache chaque ligne a une periode : par periodStart, sinon par mois
+ * calendaire (YYYY-MM) de la date de la ligne vs date d'echeance de la periode.
+ * - paid / pending avec transaction : jamais modifiees ('untouched').
+ * - pending sans transaction : mise a jour date/montant/period_* ; avec
+ *   justificatif : montant et date conservees, seulement period_* ('keep') ;
+ *   sans periode correspondante : 'void' (ou 'keep' si justificatif).
+ */
+export function planProrationRealign(
+  schedule: SchedulePeriod[],
+  rows: RealignRow[],
+  decimals: number,
+): RealignAction[] {
+  const taken = new Set<number>();
+  const result = new Map<number, RealignAction>();
+
+  const findPeriod = (row: RealignRow): SchedulePeriod | null => {
+    if (row.periodStart) {
+      const byStart = schedule.find((p) => !taken.has(p.index) && p.periodStart === String(row.periodStart).slice(0, 10));
+      if (byStart) return byStart;
+    }
+    const mk = monthKey(row.paymentDate);
+    return schedule.find((p) => !taken.has(p.index) && monthKey(p.dueDate) === mk) ?? null;
+  };
+
+  const frozen = (r: RealignRow) => r.status !== "pending" || !!r.transactionId;
+
+  // Lignes 'paid' : jamais rattachees par le MOIS de leur date de paiement reelle
+  // (un loyer de janvier peut etre paye en fevrier) mais par periodStart, sinon
+  // par couverture cumulee sur les premieres periodes libres.
+  const frozenRows = rows.filter(frozen);
+  const paidRows = frozenRows.filter((r) => r.status === "paid");
+  const paidAssign = assignPaidRows(schedule, paidRows, decimals);
+  for (const i of paidAssign.taken) taken.add(i);
+
+  for (const row of frozenRows) {
+    let idx: number | null = null;
+    if (row.status === "paid") {
+      idx = paidAssign.byRow.get(row.id) ?? null;
+    } else {
+      const p = findPeriod(row);
+      if (p) {
+        taken.add(p.index);
+        idx = p.index;
+      }
+    }
+    result.set(row.id, { rowId: row.id, action: "untouched", proposed: null, periodIndex: idx });
+  }
+
+  for (const row of rows.filter((r) => !frozen(r))) {
+    const p = findPeriod(row);
+    const hasProof = !!row.proofUrl || Number(row.proofUploadCount || 0) > 0;
+    if (!p) {
+      result.set(row.id, {
+        rowId: row.id,
+        action: hasProof ? "keep" : "void",
+        proposed: null,
+        periodIndex: null,
+      });
+      continue;
+    }
+    taken.add(p.index);
+    const samePeriod =
+      String(row.periodStart ?? "").slice(0, 10) === p.periodStart &&
+      String(row.periodEnd ?? "").slice(0, 10) === p.periodEnd;
+    if (hasProof) {
+      result.set(row.id, {
+        rowId: row.id,
+        action: samePeriod ? "aligned" : "keep",
+        proposed: samePeriod
+          ? null
+          : {
+              paymentDate: String(row.paymentDate).slice(0, 10),
+              amount: roundMoney(Number(row.amount) || 0, decimals),
+              periodStart: p.periodStart,
+              periodEnd: p.periodEnd,
+            },
+        periodIndex: p.index,
+      });
+      continue;
+    }
+    const aligned =
+      samePeriod &&
+      String(row.paymentDate).slice(0, 10) === p.dueDate &&
+      roundMoney(Number(row.amount) || 0, decimals) === p.amount;
+    result.set(row.id, {
+      rowId: row.id,
+      action: aligned ? "aligned" : "update",
+      proposed: aligned
+        ? null
+        : { paymentDate: p.dueDate, amount: p.amount, periodStart: p.periodStart, periodEnd: p.periodEnd },
+      periodIndex: p.index,
+    });
+  }
+
+  return rows.map((r) => result.get(r.id)!);
+}
+
+/** Aujourd'hui (UTC) au format YYYY-MM-DD. */
+export function todayDateOnly(): string {
+  return formatDateOnly(new Date());
+}

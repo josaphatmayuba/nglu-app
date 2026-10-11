@@ -852,6 +852,31 @@ export class PropertyManagementController {
     return this.propertyManagementService.rentBook(id, orgId, scope);
   }
 
+  @ApiOperation({ summary: "Apercu (sans ecriture) du prorata du loyer d'un bail, calcule comme si l'option etait activee" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/proration-preview")
+  prorationPreview(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.prorationPreview(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Realigne les echeances pending d'un bail au prorata actif (paid jamais modifie)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/proration-realign")
+  @HttpCode(200)
+  prorationRealign(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.prorationRealign(id, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Permissions("create-propertyManagement")
   @Post("leases")
@@ -862,8 +887,13 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Update a lease" })
   @Permissions("update-propertyManagement")
   @Put("leases/:id")
-  updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.updateLease(id, body, orgId);
+  updateLease(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateLeaseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.updateLease(id, body, orgId, scope);
   }
 
   @ApiOperation({ summary: "Delete a lease" })
@@ -1747,6 +1777,21 @@ export class PropertyManagementController {
     const user = (req as Request & { user?: { firstName?: string; lastName?: string; username?: string } }).user;
     const createdByName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.username || null : null;
     return this.contractsService.markSignedManually(id, document, orgId, createdByName);
+  }
+
+  @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Patch("contracts/:id/template")
+  @HttpCode(200)
+  changeContractTemplate(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { templateId?: number },
+    @CurrentOrg() orgId: number,
+  ) {
+    const templateId = Number(body?.templateId);
+    if (!Number.isInteger(templateId) || templateId <= 0) throw new BadRequestException("templateId invalide.");
+    return this.contractsService.changeContractTemplate(id, templateId, orgId);
   }
 
   @ApiOperation({ summary: "Delete a contract" })

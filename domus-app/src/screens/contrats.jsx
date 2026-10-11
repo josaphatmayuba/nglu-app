@@ -77,6 +77,7 @@ export function Contrats() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createLeaseId, setCreateLeaseId] = useState("");
   const [createTemplateId, setCreateTemplateId] = useState("");
+  const [changeTemplateId, setChangeTemplateId] = useState("");
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [signingLinks, setSigningLinks] = useState({});
@@ -221,6 +222,29 @@ export function Contrats() {
       await loadDetail(selectedId);
     } catch (e) {
       setActionError(e.message || "Impossible d'envoyer le message de bienvenue.");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const handleChangeTemplate = async () => {
+    if (!selectedId || !changeTemplateId) return;
+    const ok = await confirm({
+      title: t("Changer le modèle"),
+      message: t("Le texte du contrat sera régénéré avec ce modèle. Les modifications faites au texte actuel seront remplacées."),
+      confirmLabel: t("Appliquer"),
+    });
+    if (!ok) return;
+    setBusy("template");
+    setActionError("");
+    try {
+      await api.changeContractTemplate(selectedId, Number(changeTemplateId));
+      setChangeTemplateId("");
+      toast.success(t("Modèle appliqué."));
+      await reload();
+      await loadDetail(selectedId);
+    } catch (e) {
+      setActionError(e.message || "Impossible de changer le modèle.");
     } finally {
       setBusy("");
     }
@@ -375,6 +399,19 @@ export function Contrats() {
                   )}
                 </div>
               </div>
+
+              {detail?.status === "draft" && templates.length > 0 && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "0 0 12px" }}>
+                  <span className="muted" style={{ fontSize: 12 }}>{t("Modèle de bail")}</span>
+                  <div style={{ minWidth: 220, flex: "1 1 220px", maxWidth: 360 }}>
+                    <Autocomplete value={changeTemplateId} onChange={setChangeTemplateId} placeholder={t("Choisir un modèle…")}
+                      options={templates.map((tpl) => ({ value: tpl.id, label: `${templateLabel(tpl)}${tpl.isActive ? " · actif" : ""}` }))} />
+                  </div>
+                  <button type="button" className="btn" disabled={Boolean(busy) || !changeTemplateId} onClick={handleChangeTemplate}>
+                    {t("Appliquer ce modèle")}
+                  </button>
+                </div>
+              )}
 
               <div className="contrats-detail-grid">
                 <div className="contrats-paper">

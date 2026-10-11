@@ -302,6 +302,8 @@ export const api = {
 
   // Carnet de quittances (PDF imprimable) : lease enrichi + tous les paiements du bail.
   rentBook: (id) => get(`/leases/${id}/rent-book`),
+  leaseProrationPreview: (id) => get(`/leases/${id}/proration-preview`),
+  leaseProrationRealign: (id) => post(`/leases/${id}/proration-realign`),
 
   payments: () => get("/payments"),
   // proofFile optionnel (photo/scan recu, capture mobile money) — meme
@@ -516,6 +518,7 @@ export const api = {
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
   deleteContract: (id) => del(`/contracts/${id}`),
+  changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
   markContractSignedManually: (id, file) => {
     const form = new FormData();
     form.append("document", file);

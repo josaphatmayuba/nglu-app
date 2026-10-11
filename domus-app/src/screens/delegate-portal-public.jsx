@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, X, Loader2, Camera, Receipt, Wallet, Building2 } from "lucide-react";
 import { publicApi } from "../api.js";
 import { t } from "../i18n.js";
+import { nextDueAmountOf } from "../prorationUtils.js";
 
 function fmtMonth(dateLike) {
   if (!dateLike) return "";
@@ -75,7 +76,10 @@ export function DelegatePortalPublic({ token }) {
         if (d?.answer) setDone({ answer: d.answer, alreadyAnswered: true });
         // Le montant du loyer pre-rempli evite au delegue de le ressaisir sur
         // un telephone quand le locataire a paye le montant exact.
-        if (d?.lease?.rentAmount != null) setAmount(String(d.lease.rentAmount));
+        // Loyer au prorata : montant de la prochaine echeance si fourni.
+        const dueAmount = nextDueAmountOf(d?.lease);
+        if (dueAmount != null) setAmount(String(dueAmount));
+        else if (d?.lease?.rentAmount != null) setAmount(String(d.lease.rentAmount));
       })
       .catch((e) => alive && setError(e.message || String(e)))
       .finally(() => alive && setLoading(false));
@@ -128,7 +132,7 @@ export function DelegatePortalPublic({ token }) {
 
   const lease = data?.lease || {};
   const currency = lease.currencySymbol || lease.currencyCode || "";
-  const rentLabel = lease.rentAmount != null ? `${lease.rentAmount} ${currency}`.trim() : "—";
+  const rentLabel = (nextDueAmountOf(lease) ?? lease.rentAmount) != null ? `${nextDueAmountOf(lease) ?? lease.rentAmount} ${currency}`.trim() : "—";
 
   if (done) {
     const paid = done.answer === "paid";

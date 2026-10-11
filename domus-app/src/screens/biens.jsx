@@ -43,6 +43,7 @@ import { mortgageTotalsByCurrency } from "./hypotheque.jsx";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
+import { nextDueAmountOf } from "../prorationUtils.js";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 
@@ -927,6 +928,9 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           <DetailLine label="Locataire" value={property.tenant} />
           <DetailLine label="Propriétaire" value={property.ownerName || "Non assigné (gestionnaire)"} />
           <DetailLine label="Loyer" value={`${property.rent} /mois`} />
+          {property.nextDueAmount != null && (
+            <DetailLine label="Prochaine échéance" value={money(property.nextDueAmount, property.currencySymbol || "$")} />
+          )}
           <DetailLine label="Chambres" value={property.beds || "0"} />
           <DetailLine label="Salles de bain" value={property.baths || "0"} />
           <DetailLine label="Surface" value={property.area} />
@@ -1645,6 +1649,7 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = n
     initials: initials(tenant),
     avatar: AVATARS[index % AVATARS.length],
     rentValue,
+    nextDueAmount: leaseState?.nextDueAmount ?? null,
     rent: money(rentValue, leaseState?.currencySymbol || unit.currencySymbol || "$"),
   };
 }
@@ -1681,6 +1686,7 @@ function buildLeaseStatusByUnit(leases, payments) {
       byUnit.set(String(lease.unitId), {
         status,
         rentAmount: lease.rentAmount,
+        nextDueAmount: nextDueAmountOf(lease),
         currencyId: lease.currencyId,
         currencySymbol: lease.currencySymbol,
         tenantName,
