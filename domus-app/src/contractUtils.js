@@ -111,13 +111,10 @@ export function isRealSignature(sig) {
   return typeof sig === "string" && sig.startsWith("data:image") && sig.length > 600;
 }
 
-// Signature du bailleur du contrat : celle du PROPRIETAIRE si le bail en a un
-// (jamais la signature générique des Réglages), sinon celle des Réglages. Vide = non signé d'avance.
+// Signature du bailleur du contrat : uniquement celle du PROPRIETAIRE du bail
+// (la signature générique des Réglages n'est plus utilisée). Vide = non signé d'avance.
 export function landlordSignatureOf(contract) {
-  const info = contract?.landlordInfo;
-  const sig = info?.source === "owner"
-    ? info.signature
-    : (info?.signature ?? contract?.companyInfo?.landlordSignature);
+  const sig = contract?.landlordInfo?.signature;
   return isRealSignature(sig) ? sig : null;
 }
 
@@ -270,45 +267,38 @@ export const CONTRACT_PRINT_CSS = `
     }
 `;
 
-// Bloc bailleur (signature + date) tel qu'imprimé, avec ou sans signature pré-apposée.
-function landlordSigInner(contract, withSignature) {
-  const dots = "..............................";
-  const sig = withSignature ? landlordSignatureOf(contract) : null;
-  const date = sig && (contract?.sentAt || contract?.createdAt)
+const SIG_DOTS = "..............................";
+
+// Grille des deux signatures. withSignatures=false : emplacements vides, à signer à la main.
+function signatureGridHtml(contract, withSignatures = true) {
+  const landlordSig = withSignatures ? landlordSignatureOf(contract) : null;
+  const landlordDate = landlordSig && (contract?.sentAt || contract?.createdAt)
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
-    : dots;
-  return `${landlordPrintBlock(contract, withSignature)}
-        <div class="signature-date">Signé le : ${date}</div>`;
+    : SIG_DOTS;
+  const hasTenantSig = withSignatures && contract?.signatureData;
+  const tenantDate = hasTenantSig && contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : SIG_DOTS;
+  const tenantSignature = hasTenantSig
+    ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
+    : `<div class="signature-line"></div>`;
+  return `<div class="signature-grid">
+      <div>
+        <h2>Signature du bailleur</h2>${landlordPrintBlock(contract, withSignatures)}
+        <div class="signature-date">Signé le : ${landlordDate}</div>
+      </div>
+      <div>
+        <h2>Signature du locataire</h2>${tenantSignature}
+        <div class="signature-date">Signé le : ${tenantDate}</div>
+      </div>
+    </div>`;
 }
 
 export function contractPrintBody(contract) {
-  const dots = "..............................";
-  const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
-  const landlordSignedDate = landlordSignatureOf(contract) && (contract?.sentAt || contract?.createdAt)
-    ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
-    : dots;
-  const tenantSignature = contract?.signatureData
-    ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
-    : `<div class="signature-line"></div>`;
-
   return `
   <div class="header">
     <div class="doc-ref">${escapeHtml(contractRef(contract))}</div>
   </div>
   <div class="contract-content">${contractContentHtml(contract?.contractContent || "")}</div>
-  <div class="signature">
-    <div class="signature-grid">
-      <div>
-        <h2>Signature du bailleur</h2>
-        <div class="landlord-sig">${landlordPrintBlock(contract)}
-        <div class="signature-date">Signé le : ${landlordSignedDate}</div></div>
-      </div>
-      <div>
-        <h2>Signature du locataire</h2>${tenantSignature}
-        <div class="signature-date">Signé le : ${tenantSignedDate}</div>
-      </div>
-    </div>
-  </div>`;
+  <div class="signature">${signatureGridHtml(contract)}</div>`;
 }
 
 export function contractPrintHtml(contract) {
@@ -326,7 +316,7 @@ ${CONTRACT_PRINT_CSS}
   </style>
 </head>
 <body class="contract-doc">
-  <div class="print-actions">${landlordSignatureOf(contract) ? '<label><input type="checkbox" id="landlord-sig-toggle" checked /> Inclure la signature du bailleur (décochez pour signer à la main)</label> ' : ""}<button type="button">Imprimer / PDF</button></div>
+  <div class="print-actions">${landlordSignatureOf(contract) || contract?.signatureData ? '<label><input type="checkbox" id="sig-toggle" checked /> Inclure les signatures électroniques (décochez pour signer à la main)</label> ' : ""}<button type="button">Imprimer / PDF</button></div>
 ${contractPrintBody(contract)}
 </body>
 </html>`;
@@ -349,10 +339,10 @@ export function openContractPrint(contract, { autoPrint = true, onError } = {}) 
   };
   const btn = win.document.querySelector(".print-actions button");
   if (btn) btn.addEventListener("click", triggerPrint);
-  const toggle = win.document.getElementById("landlord-sig-toggle");
-  const sigBox = win.document.querySelector(".landlord-sig");
+  const toggle = win.document.getElementById("sig-toggle");
+  const sigBox = win.document.querySelector(".signature");
   if (toggle && sigBox) {
-    toggle.addEventListener("change", () => { sigBox.innerHTML = landlordSigInner(contract, toggle.checked); });
+    toggle.addEventListener("change", () => { sigBox.innerHTML = signatureGridHtml(contract, toggle.checked); });
   }
   if (autoPrint && !toggle) {
     if (win.document.readyState === "complete") setTimeout(triggerPrint, 250);

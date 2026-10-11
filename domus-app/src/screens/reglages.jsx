@@ -11,7 +11,6 @@ import {
   paymentMethodRows, PAYMENT_PRESETS, PAYMENT_PRESET_NAMES, PAYMENT_PRESET_BY_NAME,
 } from "../data.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { LandlordSignatureCard } from "./landlordSignature.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { TEMPLATE_TYPE_LABEL, hasHtmlMarkup, escapeHtml } from "../contractUtils.js";
@@ -139,7 +138,6 @@ export function Reglages({ device, go }) {
 
       <SettingsGroup id="reglages-contrats" label={t("Contrats & communication")} cols={2}>
         <LandlordInfoCard setting={data?.setting} onSaved={reload} />
-        <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
         <OverdueGraceCard setting={data?.setting} onSaved={reload} />
         <RemindersCard setting={data?.setting} onSaved={reload} />
