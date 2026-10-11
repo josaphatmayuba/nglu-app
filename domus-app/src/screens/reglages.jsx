@@ -140,6 +140,7 @@ export function Reglages({ device, go }) {
         <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
         <OverdueGraceCard setting={data?.setting} onSaved={reload} />
+        <SmsToggleCard setting={data?.setting} onSaved={reload} />
         <RemindersCard setting={data?.setting} onSaved={reload} />
         <TemplatesCard initial={data?.contractTemplates} onChanged={reload} />
       </SettingsGroup>
@@ -1380,6 +1381,40 @@ function RemindersCard({ setting, onSaved }) {
           {msg.type === "ok" && <Check size={14} />}{msg.text}
         </span>}
       </div>
+    </section>
+  );
+}
+
+function SmsToggleCard({ setting, onSaved }) {
+  const enabled = setting?.smsEnabled == null || Number(setting.smsEnabled) === 1;
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const toggle = async (checked) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.updateSetting({ smsEnabled: checked ? 1 : 0 });
+      setMsg({ type: "ok", text: checked ? "SMS activés." : "SMS désactivés." });
+      onSaved?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><MessageSquare size={17} /> Envoi de SMS</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        Interrupteur général : désactivé, aucun SMS (rappels, signature, bienvenue, préavis…) n&apos;est envoyé ; les emails ne sont pas concernés. Les tentatives restent visibles dans l&apos;historique comme « ignorées ».
+      </p>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0" }}>
+        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => toggle(e.target.checked)} />
+        <span>Activer l&apos;envoi de SMS</span>
+      </label>
+      {msg && <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</span>}
     </section>
   );
 }

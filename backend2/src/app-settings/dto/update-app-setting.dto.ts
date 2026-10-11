@@ -29,5 +29,6 @@ export class UpdateAppSettingDto {
   @ApiPropertyOptional({ example: 15 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Min(1) @Max(365) rentReminderOverdueDays?: number;
   @ApiPropertyOptional({ example: 90 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Min(1) @Max(365) leaseExpiryNoticeDays?: number;
   @ApiPropertyOptional({ example: 9 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Max(23) rentReminderHour?: number;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Max(1) smsEnabled?: number;
   @ApiPropertyOptional({ example: 5 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() @Min(0) @Max(60) rentOverdueGraceDays?: number;
 }

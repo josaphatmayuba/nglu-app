@@ -7,7 +7,9 @@ import { join } from "path";
 import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import {
+  appSettings,
   customers,
   products,
   productCategories,
@@ -126,6 +128,13 @@ export class CompatService {
       relatedType,
       relatedId,
     });
+
+    // Interrupteur Réglages (appSetting.smsEnabled) : NULL = actif, 0 = SMS désactivés.
+    const smsSetting = await readOrgAppSetting(this.db, organizationId, { smsEnabled: appSettings.smsEnabled });
+    if (smsSetting && smsSetting.smsEnabled != null && Number(smsSetting.smsEnabled) === 0) {
+      await this.updateSmsLog(logId, "skipped", "Envoi de SMS désactivé dans les réglages.");
+      return { success: false, skipped: true, message: "Envoi de SMS désactivé dans les réglages." };
+    }
 
     const { login, password, baseUrl } = env.smsGateway;
     if (login && password) {
