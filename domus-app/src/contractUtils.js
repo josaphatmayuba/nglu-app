@@ -106,15 +106,20 @@ function contractContentHtml(value = "") {
     : plainContractHtml(content);
 }
 
+// Une signature enregistrée quasi vide (point, image 1x1) ne compte pas comme signature.
+export function isRealSignature(sig) {
+  return typeof sig === "string" && sig.startsWith("data:image") && sig.length > 600;
+}
+
 function landlordPrintBlock(contract) {
   const company = contract?.companyInfo || {};
   const landlordInfo = contract?.landlordInfo || {};
   const name = landlordInfo.name || contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
   const sig = landlordInfo.signature ?? company.landlordSignature;
-  if (sig) {
+  if (isRealSignature(sig)) {
     return `<img class="signature-image" src="${sig}" alt="Signature bailleur" /><div class="signature-name">${escapeHtml(name)}</div>`;
   }
-  return `<div class="typed-signature">${escapeHtml(name)}</div>`;
+  return `<div class="signature-line"></div><div class="signature-name">${escapeHtml(name)}</div>`;
 }
 
 export const CONTRACT_PRINT_CSS = `
@@ -259,7 +264,7 @@ export function contractPrintBody(contract) {
   const dots = "..............................";
   const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
   const landlordSignature = contract?.landlordInfo?.signature ?? contract?.companyInfo?.landlordSignature;
-  const landlordSignedDate = landlordSignature && (contract?.sentAt || contract?.createdAt)
+  const landlordSignedDate = isRealSignature(landlordSignature) && (contract?.sentAt || contract?.createdAt)
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
     : dots;
   const tenantSignature = contract?.signatureData
