@@ -1770,3 +1770,15 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .domus-toast-info { background:#1e293b; }
 .domus-toast-success { background:#16a34a; }
 .domus-toast-error { background:#dc2626; }
+/* Mobile: empeche le debordement horizontal (decalage a droite) */
+.shell[data-layout="mobile"], .shell[data-layout="mobile"] .main { width:100%; max-width:100vw; min-width:0; overflow-x:hidden; }
+.shell[data-layout="mobile"] .content { box-sizing:border-box; width:100%; min-width:0; }
+.shell[data-layout="mobile"] .content > *, .shell[data-layout="mobile"] .content [class*="grid"] > * { min-width:0; max-width:100%; }
+.shell[data-layout="mobile"] .immo-lease-card { padding:16px; }
+.shell[data-layout="mobile"] .immo-header, .shell[data-layout="mobile"] .immo-filters { margin-bottom:14px; }
+.shell[data-layout="mobile"] .immo-header-actions, .shell[data-layout="mobile"] .immo-filter-group { min-width:0; max-width:100%; }
+.shell[data-layout="mobile"] .immo-search, .shell[data-layout="mobile"] .immo-filter-autocomplete { min-width:0; width:100%; flex:1 1 100%; }
+.shell[data-layout="mobile"] .input-btn input { width:100%; min-width:0; }
+.shell[data-layout="mobile"] table { max-width:100%; }
+.shell[data-layout="mobile"] img, .shell[data-layout="mobile"] canvas { max-width:100%; }
+.shell[data-layout="mobile"] .leaflet-container { z-index:0; isolation:isolate; }
