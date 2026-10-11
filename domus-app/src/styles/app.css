@@ -1782,3 +1782,5 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .shell[data-layout="mobile"] table { max-width:100%; }
 .shell[data-layout="mobile"] img, .shell[data-layout="mobile"] canvas { max-width:100%; }
 .shell[data-layout="mobile"] .leaflet-container { z-index:0; isolation:isolate; }
+.shell[data-layout="mobile"] .landlord-sig-current { flex-wrap:wrap; }
+.shell[data-layout="mobile"] .landlord-sig-current img { max-width:100%; min-width:0; }
