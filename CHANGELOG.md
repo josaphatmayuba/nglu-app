@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus — impression du contrat plus compacte (v3.220.33, pas de ticket Jira).** La feuille d'impression ajoutait trop d'espace au HTML du contrat (marges 20 mm, interligne 1.75, paragraphes 12 px, grands blancs autour des articles et signatures) et le faisait déborder d'une page. Marges 12×15 mm, police 12 px, interligne 1.5, espacements réduits. Fichier : `domus-app/src/contractUtils.js`. CSS seul ; QA dev à faire.
 - **Domus — carte de bail : « impayés » ne compte plus les loyers payés en retard (v3.220.32, pas de ticket Jira).** Le backend expose `unpaidCount` (échéances dépassées et non couvertes) en plus de `lateCount` ; la carte affiche « N impayé(s) · M payé(s) en retard ». Fichiers : `property-management.service.ts`, `domus-app/src/screens/baux.jsx`. Vérifié : `tsc --noEmit` OK ; QA dev à faire.
 - **Domus — mobile : cartes de Réservations plus coupées à droite (v3.220.31, pas de ticket Jira).** La galerie (2 colonnes `1fr`) s'élargissait au contenu ; colonnes `minmax(0,1fr)`, textes tronqués avec ellipse, specs qui passent à la ligne. CSS seul.
 - **Domus — mobile : bouton « Effacer » de la signature bailleur plus coupé (v3.220.30, pas de ticket Jira).** Réglages : la ligne signature actuelle passe à la ligne au lieu de déborder. CSS seul.

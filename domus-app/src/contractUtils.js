@@ -122,15 +122,15 @@ export const CONTRACT_PRINT_CSS = `
       background: #ffffff;
       color: #1a1a1a;
       font-family: Georgia, "Times New Roman", serif;
-      font-size: 13px;
-      line-height: 1.7;
+      font-size: 12px;
+      line-height: 1.5;
       margin: 0;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
     .contract-doc * { box-sizing: border-box; }
     .contract-doc img { max-width: 100%; }
-    .print-actions { margin: 16px 0 28px; text-align: right; }
+    .print-actions { margin: 10px 0 14px; text-align: right; }
     .print-actions button {
       background: #1a1a1a;
       border: 1px solid #b08d3e;
@@ -149,8 +149,8 @@ export const CONTRACT_PRINT_CSS = `
       letter-spacing: .3em;
       text-transform: uppercase;
     }
-    .contract-doc .contract-content { color: #292524; font-size: 13px; line-height: 1.75; margin-top: 26px; }
-    .contract-doc .contract-content p { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
+    .contract-doc .contract-content { color: #292524; font-size: 12px; line-height: 1.5; margin-top: 12px; }
+    .contract-doc .contract-content p { margin: 0 0 7px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content li { margin-bottom: 6px; orphans: 3; widows: 3; }
     .contract-doc .contract-content ul, .contract-doc .contract-content ol { margin: 0 0 14px; padding-left: 26px; }
     .contract-doc .contract-content h1, .contract-doc .contract-content h2, .contract-doc .contract-content h3, .contract-doc .contract-content h4 {
@@ -169,15 +169,15 @@ export const CONTRACT_PRINT_CSS = `
     .contract-doc .contract-content th, .contract-doc .contract-content td { border: 1px solid #d6d3d1; padding: 7px 10px; text-align: left; vertical-align: top; }
     .contract-doc .contract-content th { background: #faf7f0; font-variant: small-caps; letter-spacing: .06em; }
     .contract-doc .contract-content hr { border: 0; border-top: 1px solid #d6c39a; margin: 22px auto; width: 60%; }
-    .contract-doc .contract-content .para { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
+    .contract-doc .contract-content .para { margin: 0 0 7px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content .doc-title {
       border-bottom: 3px double #b08d3e;
       color: #1a1a1a;
       font-size: 21px;
       font-weight: normal;
       letter-spacing: .16em;
-      margin: 6px auto 30px;
-      padding-bottom: 14px;
+      margin: 4px auto 16px;
+      padding-bottom: 8px;
       text-align: center;
       text-transform: uppercase;
       width: fit-content;
@@ -189,7 +189,7 @@ export const CONTRACT_PRINT_CSS = `
       font-variant: small-caps;
       font-weight: bold;
       letter-spacing: .14em;
-      margin: 32px 0 10px;
+      margin: 16px 0 6px;
       page-break-after: avoid;
       text-align: center;
     }
@@ -211,8 +211,8 @@ export const CONTRACT_PRINT_CSS = `
       margin: 0 0 12px;
       padding: 8px 14px;
     }
-    .contract-doc .plain-contract-content { font-family: Georgia, "Times New Roman", serif; font-size: 13px; line-height: 1.75; margin: 0; }
-    .contract-doc .signature { break-inside: avoid; margin-top: 44px; page-break-inside: avoid; padding-top: 24px; position: relative; }
+    .contract-doc .plain-contract-content { font-family: Georgia, "Times New Roman", serif; font-size: 12px; line-height: 1.5; margin: 0; }
+    .contract-doc .signature { break-inside: avoid; margin-top: 22px; page-break-inside: avoid; padding-top: 14px; position: relative; }
     .contract-doc .signature::before {
       border-top: 3px double #b08d3e;
       content: "";
@@ -236,7 +236,7 @@ export const CONTRACT_PRINT_CSS = `
     .contract-doc .signature-image {
       background: #fff;
       border: 1px solid #d6c39a;
-      max-height: 110px;
+      max-height: 80px;
       max-width: 300px;
       padding: 10px;
     }
@@ -292,7 +292,7 @@ export function contractPrintHtml(contract) {
   <meta charset="utf-8" />
   <title>Contrat ${escapeHtml(contractRef(contract))}</title>
   <style>
-    @page { size: A4; margin: 20mm 18mm; }
+    @page { size: A4; margin: 12mm 15mm; }
     body { margin: 0; }
 ${CONTRACT_PRINT_CSS}
     @media print { .print-actions { display: none; } }
