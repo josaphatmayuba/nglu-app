@@ -5,6 +5,7 @@ import {
   computeProratedOverdueStats,
   planProrationRealign,
   scheduleForLease,
+  occupiedMonthKeys,
 } from "./lease-proration";
 
 // Prorata opt-in : (1) fonctions pures, (2) branches du service avec une base
@@ -19,11 +20,11 @@ const baseLease = (extra: Record<string, unknown> = {}) => ({
   unitId: 4,
   tenantId: 7,
   currencyId: 1,
-  startDate: "2026-01-15",
-  endDate: "2026-04-10",
+  startDate: "2026-01-01",
+  endDate: "2026-03-20",
   billingCycle: "monthly",
   rentAmount: "100.00",
-  nextInvoiceDate: "2026-01-15",
+  nextInvoiceDate: "2026-01-01",
   rentProrationEnabled: 1,
   ...extra,
 });
@@ -73,8 +74,8 @@ describe("lease-proration (pur)", () => {
   const lease = baseLease() as any;
   const schedule = scheduleForLease(lease, 2, 0, "2026-02-01");
 
-  it("echeancier : 3 periodes, derniere au prorata 27/31", () => {
-    expect(schedule.map((p) => p.amount)).toEqual([100, 100, 87.1]);
+  it("echeancier : 3 mois civils, derniere au prorata 20/31", () => {
+    expect(schedule.map((p) => p.amount)).toEqual([100, 100, 64.52]);
     expect(schedule[2].prorated).toBe(true);
   });
 
@@ -82,12 +83,12 @@ describe("lease-proration (pur)", () => {
     const off = computeLeaseNextDue({ ...lease, rentProrationEnabled: 0 }, [100], 2, "2026-02-01");
     expect(off).toMatchObject({ nextDueAmount: 100, isProratedNext: false, rentProrationEnabled: false });
     const on = computeLeaseNextDue(lease, [200], 2, "2026-03-20");
-    expect(on).toMatchObject({ nextDueDate: "2026-03-15", nextDueAmount: 87.1, isProratedNext: true });
+    expect(on).toMatchObject({ nextDueDate: "2026-03-01", nextDueAmount: 64.52, isProratedNext: true });
   });
 
   it("retards par periode : non paye au-dela de la grace", () => {
     const st = computeProratedOverdueStats(schedule, [{ date: "2026-01-15", amount: 100 }], new Date("2026-03-20T00:00:00Z"), 5, 2);
-    expect(st).toMatchObject({ dueCount: 3, unpaidCount: 1, isOverdue: true, overdueDueDate: "2026-02-15" });
+    expect(st).toMatchObject({ dueCount: 3, unpaidCount: 2, isOverdue: true, overdueDueDate: "2026-02-01" });
   });
 
   it("plan : pending legacy realignes, surplus annule, paid et justificatif proteges", () => {
@@ -99,20 +100,20 @@ describe("lease-proration (pur)", () => {
     ];
     const plan = planProrationRealign(schedule, rows as any, 2);
     expect(plan.map((a) => a.action)).toEqual(["untouched", "update", "keep", "void"]);
-    expect(plan[1].proposed).toMatchObject({ paymentDate: "2026-02-15", amount: 100, periodStart: "2026-02-15" });
-    expect(plan[2].proposed).toMatchObject({ amount: 100, periodStart: "2026-03-15", periodEnd: "2026-04-10" });
+    expect(plan[1].proposed).toMatchObject({ paymentDate: "2026-02-01", amount: 100, periodStart: "2026-02-01" });
+    expect(plan[2].proposed).toMatchObject({ amount: 100, periodStart: "2026-03-01", periodEnd: "2026-03-20" });
   });
 
   it("loyer de janvier paye en fevrier : pas de pending annulee a tort, pas de trou", () => {
     const rows = [
       { id: 1, status: "paid", paymentDate: "2026-02-02", amount: "100", transactionId: 9, periodStart: null },
       { id: 2, status: "pending", paymentDate: "2026-02-15", amount: "100", transactionId: null, periodStart: null },
-      { id: 3, status: "pending", paymentDate: "2026-03-15", amount: "87.10", transactionId: null, periodStart: null },
+      { id: 3, status: "pending", paymentDate: "2026-03-15", amount: "64.52", transactionId: null, periodStart: null },
     ];
     const plan = planProrationRealign(schedule, rows as any, 2);
     expect(plan.map((a) => a.action)).toEqual(["untouched", "update", "update"]);
-    expect(plan[1].proposed).toMatchObject({ periodStart: "2026-02-15" });
-    expect(plan[2].proposed).toMatchObject({ periodStart: "2026-03-15" });
+    expect(plan[1].proposed).toMatchObject({ periodStart: "2026-02-01" });
+    expect(plan[2].proposed).toMatchObject({ periodStart: "2026-03-01" });
     expect(plan[0].periodIndex).toBe(0);
     expect(plan[1].periodIndex).toBe(1);
   });
@@ -124,16 +125,16 @@ describe("PropertyManagementService — prorata opt-in", () => {
     const res = await service.generateMissingPayments(10, ORG, true);
     expect(res.createdCount).toBe(3);
     const vals = inserts.map((i) => i.vals);
-    expect(vals.map((v) => v.paymentDate)).toEqual(["2026-01-15", "2026-02-15", "2026-03-15"]);
-    expect(vals.map((v) => v.amount)).toEqual(["100", "100", "87.1"]);
-    expect(vals[2]).toMatchObject({ periodStart: "2026-03-15", periodEnd: "2026-04-10", status: "pending" });
+    expect(vals.map((v) => v.paymentDate)).toEqual(["2026-01-01", "2026-02-01", "2026-03-01"]);
+    expect(vals.map((v) => v.amount)).toEqual(["100", "100", "64.52"]);
+    expect(vals[2]).toMatchObject({ periodStart: "2026-03-01", periodEnd: "2026-03-20", status: "pending" });
   });
 
   it("idempotence : lignes avec period_* puis lignes legacy (cle mois) => zero doublon", async () => {
     const withPeriods = [
-      { id: 1, status: "pending", amount: "100", paymentDate: "2026-01-15", periodStart: "2026-01-15" },
-      { id: 1, status: "pending", amount: "100", paymentDate: "2026-02-15", periodStart: "2026-02-15" },
-      { id: 1, status: "pending", amount: "87.10", paymentDate: "2026-03-15", periodStart: "2026-03-15" },
+      { id: 1, status: "pending", amount: "100", paymentDate: "2026-01-01", periodStart: "2026-01-01" },
+      { id: 1, status: "pending", amount: "100", paymentDate: "2026-02-01", periodStart: "2026-02-01" },
+      { id: 1, status: "pending", amount: "64.52", paymentDate: "2026-03-01", periodStart: "2026-03-01" },
     ];
     const a = makeService(baseLease(), withPeriods);
     expect((await a.service.generateMissingPayments(10, ORG, true)).createdCount).toBe(0);
@@ -149,6 +150,40 @@ describe("PropertyManagementService — prorata opt-in", () => {
   });
 
 
+  it("ancienne ligne pending ancree (periodStart hors echeancier) : aucun doublon cree", async () => {
+    const lease = baseLease({ startDate: "2026-10-06", endDate: "2027-09-30", nextInvoiceDate: "2026-10-06" });
+    const rows = [
+      { id: 1, status: "pending", amount: "550", paymentDate: "2026-10-06", periodStart: "2026-10-06", transactionId: null },
+      { id: 2, status: "pending", amount: "550", paymentDate: "2026-11-06", periodStart: "2026-11-06", transactionId: null },
+    ];
+    const { service, inserts } = makeService(lease, rows);
+    await service.generateMissingPayments(10, ORG, true);
+    const dates = inserts.map((i) => i.vals.paymentDate);
+    expect(dates).not.toContain("2026-11-01");
+    expect(dates).not.toContain("2026-10-06");
+    expect(dates).toContain("2026-12-01");
+  });
+
+  it("occupiedMonthKeys : pending ancienne periode oui, pending alignee non, avec transaction non", () => {
+    const sch = scheduleForLease(baseLease({ startDate: "2026-10-06", endDate: "2027-09-30" }) as any, 2, 0, "2026-10-12");
+    const keys = occupiedMonthKeys([
+      { status: "pending", paymentDate: "2026-11-06", periodStart: "2026-11-06" },
+      { status: "pending", paymentDate: "2026-12-01", periodStart: "2026-12-01" },
+      { status: "pending", paymentDate: "2027-01-06", periodStart: "2027-01-06", transactionId: 5 },
+      { status: "paid", paymentDate: "2026-10-06", periodStart: null },
+    ], sch);
+    expect([...keys]).toEqual(["2026-11"]);
+  });
+
+  it("decoratePaymentRow : ancienne ligne ancree (06/11->05/12) n'est pas un prorata", () => {
+    const { service } = makeService(baseLease());
+    const r = (service as any).decoratePaymentRow({
+      periodStart: "2026-11-06", periodEnd: "2026-12-05", leaseProrationEnabled: 1,
+      leaseBillingCycle: "monthly", leaseStartDate: "2026-10-06",
+    });
+    expect(r.isProrata).toBe(false);
+  });
+
   it("loyer de janvier paye en fevrier : generation sans doublon ni trou", async () => {
     const rows = [
       { id: 1, status: "paid", paymentDate: "2026-02-02", amount: "100", periodStart: null },
@@ -157,16 +192,16 @@ describe("PropertyManagementService — prorata opt-in", () => {
     const { service, inserts } = makeService(baseLease(), rows);
     const res = await service.generateMissingPayments(10, ORG, true);
     expect(res.createdCount).toBe(1);
-    expect(inserts[0].vals).toMatchObject({ periodStart: "2026-03-15", status: "pending" });
+    expect(inserts[0].vals).toMatchObject({ periodStart: "2026-03-01", status: "pending" });
   });
 
-  it("decoratePaymentRow : periode ancree sur startDate (debut 31/01, fin 15/03 => 16 j / 31)", () => {
+  it("decoratePaymentRow : mois civil (debut 15/01, fin 20/03 => 20 j / 31)", () => {
     const { service } = makeService(baseLease());
     const r = (service as any).decoratePaymentRow({
-      periodStart: "2026-02-28", periodEnd: "2026-03-15", leaseProrationEnabled: 1,
-      leaseBillingCycle: "monthly", leaseStartDate: "2026-01-31",
+      periodStart: "2026-03-01", periodEnd: "2026-03-20", leaseProrationEnabled: 1,
+      leaseBillingCycle: "monthly", leaseStartDate: "2026-01-15",
     });
-    expect(r).toMatchObject({ isProrata: true, prorataDays: 16, periodDays: 31 });
+    expect(r).toMatchObject({ isProrata: true, prorataDays: 20, periodDays: 31 });
   });
 
   it("apercu : aucune ecriture, compteurs coherents", async () => {
@@ -178,7 +213,7 @@ describe("PropertyManagementService — prorata opt-in", () => {
     ];
     const { service, inserts, updates } = makeService(baseLease({ rentProrationEnabled: 0 }), rows);
     const p = await service.prorationPreview(10, ORG, "all");
-    expect(p).toMatchObject({ willUpdate: 2, willVoid: 1, willKeep: 0, paidUntouched: 1, totalProposed: 287.1 });
+    expect(p).toMatchObject({ willUpdate: 2, willVoid: 1, willKeep: 0, paidUntouched: 1, totalProposed: 264.52 });
     expect(p.schedule).toHaveLength(3);
     expect(p.currentRows.map((r) => r.action)).toEqual(["untouched", "update", "update", "void"]);
     expect(inserts).toHaveLength(0);
@@ -197,12 +232,12 @@ describe("PropertyManagementService — prorata opt-in", () => {
     expect(inserts).toHaveLength(0);
     const rentUpdates = updates.filter((u) => u.table === realEstateRentPayments).map((u) => u.vals);
     expect(rentUpdates).toHaveLength(2);
-    expect(rentUpdates[0]).toMatchObject({ paymentDate: "2026-03-15", amount: "87.1", periodStart: "2026-03-15" });
+    expect(rentUpdates[0]).toMatchObject({ paymentDate: "2026-03-01", amount: "64.52", periodStart: "2026-03-01" });
     expect(rentUpdates[1]).toMatchObject({ status: "voided" });
   });
 
   it("bail SANS option : generation historique inchangee (1er du mois, pas de period_*)", async () => {
-    const { service, inserts } = makeService(baseLease({ rentProrationEnabled: 0, endDate: "2026-04-15" }));
+    const { service, inserts } = makeService(baseLease({ rentProrationEnabled: 0, endDate: "2026-03-20" }));
     const res = await service.generateMissingPayments(10, ORG, true);
     expect(res.createdCount).toBe(3);
     const vals = inserts.map((i) => i.vals);

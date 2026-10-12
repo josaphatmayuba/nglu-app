@@ -203,12 +203,16 @@ function buildProratedRentSchedule(lease, payments) {
     };
     if (existing) {
       used.add(existing);
-      // Les champs prorata de l'échéancier (ancré sur startDate) font foi.
+      // Ligne en attente sans transaction ni justificatif : l'échéancier (mois civil) fait foi
+      // (période, montant, date). Payée / justificatif / transaction : inchangée.
+      const hasProof = Boolean(existing.proofUrl) || Number(existing.proofUploadCount || 0) > 0;
+      const followSchedule = existing.status === "pending" && !existing.transactionId && !hasProof;
       return {
         ...existing,
         ...period,
         periodStart: existing.periodStart || period.periodStart,
-        periodEnd: existing.periodEnd || period.periodEnd,
+        periodEnd: followSchedule ? period.periodEnd : existing.periodEnd || period.periodEnd,
+        ...(followSchedule ? { amount: e.amount, paymentDate: e.dueDate || e.periodStart } : {}),
       };
     }
     return {
