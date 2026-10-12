@@ -44,7 +44,7 @@ const tenantSignatureBlockHtml = (sigData, signedAt, name) => `
     </div>`;
 
 export const contractSignaturesHtml = (contract) => {
-  const signers = Array.isArray(contract?.signers) ? contract.signers : [];
+  const signers = Array.isArray(contract?.printTenants) ? contract.printTenants : [];
   if (signers.length < 2) return legacyContractSignaturesHtml(contract);
   return `
   <div class="domus-contract-signatures">
