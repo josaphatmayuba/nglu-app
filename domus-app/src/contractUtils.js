@@ -283,7 +283,7 @@ function signatureGridHtml(contract, withSignatures = true) {
       </div>`;
 
   // Bail multi-locataires (2 a 4) : un bloc de signature par locataire.
-  const signers = Array.isArray(contract?.signers) ? contract.signers : [];
+  const signers = Array.isArray(contract?.printTenants) ? contract.printTenants : [];
   if (signers.length >= 2) {
     const tenantBlocks = signers.map((s) => {
       const sig = withSignatures && isRealSignature(s.signatureData) ? s.signatureData : null;
@@ -303,6 +303,7 @@ function signatureGridHtml(contract, withSignatures = true) {
       ${landlordBlock}
       <div>
         <h2>Signature du locataire</h2>${tenantSignature}
+        ${contract?.tenantName ? `<div class="signature-name">${escapeHtml(String(contract.tenantName).toLocaleUpperCase("fr"))}</div>` : ""}
         <div class="signature-date">Signé le : ${tenantDate}</div>
       </div>
     </div>`;

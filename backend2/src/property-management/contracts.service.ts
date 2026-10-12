@@ -365,9 +365,14 @@ export class ContractsService {
 
     // Detail admin : la signature de chaque locataire sert a l'impression du contrat (un bloc par signataire).
     const signers = (await this.activeSigners(id)).map((x) => ({ ...this.signerView(x), signatureData: x.signatureData }));
+    // Les signataires n'existent qu'a l'envoi : avant (brouillon), l'impression se base sur les locataires du bail.
+    const printTenants = signers.length
+      ? signers.map((s) => ({ name: s.name, signatureData: s.signatureData, signedAt: s.signedAt }))
+      : (await this.loadSigningCandidates(rows[0].leaseId, orgId)).map((c) => ({ name: c.name, signatureData: null, signedAt: null }));
 
     return {
       ...rows[0],
+      printTenants,
       signers,
       signersSigned: signers.filter((x) => x.status === "signed").length,
       signersTotal: signers.length,
