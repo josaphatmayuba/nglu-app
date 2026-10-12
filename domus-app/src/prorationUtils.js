@@ -67,12 +67,17 @@ export function nextUnpaidProrataRow(list) {
   return rows[0] || null;
 }
 
-// Nombre de periodes mensuelles (ancrees sur le jour de debut) deja
+// Nombre de periodes (mensuel : mois civils ; autres : ancrees sur le jour de debut) deja
 // commencees a `today` (0 avant le debut). Pas de plafond : l'appelant ne
 // l'utilise que pour combler des lignes absentes.
 export function startedPeriods(lease, today = new Date()) {
   const s = parseLocal(lease?.startDate);
   if (!s) return 0;
+  if (String(lease?.billingCycle || "monthly").toLowerCase() === "monthly" || !lease?.billingCycle) {
+    // Mensuel : mois civils (1re periode partielle = date de debut, puis chaque 1er du mois).
+    if (today < s) return 0;
+    return (today.getFullYear() - s.getFullYear()) * 12 + (today.getMonth() - s.getMonth()) + 1;
+  }
   let n = (today.getFullYear() - s.getFullYear()) * 12 + (today.getMonth() - s.getMonth());
   if (today.getDate() < s.getDate()) n -= 1;
   n = Math.max(0, n) + (today >= s ? 1 : 0);

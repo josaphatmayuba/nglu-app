@@ -1,7 +1,7 @@
 /**
  * Echeancier de bail (module PUR : pas de DB, pas de Nest).
- * Dates 'YYYY-MM-DD' traitees en UTC. Les periodes sont ancrees sur startDate
- * + k cycles (jamais chainees) avec clamp fin de mois, comme addBillingCycle.
+ * Dates 'YYYY-MM-DD' traitees en UTC. Mensuel = mois civils (1re periode = date de debut,
+ * puis 1er du mois). Trimestriel/annuel : periodes ancrees sur startDate + k cycles (clamp fin de mois).
  */
 
 export type LeaseBillingCycle = "monthly" | "quarterly" | "yearly" | "annual" | null | undefined;
@@ -75,9 +75,31 @@ export function addBillingCycle(value: Date, billingCycle?: string | null, perio
 export function anchoredPeriodDays(anchorStart: string, billingCycle: string | null | undefined, periodStart: string): number {
   const a = parseDateOnly(anchorStart);
   const s = parseDateOnly(periodStart);
+  if (cycleMonths(billingCycle) === 1) {
+    // Mensuel : mois civil de periodStart.
+    return diffDays(
+      new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1)),
+      new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth() + 1, 1)),
+    );
+  }
   const months = (s.getUTCFullYear() - a.getUTCFullYear()) * 12 + (s.getUTCMonth() - a.getUTCMonth());
   const k = Math.max(0, Math.round(months / cycleMonths(billingCycle)));
   return diffDays(addBillingCycle(a, billingCycle, k), addBillingCycle(a, billingCycle, k + 1));
+}
+
+/**
+ * Vrai si [periodStart, periodEnd] est EXACTEMENT une ancienne periode ancree sur
+ * startDate (avant le passage au mois civil) : ligne a ne pas marquer prorata.
+ */
+export function isLegacyAnchoredPeriod(anchorStart: string, billingCycle: string | null | undefined, periodStart: string, periodEnd: string): boolean {
+  const a = parseDateOnly(anchorStart);
+  const s = parseDateOnly(periodStart);
+  const months = (s.getUTCFullYear() - a.getUTCFullYear()) * 12 + (s.getUTCMonth() - a.getUTCMonth());
+  const k = months / cycleMonths(billingCycle);
+  if (!Number.isInteger(k) || k < 0) return false;
+  const st = addBillingCycle(a, billingCycle, k);
+  const en = new Date(addBillingCycle(a, billingCycle, k + 1).getTime() - DAY_MS);
+  return formatDateOnly(st) === periodStart.slice(0, 10) && formatDateOnly(en) === periodEnd.slice(0, 10);
 }
 
 function diffDays(a: Date, b: Date): number {
@@ -96,22 +118,25 @@ export function buildLeaseSchedule(input: BuildLeaseScheduleInput): SchedulePeri
 
   for (let k = 0; ; k++) {
     if (!end && k >= horizon) break;
-    const pStart = addBillingCycle(start, cycle, k);
+    const civil = cycleMonths(cycle) === 1;
+    // Mensuel : mois civils (1re periode = date de debut, puis 1er du mois).
+    const monthFirst = (n: number) => new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + n, 1));
+    const pStart = civil ? (k === 0 ? start : monthFirst(k)) : addBillingCycle(start, cycle, k);
     // Un bail finissant le jour anniversaire (ou avant) ne facture pas ce mois-la.
     // Exception : bail d'un seul jour (fin == debut) -> au moins 1 echeance (comme l'ancien code).
     const oneDayLease = !!end && k === 0 && end.getTime() === start.getTime();
     if (end && ((pStart.getTime() >= end.getTime() && !oneDayLease) || k > 1200)) break;
-    const nextStart = addBillingCycle(start, cycle, k + 1);
+    const nextStart = civil ? monthFirst(k + 1) : addBillingCycle(start, cycle, k + 1);
     const theoreticalEnd = new Date(nextStart.getTime() - DAY_MS);
-    const periodDays = diffDays(pStart, nextStart);
+    // Mensuel civil : periodDays = jours du mois civil (meme pour la 1re periode partielle).
+    const periodDays = civil ? diffDays(monthFirst(k), nextStart) : diffDays(pStart, nextStart);
     let pEnd = theoreticalEnd;
-    let days = periodDays;
-    let prorated = false;
+    let days = diffDays(pStart, theoreticalEnd) + 1;
     if (end && end.getTime() < theoreticalEnd.getTime()) {
       pEnd = end;
       days = diffDays(pStart, end) + 1;
-      prorated = true;
     }
+    const prorated = days < periodDays;
     const amount = prorated ? roundMoney((fullAmount * days) / periodDays, decimals) : fullAmount;
     out.push({
       index: k,

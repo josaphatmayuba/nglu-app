@@ -102,13 +102,14 @@ import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { anchoredPeriodDays, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
+import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
   computeLeaseNextDue,
   computeProratedOverdueStats,
   planProrationRealign,
   scheduleForLease,
+  occupiedMonthKeys,
 } from "./lease-proration";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
@@ -2708,13 +2709,14 @@ export class PropertyManagementService {
     upToEnd: boolean,
     decimals: number,
   ) {
-    const existing: Array<{ id: number; status: string; amount: any; paymentDate: any; periodStart: any }> = await db
+    const existing: Array<{ id: number; status: string; amount: any; paymentDate: any; periodStart: any; transactionId?: any }> = await db
       .select({
         id: realEstateRentPayments.id,
         status: realEstateRentPayments.status,
         amount: realEstateRentPayments.amount,
         paymentDate: realEstateRentPayments.paymentDate,
         periodStart: realEstateRentPayments.periodStart,
+        transactionId: realEstateRentPayments.transactionId,
       })
       .from(realEstateRentPayments)
       .where(and(
@@ -2740,9 +2742,7 @@ export class PropertyManagementService {
     // sans periodStart est rattachee par couverture cumulee (assignPaidRows), pas
     // par le mois de sa date de paiement reelle.
     const periodStarts = new Set(existing.filter((p) => p.periodStart).map((p) => String(p.periodStart).slice(0, 10)));
-    const monthKeys = new Set(
-      existing.filter((p) => p.status === "pending" && !p.periodStart).map((p) => String(p.paymentDate).slice(0, 7)),
-    );
+    const monthKeys = occupiedMonthKeys(existing, full);
     const paidCovered = assignPaidRows(
       full,
       existing.filter((p) => p.status === "paid").map((p) => ({ ...p, id: p.id })),
@@ -2937,6 +2937,11 @@ export class PropertyManagementService {
         ? anchoredPeriodDays(String(leaseStartDate), leaseBillingCycle, String(row.periodStart))
         : Math.round((addScheduleCycle(s, leaseBillingCycle, 1).getTime() - s.getTime()) / 86_400_000);
       isProrata = prorataDays < periodDays;
+      // Ancienne ligne ancree sur le jour de debut (avant mois civil) : periode pleine, pas un prorata.
+      if (isProrata && leaseStartDate && isLegacyAnchoredPeriod(String(leaseStartDate), leaseBillingCycle, String(row.periodStart), String(row.periodEnd))) {
+        isProrata = false;
+        periodDays = prorataDays;
+      }
     }
     return { ...rest, isProrata, prorataDays, periodDays } as Omit<T, "leaseBillingCycle" | "leaseProrationEnabled" | "leaseStartDate"> & {
       isProrata: boolean;

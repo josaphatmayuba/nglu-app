@@ -310,6 +310,28 @@ export function planProrationRealign(
   return rows.map((r) => result.get(r.id)!);
 }
 
+/**
+ * Mois (YYYY-MM) deja "occupes" par une ligne pending sans transaction : pending
+ * sans periodStart (historique) OU dont le periodStart n'est plus dans l'echeancier
+ * (ancienne periode ancree, ex. 2026-11-06 avant passage en mois civil). Evite de
+ * creer un doublon a l'ouverture du carnet avant realignement.
+ */
+export function occupiedMonthKeys(
+  existing: Array<{ status: string; paymentDate: any; periodStart?: any; transactionId?: any }>,
+  schedule: SchedulePeriod[],
+): Set<string> {
+  const starts = new Set(schedule.map((p) => p.periodStart));
+  return new Set(
+    existing
+      .filter((p) => {
+        if (p.status !== "pending") return false;
+        if (!p.periodStart) return true;
+        return !p.transactionId && !starts.has(String(p.periodStart).slice(0, 10));
+      })
+      .map((p) => String(p.paymentDate).slice(0, 7)),
+  );
+}
+
 /** Aujourd'hui (UTC) au format YYYY-MM-DD. */
 export function todayDateOnly(): string {
   return formatDateOnly(new Date());
