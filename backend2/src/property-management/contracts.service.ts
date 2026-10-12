@@ -188,14 +188,14 @@ export class ContractsService {
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
 
     return {
-      "NOM COMPLET DU BAILLEUR": landlord.name,
+      "NOM COMPLET DU BAILLEUR": (landlord.name ?? "").toLocaleUpperCase("fr"),
       "ADRESSE DU BAILLEUR": landlord.address,
       "TÉLÉPHONE DU BAILLEUR": landlord.phone,
       "EMAIL DU BAILLEUR": landlord.email,
       "NOM DU GESTIONNAIRE": company.landlordName || company.companyName || "",
       "TÉLÉPHONE DU GESTIONNAIRE": company.landlordPhone || company.phone || "",
       "EMAIL DU GESTIONNAIRE": company.email ?? "",
-      "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
+      "NOM COMPLET DU PRENEUR": (lease.tenantName ?? "").toLocaleUpperCase("fr"),
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
       "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
