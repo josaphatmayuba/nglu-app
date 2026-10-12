@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   Check,
+  ClipboardCheck,
   Copy,
   Download,
   Eye,
@@ -38,6 +39,7 @@ import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
+import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -151,6 +153,7 @@ export function Baux({ go } = {}) {
   const [menuDir, setMenuDir] = useState("down");
   const [leaseModal, setLeaseModal] = useState(null);
   const [depositModal, setDepositModal] = useState(null);
+  const [inspectionView, setInspectionView] = useState(null);
   const [detailLease, setDetailLease] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -403,6 +406,8 @@ export function Baux({ go } = {}) {
                       onCollectDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "collect", lease, amount: depositDue }); }}
                       onReturnDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "return", lease, deposit }); }}
                       busy={busyAction}
+                      onInspection={(type) => { setOpenMenuId(null); setInspectionView({ kind: "launch", lease, type }); }}
+                      onCompareInspections={() => { setOpenMenuId(null); setInspectionView({ kind: "compare", lease }); }}
                       onDetail={() => {
                         setDetailLease({ lease, info });
                         setOpenMenuId(null);
@@ -504,6 +509,12 @@ export function Baux({ go } = {}) {
           }}
         />
       )}
+      {inspectionView?.kind === "launch" && (
+        <InspectionLauncher lease={inspectionView.lease} type={inspectionView.type} onClose={() => setInspectionView(null)} />
+      )}
+      {inspectionView?.kind === "compare" && (
+        <InspectionComparison lease={inspectionView.lease} onClose={() => setInspectionView(null)} />
+      )}
       {detailLease && (
         <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
       )}
@@ -555,6 +566,8 @@ function LeaseActionsMenu({
   onReturnDeposit,
   busy,
   onDetail,
+  onInspection,
+  onCompareInspections,
   onContract,
   onDownloadContract,
   onExportCsv,
@@ -654,6 +667,11 @@ function LeaseActionsMenu({
           <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> Renouveler (nouveau bail)</button>
         </>
       )}
+
+      <hr />
+      <button onClick={() => onInspection?.("entry")}><ClipboardCheck size={15} /> {t("État des lieux d'entrée")}</button>
+      <button onClick={() => onInspection?.("exit")}><ClipboardCheck size={15} /> {t("État des lieux de sortie")}</button>
+      <button onClick={onCompareInspections}><ClipboardCheck size={15} /> {t("Comparer entrée / sortie")}</button>
     </div>
   );
 }
@@ -1175,6 +1193,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
             />
           </label>
         </div>
+        <LeaseInspectionsSection lease={lease} />
         {go && (
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>

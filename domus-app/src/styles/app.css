@@ -1802,3 +1802,52 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .immo-prorata-info .immo-pay-row { flex-wrap:wrap; gap:2px 12px; }
 .immo-prorata-info .immo-pay-row:last-child { margin-bottom:0; }
 .immo-prorata-reset { min-height:44px; justify-content:center; margin-top:6px; }
+
+/* Etats des lieux (Domus) */
+.edl-screen { position:fixed; inset:0; z-index:1200; background:#f4f4f5; display:flex; flex-direction:column; }
+.edl-head { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#fff; border-bottom:1px solid #e4e4e7; }
+.edl-head-title { flex:1; min-width:0; display:flex; flex-direction:column; }
+.edl-head-title small { color:#71717a; }
+.edl-back, .edl-btn { min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #e4e4e7; border-radius:10px; background:#fff; cursor:pointer; }
+.edl-tabs { display:flex; background:#fff; border-bottom:1px solid #e4e4e7; }
+.edl-tabs button { flex:1; min-height:44px; border:0; background:none; font-weight:600; cursor:pointer; border-bottom:3px solid transparent; }
+.edl-tabs button.on { border-bottom-color:#18181b; }
+.edl-body { flex:1; overflow-y:auto; padding:12px; display:grid; gap:12px; align-content:start; max-width:960px; width:100%; margin:0 auto; box-sizing:border-box; }
+.edl-foot { padding:10px 12px; background:#fff; border-top:1px solid #e4e4e7; }
+.edl-foot .immo-btn { width:100%; }
+.edl-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; padding:12px; }
+.edl-card h3 { margin:0 0 8px; font-size:15px; }
+.edl-card textarea, .edl-card input:not([type=checkbox]) { width:100%; box-sizing:border-box; min-height:44px; }
+.edl-meters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.edl-key-row { display:grid; grid-template-columns:1fr 80px 44px; gap:8px; margin-bottom:8px; }
+.edl-room-head { width:100%; min-height:44px; display:flex; align-items:center; gap:8px; border:0; background:none; text-align:left; cursor:pointer; }
+.edl-room-head small { margin-left:auto; color:#71717a; }
+.edl-room { padding:4px 12px; }
+.edl-room-body { display:grid; gap:12px; padding:8px 0 12px; }
+.edl-item { border-top:1px solid #f0f0f2; padding-top:10px; display:grid; gap:8px; }
+.edl-item-title { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.edl-conds { display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+.edl-cond { flex:0 0 auto; min-width:64px; min-height:44px; padding:0 12px; border:1px solid #d4d4d8; border-radius:10px; background:#fff; font-weight:600; cursor:pointer; }
+.edl-cond:disabled { opacity:.7; }
+.edl-photos { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.edl-thumb { position:relative; width:64px; height:64px; border-radius:8px; overflow:hidden; background:#e4e4e7; display:inline-flex; align-items:center; justify-content:center; }
+.edl-thumb img { width:100%; height:100%; object-fit:cover; cursor:pointer; }
+.edl-thumb-del { position:absolute; top:0; right:0; width:28px; height:28px; border:0; background:rgba(0,0,0,.6); color:#fff; border-radius:0 0 0 8px; cursor:pointer; }
+.edl-photo-add { width:64px; height:64px; }
+.edl-lightbox { position:fixed; inset:0; z-index:1300; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; }
+.edl-lightbox img { max-width:96vw; max-height:92vh; object-fit:contain; }
+.edl-room-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.edl-tap { min-height:44px; }
+.edl-sig-img { max-width:100%; max-height:120px; border:1px solid #e4e4e7; border-radius:8px; background:#fff; }
+.edl-badge { display:inline-block; background:#dc2626; color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:700; }
+.edl-pill { display:inline-block; color:#fff; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; }
+.edl-cmp-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid #f0f0f2; }
+.edl-cmp-card.degraded { border-color:#dc2626; }
+.edl-cmp-sides { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.edl-cmp-table { display:none; width:100%; border-collapse:collapse; background:#fff; }
+.edl-cmp-table th, .edl-cmp-table td { border:1px solid #e4e4e7; padding:6px 8px; text-align:left; vertical-align:top; }
+.edl-cmp-table tr.degraded td { background:#fef2f2; }
+@media (min-width:900px) {
+  .edl-cmp-cards { display:none; }
+  .edl-cmp-table { display:table; }
+}

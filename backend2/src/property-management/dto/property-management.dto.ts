@@ -10,12 +10,14 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from "class-validator";
 
 export class CreatePropertyDto {
@@ -1850,3 +1852,108 @@ export class CreateDelegateAssignmentDto {
 export class UpdateDelegateAssignmentDto extends PartialType(
   OmitType(CreateDelegateAssignmentDto, ["scopeType", "scopeId"] as const),
 ) {}
+
+// ── Etats des lieux (entree / sortie) ───────────────────────────────────────
+
+export const INSPECTION_CONDITION_VALUES = ["new", "good", "fair", "poor", "damaged", "na"] as const;
+
+export class CreateInspectionDto {
+  @ApiProperty({ enum: ["entry", "exit"] })
+  @IsIn(["entry", "exit"])
+  type: "entry" | "exit";
+
+  @ApiProperty({ example: "2026-10-11" })
+  @IsDateString()
+  inspectionDate: string;
+}
+
+export class InspectionItemInputDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  id?: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  room: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
+  element: string;
+
+  @IsOptional()
+  @IsIn([...INSPECTION_CONDITION_VALUES])
+  condition?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  remarks?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+
+  // true = retrait logique (is_deleted = 1)
+  @IsOptional()
+  @IsBoolean()
+  isDeleted?: boolean;
+}
+
+export class InspectionKeyDto {
+  @IsString()
+  @MaxLength(100)
+  label: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(999)
+  count: number;
+}
+
+export class UpdateInspectionDto {
+  @IsOptional()
+  @IsDateString()
+  inspectionDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(5000)
+  generalNotes?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  meters?: Record<string, string | number | null>;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InspectionKeyDto)
+  keysHanded?: InspectionKeyDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InspectionItemInputDto)
+  items?: InspectionItemInputDto[];
+}
+
+export class SignInspectionDto {
+  @ApiProperty({ enum: ["landlord", "tenant"] })
+  @IsIn(["landlord", "tenant"])
+  role: "landlord" | "tenant";
+
+  @ApiProperty({ example: "data:image/png;base64,iVBORw0KGgo..." })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(90000)
+  signatureData: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  signerName: string;
+}

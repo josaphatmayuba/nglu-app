@@ -1030,6 +1030,64 @@ export const realEstateMaintenancePhotos = mysqlTable("real_estate_maintenance_p
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// Domus etats des lieux (migration 0310). type = entry|exit, status = draft|signed.
+export const realEstateInspections = mysqlTable("real_estate_inspections", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  unitId: bigint("unit_id", { mode: "number" }),
+  type: varchar("type", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).default("draft").notNull(),
+  inspectionDate: date("inspection_date"),
+  generalNotes: text("general_notes"),
+  meters: json("meters"),
+  keysHanded: json("keys_handed"),
+  entryInspectionId: bigint("entry_inspection_id", { mode: "number" }),
+  landlordSignatureData: mediumtext("landlord_signature_data"),
+  landlordSignerName: varchar("landlord_signer_name", { length: 255 }),
+  landlordSignedAt: datetime("landlord_signed_at"),
+  tenantSignatureData: mediumtext("tenant_signature_data"),
+  tenantSignerName: varchar("tenant_signer_name", { length: 255 }),
+  tenantSignedAt: datetime("tenant_signed_at"),
+  tenantSignerIp: varchar("tenant_signer_ip", { length: 64 }),
+  tenantSignerUa: varchar("tenant_signer_ua", { length: 512 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isDeleted: tinyint("is_deleted").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// condition = new|good|fair|poor|damaged|na (mot reserve MySQL, Drizzle le quote).
+export const realEstateInspectionItems = mysqlTable("real_estate_inspection_items", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  inspectionId: bigint("inspection_id", { mode: "number" }).notNull(),
+  room: varchar("room", { length: 100 }).notNull(),
+  element: varchar("element", { length: 150 }).notNull(),
+  condition: varchar("condition", { length: 20 }).default("good").notNull(),
+  remarks: text("remarks"),
+  entryItemId: bigint("entry_item_id", { mode: "number" }),
+  sortOrder: int("sort_order").default(0).notNull(),
+  isDeleted: tinyint("is_deleted").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const realEstateInspectionPhotos = mysqlTable("real_estate_inspection_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  inspectionId: bigint("inspection_id", { mode: "number" }).notNull(),
+  itemId: bigint("item_id", { mode: "number" }),
+  bucket: varchar("bucket", { length: 255 }).notNull(),
+  objectKey: varchar("object_key", { length: 512 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const realEstateUnits = mysqlTable("real_estate_units", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
