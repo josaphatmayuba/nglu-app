@@ -83,3 +83,14 @@ export function startedPeriods(lease, today = new Date()) {
   n = Math.max(0, n) + (today >= s ? 1 : 0);
   return n;
 }
+
+// Montant de la 1re periode (mensuel, mois civils) : loyer x jours restants / jours du mois.
+// Bail commence le 1er (ou autre cycle) → loyer plein. Arrondi au centime comme le backend.
+export function firstPeriodAmount(lease) {
+  const rent = num(lease?.rentAmount) ?? 0;
+  const s = parseLocal(lease?.startDate);
+  const cycle = String(lease?.billingCycle || "monthly").toLowerCase();
+  if (!s || cycle !== "monthly" || s.getDate() === 1) return rent;
+  const dim = new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate();
+  return Math.round((rent * (dim - s.getDate() + 1) / dim) * 100) / 100;
+}
