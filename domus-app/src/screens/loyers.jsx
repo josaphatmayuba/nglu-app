@@ -350,7 +350,10 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     return null;
   };
   const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
-  const behindTxt = status === "late" ? tf("{n} en retard", { n: monthsBehind }) : status === "pending" ? t("1 à régler") : t("À jour");
+  // Mois en retard = mois PASSÉS non soldés de la frise. monthsBehind inclut le
+  // mois courant (dû, pas en retard) : « 2 en retard » pour Sep impayé + Oct courant.
+  const lateMonths = monthKinds.slice(0, Math.max(0, monthsDue - 1)).filter((k) => k !== "paid").length;
+  const behindTxt = status === "late" ? tf("{n} en retard", { n: lateMonths || monthsBehind }) : status === "pending" ? t("1 à régler") : t("À jour");
   const frieseAria = totalMonths
     ? `${paidCount}${fixedTotal ? ` / ${totalMonths}` : ""} ${t("mois payés")}, ${behindTxt}`
     : "";
