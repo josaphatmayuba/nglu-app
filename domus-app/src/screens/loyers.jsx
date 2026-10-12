@@ -16,7 +16,7 @@ import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
 import {
   formatPeriod, isProrataRow, isProrationLease, nextDueAmountOf, nextDueDateOf,
-  nextUnpaidProrataRow, prorataBadgeText, prorataCalcText, startedPeriods,
+  nextUnpaidProrataRow, prorataBadgeText, prorataCalcText, startedPeriods, firstPeriodAmount,
 } from "../prorationUtils.js";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
@@ -185,7 +185,9 @@ export function buildLeaseCards(leases, payments) {
         ? list.filter((p) => p.periodStart && p.status !== "voided")
             .sort((a, b) => String(a.periodStart).localeCompare(String(b.periodStart)))
         : [];
-      if (prorationRows.length) {
+      // Bail prorata sans aucune ligne de paiement : la 1re periode reste au prorata
+      // (ex. debut le 10 → 22/31 du loyer), pas au loyer plein.
+      if (isProrationLease(l) && (prorationRows.length || l.startDate)) {
         const pad2 = (n) => String(n).padStart(2, "0");
         const nowIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
         const amountOf = (p) => Number(p.amount) || 0;
@@ -193,8 +195,10 @@ export function buildLeaseCards(leases, payments) {
         // Periodes echues sans ligne en base : comblees au loyer plein.
         const leaseOpen = !l.endDate || String(l.endDate).slice(0, 10) >= nowIso;
         const missing = leaseOpen ? Math.max(0, startedPeriods(l, now) - dueRows.length) : 0;
-        const dueAmounts = [...dueRows.map(amountOf), ...Array(missing).fill(rent)];
-        periodAmounts = prorationRows.map(amountOf);
+        const fill = Array(missing).fill(rent);
+        if (!dueRows.length && fill.length) fill[0] = firstPeriodAmount(l);
+        const dueAmounts = [...dueRows.map(amountOf), ...fill];
+        periodAmounts = prorationRows.length ? prorationRows.map(amountOf) : [firstPeriodAmount(l)];
         totalDue = dueAmounts.reduce((s, a) => s + a, 0);
         monthsDue = Math.max(1, dueAmounts.length);
         balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
