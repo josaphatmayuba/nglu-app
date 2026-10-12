@@ -33,7 +33,7 @@ export default function SignContractPage() {
     dispatch(getContractForSigning(token)).then((res) => {
       if (res.payload?.data) {
         setContract(res.payload.data);
-        if (res.payload.data.status === "signed") setDone(true);
+        if (res.payload.data.status === "signed" || res.payload.data.signer?.status === "signed") setDone(true);
       } else {
         setError("Lien invalide ou expiré.");
       }
@@ -111,13 +111,27 @@ export default function SignContractPage() {
     setSubmitting(true);
     const signatureData = canvasRef.current.toDataURL("image/png");
     const res = await dispatch(submitSignature({ token, signatureData }));
-    if (res.payload?.data?.message) {
+    // Reponse publique reduite : { message, status, signer, signers, signersSigned, signersTotal }.
+    const returned = res.payload?.data;
+    if (returned?.message && returned.status !== "signed" && Array.isArray(returned.signers) && returned.signers.length > 1) {
+      // Signature enregistree mais d'autres locataires doivent encore signer.
       setContract((prev) => ({
         ...(prev || {}),
-        ...(res.payload.data.contract || {}),
+        signers: returned.signers,
+        signersSigned: returned.signersSigned,
+        signersTotal: returned.signersTotal,
+        signer: { ...(prev?.signer || {}), status: "signed" },
+      }));
+      setDone(true);
+    } else if (returned?.message) {
+      setContract((prev) => ({
+        ...(prev || {}),
+        signers: returned.signers || prev?.signers,
+        signersSigned: returned.signersSigned,
+        signersTotal: returned.signersTotal,
         status: "signed",
-        signatureData: res.payload.data.contract?.signatureData || signatureData,
-        signedAt: res.payload.data.contract?.signedAt || new Date().toISOString(),
+        signatureData: signatureData,
+        signedAt: new Date().toISOString(),
       }));
       setDone(true);
     } else {
@@ -152,6 +166,36 @@ export default function SignContractPage() {
         <div style={styles.errorBox}>
           <h2>⚠️ Lien invalide</h2>
           <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const otherSigners = Array.isArray(contract?.signers) && contract.signers.length > 1 ? contract.signers : [];
+  const SIGNER_LABELS = { pending: "En attente", sent: "Envoyé", viewed: "Vu", signed: "Signé" };
+  const signersList = (otherSigners.length > 0) && (
+    <ul style={styles.signerList}>
+      {otherSigners.map((s) => (
+        <li key={s.id} style={styles.signerItem}>
+          <span>{s.name || "—"}</span>
+          <span style={{ color: s.status === "signed" ? "#52c41a" : "#888", fontWeight: 600 }}>
+            {SIGNER_LABELS[s.status] || "En attente"}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  if ((done || contract?.status === "signed") && contract?.status !== "signed" && otherSigners.length > 1) {
+    const signedCount = contract.signersSigned ?? otherSigners.filter((s) => s.status === "signed").length;
+    const total = contract.signersTotal ?? otherSigners.length;
+    return (
+      <div style={styles.center}>
+        <div style={styles.successBox}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+          <h2>Signature enregistrée</h2>
+          <p>Votre signature est enregistrée. En attente des autres locataires ({signedCount}/{total}).</p>
+          {signersList}
         </div>
       </div>
     );
@@ -197,7 +241,15 @@ export default function SignContractPage() {
           </span>
         </div>
 
-        {contract?.tenantName && (
+        {contract?.signer?.name && otherSigners.length > 1 && (
+          <div style={styles.signerBanner}>
+            <p style={{ margin: "0 0 8px" }}>Vous signez en tant que <strong>{contract.signer.name}</strong></p>
+            <div style={{ fontSize: 12, color: "#555" }}>Signataires du bail :</div>
+            {signersList}
+          </div>
+        )}
+
+        {contract?.tenantName && otherSigners.length < 2 && (
           <p style={{ color: "#555", marginBottom: 8 }}>
             Destinataire : <strong>{contract.tenantName}</strong>
           </p>
@@ -429,6 +481,15 @@ const styles = {
     textAlign: "center",
     boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
   },
+  signerBanner: {
+    background: "#f0f5ff",
+    border: "1px solid #adc6ff",
+    borderRadius: 8,
+    padding: "12px 16px",
+    margin: "8px 0 12px",
+  },
+  signerList: { listStyle: "none", margin: "6px 0 0", padding: 0, textAlign: "left" },
+  signerItem: { display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: "1px solid #eee", fontSize: 13 },
   downloadBtn: {
     marginTop: 16,
     padding: "10px 20px",

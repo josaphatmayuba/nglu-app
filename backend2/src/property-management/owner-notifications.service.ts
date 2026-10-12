@@ -20,7 +20,7 @@
 // (table email_templates, eventType ci-dessus). Sans template actif, le texte
 // par defaut code ici est utilise.
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   currencies,
@@ -28,6 +28,7 @@ import {
   emailTemplates,
   realEstateDelegateAssignments,
   realEstateDelegates,
+  realEstateLeaseCotenants,
   realEstateLeases,
   realEstateOwners,
   realEstateProperties,
@@ -39,6 +40,7 @@ import { CompatService } from "../compat/compat.service";
 import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
+import { normalizePhoneKey } from "./notification-utils";
 
 /**
  * Proprietaire a notifier. `propertyId` n'est renseigne que lorsque la
@@ -46,6 +48,27 @@ import { TenantPortalService } from "./tenant-portal.service";
  * absent pour une annonce generale adressee a tout le portefeuille.
  */
 type OwnerTarget = { id: number; name: string; phone: string; propertyId?: number };
+
+/**
+ * Locataire d'un bail a prevenir (principal ou colocataire actif). `phone` /
+ * `email` sont null quand le contact est vide OU deja porte par un locataire
+ * precedent du meme bail (un couple qui partage un numero = 1 seul SMS) ; la
+ * personne reste dans la liste pour l'affichage des noms ("A & B").
+ */
+export type LeaseRecipient = {
+  customerId: number;
+  name: string;
+  firstName: string;
+  civilName: string;
+  phone: string | null;
+  email: string | null;
+  isPrincipal: boolean;
+};
+
+/** "A & B" : noms civils des locataires d'un bail (un seul = son nom, inchange). */
+export function joinRecipientNames(list: LeaseRecipient[]): string {
+  return list.map((r) => r.civilName || r.name).filter(Boolean).join(" & ");
+}
 
 @Injectable()
 export class OwnerNotificationsService implements OnModuleInit {
@@ -798,17 +821,150 @@ export class OwnerNotificationsService implements OnModuleInit {
   }
 
   /** "Mr/Mme Prenom Nom" d'un locataire (customers + tenant_details.sex) ; "" si introuvable. */
-  async civilNameForTenant(tenantId: number): Promise<string> {
+  async civilNameForTenant(tenantId: number, orgId?: number): Promise<string> {
     try {
       const [t] = await this.db
         .select({ firstName: customers.firstName, lastName: customers.lastName, sex: tenantDetails.sex })
         .from(customers)
         .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
-        .where(eq(customers.id, tenantId))
+        .where(orgId ? and(eq(customers.id, tenantId), eq(customers.organizationId, orgId)) : eq(customers.id, tenantId))
         .limit(1);
       return t ? this.civilName(t.sex, t.firstName, t.lastName) : "";
     } catch {
       return "";
+    }
+  }
+
+  /**
+   * Locataires de plusieurs baux en UNE requete (pas de N+1) : par bail,
+   * [principal, ...colocataires actifs] dans l'ordre (position), hors dossiers
+   * client desactives (customers.status != "true"). Les telephones (normalises)
+   * et emails (minuscule) deja vus dans le bail sont mis a null pour les
+   * locataires suivants : un numero partage ne recoit qu'un message.
+   */
+  async leaseRecipients(leaseIds: number[], orgId: number): Promise<Map<number, LeaseRecipient[]>> {
+    const result = new Map<number, LeaseRecipient[]>();
+    const ids = [...new Set(leaseIds.map(Number).filter((n) => Number.isFinite(n)))];
+    if (!ids.length) return result;
+
+    // Requete 1 : principal de chaque bail (via tenantId).
+    const principalRows = await this.db
+      .select({
+        leaseId: realEstateLeases.id,
+        principalId: realEstateLeases.tenantId,
+        customerId: customers.id,
+        firstName: customers.firstName,
+        lastName: customers.lastName,
+        phone: customers.phone,
+        email: customers.email,
+        status: customers.status,
+        sex: tenantDetails.sex,
+      })
+      .from(realEstateLeases)
+      .innerJoin(customers, and(eq(customers.id, realEstateLeases.tenantId), eq(customers.organizationId, orgId)))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .where(and(inArray(realEstateLeases.id, ids), eq(realEstateLeases.organizationId, orgId)));
+
+    // Requete 2 : colocataires actifs (fiche client active), ordre = position.
+    const cotenantRows = await this.db
+      .select({
+        leaseId: realEstateLeaseCotenants.leaseId,
+        customerId: customers.id,
+        firstName: customers.firstName,
+        lastName: customers.lastName,
+        phone: customers.phone,
+        email: customers.email,
+        sex: tenantDetails.sex,
+        position: realEstateLeaseCotenants.position,
+      })
+      .from(realEstateLeaseCotenants)
+      .innerJoin(customers, and(eq(customers.id, realEstateLeaseCotenants.customerId), eq(customers.organizationId, orgId)))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .where(
+        and(
+          inArray(realEstateLeaseCotenants.leaseId, ids),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+          eq(customers.status, "true"),
+        ),
+      )
+      .orderBy(realEstateLeaseCotenants.leaseId, realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
+
+    type Row = {
+      leaseId: number;
+      principalId: number | null;
+      customerId: number;
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      email: string | null;
+      sex: string | null;
+      position: number | null;
+    };
+    const rows: Row[] = [];
+    const activeCotenantLeases = new Set(cotenantRows.map((c) => Number(c.leaseId)));
+    for (const p of principalRows) {
+      // Fiche principal inactive : exclue SAUF bail a 1 seul locataire (comme avant : repli sur le principal).
+      if (p.status !== "true" && activeCotenantLeases.has(Number(p.leaseId))) continue;
+      rows.push({ ...p, position: null });
+    }
+    const principalByLease = new Map(principalRows.map((p) => [Number(p.leaseId), p.principalId]));
+    for (const c of cotenantRows) rows.push({ ...c, principalId: principalByLease.get(Number(c.leaseId)) ?? null });
+
+    const byLease = new Map<number, Row[]>();
+    for (const row of rows) {
+      const key = Number(row.leaseId);
+      const bucket = byLease.get(key);
+      if (bucket) bucket.push(row);
+      else byLease.set(key, [row]);
+    }
+
+    const normPhone = normalizePhoneKey;
+    const normEmail = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
+    for (const [leaseId, list] of byLease) {
+      const ordered = [...list].sort((a, b) => {
+        const pa = Number(a.customerId) === Number(a.principalId) ? 0 : 1;
+        const pb = Number(b.customerId) === Number(b.principalId) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return (Number(a.position ?? 0) - Number(b.position ?? 0)) || (Number(a.customerId) - Number(b.customerId));
+      });
+      const seenPhones = new Set<string>();
+      const seenEmails = new Set<string>();
+      const recipients: LeaseRecipient[] = [];
+      for (const r of ordered) {
+        if (recipients.some((x) => x.customerId === Number(r.customerId))) continue;
+        const p = normPhone(r.phone);
+        const e = normEmail(r.email);
+        const phone = p && !seenPhones.has(p) ? (r.phone as string) : null;
+        const email = e && !seenEmails.has(e) ? (r.email as string) : null;
+        if (p) seenPhones.add(p);
+        if (e) seenEmails.add(e);
+        recipients.push({
+          customerId: Number(r.customerId),
+          name: this.fullName(r.firstName, r.lastName),
+          firstName: r.firstName || "",
+          civilName: this.civilName(r.sex, r.firstName, r.lastName),
+          phone,
+          email,
+          isPrincipal: Number(r.customerId) === Number(r.principalId),
+        });
+      }
+      result.set(leaseId, recipients);
+    }
+    return result;
+  }
+
+  /**
+   * Nom(s) du/des locataire(s) pour les messages au PROPRIETAIRE : "A & B" des
+   * qu'un bail en compte plusieurs, sinon `fallback` (comportement historique).
+   * Best-effort : en cas d'erreur, on garde le nom du locataire principal.
+   */
+  private async ownerTenantLabel(leaseId: number, orgId: number, fallback: string): Promise<string> {
+    try {
+      const list = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+      return list.length > 1 ? joinRecipientNames(list) : fallback;
+    } catch {
+      return fallback;
     }
   }
 
@@ -1007,7 +1163,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
+        tenantName: await this.ownerTenantLabel(leaseId, orgId, this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName)),
         reference: lease.reference || String(lease.id),
         address,
         unit: lease.unitName || "",
@@ -1042,12 +1198,16 @@ export class OwnerNotificationsService implements OnModuleInit {
 
   // ── 3. Loyer encaisse sur un bien du proprietaire ────────────────────────
 
+  /** Rattachement du log d'un envoi au locataire : bail a 1 locataire = rattachement historique, sinon "tenant" + son id. */
+  private tenantRelated(multi: boolean, customerId: number, type: string, id: number) {
+    return multi ? { relatedType: "tenant", relatedId: customerId } : { relatedType: type, relatedId: id };
+  }
+
   /**
-   * Quittance SMS au LOCATAIRE a chaque paiement encaisse. Le template
-   * "payment_received" (Reglages > Messages) est deja propose dans l'UI ; il
-   * sert ici de source du texte, avec repli sur un defaut court. Le lien
-   * portail locataire est ajoute en pied par TenantPortalService, comme pour
-   * les autres messages qui s'adressent au locataire lui-meme.
+   * Quittance SMS a CHAQUE locataire du bail a chaque paiement encaisse. Le
+   * template "payment_received" (Reglages > Messages) sert de source du texte,
+   * avec repli sur un defaut court ; le lien portail de chacun est ajoute en
+   * pied par TenantPortalService.
    */
   async notifyPaymentReceivedTenant(paymentId: number, leaseId: number, amount: unknown, orgId: number) {
     try {
@@ -1055,67 +1215,71 @@ export class OwnerNotificationsService implements OnModuleInit {
         .select({
           id: realEstateLeases.id,
           reference: realEstateLeases.reference,
-          tenantId: realEstateLeases.tenantId,
           currencySymbol: currencies.currencySymbol,
           propertyName: realEstateProperties.name,
           unitName: realEstateUnits.name,
-          tenantFirstName: customers.firstName,
-          tenantLastName: customers.lastName,
-          tenantSex: tenantDetails.sex,
-          tenantPhone: customers.phone,
         })
         .from(realEstateLeases)
         .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
         .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
         .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
-        .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
-        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
-      if (!lease?.tenantPhone) return;
+      if (!lease) return;
 
-      const tenantName = this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName);
-      // {url} = espace locataire public (/domus/mon-espace?token=...), ou il
-      // retrouve le detail de SES paiements et quittances. On le resout ici
-      // pour que le template puisse le placer ou il veut dans le texte ; s'il
-      // ne l'utilise pas, le footer standard l'ajoute en fin de message.
-      let portalUrl = "";
-      try {
-        portalUrl = (await this.tenantPortal.generateTenantPortalLink(Number(lease.tenantId), orgId)).url;
-      } catch {
-        portalUrl = "";
-      }
-      const vars = {
-        tenantName,
-        firstName: tenantName,
-        reference: lease.reference || String(lease.id),
-        property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
-        amount: this.money(amount, lease.currencySymbol),
-        url: portalUrl,
-      };
-      const fallback =
-        "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !";
-      const message = await this.renderMessage("payment_received", fallback, vars);
-      // Footer ajoute seulement si le template n'a pas deja place le lien :
-      // sinon le locataire recevrait deux fois la meme URL (et 2 segments SMS).
-      // Le footer ajoute le lien APRES le rendu : on re-ajuste pour rester
-      // dans un seul SMS, en preservant l'URL intacte.
-      const withFooter = this.fitOneSms(
-        portalUrl && message.includes(portalUrl)
-          ? message
-          : await this.tenantPortal.appendPortalFooterToSms(message, Number(lease.tenantId), orgId),
-      );
+      // Quittance a CHAQUE locataire du bail, avec SON lien portail.
+      const recipients = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+      const multi = recipients.length > 1;
+      for (const r of recipients) {
+        if (!r.phone) continue;
+        try {
+          const tenantName = r.civilName;
+          // {url} = espace locataire public (/domus/mon-espace?token=...), ou il
+          // retrouve le detail de SES paiements et quittances. On le resout ici
+          // pour que le template puisse le placer ou il veut dans le texte ; s'il
+          // ne l'utilise pas, le footer standard l'ajoute en fin de message.
+          let portalUrl = "";
+          try {
+            portalUrl = (await this.tenantPortal.generateTenantPortalLink(r.customerId, orgId)).url;
+          } catch {
+            portalUrl = "";
+          }
+          const vars = {
+            tenantName,
+            firstName: tenantName,
+            reference: lease.reference || String(lease.id),
+            property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
+            amount: this.money(amount, lease.currencySymbol),
+            url: portalUrl,
+          };
+          const fallback =
+            "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !";
+          const message = await this.renderMessage("payment_received", fallback, vars);
+          // Footer ajoute seulement si le template n'a pas deja place le lien :
+          // sinon le locataire recevrait deux fois la meme URL (et 2 segments SMS).
+          // Le footer ajoute le lien APRES le rendu : on re-ajuste pour rester
+          // dans un seul SMS, en preservant l'URL intacte.
+          const withFooter = this.fitOneSms(
+            portalUrl && message.includes(portalUrl)
+              ? message
+              : await this.tenantPortal.appendPortalFooterToSms(message, r.customerId, orgId),
+          );
 
-      const res = await this.sms.sendSms({
-        phone: lease.tenantPhone,
-        message: withFooter,
-        organizationId: orgId,
-        smsType: "payment_received",
-        relatedType: "real-estate-rent-payment",
-        relatedId: paymentId,
-      });
-      if (!res?.success) {
-        this.logger.warn(`Tenant receipt SMS not sent (payment ${paymentId}): ${res?.message}`);
+          const res = await this.sms.sendSms({
+            phone: r.phone,
+            message: withFooter,
+            organizationId: orgId,
+            smsType: "payment_received",
+            ...this.tenantRelated(multi, r.customerId, "real-estate-rent-payment", paymentId),
+          });
+          if (!res?.success) {
+            this.logger.warn(`Tenant receipt SMS not sent (payment ${paymentId}, tenant ${r.customerId}): ${res?.message}`);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Tenant receipt SMS error (payment ${paymentId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     } catch (error) {
       this.logger.warn(
@@ -1125,8 +1289,9 @@ export class OwnerNotificationsService implements OnModuleInit {
   }
 
   /**
-   * SMS au locataire quand le gestionnaire refuse son justificatif : il doit
-   * savoir pourquoi et pouvoir renvoyer depuis son espace. Best-effort.
+   * SMS aux locataires du bail (tous) quand le gestionnaire refuse le
+   * justificatif : chacun doit savoir pourquoi et pouvoir renvoyer depuis son
+   * espace. Best-effort.
    */
   async notifyProofRejectedTenant(paymentId: number, leaseId: number, reason: string, orgId: number) {
     try {
@@ -1134,50 +1299,52 @@ export class OwnerNotificationsService implements OnModuleInit {
         .select({
           id: realEstateLeases.id,
           reference: realEstateLeases.reference,
-          tenantId: realEstateLeases.tenantId,
-          tenantFirstName: customers.firstName,
-          tenantLastName: customers.lastName,
-          tenantSex: tenantDetails.sex,
-          tenantPhone: customers.phone,
         })
         .from(realEstateLeases)
-        .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
-        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
-      if (!lease?.tenantPhone) return;
+      if (!lease) return;
 
-      const tenantName = this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName);
       const fallback =
         "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}";
-      let portalUrl = "";
-      try {
-        portalUrl = (await this.tenantPortal.generateTenantPortalLink(Number(lease.tenantId), orgId)).url;
-      } catch {
-        portalUrl = "";
-      }
-      const message = await this.renderMessage("payment_proof_rejected", fallback, {
-        tenantName,
-        firstName: tenantName,
-        reference: lease.reference || String(lease.id),
-        reason,
-        url: portalUrl,
-      });
-      const withFooter = this.fitOneSms(
-        portalUrl && message.includes(portalUrl)
-          ? message
-          : await this.tenantPortal.appendPortalFooterToSms(message, Number(lease.tenantId), orgId),
-      );
-      const res = await this.sms.sendSms({
-        phone: lease.tenantPhone,
-        message: withFooter,
-        organizationId: orgId,
-        smsType: "payment_proof_rejected",
-        relatedType: "real-estate-rent-payment",
-        relatedId: paymentId,
-      });
-      if (!res?.success) {
-        this.logger.warn(`Proof rejection SMS not sent (payment ${paymentId}): ${res?.message}`);
+      const recipients = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+      const multi = recipients.length > 1;
+      for (const r of recipients) {
+        if (!r.phone) continue;
+        try {
+          let portalUrl = "";
+          try {
+            portalUrl = (await this.tenantPortal.generateTenantPortalLink(r.customerId, orgId)).url;
+          } catch {
+            portalUrl = "";
+          }
+          const message = await this.renderMessage("payment_proof_rejected", fallback, {
+            tenantName: r.civilName,
+            firstName: r.civilName,
+            reference: lease.reference || String(lease.id),
+            reason,
+            url: portalUrl,
+          });
+          const withFooter = this.fitOneSms(
+            portalUrl && message.includes(portalUrl)
+              ? message
+              : await this.tenantPortal.appendPortalFooterToSms(message, r.customerId, orgId),
+          );
+          const res = await this.sms.sendSms({
+            phone: r.phone,
+            message: withFooter,
+            organizationId: orgId,
+            smsType: "payment_proof_rejected",
+            ...this.tenantRelated(multi, r.customerId, "real-estate-rent-payment", paymentId),
+          });
+          if (!res?.success) {
+            this.logger.warn(`Proof rejection SMS not sent (payment ${paymentId}, tenant ${r.customerId}): ${res?.message}`);
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Proof rejection SMS error (payment ${paymentId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
     } catch (error) {
       this.logger.warn(
@@ -1241,7 +1408,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
+        tenantName: await this.ownerTenantLabel(leaseId, orgId, this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName)),
         tenantPhone: lease.tenantPhone || "",
         reference: lease.reference || String(lease.id),
         address: [lease.propertyName, lease.unitName, lease.propertyAddress, lease.propertyCity]
@@ -1366,7 +1533,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
+        tenantName: await this.ownerTenantLabel(leaseId, orgId, this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName)),
         tenantPhone: lease.tenantPhone || "",
         reference: lease.reference || String(lease.id),
         address: lease.propertyAddress || lease.propertyName || "",
@@ -1434,7 +1601,7 @@ export class OwnerNotificationsService implements OnModuleInit {
 
       const vars = {
         ownerName: owner.name,
-        tenantName: this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName),
+        tenantName: await this.ownerTenantLabel(leaseId, orgId, this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName)),
         reference: lease.reference || String(lease.id),
         property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
         unit: lease.unitName || "",

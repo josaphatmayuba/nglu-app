@@ -39,6 +39,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
+import { InspectionsService } from "./inspections.service";
 import { DelegatePortalService } from "./delegate-portal.service";
 import { DelegatesService } from "./delegates.service";
 import { TenantPortalService } from "./tenant-portal.service";
@@ -82,6 +83,9 @@ import {
   CreateMortgagePaymentDto,
   UpdateMortgagePaymentDto,
   CreateMortgageLoanDto,
+  CreateInspectionDto,
+  UpdateInspectionDto,
+  SignInspectionDto,
   UpdateMortgageLoanDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
@@ -97,6 +101,7 @@ export class PropertyManagementController {
   constructor(
     private readonly propertyManagementService: PropertyManagementService,
     private readonly contractsService: ContractsService,
+    private readonly inspectionsService: InspectionsService,
     private readonly rentReminderService: RentReminderService,
     private readonly tenantPortalService: TenantPortalService,
     private readonly delegatesService: DelegatesService,
@@ -887,13 +892,23 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Update a lease" })
   @Permissions("update-propertyManagement")
   @Put("leases/:id")
-  updateLease(
+  async updateLease(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateLeaseDto,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.updateLease(id, body, orgId, scope);
+    const partiesChanged = body.coTenantIds !== undefined || body.tenantId !== undefined;
+    const before = partiesChanged ? await this.propertyManagementService.leaseTenantIds(id, orgId) : [];
+    const result = await this.propertyManagementService.updateLease(id, body, orgId, scope);
+    if (partiesChanged) {
+      const after = await this.propertyManagementService.leaseTenantIds(id, orgId);
+      // Parties du bail modifiees : un contrat envoye mais pas signe doit etre regenere et renvoye.
+      if (before.join(",") !== after.join(",")) {
+        await this.contractsService.resetSignersForLease(id, orgId);
+      }
+    }
+    return result;
   }
 
   @ApiOperation({ summary: "Delete a lease" })
@@ -1709,6 +1724,147 @@ export class PropertyManagementController {
     return new StreamableFile(file.body);
   }
 
+  // ── Etats des lieux (entree / sortie) ──────────────────────────────────────
+
+  @ApiOperation({ summary: "List inspections (etats des lieux) of a lease" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/inspections")
+  listInspections(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.listForLease(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Entry vs exit inspection comparison for a lease" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/inspections/comparison")
+  inspectionComparison(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.comparison(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Create an entry or exit inspection for a lease" })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/inspections")
+  createInspection(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateInspectionDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.inspectionsService.create(id, body, orgId, scope, userId);
+  }
+
+  // Routes inspections/photos/... AVANT inspections/:id.
+  @ApiOperation({ summary: "Stream an inspection photo from object storage" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("inspections/photos/:photoId/file")
+  async inspectionPhotoFile(
+    @Param("photoId", ParseIntPipe) photoId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.inspectionsService.photoFile(photoId, orgId, scope);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) an inspection photo, draft only" })
+  @Permissions("update-propertyManagement")
+  @Delete("inspections/photos/:photoId")
+  @HttpCode(200)
+  deleteInspectionPhoto(
+    @Param("photoId", ParseIntPipe) photoId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.deletePhoto(photoId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Get one inspection with items and photos" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("inspections/:id")
+  getInspection(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.getInspection(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Update a draft inspection (header, meters, keys, items)" })
+  @Permissions("update-propertyManagement")
+  @Patch("inspections/:id")
+  updateInspection(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateInspectionDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.update(id, body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Upload an inspection photo to object storage" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("photo", {
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP."), false);
+      }
+    },
+  }))
+  @Post("inspections/:id/photos")
+  uploadInspectionPhoto(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { itemId?: string },
+    @UploadedFile() photo: any,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.uploadPhoto(id, photo, body?.itemId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Sign an inspection as landlord or tenant" })
+  @Permissions("update-propertyManagement")
+  @Post("inspections/:id/sign")
+  @HttpCode(200)
+  signInspection(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: SignInspectionDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Req() req: Request,
+  ) {
+    return this.inspectionsService.sign(id, body, orgId, scope, req.ip || "", String(req.headers["user-agent"] || ""));
+  }
+
+  @ApiOperation({ summary: "Soft delete a draft inspection" })
+  @Permissions("delete-propertyManagement")
+  @Delete("inspections/:id")
+  @HttpCode(200)
+  deleteInspection(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.inspectionsService.remove(id, orgId, scope);
+  }
+
   // ── Contracts ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List all contracts" })
@@ -1741,6 +1897,33 @@ export class PropertyManagementController {
   @HttpCode(200)
   sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.contractsService.sendContract(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List the signers of a contract with signing progress" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("contracts/:id/signers")
+  listContractSigners(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.contractsService.listSigners(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Resend the signing link to one signer (new token, 10 min throttle)" })
+  @ApiParam({ name: "id", type: Number })
+  @ApiParam({ name: "signerId", type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("contracts/:id/signers/:signerId/resend")
+  @HttpCode(200)
+  resendContractSigner(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("signerId", ParseIntPipe) signerId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.contractsService.resendSigner(id, signerId, orgId, scope);
   }
 
   @ApiOperation({ summary: "Send the post-signature welcome message (email + SMS) to the tenant, if never sent" })

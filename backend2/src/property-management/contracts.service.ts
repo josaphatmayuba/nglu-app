@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
-import { BadRequestException, GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { BadRequestException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { normalizePhoneKey } from "./notification-utils";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -9,7 +10,9 @@ import {
   currencies,
   emailTemplates,
   realEstateContractAuditLogs,
+  realEstateContractSigners,
   realEstateContracts,
+  realEstateLeaseCotenants,
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateOwners,
@@ -31,6 +34,26 @@ import { CreateContractDto, SignContractDto } from "./dto/property-management.dt
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
+
+type ContractRow = typeof realEstateContracts.$inferSelect;
+type SignerRow = typeof realEstateContractSigners.$inferSelect;
+type SigningCandidate = {
+  customerId: number | null;
+  role: "principal" | "cotenant";
+  name: string;
+  email: string | null;
+  phone: string | null;
+};
+
+type CoTenantInfo = {
+  id: number;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  idDocumentType: string | null;
+  idNumber: string | null;
+};
 
 type LeaseDetails = {
   leaseId: number;
@@ -64,6 +87,8 @@ type LeaseDetails = {
   tenantIdDocumentType: string | null;
   tenantIdNumber: string | null;
   tenantName: string;
+  // Co-locataires actifs (hors locataire principal), ordre position.
+  coTenants: CoTenantInfo[];
   // Proprietaire legal du bien (real_estate_owners), si assigne sur la propriete.
   ownerId: number | null;
   ownerName: string | null;
@@ -186,21 +211,30 @@ export class ContractsService {
     const guaranteeMonths = this.guaranteeMonthsRaw(lease.rentAmount, lease.securityDeposit);
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ");
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
+    const allTenants = this.allTenants(lease);
+    // Valeurs de tous les preneurs separees par « ; » (sans les vides).
+    const agg = (pick: (t: ReturnType<ContractsService["allTenants"]>[number]) => string | null | undefined) =>
+      allTenants.map((t) => String(pick(t) ?? "").trim()).filter(Boolean).join(" ; ");
 
     return {
-      "NOM COMPLET DU BAILLEUR": landlord.name,
+      "NOM COMPLET DU BAILLEUR": (landlord.name ?? "").toLocaleUpperCase("fr"),
       "ADRESSE DU BAILLEUR": landlord.address,
       "TÉLÉPHONE DU BAILLEUR": landlord.phone,
       "EMAIL DU BAILLEUR": landlord.email,
       "NOM DU GESTIONNAIRE": company.landlordName || company.companyName || "",
       "TÉLÉPHONE DU GESTIONNAIRE": company.landlordPhone || company.phone || "",
       "EMAIL DU GESTIONNAIRE": company.email ?? "",
-      "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
+      "NOM COMPLET DU PRENEUR": this.joinNames(allTenants.map((t) => (t.name ?? "").toLocaleUpperCase("fr"))),
+      "NOMS DES PRENEURS": this.joinNames(allTenants.map((t) => (t.name ?? "").toLocaleUpperCase("fr"))),
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
       "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
       "NUMÉRO DE PIÈCE D'IDENTITÉ": lease.tenantIdNumber ?? "",
       "TYPE DE PIÈCE D'IDENTITÉ": lease.tenantIdDocumentType ?? "",
+      "ADRESSES DES PRENEURS": agg((t) => t.address),
+      "TÉLÉPHONES DES PRENEURS": agg((t) => t.phone),
+      "EMAILS DES PRENEURS": agg((t) => t.email),
+      "PIÈCES D'IDENTITÉ DES PRENEURS": agg((t) => [t.idDocumentType, t.idNumber].filter(Boolean).join(" ")),
       "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION": rentalAddress,
       "TYPE DE LOGEMENT": destination,
       "PROPRIÉTÉ": lease.propertyName ?? "",
@@ -329,8 +363,13 @@ export class ContractsService {
       }
     }
 
+    const signers = (await this.activeSigners(id)).map((x) => this.signerView(x));
+
     return {
       ...rows[0],
+      signers,
+      signersSigned: signers.filter((x) => x.status === "signed").length,
+      signersTotal: signers.length,
       auditLogs,
       companyInfo,
       landlordInfo,
@@ -340,102 +379,186 @@ export class ContractsService {
   }
 
   async sendContract(id: number, orgId: number) {
-    const rows = await this.db
-      .select()
-      .from(realEstateContracts)
-      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
-      .limit(1);
+    let contract = await this.requireContract(id, orgId);
+    // Jamais d'envoi sur un contrat signe/supprime : les preuves de signature restent intactes.
+    if (contract.status !== "draft" && contract.status !== "sent" && contract.status !== "viewed") {
+      throw new BadRequestException("Ce contrat ne peut plus etre envoye pour signature.");
+    }
 
-    if (!rows.length) throw new NotFoundException("Contract not found.");
-    const contract = rows[0];
-
-    const token = crypto.randomUUID();
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
 
-    await this.db
-      .update(realEstateContracts)
-      .set({
-        status: "sent",
-        signerToken: token,
-        signerTokenExpiry: expiry,
-        sentAt: sql`CURRENT_TIMESTAMP`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
-      })
-      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
-
-    const signingUrl = `${env.appUrl}/sign/${token}`;
-
-    // Récupère le bail pour le téléphone ET le tenantId (lien portail footer).
-    let tenantPhone: string | null = null;
-    let tenantId: number | null = null;
-    try {
-      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
-      tenantPhone = lease.tenantPhone ?? null;
-      tenantId = lease.tenantId ?? null;
-    } catch {
-      tenantPhone = null;
-      tenantId = null;
-    }
-
-    if (contract.tenantEmail) {
-      const civilTenant = tenantId ? await this.ownerNotifications.civilNameForTenant(tenantId) : "";
-      const signingHtml = this.signingEmailHtml(civilTenant || contract.tenantName || "", signingUrl);
-      const htmlWithFooter = tenantId
-        ? await this.tenantPortal.appendPortalFooterToEmail(signingHtml, tenantId, orgId)
-        : signingHtml;
-      await this.sendEmail(
-        contract.tenantEmail,
-        "Votre contrat de bail est prêt à être signé",
-        htmlWithFooter,
-        "contract_signature",
-        id,
-      );
-    }
-
-    // Also send the signing link by SMS to the tenant (best-effort).
-    if (tenantPhone) {
-      const company = await this.getCompanyInfo(orgId);
-      const companyName = company?.companyName || "votre gestionnaire";
-      // Texte pilote depuis Reglages > Messages (evenement "contract_signature").
-      const message = await this.ownerNotifications.renderMessage(
-        "contract_signature",
-        "Bonjour {tenantName}, votre bail est pret. Signez-le ici : {url} (valable 7 j). {companyName}",
-        {
-          tenantName: contract.tenantName || "",
-          firstName: contract.tenantName || "",
-          url: signingUrl,
-          companyName,
-          reference: "",
-          amount: "",
-        },
-        { tenantId },
-      );
-      try {
-        // fitOneSms apres le footer : le lien s'ajoute hors du rendu et ne doit
-        // pas faire basculer le message sur un 2e segment facture.
-        const messageWithFooter = this.ownerNotifications.fitOneSms(
-          tenantId
-            ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId)
-            : message,
-        );
-        const res = await this.sms.sendSms({
-          phone: tenantPhone,
-          message: messageWithFooter,
-          organizationId: orgId,
-          smsType: "contract_signature",
-          relatedType: "real-estate-contract",
-          relatedId: id,
-        });
-        if (!res?.success) this.logger.warn(`Contract signing SMS not sent (contract ${id}): ${res?.message}`);
-      } catch (error) {
-        this.logger.warn(`Contract signing SMS error (contract ${id}): ${error instanceof Error ? error.message : String(error)}`);
+    // Contrat remis en brouillon apres un changement de locataires (signataires
+    // desactives) : on regenere contenu + nom/email depuis le bail ACTUEL avant l'envoi.
+    if (contract.status === "draft") {
+      const previous = await this.db
+        .select({ id: realEstateContractSigners.id })
+        .from(realEstateContractSigners)
+        .where(and(eq(realEstateContractSigners.contractId, id), eq(realEstateContractSigners.organizationId, orgId)))
+        .limit(1);
+      if (previous.length) {
+        const lease = await this.getLeaseDetails(contract.leaseId, orgId);
+        const company = await this.getCompanyInfo(orgId);
+        const content = await this.renderContent(lease, company, orgId);
+        const fresh = { contractContent: content, tenantName: lease.tenantName, tenantEmail: lease.tenantEmail ?? null };
+        await this.db
+          .update(realEstateContracts)
+          .set({ ...fresh, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId), eq(realEstateContracts.status, "draft")));
+        contract = { ...contract, ...fresh } as ContractRow;
       }
     }
 
-    await this.log(id, orgId, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
+    // Signataires attendus : principal + colocataires actifs. Si le bail est
+    // introuvable / sans locataire actif, repli historique sur l'email du contrat.
+    let candidates: SigningCandidate[] = [];
+    try {
+      candidates = await this.loadSigningCandidates(contract.leaseId, orgId);
+    } catch {
+      candidates = [];
+    }
+    const legacyOnly = candidates.length === 0;
+    const targets: Array<SigningCandidate & { signerId: number | null; token: string; skip: boolean }> = [];
+
+    if (legacyOnly) {
+      targets.push({
+        customerId: null,
+        role: "principal",
+        name: contract.tenantName ?? "",
+        email: contract.tenantEmail ?? null,
+        phone: null,
+        signerId: null,
+        token: crypto.randomUUID(),
+        skip: false,
+      });
+    } else {
+      const existing = await this.db
+        .select()
+        .from(realEstateContractSigners)
+        .where(and(eq(realEstateContractSigners.contractId, id), eq(realEstateContractSigners.organizationId, orgId)));
+      const wanted = new Set(candidates.map((c) => c.customerId));
+      // Retire (soft) les signataires qui ne sont plus locataires du bail.
+      for (const row of existing) {
+        if (row.isActive === 1 && !wanted.has(row.customerId)) {
+          await this.db
+            .update(realEstateContractSigners)
+            .set({ isActive: 0, signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(eq(realEstateContractSigners.id, row.id));
+        }
+      }
+      let position = 0;
+      for (const c of candidates) {
+        position += 1;
+        // Le principal garde l'email fige sur le contrat (comportement historique).
+        const email = c.role === "principal" ? contract.tenantEmail ?? null : c.email;
+        const row = existing.find((r) => r.customerId === c.customerId);
+        // Signataire deja signe d'un envoi partiel : conserve, pas de renvoi.
+        const keepSigned = !!row && row.status === "signed" && contract.status !== "signed" && row.isActive === 1;
+        const token = crypto.randomUUID();
+        const common = {
+          role: c.role,
+          position,
+          signerName: c.name,
+          signerEmail: email,
+          signerPhone: c.phone,
+          isActive: 1,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        };
+        let signerId: number;
+        if (row) {
+          signerId = row.id;
+          if (keepSigned) {
+            await this.db.update(realEstateContractSigners).set(common).where(eq(realEstateContractSigners.id, row.id));
+          } else {
+            await this.db
+              .update(realEstateContractSigners)
+              .set({
+                ...common,
+                status: "sent",
+                method: null,
+                signerToken: token,
+                signerTokenExpiry: expiry,
+                sentAt: sql`CURRENT_TIMESTAMP`,
+                viewedAt: null,
+                signedAt: null,
+                signatureData: null,
+                signerIp: null,
+                signerUserAgent: null,
+              })
+              .where(eq(realEstateContractSigners.id, row.id));
+          }
+        } else {
+          const [ins] = await this.db.insert(realEstateContractSigners).values({
+            organizationId: orgId,
+            contractId: id,
+            customerId: c.customerId as number,
+            ...common,
+            status: "sent",
+            signerToken: token,
+            signerTokenExpiry: expiry,
+            sentAt: sql`CURRENT_TIMESTAMP`,
+            createdAt: sql`CURRENT_TIMESTAMP`,
+          });
+          signerId = Number(ins.insertId);
+        }
+        targets.push({ ...c, email, signerId, token, skip: keepSigned });
+      }
+    }
+
+    // Principal (sinon 1er non signe) : sert au lien renvoye au gestionnaire. Le jeton n'est
+    // recopie sur le contrat QUE pour un contrat ancien sans lignes signataires (repli) :
+    // sinon un colocataire pourrait signer a la place du principal avec ce jeton.
+    const main = targets.find((t) => t.role === "principal" && !t.skip) ?? targets.find((t) => !t.skip);
+    const resetRes = await this.db
+      .update(realEstateContracts)
+      .set({
+        status: "sent",
+        signerToken: legacyOnly && main ? main.token : null,
+        signerTokenExpiry: legacyOnly && main ? expiry : null,
+        sentAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "signed")));
+    if (this.affected(resetRes) < 1) {
+      throw new GoneException("This contract has already been signed.");
+    }
+
+    const errors: unknown[] = [];
+    const unreachable: Array<{ id: number | null; name: string; role: string }> = [];
+    const multi = targets.length > 1;
+    for (const t of targets) {
+      if (t.skip) continue;
+      // PAS de dedoublonnage : chaque signataire a SON lien et doit le recevoir,
+      // meme si deux locataires partagent un numero ou un email.
+      const out = await this.deliverSigningLink(id, orgId, t, t.token, { phones: new Set(), emails: new Set() });
+      if (!out.emailTo && !out.smsTo) unreachable.push({ id: t.signerId, name: t.name, role: t.role });
+      if (out.error) {
+        errors.push(out.error);
+        this.logger.warn(`Contract ${id} signing email failed for ${t.name}: ${out.error instanceof Error ? out.error.message : String(out.error)}`);
+      }
+      await this.log(
+        id,
+        orgId,
+        "sent",
+        null,
+        null,
+        `Sent to ${out.emailTo ?? t.email ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""}${multi ? ` - ${t.name}` : ""}${out.skipped.length ? ` (${out.skipped.join(", ")})` : ""}${out.error ? " (email en echec)" : ""}`,
+        t.signerId,
+      );
+    }
+    // Un seul locataire : comportement historique (l'echec d'email remonte).
+    if (!multi && errors.length) throw errors[0];
+
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
-    return { message: "Contract sent.", id, signingUrl, token };
+    const signingUrl = main ? `${env.appUrl}/sign/${main.token}` : "";
+    return {
+      message: "Contract sent.",
+      id,
+      signingUrl,
+      token: main?.token ?? null,
+      signers: targets.map((t) => ({ id: t.signerId, name: t.name, role: t.role, status: t.skip ? "signed" : "sent" })),
+      unreachable,
+    };
   }
 
   // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
@@ -486,6 +609,25 @@ export class ContractsService {
       })
       .where(eq(realEstateContracts.id, id));
 
+    // Scan papier = tous les signataires actifs ont signe (methode papier) ; liens invalides.
+    await this.db
+      .update(realEstateContractSigners)
+      .set({
+        status: "signed",
+        method: "paper",
+        signedAt: sql`COALESCE(signed_at, CURRENT_TIMESTAMP)`,
+        signerToken: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(realEstateContractSigners.contractId, id),
+          eq(realEstateContractSigners.organizationId, orgId),
+          eq(realEstateContractSigners.isActive, 1),
+          ne(realEstateContractSigners.status, "signed"),
+        ),
+      );
+
     await this.log(
       id,
       orgId,
@@ -497,15 +639,39 @@ export class ContractsService {
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
 
     // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort.
-    if (!contract.welcomeMessageSentAt) {
-      try {
-        await this.deliverWelcomeMessage(contract, orgId);
-      } catch (error) {
-        this.logger.warn(`Contract ${id} marked signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
+    await this.claimAndDeliverWelcome(contract, orgId);
 
     return this.getContract(id, orgId);
+  }
+
+  /**
+   * Bienvenue automatique : claim atomique (UPDATE ... WHERE welcome_message_sent_at IS NULL),
+   * n'envoie que si 1 ligne touchee ; en cas d'echec, le claim est libere (renvoi manuel possible).
+   */
+  private async claimAndDeliverWelcome(
+    contract: { id: number; leaseId: number; tenantEmail: string | null; tenantName: string | null },
+    orgId: number,
+  ) {
+    const claim = await this.db
+      .update(realEstateContracts)
+      .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(realEstateContracts.id, contract.id),
+          eq(realEstateContracts.organizationId, orgId),
+          isNull(realEstateContracts.welcomeMessageSentAt),
+        ),
+      );
+    if (this.affected(claim) < 1) return;
+    try {
+      await this.deliverWelcomeMessage(contract, orgId);
+    } catch (error) {
+      await this.db
+        .update(realEstateContracts)
+        .set({ welcomeMessageSentAt: null })
+        .where(and(eq(realEstateContracts.id, contract.id), eq(realEstateContracts.organizationId, orgId)));
+      this.logger.warn(`Contract ${contract.id} signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // Envoi manuel du message de bienvenue (bouton UI) : uniquement si le contrat
@@ -547,7 +713,7 @@ export class ContractsService {
     const contactPhone = company.landlordPhone || company.phone || "";
 
     const tenantName =
-      (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(lease.tenantId) : "") ||
+      (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(lease.tenantId, orgId) : "") ||
       lease.tenantName ||
       contract.tenantName ||
       "Locataire";
@@ -578,90 +744,120 @@ export class ContractsService {
     const contacts =
       propertyContacts.contacts || `${companyName}${contactPhone ? ` au ${contactPhone}` : ""}`;
 
-    let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
-    let text =
-      `Bonjour ${tenantName}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
-      `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
-      `Votre bailleur est ${landlordName}. ` +
-      `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
-      `Merci de votre confiance. ` +
-      `Pour toute question, contactez ${contacts}. ` +
-      `— ${companyName}`;
-
-    // Message configurable (Réglages → Messages) : si un template "contract_signed"
-    // actif existe, on l'utilise avec substitution des placeholders.
     const tpl = await this.db
       .select({ subject: emailTemplates.subject, body: emailTemplates.body })
       .from(emailTemplates)
       .where(and(eq(emailTemplates.eventType, "contract_signed"), eq(emailTemplates.status, "true")))
       .limit(1);
-    if (tpl.length) {
-      const fill = (s: string | null) =>
-        String(s || "")
-          .replace(/\{tenantName\}/g, tenantName)
-          .replace(/\{firstName\}/g, tenantName)
-          .replace(/\{reference\}/g, reference)
-          .replace(/\{amount\}/g, rentDisplay)
-          .replace(/\{address\}/g, `${address}${unitPart}`)
-          .replace(/\{startDate\}/g, startDate)
-          .replace(/\{endDate\}/g, endDate)
-          .replace(/\{duration\}/g, duration)
-          .replace(/\{contactPhone\}/g, contactPhone)
-          .replace(/\{ownerContact\}/g, propertyContacts.ownerContact)
-          .replace(/\{managerContact\}/g, propertyContacts.managerContact)
-          .replace(/\{contacts\}/g, contacts)
-          .replace(/\{landlordName\}/g, landlordName)
-          .replace(/\{unit\}/g, unitLabel)
-          // Un bail sans unite laisserait "appartement ," : on nettoie le mot
-          // d'introduction devenu orphelin plutot que d'envoyer le texte casse.
-          .replace(/,?\s*\b(appartement|appt|unite)\b\s*:?\s*(?=[.,;]|$)/gi, "")
-          .replace(/\s+([.,;!?])/g, "$1")
-          .replace(/,\s*\./g, ".")
-          .replace(/\s+/g, " ")
-          .trim();
-      if (tpl[0].subject) subject = fill(tpl[0].subject);
-      if (tpl[0].body) text = fill(tpl[0].body);
-    }
 
-    const tenantEmail = lease.tenantEmail || contract.tenantEmail;
-    if (!tenantEmail && !lease.tenantPhone) {
+    // Message propre a UN destinataire (salutation a son nom). Un template
+    // configurable "contract_signed" (Reglages > Messages) est prioritaire.
+    const buildMessage = (name: string) => {
+      let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
+      let text =
+        `Bonjour ${name}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
+        `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
+        `Votre bailleur est ${landlordName}. ` +
+        `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
+        `Merci de votre confiance. ` +
+        `Pour toute question, contactez ${contacts}. ` +
+        `— ${companyName}`;
+      if (tpl.length) {
+        const fill = (s: string | null) =>
+          String(s || "")
+            .replace(/\{tenantName\}/g, name)
+            .replace(/\{firstName\}/g, name)
+            .replace(/\{reference\}/g, reference)
+            .replace(/\{amount\}/g, rentDisplay)
+            .replace(/\{address\}/g, `${address}${unitPart}`)
+            .replace(/\{startDate\}/g, startDate)
+            .replace(/\{endDate\}/g, endDate)
+            .replace(/\{duration\}/g, duration)
+            .replace(/\{contactPhone\}/g, contactPhone)
+            .replace(/\{ownerContact\}/g, propertyContacts.ownerContact)
+            .replace(/\{managerContact\}/g, propertyContacts.managerContact)
+            .replace(/\{contacts\}/g, contacts)
+            .replace(/\{landlordName\}/g, landlordName)
+            .replace(/\{unit\}/g, unitLabel)
+            // Un bail sans unite laisserait "appartement ," : on nettoie le mot
+            // d'introduction devenu orphelin plutot que d'envoyer le texte casse.
+            .replace(/,?\s*\b(appartement|appt|unite)\b\s*:?\s*(?=[.,;]|$)/gi, "")
+            .replace(/\s+([.,;!?])/g, "$1")
+            .replace(/,\s*\./g, ".")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (tpl[0].subject) subject = fill(tpl[0].subject);
+        if (tpl[0].body) text = fill(tpl[0].body);
+      }
+      return { subject, text };
+    };
+
+    // Destinataires : locataire principal puis colocataires actifs.
+    const recipients: Array<{ tenantId: number | null; name: string; email: string | null; phone: string | null }> = [
+      {
+        tenantId: lease.tenantId ?? null,
+        name: tenantName,
+        email: lease.tenantEmail || contract.tenantEmail || null,
+        phone: lease.tenantPhone || null,
+      },
+    ];
+    for (const co of lease.coTenants ?? []) {
+      const civil = co.id ? await this.ownerNotifications.civilNameForTenant(co.id, orgId) : "";
+      recipients.push({ tenantId: co.id ?? null, name: civil || co.name || "Locataire", email: co.email || null, phone: co.phone || null });
+    }
+    if (!recipients.some((r) => r.email || r.phone)) {
       throw new BadRequestException("Aucun email ni téléphone connu pour ce locataire.");
     }
 
+    // Dedoublonnage par telephone normalise / email minuscule (comme l'envoi des liens de signature).
+    const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
     let emailSent = false;
-    if (tenantEmail) {
-      try {
-        const emailHtml = `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
-        const htmlWithFooter = lease.tenantId
-          ? await this.tenantPortal.appendPortalFooterToEmail(emailHtml, lease.tenantId, orgId)
-          : emailHtml;
-        await this.sendEmail(tenantEmail, subject, htmlWithFooter, "contract_signed", contract.id);
-        emailSent = true;
-      } catch (error) {
-        this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
     let smsSent = false;
-    if (lease.tenantPhone) {
-      try {
-        const messageWithFooter = this.ownerNotifications.fitOneSms(
-          lease.tenantId
-            ? await this.tenantPortal.appendPortalFooterToSms(text, lease.tenantId, orgId)
-            : text,
-        );
-        const res = await this.sms.sendSms({
-          phone: lease.tenantPhone,
-          message: messageWithFooter,
-          organizationId: orgId,
-          smsType: "lease_welcome",
-          relatedType: "real-estate-lease",
-          relatedId: contract.leaseId,
-        });
-        smsSent = Boolean(res?.success);
-        if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
-      } catch (error) {
-        this.logger.warn(`Welcome SMS error (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+    const sentTo: string[] = [];
+
+    for (const r of recipients) {
+      const { subject, text } = buildMessage(r.name);
+      const emailKey = (r.email ?? "").trim().toLowerCase();
+      if (r.email && emailKey && !seenEmails.has(emailKey)) {
+        seenEmails.add(emailKey);
+        try {
+          const emailHtml = `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+          const htmlWithFooter = r.tenantId
+            ? await this.tenantPortal.appendPortalFooterToEmail(emailHtml, r.tenantId, orgId)
+            : emailHtml;
+          await this.sendEmail(r.email, subject, htmlWithFooter, "contract_signed", contract.id);
+          emailSent = true;
+          sentTo.push(r.email);
+        } catch (error) {
+          this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      const phoneKey = this.normPhone(r.phone);
+      if (r.phone && phoneKey && !seenPhones.has(phoneKey)) {
+        seenPhones.add(phoneKey);
+        try {
+          const messageWithFooter = this.ownerNotifications.fitOneSms(
+            r.tenantId ? await this.tenantPortal.appendPortalFooterToSms(text, r.tenantId, orgId) : text,
+          );
+          const res = await this.sms.sendSms({
+            phone: r.phone,
+            message: messageWithFooter,
+            organizationId: orgId,
+            smsType: "lease_welcome",
+            relatedType: "real-estate-lease",
+            relatedId: contract.leaseId,
+          });
+          if (res?.success) {
+            smsSent = true;
+            sentTo.push(`SMS ${r.phone}`);
+          } else {
+            this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
+          }
+        } catch (error) {
+          this.logger.warn(`Welcome SMS error (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
     }
 
@@ -674,21 +870,21 @@ export class ContractsService {
       .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateContracts.id, contract.id));
 
-    await this.log(
-      contract.id,
-      orgId,
-      "welcome_sent",
-      null,
-      null,
-      `Message de bienvenue envoye : ${[emailSent ? tenantEmail : null, smsSent ? `SMS ${lease.tenantPhone}` : null].filter(Boolean).join(" / ")}`,
-    );
+    await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoye : ${sentTo.join(" / ")}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
     return { message: "Message de bienvenue envoyé.", emailSent, smsSent };
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {
-    const contract = await this.findByToken(token);
+    const { contract, signer } = await this.findByToken(token);
+
+    if (signer && signer.status !== "signed") {
+      await this.db
+        .update(realEstateContractSigners)
+        .set({ status: "viewed", viewedAt: sql`COALESCE(viewed_at, CURRENT_TIMESTAMP)`, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(eq(realEstateContractSigners.id, signer.id), ne(realEstateContractSigners.status, "signed")));
+    }
 
     if (contract.status !== "signed") {
       await this.db
@@ -698,7 +894,9 @@ export class ContractsService {
       await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     }
 
-    await this.log(contract.id, contract.organizationId, "viewed", ip, ua, null);
+    await this.log(contract.id, contract.organizationId, "viewed", ip, ua, null, signer?.id ?? null);
+
+    const signers = signer ? (await this.activeSigners(contract.id)).map((x) => this.signerView(x)) : [];
 
     return {
       id: contract.id,
@@ -711,41 +909,283 @@ export class ContractsService {
       signedAt: contract.signedAt,
       createdAt: contract.createdAt,
       companyInfo: await this.getCompanyInfo(contract.organizationId),
+      // Qui signe avec ce lien + avancement des autres (sans jetons).
+      signer: signer
+        ? { id: signer.id, name: signer.signerName, role: signer.role, status: signer.status === "sent" ? "viewed" : signer.status }
+        : null,
+      signers: signers.map((x) => ({ id: x.id, name: x.name, role: x.role, status: x.status })),
     };
   }
 
   async signContract(token: string, dto: SignContractDto, ip: string, ua: string) {
-    const contract = await this.findByToken(token);
+    const { contract, signer } = await this.findByToken(token);
 
     if (contract.status === "signed") {
       throw new GoneException("This contract has already been signed.");
     }
 
-    await this.db
-      .update(realEstateContracts)
+    if (!signer) {
+      // Contrat ancien sans lignes signataires : comportement historique inchange.
+      await this.db
+        .update(realEstateContracts)
+        .set({
+          status: "signed",
+          signatureData: dto.signatureData,
+          signedAt: sql`CURRENT_TIMESTAMP`,
+          signerIp: ip,
+          signerUserAgent: ua,
+          signerToken: null,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(realEstateContracts.id, contract.id));
+
+      await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+      await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+
+      // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
+      await this.claimAndDeliverWelcome(contract, contract.organizationId);
+
+      // Reponse PUBLIQUE reduite (pas de vue gestionnaire).
+      const legacySigner = { id: 0, name: contract.tenantName ?? null, role: "principal", status: "signed" };
+      return {
+        message: "Contract signed successfully.",
+        status: "signed",
+        signer: legacySigner,
+        signers: [legacySigner],
+        signersSigned: 1,
+        signersTotal: 1,
+      };
+    }
+
+    const orgId = contract.organizationId;
+    if (signer.status === "signed") {
+      throw new GoneException("This contract has already been signed.");
+    }
+
+    // 1) Signataire : UPDATE conditionnel (anti double-signature simultanee).
+    const signerRes = await this.db
+      .update(realEstateContractSigners)
       .set({
         status: "signed",
+        method: "electronic",
         signatureData: dto.signatureData,
         signedAt: sql`CURRENT_TIMESTAMP`,
         signerIp: ip,
         signerUserAgent: ua,
-        signerToken: null,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContracts.id, contract.id));
+      .where(and(eq(realEstateContractSigners.id, signer.id), ne(realEstateContractSigners.status, "signed")));
+    if (this.affected(signerRes) < 1) {
+      throw new GoneException("This contract has already been signed.");
+    }
+    await this.log(contract.id, orgId, "signed", ip, ua, `Signed by ${signer.signerName ?? contract.tenantName ?? "tenant"}`, signer.id);
 
-    await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
-    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
-    const signedContract = await this.getContract(contract.id, contract.organizationId);
+    // 2) Contrat -> signed SEULEMENT si plus aucun signataire actif non signe.
+    const remaining = await this.db
+      .select({ id: realEstateContractSigners.id })
+      .from(realEstateContractSigners)
+      .where(
+        and(
+          eq(realEstateContractSigners.contractId, contract.id),
+          eq(realEstateContractSigners.isActive, 1),
+          ne(realEstateContractSigners.status, "signed"),
+        ),
+      );
 
-    // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
-    try {
-      await this.deliverWelcomeMessage(contract, contract.organizationId);
-    } catch (error) {
-      this.logger.warn(`Contract ${contract.id} signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
+    let finalised = false;
+    if (remaining.length === 0) {
+      const principal = (await this.activeSigners(contract.id)).find((x) => x.role === "principal");
+      const main = principal ?? signer;
+      const contractRes = await this.db
+        .update(realEstateContracts)
+        .set({
+          status: "signed",
+          signatureData: principal?.signatureData ?? dto.signatureData,
+          signedAt: sql`CURRENT_TIMESTAMP`,
+          signerIp: main.id === signer.id ? ip : main.signerIp,
+          signerUserAgent: main.id === signer.id ? ua : main.signerUserAgent,
+          signerToken: null,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(realEstateContracts.id, contract.id), ne(realEstateContracts.status, "signed")));
+      finalised = this.affected(contractRes) >= 1;
+      if (finalised) {
+        // Les liens ne servent plus : on invalide les jetons des signataires.
+        await this.db
+          .update(realEstateContractSigners)
+          .set({ signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateContractSigners.contractId, contract.id));
+        await this.log(contract.id, orgId, "all_signed", ip, ua, "Tous les signataires ont signe");
+      }
     }
 
-    return { message: "Contract signed successfully.", contract: signedContract };
+    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+    const publicSigners = (await this.activeSigners(contract.id)).map((x) => ({
+      id: x.id,
+      name: x.signerName,
+      role: x.role,
+      status: x.id === signer.id ? "signed" : x.status,
+    }));
+    const signersSigned = publicSigners.filter((x) => x.status === "signed").length;
+    const allSigned = finalised || (publicSigners.length > 0 && signersSigned === publicSigners.length);
+
+    // Bienvenue UNE seule fois, quand le contrat devient signe (best-effort, claim atomique).
+    if (finalised) await this.claimAndDeliverWelcome(contract, orgId);
+
+    // Reponse PUBLIQUE reduite : jamais la vue gestionnaire (jetons, contacts, audit).
+    return {
+      message: "Contract signed successfully.",
+      status: allSigned ? "signed" : contract.status,
+      signer: { id: signer.id, name: signer.signerName, role: signer.role, status: "signed" },
+      signers: publicSigners,
+      signersSigned,
+      signersTotal: publicSigners.length,
+    };
+  }
+
+  /** Liste des signataires d'un contrat + avancement (sans jetons). */
+  async listSigners(id: number, orgId: number, scope: "all" | number[] = "all") {
+    await this.requireContractInScope(id, orgId, scope);
+    const signers = (await this.activeSigners(id)).map((x) => this.signerView(x));
+    return {
+      contractId: id,
+      signers,
+      signersSigned: signers.filter((x) => x.status === "signed").length,
+      signersTotal: signers.length,
+    };
+  }
+
+  /** Renvoie le lien a UN signataire : nouveau jeton, throttle 10 min par signataire. */
+  async resendSigner(id: number, signerId: number, orgId: number, scope: "all" | number[] = "all") {
+    const contract = await this.requireContractInScope(id, orgId, scope);
+    if (contract.status !== "sent" && contract.status !== "viewed") {
+      throw new BadRequestException("Le contrat n'est pas en attente de signature.");
+    }
+    const [signer] = await this.db
+      .select()
+      .from(realEstateContractSigners)
+      .where(
+        and(
+          eq(realEstateContractSigners.id, signerId),
+          eq(realEstateContractSigners.contractId, id),
+          eq(realEstateContractSigners.organizationId, orgId),
+          eq(realEstateContractSigners.isActive, 1),
+        ),
+      )
+      .limit(1);
+    if (!signer) throw new NotFoundException("Signataire introuvable.");
+    if (signer.status === "signed") throw new BadRequestException("Ce signataire a deja signe.");
+
+    const token = crypto.randomUUID();
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 7);
+
+    // Throttle atomique : la pose de lastResentAt ne passe que si > 10 min.
+    const res = await this.db
+      .update(realEstateContractSigners)
+      .set({
+        signerToken: token,
+        signerTokenExpiry: expiry,
+        status: signer.status === "viewed" ? "viewed" : "sent",
+        sentAt: sql`CURRENT_TIMESTAMP`,
+        lastResentAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(realEstateContractSigners.id, signerId),
+          ne(realEstateContractSigners.status, "signed"),
+          sql`(${realEstateContractSigners.lastResentAt} IS NULL OR ${realEstateContractSigners.lastResentAt} < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 10 MINUTE))`,
+        ),
+      );
+    if (this.affected(res) < 1) {
+      throw new HttpException("Un lien a deja ete renvoye a ce signataire il y a moins de 10 minutes.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    // Le jeton reste sur la ligne signataire UNIQUEMENT (jamais recopie sur le contrat).
+    // Les anciens jetons globaux du contrat sont neutralises : ils ne servent plus.
+    await this.db
+      .update(realEstateContracts)
+      .set({ signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
+
+    const out = await this.deliverSigningLink(
+      id,
+      orgId,
+      { customerId: signer.customerId, name: signer.signerName ?? "", email: signer.signerEmail, phone: signer.signerPhone },
+      token,
+      { phones: new Set(), emails: new Set() },
+    );
+    await this.log(
+      id,
+      orgId,
+      "resent",
+      null,
+      null,
+      `Resent to ${out.emailTo ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""} - ${signer.signerName ?? ""}`,
+      signer.id,
+    );
+    if (out.error) throw out.error;
+    return { message: "Link resent.", id, signerId, signingUrl: `${env.appUrl}/sign/${token}` };
+  }
+
+  /**
+   * Le bail change de locataires : les liens deja envoyes ne correspondent plus.
+   * Contrat sent/viewed -> signataires desactives (soft), contrat remis en draft
+   * (a regenerer/renvoyer). Contrat signe ou brouillon : rien.
+   */
+  async resetSignersForLease(leaseId: number, orgId: number): Promise<{ reset: boolean; contractId: number | null }> {
+    const [contract] = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(
+        and(
+          eq(realEstateContracts.leaseId, leaseId),
+          eq(realEstateContracts.organizationId, orgId),
+          ne(realEstateContracts.status, "deleted"),
+        ),
+      )
+      .orderBy(desc(realEstateContracts.id))
+      .limit(1);
+    if (!contract || (contract.status !== "sent" && contract.status !== "viewed")) {
+      return { reset: false, contractId: contract?.id ?? null };
+    }
+
+    await this.db
+      .update(realEstateContractSigners)
+      .set({ isActive: 0, signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateContractSigners.contractId, contract.id), eq(realEstateContractSigners.organizationId, orgId)));
+    await this.db
+      .update(realEstateContracts)
+      .set({ status: "draft", signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateContracts.id, contract.id), eq(realEstateContracts.organizationId, orgId)));
+    await this.log(contract.id, orgId, "signers_reset", null, null, "Locataires du bail modifies : contrat remis en brouillon, a regenerer et renvoyer.");
+    await this.publishContractUpdate("status_changed", contract.id, leaseId);
+    return { reset: true, contractId: contract.id };
+  }
+
+  /** RBAC par bien : le bail du contrat doit etre dans le perimetre (sinon 404, comme les autres routes Domus). */
+  private async requireContractInScope(id: number, orgId: number, scope: "all" | number[]): Promise<ContractRow> {
+    const contract = await this.requireContract(id, orgId);
+    if (scope !== "all") {
+      const [lease] = await this.db
+        .select({ propertyId: realEstateLeases.propertyId })
+        .from(realEstateLeases)
+        .where(and(eq(realEstateLeases.id, contract.leaseId), eq(realEstateLeases.organizationId, orgId)))
+        .limit(1);
+      if (!lease || !scope.includes(Number(lease.propertyId))) throw new NotFoundException("Contract not found.");
+    }
+    return contract;
+  }
+
+  private async requireContract(id: number, orgId: number): Promise<ContractRow> {
+    const rows = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    return rows[0];
   }
 
   async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, orgId: number, createdBy?: number) {
@@ -812,6 +1252,34 @@ export class ContractsService {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
     }
 
+    // Les colocataires actifs suivent le renouvellement (avant le contrat, pour
+    // qu'il liste tous les preneurs et que chacun puisse le signer).
+    const coRows = await this.db
+      .select({ customerId: realEstateLeaseCotenants.customerId, position: realEstateLeaseCotenants.position })
+      .from(realEstateLeaseCotenants)
+      .where(
+        and(
+          eq(realEstateLeaseCotenants.leaseId, leaseId),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+        ),
+      )
+      .orderBy(realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
+    const copied = new Set<number>();
+    for (const co of coRows) {
+      if (co.customerId === current.tenantId || copied.has(co.customerId)) continue;
+      copied.add(co.customerId);
+      await this.db.insert(realEstateLeaseCotenants).values({
+        organizationId: orgId,
+        leaseId: newLeaseId,
+        customerId: co.customerId,
+        position: co.position,
+        isActive: 1,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+    }
+
     const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, orgId, createdBy);
 
     return { lease: { id: newLeaseId, reference }, contract: newContract };
@@ -857,8 +1325,13 @@ export class ContractsService {
 
     await this.db
       .update(realEstateContracts)
-      .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ status: "deleted", signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
+    // Les liens des signataires ne doivent plus fonctionner (soft : lignes conservees).
+    await this.db
+      .update(realEstateContractSigners)
+      .set({ isActive: 0, signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateContractSigners.contractId, id), eq(realEstateContractSigners.organizationId, orgId)));
     await this.publishContractUpdate("deleted", id, rows[0].leaseId);
     return { message: "Contract deleted." };
   }
@@ -891,7 +1364,36 @@ export class ContractsService {
     };
   }
 
-  private async findByToken(token: string) {
+  /**
+   * Resout un jeton de signature : d'abord le signataire (1 jeton par locataire),
+   * sinon REPLI sur l'ancien jeton du contrat (liens deja envoyes avant les
+   * signataires). signer = null => contrat ancien sans lignes signataires.
+   */
+  private async findByToken(token: string): Promise<{ contract: ContractRow; signer: SignerRow | null }> {
+    const signerRows = await this.db
+      .select()
+      .from(realEstateContractSigners)
+      .where(and(eq(realEstateContractSigners.signerToken, token), eq(realEstateContractSigners.isActive, 1)))
+      .limit(1);
+
+    if (signerRows.length) {
+      const signer = signerRows[0];
+      const cRows = await this.db
+        .select()
+        .from(realEstateContracts)
+        .where(and(eq(realEstateContracts.id, signer.contractId), eq(realEstateContracts.organizationId, signer.organizationId)))
+        .limit(1);
+      if (!cRows.length) throw new NotFoundException("Lien de signature invalide.");
+      // Lien valable seulement sur un contrat en cours de signature (lecture seule si signe).
+      if (!["sent", "viewed", "signed"].includes(cRows[0].status as string)) {
+        throw new NotFoundException("Lien de signature invalide.");
+      }
+      if (signer.signerTokenExpiry && new Date() > signer.signerTokenExpiry) {
+        throw new GoneException("Ce lien de signature a expiré.");
+      }
+      return { contract: cRows[0], signer };
+    }
+
     const rows = await this.db
       .select()
       .from(realEstateContracts)
@@ -905,7 +1407,183 @@ export class ContractsService {
       throw new GoneException("Ce lien de signature a expiré.");
     }
 
-    return contract;
+    // Un contrat qui a des signataires actifs ne peut plus etre signe par l'ancien
+    // jeton "global" (il ne correspond a aucun locataire) : lien invalide.
+    const active = await this.activeSigners(contract.id);
+    if (active.length) throw new NotFoundException("Lien de signature invalide.");
+
+    return { contract, signer: null };
+  }
+
+  private async activeSigners(contractId: number): Promise<SignerRow[]> {
+    return this.db
+      .select()
+      .from(realEstateContractSigners)
+      .where(and(eq(realEstateContractSigners.contractId, contractId), eq(realEstateContractSigners.isActive, 1)))
+      .orderBy(realEstateContractSigners.position, realEstateContractSigners.id);
+  }
+
+  /** Vue publique/admin d'un signataire : jamais de jeton ni de donnees de signature brutes. */
+  private signerView(s: SignerRow) {
+    return {
+      id: s.id,
+      customerId: s.customerId,
+      name: s.signerName,
+      email: s.signerEmail,
+      phone: s.signerPhone,
+      role: s.role,
+      position: s.position,
+      status: s.status,
+      method: s.method,
+      sentAt: s.sentAt,
+      viewedAt: s.viewedAt,
+      signedAt: s.signedAt,
+      lastResentAt: s.lastResentAt,
+    };
+  }
+
+  private affected(res: unknown): number {
+    const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+    return Number(header?.affectedRows ?? 0);
+  }
+
+  private normPhone(p: string | null | undefined): string {
+    return normalizePhoneKey(p);
+  }
+
+  /**
+   * Signataires attendus d'un bail : locataire principal puis colocataires actifs
+   * (customers.status = 'true'), scope organisation, sans doublon de client.
+   */
+  private async loadSigningCandidates(leaseId: number, orgId: number): Promise<SigningCandidate[]> {
+    const [lease] = await this.db
+      .select({ tenantId: realEstateLeases.tenantId })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+      .limit(1);
+    if (!lease) return [];
+
+    const out: SigningCandidate[] = [];
+    const fullName = (c: { firstName: string | null; lastName: string | null }) =>
+      [c.firstName, c.lastName].filter(Boolean).join(" ") || "Locataire";
+
+    if (lease.tenantId) {
+      const [c] = await this.db
+        .select({ id: customers.id, firstName: customers.firstName, lastName: customers.lastName, email: customers.email, phone: customers.phone })
+        .from(customers)
+        .where(and(eq(customers.id, lease.tenantId), eq(customers.organizationId, orgId), eq(customers.status, "true")))
+        .limit(1);
+      if (c) out.push({ customerId: c.id, role: "principal", name: fullName(c), email: c.email ?? null, phone: c.phone ?? null });
+    }
+
+    const coRows = await this.db
+      .select({ id: customers.id, firstName: customers.firstName, lastName: customers.lastName, email: customers.email, phone: customers.phone })
+      .from(realEstateLeaseCotenants)
+      .innerJoin(customers, eq(customers.id, realEstateLeaseCotenants.customerId))
+      .where(
+        and(
+          eq(realEstateLeaseCotenants.leaseId, leaseId),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+          eq(customers.organizationId, orgId),
+          eq(customers.status, "true"),
+        ),
+      )
+      .orderBy(realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
+    for (const c of coRows) {
+      if (out.some((o) => o.customerId === c.id)) continue;
+      out.push({ customerId: c.id, role: "cotenant", name: fullName(c), email: c.email ?? null, phone: c.phone ?? null });
+    }
+    return out;
+  }
+
+  /**
+   * Envoie le lien de signature d'UN signataire (email + SMS, pied de page portail
+   * propre). seen = dedoublonnage par telephone normalise / email minuscule.
+   * Retourne le detail pour l'audit ; une erreur d'email est remontee dans error.
+   */
+  private async deliverSigningLink(
+    contractId: number,
+    orgId: number,
+    s: { customerId: number | null; name: string; email: string | null; phone: string | null },
+    token: string,
+    seen: { phones: Set<string>; emails: Set<string> },
+  ): Promise<{ emailTo: string | null; smsTo: string | null; skipped: string[]; error: unknown }> {
+    const signingUrl = `${env.appUrl}/sign/${token}`;
+    const tenantId = s.customerId;
+    const res = { emailTo: null as string | null, smsTo: null as string | null, skipped: [] as string[], error: null as unknown };
+
+    const emailKey = (s.email ?? "").trim().toLowerCase();
+    if (emailKey) {
+      if (seen.emails.has(emailKey)) {
+        res.skipped.push("email deja utilise par un autre signataire");
+      } else {
+        seen.emails.add(emailKey);
+        try {
+          const civilTenant = tenantId ? await this.ownerNotifications.civilNameForTenant(tenantId, orgId) : "";
+          const signingHtml = this.signingEmailHtml(civilTenant || s.name || "", signingUrl);
+          const htmlWithFooter = tenantId
+            ? await this.tenantPortal.appendPortalFooterToEmail(signingHtml, tenantId, orgId)
+            : signingHtml;
+          await this.sendEmail(
+            s.email as string,
+            "Votre contrat de bail est prêt à être signé",
+            htmlWithFooter,
+            "contract_signature",
+            contractId,
+          );
+          res.emailTo = s.email;
+        } catch (error) {
+          res.error = error;
+        }
+      }
+    }
+
+    const phoneKey = this.normPhone(s.phone);
+    if (s.phone && phoneKey) {
+      if (seen.phones.has(phoneKey)) {
+        res.skipped.push("telephone deja utilise par un autre signataire");
+      } else {
+        seen.phones.add(phoneKey);
+        const company = await this.getCompanyInfo(orgId);
+        const companyName = company?.companyName || "votre gestionnaire";
+        // Texte pilote depuis Reglages > Messages (evenement "contract_signature").
+        const message = await this.ownerNotifications.renderMessage(
+          "contract_signature",
+          "Bonjour {tenantName}, votre bail est pret. Signez-le ici : {url} (valable 7 j). {companyName}",
+          {
+            tenantName: s.name || "",
+            firstName: s.name || "",
+            url: signingUrl,
+            companyName,
+            reference: "",
+            amount: "",
+          },
+          { tenantId },
+        );
+        try {
+          // fitOneSms apres le footer : le lien s'ajoute hors du rendu et ne doit
+          // pas faire basculer le message sur un 2e segment facture.
+          const messageWithFooter = this.ownerNotifications.fitOneSms(
+            tenantId ? await this.tenantPortal.appendPortalFooterToSms(message, tenantId, orgId) : message,
+          );
+          const smsRes = await this.sms.sendSms({
+            phone: s.phone,
+            message: messageWithFooter,
+            organizationId: orgId,
+            smsType: "contract_signature",
+            relatedType: "real-estate-contract",
+            relatedId: contractId,
+          });
+          if (!smsRes?.success) this.logger.warn(`Contract signing SMS not sent (contract ${contractId}): ${smsRes?.message}`);
+          res.smsTo = s.phone;
+        } catch (error) {
+          this.logger.warn(`Contract signing SMS error (contract ${contractId}): ${error instanceof Error ? error.message : String(error)}`);
+          res.smsTo = s.phone;
+        }
+      }
+    }
+    return res;
   }
 
   private async getLeaseDetails(leaseId: number, orgId: number): Promise<LeaseDetails> {
@@ -964,10 +1642,78 @@ export class ContractsService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
 
     const r = rows[0];
+
+    const coRows = await this.db
+      .select({
+        id: customers.id,
+        firstName: customers.firstName,
+        lastName: customers.lastName,
+        email: customers.email,
+        phone: customers.phone,
+        address: customers.address,
+        idDocumentType: tenantDetails.idDocumentType,
+        idNumber: tenantDetails.idNumber,
+      })
+      .from(realEstateLeaseCotenants)
+      .innerJoin(customers, eq(customers.id, realEstateLeaseCotenants.customerId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .where(
+        and(
+          eq(realEstateLeaseCotenants.leaseId, leaseId),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+          eq(customers.organizationId, orgId),
+          eq(customers.status, "true"),
+        ),
+      )
+      .orderBy(realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
+
+    const coTenants: CoTenantInfo[] = coRows
+      .filter((c) => c.id !== r.tenantId)
+      .map((c) => ({
+        id: c.id,
+        name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Locataire",
+        address: c.address ?? null,
+        phone: c.phone ?? null,
+        email: c.email ?? null,
+        idDocumentType: c.idDocumentType ?? null,
+        idNumber: c.idNumber ?? null,
+      }));
+
     return {
       ...r,
       tenantName: [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire",
+      coTenants,
     };
+  }
+
+  /** Locataire principal puis colocataires actifs (tous egaux dans le contrat). */
+  private allTenants(lease: LeaseDetails) {
+    return [
+      {
+        name: lease.tenantName,
+        address: lease.tenantAddress,
+        phone: lease.tenantPhone,
+        email: lease.tenantEmail,
+        idDocumentType: lease.tenantIdDocumentType,
+        idNumber: lease.tenantIdNumber,
+      },
+      ...(lease.coTenants ?? []),
+    ] as Array<{
+      name: string | null;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+      idDocumentType: string | null;
+      idNumber: string | null;
+    }>;
+  }
+
+  /** « A », « A et B », « A, B et C ». */
+  private joinNames(names: string[]): string {
+    const n = names.filter(Boolean);
+    if (n.length <= 1) return n[0] ?? "";
+    return `${n.slice(0, -1).join(", ")} et ${n[n.length - 1]}`;
   }
 
   private generateContent(lease: LeaseDetails, company: CompanyInfo): string {
@@ -984,7 +1730,33 @@ export class ContractsService {
     const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = landlordInfo.name || "[NOM DU BAILLEUR]";
+    const landlordName = (landlordInfo.name || "[NOM DU BAILLEUR]").toLocaleUpperCase("fr");
+    const allTenants = this.allTenants(lease);
+    const multi = allTenants.length > 1;
+    const tenantsLabel = multi ? "Les Preneurs (Locataires)" : "Le Preneur (Locataire)";
+    const tenantsBlock = allTenants
+      .map(
+        (t, i) => `<div${i > 0 ? ' style="margin-top:12px;"' : ""}>
+      <strong>${e((t.name ?? "").toLocaleUpperCase("fr"))}</strong> &mdash; ${e(t.idDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(t.idNumber || "N/A")}</em><br>
+      Adresse&nbsp;: ${e(t.address ?? (i === 0 ? "[ADRESSE DU PRENEUR]" : "N/A"))}<br>
+      Téléphone&nbsp;: ${e(t.phone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(t.email ?? "N/A")}
+    </div>`,
+      )
+      .join("");
+    const solidarityClause = multi
+      ? '<p style="margin:14px 0 0;">Les Preneurs sont tenus solidairement et indivisiblement de toutes les obligations du présent bail.</p>'
+      : "";
+    const signatureTenantBlocks = allTenants
+      .map(
+        (t) => `<div style="flex:1;text-align:center;">
+        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
+        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
+          <div style="font-size:12px;color:#333;">${e((t.name ?? "").toLocaleUpperCase("fr"))}</div>
+          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
+        </div>
+      </div>`,
+      )
+      .join("");
     const landlordAddress = landlordInfo.address || "[ADRESSE DU BAILLEUR]";
     const landlordPhone = landlordInfo.phone || "N/A";
     const landlordEmail = landlordInfo.email || "N/A";
@@ -1042,15 +1814,14 @@ export class ContractsService {
     </div>
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>
-      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Preneur (Locataire)</div>
-      <strong>${e(lease.tenantName)}</strong> &mdash; ${e(lease.tenantIdDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(lease.tenantIdNumber || "N/A")}</em><br>
-      Adresse&nbsp;: ${e(lease.tenantAddress ?? "[ADRESSE DU PRENEUR]")}<br>
-      Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
+      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${tenantsLabel}</div>
+      ${tenantsBlock}
+      ${solidarityClause}
     </div>
   `)}
 
   ${art("2", "Objet et Destination des Lieux", `
-    <p style="margin:0 0 12px;">Le Bailleur donne en location au Preneur le bien immobilier désigné ci-dessous&nbsp;:</p>
+    <p style="margin:0 0 12px;">Le Bailleur donne en location ${multi ? "aux Preneurs" : "au Preneur"} le bien immobilier désigné ci-dessous&nbsp;:</p>
     <table style="width:100%;border-collapse:collapse;">
       ${tr("Adresse", e(rentalAddress), false)}
       ${tr("Propriété", e(lease.propertyName ?? "N/A"), true)}
@@ -1075,7 +1846,7 @@ export class ContractsService {
       au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
     </p>
     <p style="margin:0;">
-      <strong>4.2. Garantie Locative&nbsp;:</strong> Le Preneur verse ce jour une garantie de
+      <strong>4.2. Garantie Locative&nbsp;:</strong> ${multi ? "Les Preneurs versent" : "Le Preneur verse"} ce jour une garantie de
       <strong style="color:#1a237e;">${securityDeposit} ${e(currency)}</strong> correspondant à ${guaranteeMonths}.
       Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées
       ou réparations locatives. La garantie ne peut pas excéder <strong>trois (3) mois</strong> de loyer
@@ -1085,27 +1856,27 @@ export class ContractsService {
 
   ${art("5", "État des Lieux", `
     Un état des lieux contradictoire est obligatoirement annexé au présent contrat lors de la remise des clés.
-    À défaut d&rsquo;état des lieux, le locataire est présumé avoir reçu le bien en bon état de réparations locatives.<br><br>
+    À défaut d&rsquo;état des lieux, ${multi ? "les locataires sont présumés avoir reçu" : "le locataire est présumé avoir reçu"} le bien en bon état de réparations locatives.<br><br>
     <strong>Relevé de compteur à l&rsquo;entrée&nbsp;:</strong> ${e(String(lease.moveInMeterReading ?? "N/A"))}.
   `)}
 
   ${art("6", "Charges et Entretien", `
-    Le Preneur prend à sa charge les consommations d&rsquo;eau (REGIDESO), d&rsquo;électricité (SNEL)
+    ${multi ? "Les Preneurs prennent à leur charge" : "Le Preneur prend à sa charge"} les consommations d&rsquo;eau (REGIDESO), d&rsquo;électricité (SNEL)
     et l&rsquo;entretien courant des équipements.
     Le Bailleur reste responsable des grosses réparations (toiture, murs, structure, étanchéité)
     ainsi que de l&rsquo;Impôt sur le Revenu Locatif (IRL), sauf disposition légale ou convention écrite contraire.
   `)}
 
   ${art("7", "Remise en État", `
-    À l&rsquo;expiration du bail, le Preneur rendra le bien dans l&rsquo;état exact où il se trouvait
+    À l&rsquo;expiration du bail, ${multi ? "les Preneurs rendront" : "le Preneur rendra"} le bien dans l&rsquo;état exact où il se trouvait
     lors de la remise des clés, tel que décrit dans l&rsquo;état des lieux initial,
     à l&rsquo;exception de l&rsquo;usure normale due au temps.
   `)}
 
   ${art("8", "Réparation et Facturation", `
     Toute destruction, dégradation ou modification non autorisée constatée lors de la sortie sera
-    intégralement facturée au Preneur. Les frais de remise en état seront déduits de la garantie locative.
-    Si le montant des dégâts excède la garantie, le Preneur s&rsquo;engage à payer le reliquat
+    intégralement facturée ${multi ? "aux Preneurs" : "au Preneur"}. Les frais de remise en état seront déduits de la garantie locative.
+    Si le montant des dégâts excède la garantie, ${multi ? "les Preneurs s&rsquo;engagent" : "le Preneur s&rsquo;engage"} à payer le reliquat
     sur présentation des factures de réparation.
   `)}
 
@@ -1129,13 +1900,7 @@ export class ContractsService {
           <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
         </div>
       </div>
-      <div style="flex:1;text-align:center;">
-        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
-        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
-          <div style="font-size:12px;color:#333;">${e(lease.tenantName)}</div>
-          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
-        </div>
-      </div>
+      ${signatureTenantBlocks}
     </div>
   </div>
 
@@ -1277,7 +2042,15 @@ export class ContractsService {
     return labels[type] ?? type;
   }
 
-  private async log(contractId: number, orgId: number, event: string, ip: string | null, ua: string | null, details: string | null) {
+  private async log(
+    contractId: number,
+    orgId: number,
+    event: string,
+    ip: string | null,
+    ua: string | null,
+    details: string | null,
+    signerId?: number | null,
+  ) {
     await this.db.insert(realEstateContractAuditLogs).values({
       organizationId: orgId,
       contractId,
@@ -1285,6 +2058,7 @@ export class ContractsService {
       ip: ip ?? null,
       userAgent: ua ?? null,
       details: details ?? null,
+      signerId: signerId ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
     });
   }

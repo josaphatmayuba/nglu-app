@@ -17,6 +17,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
+import { ContractSigners } from "../components/ContractSigners.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 
@@ -468,6 +469,7 @@ export function Contrats() {
                 </div>
 
                 <div className="contrats-audit">
+                  <ContractSigners contract={detail} onChanged={() => loadDetail(selectedId)} />
                   <p className="contrats-audit-title"><History size={14} /> Journal d&apos;audit</p>
                   <div className="contrats-timeline">
                     {(detail?.auditLogs || []).length === 0 && (

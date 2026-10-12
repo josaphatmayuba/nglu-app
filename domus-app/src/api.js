@@ -371,6 +371,21 @@ export const api = {
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
+  // Etats des lieux (entree / sortie). Photos : toujours via fetchAuthenticatedBlob (jamais d URL avec token).
+  leaseInspections: (leaseId) => get(`/leases/${leaseId}/inspections`),
+  createInspection: (leaseId, b) => post(`/leases/${leaseId}/inspections`, b),
+  inspectionComparison: (leaseId) => get(`/leases/${leaseId}/inspections/comparison`),
+  inspection: (id) => get(`/inspections/${id}`),
+  updateInspection: (id, b) => patch(`/inspections/${id}`, b),
+  signInspection: (id, b) => post(`/inspections/${id}/sign`, b),
+  deleteInspection: (id) => del(`/inspections/${id}`),
+  uploadInspectionPhoto: (id, file, itemId) => {
+    const form = new FormData();
+    form.append("photo", file);
+    if (itemId) form.append("itemId", String(itemId));
+    return multipartFetch(`/inspections/${id}/photos`, form);
+  },
+  deleteInspectionPhoto: (photoId) => del(`/inspections/photos/${photoId}`),
   maintenancePhotos: (id) => get(`/maintenance/${id}/photos`),
   uploadMaintenancePhoto: (id, file, photoType = "before") => {
     const form = new FormData();
@@ -517,6 +532,9 @@ export const api = {
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
+  // Signataires d'un bail multi-locataires (1..N) : liste + renvoi du lien (429 si < 10 min).
+  contractSigners: (id) => get(`/contracts/${id}/signers`),
+  resendContractSigner: (id, signerId) => post(`/contracts/${id}/signers/${signerId}/resend`),
   deleteContract: (id) => del(`/contracts/${id}`),
   changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
   markContractSignedManually: (id, file) => {

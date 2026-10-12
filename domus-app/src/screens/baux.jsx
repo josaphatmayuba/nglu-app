@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   Check,
+  ClipboardCheck,
   Copy,
   Download,
   Eye,
@@ -38,6 +39,7 @@ import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
+import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -45,6 +47,7 @@ const emptyLease = {
   propertyId: "",
   unitId: "",
   tenantId: "",
+  coTenantIds: [],
   startDate: todayISO(),
   endDate: addMonthsISO(todayISO(), 12, -1),
   nextInvoiceDate: todayISO(), // = startDate par defaut (suit startDate a la creation)
@@ -65,6 +68,14 @@ const emptyLease = {
 function tenantName(l) {
   const n = [l.tenantFirstName, l.tenantLastName].filter(Boolean).join(" ");
   return n || l.tenantName || "Locataire";
+}
+
+// Tous les locataires du bail (principal + co-locataires), joints par « & ».
+const MAX_CO_TENANTS = 3;
+
+function tenantNames(l) {
+  const extra = (Array.isArray(l.coTenants) ? l.coTenants : []).map((c) => c?.name).filter(Boolean);
+  return [tenantName(l), ...extra].join(" & ");
 }
 
 function initials(name) {
@@ -151,6 +162,7 @@ export function Baux({ go } = {}) {
   const [menuDir, setMenuDir] = useState("down");
   const [leaseModal, setLeaseModal] = useState(null);
   const [depositModal, setDepositModal] = useState(null);
+  const [inspectionView, setInspectionView] = useState(null);
   const [detailLease, setDetailLease] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -222,7 +234,7 @@ export function Baux({ go } = {}) {
       if (filter === "renew" && e.info.variant !== "pendingSignature") return false;
       if (filter === "expired" && e.info.variant !== "expired") return false;
       if (!q) return true;
-      return [tenantName(e.lease), e.info.propertyLabel, e.info.reference].some((v) => String(v).toLowerCase().includes(q));
+      return [tenantNames(e.lease), e.info.propertyLabel, e.info.reference].some((v) => String(v).toLowerCase().includes(q));
     });
   }, [enriched, filter, query]);
 
@@ -318,7 +330,7 @@ export function Baux({ go } = {}) {
               <div className="immo-lease-person">
                 <span className={`immo-lease-avatar ${AVATARS[index % AVATARS.length]}`}>{initials(tenantName(lease))}</span>
                 <div>
-                  <strong>{tenantName(lease)}</strong>
+                  <strong>{tenantNames(lease)}</strong>
                   <span>{info.propertyLabel}</span>
                 </div>
               </div>
@@ -403,6 +415,8 @@ export function Baux({ go } = {}) {
                       onCollectDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "collect", lease, amount: depositDue }); }}
                       onReturnDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "return", lease, deposit }); }}
                       busy={busyAction}
+                      onInspection={(type) => { setOpenMenuId(null); setInspectionView({ kind: "launch", lease, type }); }}
+                      onCompareInspections={() => { setOpenMenuId(null); setInspectionView({ kind: "compare", lease }); }}
                       onDetail={() => {
                         setDetailLease({ lease, info });
                         setOpenMenuId(null);
@@ -504,6 +518,12 @@ export function Baux({ go } = {}) {
           }}
         />
       )}
+      {inspectionView?.kind === "launch" && (
+        <InspectionLauncher lease={inspectionView.lease} type={inspectionView.type} onClose={() => setInspectionView(null)} />
+      )}
+      {inspectionView?.kind === "compare" && (
+        <InspectionComparison lease={inspectionView.lease} onClose={() => setInspectionView(null)} />
+      )}
       {detailLease && (
         <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
       )}
@@ -555,6 +575,8 @@ function LeaseActionsMenu({
   onReturnDeposit,
   busy,
   onDetail,
+  onInspection,
+  onCompareInspections,
   onContract,
   onDownloadContract,
   onExportCsv,
@@ -594,7 +616,7 @@ function LeaseActionsMenu({
   return (
     <div className={`immo-lease-actions-menu ${dir}`}>
       <div className={`immo-lease-actions-head ${variant}`}>
-        <strong>{tenantName(lease)}</strong>
+        <strong>{tenantNames(lease)}</strong>
         <span>{LEASE_MENU_HEAD[variant] || "Bail"} · {statusText || (info.variant === "expired" ? "Expiré" : "Actif")}</span>
       </div>
 
@@ -654,6 +676,11 @@ function LeaseActionsMenu({
           <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> Renouveler (nouveau bail)</button>
         </>
       )}
+
+      <hr />
+      <button onClick={() => onInspection?.("entry")}><ClipboardCheck size={15} /> {t("État des lieux d'entrée")}</button>
+      <button onClick={() => onInspection?.("exit")}><ClipboardCheck size={15} /> {t("État des lieux de sortie")}</button>
+      <button onClick={onCompareInspections}><ClipboardCheck size={15} /> {t("Comparer entrée / sortie")}</button>
     </div>
   );
 }
@@ -714,7 +741,7 @@ function DepositModal({ state, onClose, onDone }) {
             <span className="domus-modal-title-icon"><Shield size={20} /></span>
             <div>
               <h2>{mode === "collect" ? "Encaisser la caution" : "Restituer la caution"}</h2>
-              <p>{tenantName(lease)} · {[lease.propertyName || lease.propertyAddress, lease.unitName].filter(Boolean).join(" · ") || "—"}</p>
+              <p>{tenantNames(lease)} · {[lease.propertyName || lease.propertyAddress, lease.unitName].filter(Boolean).join(" · ") || "—"}</p>
             </div>
           </div>
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
@@ -884,12 +911,60 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
               />
             </div>
             <LeaseSelect
-              label="Locataire"
+              label={(form.coTenantIds || []).length ? "Locataire 1 (principal)" : "Locataire"}
               value={form.tenantId}
               required
               onChange={(tenantId) => set({ tenantId })}
-              options={tenants.map((tenant) => [String(tenant.id), tenantLabel(tenant)])}
+              options={tenants
+                .filter((t) => !(form.coTenantIds || []).includes(String(t.id)))
+                .map((tenant) => [String(tenant.id), tenantLabel(tenant)])}
             />
+            {(form.coTenantIds || []).map((coId, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <LeaseSelect
+                    label={`Locataire ${i + 2}`}
+                    value={coId}
+                    required
+                    onChange={(v) => set({ coTenantIds: form.coTenantIds.map((x, j) => (j === i ? v : x)) })}
+                    options={tenants
+                      .filter((t) => String(t.id) !== String(form.tenantId) && !form.coTenantIds.some((x, j) => j !== i && x === String(t.id)))
+                      .map((tenant) => [String(tenant.id), tenantLabel(tenant)])}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="immo-btn"
+                  style={{ minHeight: 44, minWidth: 44 }}
+                  aria-label={`Retirer le locataire ${i + 2}`}
+                  onClick={() => set({ coTenantIds: form.coTenantIds.filter((_, j) => j !== i) })}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+            {(() => {
+              const ids = [form.tenantId, ...(form.coTenantIds || [])];
+              const filled = ids.filter(Boolean);
+              const msg = filled.length !== new Set(filled).size
+                ? "Un même locataire ne peut pas figurer deux fois sur le bail."
+                : (form.coTenantIds || []).some((x) => !x)
+                  ? "Choisissez un locataire pour chaque ligne, ou retirez la ligne vide."
+                  : "";
+              return msg ? <p role="alert" style={{ margin: 0, color: "var(--danger, #b91c1c)", fontSize: 13 }}>{msg}</p> : null;
+            })()}
+            {(form.coTenantIds || []).length < MAX_CO_TENANTS ? (
+              <button
+                type="button"
+                className="immo-btn"
+                style={{ minHeight: 44, alignSelf: "flex-start" }}
+                onClick={() => set({ coTenantIds: [...(form.coTenantIds || []), ""] })}
+              >
+                + Ajouter un locataire
+              </button>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13 }}>Maximum {MAX_CO_TENANTS + 1} locataires par bail.</p>
+            )}
             <LeaseField
               label="Ville de signature (Fait a ...)"
               value={form.signingCity}
@@ -1038,7 +1113,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
 function LeaseDetailModal({ lease, info, onClose, go }) {
   const rows = [
     ["Reference", info.reference],
-    ["Locataire", tenantName(lease)],
+    [(lease.coTenants || []).length ? "Locataires" : "Locataire", tenantNames(lease)],
     ["Bien", info.propertyLabel],
     ["Debut", fmtDate(info.start)],
     ["Fin", fmtDate(info.end)],
@@ -1175,6 +1250,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
             />
           </label>
         </div>
+        <LeaseInspectionsSection lease={lease} />
         {go && (
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
@@ -1373,6 +1449,8 @@ function LeaseMoneyField({
 }
 
 function canSaveLease(form) {
+  const ids = [form.tenantId, ...(form.coTenantIds || [])];
+  if (ids.slice(1).some((id) => !id) || new Set(ids).size !== ids.length) return false;
   return Boolean(form.propertyId && form.unitId && form.tenantId && form.startDate && form.rentAmount !== "" && Number(form.rentAmount) >= 0);
 }
 
@@ -1382,6 +1460,7 @@ function leaseToForm(lease) {
     propertyId: lease.propertyId ? String(lease.propertyId) : "",
     unitId: lease.unitId ? String(lease.unitId) : "",
     tenantId: lease.tenantId ? String(lease.tenantId) : "",
+    coTenantIds: (Array.isArray(lease.coTenants) ? lease.coTenants : []).map((c) => String(c.id)),
     startDate: dateOnly(lease.startDate) || todayISO(),
     endDate: dateOnly(lease.endDate),
     nextInvoiceDate: dateOnly(lease.nextInvoiceDate) || dateOnly(lease.startDate) || todayISO(),
@@ -1407,6 +1486,7 @@ function leasePayload(form) {
     propertyId: toNumber(form.propertyId),
     unitId: toNumber(form.unitId),
     tenantId: toNumber(form.tenantId),
+    coTenantIds: (form.coTenantIds || []).filter(Boolean).map(toNumber),
     startDate: form.startDate,
     endDate: form.endDate || null,
     nextInvoiceDate: form.nextInvoiceDate || form.startDate,

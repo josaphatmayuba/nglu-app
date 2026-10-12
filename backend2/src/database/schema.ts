@@ -1030,6 +1030,64 @@ export const realEstateMaintenancePhotos = mysqlTable("real_estate_maintenance_p
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// Domus etats des lieux (migration 0310). type = entry|exit, status = draft|signed.
+export const realEstateInspections = mysqlTable("real_estate_inspections", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  unitId: bigint("unit_id", { mode: "number" }),
+  type: varchar("type", { length: 10 }).notNull(),
+  status: varchar("status", { length: 20 }).default("draft").notNull(),
+  inspectionDate: date("inspection_date"),
+  generalNotes: text("general_notes"),
+  meters: json("meters"),
+  keysHanded: json("keys_handed"),
+  entryInspectionId: bigint("entry_inspection_id", { mode: "number" }),
+  landlordSignatureData: mediumtext("landlord_signature_data"),
+  landlordSignerName: varchar("landlord_signer_name", { length: 255 }),
+  landlordSignedAt: datetime("landlord_signed_at"),
+  tenantSignatureData: mediumtext("tenant_signature_data"),
+  tenantSignerName: varchar("tenant_signer_name", { length: 255 }),
+  tenantSignedAt: datetime("tenant_signed_at"),
+  tenantSignerIp: varchar("tenant_signer_ip", { length: 64 }),
+  tenantSignerUa: varchar("tenant_signer_ua", { length: 512 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isDeleted: tinyint("is_deleted").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// condition = new|good|fair|poor|damaged|na (mot reserve MySQL, Drizzle le quote).
+export const realEstateInspectionItems = mysqlTable("real_estate_inspection_items", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  inspectionId: bigint("inspection_id", { mode: "number" }).notNull(),
+  room: varchar("room", { length: 100 }).notNull(),
+  element: varchar("element", { length: 150 }).notNull(),
+  condition: varchar("condition", { length: 20 }).default("good").notNull(),
+  remarks: text("remarks"),
+  entryItemId: bigint("entry_item_id", { mode: "number" }),
+  sortOrder: int("sort_order").default(0).notNull(),
+  isDeleted: tinyint("is_deleted").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const realEstateInspectionPhotos = mysqlTable("real_estate_inspection_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  inspectionId: bigint("inspection_id", { mode: "number" }).notNull(),
+  itemId: bigint("item_id", { mode: "number" }),
+  bucket: varchar("bucket", { length: 255 }).notNull(),
+  objectKey: varchar("object_key", { length: 512 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const realEstateUnits = mysqlTable("real_estate_units", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
@@ -1091,6 +1149,19 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   defaultNoticeMonthsBehind: int("default_notice_months_behind"),
   // Prorata du loyer (opt-in par bail) : 0 = comportement historique inchange.
   rentProrationEnabled: tinyint("rent_proration_enabled").default(0).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Locataires supplementaires d'un bail (1..N personnes par bail). Le locataire
+// principal reste real_estate_leases.tenant_id ; les autres sont ici (customer_id).
+export const realEstateLeaseCotenants = mysqlTable("real_estate_lease_cotenants", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  customerId: bigint("customer_id", { mode: "number" }).notNull(),
+  position: int("position").default(1).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1600,8 +1671,42 @@ export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audi
   ip: varchar("ip", { length: 100 }),
   userAgent: varchar("user_agent", { length: 500 }),
   details: text("details"),
+  // Signataire concerne (real_estate_contract_signers.id) ; null = evenement du contrat.
+  signerId: bigint("signer_id", { mode: "number" }),
   createdAt: timestamp("created_at"),
 });
+
+// Signataires d'un contrat de bail (1..N locataires, statut de signature par personne).
+// role : principal | cotenant ; status : pending | sent | viewed | signed ;
+// method : electronic | paper. customer_id = customers.id. Soft-delete via is_active.
+export const realEstateContractSigners = mysqlTable("real_estate_contract_signers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull(),
+  contractId: bigint("contract_id", { mode: "number" }).notNull(),
+  customerId: bigint("customer_id", { mode: "number" }).notNull(),
+  role: varchar("role", { length: 20 }).default("principal").notNull(),
+  position: int("position").default(1).notNull(),
+  signerName: varchar("signer_name", { length: 255 }),
+  signerEmail: varchar("signer_email", { length: 255 }),
+  signerPhone: varchar("signer_phone", { length: 50 }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  method: varchar("method", { length: 20 }),
+  signerToken: varchar("signer_token", { length: 64 }),
+  signerTokenExpiry: timestamp("signer_token_expiry"),
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  signedAt: timestamp("signed_at"),
+  signatureData: mediumtext("signature_data"),
+  signerIp: varchar("signer_ip", { length: 100 }),
+  signerUserAgent: varchar("signer_user_agent", { length: 500 }),
+  lastResentAt: timestamp("last_resent_at"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+}, (t) => ({
+  uqSignerToken: unique("uq_contract_signer_token").on(t.signerToken),
+  uqContractCustomer: unique("uq_contract_signer_customer").on(t.contractId, t.customerId),
+}));
 
 // RBAC par bien (Domus, Phase 2) : affecte un utilisateur a un ou plusieurs
 // biens (real_estate_properties). N IMPORTE QUEL user peut etre limite a 1..N
