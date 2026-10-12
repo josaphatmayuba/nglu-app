@@ -10,6 +10,7 @@ import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { t } from "../i18n.js";
+import { dueChipFor } from "../overdue.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { buildLeaseCards, ProrataBadge } from "./loyers.jsx";
 import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
@@ -58,9 +59,12 @@ function daysUntil(dateLike) {
   return Math.round((d - today) / 86400000);
 }
 
-function dueChip(days) {
-  if (days == null) return { text: t("Échéance à confirmer"), chip: "chip-ink" };
-  if (days < 0) return { text: `${t("en retard de")} ${Math.abs(days)} j`, chip: "chip-rose" };
+// kind (dueChipFor) : "en retard" seulement au-dela du delai de grace ; echeance
+// passee dans la grace = "echu" (ambre).
+function dueChip(days, kind, overdueDays) {
+  if (days == null && kind !== "overdue") return { text: t("Échéance à confirmer"), chip: "chip-ink" };
+  if (kind === "overdue") return { text: `${t("en retard de")} ${overdueDays ?? Math.abs(days ?? 0)} j`, chip: "chip-rose" };
+  if (days < 0) return { text: `${t("échu depuis")} ${Math.abs(days)} j`, chip: "chip-amber" };
   if (days === 0) return { text: t("dû aujourd'hui"), chip: "chip-amber" };
   return { text: `${t("dû dans")} ${days} j`, chip: "chip-amber" };
 }
@@ -142,7 +146,8 @@ export function Portail({ go }) {
 
   const dueDate = nextDueDateOf(activeLease) || activeLease?.nextInvoiceDate || activeLease?.endDate || null;
   const dueDays = daysUntil(dueDate);
-  const due = dueChip(dueDays);
+  const dueInfo = dueChipFor(activeLease, dueDate);
+  const due = dueChip(dueDays, dueInfo.kind, dueInfo.days);
 
   const leaseContracts = useMemo(
     () => contracts.filter((c) => activeLease && String(c.leaseId) === String(activeLease.id)),

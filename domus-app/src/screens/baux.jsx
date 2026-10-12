@@ -30,7 +30,7 @@ import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
 import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
 import { openRentBookPrint } from "../rentBookUtils.js";
-import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
+import { filterLeases, filterProperties, filterTenants, filterUnits, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
@@ -90,8 +90,9 @@ function monthsBetween(a, b) {
 
 // Réplique leaseDisplayInfo du CRM, sans moment (Date natif).
 function leaseInfo(l) {
-  const start = l.startDate ? new Date(l.startDate) : null;
-  const end = l.endDate ? new Date(l.endDate) : null;
+  // Date seule AAAA-MM-JJ lue en jour LOCAL (new Date("YYYY-MM-DD") = minuit UTC).
+  const start = l.startDate ? parseDomusDate(l.startDate) : null;
+  const end = l.endDate ? parseDomusDate(l.endDate) : null;
   const now = new Date();
   const isExpired = end ? end < now : false;
   const daysLeft = end ? Math.round((end - now) / DAY) : null;

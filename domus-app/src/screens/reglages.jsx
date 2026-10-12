@@ -1290,9 +1290,16 @@ function OverdueGraceCard({ setting, onSaved }) {
     <section className="card settings-card">
       <h3><Clock size={17} /> Retards de loyer</h3>
       <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
-        Un loyer est considere en retard (badges « En retard » et « Mauvais payeur ») lorsqu&apos;il reste impaye plus de ce nombre de jours apres son echeance.
+        Un loyer est considere en retard lorsqu&apos;il reste impaye plus de ce nombre de jours apres son echeance. Ce delai s&apos;applique partout :
+        badges « En retard » et « Mauvais payeur », portail locataire, frise des loyers, indicateurs Biens et alertes du tableau de bord.
+        Une echeance passee mais encore dans ce delai est affichee « echue » (a regler), sans compter comme retard.
         Le changement recalcule aussi les retards passes. Distinct du delai des rappels automatiques.
       </p>
+      {Number(setting?.rentReminderOverdueDays) > 0 && Number(setting.rentReminderOverdueDays) < Number(days) && (
+        <p role="note" style={{ fontSize: 12, color: "#b45309", margin: "0 0 8px" }}>
+          Attention : les rappels automatiques de retard sont configures a {setting.rentReminderOverdueDays} jours, soit avant la fin de ce delai de grace. Un locataire peut etre relance alors qu&apos;il n&apos;est pas encore considere en retard.
+        </p>
+      )}
       <div className="numbering-grid">
         <label className="domus-property-field">
           <span>Delai de grace avant retard (jours)</span>

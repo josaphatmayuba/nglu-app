@@ -5,7 +5,8 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
-import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
+import { filterLeases, filterPayments, parseDomusDate, useDateRange } from "../dateRange.jsx";
+import { friseKinds, leaseCardStatus } from "../overdue.js";
 import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
@@ -221,6 +222,11 @@ export function buildLeaseCards(leases, payments) {
         if (endM) coveredUntil = new Date(Number(endM[1]), Number(endM[2]) - 1, Number(endM[3]));
       }
 
+      // Retard = echeance + delai de grace de l'org : le flag backend (isOverdue)
+      // est prioritaire sur l'ancienne regle "mois passe impaye". Solde, monthsBehind,
+      // frise et preavis (canNotifyDefault) ne changent pas.
+      if (typeof l.isOverdue === "boolean") status = leaseCardStatus(l, balance, now);
+
       return {
         lease: l,
         name: tenantName(l),
@@ -289,7 +295,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   // Frise ancrée sur le début du bail → se remplit de gauche à droite dans le temps.
   const slots = lease?.startDate ? monthsFrom(lease.startDate, BAR_MONTHS) : lastMonths(BAR_MONTHS);
   const latestDate = latest?.paymentDate
-    ? new Date(latest.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+    ? (parseDomusDate(latest.paymentDate) || new Date(latest.paymentDate)).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
     : "—";
 
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -310,13 +316,16 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   // Bail sans date de fin : mois écoulés + 6 mois à venir (12 au minimum).
   const fixedTotal = lease?.startDate ? leaseTotalMonths(lease) : null;
   const totalMonths = lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
-  const monthKinds = [];
-  if (totalMonths) {
-    for (let i = 0; i < totalMonths; i++) {
-      const fill = Math.max(0, Math.min(1, (monthsCoveredFloat || 0) - i));
-      monthKinds.push(fill >= 0.999 ? "paid" : fill > 0 ? "partial" : i < monthsDue - 1 ? "late" : i === monthsDue - 1 ? "cur" : "future");
-    }
-  }
+  // Etat de chaque mois + nombre de mois en retard : meme regle (echeance + grace),
+  // echeance au prorata = periodStart des lignes, sinon 1er du mois (cf. backend).
+  const prorata = isProrationLease(lease);
+  const periodStarts = prorata
+    ? list.filter((p) => p.periodStart && p.status !== "voided").map((p) => String(p.periodStart).slice(0, 10)).sort()
+    : null;
+  const frise = totalMonths
+    ? friseKinds({ startDate: lease.startDate, graceDays: lease.graceDays, prorata, periodStarts, totalMonths, monthsDue, monthsCoveredFloat })
+    : { kinds: [], lateCount: 0 };
+  const monthKinds = frise.kinds;
   const runs = [];
   monthKinds.forEach((k, i) => {
     const last = runs[runs.length - 1];
@@ -324,7 +333,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     else runs.push({ kind: k, n: 1, fill: k === "partial" ? Math.round(((monthsCoveredFloat || 0) - i) * 100) : 0 });
   });
   const paidCount = monthKinds.filter((k) => k === "paid").length;
-  const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", cur: "courant", future: "à venir" };
+  const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", due: "échu", cur: "courant", future: "à venir" };
   const firstSlot = totalMonths ? monthsFrom(lease.startDate, 1)[0] : null;
   const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
@@ -350,10 +359,12 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     return null;
   };
   const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
-  // Mois en retard = mois PASSÉS non soldés de la frise. monthsBehind inclut le
-  // mois courant (dû, pas en retard) : « 2 en retard » pour Sep impayé + Oct courant.
-  const lateMonths = monthKinds.slice(0, Math.max(0, monthsDue - 1)).filter((k) => k !== "paid").length;
-  const behindTxt = status === "late" ? tf("{n} en retard", { n: lateMonths || monthsBehind }) : status === "pending" ? t("1 à régler") : t("À jour");
+  // Mois en retard = échéances non couvertes dont date d'échéance + délai de
+  // grâce (réglage org rentOverdueGraceDays) < aujourd'hui, soit exactement les
+  // cases rouges de la frise (même règle que computeLeaseOverdueStats). Un mois
+  // passé mais dans la grâce est « échu » (ambre), pas en retard. Repli : unpaidCount backend.
+  const lateMonths = frise.lateCount;
+  const behindTxt = status === "late" ? tf("{n} en retard", { n: lateMonths || Number(lease?.unpaidCount) || 1 }) : status === "pending" ? t("1 à régler") : t("À jour");
   const frieseAria = totalMonths
     ? `${paidCount}${fixedTotal ? ` / ${totalMonths}` : ""} ${t("mois payés")}, ${behindTxt}`
     : "";
@@ -419,7 +430,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
             <div className="immo-pay-detail">
               <div className="immo-pay-legend">
                 <span><i className="paid" />{t("Payé")}</span><span><i className="late" />{t("En retard")}</span>
-                <span><i className="cur" />{t("Mois courant")}</span><span><i className="future" />{t("À venir")}</span>
+                <span><i className="due" />{t("Échu (délai de grâce)")}</span><span><i className="cur" />{t("Mois courant")}</span><span><i className="future" />{t("À venir")}</span>
               </div>
               {Array.from(new Set(monthKinds.map((_, i) => monthAt(i).getFullYear()))).map((y) => (
                 <div key={y}>
@@ -462,7 +473,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                 const pend = k === "future" ? null : pendingForMonth(d);
                 const r = Number(rent) || 0;
                 const payAmount = Math.max(0, Math.round((cumDue(i) - Number(totalPaid || 0)) * 100) / 100);
-                const kindTxt = { partial: t("payé en partie"), late: t("en retard"), cur: t("mois courant"), future: t("à venir") }[k];
+                const kindTxt = { partial: t("payé en partie"), late: t("en retard"), due: t("échu"), cur: t("mois courant"), future: t("à venir") }[k];
                 return (
                   <div className="immo-pay-panel">
                     <strong>{fmtMonthYear(d)} · {kindTxt}</strong>

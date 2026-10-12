@@ -290,6 +290,14 @@ export const usePropertyManagementData = () => {
       };
     };
     const overdueLeases = activeLeases.map((lease) => {
+      // Retard = echeance + delai de grace org : flag backend (isOverdue) prioritaire.
+      if (typeof lease.isOverdue === "boolean") {
+        if (!lease.isOverdue) return false;
+        const from = moment(lease.overdueDueDate || lease.nextInvoiceDate || today);
+        const lw = withRemainingAmount(lease, paidAmountForLeaseSince(lease.id, from.clone().subtract(1, "month"), today));
+        // En retard selon le backend : ne jamais afficher 0 a regler (paiement hors fenetre).
+        return lw.remainingAmount > 0 ? lw : { ...lw, remainingAmount: lw.expectedAmount };
+      }
       if (!lease.nextInvoiceDate) return false;
       const due = moment(lease.nextInvoiceDate);
       if (!due.isBefore(today, "day")) return false;
@@ -300,9 +308,13 @@ export const usePropertyManagementData = () => {
     const upcomingLeases = activeLeases.map((lease) => {
       if (!lease.nextInvoiceDate) return false;
       const due = moment(lease.nextInvoiceDate);
-      if (due.isBefore(today, "day")) return false;
-      if (due.diff(today, "days") > 5) return false;
-      const paidAmount = paidAmountForLeaseSince(lease.id, today.clone().subtract(1, "month"), due);
+      // Echu mais dans le delai de grace (isOverdue=false) : reste visible, classe "a venir/en attente".
+      const dueInGrace = due.isBefore(today, "day") && lease.isOverdue === false;
+      if (due.isBefore(today, "day") && !dueInGrace) return false;
+      if (!dueInGrace && due.diff(today, "days") > 5) return false;
+      const paidAmount = dueInGrace
+        ? paidAmountForLeaseSince(lease.id, due.clone().subtract(1, "month"), today)
+        : paidAmountForLeaseSince(lease.id, today.clone().subtract(1, "month"), due);
       const leaseWithRemaining = withRemainingAmount(lease, paidAmount);
       return leaseWithRemaining.remainingAmount > 0 ? leaseWithRemaining : false;
     }).filter(Boolean);

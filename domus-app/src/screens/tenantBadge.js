@@ -11,6 +11,8 @@
 // L'ancienneté et l'historique de paiement sont cumulés sur TOUS les baux du
 // locataire (actifs comme terminés), pas seulement le bail actif.
 
+import { parseDomusDate } from "../dateRange.jsx";
+
 const YEAR_MS = 365 * 86400000;
 
 // Liaison locataire -> ses baux -> bail actif -> unité (comme le CRM).
@@ -44,7 +46,7 @@ export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now())
   }
   const hasActive = tenantLeases.some((l) => l.status === "active");
   const daysToEnd = hasActive && activeLease?.endDate
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - now) / 86400000)
+    ? Math.ceil(((parseDomusDate(activeLease.endDate) || new Date(activeLease.endDate)).getTime() - now) / 86400000)
     : null;
   // Filet : bail encore "actif" mais dont l'échéance est déjà passée (donnée non
   // clôturée en amont). On l'alerte au lieu de le laisser passer pour sain.

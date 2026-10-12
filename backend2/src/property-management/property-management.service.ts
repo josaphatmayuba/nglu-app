@@ -102,11 +102,10 @@ import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
+import { loadOverdueByLease, readOverdueGraceDays } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
-  computeLeaseNextDue,
-  computeProratedOverdueStats,
   planProrationRealign,
   scheduleForLease,
   occupiedMonthKeys,
@@ -6915,185 +6914,42 @@ export class PropertyManagementService {
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
   }
 
-  // Retard historique par bail (badge "Mauvais payeur" côté front) :
-  // dérive les échéances mensuelles (billingCycle) depuis startDate jusqu'à
-  // aujourd'hui (bornées à endDate), rapproche par ordre chronologique avec
-  // les paiements du bail, délai de grâce configurable (défaut 5 jours). Batch les paiements par
-  // leaseId en une seule requête (pas de N+1).
-  private static readonly DEFAULT_OVERDUE_GRACE_DAYS = 5;
-
-  // Delai de grace configurable par organisation (Reglages) ; NULL/invalide = 5.
+  // Retard historique par bail (badge "Mauvais payeur" cote front) : logique
+  // partagee dans ./lease-overdue (date d'echeance + delai de grace org).
   private async overdueGraceDays(orgId: number): Promise<number> {
-    const row = await readOrgAppSetting(this.db, orgId, { days: appSettings.rentOverdueGraceDays });
-    const v = row?.days == null ? NaN : Number(row.days);
-    return Number.isInteger(v) && v >= 0 && v <= 60 ? v : PropertyManagementService.DEFAULT_OVERDUE_GRACE_DAYS;
+    return readOverdueGraceDays(this.db, orgId);
   }
 
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
     orgId: number,
-  ): Promise<Array<Omit<T, "rentProrationEnabled"> & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null; rentProrationEnabled: boolean; nextDueDate: string | null; nextDueAmount: number; isProratedNext: boolean }>> {
+  ): Promise<Array<Omit<T, "rentProrationEnabled"> & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null; overdueDays: number; graceDays: number; rentProrationEnabled: boolean; nextDueDate: string | null; nextDueAmount: number; isProratedNext: boolean }>> {
     if (!rows.length) return [];
-    const leaseIds = rows.map((r) => r.id);
     const graceDays = await this.overdueGraceDays(orgId);
-    const payments = await this.db
-      .select({
-        leaseId: realEstateRentPayments.leaseId,
-        paymentDate: realEstateRentPayments.paymentDate,
-        amount: realEstateRentPayments.amount,
-      })
-      .from(realEstateRentPayments)
-      .where(and(
-        inArray(realEstateRentPayments.leaseId, leaseIds),
-        eq(realEstateRentPayments.status, "paid"),
-      ))
-      .orderBy(realEstateRentPayments.paymentDate);
-
-    const paymentsByLease = new Map<number, Array<{ date: string; amount: number }>>();
-    for (const p of payments) {
-      const list = paymentsByLease.get(p.leaseId) ?? [];
-      list.push({ date: p.paymentDate, amount: Number(p.amount || 0) });
-      paymentsByLease.set(p.leaseId, list);
-    }
-
-    const todayStr = this.formatDateOnly(new Date());
-    const today = this.parseDateOnly(todayStr);
-
-    // Decimales des devises, uniquement si au moins un bail est au prorata.
-    const decimalsByCurrency = new Map<number, number>();
-    const prorationCurrencyIds = [...new Set(
-      rows
-        .filter((r) => (r as any).rentProrationEnabled && (r as any).currencyId)
-        .map((r) => Number((r as any).currencyId)),
-    )];
-    if (prorationCurrencyIds.length) {
-      const cur = await this.db
-        .select({ id: currencies.id, d: currencies.decimalPlaces })
-        .from(currencies)
-        .where(inArray(currencies.id, prorationCurrencyIds));
-      for (const c of cur) {
-        const d = c.d == null ? NaN : Number(c.d);
-        decimalsByCurrency.set(Number(c.id), Number.isInteger(d) && d >= 0 && d <= 6 ? d : 2);
-      }
-    }
-
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const entries = await loadOverdueByLease(this.db, orgId, graceDays, rows as any[], today);
     return rows.map((row) => {
       const r = row as any;
-      const leasePayments = paymentsByLease.get(row.id) ?? [];
-      if (r.rentProrationEnabled) {
-        // Prorata opt-in : couverture/retards par montants dus de periode.
-        const decimals = decimalsByCurrency.get(Number(r.currencyId)) ?? 2;
-        const paidTotal = leasePayments.reduce((s, p) => s + p.amount, 0);
-        const schedule = scheduleForLease(r, decimals, paidTotal, todayStr);
-        const stats = computeProratedOverdueStats(schedule, leasePayments, today, graceDays, decimals);
-        const next = computeLeaseNextDue(r, leasePayments.map((p) => p.amount), decimals, todayStr);
+      const e = entries.get(row.id)!;
+      if (e.next) {
         return {
           ...row,
-          ...stats,
+          ...e.stats,
           rentProrationEnabled: true,
-          nextDueDate: next.nextDueDate,
-          nextDueAmount: next.nextDueAmount,
-          isProratedNext: next.isProratedNext,
+          nextDueDate: e.next.nextDueDate,
+          nextDueAmount: e.next.nextDueAmount,
+          isProratedNext: e.next.isProratedNext,
         } as any;
       }
-      const stats = this.computeLeaseOverdueStats(
-        row.startDate,
-        row.endDate,
-        row.billingCycle,
-        leasePayments,
-        Number((row as { rentAmount?: string | number | null }).rentAmount || 0),
-        today,
-        graceDays,
-      );
       return {
         ...row,
-        ...stats,
+        ...e.stats,
         rentProrationEnabled: false,
         nextDueDate: (r.nextInvoiceDate ?? null) as string | null,
         nextDueAmount: Number(r.rentAmount) || 0,
         isProratedNext: false,
       } as any;
     });
-  }
-
-  // Dérive les échéances mensuelles depuis startDate jusqu'à today (bornées à
-  // endDate si présent) et rapproche avec les paiements par ordre chronologique :
-  // une échéance est couverte par le 1er paiement non encore consommé dont la
-  // paymentDate correspond au mois de l'échéance. Retard si payé > graceDays après
-  // l'échéance, ou dépassée de > graceDays et toujours non couverte.
-  private computeLeaseOverdueStats(
-    startDate: string,
-    endDate: string | null,
-    billingCycle: string | null,
-    paymentRows: Array<{ date: string; amount: number }>,
-    rentAmount: number,
-    today: Date,
-    graceDays: number,
-  ): { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null } {
-    const start = this.parseDateOnly(startDate);
-    const boundary = endDate ? this.parseDateOnly(endDate) : null;
-    // Sans loyer exploitable, chaque paiement vaut une échéance.
-    const unit = rentAmount > 0 ? rentAmount : 1;
-    const payments = paymentRows.map((p) => ({ date: this.parseDateOnly(p.date), amount: rentAmount > 0 ? p.amount : 1 }));
-
-    let dueCount = 0;
-    let lateCount = 0;
-    let unpaidCount = 0;
-    let isOverdue = false;
-    // Date de la 1ere echeance non couverte en retard (affichee au front a la
-    // place de nextInvoiceDate quand isOverdue=true, qui peut deja pointer sur
-    // une echeance future si le total paye couvre la fenetre sans rapprochement
-    // mois par mois - voir advanceLeaseInvoiceDateIfCovered).
-    let overdueDueDate: string | null = null;
-    // Chaque échéance est ancrée sur `start` + N cycles (et non chaînée sur la
-    // date précédente) pour éviter que le clamp fin-de-mois (ex. 31 -> 28 en
-    // février) ne fige les échéances suivantes sur le jour raboté.
-    let period = 0;
-    let dueDate = start;
-
-    while (dueDate.getTime() <= today.getTime() && (!boundary || dueDate.getTime() <= boundary.getTime())) {
-      dueCount += 1;
-
-      // Couverture par montants cumulés (comme la frise Loyers) : l'échéance N est
-      // couverte par le paiement qui fait atteindre N loyers cumulés. Un paiement
-      // groupé ou d'avance couvre donc plusieurs échéances.
-      let coveringPayment: Date | null = null;
-      let cumulated = 0;
-      for (const p of payments) {
-        cumulated += p.amount;
-        if (cumulated + 0.0001 >= (period + 1) * unit) { coveringPayment = p.date; break; }
-      }
-
-      if (coveringPayment) {
-        const paidAt = coveringPayment;
-        const graceLimit = new Date(dueDate.getTime());
-        graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
-        if (paidAt.getTime() > graceLimit.getTime()) {
-          lateCount += 1;
-        }
-      } else {
-        const graceLimit = new Date(dueDate.getTime());
-        graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
-        if (today.getTime() > graceLimit.getTime()) {
-          lateCount += 1;
-          unpaidCount += 1;
-          isOverdue = true;
-          if (overdueDueDate === null) overdueDueDate = this.formatDateOnly(dueDate);
-        }
-      }
-
-      period += 1;
-      dueDate = this.addBillingCycle(start, billingCycle, period);
-    }
-
-    return {
-      lateCount,
-      unpaidCount,
-      dueCount,
-      lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
-      isOverdue,
-      overdueDueDate,
-    };
   }
 
   private async getLeaseOrThrow(id: number, orgId: number) {
