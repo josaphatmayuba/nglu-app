@@ -15,6 +15,7 @@ import {
   realEstateExpenseInstallments,
   realEstateLeaseDocuments,
   realEstateLeases,
+  realEstateLeaseCotenants,
   realEstateMaintenanceCosts,
   realEstateMaintenancePhotos,
   realEstateMaintenanceRequests,
@@ -1806,11 +1807,79 @@ export class PropertyManagementService {
         scopeFilter,
       ))
       .orderBy(desc(realEstateLeases.id));
-    return this.withOverdueStats(rows, orgId);
+    return this.attachCoTenants(await this.withOverdueStats(rows, orgId), orgId);
+  }
+
+  /** Ajoute `coTenants` ({id, name, phone}) = autres locataires du bail, en plus du principal (tenantId). */
+  private async attachCoTenants<T extends { id: number }>(rows: T[], orgId: number) {
+    if (!rows.length) return rows.map((r) => ({ ...r, coTenants: [] as Array<{ id: number; name: string; phone: string | null }> }));
+    const links = await this.db
+      .select({
+        leaseId: realEstateLeaseCotenants.leaseId,
+        id: customers.id,
+        firstName: customers.firstName,
+        lastName: customers.lastName,
+        phone: customers.phone,
+      })
+      .from(realEstateLeaseCotenants)
+      .innerJoin(customers, eq(customers.id, realEstateLeaseCotenants.customerId))
+      .where(and(
+        inArray(realEstateLeaseCotenants.leaseId, rows.map((r) => r.id)),
+        eq(realEstateLeaseCotenants.organizationId, orgId),
+        eq(customers.organizationId, orgId),
+        eq(customers.status, "true"),
+        eq(realEstateLeaseCotenants.isActive, 1),
+      ))
+      .orderBy(realEstateLeaseCotenants.position);
+    return rows.map((r) => ({
+      ...r,
+      coTenants: links
+        .filter((l) => l.leaseId === r.id)
+        .map((l) => ({ id: Number(l.id), name: [l.firstName, l.lastName].filter(Boolean).join(" "), phone: l.phone ?? null })),
+    }));
+  }
+
+  /** Remplace la liste des autres locataires du bail (soft delete des retires, jamais de DELETE). */
+  private async syncLeaseCoTenants(leaseId: number, principalId: number, ids: number[], orgId: number) {
+    const wanted = [...new Set(ids.map(Number))].filter((n) => n > 0 && n !== Number(principalId));
+    for (const customerId of wanted) await this.findTenant(customerId, orgId);
+    const existing = await this.db
+      .select()
+      .from(realEstateLeaseCotenants)
+      .where(and(eq(realEstateLeaseCotenants.leaseId, leaseId), eq(realEstateLeaseCotenants.organizationId, orgId)));
+    for (const row of existing) {
+      if (row.isActive === 1 && !wanted.includes(Number(row.customerId))) {
+        await this.db
+          .update(realEstateLeaseCotenants)
+          .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateLeaseCotenants.id, row.id));
+      }
+    }
+    for (const [index, customerId] of wanted.entries()) {
+      const row = existing.find((e) => Number(e.customerId) === customerId);
+      if (row) {
+        await this.db
+          .update(realEstateLeaseCotenants)
+          .set({ isActive: 1, position: index + 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateLeaseCotenants.id, row.id));
+      } else {
+        await this.db.insert(realEstateLeaseCotenants).values({
+          organizationId: orgId,
+          leaseId,
+          customerId,
+          position: index + 1,
+          isActive: 1,
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+      }
+    }
   }
 
   async createLease(input: CreateLeaseDto, orgId: number) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId, orgId);
+    // Valide les autres locataires AVANT toute ecriture (pas de bail cree a moitie).
+    for (const customerId of input.coTenantIds ?? []) await this.findTenant(customerId, orgId);
     if ((input.status ?? "draft") === "active") {
       await this.assertNoLeaseOverlap(
         orgId,
@@ -1859,6 +1928,9 @@ export class PropertyManagementService {
     }
 
     const leaseId = Number(result.insertId);
+    if (input.coTenantIds?.length) {
+      await this.syncLeaseCoTenants(leaseId, input.tenantId, input.coTenantIds, orgId);
+    }
     await this.publishLeaseUpdate("created", leaseId, {
       propertyId: input.propertyId,
       unitId: input.unitId,
@@ -2017,6 +2089,7 @@ export class PropertyManagementService {
       input.tenantId ?? current.tenantId,
       orgId,
     );
+    for (const customerId of input.coTenantIds ?? []) await this.findTenant(customerId, orgId);
 
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
@@ -2087,6 +2160,20 @@ export class PropertyManagementService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateLeases.id, id), eq(realEstateLeases.organizationId, orgId)));
+
+    if (input.coTenantIds !== undefined || (input.tenantId !== undefined && input.tenantId !== current.tenantId)) {
+      const existing = input.coTenantIds ?? (
+        await this.db
+          .select({ customerId: realEstateLeaseCotenants.customerId })
+          .from(realEstateLeaseCotenants)
+          .where(and(
+            eq(realEstateLeaseCotenants.leaseId, id),
+            eq(realEstateLeaseCotenants.organizationId, orgId),
+            eq(realEstateLeaseCotenants.isActive, 1),
+          ))
+      ).map((r) => Number(r.customerId));
+      await this.syncLeaseCoTenants(id, input.tenantId ?? current.tenantId, existing, orgId);
+    }
 
     const nextUnitId = input.unitId ?? current.unitId;
     if (input.unitId !== undefined && input.unitId !== current.unitId) {
@@ -4494,7 +4581,7 @@ export class PropertyManagementService {
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
-    const [enriched] = await this.withOverdueStats(rows, orgId);
+    const [enriched] = await this.attachCoTenants(await this.withOverdueStats(rows, orgId), orgId);
     return enriched;
   }
 

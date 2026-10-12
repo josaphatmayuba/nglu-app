@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -417,6 +418,15 @@ export class CreateLeaseDto {
   @IsOptional()
   @IsBoolean()
   rentProrationEnabled?: boolean;
+
+  @ApiPropertyOptional({ type: [Number], description: "Autres locataires du bail (en plus de tenantId, le principal)." })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  coTenantIds?: number[];
 }
 
 export class UpdateLeaseDto extends PartialType(CreateLeaseDto) {}

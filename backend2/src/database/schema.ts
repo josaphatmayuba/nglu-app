@@ -1153,6 +1153,19 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Locataires supplementaires d'un bail (1..N personnes par bail). Le locataire
+// principal reste real_estate_leases.tenant_id ; les autres sont ici (customer_id).
+export const realEstateLeaseCotenants = mysqlTable("real_estate_lease_cotenants", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  customerId: bigint("customer_id", { mode: "number" }).notNull(),
+  position: int("position").default(1).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 // Bail signé à la main par le locataire, scanné/photographié et importé pour archivage + consultation.
 export const realEstateLeaseDocuments = mysqlTable("real_estate_lease_documents", {
   id: serial("id").primaryKey(),

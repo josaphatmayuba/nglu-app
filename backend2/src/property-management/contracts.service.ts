@@ -10,6 +10,7 @@ import {
   emailTemplates,
   realEstateContractAuditLogs,
   realEstateContracts,
+  realEstateLeaseCotenants,
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateOwners,
@@ -31,6 +32,16 @@ import { CreateContractDto, SignContractDto } from "./dto/property-management.dt
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
+
+type CoTenantInfo = {
+  id: number;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  idDocumentType: string | null;
+  idNumber: string | null;
+};
 
 type LeaseDetails = {
   leaseId: number;
@@ -64,6 +75,8 @@ type LeaseDetails = {
   tenantIdDocumentType: string | null;
   tenantIdNumber: string | null;
   tenantName: string;
+  // Co-locataires actifs (hors locataire principal), ordre position.
+  coTenants: CoTenantInfo[];
   // Proprietaire legal du bien (real_estate_owners), si assigne sur la propriete.
   ownerId: number | null;
   ownerName: string | null;
@@ -964,9 +977,46 @@ export class ContractsService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
 
     const r = rows[0];
+
+    const coRows = await this.db
+      .select({
+        id: customers.id,
+        firstName: customers.firstName,
+        lastName: customers.lastName,
+        email: customers.email,
+        phone: customers.phone,
+        address: customers.address,
+        idDocumentType: tenantDetails.idDocumentType,
+        idNumber: tenantDetails.idNumber,
+      })
+      .from(realEstateLeaseCotenants)
+      .innerJoin(customers, eq(customers.id, realEstateLeaseCotenants.customerId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .where(
+        and(
+          eq(realEstateLeaseCotenants.leaseId, leaseId),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+        ),
+      )
+      .orderBy(realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
+
+    const coTenants: CoTenantInfo[] = coRows
+      .filter((c) => c.id !== r.tenantId)
+      .map((c) => ({
+        id: c.id,
+        name: [c.firstName, c.lastName].filter(Boolean).join(" ") || "Locataire",
+        address: c.address ?? null,
+        phone: c.phone ?? null,
+        email: c.email ?? null,
+        idDocumentType: c.idDocumentType ?? null,
+        idNumber: c.idNumber ?? null,
+      }));
+
     return {
       ...r,
       tenantName: [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire",
+      coTenants,
     };
   }
 
@@ -984,7 +1034,40 @@ export class ContractsService {
     const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = landlordInfo.name || "[NOM DU BAILLEUR]";
+    const landlordName = (landlordInfo.name || "[NOM DU BAILLEUR]").toLocaleUpperCase("fr");
+    const allTenants = [
+      {
+        name: lease.tenantName,
+        address: lease.tenantAddress,
+        phone: lease.tenantPhone,
+        email: lease.tenantEmail,
+        idDocumentType: lease.tenantIdDocumentType,
+        idNumber: lease.tenantIdNumber,
+      },
+      ...(lease.coTenants ?? []),
+    ];
+    const multi = allTenants.length > 1;
+    const tenantsLabel = multi ? "Les Preneurs (Locataires)" : "Le Preneur (Locataire)";
+    const tenantsBlock = allTenants
+      .map(
+        (t, i) => `<div${i > 0 ? ' style="margin-top:12px;"' : ""}>
+      <strong>${e((t.name ?? "").toLocaleUpperCase("fr"))}</strong> &mdash; ${e(t.idDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(t.idNumber || "N/A")}</em><br>
+      Adresse&nbsp;: ${e(t.address ?? (i === 0 ? "[ADRESSE DU PRENEUR]" : "N/A"))}<br>
+      Téléphone&nbsp;: ${e(t.phone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(t.email ?? "N/A")}
+    </div>`,
+      )
+      .join("");
+    const signatureTenantBlocks = allTenants
+      .map(
+        (t) => `<div style="flex:1;text-align:center;">
+        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
+        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
+          <div style="font-size:12px;color:#333;">${e((t.name ?? "").toLocaleUpperCase("fr"))}</div>
+          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
+        </div>
+      </div>`,
+      )
+      .join("");
     const landlordAddress = landlordInfo.address || "[ADRESSE DU BAILLEUR]";
     const landlordPhone = landlordInfo.phone || "N/A";
     const landlordEmail = landlordInfo.email || "N/A";
@@ -1042,10 +1125,8 @@ export class ContractsService {
     </div>
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>
-      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Preneur (Locataire)</div>
-      <strong>${e(lease.tenantName)}</strong> &mdash; ${e(lease.tenantIdDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(lease.tenantIdNumber || "N/A")}</em><br>
-      Adresse&nbsp;: ${e(lease.tenantAddress ?? "[ADRESSE DU PRENEUR]")}<br>
-      Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
+      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${tenantsLabel}</div>
+      ${tenantsBlock}
     </div>
   `)}
 
@@ -1129,13 +1210,7 @@ export class ContractsService {
           <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
         </div>
       </div>
-      <div style="flex:1;text-align:center;">
-        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
-        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
-          <div style="font-size:12px;color:#333;">${e(lease.tenantName)}</div>
-          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
-        </div>
-      </div>
+      ${signatureTenantBlocks}
     </div>
   </div>
 
