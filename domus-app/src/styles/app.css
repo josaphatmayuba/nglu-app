@@ -1851,3 +1851,11 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
   .edl-cmp-cards { display:none; }
   .edl-cmp-table { display:table; }
 }
+
+/* Signataires d'un bail multi-locataires */
+.contrats-signers { margin-bottom: 16px; }
+.contrats-signer { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 0; border-bottom:1px solid var(--line, #e5e7eb); }
+.contrats-signer-info { display:flex; flex-direction:column; flex:1 1 140px; min-width:0; }
+.contrats-signer-name { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+.contrats-signer-actions { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
+.contrats-signer-btn { min-height:44px; min-width:44px; flex:1 1 140px; justify-content:center; }

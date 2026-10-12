@@ -1671,8 +1671,42 @@ export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audi
   ip: varchar("ip", { length: 100 }),
   userAgent: varchar("user_agent", { length: 500 }),
   details: text("details"),
+  // Signataire concerne (real_estate_contract_signers.id) ; null = evenement du contrat.
+  signerId: bigint("signer_id", { mode: "number" }),
   createdAt: timestamp("created_at"),
 });
+
+// Signataires d'un contrat de bail (1..N locataires, statut de signature par personne).
+// role : principal | cotenant ; status : pending | sent | viewed | signed ;
+// method : electronic | paper. customer_id = customers.id. Soft-delete via is_active.
+export const realEstateContractSigners = mysqlTable("real_estate_contract_signers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull(),
+  contractId: bigint("contract_id", { mode: "number" }).notNull(),
+  customerId: bigint("customer_id", { mode: "number" }).notNull(),
+  role: varchar("role", { length: 20 }).default("principal").notNull(),
+  position: int("position").default(1).notNull(),
+  signerName: varchar("signer_name", { length: 255 }),
+  signerEmail: varchar("signer_email", { length: 255 }),
+  signerPhone: varchar("signer_phone", { length: 50 }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  method: varchar("method", { length: 20 }),
+  signerToken: varchar("signer_token", { length: 64 }),
+  signerTokenExpiry: timestamp("signer_token_expiry"),
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  signedAt: timestamp("signed_at"),
+  signatureData: mediumtext("signature_data"),
+  signerIp: varchar("signer_ip", { length: 100 }),
+  signerUserAgent: varchar("signer_user_agent", { length: 500 }),
+  lastResentAt: timestamp("last_resent_at"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+}, (t) => ({
+  uqSignerToken: unique("uq_contract_signer_token").on(t.signerToken),
+  uqContractCustomer: unique("uq_contract_signer_customer").on(t.contractId, t.customerId),
+}));
 
 // RBAC par bien (Domus, Phase 2) : affecte un utilisateur a un ou plusieurs
 // biens (real_estate_properties). N IMPORTE QUEL user peut etre limite a 1..N

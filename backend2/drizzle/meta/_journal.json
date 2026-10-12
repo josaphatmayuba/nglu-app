@@ -2010,6 +2010,13 @@
       "when": 1781416800000,
       "tag": "0311_real_estate_lease_cotenants",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "5",
+      "when": 1781503200000,
+      "tag": "0312_real_estate_contract_signers",
+      "breakpoints": true
     }
   ]
 }

@@ -97,9 +97,10 @@ import {
   UpdateMortgageLoanDto,
   MORTGAGE_AMOUNT_TOLERANCE,
 } from "./dto/property-management.dto";
+import { leaseAccessibleBy } from "./lease-access";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
-import { OwnerNotificationsService } from "./owner-notifications.service";
+import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
 import { anchoredPeriodDays, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
@@ -119,6 +120,24 @@ const maintenanceProperty = alias(realEstateProperties, "maintenanceProperty");
 const maintenanceUnit = alias(realEstateUnits, "maintenanceUnit");
 const maintenanceAssignee = alias(users, "maintenanceAssignee");
 const unitCurrency = alias(currencies, "unitCurrency");
+
+type WelcomeLease = {
+  id: number;
+  reference: string;
+  tenantId: number;
+  tenantFirstName: string | null;
+  tenantLastName: string | null;
+  tenantPhone: string | null;
+  tenantEmail: string | null;
+  propertyId: number | null;
+  propertyName: string | null;
+  propertyAddress: string | null;
+  unitName: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  rentAmount: string | number | null;
+  currencySymbol: string | null;
+};
 
 @Injectable()
 export class PropertyManagementService {
@@ -1839,6 +1858,27 @@ export class PropertyManagementService {
     }));
   }
 
+  /** Ids tries de tous les locataires actifs du bail (principal + autres) : sert a detecter un changement de parties. */
+  async leaseTenantIds(leaseId: number, orgId: number): Promise<number[]> {
+    const [lease] = await this.db
+      .select({ tenantId: realEstateLeases.tenantId })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+      .limit(1);
+    if (!lease) return [];
+    const others = await this.db
+      .select({ customerId: realEstateLeaseCotenants.customerId })
+      .from(realEstateLeaseCotenants)
+      .where(and(
+        eq(realEstateLeaseCotenants.leaseId, leaseId),
+        eq(realEstateLeaseCotenants.organizationId, orgId),
+        eq(realEstateLeaseCotenants.isActive, 1),
+      ));
+    // Principal EN PREMIER (un echange principal/colocataire est un changement de parties),
+    // puis les autres tries : cle `${tenantId},${autres tries}`.
+    return [Number(lease.tenantId), ...others.map((o) => Number(o.customerId)).sort((a, b) => a - b)];
+  }
+
   /** Remplace la liste des autres locataires du bail (soft delete des retires, jamais de DELETE). */
   private async syncLeaseCoTenants(leaseId: number, principalId: number, ids: number[], orgId: number) {
     const wanted = [...new Set(ids.map(Number))].filter((n) => n > 0 && n !== Number(principalId));
@@ -1950,25 +1990,77 @@ export class PropertyManagementService {
     return lease;
   }
 
-  /** Genere/reutilise le lien portail du locataire et lui envoie un SMS/email de bienvenue (non bloquant). */
+  /**
+   * Bienvenue portail a CHAQUE locataire du bail (principal + colocataires actifs),
+   * chacun avec son propre lien. Dedoublonne telephone/email entre locataires ;
+   * un echec n'interrompt ni les autres envois ni la creation du bail.
+   */
   private async sendTenantPortalWelcome(
-    lease: {
-      id: number;
-      reference: string;
-      tenantId: number;
-      tenantFirstName: string | null;
-      tenantLastName: string | null;
-      tenantPhone: string | null;
-      tenantEmail: string | null;
-      propertyId: number | null;
-      propertyName: string | null;
-      propertyAddress: string | null;
-      unitName: string | null;
-      startDate: string | null;
-      endDate: string | null;
-      rentAmount: string | number | null;
-      currencySymbol: string | null;
-    },
+    lease: WelcomeLease,
+    orgId: number,
+  ) {
+    const norm = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").toLowerCase();
+    const seenPhones = new Set<string>();
+    const seenEmails = new Set<string>();
+    const dedup = (phone: string | null, email: string | null) => {
+      const p = norm(phone);
+      const e = norm(email);
+      const outPhone = p && !seenPhones.has(p) ? phone : null;
+      const outEmail = e && !seenEmails.has(e) ? email : null;
+      if (p) seenPhones.add(p);
+      if (e) seenEmails.add(e);
+      return { phone: outPhone, email: outEmail };
+    };
+
+    const principal = dedup(lease.tenantPhone, lease.tenantEmail);
+    await this.sendTenantPortalWelcomeOne(
+      { ...lease, tenantPhone: principal.phone, tenantEmail: principal.email },
+      orgId,
+    );
+
+    let others: Array<{ id: number; firstName: string | null; lastName: string | null; phone: string | null; email: string | null }> = [];
+    try {
+      others = await this.db
+        .select({
+          id: customers.id,
+          firstName: customers.firstName,
+          lastName: customers.lastName,
+          phone: customers.phone,
+          email: customers.email,
+        })
+        .from(realEstateLeaseCotenants)
+        .innerJoin(customers, eq(customers.id, realEstateLeaseCotenants.customerId))
+        .where(and(
+          eq(realEstateLeaseCotenants.leaseId, lease.id),
+          eq(realEstateLeaseCotenants.organizationId, orgId),
+          eq(realEstateLeaseCotenants.isActive, 1),
+          eq(customers.organizationId, orgId),
+          eq(customers.status, "true"),
+        ))
+        .orderBy(realEstateLeaseCotenants.position);
+    } catch (error) {
+      this.logger.warn(`Co-tenant welcome lookup failed (lease ${lease.id}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+    for (const c of others) {
+      if (Number(c.id) === Number(lease.tenantId)) continue;
+      const d = dedup(c.phone, c.email);
+      await this.sendTenantPortalWelcomeOne(
+        {
+          ...lease,
+          tenantId: Number(c.id),
+          tenantFirstName: c.firstName,
+          tenantLastName: c.lastName,
+          tenantPhone: d.phone,
+          tenantEmail: d.email,
+        },
+        orgId,
+      );
+    }
+  }
+
+  /** Genere/reutilise le lien portail d'UN locataire et lui envoie un SMS/email de bienvenue (non bloquant). */
+  private async sendTenantPortalWelcomeOne(
+    lease: WelcomeLease,
     orgId: number,
   ) {
     if (!lease.tenantPhone && !lease.tenantEmail) return;
@@ -3956,12 +4048,11 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
 
     const lease = rows[0];
-    if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
-
-    const tenantName =
-      (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(Number(lease.tenantId)) : "") ||
-      [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") ||
-      "Locataire";
+    // Email a CHAQUE locataire du bail (principal + colocataires actifs), dedoublonne.
+    const recipients = ((await this.ownerNotifications.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [])
+      .filter((r) => r.email);
+    if (!recipients.length) throw new BadRequestException("Email du locataire introuvable.");
+    const multi = recipients.length > 1;
     // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
     const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
     // Le locataire est renvoyé vers les personnes en charge de SON immeuble
@@ -3981,9 +4072,17 @@ export class PropertyManagementService {
     const contacts =
       propertyContacts.contacts || `${companyName}${companyPhone ? ` au ${companyPhone}` : ""}`;
 
+    const tpl = await this.db
+      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.eventType, "payment_reminder"), eq(emailTemplates.status, "true")))
+      .limit(1);
+
+    const sendOne = async (r: (typeof recipients)[number]) => {
+    const tenantName = r.civilName || r.name || "Locataire";
     let subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
     let html = `
-      <p>Bonjour ${tenantName},</p>
+      <p>Bonjour ${this.escapeHtml(tenantName)},</p>
       <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
       <p><strong>Montant du:</strong> ${rentDisplay}</p>
       <p>Merci de régulariser ce paiement au plus tôt possible.</p>
@@ -3993,11 +4092,6 @@ export class PropertyManagementService {
 
     // Message configurable (Réglages → Messages) : si un template "payment_reminder"
     // actif existe, on l'utilise avec substitution des placeholders.
-    const tpl = await this.db
-      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
-      .from(emailTemplates)
-      .where(and(eq(emailTemplates.eventType, "payment_reminder"), eq(emailTemplates.status, "true")))
-      .limit(1);
     if (tpl.length) {
       const fill = (s: string | null) =>
         String(s || "")
@@ -4013,16 +4107,34 @@ export class PropertyManagementService {
       if (tpl[0].body) html = fill(tpl[0].body);
     }
 
-    const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, lease.tenantId, lease.organizationId);
-    const result = await this.emails.send({
-      to: lease.tenantEmail,
+    const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, r.customerId, lease.organizationId);
+    return this.emails.send({
+      to: r.email as string,
       subject,
       html: htmlWithFooter,
       type: "payment_reminder",
-      relatedType: "real-estate-lease",
-      relatedId: leaseId,
+      // Bail a 1 locataire = rattachement historique au bail ; sinon au locataire concerne.
+      relatedType: multi ? "tenant" : "real-estate-lease",
+      relatedId: multi ? r.customerId : leaseId,
     });
-    return { message: "success", email: result };
+    };
+
+    // Un echec pour un locataire ne bloque pas les autres ; si TOUS echouent
+    // (ou s'il n'y en a qu'un), l'erreur remonte comme avant.
+    const results: unknown[] = [];
+    let lastError: unknown = null;
+    for (const r of recipients) {
+      try {
+        results.push(await sendOne(r));
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(
+          `Payment reminder email failed (lease ${leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    if (!results.length && lastError) throw lastError;
+    return { message: "success", email: results[0], sent: results.length };
   }
 
   /**
@@ -4128,6 +4240,8 @@ export class PropertyManagementService {
     }
 
     const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const recipients = (await this.ownerNotifications.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+    const multi = recipients.length > 1;
     const place =
       [lease.propertyName, lease.unitName].filter(Boolean).join(", ") ||
       lease.propertyAddress ||
@@ -4155,48 +4269,68 @@ export class PropertyManagementService {
       ownerContact: contacts.ownerContact,
       managerContact: contacts.managerContact,
       contacts: contacts.contacts,
-      url: await this.tenantPortal.portalUrlForTenant(lease.tenantId, orgId),
+      url: "",
     };
+    // Nom(s) pour le proprietaire / la personne de contact : "A & B" si plusieurs locataires.
+    const groupVars = multi ? { ...vars, tenantName: joinRecipientNames(recipients) } : vars;
 
     // Texte pilote depuis Reglages > Messages (evenement "default_notice").
-    const tenantMsg = await this.ownerNotifications.renderMessage(
-      "default_notice",
-      "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({totalDebt}). " +
-        "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
-      vars,
-      { tenantId: lease.tenantId },
-    );
-
+    // Chaque locataire du bail recoit SON preavis (nom + lien portail propres) ;
+    // un echec pour l'un ne bloque pas les autres.
     let smsSent = false;
-    if (targets.tenant && lease.tenantPhone) {
-      const smsWithFooter = this.ownerNotifications.fitOneSms(
-        vars.url && tenantMsg.includes(vars.url)
-          ? tenantMsg
-          : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, lease.tenantId, orgId),
-      );
-      smsSent = await this.safeNoticeSms(lease.tenantPhone, smsWithFooter, leaseId, orgId);
-    }
-
     let emailSent = false;
-    if (targets.tenant && lease.tenantEmail) {
-      const html = await this.tenantPortal.appendPortalFooterToEmail(
-        `<p>${tenantMsg}</p>`,
-        lease.tenantId,
-        orgId,
-      );
+    for (const r of targets.tenant ? recipients : []) {
       try {
-        await this.emails.send({
-          to: lease.tenantEmail,
-          subject: `Preavis pour defaut de paiement — bail ${vars.reference}`,
-          html,
-          type: "default_notice",
-          relatedType: "real-estate-lease",
-          relatedId: leaseId,
-        });
-        emailSent = true;
+        const rVars = {
+          ...vars,
+          tenantName: r.name || tenantName,
+          firstName: r.firstName || r.name || tenantName,
+          url: await this.tenantPortal.portalUrlForTenant(r.customerId, orgId),
+        };
+        const tenantMsg = await this.ownerNotifications.renderMessage(
+          "default_notice",
+          "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({totalDebt}). " +
+            "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
+          rVars,
+          { tenantId: r.customerId },
+        );
+        const rel = multi
+          ? { relatedType: "tenant", relatedId: r.customerId }
+          : { relatedType: "real-estate-lease", relatedId: leaseId };
+
+        if (r.phone) {
+          const smsWithFooter = this.ownerNotifications.fitOneSms(
+            rVars.url && tenantMsg.includes(rVars.url)
+              ? tenantMsg
+              : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, orgId),
+          );
+          if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel)) smsSent = true;
+        }
+
+        if (r.email) {
+          const html = await this.tenantPortal.appendPortalFooterToEmail(
+            `<p>${this.escapeHtml(tenantMsg)}</p>`,
+            r.customerId,
+            orgId,
+          );
+          try {
+            await this.emails.send({
+              to: r.email,
+              subject: `Preavis pour defaut de paiement — bail ${vars.reference}`,
+              html,
+              type: "default_notice",
+              ...rel,
+            });
+            emailSent = true;
+          } catch (error) {
+            this.logger.warn(
+              `Default notice email error (lease ${leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
       } catch (error) {
         this.logger.warn(
-          `Default notice email error (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`,
+          `Default notice failed (lease ${leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -4213,8 +4347,8 @@ export class PropertyManagementService {
         "default_notice_contact",
         "Bonjour, {tenantName} a {monthsBehind} mois de loyer impayes ({totalDebt}). " +
           "Un preavis sera depose sans paiement. Merci de l'inviter a contacter {contacts}",
-        vars,
-        { tenantId: lease.tenantId },
+        groupVars,
+        multi ? undefined : { tenantId: lease.tenantId },
       );
       contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId);
     }
@@ -4226,7 +4360,7 @@ export class PropertyManagementService {
             leaseId,
             Number(lease.propertyId),
             Number(lease.tenantId),
-            vars,
+            groupVars,
             orgId,
             { owner: targets.owner, delegates: targets.delegates },
           )
@@ -4258,15 +4392,20 @@ export class PropertyManagementService {
   }
 
   /** Envoi SMS best-effort : un echec n'annule pas le reste du preavis. */
-  private async safeNoticeSms(phone: string, message: string, leaseId: number, orgId: number) {
+  private async safeNoticeSms(
+    phone: string,
+    message: string,
+    leaseId: number,
+    orgId: number,
+    related: { relatedType: string; relatedId: number } = { relatedType: "real-estate-lease", relatedId: leaseId },
+  ) {
     try {
       const res = await this.sms.sendSms({
         phone,
         message,
         organizationId: orgId,
         smsType: "default_notice",
-        relatedType: "real-estate-lease",
-        relatedId: leaseId,
+        ...related,
       });
       if (!res?.success) {
         this.logger.warn(`Default notice SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
@@ -4894,7 +5033,7 @@ export class PropertyManagementService {
     const leaseRows = await this.db
       .select({ id: realEstateLeases.id })
       .from(realEstateLeases)
-      .where(and(eq(realEstateLeases.tenantId, tenantId), eq(realEstateLeases.organizationId, orgId)));
+      .where(leaseAccessibleBy(tenantId, orgId));
     const leaseIds = leaseRows.map((row) => row.id);
 
     let contractIds: number[] = [];

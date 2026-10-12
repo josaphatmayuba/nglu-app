@@ -532,6 +532,9 @@ export const api = {
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
+  // Signataires d'un bail multi-locataires (1..N) : liste + renvoi du lien (429 si < 10 min).
+  contractSigners: (id) => get(`/contracts/${id}/signers`),
+  resendContractSigner: (id, signerId) => post(`/contracts/${id}/signers/${signerId}/resend`),
   deleteContract: (id) => del(`/contracts/${id}`),
   changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
   markContractSignedManually: (id, file) => {

@@ -21,6 +21,7 @@ import { message } from "antd";
 import { createContract, loadContracts, sendContract } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { compactMoney } from "../../shared/format";
 import { tenantNameFromLease } from "../../shared/tenants";
+import ContractSignersPanel from "./ContractSignersPanel";
 import { leaseDisplayInfo, pickDefaultTemplateFor } from "./leaseUtils";
 
 const escapeHtml = (value = "") =>
@@ -245,6 +246,8 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
               <div><span>Caution (2 mois)</span><strong>{compactMoney(deposit)}</strong></div>
             </div>
           </section>
+
+          {contract?.id && <ContractSignersPanel contract={contract} />}
 
           <section>
             <h3>Modèle de contrat</h3>

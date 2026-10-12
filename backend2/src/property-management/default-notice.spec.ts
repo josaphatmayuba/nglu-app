@@ -18,10 +18,12 @@ function makeService(opts: {
   payments?: any[];
   smsOk?: boolean;
   emailThrows?: boolean;
+  recipients?: any[];
 } = {}) {
   const updates: { table: any; vals: any }[] = [];
   const sentSms: any[] = [];
   const sentEmails: any[] = [];
+  const ownerCalls: any[][] = [];
 
   const lease =
     "lease" in opts
@@ -106,7 +108,28 @@ function makeService(opts: {
       return out;
     },
     fitOneSms: (t: string) => t,
-    notifyDefaultNotice: async () => true,
+    notifyDefaultNotice: async (...args: any[]) => {
+      ownerCalls.push(args);
+      return true;
+    },
+    // 1 locataire par defaut (= principal du bail) ; opts.recipients simule un bail multi-locataires.
+    leaseRecipients: async () =>
+      new Map([
+        [
+          10,
+          opts.recipients ?? [
+            {
+              customerId: 7,
+              name: "Jean Kabila",
+              firstName: "Jean",
+              civilName: "Mr Jean Kabila",
+              phone: lease?.tenantPhone ?? null,
+              email: lease?.tenantEmail ?? null,
+              isPrincipal: true,
+            },
+          ],
+        ],
+      ]),
   };
 
   const service = new PropertyManagementService(
@@ -124,7 +147,7 @@ function makeService(opts: {
     ownerNotifications as any,
   );
 
-  return { service, updates, sentSms, sentEmails };
+  return { service, updates, sentSms, sentEmails, ownerCalls };
 }
 
 // Un bail demarre il y a `monthsAgo` mois, pour forcer un nombre de mois exigibles.
@@ -252,5 +275,62 @@ describe("sendDefaultNotice — seuil de plus d'un mois impaye", () => {
   it("refuse un bail introuvable", async () => {
     const { service } = makeService({ lease: null });
     await expect(service.sendDefaultNotice(999, ORG)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("sendDefaultNotice — plusieurs locataires par bail", () => {
+  const person = (id: number, first: string, phone: string | null, email: string | null) => ({
+    customerId: id,
+    name: `${first} Kabila`,
+    firstName: first,
+    civilName: `Mr ${first} Kabila`,
+    phone,
+    email,
+    isPrincipal: id === 7,
+  });
+
+  it("1 locataire : 1 SMS + 1 email + contact, rattaches au bail (inchange)", async () => {
+    const { service, sentSms, sentEmails } = makeService({ lease: leaseStarted(2), payments: paid(1) });
+    await service.sendDefaultNotice(10, ORG);
+    expect(sentSms).toHaveLength(2);
+    expect(sentSms[0].relatedType).toBe("real-estate-lease");
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].relatedType).toBe("real-estate-lease");
+  });
+
+  it("2 locataires : 2 SMS + 2 emails, chacun trace sur son dossier, 1 seul message au contact", async () => {
+    const { service, sentSms, sentEmails, ownerCalls } = makeService({
+      lease: leaseStarted(2),
+      payments: paid(1),
+      recipients: [
+        person(7, "Jean", "+243900000000", "jean@example.com"),
+        person(8, "Marie", "+243900000001", "marie@example.com"),
+      ],
+    });
+    const res = await service.sendDefaultNotice(10, ORG);
+    const tenantSms = sentSms.filter((m) => m.relatedType === "tenant");
+    expect(tenantSms.map((m) => m.phone)).toEqual(["+243900000000", "+243900000001"]);
+    expect(tenantSms.map((m) => m.relatedId)).toEqual([7, 8]);
+    expect(tenantSms[1].message).toContain("Marie");
+    expect(sentEmails.map((m) => m.to)).toEqual(["jean@example.com", "marie@example.com"]);
+    // contact d'urgence : un seul SMS, non lie a un locataire
+    expect(sentSms.filter((m) => m.phone === "+243810000000")).toHaveLength(1);
+    // proprietaire : un seul appel, nom "A & B"
+    expect(ownerCalls).toHaveLength(1);
+    expect(ownerCalls[0][3].tenantName).toBe("Mr Jean Kabila & Mr Marie Kabila");
+    expect(res.smsSent).toBe(true);
+  });
+
+  it("numero partage : 1 seul SMS (le 2e locataire a phone=null apres dedoublonnage)", async () => {
+    const { service, sentSms } = makeService({
+      lease: leaseStarted(2),
+      payments: paid(1),
+      recipients: [
+        person(7, "Jean", "+243900000000", "jean@example.com"),
+        person(8, "Marie", null, "marie@example.com"),
+      ],
+    });
+    await service.sendDefaultNotice(10, ORG);
+    expect(sentSms.filter((m) => m.phone === "+243900000000")).toHaveLength(1);
   });
 });

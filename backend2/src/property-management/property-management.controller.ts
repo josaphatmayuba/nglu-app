@@ -892,13 +892,23 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Update a lease" })
   @Permissions("update-propertyManagement")
   @Put("leases/:id")
-  updateLease(
+  async updateLease(
     @Param("id", ParseIntPipe) id: number,
     @Body() body: UpdateLeaseDto,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.updateLease(id, body, orgId, scope);
+    const partiesChanged = body.coTenantIds !== undefined || body.tenantId !== undefined;
+    const before = partiesChanged ? await this.propertyManagementService.leaseTenantIds(id, orgId) : [];
+    const result = await this.propertyManagementService.updateLease(id, body, orgId, scope);
+    if (partiesChanged) {
+      const after = await this.propertyManagementService.leaseTenantIds(id, orgId);
+      // Parties du bail modifiees : un contrat envoye mais pas signe doit etre regenere et renvoye.
+      if (before.join(",") !== after.join(",")) {
+        await this.contractsService.resetSignersForLease(id, orgId);
+      }
+    }
+    return result;
   }
 
   @ApiOperation({ summary: "Delete a lease" })
@@ -1887,6 +1897,33 @@ export class PropertyManagementController {
   @HttpCode(200)
   sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.contractsService.sendContract(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List the signers of a contract with signing progress" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("contracts/:id/signers")
+  listContractSigners(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.contractsService.listSigners(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Resend the signing link to one signer (new token, 10 min throttle)" })
+  @ApiParam({ name: "id", type: Number })
+  @ApiParam({ name: "signerId", type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("contracts/:id/signers/:signerId/resend")
+  @HttpCode(200)
+  resendContractSigner(
+    @Param("id", ParseIntPipe) id: number,
+    @Param("signerId", ParseIntPipe) signerId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.contractsService.resendSigner(id, signerId, orgId, scope);
   }
 
   @ApiOperation({ summary: "Send the post-signature welcome message (email + SMS) to the tenant, if never sent" })

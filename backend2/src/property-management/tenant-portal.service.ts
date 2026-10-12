@@ -27,6 +27,7 @@ import {
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
 import { loadNextDueByLease } from "./lease-proration-db";
+import { leaseAccessibleBy } from "./lease-access";
 
 @Injectable()
 export class TenantPortalService {
@@ -357,7 +358,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateRentPayments.id, paymentId),
         eq(realEstateRentPayments.organizationId, organizationId),
-        eq(realEstateLeases.tenantId, tenantId),
+        leaseAccessibleBy(tenantId, organizationId),
       ))
       .limit(1);
     if (!payment) throw new NotFoundException("Paiement introuvable.");
@@ -400,7 +401,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateRentPayments.id, paymentId),
         eq(realEstateRentPayments.organizationId, organizationId),
-        eq(realEstateLeases.tenantId, tenantId),
+        leaseAccessibleBy(tenantId, organizationId),
       ))
       .limit(1);
 
@@ -439,7 +440,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateRentPayments.id, paymentId),
         eq(realEstateRentPayments.organizationId, organizationId),
-        eq(realEstateLeases.tenantId, tenantId),
+        leaseAccessibleBy(tenantId, organizationId),
       ))
       .limit(1);
 
@@ -478,7 +479,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateContracts.id, contractId),
         eq(realEstateContracts.organizationId, organizationId),
-        eq(realEstateLeases.tenantId, tenantId),
+        leaseAccessibleBy(tenantId, organizationId),
         // Meme perimetre que getPublicTenantPortal, qui n'expose que le bail en
         // cours : sans ce filtre l'endpoint servirait aussi les contrats d'un
         // bail termine, que le portail n'affiche pourtant pas.
@@ -697,8 +698,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
       ))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(and(
-        eq(realEstateLeases.tenantId, tenantId),
-        eq(realEstateLeases.organizationId, organizationId),
+        leaseAccessibleBy(tenantId, organizationId),
         eq(realEstateLeases.status, "active"),
       ))
       .orderBy(desc(realEstateLeases.id));
