@@ -155,13 +155,8 @@ export const CONTRACT_PRINT_CSS = `
       padding: 9px 22px;
       text-transform: uppercase;
     }
-    .contract-doc .header { margin-bottom: 4px; text-align: center; }
-    .contract-doc .doc-ref {
-      color: #b08d3e;
-      font-size: 12px;
-      letter-spacing: .3em;
-      text-transform: uppercase;
-    }
+    .contract-doc .header { margin: 0 0 2px; text-align: right; }
+    .contract-doc .doc-ref { color: #8a7a55; font-size: 9px; letter-spacing: .08em; line-height: 1.2; }
     .contract-doc .contract-content { color: #292524; font-size: 12px; line-height: 1.5; margin-top: 12px; }
     .contract-doc .contract-content p { margin: 0 0 7px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content li { margin-bottom: 6px; orphans: 3; widows: 3; }
