@@ -31,7 +31,29 @@ export const landlordSignatureHtml = (contract) => {
       </div>`;
 };
 
-export const contractSignaturesHtml = (contract) => `
+const tenantSignatureBlockHtml = (sigData, signedAt, name) => `
+    <div>
+      <h3>Signature du locataire</h3>
+      ${name ? `<div class="signed-on">${escapeHtml(name)}</div>` : ""}
+      ${
+        sigData
+          ? `<div class="signature-body"><div class="signature-img"><img src="${sigData}" alt="Signature locataire" /></div></div>
+             <div class="signed-on">${signedAt ? `Date de signature : ${escapeHtml(formatDateTime(signedAt))}` : "Date de signature : —"}</div>`
+          : `<div class="signature-body"><div class="signature-empty">Aucune signature locataire enregistree.</div></div>`
+      }
+    </div>`;
+
+export const contractSignaturesHtml = (contract) => {
+  const signers = Array.isArray(contract?.signers) ? contract.signers : [];
+  if (signers.length < 2) return legacyContractSignaturesHtml(contract);
+  return `
+  <div class="domus-contract-signatures">
+    ${signers.map((s) => tenantSignatureBlockHtml(s.signatureData, s.signedAt, s.name)).join("")}
+    <div>${landlordSignatureHtml(contract)}</div>
+  </div>`;
+};
+
+const legacyContractSignaturesHtml = (contract) => `
   <div class="domus-contract-signatures">
     <div>
       <h3>Signature du locataire</h3>

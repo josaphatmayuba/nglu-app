@@ -240,7 +240,8 @@ export const CONTRACT_PRINT_CSS = `
       margin: 0 0 14px;
       text-transform: uppercase;
     }
-    .contract-doc .signature-grid { display: grid; gap: 40px; grid-template-columns: 1fr 1fr; text-align: center; }
+    .contract-doc .signature-grid { display: grid; gap: 40px; grid-template-columns: 1fr 1fr; row-gap: 28px; text-align: center; }
+    .contract-doc .signature-grid > div { break-inside: avoid; }
     .contract-doc .signature-image {
       background: #fff;
       border: 1px solid #d6c39a;
@@ -276,11 +277,30 @@ function signatureGridHtml(contract, withSignatures = true) {
   const tenantSignature = hasTenantSig
     ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
     : `<div class="signature-line"></div>`;
-  return `<div class="signature-grid">
-      <div>
+  const landlordBlock = `<div>
         <h2>Signature du bailleur</h2>${landlordPrintBlock(contract, withSignatures)}
         <div class="signature-date">Signé le : ${landlordDate}</div>
-      </div>
+      </div>`;
+
+  // Bail multi-locataires (2 a 4) : un bloc de signature par locataire.
+  const signers = Array.isArray(contract?.signers) ? contract.signers : [];
+  if (signers.length >= 2) {
+    const tenantBlocks = signers.map((s) => {
+      const sig = withSignatures && isRealSignature(s.signatureData) ? s.signatureData : null;
+      const date = sig && s.signedAt ? escapeHtml(formatSignedAt(s.signedAt)) : SIG_DOTS;
+      return `<div>
+        <h2>Signature du locataire</h2>${sig
+          ? `<img class="signature-image" src="${sig}" alt="Signature du locataire" />`
+          : `<div class="signature-line"></div>`}
+        <div class="signature-name">${escapeHtml(s.name || "")}</div>
+        <div class="signature-date">Signé le : ${date}</div>
+      </div>`;
+    });
+    return `<div class="signature-grid">${landlordBlock}${tenantBlocks.join("")}</div>`;
+  }
+
+  return `<div class="signature-grid">
+      ${landlordBlock}
       <div>
         <h2>Signature du locataire</h2>${tenantSignature}
         <div class="signature-date">Signé le : ${tenantDate}</div>
