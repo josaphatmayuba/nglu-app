@@ -17,6 +17,11 @@ const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juill
 
 function parseDate(dateLike) {
   if (!dateLike) return null;
+  // Date seule (YYYY-MM-DD) = jour civil LOCAL. new Date("2026-10-01") vaut
+  // minuit UTC, donc le 30/09 au soir a l'ouest de UTC : l'echeance d'octobre
+  // s'affichait "septembre" avec un jour de retard en trop.
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z$)/.exec(String(dateLike));
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
   const d = new Date(dateLike);
   return Number.isNaN(d.getTime()) ? null : d;
 }

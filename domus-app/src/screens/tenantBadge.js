@@ -15,7 +15,10 @@ const YEAR_MS = 365 * 86400000;
 
 // Liaison locataire -> ses baux -> bail actif -> unité (comme le CRM).
 export function tenantLeaseInfo(tenant, leases, units) {
-  const tenantLeases = leases.filter((l) => String(l.tenantId) === String(tenant.id));
+  // Co-locataire inclus : un bail multi-locataires appartient a chacun d'eux.
+  const id = String(tenant.id);
+  const tenantLeases = leases.filter((l) => String(l.tenantId) === id
+    || (Array.isArray(l.coTenants) && l.coTenants.some((c) => String(c?.id) === id)));
   const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0] || null;
   const activeUnit = activeLease ? units.find((u) => String(u.id) === String(activeLease.unitId)) || null : null;
   return { tenantLeases, activeLease, activeUnit };

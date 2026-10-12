@@ -180,4 +180,11 @@ describe("tenantLeaseInfo", () => {
     expect(r.activeLease).toBeNull();
     expect(r.activeUnit).toBeNull();
   });
+
+  it("co-locataire -> rattache au bail multi-locataires", () => {
+    const leases = [{ tenantId: 1, unitId: 11, status: "active", coTenants: [{ id: 2, name: "B" }] }];
+    const r = tenantLeaseInfo({ id: 2 }, leases, [{ id: 11 }]);
+    expect(r.tenantLeases).toHaveLength(1);
+    expect(r.activeUnit).toEqual({ id: 11 });
+  });
 });
