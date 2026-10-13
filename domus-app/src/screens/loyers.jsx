@@ -333,7 +333,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     else runs.push({ kind: k, n: 1, fill: k === "partial" ? Math.round(((monthsCoveredFloat || 0) - i) * 100) : 0 });
   });
   const paidCount = monthKinds.filter((k) => k === "paid").length;
-  const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", due: "échu", cur: "courant", future: "à venir" };
+  const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", due: "dû", cur: "courant", future: "à venir" };
   const firstSlot = totalMonths ? monthsFrom(lease.startDate, 1)[0] : null;
   const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
@@ -430,7 +430,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
             <div className="immo-pay-detail">
               <div className="immo-pay-legend">
                 <span><i className="paid" />{t("Payé")}</span><span><i className="late" />{t("En retard")}</span>
-                <span><i className="due" />{t("Échu (délai de grâce)")}</span><span><i className="cur" />{t("Mois courant")}</span><span><i className="future" />{t("À venir")}</span>
+                <span><i className="due" />{t("Dû (délai de grâce)")}</span><span><i className="cur" />{t("Mois courant")}</span><span><i className="future" />{t("À venir")}</span>
               </div>
               {Array.from(new Set(monthKinds.map((_, i) => monthAt(i).getFullYear()))).map((y) => (
                 <div key={y}>
@@ -473,7 +473,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                 const pend = k === "future" ? null : pendingForMonth(d);
                 const r = Number(rent) || 0;
                 const payAmount = Math.max(0, Math.round((cumDue(i) - Number(totalPaid || 0)) * 100) / 100);
-                const kindTxt = { partial: t("payé en partie"), late: t("en retard"), due: t("échu"), cur: t("mois courant"), future: t("à venir") }[k];
+                const kindTxt = { partial: t("payé en partie"), late: t("en retard"), due: t("dû"), cur: t("mois courant"), future: t("à venir") }[k];
                 return (
                   <div className="immo-pay-panel">
                     <strong>{fmtMonthYear(d)} · {kindTxt}</strong>
