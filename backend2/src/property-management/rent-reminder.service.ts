@@ -19,9 +19,12 @@ import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
 import { computeLeaseNextDue } from "./lease-proration";
+import { readOverdueGraceDays } from "./lease-overdue";
 import { escapeHtmlText } from "./notification-utils";
 
-type ReminderConfig = { enabled: boolean; overdueDays: number; expiryDays: number; hour: number };
+// graceDays = delai de grace avant retard (Reglages « Retards de loyer ») : le
+// rappel automatique part overdueDays jours APRES la fin de ce delai.
+type ReminderConfig = { enabled: boolean; overdueDays: number; graceDays: number; expiryDays: number; hour: number };
 export type ReminderTargets = { tenant: boolean; emergency: boolean; owner: boolean; delegates: boolean };
 
 @Injectable()
@@ -52,6 +55,7 @@ export class RentReminderService {
     const cfg: ReminderConfig = {
       enabled: row?.enabled == null ? env.rentReminders.enabled : Number(row.enabled) === 1,
       overdueDays: Number(row?.overdueDays) > 0 ? Number(row?.overdueDays) : env.rentReminders.overdueDays,
+      graceDays: await readOverdueGraceDays(this.db, orgId),
       expiryDays: Number(row?.expiryDays) > 0 ? Number(row?.expiryDays) : env.rentReminders.expiryNoticeDays,
       hour: row?.hour == null ? 9 : Number(row.hour),
     };
@@ -154,11 +158,11 @@ export class RentReminderService {
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
       if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
       // Reglages de l'organisation : relance manuelle = toujours envoyee ; automatique = si active,
-      // a l'heure choisie et au-dela du nombre de jours de retard choisi.
+      // a l'heure choisie et au-dela de (delai de grace + jours de rappel) apres l'echeance.
       if (!only) {
         const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
         const late = Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000);
-        if (!cfg.enabled || late < cfg.overdueDays) continue;
+        if (!cfg.enabled || late < cfg.graceDays + cfg.overdueDays) continue;
         if (schedule && schedule.hour !== cfg.hour) continue;
       }
 

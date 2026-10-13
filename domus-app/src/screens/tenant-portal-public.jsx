@@ -84,7 +84,7 @@ function daysUntil(dateLike) {
 function dueChip(days, kind, overdueDays) {
   if (days == null && kind !== "overdue") return { text: t("Échéance à confirmer"), chip: "chip-ink" };
   if (kind === "overdue") return { text: `${t("en retard de")} ${overdueDays ?? Math.abs(days ?? 0)} j`, chip: "chip-rose" };
-  if (days < 0) return { text: `${t("échu depuis")} ${Math.abs(days)} j`, chip: "chip-amber" };
+  if (days < 0) return { text: `${t("dû depuis")} ${Math.abs(days)} j`, chip: "chip-amber" };
   if (days === 0) return { text: t("dû aujourd'hui"), chip: "chip-amber" };
   return { text: `${t("dû dans")} ${days} j`, chip: "chip-amber" };
 }
@@ -588,7 +588,7 @@ export function TenantPortalPublic({ token }) {
                         <Clock size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                         <span className="chip chip-amber">
-                          {t("échu depuis")} {p.daysPastDue ?? Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                          {t("dû depuis")} {p.daysPastDue ?? Math.abs(daysUntil(p.paymentDate) ?? 0)} j
                         </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton

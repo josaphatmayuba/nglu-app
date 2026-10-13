@@ -1293,13 +1293,8 @@ function OverdueGraceCard({ setting, onSaved }) {
         Un loyer est considere en retard lorsqu&apos;il reste impaye plus de ce nombre de jours apres son echeance. Ce delai s&apos;applique partout :
         badges « En retard » et « Mauvais payeur », portail locataire, frise des loyers, indicateurs Biens et alertes du tableau de bord.
         Une echeance passee mais encore dans ce delai est affichee « echue » (a regler), sans compter comme retard.
-        Le changement recalcule aussi les retards passes. Distinct du delai des rappels automatiques.
+        Le changement recalcule aussi les retards passes. Les rappels automatiques de retard partent seulement apres la fin de ce delai (voir « Rappels automatiques »).
       </p>
-      {Number(setting?.rentReminderOverdueDays) > 0 && Number(setting.rentReminderOverdueDays) < Number(days) && (
-        <p role="note" style={{ fontSize: 12, color: "#b45309", margin: "0 0 8px" }}>
-          Attention : les rappels automatiques de retard sont configures a {setting.rentReminderOverdueDays} jours, soit avant la fin de ce delai de grace. Un locataire peut etre relance alors qu&apos;il n&apos;est pas encore considere en retard.
-        </p>
-      )}
       <div className="numbering-grid">
         <label className="domus-property-field">
           <span>Delai de grace avant retard (jours)</span>
@@ -1319,6 +1314,9 @@ function OverdueGraceCard({ setting, onSaved }) {
 }
 
 function RemindersCard({ setting, onSaved }) {
+  // Meme normalisation que le backend (normalizeGraceDays : entier 0-60, sinon 5).
+  const rawGrace = Number(setting?.rentOverdueGraceDays);
+  const graceDays = Number.isInteger(rawGrace) && rawGrace >= 0 && rawGrace <= 60 && setting?.rentOverdueGraceDays != null ? rawGrace : 5;
   const [form, setForm] = useState({
     enabled: Number(setting?.rentReminderEnabled) === 1,
     overdueDays: setting?.rentReminderOverdueDays ?? 15,
@@ -1359,6 +1357,8 @@ function RemindersCard({ setting, onSaved }) {
       <h3><MessageSquare size={17} /> Rappels automatiques</h3>
       <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
         Envoi automatique (SMS + email) au locataire, au proprietaire et aux delegues. Un seul rappel par periode de retard.
+        Le rappel de loyer est compte a partir de la FIN du delai de grace (« Retards de loyer ») : avec {graceDays} j de grace
+        et {Number(form.overdueDays) || 0} j ici, il part {graceDays + (Number(form.overdueDays) || 0)} jours apres l&apos;echeance.
       </p>
       <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0" }}>
         <input type="checkbox" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
@@ -1366,7 +1366,7 @@ function RemindersCard({ setting, onSaved }) {
       </label>
       <div className="numbering-grid">
         <label className="domus-property-field">
-          <span>Rappel de loyer apres (jours de retard)</span>
+          <span>Rappel de loyer (jours apres le delai de grace)</span>
           <input type="number" min="1" max="365" disabled={!form.enabled} value={form.overdueDays} onChange={(e) => set("overdueDays", e.target.value)} />
         </label>
         <label className="domus-property-field">
