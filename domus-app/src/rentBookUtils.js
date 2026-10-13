@@ -235,11 +235,33 @@ function buildProratedRentSchedule(lease, payments) {
   for (const p of payments) {
     if (p.periodStart) byStart.set(day10(p.periodStart), p);
   }
+  // Paiements payés sans periodStart (saisis hors échéancier) : rattachés par
+  // couverture cumulée aux périodes restantes, dans l'ordre des dates (même règle
+  // que assignPaidRows backend) — 170 → 1re période prorata, 400 → suivante…
+  const freeStarts = lease.schedule.map((e) => day10(e.periodStart)).filter((k) => byStart.get(k)?.status !== "paid");
+  const amountByStart = new Map(lease.schedule.map((e) => [day10(e.periodStart), Number(e.amount) || 0]));
+  const loose = payments
+    .filter((p) => p.status === "paid" && !p.periodStart)
+    .sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")) || (a.id ?? 0) - (b.id ?? 0));
+  let paidSum = 0;
+  let dueSum = 0;
+  let next = 0;
+  for (const p of loose) {
+    const target = freeStarts[next];
+    paidSum += Number(p.amount) || 0;
+    while (next < freeStarts.length && paidSum + 0.005 >= dueSum + amountByStart.get(freeStarts[next])) {
+      dueSum += amountByStart.get(freeStarts[next]);
+      next += 1;
+    }
+    // Une échéance pending sur une période ainsi couverte est remplacée par le paiement réel.
+    if (target && byStart.get(target)?.status !== "paid") byStart.set(target, p);
+  }
   const used = new Set();
   const lines = lease.schedule.map((e) => {
     const key = day10(e.periodStart);
     const existing = byStart.get(key);
     const period = {
+      rentMonth: key.slice(0, 7),
       periodStart: e.periodStart,
       periodEnd: e.periodEnd,
       isProrata: Boolean(e.prorated),
@@ -274,7 +296,9 @@ function buildProratedRentSchedule(lease, payments) {
   for (const p of payments) {
     if (!used.has(p) && p.status === "paid") lines.push(p);
   }
-  return lines.sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")));
+  // Ordre des périodes (un paiement réglé le 09/10 pour septembre reste avant octobre).
+  const sortKey = (l) => String(l.periodStart || l.paymentDate || "").slice(0, 10);
+  return lines.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 }
 
 // « 11→30/09/2027 » (même mois) ou « 11/09/2027→10/10/2027 ».

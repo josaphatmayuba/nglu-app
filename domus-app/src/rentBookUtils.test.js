@@ -40,3 +40,30 @@ describe("buildFullRentSchedule (sans prorata)", () => {
     expect(m.get("2026-02")?.id).toBe(2);
   });
 });
+
+describe("buildFullRentSchedule (prorata)", () => {
+  // Bail Thaddée : début 19/07, 400/mois, juillet 13 j = 167,74 payé 170.
+  const schedule = [
+    { periodStart: "2026-07-19", periodEnd: "2026-07-31", dueDate: "2026-07-19", amount: 167.74, prorated: true, days: 13, periodDays: 31 },
+    { periodStart: "2026-08-01", periodEnd: "2026-08-31", dueDate: "2026-08-01", amount: 400 },
+    { periodStart: "2026-09-01", periodEnd: "2026-09-30", dueDate: "2026-09-01", amount: 400 },
+    { periodStart: "2026-10-01", periodEnd: "2026-10-31", dueDate: "2026-10-01", amount: 400 },
+  ];
+  const lease = { startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$", schedule };
+
+  it("paiements sans période rattachés dans l'ordre aux périodes", () => {
+    const s = buildFullRentSchedule(lease, [paid(1, "2026-08-06", 170), paid(2, "2026-09-09", 400), paid(3, "2026-10-09", 400)]);
+    expect(s).toHaveLength(4);
+    expect(s.map((l) => [l.rentMonth, l.status, l.id ?? null])).toEqual([
+      ["2026-07", "paid", 1], ["2026-08", "paid", 2], ["2026-09", "paid", 3], ["2026-10", "pending", null],
+    ]);
+    expect(s[0].isProrata).toBe(true);
+  });
+
+  it("échéance pending d'une période couverte remplacée par le paiement réel", () => {
+    const pend = { id: 9, status: "pending", paymentDate: "2026-07-19", periodStart: "2026-07-19", amount: 167.74 };
+    const s = buildFullRentSchedule(lease, [pend, paid(1, "2026-08-06", 170)]);
+    expect(s[0].id).toBe(1);
+    expect(s.find((l) => l.id === 9)).toBeUndefined();
+  });
+});

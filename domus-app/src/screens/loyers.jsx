@@ -987,6 +987,13 @@ export function Loyers({ go }) {
     return filterPayments(Array.isArray(data?.payments) ? data.payments : [], dateRange)
       .filter((payment) => leaseIds.has(payment.leaseId));
   }, [data?.payments, dateRange, leases]);
+  // Cartes / reste à payer / arriérés = solde CUMULÉ du bail depuis son début :
+  // tous ses paiements, pas seulement ceux de la période filtrée (sinon un
+  // paiement de 2025 hors filtre « cette année » gonfle les arriérés).
+  const leasePayments = useMemo(() => {
+    const leaseIds = new Set(leases.map((lease) => lease.id));
+    return (Array.isArray(data?.payments) ? data.payments : []).filter((payment) => leaseIds.has(payment.leaseId));
+  }, [data?.payments, leases]);
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
 
@@ -1017,7 +1024,7 @@ export function Loyers({ go }) {
   // Cartes par bail actif (détection du retard). Fallback : regroupement par
   // paiements si aucun bail n'est renvoyé par l'API (pas de paiement direct).
   const cards = useMemo(() => {
-    if (leases.length) return buildLeaseCards(leases, rows);
+    if (leases.length) return buildLeaseCards(leases, leasePayments);
     return groupByTenant(rows).map((g) => ({
       lease: null, name: g.name, unit: g.unit, rent: g.list[0]?.amount,
       currencyId: g.list[0]?.currencyId,
@@ -1026,7 +1033,7 @@ export function Loyers({ go }) {
       latest: [...g.list].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null,
       status: "ok",
     }));
-  }, [leases, rows]);
+  }, [leases, rows, leasePayments]);
   const lateCount = cards.filter((c) => c.status === "late").length;
   const pendingCount = cards.filter((c) => c.status === "pending").length;
   // Total des arriérés (reste à payer cumulé), groupé par devise.

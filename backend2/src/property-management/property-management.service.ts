@@ -2567,7 +2567,7 @@ export class PropertyManagementService {
     }
 
     const existing = await this.db
-      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate })
+      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate, status: realEstateRentPayments.status })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
@@ -2583,17 +2583,21 @@ export class PropertyManagementService {
     // MONTANT cumulé, pas par mois calendaire — un seul virement de plusieurs
     // mois de loyer daté d'un seul mois doit quand meme couvrir plusieurs
     // echeances, coherent avec le calcul de couverture du frontend (loyers.jsx).
-    // upToEnd=true (rentBook, carnet) : couverture par MOIS CALENDAIRE exact
-    // (YYYY-MM deja represente par une ligne, paid ou pending) — plus robuste
-    // quand des paiements a montants/dates irreguliers (ex. paiement de test)
-    // desynchronisent un simple decompte par montant cumulé, ce qui sautait a
-    // tort des mois reels (ex. octobre/novembre) sans jamais leur creer de ligne.
+    // upToEnd=true (rentBook, carnet) : un mois est couvert s'il a deja une
+    // ligne pending (son echeance) OU s'il fait partie des N premiers mois
+    // couverts par le cumul des lignes paid. Les paid ne sont PAS rangees par
+    // le mois de leur paymentDate : un loyer de janvier regle le 06/02 couvre
+    // janvier, pas fevrier (sinon pending a tort sur le 1er mois et mois
+    // suivant le dernier paiement sans ligne) — meme regle que assignPaidRows.
     const existingMonthKeys = new Set(
-      existing.map((p) => String(p.paymentDate).slice(0, 7)),
+      existing.filter((p) => p.status === "pending").map((p) => String(p.paymentDate).slice(0, 7)),
     );
     const rent = Number(lease.rentAmount) || 0;
     const totalCovered = existing.reduce((s, p) => s + Number(p.amount || 0), 0);
     const monthsAlreadyCovered = rent > 0 ? Math.floor((totalCovered + 0.0001) / rent) : existing.length;
+    const paidRows = existing.filter((p) => p.status !== "pending");
+    const totalPaid = paidRows.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const monthsPaid = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : paidRows.length;
 
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
@@ -2625,7 +2629,7 @@ export class PropertyManagementService {
       if (!boundary || cursor.getTime() <= billableEnd.getTime()) {
         const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
         const covered = upToEnd
-          ? existingMonthKeys.has(monthKey)
+          ? monthIndex < monthsPaid || existingMonthKeys.has(monthKey)
           : monthIndex < monthsAlreadyCovered;
         if (!covered) monthsToCreate.push(new Date(cursor.getTime()));
       }
@@ -5177,8 +5181,21 @@ export class PropertyManagementService {
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)))
       .limit(1);
     if (!payment) throw new NotFoundException("Payment not found.");
+    // Echeance pending generee a tort (sans transaction ni ecriture) : simple
+    // passage en voided (soft), pas de compta ni de recul de nextInvoiceDate.
+    if (payment.status === "pending" && !payment.transactionId) {
+      await this.db
+        .update(realEstateRentPayments)
+        .set({
+          status: "voided",
+          notes: `${payment.notes ?? ""} [ANNULE: ${reason.trim()}]`.trim(),
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+      return { id: paymentId, status: "voided", ledgerReversed: false };
+    }
     if (payment.status !== "paid") {
-      throw new BadRequestException("Seul un paiement encaisse (paid) peut etre annule.");
+      throw new BadRequestException("Seul un paiement encaisse (paid) ou une echeance en attente peut etre annule.");
     }
     const lease = await this.getLeaseOrThrow(payment.leaseId, orgId);
 
