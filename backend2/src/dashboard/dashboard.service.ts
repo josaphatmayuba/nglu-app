@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { loadOverdueByLease, readOverdueGraceDays } from "../property-management/lease-overdue";
 import { and, between, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -349,28 +350,41 @@ export class DashboardService {
     }));
   }
 
+  private async countOverdueLeases(org: number, todayStr: string): Promise<Array<{ count: number }>> {
+    const leases = await this.db
+      .select({
+        id: realEstateLeases.id,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        billingCycle: realEstateLeases.billingCycle,
+        rentAmount: realEstateLeases.rentAmount,
+        currencyId: realEstateLeases.currencyId,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+      })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.status, "active"), eq(realEstateLeases.organizationId, org)));
+    if (!leases.length) return [{ count: 0 }];
+    const graceDays = await readOverdueGraceDays(this.db, org);
+    const entries = await loadOverdueByLease(this.db, org, graceDays, leases, new Date(`${todayStr}T00:00:00.000Z`));
+    let count = 0;
+    for (const e of entries.values()) if (e.stats.isOverdue) count += 1;
+    return [{ count }];
+  }
+
   // ── SCRUM-142: aggregated startup endpoint ──────────────────────────────
   async getStartupData(query: DashboardQueryDto, org: number) {
     const { start, end } = this.resolveDates(query);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().slice(0, 10);
-
     const [dashboardData, overdueLeases, pendingMaintenance, lowStock, invoiceCount] =
       await Promise.all([
         this.getDashboardData(query, org),
 
-        // Active leases where nextInvoiceDate is past today
-        this.db
-          .select({ count: sql<number>`COUNT(*)` })
-          .from(realEstateLeases)
-          .where(
-            and(
-              eq(realEstateLeases.status, "active"),
-              lt(realEstateLeases.nextInvoiceDate, todayStr),
-              eq(realEstateLeases.organizationId, org),
-            ),
-          ),
+        // Baux actifs en retard : MEME calcul que les cartes Baux/Loyers (echeance +
+        // delai de grace org, loadOverdueByLease, une seule requete paiements).
+        this.countOverdueLeases(org, todayStr),
 
         // Open or in-progress maintenance requests
         this.db

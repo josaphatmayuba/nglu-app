@@ -12,11 +12,17 @@ import { money } from "../data.js";
 import { buildLeaseCards, ProrataBadge } from "./loyers.jsx";
 import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
 import { t } from "../i18n.js";
+import { dueChipFor, isPaymentOverdue } from "../overdue.js";
 
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 function parseDate(dateLike) {
   if (!dateLike) return null;
+  // Date seule (YYYY-MM-DD) = jour civil LOCAL. new Date("2026-10-01") vaut
+  // minuit UTC, donc le 30/09 au soir a l'ouest de UTC : l'echeance d'octobre
+  // s'affichait "septembre" avec un jour de retard en trop.
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z$)/.exec(String(dateLike));
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
   const d = new Date(dateLike);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -73,9 +79,12 @@ function daysUntil(dateLike) {
   return Math.round((d - today) / 86400000);
 }
 
-function dueChip(days) {
-  if (days == null) return { text: t("Échéance à confirmer"), chip: "chip-ink" };
-  if (days < 0) return { text: `${t("en retard de")} ${Math.abs(days)} j`, chip: "chip-rose" };
+// kind (overdue | due | ...) vient de dueChipFor : "en retard" seulement au-dela
+// du delai de grace ; une echeance passee dans la grace est "echue" (ambre).
+function dueChip(days, kind, overdueDays) {
+  if (days == null && kind !== "overdue") return { text: t("Échéance à confirmer"), chip: "chip-ink" };
+  if (kind === "overdue") return { text: `${t("en retard de")} ${overdueDays ?? Math.abs(days ?? 0)} j`, chip: "chip-rose" };
+  if (days < 0) return { text: `${t("échu depuis")} ${Math.abs(days)} j`, chip: "chip-amber" };
   if (days === 0) return { text: t("dû aujourd'hui"), chip: "chip-amber" };
   return { text: `${t("dû dans")} ${days} j`, chip: "chip-amber" };
 }
@@ -341,7 +350,8 @@ export function TenantPortalPublic({ token }) {
   const dirty = Object.keys(changed).length > 0;
 
   const dueDate = nextDueDateOf(activeLease) || activeLease?.nextInvoiceDate || activeLease?.endDate || null;
-  const due = dueChip(daysUntil(dueDate));
+  const dueInfo = dueChipFor(activeLease, dueDate);
+  const due = dueChip(daysUntil(dueDate), dueInfo.kind, dueInfo.days);
 
   // Paiements reellement encaisses (status 'paid'). La caution n'apparait pas
   // ici : elle est stockee a part (real_estate_security_deposits) et n'est pas
@@ -381,8 +391,14 @@ export function TenantPortalPublic({ token }) {
     () => pending.filter((p) => proofSent(p) && !isCoveredByPayments(p)),
     [pending, monthsCovered, activeLease, uploadedProofId],
   );
+  // En retard = echeance + delai de grace depasses (flag backend p.isOverdue).
   const overdue = useMemo(
-    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !proofSent(p) && !isCoveredByPayments(p)),
+    () => pending.filter((p) => isPaymentOverdue(p, activeLease?.graceDays) && !proofSent(p) && !isCoveredByPayments(p)),
+    [pending, monthsCovered, activeLease, uploadedProofId],
+  );
+  // Echues mais encore dans le delai de grace : "a regler", pas "en retard".
+  const dueNow = useMemo(
+    () => pending.filter((p) => (daysUntil(p.paymentDate) ?? 0) < 0 && !isPaymentOverdue(p, activeLease?.graceDays) && !proofSent(p) && !isCoveredByPayments(p)),
     [pending, monthsCovered, activeLease, uploadedProofId],
   );
 
@@ -531,7 +547,7 @@ export function TenantPortalPublic({ token }) {
                         <AlertTriangle size={14} className="muted" />
                         <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
                         <span className="chip chip-rose">
-                          {t("en retard de")} {Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                          {t("en retard de")} {p.daysPastDue ?? Math.abs(daysUntil(p.paymentDate) ?? 0)} j
                         </span>
                         <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                         <ProofUploadButton
@@ -554,6 +570,37 @@ export function TenantPortalPublic({ token }) {
                       {uploadError}
                     </p>
                   ) : null}
+                </section>
+              )}
+
+              {dueNow.length > 0 && (
+                <section className="onb-card">
+                  <div className="onb-card-head">
+                    <span className="onb-card-icon tone-amber"><Clock size={18} /></span>
+                    <div className="onb-card-heading">
+                      <h3>{t("À régler")}</h3>
+                      <p>{t("Échéances passées, encore dans le délai de grâce")}</p>
+                    </div>
+                  </div>
+                  <div className="onb-card-body">
+                    {dueNow.map((p) => (
+                      <div key={p.id} className="portail-hist-row">
+                        <Clock size={14} className="muted" />
+                        <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
+                        <span className="chip chip-amber">
+                          {t("échu depuis")} {p.daysPastDue ?? Math.abs(daysUntil(p.paymentDate) ?? 0)} j
+                        </span>
+                        <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
+                        <ProofUploadButton
+                          payment={p}
+                          busy={uploadingProofId === p.id}
+                          done={uploadedProofId === p.id}
+                          onClick={() => pickProofFile(p.id)}
+                          onView={openProof}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </section>
               )}
 

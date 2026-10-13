@@ -11,11 +11,16 @@
 // L'ancienneté et l'historique de paiement sont cumulés sur TOUS les baux du
 // locataire (actifs comme terminés), pas seulement le bail actif.
 
+import { parseDomusDate } from "../dateRange.jsx";
+
 const YEAR_MS = 365 * 86400000;
 
 // Liaison locataire -> ses baux -> bail actif -> unité (comme le CRM).
 export function tenantLeaseInfo(tenant, leases, units) {
-  const tenantLeases = leases.filter((l) => String(l.tenantId) === String(tenant.id));
+  // Co-locataire inclus : un bail multi-locataires appartient a chacun d'eux.
+  const id = String(tenant.id);
+  const tenantLeases = leases.filter((l) => String(l.tenantId) === id
+    || (Array.isArray(l.coTenants) && l.coTenants.some((c) => String(c?.id) === id)));
   const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0] || null;
   const activeUnit = activeLease ? units.find((u) => String(u.id) === String(activeLease.unitId)) || null : null;
   return { tenantLeases, activeLease, activeUnit };
@@ -41,7 +46,7 @@ export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now())
   }
   const hasActive = tenantLeases.some((l) => l.status === "active");
   const daysToEnd = hasActive && activeLease?.endDate
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - now) / 86400000)
+    ? Math.ceil(((parseDomusDate(activeLease.endDate) || new Date(activeLease.endDate)).getTime() - now) / 86400000)
     : null;
   // Filet : bail encore "actif" mais dont l'échéance est déjà passée (donnée non
   // clôturée en amont). On l'alerte au lieu de le laisser passer pour sain.

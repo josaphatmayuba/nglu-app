@@ -24,7 +24,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadNextDueByLease } from "./lease-proration-db";
+import { loadPortalOverdueByLease, paymentOverdueFields } from "./lease-overdue";
 
 @Injectable()
 export class OwnerPortalService {
@@ -264,7 +264,8 @@ export class OwnerPortalService {
       paymentsByLease.set(key, list);
     }
 
-    const nextDue = await loadNextDueByLease(this.db, organizationId, leases as any);
+    const overdue = await loadPortalOverdueByLease(this.db, organizationId, leases as any);
+    const nextDue = overdue.nextDue;
 
     return {
       owner: { name: owner.displayName },
@@ -275,6 +276,11 @@ export class OwnerPortalService {
         nextDueDate: nextDue.get(Number(lease.id))?.nextDueDate ?? null,
         nextDueAmount: nextDue.get(Number(lease.id))?.nextDueAmount ?? (Number(lease.rentAmount) || 0),
         isProratedNext: nextDue.get(Number(lease.id))?.isProratedNext ?? false,
+        isOverdue: overdue.byLease.get(Number(lease.id))?.isOverdue ?? false,
+        overdueDueDate: overdue.byLease.get(Number(lease.id))?.overdueDueDate ?? null,
+        overdueDays: overdue.byLease.get(Number(lease.id))?.overdueDays ?? 0,
+        unpaidCount: overdue.byLease.get(Number(lease.id))?.unpaidCount ?? 0,
+        graceDays: overdue.graceDays,
         depositsPaid: deposits.filter((d) => Number(d.leaseId) === Number(lease.id)),
         payments: (paymentsByLease.get(Number(lease.id)) ?? []).map((p) => ({
           id: p.id,
@@ -282,6 +288,7 @@ export class OwnerPortalService {
           amount: p.amount,
           currencySymbol: p.currencySymbol,
           status: p.status,
+          ...paymentOverdueFields(p.status, p.paymentDate, overdue.today, overdue.graceDays),
           hasProof: p.hasProof,
         })),
       })),

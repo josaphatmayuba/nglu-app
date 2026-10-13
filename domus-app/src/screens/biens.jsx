@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill, setPnlPrefill } from "./reservationPrefill.js";
-import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
+import { filterLeases, filterPayments, filterProperties, filterUnits, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
 import { mortgageTotalsByCurrency } from "./hypotheque.jsx";
@@ -1670,8 +1670,12 @@ function buildLeaseStatusByUnit(leases, payments) {
     .forEach((lease) => {
       const paidMonths = paidByLease.get(String(lease.id)) || new Set();
       let status = "ok";
-      if (lease.startDate) {
-        const start = new Date(lease.startDate);
+      // Retard = echeance + delai de grace (flag backend isOverdue) ; sans flag
+      // (ancien backend), repli sur l'ancienne regle "mois passe sans paiement".
+      if (typeof lease.isOverdue === "boolean") {
+        status = lease.isOverdue ? "late" : "ok";
+      } else if (lease.startDate) {
+        const start = parseDomusDate(lease.startDate) || new Date(lease.startDate);
         const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
         while (cursor < currentMonth) {
           if (!paidMonths.has(monthKey(cursor))) {
@@ -1696,7 +1700,7 @@ function buildLeaseStatusByUnit(leases, payments) {
 }
 
 function monthKey(dateLike) {
-  const date = new Date(dateLike);
+  const date = parseDomusDate(dateLike) || new Date(dateLike);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 

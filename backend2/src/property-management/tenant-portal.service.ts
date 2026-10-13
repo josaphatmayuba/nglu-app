@@ -26,7 +26,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadNextDueByLease } from "./lease-proration-db";
+import { loadPortalOverdueByLease, paymentOverdueFields } from "./lease-overdue";
 import { leaseAccessibleBy } from "./lease-access";
 
 @Injectable()
@@ -783,11 +783,20 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
       .limit(10);
 
     // Prochaine echeance (prorata inclus) : champs additifs, loyer du bail si option off.
-    const nextDue = await loadNextDueByLease(this.db, organizationId, leases as any);
+    // Retard (echeance + delai de grace de l'org du token) et prochaine echeance :
+    // une seule lecture des paiements (champs additifs).
+    const overdue = await loadPortalOverdueByLease(this.db, organizationId, leases as any);
+    const nextDue = overdue.nextDue;
     const leasesOut = leases.map(({ currencyDecimals: _d, ...l }) => {
       const n = nextDue.get(l.id);
+      const o = overdue.byLease.get(l.id);
       return {
         ...l,
+        isOverdue: o?.isOverdue ?? false,
+        overdueDueDate: o?.overdueDueDate ?? null,
+        overdueDays: o?.overdueDays ?? 0,
+        unpaidCount: o?.unpaidCount ?? 0,
+        graceDays: overdue.graceDays,
         rentProrationEnabled: !!l.rentProrationEnabled,
         nextDueDate: n?.nextDueDate ?? null,
         nextDueAmount: n?.nextDueAmount ?? (Number(l.rentAmount) || 0),
@@ -811,7 +820,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
       // echeances a venir / en retard (status 'pending'), que le front separe.
       // La caution n'y figure pas : elle vit dans real_estate_security_deposits
       // et n'est pas un loyer.
-      payments,
+      payments: payments.map((p) => ({
+        ...p,
+        ...paymentOverdueFields(p.status, p.paymentDate, overdue.today, overdue.graceDays),
+      })),
       // copySource : 'scan' si le bail papier est numerise, sinon 'electronic'
       // si le bail a ete signe en ligne, sinon null (rien a telecharger).
       contracts: contracts.map((c) => ({

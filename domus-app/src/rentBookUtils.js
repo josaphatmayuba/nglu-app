@@ -134,12 +134,6 @@ export function buildFullRentSchedule(lease, payments) {
   const start = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.startDate || ""));
   if (!start) return payments; // pas de date de début exploitable : fallback paiements réels
 
-  const byMonth = new Map();
-  for (const p of payments) {
-    const key = /^(\d{4})-(\d{2})/.exec(String(p.paymentDate || ""))?.[0];
-    if (key) byMonth.set(key, p);
-  }
-
   const startIdx = Number(start[1]) * 12 + (Number(start[2]) - 1);
   const end = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(String(lease?.endDate || ""));
   let endIdx;
@@ -158,29 +152,80 @@ export function buildFullRentSchedule(lease, payments) {
       const idx = Number(key[1]) * 12 + (Number(key[2]) - 1);
       return idx > max ? idx : max;
     }, startIdx);
-    endIdx = Math.max(lastPaid, startIdx + 11);
+    const paidCount = payments.filter((p) => p.status === "paid").length;
+    endIdx = Math.max(lastPaid, startIdx + 11, startIdx + paidCount - 1);
   }
 
-  const schedule = [];
+  const keys = [];
   for (let idx = startIdx; idx <= endIdx; idx += 1) {
-    const year = Math.floor(idx / 12);
-    const month = (idx % 12) + 1;
-    const key = `${year}-${String(month).padStart(2, "0")}`;
+    keys.push(`${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`);
+  }
+  const byMonth = assignPaymentsToMonths(keys, payments, Number(lease.rentAmount) || 0);
+
+  const schedule = keys.map((key) => {
     const existing = byMonth.get(key);
-    if (existing) {
-      schedule.push(existing);
-    } else {
-      schedule.push({
-        paymentDate: `${key}-01`,
-        amount: lease.rentAmount,
-        currencySymbol: lease.currencySymbol || "CDF",
-        status: "pending",
-        method: null,
-        receivedBy: null,
-      });
-    }
+    if (existing) return { ...existing, rentMonth: key };
+    return {
+      paymentDate: `${key}-01`,
+      rentMonth: key,
+      amount: lease.rentAmount,
+      currencySymbol: lease.currencySymbol || "CDF",
+      status: "pending",
+      method: null,
+      receivedBy: null,
+    };
+  });
+  // Paiements réels non placés (doublon sur un mois, au-delà de la fin) : jamais perdus.
+  const placed = new Set(byMonth.values());
+  for (const p of payments) {
+    if (!placed.has(p) && p.status === "paid") schedule.push(p);
   }
   return schedule;
+}
+
+// Mois de loyer couvert par chaque paiement (bail sans prorata). Un loyer de
+// janvier réglé le 06/02 doit tomber sur janvier, pas sur février ; la vraie
+// date de paiement est conservée (retards inchangés).
+// - periodStart explicite → ce mois-là ;
+// - sinon couverture cumulée dans l'ordre des dates de paiement, sur les mois
+//   restants à partir du début du bail (même règle que assignPaidRows côté
+//   backend pour les retards / la prochaine échéance). Jamais avant le début
+//   du bail : les mois proposés commencent à lease.startDate.
+// Les lignes en attente (sans periodStart) restent rangées par leur échéance.
+export function assignPaymentsToMonths(keys, payments, rent) {
+  const keySet = new Set(keys);
+  const byMonth = new Map();
+  const monthOf = (v) => /^(\d{4})-(\d{2})/.exec(String(v || ""))?.[0] || null;
+  const live = payments.filter((p) => p.status !== "voided");
+
+  const cumulative = [];
+  for (const p of live.filter((x) => x.status === "paid")) {
+    const key = monthOf(p.periodStart);
+    if (key && keySet.has(key) && !byMonth.has(key)) byMonth.set(key, p);
+    else cumulative.push(p);
+  }
+  cumulative.sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")) || (a.id ?? 0) - (b.id ?? 0));
+  const remaining = keys.filter((k) => !byMonth.has(k));
+  let paid = 0;
+  let count = 0;
+  for (const p of cumulative) {
+    paid += Number(p.amount) || 0;
+    const before = count;
+    if (rent > 0) {
+      while (count < remaining.length && paid + 0.005 >= rent * (count + 1)) count += 1;
+    } else {
+      count = Math.min(count + 1, remaining.length);
+    }
+    // Premier mois complété par ce paiement ; paiement partiel → mois en cours.
+    const key = remaining[before];
+    if (key && !byMonth.has(key)) byMonth.set(key, p);
+  }
+
+  for (const p of live.filter((x) => x.status !== "paid")) {
+    const key = monthOf(p.periodStart) || monthOf(p.paymentDate);
+    if (key && keySet.has(key) && !byMonth.has(key)) byMonth.set(key, p);
+  }
+  return byMonth;
 }
 
 const day10 = (v) => String(v || "").slice(0, 10);
@@ -190,11 +235,33 @@ function buildProratedRentSchedule(lease, payments) {
   for (const p of payments) {
     if (p.periodStart) byStart.set(day10(p.periodStart), p);
   }
+  // Paiements payés sans periodStart (saisis hors échéancier) : rattachés par
+  // couverture cumulée aux périodes restantes, dans l'ordre des dates (même règle
+  // que assignPaidRows backend) — 170 → 1re période prorata, 400 → suivante…
+  const freeStarts = lease.schedule.map((e) => day10(e.periodStart)).filter((k) => byStart.get(k)?.status !== "paid");
+  const amountByStart = new Map(lease.schedule.map((e) => [day10(e.periodStart), Number(e.amount) || 0]));
+  const loose = payments
+    .filter((p) => p.status === "paid" && !p.periodStart)
+    .sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")) || (a.id ?? 0) - (b.id ?? 0));
+  let paidSum = 0;
+  let dueSum = 0;
+  let next = 0;
+  for (const p of loose) {
+    const target = freeStarts[next];
+    paidSum += Number(p.amount) || 0;
+    while (next < freeStarts.length && paidSum + 0.005 >= dueSum + amountByStart.get(freeStarts[next])) {
+      dueSum += amountByStart.get(freeStarts[next]);
+      next += 1;
+    }
+    // Une échéance pending sur une période ainsi couverte est remplacée par le paiement réel.
+    if (target && byStart.get(target)?.status !== "paid") byStart.set(target, p);
+  }
   const used = new Set();
   const lines = lease.schedule.map((e) => {
     const key = day10(e.periodStart);
     const existing = byStart.get(key);
     const period = {
+      rentMonth: key.slice(0, 7),
       periodStart: e.periodStart,
       periodEnd: e.periodEnd,
       isProrata: Boolean(e.prorated),
@@ -229,7 +296,9 @@ function buildProratedRentSchedule(lease, payments) {
   for (const p of payments) {
     if (!used.has(p) && p.status === "paid") lines.push(p);
   }
-  return lines.sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")));
+  // Ordre des périodes (un paiement réglé le 09/10 pour septembre reste avant octobre).
+  const sortKey = (l) => String(l.periodStart || l.paymentDate || "").slice(0, 10);
+  return lines.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 }
 
 // « 11→30/09/2027 » (même mois) ou « 11/09/2027→10/10/2027 ».
@@ -374,7 +443,8 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
-  const headerLine = escapeHtml(monthLabel(payment.paymentDate).toLocaleUpperCase("fr"));
+  // Mois de loyer (rentMonth, cf. assignPaymentsToMonths) et non mois du paiement.
+  const headerLine = escapeHtml(monthLabel(payment.rentMonth ? `${payment.rentMonth}-01` : payment.paymentDate).toLocaleUpperCase("fr"));
   // Loyer au prorata : période exacte + mention « 20 j / 30 » (jamais affiché
   // pour un paiement sans periodStart/periodEnd, donc hors option).
   const rangeText = payment.periodStart && payment.periodEnd ? fmtPeriodShort(payment.periodStart, payment.periodEnd) : "";

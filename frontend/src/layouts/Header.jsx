@@ -104,9 +104,13 @@ const buildPropertyAlerts = ({ leases = [], maintenance = [] }) => {
   ).length;
   const overdueLeases = leases.filter((lease) => {
     if (!isActiveLease(lease)) return false;
+    // Retard = echeance + delai de grace org : flag backend prioritaire.
+    if (typeof lease?.isOverdue === "boolean") return lease.isOverdue;
+    if (lease?.status === "late") return true;
+    // Secours (ancien backend sans flag) : date lue en jour LOCAL, pas minuit UTC.
     const dueDate = lease?.nextInvoiceDate || lease?.nextPaymentDate;
-    const due = dueDate ? new Date(dueDate) : null;
-    if (lease?.isOverdue || lease?.status === "late") return true;
+    const m = dueDate ? /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dueDate)) : null;
+    const due = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : (dueDate ? new Date(dueDate) : null);
     return due && !Number.isNaN(due.getTime()) && due < today;
   }).length;
 

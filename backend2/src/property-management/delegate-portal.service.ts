@@ -38,7 +38,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadNextDueByLease } from "./lease-proration-db";
+import { loadPortalOverdueByLease } from "./lease-overdue";
 
 @Injectable()
 export class DelegatePortalService {
@@ -208,7 +208,10 @@ export class DelegatePortalService {
       .limit(1);
     if (!lease) throw new NotFoundException("Lien invalide ou expire.");
 
-    const nextDue = (await loadNextDueByLease(this.db, Number(check.organizationId), [lease as any])).get(lease.id);
+    const overduePortal = await loadPortalOverdueByLease(this.db, Number(check.organizationId), [lease as any]);
+    const nextDue = overduePortal.nextDue.get(lease.id);
+
+    const overdue = overduePortal.byLease.get(lease.id);
 
     return {
       delegateName,
@@ -227,6 +230,11 @@ export class DelegatePortalService {
         nextDueDate: nextDue?.nextDueDate ?? null,
         nextDueAmount: nextDue?.nextDueAmount ?? (Number(lease.rentAmount) || 0),
         isProratedNext: nextDue?.isProratedNext ?? false,
+        isOverdue: overdue?.isOverdue ?? false,
+        overdueDueDate: overdue?.overdueDueDate ?? null,
+        overdueDays: overdue?.overdueDays ?? 0,
+        unpaidCount: overdue?.unpaidCount ?? 0,
+        graceDays: overdue?.graceDays ?? null,
         currencySymbol: lease.currencySymbol ?? null,
         currencyCode: lease.currencyCode ?? null,
         tenantName: [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ").trim(),
