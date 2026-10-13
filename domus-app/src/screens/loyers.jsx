@@ -1317,7 +1317,7 @@ export function Loyers({ go }) {
           ))}
         </div>
       ) : (
-        <div className="card" style={{ overflow: "hidden" }}>
+        <div className="card" style={{ overflowX: "auto" }}>
           <table className="tbl">
             <thead><tr><th>Locataire</th><th>Logement</th><th>Date</th><th>Méthode</th><th>Statut</th><th>Montant</th><th></th></tr></thead>
             <tbody>
