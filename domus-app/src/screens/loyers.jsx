@@ -197,7 +197,12 @@ export function buildLeaseCards(leases, payments) {
         const leaseOpen = !l.endDate || String(l.endDate).slice(0, 10) >= nowIso;
         const missing = leaseOpen ? Math.max(0, startedPeriods(l, now) - dueRows.length) : 0;
         const fill = Array(missing).fill(rent);
-        if (!dueRows.length && fill.length) fill[0] = firstPeriodAmount(l);
+        // Periodes manquantes = les plus anciennes : si la 1re periode (debut du
+        // bail) n'a pas de ligne, elle reste au prorata meme si des echeances
+        // plus recentes existent (ex. pending d'octobre seule → juillet 13 j).
+        const startIso = String(l.startDate || "").slice(0, 10);
+        const hasFirstRow = dueRows.some((p) => String(p.periodStart).slice(0, 10) === startIso);
+        if (fill.length && !hasFirstRow) fill[0] = firstPeriodAmount(l);
         const dueAmounts = [...dueRows.map(amountOf), ...fill];
         periodAmounts = prorationRows.length ? prorationRows.map(amountOf) : [firstPeriodAmount(l)];
         totalDue = dueAmounts.reduce((s, a) => s + a, 0);
