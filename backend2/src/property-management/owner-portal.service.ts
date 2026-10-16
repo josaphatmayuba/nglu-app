@@ -251,6 +251,8 @@ export class OwnerPortalService {
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
             ne(realEstateRentPayments.status, "voided"),
+            // 'settled' = echeance soldee par imputation (bail flagge) : ce n'est pas un encaissement.
+            ne(realEstateRentPayments.status, "settled"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];

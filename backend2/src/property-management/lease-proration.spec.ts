@@ -66,6 +66,7 @@ function makeService(lease: any, rows: any[] = []) {
   };
   const service = new PropertyManagementService(
     db, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+    {} as any,
   );
   return { service, inserts, updates };
 }

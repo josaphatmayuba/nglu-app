@@ -147,7 +147,7 @@ export function buildLeaseCards(leases, payments) {
       // Seules les échéances réellement réglées comptent pour la couverture/frise ;
       // les "pending" (générées auto sur bail rétroactif, pas encore confirmées) ne
       // doivent pas être comptées comme payées.
-      const paidList = list.filter((p) => p.status !== "pending");
+      const paidList = list.filter((p) => p.status !== "pending" && p.status !== "settled");
       const paidMonths = new Set(paidList.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
       const latest = [...paidList].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
 
@@ -352,7 +352,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
   // Paiement ayant couvert le mois i : les paiements réglés se cumulent par date jusqu'à (i+1) loyers.
-  const paidSorted = list.filter((p) => p.status !== "pending").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
+  const paidSorted = list.filter((p) => p.status !== "pending" && p.status !== "settled").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
   // Cumul exigible jusqu'au mois i inclus : (i+1) loyers, ou, au prorata, la
   // somme des montants de période (loyer plein au-delà des périodes connues).
   const cumDue = (i) => {
@@ -1407,7 +1407,7 @@ function receivedReceipts(payments) {
   const list = (Array.isArray(payments) ? payments : []).filter(isTenantReceipt);
   const ts = (p) => new Date(p.updatedAt || p.paymentDate || 0).getTime() || 0;
   const pending = list.filter((p) => p.status === "pending").sort((a, b) => ts(b) - ts(a));
-  const paid = list.filter((p) => p.status !== "pending" && ts(p) >= since).sort((a, b) => ts(b) - ts(a));
+  const paid = list.filter((p) => p.status !== "pending" && p.status !== "settled" && ts(p) >= since).sort((a, b) => ts(b) - ts(a));
   return { pending, paid };
 }
 

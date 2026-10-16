@@ -108,7 +108,8 @@ function makeService(opts: {
     whatsapp,
     {} as any,
   {} as any,
-    {} as any, // ownerNotifications
+    {} as any, // ownerNotifications,
+    {} as any,
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate, putDocument };
@@ -287,7 +288,8 @@ describe("PropertyManagementService — listPropertyExpenses", () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any, // ownerNotifications
+      {} as any, // ownerNotifications,
+      {} as any,
     );
     await service.listPropertyExpenses(ORG, {
       propertyId: 3,

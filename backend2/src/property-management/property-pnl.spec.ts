@@ -131,7 +131,8 @@ function makeService(opts: {
     {} as any, // whatsapp
     {} as any, // tenantPortal
     {} as any, // geocoding
-    {} as any, // ownerNotifications
+    {} as any, // ownerNotifications,
+    {} as any,
   );
 
   return { service, db };

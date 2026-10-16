@@ -109,6 +109,7 @@ function makeService(opts: {
     {} as any,
     {} as any,
     {} as any,
+    {} as any,
   );
 
   return { service, db, inserts, updates, deletes, setInstallmentRows: (rows: any[]) => (installmentRows = rows) };
@@ -396,7 +397,8 @@ describe("PropertyManagementService — createPropertyExpense non-regression (mo
       {} as any,
       {} as any,
       {} as any,
-      {} as any, // ownerNotifications
+      {} as any, // ownerNotifications,
+      {} as any,
     );
 
     await service.createPropertyExpense(

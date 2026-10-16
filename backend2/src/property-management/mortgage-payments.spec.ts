@@ -107,7 +107,8 @@ function makeService(opts: {
     whatsapp,
     {} as any,
   {} as any,
-    {} as any, // ownerNotifications
+    {} as any, // ownerNotifications,
+    {} as any,
   );
 
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate };
@@ -398,7 +399,8 @@ describe("PropertyManagementService — listMortgagePayments", () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any, // ownerNotifications
+      {} as any, // ownerNotifications,
+      {} as any,
     );
     await service.listMortgagePayments(ORG, {
       propertyId: 3,
@@ -440,7 +442,8 @@ describe("PropertyManagementService — listMortgagePayments", () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any, // ownerNotifications
+      {} as any, // ownerNotifications,
+      {} as any,
     );
     await service.listMortgagePayments(ORG, {});
     expect(capturedWhere.length).toBe(1);

@@ -440,6 +440,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateRentPayments.id, paymentId),
         eq(realEstateRentPayments.organizationId, organizationId),
+        ne(realEstateRentPayments.status, "settled"), // echeance soldee, pas une quittance
         leaseAccessibleBy(tenantId, organizationId),
       ))
       .limit(1);
@@ -735,6 +736,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
             ne(realEstateRentPayments.status, "voided"),
+            // 'settled' = echeance soldee par imputation (bail flagge) : ce n'est pas un encaissement.
+            ne(realEstateRentPayments.status, "settled"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];
