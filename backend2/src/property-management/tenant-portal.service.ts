@@ -26,7 +26,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadPortalOverdueByLease, paymentOverdueFields } from "./lease-overdue";
+import { loadPortalOverdueByLease, paymentOverdueFields, portalDues } from "./lease-overdue";
 import { leaseAccessibleBy } from "./lease-access";
 
 @Injectable()
@@ -440,6 +440,7 @@ export class TenantPortalService {
       .where(and(
         eq(realEstateRentPayments.id, paymentId),
         eq(realEstateRentPayments.organizationId, organizationId),
+        ne(realEstateRentPayments.status, "settled"), // echeance soldee, pas une quittance
         leaseAccessibleBy(tenantId, organizationId),
       ))
       .limit(1);
@@ -678,6 +679,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         rentAmount: realEstateLeases.rentAmount,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         currencyDecimals: currencies.decimalPlaces,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         currencyId: realEstateLeases.currencyId,
         status: realEstateLeases.status,
         propertyName: realEstateProperties.name,
@@ -735,6 +737,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
             ne(realEstateRentPayments.status, "voided"),
+            // 'settled' = echeance soldee par imputation (bail flagge) : ce n'est pas un encaissement.
+            ne(realEstateRentPayments.status, "settled"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];
@@ -787,8 +791,9 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
     // une seule lecture des paiements (champs additifs).
     const overdue = await loadPortalOverdueByLease(this.db, organizationId, leases as any);
     const nextDue = overdue.nextDue;
-    const leasesOut = leases.map(({ currencyDecimals: _d, ...l }) => {
+    const leasesOut = leases.map(({ currencyDecimals: _d, allocationLedgerAt: _la, ...l }) => {
       const n = nextDue.get(l.id);
+      const ledger = overdue.ledger.get(l.id);
       const o = overdue.byLease.get(l.id);
       return {
         ...l,
@@ -801,6 +806,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         nextDueDate: n?.nextDueDate ?? null,
         nextDueAmount: n?.nextDueAmount ?? (Number(l.rentAmount) || 0),
         isProratedNext: n?.isProratedNext ?? false,
+        allocationLedger: !!ledger,
+        ...(ledger ? { dues: portalDues(ledger.dues), credit: ledger.credit, totalDue: ledger.totalDue } : {}),
       };
     });
 

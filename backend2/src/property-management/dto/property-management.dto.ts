@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMinSize,
   ArrayMaxSize,
@@ -432,6 +432,22 @@ export class CreateLeaseDto {
 
 export class UpdateLeaseDto extends PartialType(CreateLeaseDto) {}
 
+export class AllocationItemDto {
+  @ApiProperty({ example: 123, description: "Id de la ligne echeance (real_estate_rent_payments, rowKind=due)." })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  dueId: number;
+
+  @ApiPropertyOptional({ example: 1500, description: "Montant impute ; absent = autant que possible." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.000001)
+  @Max(1e12)
+  amount?: number;
+}
+
 export class CreateRentPaymentDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)
@@ -489,6 +505,26 @@ export class CreateRentPaymentDto {
   @IsOptional()
   @IsString()
   proofUrl?: string | null;
+
+  @ApiPropertyOptional({
+    enum: ["auto", "manual", "none"],
+    description: "Registre d'imputations (baux actives seulement, ignore sinon) : auto = FIFO, manual = allocations explicites, none = pas d'imputation immediate.",
+  })
+  @IsOptional()
+  @IsIn(["auto", "manual", "none"])
+  allocationMode?: "auto" | "manual" | "none";
+
+  @ApiPropertyOptional({ type: () => [AllocationItemDto], description: "Imputations explicites (allocationMode=manual). Ignore si le bail n'est pas actif sur le registre." })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") return value;
+    try { return JSON.parse(value); } catch { return value; }
+  })
+  @IsArray()
+  @ArrayMaxSize(60)
+  @ValidateNested({ each: true })
+  @Type(() => AllocationItemDto)
+  allocations?: AllocationItemDto[];
 }
 
 // Confirmation d'une echeance 'pending' generee retroactivement : memes
@@ -498,6 +534,96 @@ export class ConfirmPendingPaymentDto extends OmitType(CreateRentPaymentDto, ["l
 
 // Refus du justificatif d'une echeance 'pending' : le motif est obligatoire,
 // il est montre au locataire (portail + SMS) pour qu'il puisse renvoyer.
+export class AllocationPreviewDto {
+  @ApiProperty({ example: 3000 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1e12)
+  amount: number;
+
+  @ApiProperty({ example: "2026-10-16" })
+  @IsDateString()
+  paymentDate: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
+  @ApiPropertyOptional({ type: () => [AllocationItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(60)
+  @ValidateNested({ each: true })
+  @Type(() => AllocationItemDto)
+  allocations?: AllocationItemDto[];
+}
+
+export class UpdatePaymentAllocationItemDto {
+  @ApiProperty({ example: 123 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  dueId: number;
+
+  @ApiProperty({ example: 1500 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.000001)
+  @Max(1e12)
+  amount: number;
+}
+
+export class UpdatePaymentAllocationsDto {
+  @ApiProperty({ type: () => [UpdatePaymentAllocationItemDto], description: "Jeu complet d'imputations manuelles (remplace l'ancien ; vide = retour au FIFO)." })
+  @IsArray()
+  @ArrayMaxSize(60)
+  @ValidateNested({ each: true })
+  @Type(() => UpdatePaymentAllocationItemDto)
+  allocations: UpdatePaymentAllocationItemDto[];
+
+  @ApiProperty({ example: "Le locataire a precise qu'il payait octobre." })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(400)
+  reason: string;
+}
+
+export class BackfillAllocationsDto {
+  @ApiPropertyOptional({ type: [Number], description: "Baux a traiter ; obligatoire pour appliquer (dryRun=false) ou annuler (revert)." })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  leaseIds?: number[];
+
+  @ApiPropertyOptional({ default: true, description: "true (defaut) = apercu sans aucune ecriture." })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  @ApiPropertyOptional({ description: "Applique malgre un ecart avec le calcul legacy." })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+
+  @ApiPropertyOptional({ description: "Annule la reprise (flag NULL, imputations desactivees)." })
+  @IsOptional()
+  @IsBoolean()
+  revert?: boolean;
+
+  @ApiPropertyOptional({ description: "Curseur de pagination de l'apercu sans leaseIds : ne traite que les baux d'id > afterLeaseId (50 par appel)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  afterLeaseId?: number;
+}
+
 export class RejectPendingPaymentDto {
   @ApiProperty({ example: "Capture illisible, merci de renvoyer une photo nette." })
   @IsString()

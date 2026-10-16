@@ -135,3 +135,26 @@ export function friseKinds({ startDate, graceDays, prorata = false, periodStarts
 export function countLateDues(dueDates, graceDays, now = new Date()) {
   return dueDates.reduce((n, d) => n + (classifyDue(d, graceDays, now) === "late" ? 1 : 0), 0);
 }
+
+// ── Echeance-paiements (bail flagge allocationLedger) ─────────────────────
+// Un etat par ECHEANCE (backend `dues`), au lieu de deduire les mois du cumul
+// des paiements. kind : paid | partial | late | due | cur | future.
+//  - solde (remaining <= 0 ou dueStatus paid) -> paid ;
+//  - echeance + grace depassee et reste > 0 -> late (meme partiellement payee) ;
+//  - partiellement payee (dans la grace / a venir) -> partial ;
+//  - echeance passee dans la grace -> due ; mois courant a venir -> cur ; sinon future.
+export function dueKind(due, graceDays, now = new Date()) {
+  const remaining = Number(due?.remaining ?? (Number(due?.amount || 0) - Number(due?.amountPaid || 0)));
+  if (due?.dueStatus === "paid" || remaining <= 0.005) return "paid";
+  const cls = classifyDue(due.dueDate ?? due.periodStart, graceDays, now);
+  if (cls === "late") return "late";
+  if (Number(due?.amountPaid) > 0.005) return "partial";
+  if (cls === "due") return "due";
+  const s = parseLocalDay(due.periodStart);
+  return s && s.getFullYear() === now.getFullYear() && s.getMonth() === now.getMonth() ? "cur" : "future";
+}
+
+export function friseKindsFromDues(dues, graceDays, now = new Date()) {
+  const kinds = (dues || []).map((d) => dueKind(d, graceDays, now));
+  return { kinds, lateCount: kinds.filter((k) => k === "late").length };
+}

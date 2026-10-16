@@ -38,7 +38,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadPortalOverdueByLease } from "./lease-overdue";
+import { loadPortalOverdueByLease, portalDues } from "./lease-overdue";
 
 @Injectable()
 export class DelegatePortalService {
@@ -186,6 +186,7 @@ export class DelegatePortalService {
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         currencyDecimals: currencies.decimalPlaces,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         currencyId: realEstateLeases.currencyId,
         currencySymbol: currencies.currencySymbol,
         currencyCode: currencies.currencyCode,
@@ -210,6 +211,7 @@ export class DelegatePortalService {
 
     const overduePortal = await loadPortalOverdueByLease(this.db, Number(check.organizationId), [lease as any]);
     const nextDue = overduePortal.nextDue.get(lease.id);
+    const ledgerState = overduePortal.ledger.get(lease.id);
 
     const overdue = overduePortal.byLease.get(lease.id);
 
@@ -235,6 +237,8 @@ export class DelegatePortalService {
         overdueDays: overdue?.overdueDays ?? 0,
         unpaidCount: overdue?.unpaidCount ?? 0,
         graceDays: overdue?.graceDays ?? null,
+        allocationLedger: !!ledgerState,
+        ...(ledgerState ? { dues: portalDues(ledgerState.dues), credit: ledgerState.credit, totalDue: ledgerState.totalDue } : {}),
         currencySymbol: lease.currencySymbol ?? null,
         currencyCode: lease.currencyCode ?? null,
         tenantName: [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ").trim(),

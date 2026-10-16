@@ -1394,6 +1394,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           currencyId: realEstateLeases.currencyId,
           rentProrationEnabled: realEstateLeases.rentProrationEnabled,
           nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+          allocationLedgerAt: realEstateLeases.allocationLedgerAt,
           currencySymbol: currencies.currencySymbol,
           propertyName: realEstateProperties.name,
           propertyAddress: realEstateProperties.address,

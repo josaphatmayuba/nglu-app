@@ -56,6 +56,9 @@ import {
   UpdateOwnerDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  AllocationPreviewDto,
+  BackfillAllocationsDto,
+  UpdatePaymentAllocationsDto,
   ConfirmPendingPaymentDto,
   RejectPendingPaymentDto,
   CollectDepositDto,
@@ -887,6 +890,80 @@ export class PropertyManagementController {
     return this.propertyManagementService.prorationRealign(id, orgId, scope);
   }
 
+  @ApiOperation({ summary: "Echeances d'un bail avec leurs imputations (registre) ; bail non active : etat legacy (flagged=false)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readAll-propertyManagement")
+  @Get("leases/:id/dues")
+  leaseDues(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.leaseDues(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Apercu (sans ecriture) de l'imputation d'un encaissement sur les echeances du bail" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readAll-propertyManagement")
+  @Post("leases/:id/allocation-preview")
+  @HttpCode(200)
+  leaseAllocationPreview(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: AllocationPreviewDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.leaseAllocationPreview(id, orgId, body, scope);
+  }
+
+  @ApiOperation({ summary: "Reimputation manuelle d'un paiement sur des echeances (motif obligatoire, ancien jeu soft-void)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Put("payments/:id/allocations")
+  updatePaymentAllocations(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdatePaymentAllocationsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.updatePaymentAllocations(id, orgId, body, userId, scope);
+  }
+
+  // Reprise du registre : lecture/apercu (dryRun) ouvert a readAll ou delete ; ecriture (apply/force/revert)
+  // reservee a la permission d'administration la plus elevee existante (update-rolePermission : gestion
+  // des roles/droits ; les roles systeme passent le guard). Pas de permission « admin-* » dediee dans le projet.
+  @ApiOperation({ summary: "Apercu (dryRun, sans ecriture) de la reprise du registre d'imputations ; pagine par curseur afterLeaseId (50 baux max)" })
+  @Permissions("readAll-propertyManagement", "delete-propertyManagement")
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  @Post("allocations/backfill")
+  @HttpCode(200)
+  backfillAllocations(
+    @Body() body: BackfillAllocationsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    if (body.dryRun === false || body.force) {
+      throw new BadRequestException("L'application ou l'annulation d'une reprise passe par POST allocations/backfill/apply (droit d'administration).");
+    }
+    return this.propertyManagementService.backfillAllocations(orgId, { ...body, dryRun: true }, userId, scope);
+  }
+
+  @ApiOperation({ summary: "Applique / force / annule la reprise du registre d'imputations (par bail) — administration" })
+  @Permissions("update-rolePermission")
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Post("allocations/backfill/apply")
+  @HttpCode(200)
+  backfillAllocationsApply(
+    @Body() body: BackfillAllocationsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.backfillAllocations(orgId, body, userId, scope);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Permissions("create-propertyManagement")
   @Post("leases")
@@ -1121,8 +1198,10 @@ export class PropertyManagementController {
     @UploadedFile() proof: any,
     @Req() req: Request,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req));
+    return this.propertyManagementService.createPayment(body, orgId, proof, this.publicApiBase(req), userId, scope);
   }
 
   @ApiOperation({ summary: "Generate missing (pending) monthly rent payment rows for a retroactive lease — no accounting impact" })
@@ -1155,8 +1234,10 @@ export class PropertyManagementController {
     @UploadedFile() proof: any,
     @Req() req: Request,
     @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req));
+    return this.propertyManagementService.confirmPendingPayment(id, body, orgId, proof, this.publicApiBase(req), userId, scope);
   }
 
   @ApiOperation({ summary: "Refuse le justificatif d'une echeance pending (motif obligatoire) — sans impact comptable, locataire prevenu" })

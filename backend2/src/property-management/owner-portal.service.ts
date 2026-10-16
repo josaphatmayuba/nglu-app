@@ -24,7 +24,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ObjectStorageService } from "./object-storage.service";
-import { loadPortalOverdueByLease, paymentOverdueFields } from "./lease-overdue";
+import { loadPortalOverdueByLease, paymentOverdueFields, portalDues } from "./lease-overdue";
 
 @Injectable()
 export class OwnerPortalService {
@@ -183,6 +183,7 @@ export class OwnerPortalService {
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         currencyDecimals: currencies.decimalPlaces,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         securityDeposit: realEstateLeases.securityDeposit,
         status: realEstateLeases.status,
         taxName: realEstateLeases.taxName,
@@ -251,6 +252,8 @@ export class OwnerPortalService {
             eq(realEstateRentPayments.organizationId, organizationId),
             inArray(realEstateRentPayments.leaseId, leaseIds),
             ne(realEstateRentPayments.status, "voided"),
+            // 'settled' = echeance soldee par imputation (bail flagge) : ce n'est pas un encaissement.
+            ne(realEstateRentPayments.status, "settled"),
           ))
           .orderBy(desc(realEstateRentPayments.paymentDate))
       : [];
@@ -270,8 +273,12 @@ export class OwnerPortalService {
     return {
       owner: { name: owner.displayName },
       tenant,
-      leases: leases.map(({ currencyDecimals: _d, nextInvoiceDate: _n, ...lease }) => ({
+      leases: leases.map(({ currencyDecimals: _d, nextInvoiceDate: _n, allocationLedgerAt: _la, ...lease }) => {
+      const ledger = overdue.ledger.get(Number(lease.id));
+      return {
         ...lease,
+        allocationLedger: !!ledger,
+        ...(ledger ? { dues: portalDues(ledger.dues), credit: ledger.credit, totalDue: ledger.totalDue } : {}),
         rentProrationEnabled: !!lease.rentProrationEnabled,
         nextDueDate: nextDue.get(Number(lease.id))?.nextDueDate ?? null,
         nextDueAmount: nextDue.get(Number(lease.id))?.nextDueAmount ?? (Number(lease.rentAmount) || 0),
@@ -291,7 +298,8 @@ export class OwnerPortalService {
           ...paymentOverdueFields(p.status, p.paymentDate, overdue.today, overdue.graceDays),
           hasProof: p.hasProof,
         })),
-      })),
+      };
+      }),
     };
   }
 

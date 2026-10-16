@@ -145,6 +145,7 @@ function makeService(opts: {
     tenantPortal as any,
     {} as any,
     ownerNotifications as any,
+    {} as any,
   );
 
   return { service, updates, sentSms, sentEmails, ownerCalls };

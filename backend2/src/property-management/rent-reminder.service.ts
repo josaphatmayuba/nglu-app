@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
-import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { CompatService } from "../compat/compat.service";
 import { DRIZZLE } from "../database/database.constants";
@@ -17,8 +17,13 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
-import { loadLeaseTotalDue, readOverdueGraceDays } from "./lease-overdue";
+import { formatMoneyFr, loadFlaggedDueStates, loadLeaseTotalDue, readOverdueGraceDays, type LeaseDueState } from "./lease-overdue";
+import { isLeaseFlagged } from "./lease-allocation";
+import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
+
+/** Marqueur interne : SMS non envoye car desactive (pas un echec). */
+const SMS_SKIPPED = "__sms_skipped__";
 
 // graceDays = delai de grace avant retard (Reglages « Retards de loyer ») : le
 // rappel automatique part overdueDays jours APRES la fin de ce delai.
@@ -123,6 +128,8 @@ export class RentReminderService {
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         currencyDecimals: currencies.decimalPlaces,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        currencyId: realEstateLeases.currencyId,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         lastReminder: realEstateLeases.lastOverdueReminderDate,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
@@ -142,17 +149,39 @@ export class RentReminderService {
       .where(
         and(
           eq(realEstateLeases.status, "active"),
-          isNotNull(realEstateLeases.nextInvoiceDate),
+          // Baux flagges (registre d'imputations) : retard lu sur l'etat impute, pas sur nextInvoiceDate.
+          or(isNotNull(realEstateLeases.nextInvoiceDate), isNotNull(realEstateLeases.allocationLedgerAt)),
           only
             ? and(eq(realEstateLeases.id, only.leaseId), eq(realEstateLeases.organizationId, only.orgId))
-            : lte(realEstateLeases.nextInvoiceDate, cutoffStr),
+            : or(lte(realEstateLeases.nextInvoiceDate, cutoffStr), isNotNull(realEstateLeases.allocationLedgerAt)),
         ),
       );
 
     const recipientsMap = await this.recipientsByLease(rows);
+    // Baux flagges : etat impute charge par organisation (aucune requete si aucun bail flagge).
+    const ledgerByLease = new Map<number, LeaseDueState>();
+    const flaggedRows = rows.filter((l) => isLeaseFlagged(l));
+    if (flaggedRows.length) {
+      const todayStr = formatDateOnly(new Date());
+      const today = parseDateOnly(todayStr);
+      for (const orgId of [...new Set(flaggedRows.map((l) => Number(l.organizationId)))]) {
+        const orgRows = flaggedRows.filter((l) => Number(l.organizationId) === orgId).map((l) => ({ id: Number(l.leaseId), currencyId: l.currencyId, currencyDecimals: l.currencyDecimals }));
+        const states = await loadFlaggedDueStates(this.db, orgId, orgRows, today, await readOverdueGraceDays(this.db, orgId));
+        for (const [id, st] of states) ledgerByLease.set(id, st);
+      }
+      for (const l of flaggedRows) {
+        const st = ledgerByLease.get(Number(l.leaseId));
+        const oldest = st?.dues.find((d) => d.dueDate <= todayStr && d.remaining > 0);
+        // « Echeance en retard » = plus ancienne echeance echue non soldee.
+        if (oldest) l.nextInvoiceDate = oldest.dueDate;
+        else if (!only) l.nextInvoiceDate = null;
+        else if (!l.nextInvoiceDate) l.nextInvoiceDate = todayStr;
+      }
+    }
     let sent = 0;
     let lastSms: { smsStatus: string; smsError: string | null; hasEmail: boolean } | null = null;
     for (const lease of rows) {
+      if (!lease.nextInvoiceDate && !only) continue;
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
       if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
       // Reglages de l'organisation : relance manuelle = toujours envoyee ; automatique = si active,
@@ -168,6 +197,7 @@ export class RentReminderService {
       let smsStatus: "sent" | "failed" | "no_phone" | "skipped" = targets.tenant ? "no_phone" : "skipped";
       let smsError: string | null = null;
       let smsFailures = 0;
+      let smsSkipped = 0;
 
       const daysLate = Math.floor(
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
@@ -175,12 +205,15 @@ export class RentReminderService {
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
       // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), identique
       // dans les SMS locataire / contact / proprietaire / delegue.
-      const totalDue = await loadLeaseTotalDue(
-        this.db,
-        Number(lease.organizationId),
-        { ...lease, id: Number(lease.leaseId) },
-        lease.currencySymbol,
-      );
+      const ledger = ledgerByLease.get(Number(lease.leaseId));
+      const totalDue = ledger
+        ? { value: ledger.totalDue, text: formatMoneyFr(ledger.totalDue, lease.currencySymbol) }
+        : await loadLeaseTotalDue(
+          this.db,
+          Number(lease.organizationId),
+          { ...lease, id: Number(lease.leaseId) },
+          lease.currencySymbol,
+        );
       const amount = totalDue.text;
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
@@ -241,7 +274,9 @@ export class RentReminderService {
                 : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, lease.organizationId),
             );
             const err = await this.safeSms(r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel);
-            if (err) {
+            if (err === SMS_SKIPPED) {
+              smsSkipped += 1;
+            } else if (err) {
               smsFailures += 1;
               smsError = smsError ?? err;
             } else {
@@ -265,6 +300,7 @@ export class RentReminderService {
       if (targets.tenant) {
         if (sentCount > 0) smsStatus = "sent";
         else if (smsFailures > 0) smsStatus = "failed";
+        else if (smsSkipped > 0) smsStatus = "skipped";
       }
 
       if (targets.emergency && lease.emergencyPhone) {
@@ -511,6 +547,7 @@ export class RentReminderService {
         ...related,
       });
       if (!res?.success) {
+        if ((res as any)?.skipped) return SMS_SKIPPED;
         this.logger.warn(`Reminder SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
         return res?.message || "SMS non envoye";
       }

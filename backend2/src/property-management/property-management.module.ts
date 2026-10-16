@@ -13,6 +13,7 @@ import { ContractTemplatesService } from "./contract-templates.service";
 import { ContractsPublicController } from "./contracts-public.controller";
 import { ContractsService } from "./contracts.service";
 import { InspectionsService } from "./inspections.service";
+import { LeaseAllocationService } from "./lease-allocation.service";
 import { PropertyManagementController } from "./property-management.controller";
 import { PropertyManagementPublicController } from "./property-management-public.controller";
 import { PropertyManagementService } from "./property-management.service";
@@ -50,6 +51,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
   ],
   providers: [
     PropertyManagementService,
+    LeaseAllocationService,
     ObjectStorageService,
     ContractsService,
     InspectionsService,

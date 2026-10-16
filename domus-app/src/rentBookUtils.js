@@ -125,6 +125,10 @@ export function amountToWordsFr(amount, currencySymbol = "CDF") {
 // à la main au moment du paiement), fusionnés avec les paiements réels
 // quand ils existent pour ce mois. ──────────────────────────────────────
 export function buildFullRentSchedule(lease, payments) {
+  // Bail flagge « 1 mois = 1 echeance » : une ligne par echeance, avec ses paiements lies.
+  if (lease?.allocationLedger === true && Array.isArray(lease.dues) && lease.dues.length) {
+    return buildDuesRentSchedule(lease, payments);
+  }
   // Loyer au prorata (opt-in) : le backend fournit l'échéancier exact
   // (dates, périodes, montants). Sans option ou sans échéancier -> calcul
   // historique ci-dessous, inchangé.
@@ -229,6 +233,40 @@ export function assignPaymentsToMonths(keys, payments, rent) {
 }
 
 const day10 = (v) => String(v || "").slice(0, 10);
+
+// Une ligne par echeance (dues) : soldee -> « paid » (date/moyen du dernier paiement lie),
+// sinon « pending » ; linkedPayments = [{ payment, amount }] pour le detail imprime.
+export function buildDuesRentSchedule(lease, payments) {
+  const byId = new Map((payments || []).map((p) => [String(p.id), p]));
+  return lease.dues
+    .filter((d) => d && d.status !== false && d.dueStatus !== "voided" && d.periodStart)
+    .slice()
+    .sort((a, b) => day10(a.periodStart).localeCompare(day10(b.periodStart)))
+    .map((d) => {
+      const linked = (d.allocations || [])
+        .map((a) => ({ payment: byId.get(String(a.paymentId)), amount: Number(a.amount) || 0 }))
+        .filter((x) => x.payment)
+        .sort((a, b) => String(a.payment.paymentDate || "").localeCompare(String(b.payment.paymentDate || "")));
+      const last = linked.length ? linked[linked.length - 1].payment : null;
+      const remaining = Number(d.remaining ?? (Number(d.amount || 0) - Number(d.amountPaid || 0)));
+      const settled = d.dueStatus === "paid" || remaining <= 0.005;
+      return {
+        ...(settled && last ? last : {}),
+        id: settled && last ? last.id : null,
+        rentMonth: day10(d.periodStart).slice(0, 7),
+        periodStart: d.periodStart,
+        periodEnd: d.periodEnd,
+        amount: Number(d.amount) || 0,
+        currencySymbol: last?.currencySymbol || lease.currencySymbol || "CDF",
+        status: settled ? "paid" : "pending",
+        paymentDate: settled && last ? last.paymentDate : d.periodStart,
+        method: settled && last ? last.method : null,
+        receivedBy: settled && last ? last.receivedBy : null,
+        linkedPayments: linked,
+        remaining: settled ? 0 : remaining,
+      };
+    });
+}
 
 function buildProratedRentSchedule(lease, payments) {
   const byStart = new Map();
@@ -470,6 +508,12 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const receiptQr = receiptQrDataUrl
     ? `<div class="receipt-qr"><img src="${receiptQrDataUrl}" width="90" height="90" alt="QR photo quittance" /><span>Scanner pour<br/>envoyer la photo<br/>de cette quittance</span></div>`
     : "";
+  // Bail flagge : paiements imputes sur cette echeance (date, moyen, montant) + reste eventuel.
+  const linkedRows = Array.isArray(payment.linkedPayments) && payment.linkedPayments.length
+    ? `<div class="receipt-row"><div><span>Paiements liés</span><span>${payment.linkedPayments
+      .map((x) => escapeHtml(`${fmtDateShort(x.payment.paymentDate)} · ${x.payment.method || "—"} · ${moneyAfter(x.amount, payment.currencySymbol || "CDF")}`))
+      .join("<br/>")}</span></div>${payment.remaining > 0.005 ? `<div><span>Reste dû</span><span>${escapeHtml(moneyAfter(payment.remaining, payment.currencySymbol || "CDF"))}</span></div>` : "<div></div>"}</div>`
+    : "";
   return `
   <div class="receipt-wrap${index % 2 === 1 ? " page-end" : ""}">
   <div class="receipt">
@@ -486,6 +530,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
       ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div><div><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div></div>`
       : `<div class="receipt-row"><div><span>Moyen de paiement</span><span>........................................</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
     }
+    ${linkedRows}
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
       <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
