@@ -3,6 +3,8 @@ import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
+import { BatiproPhoneField } from "./components/PhoneField.jsx";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 /* ────────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — pas de dépendance externe.
@@ -261,7 +263,7 @@ function App() {
           {apiStatus === "loading" && <div className="card pad" style={{ marginBottom: 16 }}><span className="muted">Connexion au serveur…</span></div>}
           {apiStatus === "error" && <div className="inline-error">Impossible de contacter le serveur BâtiPro. Vérifiez votre connexion, puis réessayez.</div>}
           {apiStatus === "api" && (openProject
-            ? <ProjectDetail project={openProject} onBack={() => setOpenProjectId(null)} canMutate={canMutate} projects={projectRows} tasks={taskRows} materials={materialRows} />
+            ? <ProjectDetail project={openProject} onBack={() => setOpenProjectId(null)} canMutate={canMutate} projects={projectRows} tasks={taskRows} materials={materialRows} onEdit={(project) => setModal({ kind: "project", project })} />
             : views[route])}
         </div>
       </main>
@@ -510,7 +512,7 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
           <div className="card pad" key={p.id} onClick={() => onOpen?.(p.id)} style={{ cursor: "pointer" }}>
             <div className="proj-card-head">
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-            </div>
+              {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="SMS automatiques au propriétaire actifs"><Icon name="bell" /> SMS propriétaire</span>}</div>
             <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 10 }}>{p.client} · {p.location}</div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>
@@ -572,7 +574,7 @@ const PROJECT_TABS = [
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
 ];
-function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials }) {
+function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials, onEdit }) {
   const [tab, setTab] = React.useState("apercu");
   const p = project;
   const [budget, setBudget] = React.useState(null);
@@ -592,7 +594,11 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials 
             <h2 className="title font-display">{p.name}</h2>
           </div>
         </div>
-        <span className="chip amber">{n(p.progress)} % avancé</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
+          <span className="chip amber">{n(p.progress)} % avancé</span>
+          {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
+        </div>
       </div>
 
       <div className="selected-banner grad-amber">
@@ -4564,17 +4570,30 @@ function payloadFor(kind, form) {
     return {
       code: form.code || `BAT-${Date.now()}`, name: form.name, client: form.client || null, manager: form.manager || null,
       status: form.status || "Planifie", budget: n(form.budget), spent: n(form.spent),
-      currency_id: form.currency_id ? Number(form.currency_id) : null,
+      // En edition, la devise d'un chantier existant n'est jamais renvoyee (documents deja emis).
+      ...(form.id && form.currency_id ? {} : { currency_id: form.currency_id ? Number(form.currency_id) : null }),
       contract_amount: n(form.contractAmount), billed_amount: n(form.billedAmount),
       due_date: form.dueDate || form.due || null, location: form.location || null, risk: form.risk || "Faible",
+      owner_phone: form.ownerPhone || null,
+      owner_sms_enabled: form.ownerPhone && form.ownerSmsEnabled ? 1 : 0,
     };
   }
   return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null, supplier_id: form.supplier_id ? Number(form.supplier_id) : null };
 }
 function RecordModal({ modal, busy, error, onClose, onSave }) {
   const { kind } = modal;
+  const editing = kind === "project" ? modal.project : null;
   const [form, setForm] = React.useState(() => (kind === "project"
-    ? { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0 }
+    ? (editing
+      ? {
+        id: editing.id, code: editing.code, name: editing.name || "", client: editing.client || "", manager: editing.manager || "",
+        status: editing.status || "Planifie", risk: editing.risk || "Faible", progress: editing.progress || 0,
+        budget: editing.budget ?? 0, spent: editing.spent ?? 0, currency_id: editing.currencyId || null,
+        contractAmount: editing.contractAmount ?? 0, billedAmount: editing.billedAmount ?? 0,
+        dueDate: editing.dueDate ? String(editing.dueDate).slice(0, 10) : "", location: editing.location || "",
+        ownerPhone: editing.ownerPhone || "", ownerSmsEnabled: Number(editing.ownerSmsEnabled) === 1,
+      }
+      : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false })
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const [suppliers, setSuppliers] = React.useState([]);
@@ -4594,11 +4613,12 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
     }).catch(() => setCurrencies([]));
   }, [kind]);
   const canSave = Boolean(form.name);
+  const phoneInvalid = kind === "project" && Boolean(form.ownerPhone) && !isValidPhoneNumber(form.ownerPhone);
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
-      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(kind, form); }}>
+      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); if (phoneInvalid) return; onSave(kind, form); }}>
         <div className="modal-head">
-          <div><h2 className="font-display">{kind === "project" ? "Nouveau chantier" : "Nouveau matériau"}</h2><p>BâtiPro Construction</p></div>
+          <div><h2 className="font-display">{kind === "project" ? (editing ? "Modifier le chantier" : "Nouveau chantier") : "Nouveau matériau"}</h2><p>BâtiPro Construction</p></div>
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div className="form-grid">
@@ -4610,11 +4630,22 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Lieu" value={form.location || ""} onChange={(v) => set("location", v)} />
               <label className="field">
                 <span>Devise</span>
-                <CurrencyPicker value={form.currency_id || ""} onChange={(id) => set("currency_id", id || null)} currencies={currencies} />
+                <CurrencyPicker value={form.currency_id || ""} onChange={(id) => set("currency_id", id || null)} currencies={currencies} disabled={Boolean(editing?.currencyId)} />
               </label>
               <Field label="Budget (coût)" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
               <Field label="Montant contrat (client)" type="number" value={form.contractAmount} onChange={(v) => set("contractAmount", v)} />
               <Field label="Échéance" type="date" value={form.dueDate || ""} onChange={(v) => set("dueDate", v)} />
+              <BatiproPhoneField
+                label="Téléphone du propriétaire"
+                value={form.ownerPhone}
+                error={phoneInvalid ? "Numéro de téléphone invalide pour le pays sélectionné." : ""}
+                onChange={(v) => setForm((c) => ({ ...c, ownerPhone: v, ownerSmsEnabled: v ? c.ownerSmsEnabled : false }))}
+              />
+              <label className={`owner-sms-toggle ${form.ownerPhone ? "" : "disabled"}`}>
+                <input type="checkbox" aria-describedby={form.ownerPhone ? undefined : "owner-sms-hint"} disabled={!form.ownerPhone} checked={Boolean(form.ownerPhone && form.ownerSmsEnabled)} onChange={(e) => set("ownerSmsEnabled", e.target.checked)} />
+                <span>Envoyer des SMS au propriétaire (dépenses, devis, avancement)</span>
+              </label>
+              {!form.ownerPhone && <small id="owner-sms-hint" className="owner-sms-hint">Renseignez un numéro pour activer les SMS.</small>}
             </>
           ) : (
             <>
@@ -4637,10 +4668,10 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
             </>
           )}
         </div>
-        {error && <div className="login-error">{error}</div>}
+        {error && <div className="login-error" role="alert">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-amber grad-amber" disabled={busy || !canSave}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !canSave || phoneInvalid}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
         </div>
       </form>
     </div>

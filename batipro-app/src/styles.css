@@ -319,6 +319,7 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .mob-nav button { background: none; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink-400); font-size: 10px; flex: 1; padding: 6px 0; }
   .mob-nav button .ic { width: 20px; height: 20px; }
   .mob-nav button.active { color: var(--amber-600); }
+  .btn-touch { min-height: 44px; }
 
   .more-sheet { display: block; position: fixed; inset: 0; z-index: 40; }
   .more-scrim { position: absolute; inset: 0; background: rgba(12,8,3,.5); }
@@ -329,3 +330,16 @@ table.bp td .danger-txt { color: var(--rose-600); }
 }
 
 @media (min-width: 961px) { .desk-hidden { display: none !important; } }
+
+/* Champ telephone international (SMS proprietaire) */
+.batipro-phone-field { grid-column: 1 / -1; }
+.batipro-phone-field .PhoneInput { display: flex; align-items: center; gap: 8px; border: 1px solid var(--ink-200); border-radius: 8px; background: transparent; padding: 0 11px; min-height: 40px; }
+.batipro-phone-field .PhoneInput:focus-within { border-color: var(--amber-400); box-shadow: 0 0 0 3px rgba(251,191,36,.18); }
+.batipro-phone-field .field-error { color: var(--rose-600); font-weight: 500; }
+.batipro-phone-field .PhoneInputInput { border: 0 !important; outline: 0; padding: 0 !important; min-height: 38px !important; font-size: 13px; background: transparent; width: 100%; min-width: 0; color: var(--ink-900); }
+.batipro-phone-field .PhoneInputCountry { margin: 0; min-width: 44px; min-height: 44px; justify-content: center; }
+.batipro-phone-field .PhoneInputCountryIcon { width: 26px; height: 19px; border-radius: 2px; }
+.owner-sms-toggle { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-600); grid-column: 1 / -1; min-height: 44px; align-items: center; cursor: pointer; }
+.owner-sms-hint { grid-column: 1 / -1; font-size: 12px; color: var(--ink-500); margin-top: -6px; }
+.owner-sms-toggle input { width: 18px; height: 18px; min-height: 0; margin-top: 1px; flex: none; }
+.owner-sms-toggle.disabled { opacity: .55; cursor: not-allowed; }

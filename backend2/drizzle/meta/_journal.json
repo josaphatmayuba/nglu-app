@@ -2017,6 +2017,13 @@
       "when": 1781503200000,
       "tag": "0312_real_estate_contract_signers",
       "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "5",
+      "when": 1781589600000,
+      "tag": "0313_batipro_project_owner_sms",
+      "breakpoints": true
     }
   ]
 }

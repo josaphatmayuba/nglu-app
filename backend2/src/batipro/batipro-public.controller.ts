@@ -25,6 +25,7 @@ export class BatiproPublicController {
 
   @ApiOperation({ summary: "Soumettre un document (public — token opaque)" })
   @ApiParam({ name: "token", type: String })
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post(":token")
   submit(@Param("token") token: string, @Body() body: SubmitSubcontractorDocumentDto) {
     return this.batipro.submitSubcontractorDocument(token, body);
