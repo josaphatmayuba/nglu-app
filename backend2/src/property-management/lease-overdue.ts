@@ -15,6 +15,7 @@ import {
 } from "./lease-schedule";
 import {
   computeLeaseNextDue,
+  computeLeaseTotalDue,
   computeProratedOverdueStats,
   scheduleForLease,
   type LeaseNextDue,
@@ -263,4 +264,52 @@ export function paymentOverdueFields(
     isOverdue: isPastGrace(paymentDate, today, graceDays),
     daysPastDue: daysSince(paymentDate, today),
   };
+}
+
+/** Format monetaire unique des SMS : separateur de milliers, decimales si non entier, devise de la DB. */
+export function formatMoneyFr(amount: unknown, symbol?: string | null): string {
+  const n = Number(amount ?? 0);
+  const formatted = Number.isFinite(n)
+    ? n.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
+    : String(amount ?? "");
+  return symbol ? `${formatted} ${symbol}` : formatted;
+}
+
+/**
+ * Total du (= « Reste a payer » de la carte Loyers) d'un bail a la date du jour,
+ * pret pour {amount} : « 4 645,16 $ ». Charge les paiements regles.
+ */
+export async function loadLeaseTotalDue(
+  db: Database,
+  orgId: number,
+  lease: LeaseForOverdue,
+  currencySymbol?: string | null,
+  now: Date = new Date(),
+): Promise<{ value: number; text: string }> {
+  const rows = await db
+    .select({ amount: realEstateRentPayments.amount })
+    .from(realEstateRentPayments)
+    .where(and(
+      eq(realEstateRentPayments.leaseId, lease.id),
+      eq(realEstateRentPayments.organizationId, orgId),
+      eq(realEstateRentPayments.status, "paid"),
+    ));
+  const paidTotal = (rows as Array<{ amount: unknown }>).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  let decimals = 2;
+  if (lease.rentProrationEnabled) {
+    const dec = lease.currencyDecimals == null ? NaN : Number(lease.currencyDecimals);
+    if (Number.isInteger(dec) && dec >= 0 && dec <= 6) {
+      decimals = dec;
+    } else if (lease.currencyId) {
+      const [c] = await db
+        .select({ d: currencies.decimalPlaces })
+        .from(currencies)
+        .where(eq(currencies.id, Number(lease.currencyId)))
+        .limit(1);
+      const d = c?.d == null ? NaN : Number(c.d);
+      if (Number.isInteger(d) && d >= 0 && d <= 6) decimals = d;
+    }
+  }
+  const value = computeLeaseTotalDue(lease, paidTotal, decimals, now);
+  return { value, text: formatMoneyFr(value, currencySymbol) };
 }

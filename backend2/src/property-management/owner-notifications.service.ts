@@ -41,6 +41,7 @@ import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { normalizePhoneKey } from "./notification-utils";
+import { formatMoneyFr, loadLeaseTotalDue } from "./lease-overdue";
 
 /**
  * Proprietaire a notifier. `propertyId` n'est renseigne que lorsque la
@@ -149,7 +150,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "payment_reminder",
       subject: "Rappel : loyer en retard — bail {reference}",
       body:
-        "Bonjour {tenantName}, votre loyer de {amount} (bail {reference}) a {lateLabel} de retard. " +
+        "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. " +
         "Merci de regulariser rapidement. Contact : {contacts}",
     },
     {
@@ -157,7 +158,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "payment_reminder_contact",
       subject: "Loyer en retard de {tenantName}",
       body:
-        "Bonjour, {tenantName} a {lateLabel} de retard de loyer ({amount}). " +
+        "Bonjour, {tenantName} a {lateLabel} de retard de loyer. Montant du : {amount}. " +
         "Merci de l'inviter a regulariser : {contacts}",
     },
     {
@@ -261,8 +262,8 @@ export class OwnerNotificationsService implements OnModuleInit {
     lease_created: "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
     contract_signed: "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). Pour toute question, contactez {contacts}. — {companyName}",
     payment_received: "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
-    payment_reminder: "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}), d'un montant de {amount}, est en retard de {lateLabel}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
-    payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} ({amount}) est en retard de {lateLabel}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
+    payment_reminder: "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}) est en retard de {lateLabel}. Montant du : {amount}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
+    payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
     default_notice: "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
     default_notice_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de paiement sera depose. Merci de l'inviter a contacter {contacts}.",
     tenant_created_owner: "Nouveau dossier locataire : {tenantName} ({tenantPhone}). {profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. {occupants} occupants. Contact : {emergencyContact}.",
@@ -979,9 +980,7 @@ export class OwnerNotificationsService implements OnModuleInit {
   }
 
   private money(amount: unknown, code?: string | null) {
-    const n = Number(amount ?? 0);
-    const formatted = Number.isFinite(n) ? n.toLocaleString("fr-FR") : String(amount ?? "");
-    return code ? `${formatted} ${code}` : formatted;
+    return formatMoneyFr(amount, code);
   }
 
   // ── 1. Dossier locataire cree sur un bien du proprietaire ────────────────
@@ -1389,6 +1388,12 @@ export class OwnerNotificationsService implements OnModuleInit {
           reference: realEstateLeases.reference,
           tenantId: realEstateLeases.tenantId,
           rentAmount: realEstateLeases.rentAmount,
+          startDate: realEstateLeases.startDate,
+          endDate: realEstateLeases.endDate,
+          billingCycle: realEstateLeases.billingCycle,
+          currencyId: realEstateLeases.currencyId,
+          rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+          nextInvoiceDate: realEstateLeases.nextInvoiceDate,
           currencySymbol: currencies.currencySymbol,
           propertyName: realEstateProperties.name,
           propertyAddress: realEstateProperties.address,
@@ -1416,6 +1421,9 @@ export class OwnerNotificationsService implements OnModuleInit {
         propertyId,
       );
 
+      // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), comme le SMS locataire.
+      const totalDue = await loadLeaseTotalDue(this.db, orgId, lease, lease.currencySymbol);
+
       const vars = {
         ownerName: owner.name,
         tenantName: await this.ownerTenantLabel(leaseId, orgId, this.civilName(lease.tenantSex, lease.tenantFirstName, lease.tenantLastName)),
@@ -1426,7 +1434,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           .join(", "),
         unit: lease.unitName || "",
         property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
-        amount: this.money(lease.rentAmount, lease.currencySymbol),
+        amount: totalDue.text,
         daysLate: String(daysLate),
         url,
       };

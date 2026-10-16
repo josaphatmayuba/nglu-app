@@ -103,10 +103,11 @@ import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { loadOverdueByLease, readOverdueGraceDays } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
+  computeLeaseTotalDue,
   planProrationRealign,
   scheduleForLease,
   occupiedMonthKeys,
@@ -4320,6 +4321,12 @@ export class PropertyManagementService {
         propertyId: realEstateLeases.propertyId,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
+        startDate: realEstateLeases.startDate,
+        endDate: realEstateLeases.endDate,
+        billingCycle: realEstateLeases.billingCycle,
+        currencyId: realEstateLeases.currencyId,
+        rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         currencySymbol: currencies.currencySymbol,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
@@ -4339,8 +4346,8 @@ export class PropertyManagementService {
       .filter((r) => r.email);
     if (!recipients.length) throw new BadRequestException("Email du locataire introuvable.");
     const multi = recipients.length > 1;
-    // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
-    const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
+    // {amount} = TOTAL DU avec devise (ex. « 4 645,16 $ ») — comme le rappel automatique.
+    const rentDisplay = (await loadLeaseTotalDue(this.db, orgId, { ...lease, id: lease.leaseId }, lease.currencySymbol)).text;
     // Le locataire est renvoyé vers les personnes en charge de SON immeuble
     // (propriétaire + gestionnaire assigné), comme le rappel automatique, et non
     // vers un « nous » anonyme. Repli sur le contact société si aucun des deux
@@ -4505,7 +4512,7 @@ export class PropertyManagementService {
     );
     const monthsDue = elapsedPast + 1;
     let monthsBehind = Math.max(0, monthsDue - monthsCovered);
-    let balance = Math.max(0, Math.round((monthsDue * rent - totalPaid) * 100) / 100);
+    let balance = computeLeaseTotalDue(lease as any, totalPaid, 2, now);
     let nextDueForLate: string | null = lease.nextInvoiceDate;
     if ((lease as any).rentProrationEnabled) {
       // Prorata opt-in : solde et retard par montants dus de periode.
@@ -4515,7 +4522,7 @@ export class PropertyManagementService {
       const cov = applyCoverage(schedule, [totalPaid], todayStr, decimals);
       const dueCount = schedule.filter((p) => p.dueDate <= todayStr).length;
       monthsBehind = Math.max(0, dueCount - Math.min(cov.coveredCount, dueCount));
-      balance = cov.balance;
+      balance = computeLeaseTotalDue(lease as any, totalPaid, decimals, now);
       nextDueForLate = cov.nextDueDate;
     }
 
@@ -4547,8 +4554,8 @@ export class PropertyManagementService {
       property: place,
       // totalDebt = dette TOTALE (loyers dus - verses) ; amount = meme valeur (ancien nom) ;
       // rentAmount = loyer MENSUEL.
-      amount: `${balance}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`,
-      totalDebt: `${balance}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`,
+      amount: formatMoneyFr(balance, lease.currencySymbol),
+      totalDebt: formatMoneyFr(balance, lease.currencySymbol),
       rentAmount: `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim(),
       monthsBehind: String(monthsBehind),
       daysLate: String(daysLate),
