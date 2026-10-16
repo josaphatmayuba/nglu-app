@@ -69,6 +69,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  TerminateLeaseDto,
   CreateTenantDto,
   UpdateTenantDto,
   CreateUnitDto,
@@ -119,6 +120,7 @@ const paymentUnit = alias(realEstateUnits, "paymentUnit");
 const maintenanceProperty = alias(realEstateProperties, "maintenanceProperty");
 const maintenanceUnit = alias(realEstateUnits, "maintenanceUnit");
 const maintenanceAssignee = alias(users, "maintenanceAssignee");
+const leaseTerminator = alias(users, "leaseTerminator");
 const unitCurrency = alias(currencies, "unitCurrency");
 
 type WelcomeLease = {
@@ -2313,6 +2315,266 @@ export class PropertyManagementService {
     return { message: "Lease deleted successfully." };
   }
 
+  // ─── Resiliation de bail avec motif ───────────────────────────────────────────
+  // Distincte de deleteLease (statut "cancelled", bail masque) : le bail reste
+  // visible en statut "ended" avec termination_date / reason / terminated_at / by.
+
+  private terminationDay(value: unknown): string {
+    const day = String(value ?? "").slice(0, 10);
+    const parsed = new Date(`${day}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== day) {
+      throw new BadRequestException("Date de resiliation invalide (AAAA-MM-JJ).");
+    }
+    return day;
+  }
+
+  /** Echeances non encaissees du bail (pending/overdue, sans transaction) ; periode = period_start sinon payment_date. */
+  private async terminationDueRows(db: any, leaseId: number, orgId: number) {
+    const rows: Array<{ id: number; amount: any; periodDay: any }> = await db
+      .select({
+        id: realEstateRentPayments.id,
+        amount: realEstateRentPayments.amount,
+        periodDay: sql<string>`COALESCE(${realEstateRentPayments.periodStart}, ${realEstateRentPayments.paymentDate})`,
+      })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, leaseId),
+        inArray(realEstateRentPayments.status, ["pending", "overdue"]),
+        isNull(realEstateRentPayments.transactionId),
+      ));
+    return rows.map((r) => ({ id: Number(r.id), periodDay: String(r.periodDay).slice(0, 10), total: Number(r.amount) || 0 }));
+  }
+
+  // Recapitulatif SANS ecriture pour la modale de resiliation.
+  async terminationPreview(leaseId: number, date: string, orgId: number, propertyScope: "all" | number[] = "all") {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const day = this.terminationDay(date);
+    const rows = await this.terminationDueRows(this.db, leaseId, orgId);
+    const future = rows.filter((r) => r.periodDay > day);
+    const unpaid = rows.filter((r) => r.periodDay <= day);
+    const sum = (list: Array<{ total: number }>) => Math.round(list.reduce((a, r) => a + r.total, 0) * 100) / 100;
+
+    const [cur] = lease.currencyId
+      ? await this.db
+          .select({ symbol: currencies.currencySymbol, name: currencies.currencyName, code: currencies.currencyCode })
+          .from(currencies)
+          .where(eq(currencies.id, Number(lease.currencyId)))
+          .limit(1)
+      : [];
+    const [dep] = await this.db
+      .select({
+        id: realEstateSecurityDeposits.id,
+        amount: realEstateSecurityDeposits.amount,
+        symbol: currencies.currencySymbol,
+        code: currencies.currencyCode,
+      })
+      .from(realEstateSecurityDeposits)
+      .leftJoin(currencies, eq(currencies.id, realEstateSecurityDeposits.currencyId))
+      .where(and(
+        eq(realEstateSecurityDeposits.leaseId, leaseId),
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .orderBy(desc(realEstateSecurityDeposits.id))
+      .limit(1);
+
+    return {
+      leaseId,
+      status: lease.status,
+      startDate: lease.startDate,
+      terminationDate: day,
+      currency: { symbol: cur?.symbol ?? null, name: cur?.name ?? null, code: cur?.code ?? null },
+      futureCount: future.length,
+      futureTotal: sum(future),
+      unpaidCount: unpaid.length,
+      unpaidTotal: sum(unpaid),
+      deposit: dep
+        ? { id: Number(dep.id), amount: Number(dep.amount) || 0, currencySymbol: dep.symbol ?? cur?.symbol ?? null, currencyCode: dep.code ?? cur?.code ?? null }
+        : null,
+      sms: await this.terminationSmsPreview(leaseId, day, orgId),
+    };
+  }
+
+  async terminateLease(
+    id: number,
+    input: TerminateLeaseDto,
+    orgId: number,
+    userId?: number,
+    propertyScope: "all" | number[] = "all",
+  ) {
+    const reason = String(input?.reason ?? "").trim();
+    if (reason.length < 5 || reason.length > 2000) {
+      throw new BadRequestException("Le motif de resiliation est obligatoire (5 a 2000 caracteres).");
+    }
+    const lease = await this.getLeaseOrThrow(id, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    if (lease.status !== "active") {
+      throw new BadRequestException("Seul un bail actif peut etre resilie.");
+    }
+    const day = this.terminationDay(input.terminationDate);
+    if (day > this.formatDateOnly(new Date())) {
+      throw new BadRequestException("La date de resiliation ne peut pas etre dans le futur.");
+    }
+    if (day < String(lease.startDate).slice(0, 10)) {
+      throw new BadRequestException("La date de resiliation ne peut pas preceder le debut du bail.");
+    }
+    const currentEnd = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
+    const newEnd = currentEnd && currentEnd <= day ? currentEnd : day;
+
+    let voidedCount = 0;
+    let voidedTotal = 0;
+    await this.db.transaction(async (tx) => {
+      const res: any = await tx
+        .update(realEstateLeases)
+        .set({
+          status: "ended",
+          endDate: newEnd,
+          terminationDate: day,
+          terminationReason: reason,
+          terminatedAt: sql`CURRENT_TIMESTAMP`,
+          terminatedBy: userId ?? null,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(
+          eq(realEstateLeases.id, id),
+          eq(realEstateLeases.organizationId, orgId),
+          eq(realEstateLeases.status, "active"),
+        ));
+      if (Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) === 0) {
+        throw new BadRequestException("Seul un bail actif peut etre resilie.");
+      }
+
+      // Echeances a venir : soft void, jamais une echeance payee.
+      const future = (await this.terminationDueRows(tx, id, orgId)).filter((r) => r.periodDay > day);
+      if (future.length) {
+        await tx
+          .update(realEstateRentPayments)
+          .set({
+            status: "voided",
+            notes: sql`TRIM(CONCAT(COALESCE(${realEstateRentPayments.notes}, ''), ${` [ANNULE: bail resilie le ${day}]`}))`,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          })
+          .where(and(
+            eq(realEstateRentPayments.organizationId, orgId),
+            eq(realEstateRentPayments.leaseId, id),
+            inArray(realEstateRentPayments.id, future.map((r) => r.id)),
+            inArray(realEstateRentPayments.status, ["pending", "overdue"]),
+          ));
+        voidedCount = future.length;
+        voidedTotal = Math.round(future.reduce((a, r) => a + r.total, 0) * 100) / 100;
+      }
+
+      // Unite vacante, sauf si un autre bail actif l'occupe encore.
+      const others = await tx
+        .select({ id: realEstateLeases.id })
+        .from(realEstateLeases)
+        .where(and(
+          eq(realEstateLeases.organizationId, orgId),
+          eq(realEstateLeases.unitId, lease.unitId),
+          eq(realEstateLeases.status, "active"),
+          ne(realEstateLeases.id, id),
+        ))
+        .limit(1);
+      if (!others.length) {
+        await tx
+          .update(realEstateUnits)
+          .set({ status: "vacant", updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(and(eq(realEstateUnits.id, lease.unitId), eq(realEstateUnits.organizationId, orgId)));
+      }
+    });
+
+    try {
+      await this.publishLeaseUpdate("updated", id, { propertyId: lease.propertyId, unitId: lease.unitId });
+    } catch (error) {
+      this.logger.warn(`Lease termination publish failed (lease ${id}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // SMS best-effort : n'echoue jamais la resiliation, ne contient jamais le motif.
+    const sms = input.notifyTenant
+      ? await this.notifyLeaseTerminated(id, day, orgId)
+      : { requested: false, sent: 0, failed: 0 };
+
+    return { lease: await this.findLease(id, orgId), voidedCount, voidedTotal, sms };
+  }
+
+  /** Destinataires + variables du SMS de resiliation (principal + colocataires, numero partage = 1 envoi). */
+  private async terminationSmsContext(leaseId: number, day: string, orgId: number) {
+    const lease: any = await this.findLease(leaseId, orgId);
+    const recipients = (await this.ownerNotifications.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+    const contacts = await this.ownerNotifications.propertyContactVars(
+      lease.propertyId ? Number(lease.propertyId) : null,
+      orgId,
+    );
+    const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const [y, m, d] = day.split("-");
+    const vars = {
+      tenantName,
+      firstName: lease.tenantFirstName || tenantName,
+      reference: lease.reference || String(leaseId),
+      address: lease.propertyAddress || lease.propertyName || "",
+      property: lease.propertyName || "",
+      unit: lease.unitName || "",
+      terminationDate: `${d}/${m}/${y}`,
+      ownerContact: contacts.ownerContact,
+      managerContact: contacts.managerContact,
+      contacts: contacts.contacts,
+      url: "",
+    };
+    const render = (r: { customerId: number; name: string; firstName: string }) =>
+      this.ownerNotifications.renderMessage(
+        "lease_terminated",
+        "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
+          "Pour toute question, contactez votre gestionnaire {managerContact}.",
+        { ...vars, tenantName: r.name || tenantName, firstName: r.firstName || r.name || tenantName },
+        { tenantId: r.customerId },
+      );
+    return { recipients, render };
+  }
+
+  // Apercu du SMS (texte rendu pour le 1er locataire joignable) pour la modale.
+  private async terminationSmsPreview(leaseId: number, day: string, orgId: number) {
+    try {
+      const { recipients, render } = await this.terminationSmsContext(leaseId, day, orgId);
+      const reachable = recipients.filter((r) => r.phone);
+      const first = reachable[0] ?? recipients[0];
+      return { recipientCount: reachable.length, message: first ? await render(first) : "" };
+    } catch (error) {
+      this.logger.warn(`Lease termination SMS preview failed (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`);
+      return { recipientCount: 0, message: "" };
+    }
+  }
+
+  private async notifyLeaseTerminated(leaseId: number, day: string, orgId: number) {
+    const out = { requested: true, sent: 0, failed: 0 };
+    try {
+      const { recipients, render } = await this.terminationSmsContext(leaseId, day, orgId);
+      for (const r of recipients) {
+        if (!r.phone) continue;
+        try {
+          const res = await this.sms.sendSms({
+            phone: r.phone,
+            message: await render(r),
+            organizationId: orgId,
+            smsType: "lease_terminated",
+            relatedType: "real-estate-lease",
+            relatedId: leaseId,
+          });
+          if (res?.success) out.sent += 1;
+          else out.failed += 1;
+        } catch (error) {
+          out.failed += 1;
+          this.logger.warn(`Lease termination SMS failed (lease ${leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Lease termination SMS skipped (lease ${leaseId}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return out;
+  }
+
   async payments(orgId: number, propertyScope: "all" | number[] = "all") {
     const rows = await this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
     return rows.map((r) => this.decoratePaymentRow(r));
@@ -2559,6 +2821,8 @@ export class PropertyManagementService {
   // (upToEnd=false) inchangé pour l'appel API existant (baux rétroactifs).
   async generateMissingPayments(leaseId: number, orgId: number, upToEnd = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    // Bail resilie : aucune echeance apres la date d'effet.
+    const terminatedOn = this.terminatedOn(lease);
 
     // Prorata opt-in : generation par periode de l'echeancier (branche dediee,
     // le calcul historique ci-dessous reste strictement inchange).
@@ -2639,6 +2903,11 @@ export class PropertyManagementService {
 
     const created: number[] = [];
     for (const month of monthsToCreate) {
+      if (terminatedOn) {
+        const key = this.formatDateOnly(month).slice(0, 7);
+        const tKey = terminatedOn.slice(0, 7);
+        if (key > tKey || (key === tKey && start.getUTCDate() > Number(terminatedOn.slice(8, 10)))) continue;
+      }
       const [result] = await this.db.insert(realEstateRentPayments).values({
         organizationId: orgId,
         leaseId: lease.id,
@@ -2677,6 +2946,11 @@ export class PropertyManagementService {
     const d = row?.d == null ? NaN : Number(row.d);
     // Plafonne a 2 : les colonnes montant sont decimal(..., 2).
     return Number.isInteger(d) && d >= 0 ? Math.min(d, 2) : 2;
+  }
+
+  /** Date d'effet de resiliation (YYYY-MM-DD) d'un bail resilie, sinon null. */
+  private terminatedOn(lease: { status?: string | null; terminationDate?: unknown }): string | null {
+    return lease.status === "ended" && lease.terminationDate ? String(lease.terminationDate).slice(0, 10) : null;
   }
 
   /** nextInvoiceDate d'un bail au prorata : absente -> startDate ; anterieure a startDate -> startDate. */
@@ -2737,7 +3011,9 @@ export class PropertyManagementService {
     const horizonEnd = upToEnd
       ? (lease.endDate ? null : this.formatDateOnly(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 12, 0))))
       : todayStr;
-    const schedule = horizonEnd ? full.filter((p) => p.dueDate <= horizonEnd) : full;
+    const terminatedOn = this.terminatedOn(lease);
+    const schedule = (horizonEnd ? full.filter((p) => p.dueDate <= horizonEnd) : full)
+      .filter((p) => !terminatedOn || p.periodStart <= terminatedOn);
 
     // Idempotence : par periodStart ; repli sur la cle mois YYYY-MM pour les
     // lignes sans period_* (historique ou creees avant l'activation).
@@ -2806,7 +3082,9 @@ export class PropertyManagementService {
       ))
       .orderBy(realEstateRentPayments.paymentDate, realEstateRentPayments.id);
     const paidTotal = rows.filter((r) => r.status === "paid").reduce((s, r) => s + Number(r.amount || 0), 0);
-    const schedule = scheduleForLease(lease as any, decimals, paidTotal, this.formatDateOnly(new Date()), 14);
+    const terminatedOn = this.terminatedOn(lease);
+    const schedule = scheduleForLease(lease as any, decimals, paidTotal, this.formatDateOnly(new Date()), 14)
+      .filter((p) => !terminatedOn || p.periodStart <= terminatedOn);
     const actions = planProrationRealign(schedule, rows as any, decimals);
     return { decimals, rows, schedule, actions };
   }
@@ -4715,7 +4993,7 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  async findLease(id: number, orgId: number) {
+  async findLease(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
     const rows = await this.leaseQuery()
       .where(and(
         ne(realEstateLeases.status, "cancelled"),
@@ -4728,6 +5006,7 @@ export class PropertyManagementService {
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
+    this.ensurePropertyInScope((rows[0] as any).propertyId, propertyScope);
     const [enriched] = await this.attachCoTenants(await this.withOverdueStats(rows, orgId), orgId);
     return enriched;
   }
@@ -6919,6 +7198,12 @@ export class PropertyManagementService {
         // pour afficher la date du dernier preavis notifie sur ce bail.
         defaultNoticeSentAt: realEstateLeases.defaultNoticeSentAt,
         defaultNoticeMonthsBehind: realEstateLeases.defaultNoticeMonthsBehind,
+        // Resiliation avec motif (statut "ended" + ces 4 champs ; null pour une fin normale/renouvellement).
+        terminationDate: realEstateLeases.terminationDate,
+        terminationReason: realEstateLeases.terminationReason,
+        terminatedAt: realEstateLeases.terminatedAt,
+        terminatedBy: realEstateLeases.terminatedBy,
+        terminatedByName: sql<string | null>`NULLIF(TRIM(CONCAT_WS(' ', ${leaseTerminator.firstName}, ${leaseTerminator.lastName})), '')`,
         propertyName: leaseProperty.name,
         propertyAddress: leaseProperty.address,
         unitName: leaseUnit.name,
@@ -6935,7 +7220,8 @@ export class PropertyManagementService {
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
-      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+      .leftJoin(leaseTerminator, eq(leaseTerminator.id, realEstateLeases.terminatedBy));
   }
 
   // Retard historique par bail (badge "Mauvais payeur" cote front) : logique
@@ -6952,13 +7238,26 @@ export class PropertyManagementService {
     const graceDays = await this.overdueGraceDays(orgId);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
     const entries = await loadOverdueByLease(this.db, orgId, graceDays, rows as any[], today);
+    // openDueCount : toutes les echeances pending/overdue non voided (delai de grace inclus), distinct de unpaidCount.
+    const openRows: Array<{ leaseId: number; n: any }> = await this.db
+      .select({ leaseId: realEstateRentPayments.leaseId, n: sql`COUNT(*)` })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        inArray(realEstateRentPayments.leaseId, rows.map((x) => x.id)),
+        inArray(realEstateRentPayments.status, ["pending", "overdue"]),
+      ))
+      .groupBy(realEstateRentPayments.leaseId);
+    const openMap = new Map<number, number>(openRows.map((o) => [Number(o.leaseId), Number(o.n) || 0]));
     return rows.map((row) => {
       const r = row as any;
       const e = entries.get(row.id)!;
+      const openDueCount = openMap.get(Number(row.id)) ?? 0;
       if (e.next) {
         return {
           ...row,
           ...e.stats,
+          openDueCount,
           rentProrationEnabled: true,
           nextDueDate: e.next.nextDueDate,
           nextDueAmount: e.next.nextDueAmount,
@@ -6968,6 +7267,7 @@ export class PropertyManagementService {
       return {
         ...row,
         ...e.stats,
+        openDueCount,
         rentProrationEnabled: false,
         nextDueDate: (r.nextInvoiceDate ?? null) as string | null,
         nextDueAmount: Number(r.rentAmount) || 0,

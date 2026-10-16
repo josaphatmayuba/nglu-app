@@ -223,6 +223,14 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
     },
     {
+      name: "Bail resilie — locataire",
+      eventType: "lease_terminated",
+      subject: "Votre bail est resilie",
+      body:
+        "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
+        "Pour toute question, contactez votre gestionnaire {managerContact}.",
+    },
+    {
       name: "Proprietaire — fin de bail",
       eventType: "lease_expiring_owner",
       subject: "Fin de bail {reference} sur votre bien",
@@ -624,6 +632,8 @@ export class OwnerNotificationsService implements OnModuleInit {
     // "revenu .", "Contact :.") n'ont plus de sens : on les retire. Repete
     // car supprimer un fragment peut en exposer un autre juste avant.
     const orphans = [
+      // Phrase de contact sans gestionnaire ("Pour toute question, contactez votre gestionnaire .")
+      /\s*Pour toute question,?\s*contactez(?:\s+votre\s+gestionnaire)?\s*:?\s*(?=[.]|$)\.?/gi,
       // "<mot d'introduction>" suivi immediatement d'une ponctuation de fin
       /\s*\b(chez|revenu|contact|contactez|contactez-nous|proprietaire|bailleur|appartement|appt|unite|de|a|au|pour|du|avec)\b\s*:?\s*(?=[.,;)]|$)/gi,
       // "Marie a ." / "Marie(e) avec ." -> mention retiree quand le conjoint

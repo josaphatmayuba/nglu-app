@@ -503,6 +503,13 @@ export class BatiproService {
     await this.getProject(input.project_id, orgId);
     await this.getMaterial(input.material_id, orgId);
     if (input.phase_id != null) await this.getPhase(input.phase_id, orgId);
+    // Une sortie ne peut pas depasser le restant (recu - consomme) du chantier.
+    const stock = (await this.materialsWithProjectStock(orgId, input.project_id))
+      .find((m) => Number(m.id) === Number(input.material_id));
+    const remaining = stock ? stock.remaining : 0;
+    if (input.quantity > remaining) {
+      throw new BadRequestException(`Stock insuffisant : ${remaining} ${stock?.unit ?? ""} restant(s)`.replace("  ", " "));
+    }
     const [result] = await this.db.insert(batiproStockMovements).values({
       organizationId: orgId,
       projectId: input.project_id,

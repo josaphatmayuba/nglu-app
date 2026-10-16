@@ -294,6 +294,9 @@ export const api = {
   updateLease: (id, b) => put(`/leases/${id}`, b),
   renewLease: (id, b) => post(`/leases/${id}/renew`, b),
   deleteLease: (id) => del(`/leases/${id}`),
+  // Résiliation avec motif (statut ended) + récapitulatif préalable.
+  terminateLease: (id, b) => post(`/leases/${id}/terminate`, b),
+  terminationPreview: (id, date) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}`),
 
   // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
   leaseDocuments: (id) => get(`/leases/${id}/documents`),

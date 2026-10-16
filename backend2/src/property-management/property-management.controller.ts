@@ -60,6 +60,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  TerminateLeaseDto,
   CreateTenantDto,
   CreateUnitDto,
   GenerateTenantOnboardingDto,
@@ -841,8 +842,12 @@ export class PropertyManagementController {
   @ApiParam({ name: "id", type: Number })
   @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("leases/:id")
-  findLease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.findLease(id, orgId);
+  findLease(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.findLease(id, orgId, scope);
   }
 
   @ApiOperation({ summary: "Rent book (carnet de quittances) data for a lease: lease/tenant/property/unit + all payments" })
@@ -907,6 +912,39 @@ export class PropertyManagementController {
       if (before.join(",") !== after.join(",")) {
         await this.contractsService.resetSignersForLease(id, orgId);
       }
+    }
+    return result;
+  }
+
+  @ApiOperation({ summary: "Resume avant resiliation d'un bail (echeances a annuler, impayes, caution)" })
+  @Permissions("delete-propertyManagement")
+  @Get("leases/:id/termination-preview")
+  terminationPreview(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("date") date: string,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.terminationPreview(id, date, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Resilier un bail avec motif (statut ended, echeances futures annulees)" })
+  @Permissions("delete-propertyManagement")
+  @Post("leases/:id/terminate")
+  @HttpCode(200)
+  async terminateLease(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: TerminateLeaseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    const result = await this.propertyManagementService.terminateLease(id, body, orgId, userId, scope);
+    // Contrat envoye mais pas signe : les liens de signature sont desactives (best-effort).
+    try {
+      await this.contractsService.resetSignersForLease(id, orgId);
+    } catch {
+      /* ne bloque jamais la resiliation */
     }
     return result;
   }

@@ -130,11 +130,18 @@ function groupByTenant(rows) {
 // Construit une carte par bail actif, enrichie des paiements de ce bail.
 // status : "late" (un mois PASSÉ impayé) · "pending" (mois courant impayé,
 // en attente) · "ok" (à jour).
+// Bail suivi dans Loyers : actif, ou RÉSILIÉ (ended + motif) tant qu'il reste des impayés à recouvrer.
+// Les baux « cancelled » et les fins de bail normales (renouvellement) restent exclus.
+const isRentTracked = (l) =>
+  (l.status || "active") === "active" ||
+  (l.status === "ended" && Boolean(l.terminationReason) &&
+    Number(l.openDueCount ?? l.unpaidCount) > 0);
+
 export function buildLeaseCards(leases, payments) {
   const now = new Date();
   const thisM = new Date(now.getFullYear(), now.getMonth(), 1);
   return leases
-    .filter((l) => (l.status || "active") === "active")
+    .filter(isRentTracked)
     .map((l) => {
       const list = payments.filter((p) => String(p.leaseId) === String(l.id));
       // Seules les échéances réellement réglées comptent pour la couverture/frise ;
@@ -1517,7 +1524,7 @@ export function Paiement({ go }) {
   useRealtimeReload(reload, ["leases", "payments"]);
   const leases = data?.leases;
   const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
-  const active = (Array.isArray(leases) ? leases : []).filter((l) => (l.status || "active") === "active");
+  const active = (Array.isArray(leases) ? leases : []).filter(isRentTracked);
 
   const [step, setStep] = useState(() => {
     try {

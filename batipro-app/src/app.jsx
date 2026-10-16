@@ -3817,7 +3817,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
             <thead><tr><th>Matériau</th><th>Reçu</th><th>Consommé</th><th>Restant</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={4} className="muted">Chargement…</td></tr> :
-                !projectMaterials.length ? <tr><td colSpan={4} className="muted">Aucun mouvement de stock pour ce chantier.</td></tr> :
+                !projectMaterials.length ? <tr><td colSpan={4} className="muted">Aucun mouvement de stock pour ce chantier. Le stock s'alimente à la réception d'un bon de commande (onglet Bons de commande).</td></tr> :
                 projectMaterials.map((m) => (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 500 }}>{m.name}</td>
@@ -3852,7 +3852,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         {modal && (
           <StockMovementModal
             projectId={fixedProjectId}
-            materials={projectMaterials.length ? projectMaterials : globalMaterials}
+            materials={projectMaterials}
             onClose={() => setModal(null)}
             onSaved={() => { setModal(null); load(); }}
           />
@@ -4002,17 +4002,22 @@ function StockMovementModal({ projectId, materials, onClose, onSaved }) {
     api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
   }, [projectId]);
 
+  const selected = (materials || []).find((m) => String(m.id) === String(materialId));
+  const maxQty = selected ? Math.max(0, n(selected.remaining)) : undefined;
+  const noMaterials = !(materials || []).length;
+
   const save = async (e) => {
     e.preventDefault();
     setError("");
     if (!materialId) { setError("Choisissez un matériau."); return; }
     if (!(n(quantity) > 0)) { setError("La quantité doit être supérieure à 0."); return; }
+    if (maxQty != null && n(quantity) > maxQty) { setError(`Stock insuffisant : ${maxQty} ${selected.unit || ""} restant(s)`); return; }
     setBusy(true);
     try {
       await api.createStockMovement({
-        projectId,
-        materialId: Number(materialId),
-        phaseId: phaseId ? Number(phaseId) : undefined,
+        project_id: Number(projectId),
+        material_id: Number(materialId),
+        phase_id: phaseId ? Number(phaseId) : undefined,
         quantity: n(quantity),
         note: note.trim() || undefined,
       });
@@ -4028,6 +4033,7 @@ function StockMovementModal({ projectId, materials, onClose, onSaved }) {
           <div><h2 className="font-display">Déclarer une sortie de stock</h2></div>
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
+        {noMaterials && <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>Aucun matériau en stock sur ce chantier : réceptionnez d'abord un bon de commande.</div>}
         <div className="form-grid">
           <label className="field">
             <span>Matériau</span>
@@ -4035,6 +4041,7 @@ function StockMovementModal({ projectId, materials, onClose, onSaved }) {
               <option value="">—</option>
               {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
+            {selected && <small className="muted">Restant : {maxQty} {selected.unit}</small>}
           </label>
           <label className="field">
             <span>Phase</span>
@@ -4042,14 +4049,18 @@ function StockMovementModal({ projectId, materials, onClose, onSaved }) {
               <option value="">—</option>
               {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
+            {!phases.length && <small className="muted">Aucune phase : créez-en dans le Planning (facultatif).</small>}
           </label>
-          <Field label="Quantité" type="number" value={quantity} onChange={setQuantity} required />
+          <label className="field">
+            <span>Quantité</span>
+            <input type="number" min="0.001" step="any" max={maxQty != null ? maxQty : undefined} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+          </label>
           <label className="field"><span>Note (optionnel)</span><textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ minHeight: 50 }} placeholder="Précisions…" /></label>
         </div>
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-amber grad-amber" disabled={busy || !materialId}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !materialId || noMaterials}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
         </div>
       </form>
     </div>
