@@ -10,7 +10,6 @@ import {
   customers,
   realEstateLeases,
   realEstateProperties,
-  realEstateRentPayments,
   tenantDetails,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -18,8 +17,7 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
-import { computeLeaseNextDue } from "./lease-proration";
-import { readOverdueGraceDays } from "./lease-overdue";
+import { loadLeaseTotalDue, readOverdueGraceDays } from "./lease-overdue";
 import { escapeHtmlText } from "./notification-utils";
 
 // graceDays = delai de grace avant retard (Reglages « Retards de loyer ») : le
@@ -175,30 +173,15 @@ export class RentReminderService {
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
       );
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-      // Prorata opt-in : montant = reste du de la 1re periode non couverte.
-      // Sinon : loyer du bail, strictement comme avant.
-      let amountValue: string | number = lease.rentAmount;
-      if (lease.rentProrationEnabled) {
-        const paid = await this.db
-          .select({ amount: realEstateRentPayments.amount })
-          .from(realEstateRentPayments)
-          .where(and(
-            eq(realEstateRentPayments.leaseId, lease.leaseId),
-            eq(realEstateRentPayments.organizationId, lease.organizationId),
-            eq(realEstateRentPayments.status, "paid"),
-          ));
-        const dec = Number(lease.currencyDecimals);
-        // Plafonne a 2 : colonnes decimal(..., 2).
-        const decimals = Number.isInteger(dec) && dec >= 0 ? Math.min(dec, 2) : 2;
-        const next = computeLeaseNextDue(
-          lease,
-          paid.map((p) => Number(p.amount || 0)),
-          decimals,
-          new Date().toISOString().slice(0, 10),
-        );
-        if (next.nextDueAmount > 0) amountValue = next.nextDueAmount.toFixed(decimals);
-      }
-      const amount = `${amountValue}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`;
+      // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), identique
+      // dans les SMS locataire / contact / proprietaire / delegue.
+      const totalDue = await loadLeaseTotalDue(
+        this.db,
+        Number(lease.organizationId),
+        { ...lease, id: Number(lease.leaseId) },
+        lease.currencySymbol,
+      );
+      const amount = totalDue.text;
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
       // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
@@ -243,7 +226,7 @@ export class RentReminderService {
           };
           const tenantMsg = await this.ownerNotifications.renderMessage(
             "payment_reminder",
-            "Bonjour {tenantName}, votre loyer de {monthlyRent} (bail {reference}) a {lateLabel} de retard. " +
+            "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. " +
               "Merci de regulariser rapidement. Contact : {contacts}",
             vars,
             { tenantId: r.customerId },
@@ -290,7 +273,7 @@ export class RentReminderService {
         // "payment_reminder_contact" dans les Reglages.
         const emergencyMsg = await this.ownerNotifications.renderMessage(
           "payment_reminder_contact",
-          "Bonjour, {tenantName} a {lateLabel} de retard de loyer ({monthlyRent}). " +
+          "Bonjour, {tenantName} a {lateLabel} de retard de loyer. Montant du : {amount}. " +
             "Merci de l'inviter a regulariser : {contacts}",
           multi ? { ...baseVars, tenantName: groupName } : baseVars,
           multi ? undefined : { tenantId: lease.tenantId },

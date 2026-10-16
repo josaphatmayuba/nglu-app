@@ -2045,6 +2045,13 @@
       "when": 1781848800000,
       "tag": "0316_batipro_project_owner_name",
       "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "5",
+      "when": 1781935200000,
+      "tag": "0317_domus_payment_allocations",
+      "breakpoints": true
     }
   ]
 }

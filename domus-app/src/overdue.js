@@ -105,6 +105,12 @@ export function dueDateForMonth(startDate, i, civil = false) {
 export function friseKinds({ startDate, graceDays, prorata = false, periodStarts = null, totalMonths, monthsDue, monthsCoveredFloat = 0, now = new Date() }) {
   const kinds = [];
   let lateCount = 0;
+  // Echeances reelles indexees par mois civil (AAAA-MM) : les lignes de periode ne
+  // commencent pas forcement au 1er mois du bail (ex. juil/aout payes sans periode),
+  // un acces par rang decalerait les echeances et rendrait un mois en retard « courant ».
+  const startD = parseLocalDay(startDate);
+  const byMonth = new Map();
+  (periodStarts || []).forEach((p) => { if (p) byMonth.set(String(p).slice(0, 7), p); });
   for (let i = 0; i < totalMonths; i++) {
     const fill = Math.max(0, Math.min(1, (monthsCoveredFloat || 0) - i));
     if (fill >= 0.999) { kinds.push("paid"); continue; }
@@ -113,11 +119,14 @@ export function friseKinds({ startDate, graceDays, prorata = false, periodStarts
     if (normalizeGrace(graceDays) === null) {
       cls = i < monthsDue - 1 ? "late" : "cur";
     } else {
-      const due = prorata && periodStarts && periodStarts[i] ? periodStarts[i] : dueDateForMonth(startDate, i, prorata);
+      const mk = startD ? (() => { const m = new Date(startD.getFullYear(), startD.getMonth() + i, 1); return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`; })() : null;
+      const due = prorata && mk && byMonth.has(mk) ? byMonth.get(mk) : dueDateForMonth(startDate, i, prorata);
       cls = classifyDue(due, graceDays, now);
     }
     if (cls === "late") lateCount += 1;
-    kinds.push(fill > 0 ? "partial" : cls === "late" ? "late" : cls === "due" ? "due" : "cur");
+    // Un mois echeance + grace depasse et non solde (meme partiellement paye) reste « late » ;
+    // dans la grace ou mois courant, un paiement partiel garde la case « partial ».
+    kinds.push(cls === "late" ? "late" : fill > 0 ? "partial" : cls === "due" ? "due" : "cur");
   }
   return { kinds, lateCount };
 }

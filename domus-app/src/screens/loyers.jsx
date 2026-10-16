@@ -17,7 +17,7 @@ import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
 import {
   formatPeriod, isProrataRow, isProrationLease, nextDueAmountOf, nextDueDateOf,
-  nextUnpaidProrataRow, prorataBadgeText, prorataCalcText, startedPeriods, firstPeriodAmount,
+  nextUnpaidProrataRow, prorataBadgeText, prorataCalcText, startedPeriods, firstPeriodAmount, monthlyDueAmounts,
 } from "../prorationUtils.js";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
@@ -198,20 +198,14 @@ export function buildLeaseCards(leases, payments) {
       if (isProrationLease(l) && (prorationRows.length || l.startDate)) {
         const pad2 = (n) => String(n).padStart(2, "0");
         const nowIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-        const amountOf = (p) => Number(p.amount) || 0;
-        const dueRows = prorationRows.filter((p) => String(p.periodStart).slice(0, 10) <= nowIso);
-        // Periodes echues sans ligne en base : comblees au loyer plein.
+        // Montants indexes PAR MOIS CIVIL du bail (index 0 = mois de debut) : lignes
+        // existantes (par periodStart) fusionnees avec les mois sans ligne (1er mois
+        // au prorata, sinon loyer plein). L'ordre chronologique est indispensable :
+        // la couverture par cumul se lit du plus ancien au plus recent.
         const leaseOpen = !l.endDate || String(l.endDate).slice(0, 10) >= nowIso;
-        const missing = leaseOpen ? Math.max(0, startedPeriods(l, now) - dueRows.length) : 0;
-        const fill = Array(missing).fill(rent);
-        // Periodes manquantes = les plus anciennes : si la 1re periode (debut du
-        // bail) n'a pas de ligne, elle reste au prorata meme si des echeances
-        // plus recentes existent (ex. pending d'octobre seule → juillet 13 j).
-        const startIso = String(l.startDate || "").slice(0, 10);
-        const hasFirstRow = dueRows.some((p) => String(p.periodStart).slice(0, 10) === startIso);
-        if (fill.length && !hasFirstRow) fill[0] = firstPeriodAmount(l);
-        const dueAmounts = [...dueRows.map(amountOf), ...fill];
-        periodAmounts = prorationRows.length ? prorationRows.map(amountOf) : [firstPeriodAmount(l)];
+        const monthly = monthlyDueAmounts(l, prorationRows, now, leaseOpen);
+        const dueAmounts = monthly.amounts.slice(0, monthly.dueCount);
+        periodAmounts = monthly.amounts;
         totalDue = dueAmounts.reduce((s, a) => s + a, 0);
         monthsDue = Math.max(1, dueAmounts.length);
         balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
@@ -229,9 +223,17 @@ export function buildLeaseCards(leases, payments) {
         monthsBehind = Math.max(0, monthsDue - covered);
         const lastDue = dueAmounts.length ? dueAmounts[dueAmounts.length - 1] : rent;
         status = balance <= 0.005 ? "ok" : balance > lastDue + 0.005 ? "late" : "pending";
-        const lastCovered = covered > 0 ? prorationRows[covered - 1] : null;
-        const endM = lastCovered?.periodEnd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lastCovered.periodEnd)) : null;
-        if (endM) coveredUntil = new Date(Number(endM[1]), Number(endM[2]) - 1, Number(endM[3]));
+        // Dernier mois civil couvert (par mois, pas par rang de ligne).
+        if (covered > 0 && l.startDate) {
+          const sM = leaseStartMonth(l.startDate);
+          const cm = new Date(sM.getFullYear(), sM.getMonth() + covered - 1, 1);
+          const ck = `${cm.getFullYear()}-${pad2(cm.getMonth() + 1)}`;
+          const lastCovered = prorationRows.find((p) => String(p.periodStart).slice(0, 7) === ck);
+          const endM = lastCovered?.periodEnd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lastCovered.periodEnd)) : null;
+          coveredUntil = endM
+            ? new Date(Number(endM[1]), Number(endM[2]) - 1, Number(endM[3]))
+            : new Date(cm.getFullYear(), cm.getMonth() + 1, 0);
+        }
       }
 
       // Retard = echeance + delai de grace de l'org : le flag backend (isOverdue)

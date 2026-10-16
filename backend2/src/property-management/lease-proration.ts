@@ -81,6 +81,35 @@ export function computeLeaseNextDue(
   };
 }
 
+/**
+ * TOTAL DU = meme valeur que « Reste a payer » de la carte Loyers : somme des
+ * echeances echues (mois courant inclus) moins tout ce qui a ete verse, plancher 0.
+ * Source UNIQUE du {amount} des SMS/emails de retard (locataire, contact,
+ * proprietaire, delegue) et du preavis de defaut.
+ * - prorata : somme des montants de periode de l'echeancier (1re periode partielle) ;
+ * - sinon : (mois ecoules depuis le debut, mois courant inclus) x loyer.
+ */
+export function computeLeaseTotalDue(
+  lease: ProrationLease,
+  paidTotal: number,
+  decimals: number,
+  now: Date,
+): number {
+  const paid = Number(paidTotal) || 0;
+  if (lease.rentProrationEnabled) {
+    const todayStr = formatDateOnly(now);
+    const schedule = scheduleForLease(lease, decimals, paid, todayStr);
+    return applyCoverage(schedule, [paid], todayStr, decimals).balance;
+  }
+  const rent = Number(lease.rentAmount) || 0;
+  const start = parseDateOnly(lease.startDate);
+  const elapsedPast = Math.max(
+    0,
+    (now.getFullYear() - start.getUTCFullYear()) * 12 + (now.getMonth() - start.getUTCMonth()),
+  );
+  return Math.max(0, Math.round(((elapsedPast + 1) * rent - paid) * 100) / 100);
+}
+
 export interface OverdueStats {
   lateCount: number;
   unpaidCount: number;

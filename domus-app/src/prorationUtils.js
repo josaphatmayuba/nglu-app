@@ -84,6 +84,41 @@ export function startedPeriods(lease, today = new Date()) {
   return n;
 }
 
+// Montants dus indexes PAR MOIS CIVIL du bail (index 0 = mois de debut), ordre chronologique.
+// Fusionne les lignes existantes (par periodStart AAAA-MM) et les mois sans ligne comblees
+// (1er mois = prorata, sinon loyer plein). `rows` = lignes avec periodStart (toutes, futures
+// comprises) ; `dueCount` = nombre de mois deja echus (a `today`, ou jusqu'a la derniere ligne echue).
+export function monthlyDueAmounts(lease, rows, today = new Date(), leaseOpen = true) {
+  const s = parseLocal(lease?.startDate);
+  const rent = num(lease?.rentAmount) ?? 0;
+  const list = Array.isArray(rows) ? rows : [];
+  const idxOf = (p) => {
+    const m = /^(\d{4})-(\d{2})/.exec(String(p.periodStart || ""));
+    if (!m || !s) return null;
+    return Math.max(0, (Number(m[1]) - s.getFullYear()) * 12 + (Number(m[2]) - 1 - s.getMonth()));
+  };
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const todayIso = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-${pad2(today.getDate())}`;
+  const byIdx = new Map();
+  let maxIdx = -1;
+  let maxDueIdx = -1;
+  list.forEach((p) => {
+    const i = idxOf(p);
+    if (i === null) return;
+    byIdx.set(i, (byIdx.get(i) || 0) + (Number(p.amount) || 0));
+    maxIdx = Math.max(maxIdx, i);
+    if (String(p.periodStart).slice(0, 10) <= todayIso) maxDueIdx = Math.max(maxDueIdx, i);
+  });
+  const started = leaseOpen ? startedPeriods(lease, today) : 0;
+  const dueCount = Math.max(started, maxDueIdx + 1);
+  const len = Math.max(dueCount, maxIdx + 1, 1);
+  const amounts = [];
+  for (let i = 0; i < len; i += 1) {
+    amounts.push(byIdx.has(i) ? byIdx.get(i) : i === 0 ? firstPeriodAmount(lease) : rent);
+  }
+  return { amounts, dueCount };
+}
+
 // Montant de la 1re periode (mensuel, mois civils) : loyer x jours restants / jours du mois.
 // Bail commence le 1er (ou autre cycle) → loyer plein. Arrondi au centime comme le backend.
 export function firstPeriodAmount(lease) {
