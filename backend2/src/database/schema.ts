@@ -1155,6 +1155,9 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   terminationReason: text("termination_reason"),
   terminatedAt: timestamp("terminated_at"),
   terminatedBy: bigint("terminated_by", { mode: "number" }),
+  // Registre des affectations (migration 0317) : date de bascule du bail sur le
+  // modele 1 mois = 1 echeance = ses paiements. NULL = comportement historique.
+  allocationLedgerAt: datetime("allocation_ledger_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1236,8 +1239,34 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   // Periode de loyer couverte par ce paiement (optionnelle, NULL = historique).
   periodStart: date("period_start", { mode: "string" }),
   periodEnd: date("period_end", { mode: "string" }),
+  // Registre des affectations (migration 0317) — caches, non lus pour l instant.
+  // amountPaid = somme des affectations actives (ligne echeance).
+  amountPaid: decimal("amount_paid", { precision: 15, scale: 2 }).default("0").notNull(),
+  // pending | partially_paid | paid | voided (ligne echeance).
+  dueStatus: varchar("due_status", { length: 20 }),
+  // due | payment (NULL = ligne historique non classee).
+  rowKind: varchar("row_kind", { length: 10 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+// Affectation d un encaissement a une echeance (migration 0317). payment_id et due_id
+// pointent vers real_estate_rent_payments. source = auto|manual|backfill.
+// Suppression logique : status 'true'/'false' + voided_at/void_reason.
+export const realEstatePaymentAllocations = mysqlTable("real_estate_payment_allocations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  paymentId: bigint("payment_id", { mode: "number" }).notNull(),
+  dueId: bigint("due_id", { mode: "number" }).notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  source: varchar("source", { length: 20 }).default("auto").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  voidReason: varchar("void_reason", { length: 500 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  voidedAt: timestamp("voided_at"),
 });
 
 // Caution / dépôt de garantie : cycle complet (détenu → restitué) avec retenue.
