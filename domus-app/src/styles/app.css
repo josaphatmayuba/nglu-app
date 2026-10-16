@@ -1900,8 +1900,8 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .domus-terminate-submit:hover:not(:disabled) { background:var(--rose); border-color:var(--rose); filter:brightness(.88); }
 .domus-terminate-modal .immo-pay-row { gap:8px; flex-wrap:wrap; }
 @media (max-width:480px) {
-  .domus-terminate-modal .domus-modal-footer { flex-wrap:wrap; padding:12px 16px; }
-  .domus-terminate-modal .domus-modal-footer > button { flex:1 1 140px; justify-content:center; }
+  .domus-terminate-modal .domus-modal-footer { flex-direction:row; flex-wrap:wrap; padding:12px 16px; }
+  .domus-terminate-modal .domus-modal-footer > button { flex:1 1 140px; height:44px; justify-content:center; }
   .domus-terminate-error-box { margin:0 16px 8px; }
   .domus-terminate-final { margin:12px 16px 0; }
 }
