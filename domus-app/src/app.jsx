@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, HardHat, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
+  UserPlus, Wallet, Smartphone, Megaphone, Wrench, UserRound, HardHat, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
   ShieldCheck, Receipt, Landmark, BarChart3, HandCoins,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
@@ -14,6 +14,7 @@ import { CarteBiens } from "./screens/carte.jsx";
 import { Locataires } from "./screens/locataires.jsx";
 import { Proprietaires } from "./screens/proprietaires.jsx";
 import { Delegues } from "./screens/delegues.jsx";
+import { Communiques } from "./screens/communiques.jsx";
 import { SousTraitants } from "./screens/sous-traitants.jsx";
 import { Loyers, Paiement, PendingReceiptsBadge } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
@@ -54,6 +55,7 @@ const NAV = [
     { key: "delegues", label: "Délégués", icon: UserRound },
     { key: "sous-traitants", label: "Sous-traitants", icon: HardHat },
     { key: "locataires", label: "Locataires", icon: Users },
+    { key: "communiques", label: "Communiqués", icon: Megaphone },
   ] },
   { sec: "Locatif", items: [
     { key: "baux", label: "Baux", icon: FileSignature },
@@ -76,7 +78,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "delegues", "sous-traitants", "depenses", "hypotheque", "prets", "portail", "reglages"];
+const MORE = ["previsionnel", "pnl", "baux", "reservations", "contrats", "prescreening", "onboarding", "carte", "proprietaires", "delegues", "communiques", "sous-traitants", "depenses", "hypotheque", "prets", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -87,6 +89,7 @@ const SCREENS = {
   locataires: (nav, device) => <Locataires go={nav} device={device} />,
   proprietaires: (nav, device) => <Proprietaires go={nav} device={device} />,
   delegues: (nav, device) => <Delegues go={nav} device={device} />,
+  communiques: () => <Communiques />,
   "sous-traitants": () => <SousTraitants />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,

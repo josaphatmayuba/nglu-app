@@ -5036,7 +5036,7 @@ export class PropertyManagementService {
    * 404 si le tenant n'appartient pas a orgId.
    */
   async tenantCommunications(tenantId: number, orgId: number) {
-    await this.findTenant(tenantId, orgId);
+    const tenantRow = await this.findTenant(tenantId, orgId);
 
     const leaseRows = await this.db
       .select({ id: realEstateLeases.id })
@@ -5085,6 +5085,13 @@ export class PropertyManagementService {
       ...(contractIds.length
         ? [and(eq(smsLogs.relatedType, "real-estate-contract"), inArray(smsLogs.relatedId, contractIds.map(String)))]
         : []),
+      // Communiques SMS (Domus) : rattaches a l'annonce, retrouves via le telephone du locataire.
+      ...(() => {
+        const phones = [...new Set([tenantRow.phone, normalizePhoneE164(tenantRow.phone)].filter((v): v is string => !!v))];
+        return phones.length
+          ? [and(eq(smsLogs.relatedType, "real-estate-announcement"), inArray(smsLogs.recipient, phones))]
+          : [];
+      })(),
     ];
 
     const smsRows = await this.db

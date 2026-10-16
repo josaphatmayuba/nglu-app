@@ -6,6 +6,8 @@ import { LedgerModule } from "../ledger/ledger.module";
 import { ProjectsModule } from "../projects/projects.module";
 import { WorkflowModule } from "../workflow/workflow.module";
 import { SystemEmailModule } from "../system-email/system-email.module";
+import { AnnouncementsController } from "./announcements.controller";
+import { AnnouncementsService } from "./announcements.service";
 import { ContractTemplatesController } from "./contract-templates.controller";
 import { ContractTemplatesService } from "./contract-templates.service";
 import { ContractsPublicController } from "./contracts-public.controller";
@@ -44,6 +46,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     PropertyManagementController,
     TenantPrescreeningController,
     ContractTemplatesController,
+    AnnouncementsController,
   ],
   providers: [
     PropertyManagementService,
@@ -57,6 +60,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     DelegatePortalService,
     DelegatesService,
     OwnerNotificationsService,
+    AnnouncementsService,
     DomusPropertyGuard,
     TenantPrescreeningService,
     WhatsappClientService,

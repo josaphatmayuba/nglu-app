@@ -2024,6 +2024,20 @@
       "when": 1781589600000,
       "tag": "0313_batipro_project_owner_sms",
       "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "5",
+      "when": 1781676000000,
+      "tag": "0314_real_estate_announcements",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "5",
+      "when": 1781762400000,
+      "tag": "0315_real_estate_lease_termination",
+      "breakpoints": true
     }
   ]
 }

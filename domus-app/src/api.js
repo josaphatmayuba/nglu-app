@@ -224,6 +224,12 @@ export const api = {
   tenantCommunications: (id) => get(`/tenants/${id}/communications`),
   // Renvoi d'un SMS dont l'envoi a echoue (reprend destinataire + texte du log).
   resendSmsLog: (logId) => post(`/sms-logs/${logId}/resend`),
+  // Communiqués SMS : aperçu des destinataires, envoi (asynchrone), historique, suivi, renvoi des échecs.
+  announcementPreview: (b) => post("/announcements/preview", b),
+  createAnnouncement: (b) => post("/announcements", b),
+  announcements: (propertyId) => get(`/announcements${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ""}`),
+  announcement: (id) => get(`/announcements/${id}`),
+  resendAnnouncementFailed: (id) => post(`/announcements/${id}/resend-failed`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),

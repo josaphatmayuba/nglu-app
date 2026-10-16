@@ -1861,3 +1861,14 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .contrats-signer-name { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
 .contrats-signer-actions { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
 .contrats-signer-btn { min-height:44px; min-width:44px; flex:1 1 140px; justify-content:center; }
+
+/* Communiques SMS : boutons tactiles, alerte, textarea natif */
+.modal-actions .btn, .modal-actions .immo-btn { min-height:44px; }
+@media (max-width:420px) {
+  .modal-actions { flex-direction:column-reverse; align-items:stretch; }
+  .modal-actions .btn, .modal-actions .immo-btn { width:100%; justify-content:center; }
+}
+.field textarea { border:1px solid var(--border); border-radius:8px; padding:10px 11px; background:#fff; color:var(--ink-800); font:14px 'Inter',sans-serif; outline:none; resize:vertical; }
+.field textarea:focus { border-color:var(--iris-300); box-shadow:0 0 0 3px var(--iris-50); }
+.immo-callout-warning { background:#fef3c7; color:#92400e; border-radius:8px; padding:10px 12px; display:flex; gap:8px; align-items:flex-start; }
+.immo-callout-warning.block { display:grid; gap:8px; }

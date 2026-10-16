@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   AlertTriangle,
+  Megaphone,
   BarChart3,
   Bath,
   BedDouble,
@@ -46,6 +47,7 @@ import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.j
 import { nextDueAmountOf } from "../prorationUtils.js";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { AnnouncementModal } from "./communiques.jsx";
 
 const TYPES = ["Tous", "Appartement", "Maison", "Bureau", "Commerce"];
 const TYPE_MAP = {
@@ -132,6 +134,7 @@ export function Biens({ go }) {
   const [actionError, setActionError] = useState("");
   // Navigation deux niveaux : null = liste d'immeubles, id = detail d'un immeuble (ses unites).
   const [selectedPropertyId, setSelectedPropertyId] = useState(null);
+  const [announceModal, setAnnounceModal] = useState(null);
 
   const properties = useMemo(() => filterProperties(data?.properties || []).map(normalizeProperty), [data]);
   const photosByProperty = useMemo(() => {
@@ -470,6 +473,7 @@ export function Biens({ go }) {
           property={selectedProperty}
           onBack={() => setSelectedPropertyId(null)}
           onEditProperty={() => editProperty(selectedProperty)}
+          onAnnounce={() => setAnnounceModal(selectedProperty.id)}
           onAddUnit={() => setUnitModal({ ...emptyUnit, propertyId: String(selectedProperty.id) })}
           onOpenUnit={setDetailModal}
           onEditUnit={editCard}
@@ -512,6 +516,7 @@ export function Biens({ go }) {
 
       <RecentPayments payments={payments} go={go} />
 
+      {announceModal && <AnnouncementModal presetPropertyId={announceModal} onClose={() => setAnnounceModal(null)} />}
       {propertyModal && (
         <PropertyModal
           value={propertyModal}
@@ -655,7 +660,7 @@ function PropertyGroupTable({ rows, onOpen, onEdit, onDelete, fallbackSymbol }) 
 }
 
 // Niveau 2 : detail d'un immeuble = en-tete (adresse + bouton Modifier l'immeuble) + grille de ses unites.
-function PropertyUnitsView({ property, onBack, onEditProperty, onAddUnit, onOpenUnit, onEditUnit, onDeleteUnit, go }) {
+function PropertyUnitsView({ property, onBack, onEditProperty, onAnnounce, onAddUnit, onOpenUnit, onEditUnit, onDeleteUnit, go }) {
   return (
     <div className="immo-property-units-view">
       <div className="immo-property-units-head card">
@@ -665,6 +670,7 @@ function PropertyUnitsView({ property, onBack, onEditProperty, onAddUnit, onOpen
           <p><MapPin size={14} /> {property.address}</p>
         </div>
         <div className="immo-property-units-actions">
+          <button className="immo-btn" onClick={onAnnounce} style={{ minHeight: 44 }}><Megaphone size={16} /> {t("Envoyer un communiqué")}</button>
           <button className="immo-btn" onClick={onAddUnit}><Plus size={16} /> Ajouter une unite</button>
           <button className="immo-btn primary" onClick={onEditProperty}><Edit3 size={16} /> Modifier l'immeuble</button>
         </div>
