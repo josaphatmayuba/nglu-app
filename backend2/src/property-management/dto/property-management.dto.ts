@@ -17,6 +17,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateIf,
   ValidateNested,
 } from "class-validator";
@@ -1966,4 +1967,21 @@ export class SignInspectionDto {
   @IsNotEmpty()
   @MaxLength(255)
   signerName: string;
+}
+
+export class TerminateLeaseDto {
+  @ApiProperty({ example: "2027-03-31", description: "Date d'effet de la resiliation (YYYY-MM-DD)." })
+  @IsDateString()
+  terminationDate: string;
+
+  @ApiProperty({ example: "Depart du locataire", description: "Motif obligatoire (5 a 2000 caracteres)." })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(2000)
+  reason: string;
+
+  @ApiPropertyOptional({ default: false, description: "Prevenir le(s) locataire(s) par SMS." })
+  @IsOptional()
+  @IsBoolean()
+  notifyTenant?: boolean;
 }

@@ -1149,6 +1149,12 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   defaultNoticeMonthsBehind: int("default_notice_months_behind"),
   // Prorata du loyer (opt-in par bail) : 0 = comportement historique inchange.
   rentProrationEnabled: tinyint("rent_proration_enabled").default(0).notNull(),
+  // Resiliation de bail avec motif (migration 0315) : date effective, motif,
+  // horodatage et utilisateur ayant resilie.
+  terminationDate: date("termination_date", { mode: "string" }),
+  terminationReason: text("termination_reason"),
+  terminatedAt: timestamp("terminated_at"),
+  terminatedBy: bigint("terminated_by", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1164,6 +1170,25 @@ export const realEstateLeaseCotenants = mysqlTable("real_estate_lease_cotenants"
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+// Communiques SMS Domus (migration 0314). audience = 'property' (locataires du bien
+// property_id) | 'selection' (liste libre, property_id NULL). status = queued|sending|done.
+export const realEstateAnnouncements = mysqlTable("real_estate_announcements", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }),
+  message: text("message").notNull(),
+  audience: varchar("audience", { length: 20 }).default("property").notNull(),
+  recipientsCount: int("recipients_count").default(0).notNull(),
+  sentCount: int("sent_count").default(0).notNull(),
+  failedCount: int("failed_count").default(0).notNull(),
+  skippedCount: int("skipped_count").default(0).notNull(),
+  status: varchar("status", { length: 20 }).default("queued").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 // Bail signé à la main par le locataire, scanné/photographié et importé pour archivage + consultation.
@@ -2932,6 +2957,12 @@ export const batiproProjects = mysqlTable("batipro_projects", {
   code: varchar("code", { length: 100 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   client: varchar("client", { length: 255 }),
+  // SMS au proprietaire du chantier (migration 0313).
+  ownerName: varchar("owner_name", { length: 255 }),
+  ownerPhone: varchar("owner_phone", { length: 32 }),
+  ownerSmsEnabled: tinyint("owner_sms_enabled").default(0).notNull(),
+  ownerSmsLastProgressStep: int("owner_sms_last_progress_step").default(0).notNull(),
+  ownerSmsLastQuoteAt: datetime("owner_sms_last_quote_at"),
   manager: varchar("manager", { length: 255 }),
   status: varchar("status", { length: 40 }).default("Planifie").notNull(),
   progress: int("progress").default(0).notNull(),

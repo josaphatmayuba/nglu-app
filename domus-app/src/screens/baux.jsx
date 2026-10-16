@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t, tf } from "../i18n.js";
 import {
   Check,
@@ -40,6 +40,7 @@ import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
+import { TerminateLeaseModal } from "./leaseTermination.jsx";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -101,9 +102,11 @@ function leaseInfo(l) {
   const years = Math.max(1, Math.round(totalMonths / 12));
   const progress = Math.min(100, Math.max(0, Math.round((elapsedMonths / totalMonths) * 100)));
 
-  const variant = isExpired ? "expired" : daysLeft !== null && daysLeft <= 60 ? "pendingSignature" : "signed";
-  const tone = isExpired ? "danger" : daysLeft !== null && daysLeft <= 60 ? "warning" : "success";
-  const statusText = isExpired ? "Expiré" : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
+  // Bail résilié avec motif (statut ended + termination_reason) : distinct d'un « Terminé » de renouvellement.
+  const terminated = isTerminatedLease(l);
+  const variant = isExpired || terminated ? "expired" : daysLeft !== null && daysLeft <= 60 ? "pendingSignature" : "signed";
+  const tone = isExpired || terminated ? "danger" : daysLeft !== null && daysLeft <= 60 ? "warning" : "success";
+  const statusText = terminated ? t("Résilié") : isExpired ? "Expiré" : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
 
   // dueCount/lateCount viennent du backend (withOverdueStats) : échéances
   // réellement rapprochées des paiements enregistrés, pas juste la durée
@@ -116,11 +119,15 @@ function leaseInfo(l) {
   const paidLateCount = lateCount !== null ? Math.max(0, lateCount - (unpaidCount || 0)) : null;
 
   return {
-    variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
+    terminated, variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
     dueCount, lateCount, unpaidCount, paidLateCount, paidOnTimeCount, isOverdue: !!l.isOverdue,
     reference: `#${l.reference || `LEASE-${l.id}`}`,
     propertyLabel: [l.propertyAddress || l.propertyName, l.unitName].filter(Boolean).join(" · ") || "—",
   };
+}
+
+function isTerminatedLease(l) {
+  return l?.status === "ended" && Boolean(l?.terminationReason);
 }
 
 // Chip de contrat dérivé du VRAI contrat lié au bail (pas de l'échéance).
@@ -163,6 +170,7 @@ export function Baux({ go } = {}) {
   const [menuDir, setMenuDir] = useState("down");
   const [leaseModal, setLeaseModal] = useState(null);
   const [depositModal, setDepositModal] = useState(null);
+  const [terminateModal, setTerminateModal] = useState(null); // { lease, rev }
   const [inspectionView, setInspectionView] = useState(null);
   const [detailLease, setDetailLease] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
@@ -225,7 +233,8 @@ export function Baux({ go } = {}) {
     all: enriched.length,
     active: enriched.filter((e) => e.info.variant !== "expired").length,
     renew: enriched.filter((e) => e.info.variant === "pendingSignature").length,
-    expired: enriched.filter((e) => e.info.variant === "expired").length,
+    expired: enriched.filter((e) => e.info.variant === "expired" && !e.info.terminated).length,
+    terminated: enriched.filter((e) => e.info.terminated).length,
   }), [enriched]);
 
   const shown = useMemo(() => {
@@ -233,7 +242,8 @@ export function Baux({ go } = {}) {
     return enriched.filter((e) => {
       if (filter === "active" && e.info.variant === "expired") return false;
       if (filter === "renew" && e.info.variant !== "pendingSignature") return false;
-      if (filter === "expired" && e.info.variant !== "expired") return false;
+      if (filter === "expired" && (e.info.variant !== "expired" || e.info.terminated)) return false;
+      if (filter === "terminated" && !e.info.terminated) return false;
       if (!q) return true;
       return [tenantNames(e.lease), e.info.propertyLabel, e.info.reference].some((v) => String(v).toLowerCase().includes(q));
     });
@@ -247,6 +257,7 @@ export function Baux({ go } = {}) {
     { key: "active", label: "Actifs", count: counts.active },
     { key: "renew", label: "À renouveler", count: counts.renew },
     { key: "expired", label: "Expirés", count: counts.expired },
+    { key: "terminated", label: t("Résiliés"), count: counts.terminated },
   ];
 
   return (
@@ -375,7 +386,9 @@ export function Baux({ go } = {}) {
                   </strong>
                   <small className={info.variant === "expired" ? "muted" : info.isOverdue ? "danger" : "success"}>
                     {info.variant !== "expired" && !info.isOverdue && <Check size={13} />}
-                    {info.variant === "expired"
+                    {info.terminated
+                      ? `${t("Bail résilié")}${lease.terminationDate ? ` · ${fmtDate(parseDomusDate(lease.terminationDate))}` : ""}${info.unpaidCount > 0 ? ` · ${info.unpaidCount} ${info.unpaidCount > 1 ? t("impayés") : t("impayé")}` : ""}`
+                      : info.variant === "expired"
                       ? "Bail terminé"
                       : info.dueCount === null
                         ? "—"
@@ -409,7 +422,7 @@ export function Baux({ go } = {}) {
                       variant={menuVariant}
                       contract={contract}
                       dir={menuDir}
-                      renewable={info.isExpired || (info.daysLeft != null && info.daysLeft <= 120)}
+                      renewable={!info.terminated && (info.isExpired || (info.daysLeft != null && info.daysLeft <= 120))}
                       statusText={statusPill.text}
                       deposit={deposit}
                       depositDue={depositDue}
@@ -460,6 +473,10 @@ export function Baux({ go } = {}) {
                       }}
                       onDelete={() => {
                         setOpenMenuId(null);
+                        setTerminateModal({ lease, rev: 0 });
+                      }}
+                      onCancelLease={() => {
+                        setOpenMenuId(null);
                         handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm);
                       }}
                       onClose={() => setOpenMenuId(null)}
@@ -473,6 +490,20 @@ export function Baux({ go } = {}) {
         </div>
       )}
 
+      {terminateModal && (
+        <TerminateLeaseModal
+          lease={terminateModal.lease}
+          refreshKey={terminateModal.rev}
+          onClose={() => setTerminateModal(null)}
+          onDone={async () => {
+            setTerminateModal(null);
+            setActionError("");
+            await reload();
+          }}
+          onOpenDeposit={(deposit) => setDepositModal({ mode: "return", lease: terminateModal.lease, deposit })}
+          onOpenExitInspection={() => setInspectionView({ kind: "launch", lease: terminateModal.lease, type: "exit" })}
+        />
+      )}
       {depositModal && (
         <DepositModal
           state={depositModal}
@@ -480,6 +511,7 @@ export function Baux({ go } = {}) {
           onDone={async (msg) => {
             setDepositModal(null);
             setActionError("");
+            setTerminateModal((m) => (m ? { ...m, rev: m.rev + 1 } : m));
             await reload();
             if (msg) setActionError("");
           }}
@@ -588,6 +620,7 @@ function LeaseActionsMenu({
   onEdit,
   onRenew,
   onDelete,
+  onCancelLease,
   onClose,
 }) {
   const disabled = Boolean(busy);
@@ -618,7 +651,7 @@ function LeaseActionsMenu({
     <div className={`immo-lease-actions-menu ${dir}`}>
       <div className={`immo-lease-actions-head ${variant}`}>
         <strong>{tenantNames(lease)}</strong>
-        <span>{LEASE_MENU_HEAD[variant] || "Bail"} · {statusText || (info.variant === "expired" ? "Expiré" : "Actif")}</span>
+        <span>{info.terminated ? t("Bail résilié") : (LEASE_MENU_HEAD[variant] || "Bail")} · {statusText || (info.variant === "expired" ? "Expiré" : "Actif")}</span>
       </div>
 
       {(depositDue > 0 || deposit) && (
@@ -643,7 +676,8 @@ function LeaseActionsMenu({
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
           {renewable && <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>}
           {/* Résilier uniquement si le contrat est signé. */}
-          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> Résilier le bail</button>
+          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> {t("Résilier le bail")}</button>
+          <button disabled={disabled} className="danger" onClick={onCancelLease}><Trash2 size={15} /> {t("Annuler le bail (erreur de saisie)")}</button>
         </>
       )}
 
@@ -673,8 +707,8 @@ function LeaseActionsMenu({
           <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
           <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat archivé</button>
           <hr />
-          {/* Bail expiré → renouvellement toujours proposé. */}
-          <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> Renouveler (nouveau bail)</button>
+          {/* Bail expiré → renouvellement toujours proposé (pas pour un bail résilié). */}
+          {!info.terminated && <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> {t("Renouveler (nouveau bail)")}</button>}
         </>
       )}
 
@@ -704,6 +738,21 @@ function DepositModal({ state, onClose, onDone }) {
   const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+
+  // Échap ferme la modale du dessus (la caution peut être ouverte par-dessus la résiliation).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape" || busyRef.current) return;
+      e.stopPropagation();
+      closeRef.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const dedNum = Math.min(Math.max(0, Number(deduction) || 0), held);
   const refund = Math.round((held - dedNum) * 100) / 100;
@@ -1121,6 +1170,13 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
     ["Loyer", `${moneyExact(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
     ["Depot", moneyExact(lease.securityDeposit || 0, lease.currencySymbol || "$")],
     ["Statut", info.statusText],
+    ...(info.terminated
+      ? [
+          [t("Date de résiliation"), fmtDate(lease.terminationDate ? parseDomusDate(lease.terminationDate) : null)],
+          [t("Motif de résiliation"), lease.terminationReason],
+          [t("Résilié par"), [lease.terminatedByName, lease.terminatedAt ? new Date(lease.terminatedAt).toLocaleDateString("fr-FR") : ""].filter(Boolean).join(" · ")],
+        ]
+      : []),
   ];
 
   const confirm = useConfirm();
@@ -1626,11 +1682,12 @@ async function handleCancelContract(contract, setBusyAction, setActionError, rel
   }
 }
 
+// Annulation d'un bail créé par erreur (statut "cancelled", bail masqué) : distincte de la résiliation avec motif.
 async function handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm) {
   const ok = await confirm({
-    title: t("Résilier le bail"),
-    message: tf(t("Résilier le bail {ref} ?"), { ref: lease.reference || lease.id }),
-    confirmLabel: t("Résilier"),
+    title: t("Annuler le bail (erreur de saisie)"),
+    message: tf(t("Annuler le bail {ref} ? Il sera retiré de la liste (ce n'est pas une résiliation)."), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Annuler le bail"),
     danger: true,
   });
   if (!ok) return;
@@ -1640,7 +1697,7 @@ async function handleDeleteLease(lease, setBusyAction, setActionError, reload, c
     await api.deleteLease(lease.id);
     await reload();
   } catch (e) {
-    setActionError(e.message || "Impossible de resilier le bail.");
+    setActionError(e.message || t("Impossible d'annuler le bail."));
   } finally {
     setBusyAction("");
   }

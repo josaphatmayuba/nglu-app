@@ -1,6 +1,6 @@
 import { BadRequestException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, lt, lte, ne, notInArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
@@ -39,6 +39,7 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
+import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { OcrService } from "./ocr.service";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -88,6 +89,7 @@ export class BatiproService {
     private readonly ledger: LedgerService,
     private readonly ocr: OcrService,
     private readonly projectsService: ProjectsService,
+    private readonly ownerNotifier: BatiproOwnerNotifier,
   ) {}
 
   // Resout le project_id du REGISTRE PARTAGE `projects` correspondant a un
@@ -278,14 +280,26 @@ export class BatiproService {
       // qu'une phase ou un bon de commande est ajoute (recomputeProjectRisk).
       risk: input.risk ?? "Faible",
       notes: input.notes ?? null,
+      ownerName: String(input.owner_name ?? "").trim() || null,
+      ownerPhone: this.normalizeOwnerPhone(input.owner_phone),
+      ownerSmsEnabled: this.normalizeOwnerPhone(input.owner_phone) ? this.toFlag(input.owner_sms_enabled) : 0,
     }).$returningId();
     const id = Number(result.id);
     await this.publish("createProject", ["projects"], "created", id, orgId);
     return this.getProject(id, orgId);
   }
 
+  private normalizeOwnerPhone(value: string | null | undefined): string | null {
+    const v = String(value ?? "").replace(/\s+/g, "");
+    return v || null;
+  }
+
+  private toFlag(value: boolean | number | string | null | undefined): number {
+    return value === true || value === 1 || value === "1" || value === "true" ? 1 : 0;
+  }
+
   async updateProject(id: number, input: UpdateBatiproProjectDto, orgId: number) {
-    await this.getProject(id, orgId);
+    const before = await this.getProject(id, orgId);
     const patch: Partial<typeof batiproProjects.$inferInsert> = {};
     if (input.code !== undefined) patch.code = input.code;
     if (input.name !== undefined) patch.name = input.name;
@@ -301,8 +315,26 @@ export class BatiproService {
     if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
     if (input.location !== undefined) patch.location = input.location || null;
     if (input.notes !== undefined) patch.notes = input.notes || null;
+    if (input.owner_name !== undefined) patch.ownerName = String(input.owner_name ?? "").trim() || null;
+    if (input.owner_phone !== undefined) patch.ownerPhone = this.normalizeOwnerPhone(input.owner_phone);
+    if (input.owner_sms_enabled !== undefined) {
+      patch.ownerSmsEnabled = this.toFlag(input.owner_sms_enabled);
+      // Activation (0 -> 1) : recale le dernier palier pour eviter une rafale de vieux paliers.
+      if (patch.ownerSmsEnabled === 1 && Number(before.ownerSmsEnabled ?? 0) === 0) {
+        patch.ownerSmsLastProgressStep = Math.floor(Number(before.progress ?? 0) / 10) * 10;
+      }
+    }
+    // Numero final vide -> SMS force a 0.
+    const finalPhone = patch.ownerPhone !== undefined ? patch.ownerPhone : before.ownerPhone;
+    if (!String(finalPhone ?? "").trim() && (patch.ownerSmsEnabled === 1 || (patch.ownerSmsEnabled === undefined && Number(before.ownerSmsEnabled ?? 0) === 1))) {
+      patch.ownerSmsEnabled = 0;
+      delete patch.ownerSmsLastProgressStep;
+    }
     if (Object.keys(patch).length) await this.db.update(batiproProjects).set(patch).where(eq(batiproProjects.id, id));
     await this.publish("updateProject", ["projects"], "updated", id, orgId);
+    if (input.status !== undefined && input.status !== before.status) {
+      void this.ownerNotifier.notifyStatusChange(orgId, id, before.status ?? null, input.status);
+    }
     return this.getProject(id, orgId);
   }
 
@@ -471,6 +503,13 @@ export class BatiproService {
     await this.getProject(input.project_id, orgId);
     await this.getMaterial(input.material_id, orgId);
     if (input.phase_id != null) await this.getPhase(input.phase_id, orgId);
+    // Une sortie ne peut pas depasser le restant (recu - consomme) du chantier.
+    const stock = (await this.materialsWithProjectStock(orgId, input.project_id))
+      .find((m) => Number(m.id) === Number(input.material_id));
+    const remaining = stock ? stock.remaining : 0;
+    if (input.quantity > remaining) {
+      throw new BadRequestException(`Stock insuffisant : ${remaining} ${stock?.unit ?? ""} restant(s)`.replace("  ", " "));
+    }
     const [result] = await this.db.insert(batiproStockMovements).values({
       organizationId: orgId,
       projectId: input.project_id,
@@ -636,6 +675,7 @@ export class BatiproService {
     const phases = await this.phases(orgId, projectId);
     if (!phases.length) {
       await this.db.update(batiproProjects).set({ progress: 0 }).where(eq(batiproProjects.id, projectId));
+      await this.notifyProgressStep(orgId, projectId, 0);
       return;
     }
     const allHaveBudget = phases.every((p) => Number(p.plannedBudget || 0) > 0);
@@ -644,6 +684,50 @@ export class BatiproService {
       ? phases.reduce((sum, p) => sum + Number(p.progress || 0) * Number(p.plannedBudget || 0), 0) / totalBudget
       : phases.reduce((sum, p) => sum + Number(p.progress || 0), 0) / phases.length;
     await this.db.update(batiproProjects).set({ progress: Math.round(progress) }).where(eq(batiproProjects.id, projectId));
+    await this.notifyProgressStep(orgId, projectId, Math.round(progress));
+  }
+
+  // SMS proprietaire a chaque palier de 10 % franchi. Claim atomique du palier
+  // (anti-doublon) ; une baisse n'envoie rien et ne rearme pas le palier.
+  private async notifyProgressStep(orgId: number, projectId: number, progress: number) {
+    try {
+      const step = Math.floor(progress / 10) * 10;
+      if (step <= 0) return;
+      const res = await this.db.update(batiproProjects).set({ ownerSmsLastProgressStep: step }).where(and(
+        eq(batiproProjects.id, projectId),
+        eq(batiproProjects.organizationId, orgId),
+        lt(batiproProjects.ownerSmsLastProgressStep, step),
+        eq(batiproProjects.ownerSmsEnabled, 1),
+      ));
+      const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+      if (Number(header?.affectedRows ?? 0) > 0) void this.ownerNotifier.notifyProgress(orgId, projectId, step);
+    } catch {
+      // jamais bloquant
+    }
+  }
+
+  // Devis recu via lien public : nom du tiers resolu cote serveur, jamais bloquant.
+  private async notifyOwnerQuoteFromLink(
+    orgId: number,
+    projectId: number,
+    subcontractorId: number | null,
+    q: { fallbackName: string | null; totalTtc: number; currencyId: number | null },
+  ) {
+    try {
+      // Nom libre (lien public) = contenu tiers non fiable : utilise seulement si le lien est rattache a un sous-traitant reference.
+      let tiers: string | null = null;
+      if (subcontractorId != null) {
+        const [sub] = await this.db
+          .select({ name: batiproSubcontractors.name })
+          .from(batiproSubcontractors)
+          .where(and(eq(batiproSubcontractors.id, subcontractorId), eq(batiproSubcontractors.organizationId, orgId)))
+          .limit(1);
+        tiers = sub?.name ?? null;
+      }
+      await this.ownerNotifier.notifyQuoteReceived(orgId, projectId, { tiers, totalTtc: q.totalTtc, currencyId: q.currencyId });
+    } catch {
+      // jamais bloquant
+    }
   }
 
   // Montant ENGAGE en bons de commande par phase, VENTILE PAR DEVISE (meme
@@ -1487,6 +1571,13 @@ export class BatiproService {
     });
 
     await this.publish("submitSubcontractorDocument", ["documents", "document_lines"], "created", documentId, orgId);
+    if ((payload.type ?? "quote") === "quote") {
+      void this.notifyOwnerQuoteFromLink(orgId, link.projectId, link.subcontractorId ?? null, {
+        fallbackName: payload.submitted_by_company || payload.submitted_by_name || null,
+        totalTtc,
+        currencyId: payload.currency_id ?? null,
+      });
+    }
     return { id: documentId, message: "Soumission enregistree." };
   }
 
@@ -3248,6 +3339,17 @@ export class BatiproService {
     }
 
     await this.publish("recordPayment", ["documents"], "updated", invoiceDocumentId, orgId);
+    if (isSupplierSettlement) {
+      void this.ownerNotifier.notifyPayment(orgId, invoice.projectId, {
+        amount,
+        currencyId: invoice.currencyId ?? null,
+        supplierName: invoice.supplierName || invoice.subcontractorName || null,
+        loadBudgetSummary: async () => {
+          const s = await this.projectBudgetSummary(invoice.projectId, orgId);
+          return { spent: s.spent, budget: s.budget };
+        },
+      });
+    }
     return {
       id: invoiceDocumentId,
       paid_amount: newPaid,

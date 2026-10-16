@@ -1861,3 +1861,47 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .contrats-signer-name { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
 .contrats-signer-actions { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
 .contrats-signer-btn { min-height:44px; min-width:44px; flex:1 1 140px; justify-content:center; }
+
+/* Communiques SMS : boutons tactiles, alerte, textarea natif */
+.modal-actions .btn, .modal-actions .immo-btn { min-height:44px; }
+@media (max-width:420px) {
+  .modal-actions { flex-direction:column-reverse; align-items:stretch; }
+  .modal-actions .btn, .modal-actions .immo-btn { width:100%; justify-content:center; }
+}
+.field textarea { border:1px solid var(--border); border-radius:8px; padding:10px 11px; background:#fff; color:var(--ink-800); font:14px 'Inter',sans-serif; outline:none; resize:vertical; }
+.field textarea:focus { border-color:var(--iris-300); box-shadow:0 0 0 3px var(--iris-50); }
+.immo-callout-warning { background:#fef3c7; color:#92400e; border-radius:8px; padding:10px 12px; display:flex; gap:8px; align-items:flex-start; }
+.immo-callout-warning.block { display:grid; gap:8px; }
+
+/* Résiliation de bail (modale) — mobile 360px, cibles >= 44px */
+.domus-terminate-modal { max-height:min(88vh,760px); max-height:min(88dvh,760px); }
+.domus-terminate-modal textarea { width:100%; min-height:96px; box-sizing:border-box; resize:vertical; font:inherit; }
+.domus-terminate-modal input[type="date"] { min-height:44px; width:100%; box-sizing:border-box; }
+.domus-terminate-modal .modal-head button { min-height:44px; min-width:44px; }
+.domus-terminate-sub { font-size:13px; font-weight:700; margin:0 0 8px; }
+.domus-terminate-hint { color:var(--ink-500); display:block; font-size:12px; margin-top:4px; }
+.domus-terminate-error { color:var(--rose); font-size:13px; margin:6px 0 0; }
+.domus-terminate-error-box { margin:0 24px 8px; }
+.domus-terminate-warn { color:var(--rose) !important; }
+.domus-terminate-retry { align-items:center; display:flex; flex-wrap:wrap; gap:10px; }
+.domus-terminate-recap.is-loading { opacity:.5; pointer-events:none; }
+.domus-terminate-final { color:var(--ink-600); font-size:13px; font-weight:600; margin:12px 24px 0; }
+.domus-terminate-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.domus-terminate-links .immo-btn,
+.domus-terminate-retry .immo-btn,
+.domus-terminate-modal .domus-modal-cancel,
+.domus-terminate-modal .domus-modal-submit { min-height:44px; }
+.domus-terminate-modal .domus-modal-submit { height:44px; }
+.domus-terminate-secondary { background:var(--ink-100); color:var(--ink-600); }
+.domus-terminate-check { align-items:center; display:flex; gap:10px; min-height:44px; cursor:pointer; }
+.domus-terminate-check input { height:22px; width:22px; flex:none; }
+.domus-terminate-sms { background:var(--ink-100); border-left:3px solid var(--ink-400); border-radius:6px; font-size:13px; margin:8px 0 0; padding:10px 12px; word-break:break-word; }
+.domus-terminate-submit { background:var(--rose); border-color:var(--rose); }
+.domus-terminate-submit:hover:not(:disabled) { background:var(--rose); border-color:var(--rose); filter:brightness(.88); }
+.domus-terminate-modal .immo-pay-row { gap:8px; flex-wrap:wrap; }
+@media (max-width:480px) {
+  .domus-terminate-modal .domus-modal-footer { flex-direction:row; flex-wrap:wrap; padding:12px 16px; }
+  .domus-terminate-modal .domus-modal-footer > button { flex:1 1 140px; height:44px; justify-content:center; }
+  .domus-terminate-error-box { margin:0 16px 8px; }
+  .domus-terminate-final { margin:12px 16px 0; }
+}

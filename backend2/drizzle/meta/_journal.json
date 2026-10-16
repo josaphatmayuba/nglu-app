@@ -2017,6 +2017,34 @@
       "when": 1781503200000,
       "tag": "0312_real_estate_contract_signers",
       "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "5",
+      "when": 1781589600000,
+      "tag": "0313_batipro_project_owner_sms",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "5",
+      "when": 1781676000000,
+      "tag": "0314_real_estate_announcements",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "5",
+      "when": 1781762400000,
+      "tag": "0315_real_estate_lease_termination",
+      "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "5",
+      "when": 1781848800000,
+      "tag": "0316_batipro_project_owner_name",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString } from "class-validator";
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
@@ -22,6 +22,13 @@ export class CreateBatiproProjectDto {
   // "Faible" avant qu'aucune phase/BC n'existe).
   @IsOptional() @IsString() risk?: string;
   @IsOptional() @IsString() notes?: string;
+  // Nom du proprietaire (formule d'accueil des SMS). ""/null = effacer.
+  @IsOptional() @IsString() @MaxLength(255) owner_name?: string | null;
+  // SMS au proprietaire du chantier. null/"" = effacer le numero.
+  @ValidateIf((o) => o.owner_phone !== undefined && o.owner_phone !== null && o.owner_phone !== "")
+  @IsString() @MaxLength(32) @Matches(/^\+\d{6,15}$/, { message: "owner_phone doit etre au format international (+243...)." })
+  owner_phone?: string | null;
+  @IsOptional() @IsIn([true, false, 0, 1]) owner_sms_enabled?: boolean | number;
 }
 
 export class UpdateBatiproProjectDto extends CreateBatiproProjectDto {

@@ -531,6 +531,7 @@ const MESSAGE_EVENTS = [
   ["payment_received_owner", "Propriétaire · paiement reçu"],
   ["payment_overdue_owner", "Propriétaire · loyer en retard"],
   ["lease_expiring", "Fin de bail · locataire"],
+  ["lease_terminated", "Bail résilié · locataire"],
   ["lease_expiring_owner", "Propriétaire · fin de bail"],
   ["custom", "Autre / personnalisé"],
 ];
@@ -638,6 +639,14 @@ const DEFAULT_MESSAGES = [
     body:
       "Bonjour {firstName}, votre bail {address} se termine le {endDate}. " +
       "Pour le renouveler ou nous informer de votre depart, contactez {contacts}.",
+  },
+  {
+    name: "Bail résilié — locataire",
+    eventType: "lease_terminated",
+    subject: "Votre bail est résilié",
+    body:
+      "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
+      "Pour toute question, contactez votre gestionnaire {managerContact}.",
   },
   {
     name: "Propriétaire — fin de bail",
@@ -751,7 +760,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contacts}"} (proprietaire du bien et gestionnaire qui lui est assigne, avec leurs telephones ; {"{ownerContact}"} et {"{managerContact}"} permettent de n'en citer qu'un), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. <b>Chaque SMS est limite a 160 caracteres (un seul segment)</b> : au-dela, le texte est coupe automatiquement, le lien etant toujours preserve en entier. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contacts}"} (proprietaire du bien et gestionnaire qui lui est assigne, avec leurs telephones ; {"{ownerContact}"} et {"{managerContact}"} permettent de n'en citer qu'un), {"{landlordName}"} (nom du proprietaire) et {"{unit}"} (numero d'appartement). Pour les messages au PROPRIETAIRE : {"{ownerName}"} (nom du proprietaire), {"{tenantPhone}"}, {"{deposit}"} (caution) et {"{charges}"}. Pour le nouveau dossier locataire : {"{profession}"}, {"{employer}"}, {"{income}"}, {"{spouse}"} (conjoint si marie), {"{occupants}"}, {"{children}"}, {"{idNumber}"}, {"{nationality}"}, {"{oldLessor}"} et {"{emergencyContact}"} — un champ vide est retire automatiquement du texte. {"{property}"} (nom du bien seul, ex. « Residence Tombalbaye ») n'est disponible que pour le message de paiement recu ; pour le bail, {"{address}"} donne le bien, la rue, la ville et l'appartement. Pour le message de bail resilie : {"{terminationDate}"} (date d'effet, JJ/MM/AAAA), {"{address}"}, {"{unit}"}, {"{tenantName}"} et {"{managerContact}"} ; le motif de la resiliation n'est jamais envoye au locataire. Le message de nouveau dossier locataire ne mentionne aucun bien : a ce stade le locataire n'est encore rattache a rien.
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
@@ -812,7 +821,7 @@ function MessageEditorModal({ value, busy, onClose, onSave }) {
             <label className="domus-property-field">
               <span>Evenement <b>*</b></span>
               <select value={form.eventType} onChange={(e) => set({ eventType: e.target.value })}>
-                {MESSAGE_EVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {MESSAGE_EVENTS.map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}
               </select>
             </label>
           </div>
@@ -1157,7 +1166,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
             <label className="domus-property-field">
               <span>Type <b>*</b></span>
               <select value={form.type} onChange={(e) => set({ type: e.target.value })}>
-                {TEMPLATE_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {TEMPLATE_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}
               </select>
             </label>
           </div>
