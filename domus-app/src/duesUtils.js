@@ -1,7 +1,7 @@
 // Domus — bail « 1 mois = 1 echeance = ses paiements » (lease.allocationLedger).
 // Logique PURE : construit les champs de la carte de loyer DIRECTEMENT depuis
 // lease.dues (backend). Les baux non flagges gardent le chemin historique.
-import { daysPastDue, dueKind } from "./overdue.js";
+import { daysPastDue, dueKind, normalizeGrace, parseLocalDay } from "./overdue.js";
 
 export const isDuesLease = (lease) => Boolean(lease && lease.allocationLedger === true && Array.isArray(lease.dues));
 
@@ -76,8 +76,10 @@ export function duesCardFields(lease, now = new Date()) {
       months.push(new Date(lastMonth.getFullYear(), lastMonth.getMonth() + (k - base + 1), 1));
     }
   }
+  const ld = lateDueSplit(dues, kinds, lease?.graceDays, now);
   return {
     dues, kinds, months, fills, paidCount, lateCount, hasOpen,
+    lateAmount: ld.late, dueAmount: ld.due, graceUntil: ld.graceUntil,
     monthsCovered: paidCount,
     monthsCoveredFloat: paidCount,
     monthsDue: Math.max(1, dues.filter((d) => isEchu(d)).length + (kinds.includes("cur") ? 1 : 0)),
@@ -113,4 +115,50 @@ export function futureBeforeLate(dues, picked, graceDays, now = new Date()) {
   const future = sel.some((d) => !isDueEchu(d, now) && kinds.get(d.id) !== "cur");
   if (!future) return false;
   return dues.some((d) => kinds.get(d.id) === "late" && !(picked.get(d.id) > 0) && day10(d.periodStart) < maxSel);
+}
+
+// Date limite de grace = echeance + graceDays (null si graceDays inconnu).
+export function graceUntilOf(dueDate, graceDays) {
+  const g = normalizeGrace(graceDays);
+  const d = parseLocalDay(dueDate);
+  if (g === null || g < 0 || !d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + g);
+}
+
+// Retard / Du (bail flagge) : retard = reste des echeances « late » ; du = reste des
+// echeances echues (ou mois courant) encore dans la grace. graceUntil = fin de grace
+// de la plus ancienne echeance « du ».
+export function lateDueSplit(dues, kinds, graceDays, now = new Date()) {
+  let late = 0;
+  let due = 0;
+  let graceUntil = null;
+  dues.forEach((d, i) => {
+    const k = kinds[i];
+    if (k === "paid" || k === "future") return;
+    const rest = dueRemaining(d);
+    if (k === "late") { late += rest; return; }
+    if (!isDueEchu(d, now)) return;
+    due += rest;
+    if (graceUntil === null && rest > 0.005) graceUntil = graceUntilOf(dueDay(d), graceDays);
+  });
+  return { late: r2(late), due: r2(due), graceUntil };
+}
+
+// Bail historique : retard = reste cumule jusqu'au dernier mois « late » de la frise
+// (les paiements remplissent les mois du plus ancien au plus recent), borne par le solde ;
+// du = solde - retard. cumDue(i) = cumul exigible jusqu'au mois i inclus.
+export function legacyLateDue({ kinds, balance, totalPaid, cumDue }) {
+  const lastLate = kinds.lastIndexOf("late");
+  const bal = Math.max(0, Number(balance) || 0);
+  const late = lastLate < 0 ? 0 : Math.min(bal, Math.max(0, r2(cumDue(lastLate) - (Number(totalPaid) || 0))));
+  return { late: r2(late), due: r2(Math.max(0, bal - late)) };
+}
+
+// Montants d'un mois de la frise d'un bail flagge. prorata = periode plus courte que le loyer plein.
+export function monthAmounts(dueFrise, i, rent) {
+  const d = dueFrise?.dues?.[i];
+  if (!d) return { amount: r2(rent), paid: 0, prorata: false, hasDue: false };
+  const amount = r2(d.amount);
+  const full = Number(rent) || 0;
+  return { amount, paid: r2(d.amountPaid), prorata: full > 0 && amount > 0.005 && amount < full - 0.005, hasDue: true };
 }

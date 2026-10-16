@@ -1930,3 +1930,18 @@ fieldset.immo-alloc { min-width:0; }
 .immo-alloc-line { flex-wrap:wrap; gap:6px; }
 .immo-alloc-line .immo-btn, .immo-alloc-cta { min-height:44px; }
 @media (min-width:520px) { .immo-alloc-list li { flex-direction:row; align-items:center; justify-content:space-between; } .immo-alloc-amount { max-width:140px; } }
+
+/* Carte loyer : ligne Retard / Du (remplace le total « Reste a payer ») */
+.immo-pay-ld { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 12px; margin-bottom:6px; line-height:1.3; }
+.immo-pay-ld .ld-late { color:#dc2626; font-size:13px; font-weight:600; }
+.immo-pay-ld .ld-late b { font-size:16px; font-weight:800; }
+.immo-pay-ld .ld-due { color:#b45309; font-size:12px; font-weight:600; }
+.immo-pay-ld .ld-due b { font-size:13px; font-weight:800; }
+/* Frise depliee (bail flagge) : montant par mois + actions du panneau */
+.immo-pay-months > button.immo-pay-m { min-width:0; padding:2px 1px; }
+.immo-pay-m .amt { font-size:9px; font-weight:600; line-height:1.15; text-align:center; max-width:100%; display:flex; flex-direction:column; align-items:center; }
+.immo-pay-m .amt span { white-space:nowrap; }
+.immo-pay-m .amt i { display:block; font-style:normal; font-weight:500; font-size:8px; opacity:.85; }
+button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px; }
+.immo-pay-mini-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.immo-pay-mini-actions .immo-btn, .immo-pay-panel .immo-btn { min-height:36px; padding:0 10px; font-size:12px; }
