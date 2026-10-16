@@ -216,6 +216,7 @@ export class LeaseAllocationService {
           code: "OLDER_DUE_UNSETTLED",
           message: `L'echeance du ${older.periodStart} n'est pas soldee alors qu'une echeance plus recente est payee.`,
           dueId: older.id,
+          params: { date: older.periodStart },
         });
       }
     }
@@ -520,7 +521,7 @@ export class LeaseAllocationService {
 
   // ─── Reprise (backfill) ──────────────────────────────────────────────────
 
-  private makePlan(lease: typeof realEstateLeases.$inferSelect, rows: Awaited<ReturnType<LeaseAllocationService["loadRows"]>>, decimals: number, now: Date): BackfillPlan {
+  private makePlan(lease: typeof realEstateLeases.$inferSelect, rows: Awaited<ReturnType<LeaseAllocationService["loadRows"]>>, decimals: number, now: Date, graceDays = 0): BackfillPlan {
     const todayStr = formatDateOnly(now);
     const schedule = this.buildSchedule(lease, decimals, todayStr);
     const paidTotal = rows.filter((r) => r.status === "paid").reduce((s, r) => s + Number(r.amount || 0), 0);
@@ -539,7 +540,7 @@ export class LeaseAllocationService {
         currencyId: r.currencyId, periodStart: r.periodStart, periodEnd: r.periodEnd, transactionId: r.transactionId,
         proofUrl: r.proofUrl, notes: r.notes,
       })),
-      { decimals, today: todayStr, legacyTotalDue: legacy },
+      { decimals, today: todayStr, legacyTotalDue: legacy, graceDays },
     );
   }
 
@@ -599,7 +600,7 @@ export class LeaseAllocationService {
     if (isLeaseFlagged(lease)) return { leaseId, reference, mode: "skipped", reason: "Registre deja actif sur ce bail." };
     const decimals = await this.decimalsFor(this.db, lease.currencyId);
     const rows = await this.loadRows(this.db, leaseId, orgId);
-    const plan = this.makePlan(lease, rows, decimals, now);
+    const plan = this.makePlan(lease, rows, decimals, now, await readOverdueGraceDays(this.db, orgId));
     if (summary) {
       const { dues: _dues, ...rest } = plan;
       return { leaseId, reference, mode: "preview", plan: rest };
@@ -613,7 +614,7 @@ export class LeaseAllocationService {
       if (isLeaseFlagged(lease)) return { leaseId, reference, mode: "skipped", reason: "Registre deja actif sur ce bail." };
       const decimals = await this.decimalsFor(tx, lease.currencyId);
       const rows = await this.loadRows(tx, leaseId, orgId, true);
-      const plan = this.makePlan(lease, rows, decimals, now);
+      const plan = this.makePlan(lease, rows, decimals, now, await readOverdueGraceDays(tx as any, orgId));
       if (!plan.canApply) return { leaseId, reference, mode: "refused", reason: "Bail sans echeancier exploitable.", plan };
       if (plan.requiresForce && !force) {
         return { leaseId, reference, mode: "refused", reason: "Ecart avec le calcul legacy : revoir l'apercu puis relancer avec force.", plan };

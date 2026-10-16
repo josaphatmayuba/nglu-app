@@ -701,6 +701,7 @@ const EN = {
   "Montant imputé sur {m}": "Amount allocated to {m}",
   "{m} non imputé : il deviendra une avance.": "{m} unallocated: it will become an advance.",
   "Avance : {m}": "Advance: {m}",
+  "L'échéance du {date} n'est pas soldée alors qu'une échéance plus récente est payée.": "The {date} due is not settled although a more recent due is paid.",
   "Un mois à venir est payé alors qu'un mois plus ancien est en retard.": "An upcoming month is being paid while an older month is overdue.",
   "Réimputer le paiement": "Reallocate payment",
   "Réimputer": "Reallocate",

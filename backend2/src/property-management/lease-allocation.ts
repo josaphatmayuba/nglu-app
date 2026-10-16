@@ -25,6 +25,8 @@ export interface AllocationWarning {
   code: "CURRENCY_MISMATCH" | "OLDER_DUE_UNSETTLED" | "DUE_NOT_ELIGIBLE" | "OVER_ALLOCATION_CAPPED";
   message: string;
   dueId?: DueId;
+  /** Parametres structures (affichage localise cote front). */
+  params?: { date?: string; [k: string]: unknown };
 }
 
 export interface AllocateInput {
@@ -101,6 +103,7 @@ export function allocate(input: AllocateInput): AllocateResult {
         code: "OLDER_DUE_UNSETTLED",
         message: `L'echeance du ${older.periodStart} n'est pas soldee alors qu'une echeance plus recente est payee.`,
         dueId: older.id,
+        params: { date: older.periodStart },
       });
     }
   }
@@ -151,6 +154,8 @@ export interface BackfillOptions {
   legacyTotalDue?: number | null;
   /** Periodes sans ligne creees seulement si dueDate <= createUntil (defaut = today). */
   createUntil?: string;
+  /** Delai de grace (jours) : une echeance n'est « en retard » que si today > dueDate + graceDays. Defaut 0. */
+  graceDays?: number;
 }
 
 export type BackfillAnomalyCode =
@@ -402,7 +407,10 @@ export function planBackfill(
     d.dueStatus = dueStatusOf(d.amount, d.amountPaid, decimals);
     if (d.dueDate <= opts.today && d.remaining > 0) {
       totalDue = roundMoney(totalDue + d.remaining, decimals);
-      overdue++;
+      // Meme regle que isPastGrace (lease-overdue) : today strictement apres dueDate + grace.
+      const limit = new Date(`${d.dueDate}T00:00:00Z`);
+      limit.setUTCDate(limit.getUTCDate() + (opts.graceDays ?? 0));
+      if (new Date(`${opts.today}T00:00:00Z`).getTime() > limit.getTime()) overdue++;
     }
   }
   plan.dues = [...dues.values()];

@@ -22,6 +22,9 @@ import { isLeaseFlagged } from "./lease-allocation";
 import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
 
+/** Marqueur interne : SMS non envoye car desactive (pas un echec). */
+const SMS_SKIPPED = "__sms_skipped__";
+
 // graceDays = delai de grace avant retard (Reglages « Retards de loyer ») : le
 // rappel automatique part overdueDays jours APRES la fin de ce delai.
 type ReminderConfig = { enabled: boolean; overdueDays: number; graceDays: number; expiryDays: number; hour: number };
@@ -194,6 +197,7 @@ export class RentReminderService {
       let smsStatus: "sent" | "failed" | "no_phone" | "skipped" = targets.tenant ? "no_phone" : "skipped";
       let smsError: string | null = null;
       let smsFailures = 0;
+      let smsSkipped = 0;
 
       const daysLate = Math.floor(
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
@@ -270,7 +274,9 @@ export class RentReminderService {
                 : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, lease.organizationId),
             );
             const err = await this.safeSms(r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel);
-            if (err) {
+            if (err === SMS_SKIPPED) {
+              smsSkipped += 1;
+            } else if (err) {
               smsFailures += 1;
               smsError = smsError ?? err;
             } else {
@@ -294,6 +300,7 @@ export class RentReminderService {
       if (targets.tenant) {
         if (sentCount > 0) smsStatus = "sent";
         else if (smsFailures > 0) smsStatus = "failed";
+        else if (smsSkipped > 0) smsStatus = "skipped";
       }
 
       if (targets.emergency && lease.emergencyPhone) {
@@ -540,6 +547,7 @@ export class RentReminderService {
         ...related,
       });
       if (!res?.success) {
+        if ((res as any)?.skipped) return SMS_SKIPPED;
         this.logger.warn(`Reminder SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
         return res?.message || "SMS non envoye";
       }

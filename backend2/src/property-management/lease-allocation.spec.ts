@@ -125,6 +125,10 @@ describe("planBackfill (pur)", () => {
     expect(plan.credit).toBe(0);
     expect(plan.requiresForce).toBe(false);
     expect(plan.canApply).toBe(true);
+    // Delai de grace : echeance du 2026-10-01 + 15 j = 16 oct, non strictement depassee -> 1 seul retard.
+    const graced = planBackfill(lease, sched, rows, { today: "2026-10-16", legacyTotalDue: 6000, graceDays: 15 });
+    expect(graced.totals.overdueCount).toBe(1);
+    expect(graced.totals.totalDueNew).toBe(6000);
     expect(plan.create.map((c) => c.periodStart)).toEqual(["2026-07-15", "2026-08-01"]);
     expect(plan.payments.map((p) => p.rowId)).toEqual([1, 2]);
   });

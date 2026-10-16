@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import { getLang, t, tf } from "../i18n.js";
 import { moneyExact } from "../data.js";
+import { fmtDateLong } from "../rentBookUtils.js";
 import { Modal } from "../screens/biens.jsx";
 import { activeDues, allocationsOfPayment, dueRemaining, futureBeforeLate } from "../duesUtils.js";
 
@@ -13,6 +14,14 @@ const monthLabel = (iso) => {
   if (!m) return "";
   return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString(getLang() === "en" ? "en-GB" : "fr-FR", { month: "short", year: "numeric" });
 };
+// Avertissement d'apercu : code + params structures (localise), repli sur le message brut.
+const WARN_KEYS = { OLDER_DUE_UNSETTLED: "L'échéance du {date} n'est pas soldée alors qu'une échéance plus récente est payée." };
+export function warningText(w) {
+  if (typeof w === "string") return w;
+  const key = w?.code && w?.params ? WARN_KEYS[w.code] : null;
+  if (!key) return w?.message || "";
+  return tf(key, { ...w.params, date: w.params.date ? fmtDateLong(w.params.date) : "" });
+}
 const num = (v) => Number(String(v ?? "").replace(/\s/g, "").replace(",", "."));
 
 // "juil. 2026 (1 645,16 $), aout 2026 (...)"
@@ -158,7 +167,7 @@ export function AllocationBlock({ lease, amount, paymentDate, symbol, onChange }
         )}
         {credit > 0.005 && <p className="immo-alloc-credit">{tf("Avance : {m}", { m: moneyExact(credit, symbol) })}</p>}
         {warnFuture && <p className="immo-alloc-warn">{t("Un mois à venir est payé alors qu'un mois plus ancien est en retard.")}</p>}
-        {(preview?.warnings || []).map((w, i) => <p key={i} className="immo-alloc-warn">{typeof w === "string" ? w : w.message || ""}</p>)}
+        {(preview?.warnings || []).map((w, i) => <p key={i} className="immo-alloc-warn">{warningText(w)}</p>)}
       </div>
       {err && (
         <div className="api-error" role="alert">

@@ -57,6 +57,25 @@ export function duesCardFields(lease, now = new Date()) {
   // Dernier mois solde (fin de periode) pour « Couvert jusqu'a ».
   const lastPaid = dues.filter((d, i) => kinds[i] === "paid").pop();
   const futurePaid = dues.filter((d, i) => kinds[i] === "paid" && !isEchu(d)).length;
+  // Total = periodes du bail (debut/fin inclus) : les mois futurs non encore generes
+  // s'affichent « a venir » (comme le legacy). Bail sans fin : pas de remplissage.
+  // Periodes mensuelles du bail : fin exclusive = lendemain de endDate (07-15 -> 07-14 = 12).
+  const sm = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const em = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.endDate || ""));
+  let leaseMonths = 0;
+  if (sm && em) {
+    const ex = new Date(Number(em[1]), Number(em[2]) - 1, Number(em[3]) + 1);
+    leaseMonths = (ex.getFullYear() - Number(sm[1])) * 12 + (ex.getMonth() + 1 - Number(sm[2])) + (ex.getDate() > Number(sm[3]) ? 1 : 0);
+  }
+  const lastMonth = months[months.length - 1];
+  if (lastMonth && leaseMonths > kinds.length) {
+    const base = kinds.length;
+    for (let k = base; k < leaseMonths; k += 1) {
+      kinds.push("future");
+      fills.push(0);
+      months.push(new Date(lastMonth.getFullYear(), lastMonth.getMonth() + (k - base + 1), 1));
+    }
+  }
   return {
     dues, kinds, months, fills, paidCount, lateCount, hasOpen,
     monthsCovered: paidCount,

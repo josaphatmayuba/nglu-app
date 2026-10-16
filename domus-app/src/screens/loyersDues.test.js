@@ -88,3 +88,16 @@ describe("non-regression : bail non flagge", () => {
     expect(c.dueFrise).toBeUndefined();
   });
 });
+
+describe("frise : total = periodes du bail", () => {
+  it("dues generees jusqu'a aujourd'hui (4) : 12 cases, mois futurs a venir", () => {
+    const [c] = buildLeaseCards([lease(bail11().slice(0, 4))], pays);
+    expect(c.dueFrise.kinds.length).toBe(12);
+    expect(c.dueFrise.kinds.slice(4)).toEqual(Array(8).fill("future"));
+    expect(c.dueFrise.fills.length).toBe(12);
+    expect(c.dueFrise.months[4].getMonth()).toBe(10);
+    expect(c.dueFrise.months[11].getFullYear()).toBe(2027);
+    expect(c.dueFrise.kinds.filter((k) => k === "paid").length).toBe(2);
+    expect(c.monthsDue).toBe(4);
+  });
+});
