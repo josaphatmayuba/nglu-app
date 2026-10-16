@@ -315,13 +315,19 @@ export const api = {
   leaseProrationRealign: (id) => post(`/leases/${id}/proration-realign`),
 
   payments: () => get("/payments"),
+  // Echeance-paiements (bail flagge allocationLedger) : echeances + imputations.
+  leaseDues: (id) => get(`/leases/${id}/dues`),
+  // Simulation sans ecriture : { amount, paymentDate, currencyId?, allocations?:[{dueId, amount?}] }.
+  allocationPreview: (id, b) => post(`/leases/${id}/allocation-preview`, b),
+  // Reimputation d'un paiement existant : { allocations:[{dueId, amount}], reason }.
+  setPaymentAllocations: (id, b) => put(`/payments/${id}/allocations`, b),
   // proofFile optionnel (photo/scan recu, capture mobile money) — meme
   // pattern multipart que markContractSignedManually / uploadMaintenancePhoto.
   createPayment: (b, proofFile = null) => {
     if (!proofFile) return post("/payments", b);
     const form = new FormData();
     Object.entries(b || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) form.append(key, String(value));
+      if (value !== undefined && value !== null) form.append(key, typeof value === "object" ? JSON.stringify(value) : String(value));
     });
     form.append("proof", proofFile);
     return multipartFetch("/payments", form);

@@ -361,6 +361,7 @@ export class DashboardService {
         currencyId: realEstateLeases.currencyId,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
       })
       .from(realEstateLeases)
       .where(and(eq(realEstateLeases.status, "active"), eq(realEstateLeases.organizationId, org)));

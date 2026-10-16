@@ -106,7 +106,7 @@ import { isLeaseFlagged } from "./lease-allocation";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, type LeaseDueEntry } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
@@ -4515,6 +4515,7 @@ export class PropertyManagementService {
         currencyId: realEstateLeases.currencyId,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         currencySymbol: currencies.currencySymbol,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
@@ -4654,6 +4655,8 @@ export class PropertyManagementService {
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
         noticeSentAt: realEstateLeases.defaultNoticeSentAt,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
+        currencyDecimals: currencies.decimalPlaces,
         currencySymbol: currencies.currencySymbol,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
@@ -4712,6 +4715,17 @@ export class PropertyManagementService {
       monthsBehind = Math.max(0, dueCount - Math.min(cov.coveredCount, dueCount));
       balance = computeLeaseTotalDue(lease as any, totalPaid, decimals, now);
       nextDueForLate = cov.nextDueDate;
+    }
+
+    if (isLeaseFlagged(lease)) {
+      // Bail flagge : retard et dette depuis l'etat impute (meme source que l'ecran Loyers).
+      const graceDays = await readOverdueGraceDays(this.db, orgId);
+      const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+      const st = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))!;
+      const openDues = st.dues.filter((d) => d.dueDate <= this.formatDateOnly(today) && d.remaining > 0);
+      monthsBehind = openDues.length;
+      balance = st.totalDue;
+      nextDueForLate = openDues.length ? openDues[0].dueDate : null;
     }
 
     if (monthsBehind <= 1) {
@@ -5220,6 +5234,7 @@ export class PropertyManagementService {
         rentAmount: realEstateLeases.rentAmount,
         billingCycle: realEstateLeases.billingCycle,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         currencyId: realEstateLeases.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -5324,8 +5339,24 @@ export class PropertyManagementService {
       schedule = scheduleForLease(lease as any, decimals, paidTotal, this.formatDateOnly(new Date()), 14);
     }
 
+    // Bail flagge : echeances imputees (meme forme que getLeaseDueState.dues) pour le carnet imprime.
+    const { allocationLedgerAt: _ledgerAt, ...leaseOut } = lease as any;
+    let ledgerDues: LeaseDueEntry[] | undefined;
+    if (isLeaseFlagged(lease)) {
+      const graceDays = await readOverdueGraceDays(this.db, orgId);
+      const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+      ledgerDues = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))?.dues;
+    }
+
     return {
-      lease: { ...lease, rentProrationEnabled: !!lease.rentProrationEnabled, managerName, payTo },
+      lease: {
+        ...leaseOut,
+        rentProrationEnabled: !!lease.rentProrationEnabled,
+        managerName,
+        payTo,
+        allocationLedger: isLeaseFlagged(lease),
+        ...(ledgerDues ? { dues: ledgerDues } : {}),
+      },
       payments,
       portalUrl: portalUrl || null,
       ...(schedule ? { schedule } : {}),
@@ -7427,6 +7458,8 @@ export class PropertyManagementService {
         defaultNoticeSentAt: realEstateLeases.defaultNoticeSentAt,
         defaultNoticeMonthsBehind: realEstateLeases.defaultNoticeMonthsBehind,
         // Resiliation avec motif (statut "ended" + ces 4 champs ; null pour une fin normale/renouvellement).
+        // Registre d'imputations actif (bail flagge) : lecteurs bascules sur l'etat impute.
+        allocationLedgerAt: realEstateLeases.allocationLedgerAt,
         terminationDate: realEstateLeases.terminationDate,
         terminationReason: realEstateLeases.terminationReason,
         terminatedAt: realEstateLeases.terminatedAt,
@@ -7461,45 +7494,66 @@ export class PropertyManagementService {
   private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
     rows: T[],
     orgId: number,
-  ): Promise<Array<Omit<T, "rentProrationEnabled"> & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null; overdueDays: number; graceDays: number; rentProrationEnabled: boolean; nextDueDate: string | null; nextDueAmount: number; isProratedNext: boolean }>> {
+  ): Promise<Array<Omit<T, "rentProrationEnabled"> & { lateCount: number; unpaidCount: number; dueCount: number; lateRatio: number; isOverdue: boolean; overdueDueDate: string | null; overdueDays: number; graceDays: number; rentProrationEnabled: boolean; nextDueDate: string | null; nextDueAmount: number; isProratedNext: boolean; allocationLedger: boolean; dues?: LeaseDueEntry[]; credit?: number; totalDue?: number }>> {
     if (!rows.length) return [];
     const graceDays = await this.overdueGraceDays(orgId);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
     const entries = await loadOverdueByLease(this.db, orgId, graceDays, rows as any[], today);
     // openDueCount : toutes les echeances pending/overdue non voided (delai de grace inclus), distinct de unpaidCount.
-    const openRows: Array<{ leaseId: number; n: any }> = await this.db
+    // Baux flagges : calcule depuis l'etat impute (entries.ledger), pas de requete.
+    const legacyIds = rows.filter((x) => !(entries.get(x.id) as any)?.ledger).map((x) => x.id);
+    const openRows: Array<{ leaseId: number; n: any }> = legacyIds.length ? await this.db
       .select({ leaseId: realEstateRentPayments.leaseId, n: sql`COUNT(*)` })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
-        inArray(realEstateRentPayments.leaseId, rows.map((x) => x.id)),
+        inArray(realEstateRentPayments.leaseId, legacyIds),
         inArray(realEstateRentPayments.status, ["pending", "overdue"]),
       ))
-      .groupBy(realEstateRentPayments.leaseId);
+      .groupBy(realEstateRentPayments.leaseId) : [];
     const openMap = new Map<number, number>(openRows.map((o) => [Number(o.leaseId), Number(o.n) || 0]));
     return rows.map((row) => {
+      const { allocationLedgerAt: _ledgerAt, ...rowOut } = row as any;
       const r = row as any;
       const e = entries.get(row.id)!;
+      if (e.ledger) {
+        const { openDueCount, dues, credit, totalDue } = e.ledger;
+        return {
+          ...rowOut,
+          ...e.stats,
+          openDueCount,
+          rentProrationEnabled: !!r.rentProrationEnabled,
+          nextDueDate: e.next ? e.next.nextDueDate : ((r.nextInvoiceDate ?? null) as string | null),
+          nextDueAmount: e.next ? e.next.nextDueAmount : (Number(r.rentAmount) || 0),
+          isProratedNext: false,
+          allocationLedger: true,
+          dues,
+          credit,
+          totalDue,
+        } as any;
+      }
       const openDueCount = openMap.get(Number(row.id)) ?? 0;
       if (e.next) {
         return {
-          ...row,
+          ...rowOut,
           ...e.stats,
           openDueCount,
           rentProrationEnabled: true,
           nextDueDate: e.next.nextDueDate,
           nextDueAmount: e.next.nextDueAmount,
           isProratedNext: e.next.isProratedNext,
+          allocationLedger: false,
         } as any;
       }
       return {
-        ...row,
+        ...rowOut,
         ...e.stats,
         openDueCount,
         rentProrationEnabled: false,
         nextDueDate: (r.nextInvoiceDate ?? null) as string | null,
         nextDueAmount: Number(r.rentAmount) || 0,
         isProratedNext: false,
+        allocationLedger: false,
       } as any;
     });
   }

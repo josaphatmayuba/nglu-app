@@ -7,7 +7,9 @@ import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { filterLeases, filterPayments, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { friseKinds, leaseCardStatus } from "../overdue.js";
-import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
+import { AllocationBlock, PaymentAllocations, allocationPayload } from "../components/Allocation.jsx";
+import { allocationsOfPayment, cumulativeRemaining, dueRemaining, duesCardFields, isDuesLease } from "../duesUtils.js";
+import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
@@ -151,6 +153,39 @@ export function buildLeaseCards(leases, payments) {
       const paidMonths = new Set(paidList.map((p) => p.paymentDate && monthKey(p.paymentDate)).filter(Boolean));
       const latest = [...paidList].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null;
 
+      // Bail flagge « 1 mois = 1 echeance » : carte construite DIRECTEMENT depuis `dues`
+      // (sans deduire les mois du cumul des paiements). Les autres baux : chemin historique.
+      if (isDuesLease(l)) {
+        const f = duesCardFields(l, now);
+        return {
+          lease: l,
+          name: tenantName(l),
+          unit: [l.propertyName || l.propertyAddress, l.unitName].filter(Boolean).join(" · ") || null,
+          rent: l.rentAmount,
+          nextDueAmount: nextDueAmountOf(l),
+          nextDueDate: nextDueDateOf(l),
+          isProratedNext: false,
+          periodAmounts: null,
+          currencyId: l.currencyId,
+          symbol: l.currencySymbol || latest?.currencySymbol || "$",
+          paidMonths,
+          monthsCovered: f.monthsCovered,
+          monthsCoveredFloat: f.monthsCoveredFloat,
+          monthsDue: f.monthsDue,
+          totalDue: f.totalDue,
+          balance: f.balance,
+          credit: f.credit,
+          monthsBehind: f.monthsBehind,
+          monthsAhead: f.monthsAhead,
+          coveredUntil: f.coveredUntil,
+          totalPaid: f.totalPaid,
+          latest,
+          status: f.status,
+          list,
+          dueFrise: f,
+        };
+      }
+
       // Couverture par MONTANT : le total payé / loyer mensuel = nb de mois couverts,
       // rempli du début du bail vers le présent. Régler le montant total fait avancer
       // la couverture et met donc le statut à jour (corrige « reste en retard apres paiement »).
@@ -278,8 +313,8 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
-function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false }) {
-  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [], periodAmounts = null } = card;
+function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false, onChanged }) {
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [], periodAmounts = null, dueFrise = null } = card;
   const [showMonths, setShowMonths] = useState(false);
   const [proofOpen, setProofOpen] = useState(null); // paiement dont on affiche la preuve
   const [selMonth, setSelMonth] = useState(null);
@@ -328,15 +363,18 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
 
   // Frise proportionnelle à la durée du bail : un bloc par état (payé / partiel / retard / courant / à venir).
   // Bail sans date de fin : mois écoulés + 6 mois à venir (12 au minimum).
-  const fixedTotal = lease?.startDate ? leaseTotalMonths(lease) : null;
-  const totalMonths = lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
+  // Bail flagge (dueFrise) : une case par echeance du backend ; bail a duree indeterminee = pas de total.
+  const fixedTotal = dueFrise ? (lease?.endDate ? dueFrise.kinds.length : null) : lease?.startDate ? leaseTotalMonths(lease) : null;
+  const totalMonths = dueFrise ? dueFrise.kinds.length : lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
   // Etat de chaque mois + nombre de mois en retard : meme regle (echeance + grace),
   // echeance au prorata = periodStart des lignes, sinon 1er du mois (cf. backend).
   const prorata = isProrationLease(lease);
   const periodStarts = prorata
     ? list.filter((p) => p.periodStart && p.status !== "voided").map((p) => String(p.periodStart).slice(0, 10)).sort()
     : null;
-  const frise = totalMonths
+  const frise = dueFrise
+    ? { kinds: dueFrise.kinds, lateCount: dueFrise.lateCount }
+    : totalMonths
     ? friseKinds({ startDate: lease.startDate, graceDays: lease.graceDays, prorata, periodStarts, totalMonths, monthsDue, monthsCoveredFloat })
     : { kinds: [], lateCount: 0 };
   const monthKinds = frise.kinds;
@@ -344,12 +382,12 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   monthKinds.forEach((k, i) => {
     const last = runs[runs.length - 1];
     if (last && last.kind === k && k !== "partial") last.n += 1;
-    else runs.push({ kind: k, n: 1, fill: k === "partial" ? Math.round(((monthsCoveredFloat || 0) - i) * 100) : 0 });
+    else runs.push({ kind: k, n: 1, fill: k === "partial" ? (dueFrise ? dueFrise.fills[i] : Math.round(((monthsCoveredFloat || 0) - i) * 100)) : 0 });
   });
   const paidCount = monthKinds.filter((k) => k === "paid").length;
   const kindLabel = { paid: "payé", partial: "partiel", late: "en retard", due: "dû", cur: "courant", future: "à venir" };
-  const firstSlot = totalMonths ? monthsFrom(lease.startDate, 1)[0] : null;
-  const monthAt = (i) => new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1);
+  const firstSlot = totalMonths && !dueFrise ? monthsFrom(lease.startDate, 1)[0] : null;
+  const monthAt = (i) => (dueFrise ? dueFrise.months[i] : new Date(firstSlot.getFullYear(), firstSlot.getMonth() + i, 1));
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
   // Paiement ayant couvert le mois i : les paiements réglés se cumulent par date jusqu'à (i+1) loyers.
   const paidSorted = list.filter((p) => p.status !== "pending" && p.status !== "settled").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
@@ -413,10 +451,15 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           <strong style={{ color: "#b91c1c" }}>{noticeLabel}</strong>
         </div>
       )}
-      {status === "ok" && credit > 0 && (
+      {status === "ok" && credit > 0 && !dueFrise && (
         <div className="immo-pay-row">
           <span>Avance{monthsAhead > 0 ? ` · ${monthsAhead} mois` : ""}</span>
           <strong style={{ color: "#16a34a" }}>{money(credit, symbol)}</strong>
+        </div>
+      )}
+      {dueFrise && credit > 0 && (
+        <div className="immo-pay-row">
+          <strong style={{ color: "#16a34a" }}>{tf("Avance : {m}", { m: moneyExact(credit, symbol) })}</strong>
         </div>
       )}
       {status === "ok" && monthsAhead > 0 && coveredUntilLabel && (
@@ -466,6 +509,9 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                 const k = monthKinds[i];
                 const d = monthAt(i);
                 const cur = symbol;
+                if (dueFrise) {
+                  return <DueMonthPanel card={card} index={i} kind={k} label={fmtMonthYear(d)} onPay={onPay} onChanged={onChanged} />;
+                }
                 if (k === "paid") {
                   const pp = payForMonth(i);
                   return (
@@ -573,9 +619,47 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   );
 }
 
-// Mini-modale d'encaissement rapide depuis une carte en retard.
-// Relance manuelle : le gestionnaire choisit qui recoit un SMS (rien n'est
-// envoye au proprietaire ni aux delegues sans case cochee).
+// Detail d'un mois d'un bail flagge : echeance, reste, paiements imputes + « Reimputer ».
+function DueMonthPanel({ card, index, kind, label, onPay, onChanged }) {
+  const { dueFrise, symbol, list = [] } = card;
+  const due = dueFrise.dues[index];
+  const [proofOpen, setProofOpen] = useState(null);
+  if (!due) return null;
+  const rest = dueRemaining(due);
+  const kindTxt = { paid: t("payé"), partial: t("payé en partie"), late: t("en retard"), due: t("dû"), cur: t("mois courant"), future: t("à venir") }[kind];
+  const pays = (due.allocations || []).map((a) => ({ a, p: list.find((x) => String(x.id) === String(a.paymentId)) })).filter((x) => x.p);
+  const payAmount = cumulativeRemaining(dueFrise.dues, index);
+  return (
+    <div className="immo-pay-panel">
+      <strong>{label} · {kindTxt}</strong>
+      <div className="immo-pay-row"><span>{t("Échéance")}</span><strong>{moneyExact(due.amount, symbol)}</strong></div>
+      {rest > 0.005 && <div className="immo-pay-row"><span>{t("Reste")}</span><strong style={{ color: kind === "late" ? "#dc2626" : undefined }}>{moneyExact(rest, symbol)}</strong></div>}
+      {pays.map(({ a, p }) => (
+        <div key={p.id}>
+          <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{moneyExact(a.amount, p.currencySymbol || symbol)}{p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>
+          {p.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{p.method}</strong></div>}
+          <PaymentAllocations payment={p} dues={dueFrise.dues} symbol={symbol} onChanged={onChanged} />
+          {p.proofUrl && (
+            <button type="button" className="immo-btn primary" onClick={() => setProofOpen(p)}>
+              <FileDown size={14} /> {t("Quittance signée")}
+            </button>
+          )}
+        </div>
+      ))}
+      {proofOpen && <ProofModal path={`/leases/payments/${proofOpen.id}/proof-file`} title={`${t("Quittance signée")} · ${label}`} onClose={() => setProofOpen(null)} />}
+      {rest > 0.005 && (
+        <>
+          <p className="muted">{t("Les paiements couvrent d'abord les mois les plus anciens.")}</p>
+          <button type="button" className="immo-btn primary immo-alloc-cta"
+            onClick={() => onPay({ ...card, payAmount, payLabel: label, payAdvance: kind === "future" })}>
+            <Smartphone size={14} /> {kind === "future" ? t("Payer d'avance") : t("Régler")} · {moneyExact(payAmount, symbol)}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 const REMIND_TARGETS = [
   { key: "tenant", label: "Locataire", hint: "SMS (+ courriel) de rappel de loyer" },
   { key: "emergency", label: "Contact d'urgence du locataire", hint: "SMS sans lien portail" },
@@ -666,6 +750,9 @@ export function ProrataBadge({ p }) {
   );
 }
 
+// Mini-modale d'encaissement rapide depuis une carte en retard.
+// Relance manuelle : le gestionnaire choisit qui recoit un SMS (rien n'est
+// envoye au proprietaire ni aux delegues sans case cochee).
 function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   // Prorata : la « période » à régler est nextDueAmount (peut être partielle) ;
@@ -683,6 +770,8 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const [proofFile, setProofFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [alloc, setAlloc] = useState({ allocationMode: "auto" });
+  const dueLease = isDuesLease(card.lease);
 
   const activeKey = method ?? methods[0]?.key;
   const amountNum = Number(String(amount).replace(/\s/g, "").replace(",", "."));
@@ -693,7 +782,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
     setBusy(true); setErr(null);
     try {
       const m = methods.find((x) => x.key === activeKey);
-      await api.createPayment({
+      const created = await api.createPayment({
         leaseId: card.lease.id,
         paymentDate: today(),
         amount: amountNum,
@@ -701,8 +790,9 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
         reference: null,
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(card.currencyId ? { currencyId: Number(card.currencyId) } : {}),
+        ...(dueLease ? allocationPayload(alloc) : {}),
       }, proofFile);
-      onPaid(`Paiement de ${money(amountNum, card.symbol)} enregistré pour ${card.name}`);
+      onPaid(`Paiement de ${money(amountNum, card.symbol)} enregistré pour ${card.name}${created?.allocationWarning ? ` — ${typeof created.allocationWarning === "string" ? created.allocationWarning : created.allocationWarning.message || ""}` : ""}`);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {
@@ -758,7 +848,8 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
               {t("Rétablir le montant calculé")} · {money(Number(computedAmount), card.symbol)}
             </button>
           )}
-          {fullBalance > 0 && Number(amount) > 0 && Number(amount) < fullBalance && (
+          {dueLease && <AllocationBlock lease={card.lease} amount={amountNum} paymentDate={today()} symbol={card.symbol} onChange={setAlloc} />}
+          {fullBalance > 0 && Number(amount) > 0 && Number(amount) < fullBalance && !dueLease && (
             <p className="immo-quickpay-note">Paiement partiel — il restera {money(fullBalance - Number(amount), card.symbol)} à régler.</p>
           )}
           <label className="immo-field-label">Moyen de paiement</label>
@@ -1323,6 +1414,7 @@ export function Loyers({ go }) {
                 noticing={Boolean(c.lease?.id) && noticingLeaseId === c.lease?.id}
                 onRemind={setRemindTarget}
                 reminding={Boolean(c.lease?.id) && remindingLeaseId === c.lease?.id}
+                onChanged={reload}
               />
             ))}
           </div>
@@ -1558,6 +1650,7 @@ export function Paiement({ go }) {
   const [done, setDone] = useState(null);
   const [err, setErr] = useState(null);
   const [rentBookBusy, setRentBookBusy] = useState(false);
+  const [alloc, setAlloc] = useState({ allocationMode: "auto" });
   const toast = useToast();
 
   const lease = active.find((l) => String(l.id) === String(leaseId)) || null;
@@ -1630,6 +1723,7 @@ export function Paiement({ go }) {
         reference: (methodMeta?.mobile ? mobileNumber : receiptRef) || null,
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(lease?.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
+        ...(isDuesLease(lease) ? allocationPayload(alloc) : {}),
       }, proofFile);
       setDone(payment || { amount: amountNum, method: methodMeta?.label });
       setStep(4);
@@ -1745,6 +1839,11 @@ export function Paiement({ go }) {
               <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--ink-500)", fontWeight: 600 }}>{symbol}</span>
             </div>
             {amount !== "" && !amountValid && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>Saisissez un montant supérieur à 0.</div>}
+            {isDuesLease(lease) && amountValid && (
+              <div style={{ marginTop: 14 }}>
+                <AllocationBlock key={lease.id} lease={lease} amount={amountNum} paymentDate={today()} symbol={symbol} onChange={setAlloc} />
+              </div>
+            )}
             {amountChips.length > 1 && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                 {amountChips.map((chip) => (
@@ -1876,6 +1975,9 @@ export function Paiement({ go }) {
                 <div style={{ fontSize: 12, color: "#047857" }}>Quittance et écriture comptable créées</div>
               </div>
             </div>
+            {done?.allocationWarning && (
+              <p className="immo-alloc-warn" role="status">{typeof done.allocationWarning === "string" ? done.allocationWarning : done.allocationWarning.message || ""}</p>
+            )}
             <div style={{ border: "1px dashed var(--ink-200)", borderRadius: 14, padding: 16 }}>
               <div style={{ textAlign: "center", margin: "0 0 12px" }}>
                 <div className="eyebrow">Quittance de loyer</div>

@@ -1905,3 +1905,28 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
   .domus-terminate-error-box { margin:0 16px 8px; }
   .domus-terminate-final { margin:12px 16px 0; }
 }
+
+/* Imputation des paiements sur les echeances (baux allocationLedger) */
+.immo-alloc { margin:12px 0; padding:12px; border:1px solid var(--ink-200); border-radius:12px; background:var(--ink-50); }
+.immo-alloc-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:8px; }
+.immo-alloc-head .immo-btn { min-height:44px; }
+.immo-alloc-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.immo-alloc-list li { display:flex; flex-direction:column; gap:6px; padding:6px 8px; border-radius:10px; background:var(--surface); border:1px solid var(--ink-200); }
+.immo-alloc-list li.on { border-color:var(--iris-600); background:var(--iris-50); }
+.immo-alloc-check { display:flex; align-items:center; gap:10px; min-height:44px; cursor:pointer; }
+.immo-alloc-check input { width:22px; height:22px; flex:none; }
+.immo-alloc-check span { display:flex; flex-direction:column; }
+.immo-alloc-check small { color:var(--ink-500); font-size:12px; }
+.immo-alloc-amount { height:44px; }
+fieldset.immo-alloc { min-width:0; }
+.immo-alloc-legend { padding:0 6px; font-weight:700; }
+.immo-alloc-amount-wrap { position:relative; display:inline-flex; align-items:center; }
+.immo-alloc-amount-wrap .immo-alloc-amount { padding-right:36px; width:100%; }
+.immo-alloc-sym { position:absolute; right:10px; color:var(--ink-500); font-size:13px; pointer-events:none; }
+.immo-alloc-status p { margin:8px 0 0; }
+.immo-realloc-modal .modal-head button { min-width:44px; min-height:44px; }
+.immo-alloc-credit { color:var(--emerald); font-weight:600; margin:8px 0 0; }
+.immo-alloc-warn { color:var(--ink-800); background:var(--ink-50); border:1px solid var(--amber); border-radius:8px; padding:8px 10px; font-size:13px; margin:8px 0 0; }
+.immo-alloc-line { flex-wrap:wrap; gap:6px; }
+.immo-alloc-line .immo-btn, .immo-alloc-cta { min-height:44px; }
+@media (min-width:520px) { .immo-alloc-list li { flex-direction:row; align-items:center; justify-content:space-between; } .immo-alloc-amount { max-width:140px; } }

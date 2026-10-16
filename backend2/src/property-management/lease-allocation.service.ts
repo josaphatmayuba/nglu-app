@@ -13,7 +13,7 @@ import {
   type BackfillPlan,
   type RebuildRow,
 } from "./lease-allocation";
-import { isPastGrace, loadOverdueByLease, readOverdueGraceDays } from "./lease-overdue";
+import { buildFlaggedDueState, isPastGrace, loadOverdueByLease, readOverdueGraceDays, type LeaseDueEntry, type LeaseDueState } from "./lease-overdue";
 import { computeLeaseTotalDue, scheduleForLease } from "./lease-proration";
 import { applyCoverage, formatDateOnly, parseDateOnly, roundMoney, type SchedulePeriod } from "./lease-schedule";
 
@@ -24,28 +24,7 @@ export interface ExplicitAllocation {
   amount?: number;
 }
 
-export interface LeaseDueEntry {
-  id: number;
-  periodStart: string;
-  periodEnd: string | null;
-  dueDate: string;
-  amount: number;
-  amountPaid: number;
-  remaining: number;
-  dueStatus: string;
-  /** Statut legacy de la ligne (pending | settled | paid | overdue). */
-  status: string;
-  allocations: Array<{ id: number; paymentId: number; paymentDate: string | null; amount: number; source: string }>;
-}
-
-export interface LeaseDueState {
-  flagged: boolean;
-  dues: LeaseDueEntry[];
-  credit: number;
-  totalDue: number;
-  overdueCount: number;
-  payments?: Array<{ id: number; paymentDate: string; amount: number; allocated: number; unallocated: number }>;
-}
+export type { LeaseDueEntry, LeaseDueState };
 
 export interface BackfillOptions {
   leaseIds?: number[];
@@ -188,57 +167,7 @@ export class LeaseAllocationService {
     }
 
     const allocs = await this.loadActiveAllocs(this.db, leaseId, orgId);
-    const dateById = new Map(rows.map((r) => [r.id, String(r.paymentDate).slice(0, 10)]));
-    const allocsByDue = new Map<number, typeof allocs>();
-    const allocByPay = new Map<number, number>();
-    for (const a of allocs) {
-      const l = allocsByDue.get(Number(a.dueId)) ?? [];
-      l.push(a);
-      allocsByDue.set(Number(a.dueId), l);
-      allocByPay.set(Number(a.paymentId), roundMoney((allocByPay.get(Number(a.paymentId)) ?? 0) + Number(a.amount), decimals));
-    }
-    const dues: LeaseDueEntry[] = rows
-      .filter((r) => r.rowKind === "due")
-      .map((r) => {
-        const list = allocsByDue.get(r.id) ?? [];
-        const amount = roundMoney(Number(r.amount), decimals);
-        const paid = roundMoney(list.reduce((s, a) => s + Number(a.amount), 0), decimals);
-        const dueDate = String(r.paymentDate).slice(0, 10);
-        return {
-          id: r.id,
-          periodStart: r.periodStart ? String(r.periodStart).slice(0, 10) : dueDate,
-          periodEnd: r.periodEnd ? String(r.periodEnd).slice(0, 10) : null,
-          dueDate,
-          amount,
-          amountPaid: paid,
-          remaining: Math.max(0, roundMoney(amount - paid, decimals)),
-          dueStatus: dueStatusOf(amount, paid, decimals),
-          status: r.status,
-          allocations: list.map((a) => ({
-            id: Number(a.id), paymentId: Number(a.paymentId), paymentDate: dateById.get(Number(a.paymentId)) ?? null,
-            amount: Number(a.amount), source: a.source,
-          })),
-        };
-      })
-      .sort((a, b) => a.periodStart.localeCompare(b.periodStart) || a.id - b.id);
-
-    const payments = rows
-      .filter((r) => r.status === "paid" && r.rowKind !== "due")
-      .map((r) => {
-        const amount = roundMoney(Number(r.amount), decimals);
-        const allocated = allocByPay.get(r.id) ?? 0;
-        return { id: r.id, paymentDate: String(r.paymentDate).slice(0, 10), amount, allocated, unallocated: Math.max(0, roundMoney(amount - allocated, decimals)) };
-      });
-    const credit = roundMoney(payments.reduce((s, p) => s + p.unallocated, 0), decimals);
-    const due = dues.filter((d) => d.dueDate <= todayStr);
-    return {
-      flagged: true,
-      dues,
-      credit,
-      totalDue: roundMoney(due.reduce((s, d) => s + d.remaining, 0), decimals),
-      overdueCount: due.filter((d) => d.remaining > 0 && isPastGrace(d.dueDate, today, graceDays)).length,
-      payments,
-    };
+    return buildFlaggedDueState(rows, allocs as any, decimals, today, graceDays);
   }
 
   // ─── Apercu d'imputation (aucune ecriture) ───────────────────────────────
