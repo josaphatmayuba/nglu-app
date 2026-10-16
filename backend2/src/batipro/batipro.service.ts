@@ -280,6 +280,7 @@ export class BatiproService {
       // qu'une phase ou un bon de commande est ajoute (recomputeProjectRisk).
       risk: input.risk ?? "Faible",
       notes: input.notes ?? null,
+      ownerName: String(input.owner_name ?? "").trim() || null,
       ownerPhone: this.normalizeOwnerPhone(input.owner_phone),
       ownerSmsEnabled: this.normalizeOwnerPhone(input.owner_phone) ? this.toFlag(input.owner_sms_enabled) : 0,
     }).$returningId();
@@ -314,6 +315,7 @@ export class BatiproService {
     if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
     if (input.location !== undefined) patch.location = input.location || null;
     if (input.notes !== undefined) patch.notes = input.notes || null;
+    if (input.owner_name !== undefined) patch.ownerName = String(input.owner_name ?? "").trim() || null;
     if (input.owner_phone !== undefined) patch.ownerPhone = this.normalizeOwnerPhone(input.owner_phone);
     if (input.owner_sms_enabled !== undefined) {
       patch.ownerSmsEnabled = this.toFlag(input.owner_sms_enabled);

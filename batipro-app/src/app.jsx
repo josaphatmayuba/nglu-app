@@ -595,6 +595,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {p.ownerName && <span style={{ fontSize: 12, color: "var(--ink-500)" }} title="Propriétaire du chantier">Propriétaire : {p.ownerName}</span>}
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
           {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
@@ -4574,6 +4575,7 @@ function payloadFor(kind, form) {
       ...(form.id && form.currency_id ? {} : { currency_id: form.currency_id ? Number(form.currency_id) : null }),
       contract_amount: n(form.contractAmount), billed_amount: n(form.billedAmount),
       due_date: form.dueDate || form.due || null, location: form.location || null, risk: form.risk || "Faible",
+      owner_name: (form.ownerName || "").trim() || null,
       owner_phone: form.ownerPhone || null,
       owner_sms_enabled: form.ownerPhone && form.ownerSmsEnabled ? 1 : 0,
     };
@@ -4591,7 +4593,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
         budget: editing.budget ?? 0, spent: editing.spent ?? 0, currency_id: editing.currencyId || null,
         contractAmount: editing.contractAmount ?? 0, billedAmount: editing.billedAmount ?? 0,
         dueDate: editing.dueDate ? String(editing.dueDate).slice(0, 10) : "", location: editing.location || "",
-        ownerPhone: editing.ownerPhone || "", ownerSmsEnabled: Number(editing.ownerSmsEnabled) === 1,
+        ownerName: editing.ownerName || "", ownerPhone: editing.ownerPhone || "", ownerSmsEnabled: Number(editing.ownerSmsEnabled) === 1,
       }
       : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false })
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
@@ -4635,6 +4637,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Budget (coût)" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
               <Field label="Montant contrat (client)" type="number" value={form.contractAmount} onChange={(v) => set("contractAmount", v)} />
               <Field label="Échéance" type="date" value={form.dueDate || ""} onChange={(v) => set("dueDate", v)} />
+              <Field label="Nom du propriétaire" value={form.ownerName || ""} onChange={(v) => set("ownerName", v)} />
               <BatiproPhoneField
                 label="Téléphone du propriétaire"
                 value={form.ownerPhone}

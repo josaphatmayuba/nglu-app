@@ -55,6 +55,21 @@ describe("BatiproOwnerNotifier", () => {
     expect(arg.message).toMatch(/^[\x20-\x7E]*$/);
   });
 
+  it("nom du proprietaire : prefixe Bonjour, ASCII, <=160 meme avec nom + chantier tres longs", async () => {
+    const a = setup([[project({ ownerName: "Joséphat Mayuba" })]]);
+    await a.n.notifyProgress(1, 5, 30);
+    expect(a.sendSms.mock.calls[0][0].message).toBe("Bonjour Josephat Mayuba, Chantier CH-001 Residence Elysee: avancement 30% atteint.");
+    const b = setup([[project({ ownerName: "Très long nom de proprietaire ".repeat(8), name: "Très long nom de chantier ".repeat(10) })]]);
+    await b.n.notifyStatusChange(1, 5, "in_progress", "on_hold");
+    const msg = b.sendSms.mock.calls[0][0].message as string;
+    expect(msg.length).toBeLessThanOrEqual(160);
+    expect(msg.startsWith("Bonjour ")).toBe(true);
+    expect(msg).toMatch(/^[ -~]*$/);
+    const c = setup([[project({ ownerName: "  " })]]);
+    await c.n.notifyProgress(1, 5, 30);
+    expect(c.sendSms.mock.calls[0][0].message.startsWith("Chantier")).toBe(true);
+  });
+
   it("statut : libelle sans underscore, <=160 meme avec nom tres long", async () => {
     const { n, sendSms } = setup([[project({ name: "Très long nom de chantier ".repeat(10) })]]);
     await n.notifyStatusChange(1, 5, "in_progress", "on_hold");

@@ -2958,6 +2958,7 @@ export const batiproProjects = mysqlTable("batipro_projects", {
   name: varchar("name", { length: 255 }).notNull(),
   client: varchar("client", { length: 255 }),
   // SMS au proprietaire du chantier (migration 0313).
+  ownerName: varchar("owner_name", { length: 255 }),
   ownerPhone: varchar("owner_phone", { length: 32 }),
   ownerSmsEnabled: tinyint("owner_sms_enabled").default(0).notNull(),
   ownerSmsLastProgressStep: int("owner_sms_last_progress_step").default(0).notNull(),

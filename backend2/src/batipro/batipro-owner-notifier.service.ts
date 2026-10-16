@@ -46,7 +46,7 @@ export class BatiproOwnerNotifier {
         const sup = p.supplierName ? ` a ${this.cut(p.supplierName, supMax)}` : "";
         return `Chantier ${project.code} ${this.cut(project.name, nameMax)}: paiement fournisseur ${amount}${sup}.${tail}`;
       };
-      return this.fit(build);
+      return this.fit(build, project.ownerName);
     });
   }
 
@@ -73,19 +73,19 @@ export class BatiproOwnerNotifier {
       const tiers = String(q.tiers ?? "").replace(/[^\p{L} .'-]/gu, "").replace(/\s+/g, " ").trim() || "un sous-traitant";
       const build = (_n: number, supMax: number) =>
         `Chantier ${project.code}: nouveau devis recu de ${this.cut(tiers, supMax)} - ${amount}.`;
-      return this.fit(build);
+      return this.fit(build, project.ownerName);
     }, claim);
   }
 
   async notifyProgress(orgId: number, projectId: number, step: number) {
     await this.run("progress", orgId, projectId, async (project) =>
-      this.fit((nameMax) => `Chantier ${project.code} ${this.cut(project.name, nameMax)}: avancement ${step}% atteint.`));
+      this.fit((nameMax) => `Chantier ${project.code} ${this.cut(project.name, nameMax)}: avancement ${step}% atteint.`, project.ownerName));
   }
 
   async notifyStatusChange(orgId: number, projectId: number, oldStatus: string | null, newStatus: string | null) {
     await this.run("status", orgId, projectId, async (project) =>
       this.fit((nameMax) =>
-        `Chantier ${project.code} ${this.cut(project.name, nameMax)}: statut passe de ${this.statusLabel(oldStatus)} a ${this.statusLabel(newStatus)}.`));
+        `Chantier ${project.code} ${this.cut(project.name, nameMax)}: statut passe de ${this.statusLabel(oldStatus)} a ${this.statusLabel(newStatus)}.`, project.ownerName));
   }
 
   // Garde commune + envoi ; jamais de throw.
@@ -93,7 +93,7 @@ export class BatiproOwnerNotifier {
     evt: string,
     orgId: number,
     projectId: number,
-    buildMessage: (project: { code: string; name: string; currencyId: number | null }) => Promise<string>,
+    buildMessage: (project: { code: string; name: string; currencyId: number | null; ownerName: string | null }) => Promise<string>,
     claim?: () => Promise<boolean>,
   ) {
     try {
@@ -102,6 +102,7 @@ export class BatiproOwnerNotifier {
           code: batiproProjects.code,
           name: batiproProjects.name,
           currencyId: batiproProjects.currencyId,
+          ownerName: batiproProjects.ownerName,
           ownerPhone: batiproProjects.ownerPhone,
           ownerSmsEnabled: batiproProjects.ownerSmsEnabled,
         })
@@ -116,7 +117,7 @@ export class BatiproOwnerNotifier {
       const phone = (project?.ownerPhone ?? "").trim();
       if (!project || !phone) return;
       if (claim && !(await claim())) return;
-      const message = await buildMessage({ code: project.code, name: project.name, currencyId: project.currencyId ?? null });
+      const message = await buildMessage({ code: project.code, name: project.name, currencyId: project.currencyId ?? null, ownerName: project.ownerName ?? null });
       await this.compat.sendSms({
         phone,
         message,
@@ -155,12 +156,19 @@ export class BatiproOwnerNotifier {
   }
 
   // Construit le message en reduisant progressivement les noms jusqu'a <= 160 car.
-  private fit(build: (nameMax: number, supMax: number) => string): string {
-    for (const [n, s] of [[40, 30], [25, 20], [15, 12], [8, 8]] as const) {
-      const msg = this.ascii(build(n, s));
+  // Si le proprietaire est nomme : prefixe "Bonjour {nom}, " ; son nom est raccourci en premier.
+  private fit(build: (nameMax: number, supMax: number) => string, ownerName?: string | null): string {
+    // Nom libre non fiable : lettres/espaces/.-' uniquement.
+    const owner = String(ownerName ?? "").replace(/[^\p{L} .'-]/gu, "").replace(/\s+/g, " ").trim();
+    const greet = (max: number) => (owner ? `Bonjour ${this.cut(owner, max)}, ` : "");
+    const steps: Array<[number, number, number]> = owner
+      ? [[40, 30, 30], [40, 30, 20], [40, 30, 12], [40, 30, 6], [25, 20, 6], [15, 12, 6], [8, 8, 6]]
+      : [[40, 30, 0], [25, 20, 0], [15, 12, 0], [8, 8, 0]];
+    for (const [n, s, o] of steps) {
+      const msg = this.ascii(greet(o) + build(n, s));
       if (msg.length <= SMS_MAX) return msg;
     }
-    return this.ascii(build(8, 8)).slice(0, SMS_MAX);
+    return this.ascii(greet(6) + build(8, 8)).slice(0, SMS_MAX);
   }
 
   private ascii(text: string): string {
