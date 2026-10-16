@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildLeaseCards } from "./loyers.jsx";
 import { buildFullRentSchedule } from "../rentBookUtils.js";
-import { allocationsOfPayment, futureBeforeLate } from "../duesUtils.js";
+import { allocationsOfPayment, futureBeforeLate, legacyLateDue, monthAmounts } from "../duesUtils.js";
 
 const NOW = new Date(2026, 9, 16, 12);
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(NOW); });
@@ -99,5 +99,58 @@ describe("frise : total = periodes du bail", () => {
     expect(c.dueFrise.months[11].getFullYear()).toBe(2027);
     expect(c.dueFrise.kinds.filter((k) => k === "paid").length).toBe(2);
     expect(c.monthsDue).toBe(4);
+  });
+});
+
+describe("Retard / Du (carte)", () => {
+  it("bail 11 : retard 3000 (sept), du 3000 (oct), grace jusqu'au 16 oct", () => {
+    const [c] = buildLeaseCards([lease(bail11())], pays);
+    expect(c.dueFrise.lateAmount).toBeCloseTo(3000, 2);
+    expect(c.dueFrise.dueAmount).toBeCloseTo(3000, 2);
+    expect(c.dueFrise.lateCount).toBe(1);
+    const g = c.dueFrise.graceUntil;
+    expect([g.getFullYear(), g.getMonth(), g.getDate()]).toEqual([2026, 9, 16]);
+  });
+
+  it("graceDays inconnu : pas de date de grace", () => {
+    const [c] = buildLeaseCards([lease(bail11(), { graceDays: null })], pays);
+    expect(c.dueFrise.graceUntil).toBeNull();
+  });
+
+  it("rien de du : retard 0 et du 0", () => {
+    const d = bail11().map((_, i) => (i < 4 ? paidDue(i, i + 1) : mkDue(i)));
+    const [c] = buildLeaseCards([lease(d, { totalDue: 0 })], pays);
+    expect(c.dueFrise.lateAmount).toBe(0);
+    expect(c.dueFrise.dueAmount).toBe(0);
+  });
+
+  it("legacy : retard borne par le solde, du = solde - retard", () => {
+    const kinds = ["paid", "paid", "late", "due"];
+    const cumDue = (i) => (i + 1) * 3000;
+    expect(legacyLateDue({ kinds, balance: 6000, totalPaid: 6000, cumDue })).toEqual({ late: 3000, due: 3000 });
+    expect(legacyLateDue({ kinds, balance: 4500, totalPaid: 7500, cumDue })).toEqual({ late: 1500, due: 3000 });
+    expect(legacyLateDue({ kinds: ["paid", "due"], balance: 3000, totalPaid: 3000, cumDue })).toEqual({ late: 0, due: 3000 });
+  });
+
+  it("montants par mois : prorata juillet, plein ensuite", () => {
+    const [c] = buildLeaseCards([lease(bail11())], pays);
+    expect(monthAmounts(c.dueFrise, 0, 3000)).toMatchObject({ amount: 1645.16, paid: 1645.16, prorata: true });
+    expect(monthAmounts(c.dueFrise, 2, 3000)).toMatchObject({ amount: 3000, paid: 0, prorata: false });
+  });
+});
+
+describe("Retard + Du == solde", () => {
+  it("mois courant a echeance future exclu du Du", () => {
+    // Echeance du mois courant au 25 oct. (future au 16 oct.) : non echue, hors solde serveur.
+    const d = bail11().slice(0, 4);
+    d[3] = mkDue(3, { dueDate: "2026-10-25" });
+    const [c] = buildLeaseCards([lease(d, { totalDue: 3000 })], pays);
+    expect(c.dueFrise.lateAmount + c.dueFrise.dueAmount).toBeCloseTo(c.balance, 2);
+    expect(c.dueFrise.dueAmount).toBe(0);
+  });
+
+  it("graceDays negatif : pas de date", () => {
+    const [c] = buildLeaseCards([lease(bail11(), { graceDays: -3 })], pays);
+    expect(c.dueFrise.graceUntil).toBeNull();
   });
 });

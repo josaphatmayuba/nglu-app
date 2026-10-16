@@ -4,11 +4,11 @@ import {
   BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera,
 } from "lucide-react";
 import { api } from "../api.js";
-import { t, tf } from "../i18n.js";
+import { getLang, t, tf } from "../i18n.js";
 import { filterLeases, filterPayments, parseDomusDate, useDateRange } from "../dateRange.jsx";
-import { friseKinds, leaseCardStatus } from "../overdue.js";
+import { dueDateForMonth, friseKinds, leaseCardStatus } from "../overdue.js";
 import { AllocationBlock, PaymentAllocations, allocationPayload } from "../components/Allocation.jsx";
-import { allocationsOfPayment, cumulativeRemaining, dueRemaining, duesCardFields, isDuesLease } from "../duesUtils.js";
+import { allocationsOfPayment, cumulativeRemaining, dueRemaining, duesCardFields, graceUntilOf, isDuesLease, legacyLateDue, monthAmounts } from "../duesUtils.js";
 import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
@@ -313,6 +313,8 @@ const STATUS_META = {
   late: { pill: "danger", label: "En retard", color: "#dc2626", rowLabel: "Mois en cours" },
 };
 
+const fmtNum = (n) => (Number(n) || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+
 function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false, onChanged }) {
   const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [], periodAmounts = null, dueFrise = null } = card;
   const [showMonths, setShowMonths] = useState(false);
@@ -410,6 +412,20 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     }
     return null;
   };
+  // Retard / Du : bail flagge = depuis les echeances ; historique = derive de la frise.
+  const lateDue = (() => {
+    // Historique sans frise (bail sans date de debut) en retard : tout le solde est en retard.
+    if (!dueFrise && !monthKinds.length && status === "late") return { late: balance, due: 0, graceUntil: null };
+    if (dueFrise) return { late: dueFrise.lateAmount, due: dueFrise.dueAmount, graceUntil: dueFrise.graceUntil };
+    const s = legacyLateDue({ kinds: monthKinds, balance, totalPaid, cumDue });
+    let graceUntil = null;
+    if (s.due > 0.005 && lease?.startDate) {
+      const lastLate = monthKinds.lastIndexOf("late");
+      const j = monthKinds.findIndex((k, i) => i > lastLate && (k === "due" || k === "cur" || k === "partial") && i < monthsDue);
+      if (j >= 0) graceUntil = graceUntilOf(dueDateForMonth(lease.startDate, j, prorata), lease.graceDays);
+    }
+    return { ...s, graceUntil };
+  })();
   const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
   // Mois en retard = échéances non couvertes dont date d'échéance + délai de
   // grâce (réglage org rentOverdueGraceDays) < aujourd'hui, soit exactement les
@@ -440,9 +456,18 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
         </div>
       )}
       {actionable && balance > 0 && (
-        <div className="immo-pay-row">
-          <span>Reste à payer{monthsBehind > 1 ? ` · ${monthsBehind} mois` : ""}</span>
-          <strong style={{ color: status === "late" ? "#dc2626" : "#d97706" }}>{money(balance, symbol)}</strong>
+        <div className="immo-pay-ld">
+          {lateDue.late > 0.005 && (
+            <span className="ld-late">
+              {lateMonths > 1 ? tf("Retard · {n} mois", { n: lateMonths }) : t("Retard")} <b>{money(lateDue.late, symbol)}</b>
+            </span>
+          )}
+          {(lateDue.due > 0.005 || lateDue.late <= 0.005) && (
+            <span className="ld-due">
+              {t("Dû")} <b>{money(lateDue.due > 0.005 ? lateDue.due : balance, symbol)}</b>
+              {lateDue.graceUntil ? ` · ${tf("grâce jusqu'au {d}", { d: lateDue.graceUntil.toLocaleDateString(getLang() === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "short" }) })}` : ""}
+            </span>
+          )}
         </div>
       )}
       {canNotifyDefault && noticeLabel && (
@@ -499,6 +524,15 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                         aria-label={`${fmtMonthYear(d)} : ${t(kindLabel[k])}`}
                         onClick={() => setSelMonth(selMonth === i ? null : i)}>
                         <span>{MONTHS_FR[d.getMonth()]}</span><small>{t(kindLabel[k])}</small>
+                        {dueFrise && (() => {
+                          const ma = monthAmounts(dueFrise, i, rent);
+                          return (
+                            <span className="amt">
+                              {k === "paid" ? <span>{fmtNum(ma.paid || ma.amount)}</span> : k === "future" ? <span>{fmtNum(ma.amount)}</span> : <><span>{fmtNum(ma.paid)}</span><span>/ {fmtNum(ma.amount)}</span></>}
+                              {k === "paid" && ma.prorata && <i>{t("prorata payé")}</i>}
+                            </span>
+                          );
+                        })()}
                       </button>
                     ))}
                   </div>
@@ -510,7 +544,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                 const d = monthAt(i);
                 const cur = symbol;
                 if (dueFrise) {
-                  return <DueMonthPanel card={card} index={i} kind={k} label={fmtMonthYear(d)} onPay={onPay} onChanged={onChanged} />;
+                  return <DueMonthPanel card={card} index={i} kind={k} label={fmtMonthYear(d)} onPay={onPay} onConfirm={onConfirm} onReceipt={onReceipt} onRemind={onRemind} reminding={reminding} onChanged={onChanged} />;
                 }
                 if (k === "paid") {
                   const pp = payForMonth(i);
@@ -620,40 +654,84 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
 }
 
 // Detail d'un mois d'un bail flagge : echeance, reste, paiements imputes + « Reimputer ».
-function DueMonthPanel({ card, index, kind, label, onPay, onChanged }) {
+function DueMonthPanel({ card, index, kind, label, onPay, onConfirm, onReceipt, onRemind, reminding = false, onChanged }) {
   const { dueFrise, symbol, list = [] } = card;
   const due = dueFrise.dues[index];
   const [proofOpen, setProofOpen] = useState(null);
+  const [bookBusy, setBookBusy] = useState(false);
   if (!due) return null;
+  const openBook = async () => {
+    setBookBusy(true);
+    try { await onReceipt?.(card); } finally { setBookBusy(false); }
+  };
   const rest = dueRemaining(due);
+  const ma = monthAmounts(dueFrise, index, card.rent);
   const kindTxt = { paid: t("payé"), partial: t("payé en partie"), late: t("en retard"), due: t("dû"), cur: t("mois courant"), future: t("à venir") }[kind];
   const pays = (due.allocations || []).map((a) => ({ a, p: list.find((x) => String(x.id) === String(a.paymentId)) })).filter((x) => x.p);
   const payAmount = cumulativeRemaining(dueFrise.dues, index);
+  // Paiements declares en attente (non imputes tant qu'ils ne sont pas confirmes) rattaches au mois.
+  const monthKey7 = String(due.periodStart || "").slice(0, 7);
+  const pendingPays = list.filter((p) => p.status === "pending" && p.rowKind !== "due"
+    && String(p.periodStart || p.paymentDate || "").slice(0, 7) === monthKey7
+    && !pays.some((x) => String(x.p.id) === String(p.id)));
   return (
     <div className="immo-pay-panel">
       <strong>{label} · {kindTxt}</strong>
-      <div className="immo-pay-row"><span>{t("Échéance")}</span><strong>{moneyExact(due.amount, symbol)}</strong></div>
+      <div className="immo-pay-row"><span>{ma.prorata ? tf("Loyer (prorata {p})", { p: formatPeriod(due.periodStart, due.periodEnd) }) : t("Loyer")}</span><strong>{moneyExact(due.amount, symbol)}</strong></div>
+      <div className="immo-pay-row"><span>{t("Payé")}</span><strong>{moneyExact(ma.paid, symbol)}</strong></div>
       {rest > 0.005 && <div className="immo-pay-row"><span>{t("Reste")}</span><strong style={{ color: kind === "late" ? "#dc2626" : undefined }}>{moneyExact(rest, symbol)}</strong></div>}
+      {pays.length === 0 && pendingPays.length === 0 && <div className="immo-pay-row"><span>{t("Paiements")}</span><strong>{t("aucun")}</strong></div>}
       {pays.map(({ a, p }) => (
         <div key={p.id}>
           <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{moneyExact(a.amount, p.currencySymbol || symbol)}{p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>
           {p.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{p.method}</strong></div>}
           <PaymentAllocations payment={p} dues={dueFrise.dues} symbol={symbol} onChanged={onChanged} />
-          {p.proofUrl && (
-            <button type="button" className="immo-btn primary" onClick={() => setProofOpen(p)}>
-              <FileDown size={14} /> {t("Quittance signée")}
-            </button>
+          <div className="immo-pay-mini-actions">
+            {p.status === "pending" && onConfirm && (
+              <button type="button" className="immo-btn primary" onClick={() => onConfirm(p)}>
+                <Check size={14} /> {t("Confirmer")}
+              </button>
+            )}
+            {p.proofUrl && (
+              <button type="button" className="immo-btn" onClick={() => setProofOpen(p)}>
+                <FileDown size={14} /> {t("Preuve")}
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      {pendingPays.map((p) => (
+        <div key={p.id}>
+          <div className="immo-pay-row"><span>{t("En attente")}</span><strong>{moneyExact(p.amount, p.currencySymbol || symbol)}{p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>
+          {onConfirm && (
+            <div className="immo-pay-mini-actions">
+              <button type="button" className="immo-btn primary" onClick={() => onConfirm(p)}>
+                <Check size={14} /> {t("Confirmer")}
+              </button>
+            </div>
           )}
         </div>
       ))}
+      {card.lease?.id && onReceipt && (
+        <div className="immo-pay-mini-actions">
+          <button type="button" className="immo-btn" title={t("Imprimer le carnet de quittances (PDF)")} disabled={bookBusy} onClick={openBook}>
+            <FileDown size={14} /> {bookBusy ? t("Génération…") : t("Quittance")}
+          </button>
+        </div>
+      )}
       {proofOpen && <ProofModal path={`/leases/payments/${proofOpen.id}/proof-file`} title={`${t("Quittance signée")} · ${label}`} onClose={() => setProofOpen(null)} />}
       {rest > 0.005 && (
         <>
           <p className="muted">{t("Les paiements couvrent d'abord les mois les plus anciens.")}</p>
           <button type="button" className="immo-btn primary immo-alloc-cta"
             onClick={() => onPay({ ...card, payAmount, payLabel: label, payAdvance: kind === "future" })}>
-            <Smartphone size={14} /> {kind === "future" ? t("Payer d'avance") : t("Régler")} · {moneyExact(payAmount, symbol)}
+            <Smartphone size={14} /> {kind === "future" ? t("Payer d'avance") : t("Payer ce mois")} · {moneyExact(payAmount, symbol)}
           </button>
+          {kind === "late" && card.lease && onRemind && (
+            <button type="button" className="immo-btn" disabled={reminding} onClick={() => onRemind(card)}>
+              <BellRing size={14} /> {reminding ? t("Envoi…") : t("Relancer")}
+            </button>
+          )}
         </>
       )}
     </div>
