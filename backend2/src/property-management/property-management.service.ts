@@ -2635,6 +2635,11 @@ export class PropertyManagementService {
         // servent uniquement a decoratePaymentRow et sont retires de la reponse.
         periodStart: realEstateRentPayments.periodStart,
         periodEnd: realEstateRentPayments.periodEnd,
+        // Ligne echeance (bail allocationLedger) vs paiement : le front ne doit pas
+        // traiter une echeance pending comme un paiement a confirmer.
+        rowKind: realEstateRentPayments.rowKind,
+        amountPaid: realEstateRentPayments.amountPaid,
+        dueStatus: realEstateRentPayments.dueStatus,
         leaseBillingCycle: paymentLease.billingCycle,
         leaseProrationEnabled: paymentLease.rentProrationEnabled,
         leaseStartDate: paymentLease.startDate,

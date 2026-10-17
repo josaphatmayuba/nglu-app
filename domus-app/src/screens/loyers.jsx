@@ -336,7 +336,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   // Des echeances manquantes existent si le bail a des mois en retard ET
   // qu'aucune ligne pending n'a deja ete generee pour couvrir ces mois-la
   // (sinon on duplique l'action : il suffit de confirmer les pending existantes).
-  const hasPending = list.some((p) => p.status === "pending");
+  const hasPending = list.some((p) => p.status === "pending" && p.rowKind !== "due");
   const missingMonths = monthsBehind > 0 && Boolean(lease) && !hasPending;
   const coveredUntilLabel = coveredUntil
     ? coveredUntil.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
@@ -426,7 +426,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     }
     return { ...s, graceUntil };
   })();
-  const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
+  const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.rowKind !== "due" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
   // Mois en retard = échéances non couvertes dont date d'échéance + délai de
   // grâce (réglage org rentOverdueGraceDays) < aujourd'hui, soit exactement les
   // cases rouges de la frise (même règle que computeLeaseOverdueStats). Un mois

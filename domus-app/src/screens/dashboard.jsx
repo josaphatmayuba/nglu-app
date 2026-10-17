@@ -8,6 +8,8 @@ import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
+import { buildLeaseCards } from "./loyers.jsx";
+import { splitRentPayments } from "../rentBreakdown.js";
 import { t, tf } from "../i18n.js";
 
 export function Dashboard({ go }) {
@@ -34,7 +36,20 @@ export function Dashboard({ go }) {
   const currency = normalizeCurrencyModule(data?.currencies, data?.setting);
   const activeLeases = leases.filter((lease) => (lease.status || "active") === "active");
   const monthlyRentRows = groupAmountsByCurrency(activeLeases, (lease) => lease.rentAmount, currency.defaultCurrencySymbol);
-  const collectedRows = groupAmountsByCurrency(payments, (payment) => payment.amount, currency.defaultCurrencySymbol);
+  const fallbackSym = currency.defaultCurrencySymbol;
+  // Encaissé = paiements confirmes (status paid) sur la periode filtree.
+  const collectedRows = groupAmountsByCurrency(splitRentPayments(payments).paid, (payment) => payment.amount, fallbackSym);
+  // Impaye echu = memes cartes/soldes que l'ecran Loyers (solde cumule du bail, tous paiements).
+  const allLeasePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => leaseIds.has(p.leaseId));
+  const overdueCards = buildLeaseCards(leases, allLeasePayments)
+    .filter((c) => Number(c.balance) > 0)
+    .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, balance: c.balance }));
+  const overdueRows = groupAmountsByCurrency(overdueCards, (c) => c.balance, fallbackSym);
+  const activeIds = new Set(activeLeases.map((l) => l.id));
+  const upcomingRows = groupAmountsByCurrency(
+    splitRentPayments(allLeasePayments.filter((p) => activeIds.has(p.leaseId))).upcoming,
+    (payment) => payment.amount, fallbackSym,
+  );
   const occupancy = d.units ? Math.round((d.occupiedUnits / d.units) * 100) : 0;
 
   return (
@@ -96,16 +111,20 @@ export function Dashboard({ go }) {
             valueColor={d.openMaintenance > 0 ? "#dc2626" : undefined} helper={t("interventions")} />
         </MetricsGrid>
 
+        <MetricsGrid>
+          <Metric tone="green" icon={<Wallet size={20} />} label={t("Encaissé")}
+            value={<MoneyStack rows={collectedRows} fallbackSymbol={fallbackSym} />}
+            helper={t("Loyers réellement reçus (paiements confirmés)")} />
+          <Metric tone="red" icon={<AlertTriangle size={20} />} label={t("Impayé échu")}
+            value={<MoneyStack rows={overdueRows} fallbackSymbol={fallbackSym} />}
+            valueColor={overdueRows.some((r) => r.amount > 0) ? "#dc2626" : undefined}
+            helper={t("Loyers échus non payés (détail dans Loyers)")} />
+          <Metric tone="brand" icon={<RefreshCw size={20} />} label={t("À venir")}
+            value={<MoneyStack rows={upcomingRows} fallbackSymbol={fallbackSym} />}
+            helper={t("Échéances futures prévues aux baux")} />
+        </MetricsGrid>
+
         <div className="grid g3">
-          <div className="card" style={{ padding: 20, gridColumn: "span 2" }}>
-            <h3 className="font-display" style={{ fontWeight: 600, fontSize: 15, marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-              <RefreshCw size={16} color="#6366f1" /> {t("Encaissé cumulé")}
-            </h3>
-            <div className="kpi-value" style={{ fontSize: 30 }}><MoneyStack rows={collectedRows} fallbackSymbol={currency.defaultCurrencySymbol} /></div>
-            <p className="muted" style={{ fontSize: 13 }}>
-              {t("Total des paiements de loyer enregistrés. Le détail par échéance arrive avec l'écran Loyers (SCRUM-248).")}
-            </p>
-          </div>
           <div className="card" style={{ padding: 20 }}>
             <h3 className="font-display" style={{ fontWeight: 600, fontSize: 15, marginTop: 0 }}>{t("Occupation")}</h3>
             <Bar label={t("Parc")} pct={occupancy} />
