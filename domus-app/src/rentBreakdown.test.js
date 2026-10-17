@@ -18,11 +18,21 @@ describe("splitRentPayments", () => {
     const r = splitRentPayments(rows, now);
     expect(sum(r.paid)).toBe(105);
     expect(sum(r.pendingPast)).toBe(50);
-    expect(sum(r.upcoming)).toBe(70);
+    expect(sum(r.upcoming)).toBe(70 + 888);
   });
   it("exclut voided, settled, due et supprimes", () => {
     const r = splitRentPayments([...rows, { id: 8, status: false, amount: 1 }], now);
     const ids = [...r.paid, ...r.upcoming, ...r.pendingPast].map((p) => p.id);
-    expect(ids.sort()).toEqual([1, 2, 3, 7]);
+    expect(ids.sort()).toEqual([1, 2, 3, 5, 7]);
+    expect(r.paid.map((p) => p.id)).not.toContain(5);
+  });
+  it("echeance future (rowKind due) : A venir pour son reste, jamais encaisse", () => {
+    const r = splitRentPayments([
+      { id: 9, status: "pending", rowKind: "due", amount: 3000, amountPaid: 1000, periodStart: "2026-11-01" },
+      { id: 10, status: "pending", rowKind: "due", amount: 3000, amountPaid: 0, periodStart: "2026-09-01" },
+      { id: 11, status: "settled", rowKind: "due", amount: 3000, amountPaid: 3000, periodStart: "2026-12-01" },
+    ], now);
+    expect(r.upcoming.map((p) => [p.id, p.amount])).toEqual([[9, 2000]]);
+    expect(r.paid).toEqual([]);
   });
 });

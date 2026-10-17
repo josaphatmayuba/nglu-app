@@ -10,8 +10,16 @@ export function splitRentPayments(payments = [], now = new Date()) {
   const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const out = { paid: [], upcoming: [], pendingPast: [] };
   (Array.isArray(payments) ? payments : []).forEach((p) => {
-    if (!p || p.rowKind === "due" || p.status === false) return;
+    if (!p || p.status === false) return;
     const st = String(p.status || "").toLowerCase();
+    // Ligne echeance (bail allocationLedger) : jamais de l'argent recu ; une echeance
+    // future non soldee compte dans « A venir » pour son reste (montant - deja impute).
+    if (p.rowKind === "due") {
+      const rest = Math.round(((Number(p.amount) || 0) - (Number(p.amountPaid) || 0)) * 100) / 100;
+      const d = dayKey(p.periodStart || p.paymentDate);
+      if (st === "pending" && p.dueStatus !== "paid" && rest > 0.005 && d > today) out.upcoming.push({ ...p, amount: rest });
+      return;
+    }
     if (st === "paid") out.paid.push(p);
     else if (st === "pending") {
       const d = dayKey(p.paymentDate || p.periodStart);
