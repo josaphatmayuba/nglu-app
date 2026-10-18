@@ -1097,6 +1097,80 @@ export class GenerateTenantOnboardingDto {
 }
 
 export class SaveTenantOnboardingDto {
+  // Locataire entreprise (memes validateurs que CreateTenantDto) ; tous optionnels (brouillon).
+  @ApiPropertyOptional({ example: "individual", enum: ["individual", "company"] })
+  @IsOptional()
+  @IsIn(["individual", "company"])
+  tenant_type?: "individual" | "company";
+
+  @ApiPropertyOptional({ example: "Societe Congo SARL" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  company_name?: string | null;
+
+  @ApiPropertyOptional({ example: "SARL" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  legal_form?: string | null;
+
+  @ApiPropertyOptional({ example: "CD/KIN/RCCM/21-B-00000" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Matches(RCCM_REGEX, { message: "rccm invalide" })
+  rccm?: string | null;
+
+  @ApiPropertyOptional({ example: "01-123-N12345X" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  company_national_id?: string | null;
+
+  @ApiPropertyOptional({ example: "A1234567B" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(NIF_REGEX, { message: "tax_id invalide" })
+  tax_id?: string | null;
+
+  @ApiPropertyOptional({ example: "Siege social" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  company_address?: string | null;
+
+  @ApiPropertyOptional({ example: "Jean Dupont" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  representative_name?: string | null;
+
+  @ApiPropertyOptional({ example: "Directeur general" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  representative_title?: string | null;
+
+  @ApiPropertyOptional({ example: "+243810000000" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  representative_phone?: string | null;
+
+  @ApiPropertyOptional({ example: "rep@example.com" })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(191)
+  representative_email?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  representative_id_number?: string | null;
+
   @ApiPropertyOptional({ example: "Jean" })
   @IsOptional()
   @IsString()

@@ -35,6 +35,17 @@ const PRO_OPTIONS = [
   ["stagiaire", t("Stagiaire")],
 ];
 
+const LEGAL_FORM_OPTIONS = [["", t("Sélectionnez…")], ...["SARL", "SA", "SAS", "SNC", "SCS", "ETS", "ASBL", "ONG", "Autre"].map((v) => [v, v === "Autre" ? t("Autre") : v])];
+const COMPANY_REQUIRED_FIELDS = [
+  ["company_name", t("Raison sociale")], ["company_address", t("Adresse du siège")],
+  ["representative_name", t("Nom du représentant")],
+];
+const COMPANY_PAYLOAD_KEYS = [
+  "tenant_type", "company_name", "legal_form", "rccm", "company_national_id", "tax_id", "company_address",
+  "representative_name", "representative_title", "representative_phone", "representative_email",
+  "representative_id_number", "email", "phone", "phone2",
+];
+
 const SEX_OPTIONS = [["", t("Sélectionnez…")], ["M", t("Masculin")], ["F", t("Féminin")]];
 
 // Champs simples (réutilisent les classes Domus existantes).
@@ -126,6 +137,7 @@ export function TenantOnboardingPublic({ token }) {
     return () => { alive = false; };
   }, [token]);
 
+  const isCompany = values.tenant_type === "company";
   const isCouple = useMemo(
     () => COUPLE_STATUSES.includes(String(values.marital_status || "").toLowerCase()),
     [values.marital_status],
@@ -140,22 +152,35 @@ export function TenantOnboardingPublic({ token }) {
 
   // Clés obligatoires effectives (selon état civil / primo-location) → progression.
   const requiredKeys = useMemo(() => {
+    if (isCompany) return COMPANY_REQUIRED_FIELDS.map(([k]) => k);
     const keys = REQUIRED_FIELDS.map(([k]) => k);
     if (isCouple) keys.push("partenair_name", "partenair_number");
     if (!firstRental) keys.push("old_address", "old_lessor", "moving_reason");
     return keys;
-  }, [isCouple, firstRental]);
+  }, [isCompany, isCouple, firstRental]);
   const progress = useMemo(() => {
     const filled = requiredKeys.filter((k) => String(values[k] ?? "").trim() !== "").length;
     return Math.round((filled / Math.max(1, requiredKeys.length)) * 100);
   }, [requiredKeys, values]);
 
   const buildPayload = () => {
+    if (isCompany) {
+      const out = {};
+      COMPANY_PAYLOAD_KEYS.forEach((k) => {
+        const v = values[k];
+        out[k] = typeof v === "string" ? (v.trim() === "" ? null : v.trim()) : (v ?? null);
+      });
+      out.tenant_type = "company";
+      // Le serveur exige l'adresse : on reprend celle du siege.
+      out.address = out.company_address;
+      return out;
+    }
     const child_age = childNumber > 0
       ? Array.from({ length: childNumber }).map((_, i) => Number(values.child_age?.[i]) || 0)
       : [];
     return {
       ...values,
+      tenant_type: "individual",
       occupant_number: values.occupant_number != null && values.occupant_number !== "" ? Number(values.occupant_number) : undefined,
       child_number: childNumber,
       monthly_pay: values.monthly_pay !== "" && values.monthly_pay != null ? Number(values.monthly_pay) : null,
@@ -180,14 +205,14 @@ export function TenantOnboardingPublic({ token }) {
 
   const submit = async () => {
     setError("");
-    const missing = REQUIRED_FIELDS.filter(([k]) => {
+    const missing = (isCompany ? COMPANY_REQUIRED_FIELDS : REQUIRED_FIELDS).filter(([k]) => {
       const v = values[k];
       return v == null || String(v).trim() === "";
     });
-    if (isCouple && (!String(values.partenair_name || "").trim() || !String(values.partenair_number || "").trim())) {
+    if (!isCompany && isCouple && (!String(values.partenair_name || "").trim() || !String(values.partenair_number || "").trim())) {
       missing.push(["partenair_name", "Informations du partenaire"]);
     }
-    if (!firstRental) {
+    if (!isCompany && !firstRental) {
       ["old_address", "old_lessor", "moving_reason"].forEach((k) => {
         if (!String(values[k] || "").trim()) missing.push([k, k]);
       });
@@ -260,6 +285,48 @@ export function TenantOnboardingPublic({ token }) {
         <div className="onb-body">
           {error && <div ref={errorRef} className="onb-alert">{error}</div>}
 
+          <Card icon={<Building2 size={18} />} tone="iris" title={t("Je suis")}
+            subtitle={t("Choisissez le type de locataire")}>
+            <div className="domus-radio-cards">
+              {[["individual", t("Une personne")], ["company", t("Une entreprise")]].map(([val, label]) => (
+                <button key={val} type="button"
+                  className={(isCompany ? "company" : "individual") === val ? "active" : ""}
+                  onClick={() => set("tenant_type", val)}>
+                  <i /> {label}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {isCompany ? (
+            <>
+              <Card icon={<Building2 size={18} />} tone="violet" title={t("Société")}
+                subtitle={t("Informations légales de l'entreprise")}>
+                <Field label={t("Raison sociale")} value={values.company_name} onChange={(v) => set("company_name", v)} required />
+                <div className="domus-property-form-grid">
+                  <SelectField label={t("Forme juridique")} value={values.legal_form} options={LEGAL_FORM_OPTIONS} onChange={(v) => set("legal_form", v)} />
+                  <Field label={t("RCCM")} value={values.rccm} onChange={(v) => set("rccm", v)} />
+                  <Field label={t("Id. Nat.")} value={values.company_national_id} onChange={(v) => set("company_national_id", v)} />
+                  <Field label={t("NIF")} value={values.tax_id} onChange={(v) => set("tax_id", v)} />
+                  <Field label={t("Email de l'entreprise")} type="email" value={values.email} onChange={(v) => set("email", v)} />
+                  <Field label={t("Téléphone")} value={values.phone} disabled placeholder={t("Fourni par le gestionnaire")} />
+                </div>
+                <Field label={t("Adresse du siège")} value={values.company_address} onChange={(v) => set("company_address", v)} required />
+              </Card>
+
+              <Card icon={<User size={18} />} tone="rose" title={t("Représentant légal")}
+                subtitle={t("La personne qui engage l'entreprise")}>
+                <div className="domus-property-form-grid">
+                  <Field label={t("Nom du représentant")} value={values.representative_name} onChange={(v) => set("representative_name", v)} required />
+                  <Field label={t("Fonction")} value={values.representative_title} onChange={(v) => set("representative_title", v)} />
+                  <DomusPhoneField label={t("Téléphone du représentant")} value={values.representative_phone} onChange={(v) => set("representative_phone", v)} />
+                  <Field label={t("Email du représentant")} type="email" value={values.representative_email} onChange={(v) => set("representative_email", v)} />
+                  <Field label={t("N° de la pièce du représentant")} value={values.representative_id_number} onChange={(v) => set("representative_id_number", v)} />
+                </div>
+              </Card>
+            </>
+          ) : (
+            <>
           <Card icon={<User size={18} />} tone="iris" title={t("Identité")}
             subtitle={t("Vos informations de base et de contact")}>
             <div className="domus-property-form-grid">
@@ -335,6 +402,9 @@ export function TenantOnboardingPublic({ token }) {
               </div>
             )}
           </Card>
+
+            </>
+          )}
 
           <p className="onb-secure"><ShieldCheck size={14} /> {t("Connexion sécurisée — vos informations restent confidentielles.")}</p>
         </div>

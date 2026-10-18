@@ -133,6 +133,46 @@ describe("DTO CreateTenantDto - validation conditionnelle", () => {
   });
 });
 
+describe("validatedTenantPayload - onboarding", () => {
+  const svc = () => Object.create(PropertyManagementService.prototype) as any;
+  const company = {
+    tenant_type: "company",
+    company_name: " Societe Congo SARL ",
+    representative_name: "Jean Dupont",
+    phone: "+243810000001",
+    company_address: "Siege Gombe",
+  };
+
+  it("entreprise valide sans birth_date/sex/etat civil, sans defauts personne", () => {
+    const out = svc().validatedTenantPayload(company, "+243810000001");
+    expect(out.tenant_type).toBe("company");
+    expect(out.company_name).toBe("Societe Congo SARL");
+    expect(out.address).toBe("Siege Gombe");
+    expect(out.birth_date).toBeUndefined();
+    expect(out.monthly_pay).toBeUndefined();
+    expect(out.origin_province).toBeUndefined();
+  });
+
+  it("entreprise sans company_name -> 400", () => {
+    expect(() => svc().validatedTenantPayload({ ...company, company_name: "" }, "+243810000001")).toThrow(/company_name/);
+  });
+
+  it("entreprise : telephone different du lien -> 400", () => {
+    expect(() => svc().validatedTenantPayload(company, "+243810000009")).toThrow(/ne correspond pas/);
+  });
+
+  it("personne inchangee : champs requis personne toujours exiges", () => {
+    expect(() => svc().validatedTenantPayload({ phone: "+243810000001" }, "+243810000001")).toThrow(
+      /Missing required tenant fields: firstName, lastName, address, birth_date/,
+    );
+  });
+
+  it("normalise representative_phone", () => {
+    const out = svc().normalizeOnboardingPhones({ representative_phone: "0810000000" }, { lenient: true });
+    expect(out.representative_phone).toBe("+243810000000");
+  });
+});
+
 describe("updateTenant - societe", () => {
   it("update partiel d'une societe existante : lastName reste null, pas de valeur fictive", async () => {
     const { svc, sets } = makeService([

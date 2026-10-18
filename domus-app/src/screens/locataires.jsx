@@ -111,6 +111,7 @@ export function onboardingUrl(record) {
 }
 export function onboardingDisplayName(record) {
   const data = parseOnboardingData(record);
+  if (data.tenant_type === "company" && String(data.company_name || "").trim()) return String(data.company_name).trim();
   return [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
     data.email || data.phone || record?.phone || "Dossier locataire";
 }
@@ -1214,7 +1215,7 @@ function tenantPayload(f) {
   const childN = Number(f.child_number || 0);
   const payload = {
     ...typeFlag,
-    ...(f._onboardingId ? {} : { tenant_type: "individual" }),
+    tenant_type: "individual",
     firstName: s(f.firstName),
     lastName: s(f.lastName),
     email: s(f.email) || null,
@@ -1288,8 +1289,6 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
             <span style={{ fontSize: 13, lineHeight: 1.4 }}>Un locataire actif sera cree dans votre annuaire a partir de ce dossier. Aucun bail n'est cree a cette etape — vous pourrez le creer ensuite depuis la fiche.</span>
           </div>
         )}
-        {/* Dossier d'inscription : toujours une personne (SaveTenantOnboardingDto n'accepte pas les champs société). */}
-        {!form._onboardingId && (
         <FormSection icon={<Building2 size={14} />} title={t("Type de locataire")}>
           <div className="domus-property-field">
             <span>{t("Type")}</span>
@@ -1310,7 +1309,6 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
             )}
           </div>
         </FormSection>
-        )}
 
         {isCompany && (
           <>

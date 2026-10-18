@@ -845,7 +845,7 @@ export class PropertyManagementService {
     input: T,
     options: { lenient?: boolean } = {},
   ): T {
-    const phoneFields = ["phone", "phone2", "partenair_number", "contacted_person_phone_number"] as const;
+    const phoneFields = ["phone", "phone2", "partenair_number", "contacted_person_phone_number", "representative_phone"] as const;
     const next: Record<string, any> = { ...input };
     for (const f of phoneFields) {
       if (next[f] === undefined) continue;
@@ -8059,6 +8059,39 @@ export class PropertyManagementService {
     // (origin_province, entity_address, hiring_date, contract_type, monthly_pay,
     // old_address/lessor, moving_reason sont retirés — les colonnes NOT NULL sont
     // défaultées plus bas pour éviter une migration lourde).
+    if (data.tenant_type === "company") {
+      // Entreprise : pas de champs personne (naissance, sexe, etat civil, employeur...).
+      const requiredCompany = ["company_name", "representative_name", "phone"];
+      const missingCompany = requiredCompany.filter(
+        (key) => data[key] === undefined || data[key] === null || String(data[key]).trim() === "",
+      );
+      const address = String(data.address ?? "").trim() || String(data.company_address ?? "").trim();
+      if (!address) missingCompany.push("address");
+      if (missingCompany.length) {
+        throw new BadRequestException(`Missing required tenant fields: ${missingCompany.join(", ")}.`);
+      }
+      if (data.phone !== expectedPhone) {
+        throw new BadRequestException("Le numéro de téléphone ne correspond pas au lien d'inscription.");
+      }
+      // Un brouillon commence en "personne" puis bascule : les anciens champs personne
+      // restent dans data (fusion des sauvegardes) -> on ne les transmet pas.
+      const personFields = [
+        "lastName", "birth_date", "sex", "nationality", "marital_status", "origin_province",
+        "contacted_person", "contacted_person_phone_number", "prossional_status", "main_activity",
+        "entity_name", "entity_address", "hiring_date", "contract_type", "monthly_pay",
+        "salary_currency_id", "other_monthly_income", "occupant_number",
+        "partenair_name", "partenair_number", "child_number", "child_age",
+      ];
+      const companyData = Object.fromEntries(Object.entries(data).filter(([key]) => !personFields.includes(key)));
+      return {
+        ...companyData,
+        tenant_type: "company",
+        company_name: String(data.company_name).trim(),
+        representative_name: String(data.representative_name).trim(),
+        address,
+        company_address: String(data.company_address ?? "").trim() || address,
+      } as CreateTenantDto;
+    }
     const required = [
       "firstName",
       "lastName",
