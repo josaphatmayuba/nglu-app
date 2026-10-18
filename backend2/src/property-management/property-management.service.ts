@@ -1,4 +1,5 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, UnauthorizedException } from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
 import * as bcrypt from "bcryptjs";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
@@ -164,6 +165,8 @@ export class PropertyManagementService {
     private readonly ownerNotifications: OwnerNotificationsService,
     // Registre d'imputations loyer (actif seulement sur les baux flagges allocationLedgerAt).
     private readonly leaseAllocations: LeaseAllocationService,
+    // Journal d'audit (changement de type / identifiants legaux locataire). Optionnel : repli sur Logger.
+    @Optional() private readonly audit?: AuditService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -257,11 +260,11 @@ export class PropertyManagementService {
     return this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
   }
 
-  private tenantQuery(customerId?: number, orgId?: number) {
+  private tenantQuery(customerId: number | undefined, orgId: number) {
     const tenantWhere = and(
       eq(customers.status, "true"),
       inArray(roles.name, ["Locataire", "locataire", "tenant"]),
-      ...(orgId !== undefined ? [eq(customers.organizationId, orgId)] : []),
+      eq(customers.organizationId, orgId),
     );
     const where = customerId ? and(tenantWhere, eq(customers.id, customerId)) : tenantWhere;
 
@@ -304,6 +307,20 @@ export class PropertyManagementService {
         partenairNumber: tenantDetails.partenairNumber,
         childNumber: tenantDetails.childNumber,
         childAges: tenantDetails.childAges,
+        // Locataire entreprise (migration 0318).
+        tenantType: tenantDetails.tenantType,
+        companyName: tenantDetails.companyName,
+        legalForm: tenantDetails.legalForm,
+        rccm: tenantDetails.rccm,
+        companyNationalId: tenantDetails.companyNationalId,
+        taxId: tenantDetails.taxId,
+        companyAddress: tenantDetails.companyAddress,
+        representativeName: tenantDetails.representativeName,
+        representativeTitle: tenantDetails.representativeTitle,
+        representativePhone: tenantDetails.representativePhone,
+        representativeEmail: tenantDetails.representativeEmail,
+        // Piece d'identite du representant : fiche uniquement (jamais en liste).
+        ...(customerId ? { representativeIdNumber: tenantDetails.representativeIdNumber } : {}),
       })
       .from(customers)
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
@@ -311,16 +328,16 @@ export class PropertyManagementService {
       .where(where);
   }
 
-  async createTenant(input: CreateTenantDto, orgId: number) {
-    return this.createTenantRecord(input, orgId);
+  async createTenant(input: CreateTenantDto, orgId: number, userId?: number) {
+    return this.createTenantRecord(input, orgId, userId);
   }
 
-  async updateTenant(id: number, input: UpdateTenantDto, orgId: number) {
+  async updateTenant(id: number, input: UpdateTenantDto, orgId: number, userId?: number) {
     // Lecture SANS filtre sur status : findTenant n'expose que les dossiers
     // actifs, ce qui rendrait un locataire desactive introuvable et donc
     // impossible a reactiver (soft delete sans retour possible).
     const [existing] = await this.db
-      .select({ id: customers.id })
+      .select({ id: customers.id, firstName: customers.firstName, lastName: customers.lastName })
       .from(customers)
       .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)))
       .limit(1);
@@ -328,10 +345,77 @@ export class PropertyManagementService {
       throw new NotFoundException("Locataire introuvable.");
     }
 
+    // Type courant en base : en PUT partiel, la validation conditionnelle
+    // (societe vs personne) se base sur lui quand tenant_type est absent.
+    const [currentDetail] = await this.db
+      .select({
+        id: tenantDetails.id,
+        tenantType: tenantDetails.tenantType,
+        companyName: tenantDetails.companyName,
+        representativeName: tenantDetails.representativeName,
+        rccm: tenantDetails.rccm,
+        taxId: tenantDetails.taxId,
+        companyNationalId: tenantDetails.companyNationalId,
+      })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, id))
+      .limit(1);
+    const currentType = currentDetail?.tenantType === "company" ? "company" : "individual";
+    const nextType = input.tenant_type ?? currentType;
+    const isCompany = nextType === "company";
+
+    if (nextType !== currentType) {
+      // Un bail actif porte deja les mentions legales du locataire : changer de
+      // type sans confirmation explicite est refuse.
+      const [activeLease] = await this.db
+        .select({ id: realEstateLeases.id })
+        .from(realEstateLeases)
+        .where(and(
+          eq(realEstateLeases.tenantId, id),
+          eq(realEstateLeases.organizationId, orgId),
+          eq(realEstateLeases.status, "active"),
+        ))
+        .limit(1);
+      if (activeLease && input.confirm_type_change !== true) {
+        throw new ConflictException({
+          code: "TENANT_TYPE_CHANGE_REQUIRES_CONFIRMATION",
+          message: "Ce locataire a un bail actif : confirmer le changement de type.",
+        });
+      }
+    }
+
+    if (isCompany) {
+      const companyName = input.company_name !== undefined ? input.company_name : currentDetail?.companyName;
+      const representativeName =
+        input.representative_name !== undefined ? input.representative_name : currentDetail?.representativeName;
+      if (!String(companyName ?? "").trim()) {
+        throw new BadRequestException("La raison sociale (company_name) est requise pour une entreprise.");
+      }
+      if (!String(representativeName ?? "").trim()) {
+        throw new BadRequestException("Le representant (representative_name) est requis pour une entreprise.");
+      }
+    } else if (nextType !== currentType) {
+      // Passage societe -> personne : le nom/prenom doivent etre fournis.
+      if (!String(input.firstName ?? "").trim() || !String(input.lastName ?? "").trim()) {
+        throw new BadRequestException("firstName et lastName sont requis pour un locataire personne.");
+      }
+    }
+
     // Champs de base sur le customer (uniquement ceux fournis).
     const customerSet: Record<string, unknown> = { updatedAt: sql`CURRENT_TIMESTAMP` };
-    if (input.firstName !== undefined) customerSet.firstName = input.firstName;
-    if (input.lastName !== undefined) customerSet.lastName = input.lastName;
+    if (isCompany) {
+      // Societe : firstName = raison sociale, lastName toujours null.
+      const companyName = input.company_name !== undefined ? input.company_name : currentDetail?.companyName;
+      if (input.company_name !== undefined || nextType !== currentType) {
+        customerSet.firstName = String(companyName ?? "").trim();
+      }
+      if (input.company_name !== undefined || nextType !== currentType || existing.lastName !== null) {
+        customerSet.lastName = null;
+      }
+    } else {
+      if (input.firstName !== undefined) customerSet.firstName = input.firstName;
+      if (input.lastName !== undefined) customerSet.lastName = input.lastName;
+    }
     if (input.email !== undefined) customerSet.email = input.email || null;
     if (input.phone !== undefined) customerSet.phone = input.phone;
     if (input.address !== undefined) customerSet.address = input.address;
@@ -346,6 +430,23 @@ export class PropertyManagementService {
 
     // Détails locataire (uniquement les champs fournis).
     const detail: Record<string, unknown> = { updatedAt: sql`CURRENT_TIMESTAMP` };
+    if (input.tenant_type !== undefined) detail.tenantType = input.tenant_type;
+    if (input.company_name !== undefined) detail.companyName = input.company_name?.trim() || null;
+    if (input.legal_form !== undefined) detail.legalForm = input.legal_form || null;
+    if (input.rccm !== undefined) detail.rccm = input.rccm?.trim() || null;
+    if (input.company_national_id !== undefined) detail.companyNationalId = input.company_national_id?.trim() || null;
+    if (input.tax_id !== undefined) detail.taxId = input.tax_id?.trim() || null;
+    if (input.company_address !== undefined) detail.companyAddress = input.company_address || null;
+    if (input.representative_name !== undefined) detail.representativeName = input.representative_name?.trim() || null;
+    if (input.representative_title !== undefined) detail.representativeTitle = input.representative_title || null;
+    if (input.representative_phone !== undefined) {
+      detail.representativePhone = input.representative_phone
+        ? this.normalizePhoneOrBadRequest(input.representative_phone)
+        : null;
+    }
+    if (input.representative_email !== undefined) detail.representativeEmail = input.representative_email || null;
+    if (input.representative_id_number !== undefined)
+      detail.representativeIdNumber = input.representative_id_number?.trim() || null;
     if (input.birth_date !== undefined) detail.birthDate = input.birth_date;
     if (input.sex !== undefined) detail.sex = input.sex;
     if (input.nationality !== undefined) detail.nationality = input.nationality;
@@ -375,12 +476,29 @@ export class PropertyManagementService {
     if (input.child_number !== undefined) detail.childNumber = input.child_number ?? 0;
     if (input.child_age !== undefined) detail.childAges = input.child_age?.length ? JSON.stringify(input.child_age) : null;
 
-    const detailRows = await this.db
-      .select({ id: tenantDetails.id })
-      .from(tenantDetails)
-      .where(eq(tenantDetails.customerId, id));
-    if (detailRows.length) {
+    if (currentDetail) {
       await this.db.update(tenantDetails).set(detail).where(eq(tenantDetails.customerId, id));
+    } else if (isCompany) {
+      // Cas défensif societe : aucune valeur fictive (sexe, naissance...) inventee.
+      await this.db.insert(tenantDetails).values({
+        customerId: id,
+        tenantType: "company",
+        companyName: input.company_name?.trim() || null,
+        legalForm: input.legal_form || null,
+        rccm: input.rccm?.trim() || null,
+        companyNationalId: input.company_national_id?.trim() || null,
+        taxId: input.tax_id?.trim() || null,
+        companyAddress: input.company_address || null,
+        representativeName: input.representative_name?.trim() || null,
+        representativeTitle: input.representative_title || null,
+        representativePhone: input.representative_phone ? this.normalizePhoneOrBadRequest(input.representative_phone) : null,
+        representativeEmail: input.representative_email || null,
+        representativeIdNumber: input.representative_id_number?.trim() || null,
+        phone2: input.phone2 ?? null,
+        childNumber: 0,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
     } else {
       // Cas défensif : le locataire n'a pas (encore) de ligne tenant_details.
       await this.db.insert(tenantDetails).values({
@@ -420,6 +538,21 @@ export class PropertyManagementService {
       });
     }
 
+    // Trace : changement de type + identifiants legaux (ancien -> nouveau).
+    const before: Record<string, unknown> = {
+      tenantType: currentType,
+      companyName: currentDetail?.companyName ?? null,
+      rccm: currentDetail?.rccm ?? null,
+      taxId: currentDetail?.taxId ?? null,
+      companyNationalId: currentDetail?.companyNationalId ?? null,
+    };
+    const after: Record<string, unknown> = { ...before, tenantType: nextType };
+    if (input.company_name !== undefined) after.companyName = input.company_name?.trim() || null;
+    if (input.rccm !== undefined) after.rccm = input.rccm?.trim() || null;
+    if (input.tax_id !== undefined) after.taxId = input.tax_id?.trim() || null;
+    if (input.company_national_id !== undefined) after.companyNationalId = input.company_national_id?.trim() || null;
+    await this.auditTenantIdentityChange(id, orgId, userId, before, after, input.confirm_type_change === true);
+
     // Apres une desactivation (status "false"), le dossier sort du perimetre de
     // findTenant : on renvoie alors un accuse minimal plutot qu'un 404 sur une
     // mise a jour qui a pourtant reussi.
@@ -427,6 +560,38 @@ export class PropertyManagementService {
       return { id, status: "false" };
     }
     return this.findTenant(id, orgId);
+  }
+
+  /**
+   * Trace les changements de type de locataire et d'identifiants legaux
+   * (rccm, tax_id, company_national_id, company_name) dans audit_log
+   * (AuditService existant) ; repli Logger si le service n'est pas injecte.
+   */
+  private async auditTenantIdentityChange(
+    tenantId: number,
+    orgId: number,
+    userId: number | undefined,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+    confirmed = false,
+  ) {
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const key of Object.keys(after)) {
+      if (key === "tenantType") continue;
+      if ((before[key] ?? null) !== (after[key] ?? null)) changes[key] = { from: before[key] ?? null, to: after[key] ?? null };
+    }
+    const typeChanged = before.tenantType !== after.tenantType;
+    const entries: Array<[string, Record<string, unknown>]> = [];
+    if (typeChanged) {
+      entries.push(["domus.tenant.type_change", { orgId, tenantId, from: before.tenantType, to: after.tenantType, confirmed }]);
+    }
+    if (Object.keys(changes).length) {
+      entries.push(["domus.tenant.legal_identity_change", { orgId, tenantId, changes }]);
+    }
+    for (const [action, metadata] of entries) {
+      this.logger.log(`${action} tenant=${tenantId} org=${orgId} user=${userId ?? "n/a"} ${JSON.stringify(metadata)}`);
+      if (this.audit) await this.audit.log(action, `tenant:${tenantId}`, { userId }, metadata);
+    }
   }
 
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto, orgId: number) {
@@ -454,7 +619,7 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    const onboarding = await this.findOnboarding(Number(result.insertId));
+    const onboarding = await this.findOnboarding(Number(result.insertId), orgId);
     const response = this.adminOnboardingResponse(onboarding);
 
     await this.publishOnboardingUpdate("created", onboarding.id);
@@ -469,8 +634,8 @@ export class PropertyManagementService {
    * existant, puis trace `sms_sent_at` afin que le frontend sache distinguer
    * "Envoyer" de "Renvoyer" (le dossier n'a jamais reçu de SMS avant ce champ).
    */
-  async sendOnboardingSms(id: number) {
-    const onboarding = await this.findOnboarding(id);
+  async sendOnboardingSms(id: number, orgId: number) {
+    const onboarding = await this.findOnboarding(id, orgId);
     const data = this.parseOnboardingData(onboarding.data);
     const phone = data.phone || onboarding.phone;
     if (!phone) {
@@ -517,15 +682,15 @@ export class PropertyManagementService {
       })
       .where(eq(tenantOnboardings.id, id));
 
-    return this.adminOnboardingResponse(await this.findOnboarding(id));
+    return this.adminOnboardingResponse(await this.findOnboarding(id, orgId));
   }
 
   /**
    * Envoie (ou renvoie) l'email de lien d'inscription pour un dossier onboarding
    * existant, puis trace `email_sent_at` (voir sendOnboardingSms ci-dessus).
    */
-  async sendOnboardingEmail(id: number) {
-    const onboarding = await this.findOnboarding(id);
+  async sendOnboardingEmail(id: number, orgId: number) {
+    const onboarding = await this.findOnboarding(id, orgId);
     const data = this.parseOnboardingData(onboarding.data);
     const email = data.email;
     if (!email) {
@@ -575,7 +740,7 @@ export class PropertyManagementService {
       .set({ emailSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(tenantOnboardings.id, id));
 
-    return this.adminOnboardingResponse(await this.findOnboarding(id));
+    return this.adminOnboardingResponse(await this.findOnboarding(id, orgId));
   }
 
   /**
@@ -709,18 +874,18 @@ export class PropertyManagementService {
     }
   }
 
-  async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {
-    const onboarding = await this.findOnboarding(id);
+  async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto, orgId: number) {
+    const onboarding = await this.findOnboarding(id, orgId);
     if (onboarding.status === "validated") {
       throw new BadRequestException("This onboarding dossier has already been validated.");
     }
     const normalized = this.normalizeOnboardingPhones(input, { lenient: true });
     await this.updateOnboardingData(id, { ...this.parseOnboardingData(onboarding.data), ...normalized }, "draft");
-    return this.adminOnboardingResponse(await this.findOnboarding(id));
+    return this.adminOnboardingResponse(await this.findOnboarding(id, orgId));
   }
 
   async validateOnboarding(id: number, orgId: number) {
-    const onboarding = await this.findOnboarding(id);
+    const onboarding = await this.findOnboarding(id, orgId);
     if (onboarding.status === "validated") {
       throw new BadRequestException("This onboarding dossier has already been validated.");
     }
@@ -740,7 +905,7 @@ export class PropertyManagementService {
 
     await this.publishOnboardingUpdate("status_changed", id);
 
-    return { ...this.adminOnboardingResponse(await this.findOnboarding(id)), customer };
+    return { ...this.adminOnboardingResponse(await this.findOnboarding(id, orgId)), customer };
   }
 
   async getPublicOnboarding(token: string) {
@@ -801,25 +966,32 @@ export class PropertyManagementService {
     };
   }
 
-  private async createTenantRecord(input: CreateTenantDto, orgId: number) {
+  private async createTenantRecord(input: CreateTenantDto, orgId: number, userId?: number) {
+    const isCompany = input.tenant_type === "company";
     await this.ensureTenantForm(input);
+    const representativePhone = input.representative_phone
+      ? this.normalizePhoneOrBadRequest(input.representative_phone)
+      : null;
+    // Societe : firstName = raison sociale, lastName null (pas de nom/prenom fictif).
+    const firstName = isCompany ? String(input.company_name).trim() : input.firstName;
+    const lastName = isCompany ? null : input.lastName;
     if (input.email) {
       await this.ensureCustomerEmailAvailable(input.email);
     }
 
     const tenantRole = await this.getTenantRole();
     const password = await bcrypt.hash(randomBytes(12).toString("hex"), 10);
-    const username = input.username || this.usernameFromEmail(input.email) || input.phone || `${input.firstName}${input.lastName}`;
+    const username = input.username || this.usernameFromEmail(input.email) || input.phone || [firstName, lastName].filter(Boolean).join("");
 
     const customerId = await this.db.transaction(async (tx) => {
       const [customerResult] = await tx.insert(customers).values({
         organizationId: orgId,
         username,
-        firstName: input.firstName,
-        lastName: input.lastName,
+        firstName,
+        lastName,
         email: input.email ?? null,
         phone: input.phone,
-        address: input.address,
+        address: input.address ?? (isCompany ? input.company_address ?? null : null),
         password,
         roleId: tenantRole.id,
         isLogin: "false",
@@ -829,8 +1001,44 @@ export class PropertyManagementService {
       });
 
       const createdCustomerId = Number(customerResult.insertId);
+      const companyFields = {
+        tenantType: isCompany ? "company" : "individual",
+        companyName: isCompany ? firstName : null,
+        legalForm: input.legal_form || null,
+        rccm: input.rccm?.trim() || null,
+        companyNationalId: input.company_national_id?.trim() || null,
+        taxId: input.tax_id?.trim() || null,
+        companyAddress: input.company_address || null,
+        representativeName: input.representative_name?.trim() || null,
+        representativeTitle: input.representative_title || null,
+        representativePhone,
+        representativeEmail: input.representative_email || null,
+        representativeIdNumber: input.representative_id_number?.trim() || null,
+      };
+      if (isCompany) {
+        // Societe : jamais de sex / birth_date / situation familiale fictifs.
+        await tx.insert(tenantDetails).values({
+          customerId: createdCustomerId,
+          ...companyFields,
+          idDocumentType: input.id_document_type ?? null,
+          idNumber: input.id_number ?? null,
+          phone2: input.phone2 ?? null,
+          monthlyPay: input.monthly_pay == null ? null : this.money(input.monthly_pay),
+          salaryCurrencyId: input.salary_currency_id ?? null,
+          otherMonthlyIncome: input.other_monthly_income == null ? null : this.money(input.other_monthly_income),
+          oldAddress: input.old_address,
+          oldLessor: input.old_lessor,
+          movingReason: input.moving_reason,
+          occupantNumber: input.occupant_number ?? null,
+          childNumber: 0,
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+        return createdCustomerId;
+      }
       await tx.insert(tenantDetails).values({
         customerId: createdCustomerId,
+        ...companyFields,
         birthDate: input.birth_date,
         sex: input.sex,
         nationality: input.nationality,
@@ -869,6 +1077,21 @@ export class PropertyManagementService {
     });
 
     const tenant = await this.findTenant(customerId, orgId);
+    if (isCompany) {
+      await this.auditTenantIdentityChange(
+        customerId,
+        orgId,
+        userId,
+        { tenantType: "individual", companyName: null, rccm: null, taxId: null, companyNationalId: null },
+        {
+          tenantType: "company",
+          companyName: firstName,
+          rccm: input.rccm?.trim() || null,
+          taxId: input.tax_id?.trim() || null,
+          companyNationalId: input.company_national_id?.trim() || null,
+        },
+      );
+    }
     // Le lien portail est cree systematiquement a l'ouverture du dossier (meme
     // sans telephone) : la fiche locataire doit toujours pouvoir l'afficher
     // sans qu'un gestionnaire ait a cliquer sur "Generer".
@@ -7419,8 +7642,13 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  private async findOnboarding(id: number) {
-    const rows = await this.db.select().from(tenantOnboardings).where(eq(tenantOnboardings.id, id)).limit(1);
+  private async findOnboarding(id: number, orgId: number) {
+    // Isolation multi-org : un id d'une autre organisation = 404 (jamais de fuite cross-org).
+    const rows = await this.db
+      .select()
+      .from(tenantOnboardings)
+      .where(and(eq(tenantOnboardings.id, id), eq(tenantOnboardings.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) throw new NotFoundException("Tenant onboarding not found.");
     return rows[0];
   }
@@ -7478,6 +7706,10 @@ export class PropertyManagementService {
         tenantPhone: customers.phone,
         tenantEmail: customers.email,
         tenantSex: tenantDetails.sex,
+        // Preneur entreprise : badge + RCCM/NIF sur la quittance (domus-app rentBookUtils).
+        tenantType: tenantDetails.tenantType,
+        tenantRccm: tenantDetails.rccm,
+        tenantTaxId: tenantDetails.taxId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })
@@ -7908,6 +8140,16 @@ export class PropertyManagementService {
   }
 
   private ensureTenantForm(input: CreateTenantDto) {
+    if (input.tenant_type === "company") {
+      // Societe : pas de regles couple / enfants / salaire. Nom + representant requis.
+      if (!String(input.company_name ?? "").trim()) {
+        throw new BadRequestException("La raison sociale (company_name) est requise pour une entreprise.");
+      }
+      if (!String(input.representative_name ?? "").trim()) {
+        throw new BadRequestException("Le representant (representative_name) est requis pour une entreprise.");
+      }
+      return;
+    }
     if (this.isCoupleStatus(input.marital_status) && (!input.partenair_name || !input.partenair_number)) {
       throw new BadRequestException("Partner name and phone number are required for couple marital statuses.");
     }

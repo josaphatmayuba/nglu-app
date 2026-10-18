@@ -160,6 +160,12 @@ export class OwnerPortalService {
         partenairName: tenantDetails.partenairName,
         partenairNumber: tenantDetails.partenairNumber,
         childNumber: tenantDetails.childNumber,
+        // Societe : seuls raison sociale, RCCM et nom du representant sont exposes au proprietaire
+        // (jamais piece/telephone/email du representant).
+        tenantType: tenantDetails.tenantType,
+        companyName: tenantDetails.companyName,
+        rccm: tenantDetails.rccm,
+        representativeName: tenantDetails.representativeName,
       })
       .from(customers)
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))

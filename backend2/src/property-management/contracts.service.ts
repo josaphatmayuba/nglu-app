@@ -87,6 +87,15 @@ type LeaseDetails = {
   tenantIdDocumentType: string | null;
   tenantIdNumber: string | null;
   tenantName: string;
+  // Locataire entreprise (migration 0318) : mentions legales + representant signataire.
+  tenantType: string | null;
+  tenantLegalForm: string | null;
+  tenantRccm: string | null;
+  tenantCompanyNationalId: string | null;
+  tenantTaxId: string | null;
+  tenantCompanyAddress: string | null;
+  tenantRepresentativeName: string | null;
+  tenantRepresentativeTitle: string | null;
   // Co-locataires actifs (hors locataire principal), ordre position.
   coTenants: CoTenantInfo[];
   // Proprietaire legal du bien (real_estate_owners), si assigne sur la propriete.
@@ -226,6 +235,15 @@ export class ContractsService {
       "EMAIL DU GESTIONNAIRE": company.email ?? "",
       "NOM COMPLET DU PRENEUR": this.joinNames(allTenants.map((t) => (t.name ?? "").toLocaleUpperCase("fr"))),
       "NOMS DES PRENEURS": this.joinNames(allTenants.map((t) => (t.name ?? "").toLocaleUpperCase("fr"))),
+      "TYPE DE PRENEUR": lease.tenantType === "company" ? "société" : "personne physique",
+      "DÉSIGNATION COMPLÈTE DU PRENEUR": this.tenantDesignation(lease, allTenants),
+      "FORME JURIDIQUE DU PRENEUR": lease.tenantLegalForm ?? "",
+      "RCCM DU PRENEUR": lease.tenantRccm ?? "",
+      "ID NAT DU PRENEUR": lease.tenantCompanyNationalId ?? "",
+      "NIF DU PRENEUR": lease.tenantTaxId ?? "",
+      "SIÈGE DU PRENEUR": lease.tenantCompanyAddress ?? "",
+      "REPRÉSENTANT DU PRENEUR": lease.tenantRepresentativeName ?? "",
+      "FONCTION DU REPRÉSENTANT": lease.tenantRepresentativeTitle ?? "",
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
       "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
@@ -336,9 +354,24 @@ export class ContractsService {
     // supprime entre temps, on retombe sur companyInfo seul (source "settings")
     // plutot que de faire planter l'endpoint (rétrocompatibilité).
     let landlordInfo: LandlordInfo;
+    // Preneur entreprise : champs a plat pour le bloc de signature du PDF (domus-app contractUtils).
+    let tenantCompany: Record<string, string | null> | null = null;
     try {
       const lease = await this.getLeaseDetails(rows[0].leaseId, orgId);
       landlordInfo = this.resolveLandlord(lease, companyInfo);
+      if (lease.tenantType === "company") {
+        tenantCompany = {
+          tenantType: "company",
+          companyName: lease.tenantName ?? null,
+          legalForm: lease.tenantLegalForm ?? null,
+          rccm: lease.tenantRccm ?? null,
+          companyNationalId: lease.tenantCompanyNationalId ?? null,
+          taxId: lease.tenantTaxId ?? null,
+          companyAddress: lease.tenantCompanyAddress ?? null,
+          representativeName: lease.tenantRepresentativeName ?? null,
+          representativeTitle: lease.tenantRepresentativeTitle ?? null,
+        };
+      }
     } catch {
       landlordInfo = {
         name: companyInfo.landlordName || companyInfo.companyName || "",
@@ -372,6 +405,7 @@ export class ContractsService {
 
     return {
       ...rows[0],
+      ...(tenantCompany ?? {}),
       printTenants,
       signers,
       signersSigned: signers.filter((x) => x.status === "signed").length,
@@ -719,6 +753,7 @@ export class ContractsService {
     const contactPhone = company.landlordPhone || company.phone || "";
 
     const tenantName =
+      (lease.tenantType === "company" ? lease.tenantRepresentativeName ?? "" : "") ||
       (lease.tenantId ? await this.ownerNotifications.civilNameForTenant(lease.tenantId, orgId) : "") ||
       lease.tenantName ||
       contract.tenantName ||
@@ -1475,11 +1510,23 @@ export class ContractsService {
 
     if (lease.tenantId) {
       const [c] = await this.db
-        .select({ id: customers.id, firstName: customers.firstName, lastName: customers.lastName, email: customers.email, phone: customers.phone })
+        .select({
+          id: customers.id,
+          firstName: customers.firstName,
+          lastName: customers.lastName,
+          email: customers.email,
+          phone: customers.phone,
+          tenantType: tenantDetails.tenantType,
+          representativeName: tenantDetails.representativeName,
+        })
         .from(customers)
+        .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(and(eq(customers.id, lease.tenantId), eq(customers.organizationId, orgId), eq(customers.status, "true")))
         .limit(1);
-      if (c) out.push({ customerId: c.id, role: "principal", name: fullName(c), email: c.email ?? null, phone: c.phone ?? null });
+      // Societe : le signataire du bail est son representant.
+      const principalName =
+        c?.tenantType === "company" && c.representativeName ? c.representativeName : c ? fullName(c) : "";
+      if (c) out.push({ customerId: c.id, role: "principal", name: principalName, email: c.email ?? null, phone: c.phone ?? null });
     }
 
     const coRows = await this.db
@@ -1625,6 +1672,14 @@ export class ContractsService {
         tenantAddress: customers.address,
         tenantIdDocumentType: tenantDetails.idDocumentType,
         tenantIdNumber: tenantDetails.idNumber,
+        tenantType: tenantDetails.tenantType,
+        tenantLegalForm: tenantDetails.legalForm,
+        tenantRccm: tenantDetails.rccm,
+        tenantCompanyNationalId: tenantDetails.companyNationalId,
+        tenantTaxId: tenantDetails.taxId,
+        tenantCompanyAddress: tenantDetails.companyAddress,
+        tenantRepresentativeName: tenantDetails.representativeName,
+        tenantRepresentativeTitle: tenantDetails.representativeTitle,
         ownerId: realEstateOwners.id,
         ownerName: realEstateOwners.displayName,
         ownerAddress: realEstateOwners.address,
@@ -1715,6 +1770,34 @@ export class ContractsService {
     }>;
   }
 
+  /**
+   * Designation du preneur dans le contrat. Societe : « Societe X, forme, RCCM,
+   * Id.Nat, NIF, siege, representee par Y, en sa qualite de Z ». Personne :
+   * nom(s) des preneurs inchange.
+   */
+  private tenantDesignation(
+    lease: LeaseDetails,
+    allTenants: Array<{ name: string | null }>,
+  ): string {
+    if (lease.tenantType !== "company") {
+      return this.joinNames(allTenants.map((t) => (t.name ?? "").toLocaleUpperCase("fr")));
+    }
+    const parts = [
+      `Société ${(lease.tenantName ?? "").toLocaleUpperCase("fr")}`,
+      lease.tenantLegalForm ? `${lease.tenantLegalForm}` : null,
+      lease.tenantRccm ? `RCCM n° ${lease.tenantRccm}` : null,
+      lease.tenantCompanyNationalId ? `Id.Nat n° ${lease.tenantCompanyNationalId}` : null,
+      lease.tenantTaxId ? `NIF n° ${lease.tenantTaxId}` : null,
+      lease.tenantCompanyAddress ? `dont le siège est situé ${lease.tenantCompanyAddress}` : null,
+      lease.tenantRepresentativeName
+        ? `représentée par ${lease.tenantRepresentativeName}${
+            lease.tenantRepresentativeTitle ? `, en sa qualité de ${lease.tenantRepresentativeTitle}` : ""
+          }`
+        : null,
+    ].filter(Boolean);
+    return parts.join(", ");
+  }
+
   /** « A », « A et B », « A, B et C ». */
   private joinNames(names: string[]): string {
     const n = names.filter(Boolean);
@@ -1740,13 +1823,26 @@ export class ContractsService {
     const allTenants = this.allTenants(lease);
     const multi = allTenants.length > 1;
     const tenantsLabel = multi ? "Les Preneurs (Locataires)" : "Le Preneur (Locataire)";
+    const isCompanyTenant = lease.tenantType === "company";
+    // Societe : bloc preneur = identite legale + representant (a la place de la piece d'identite).
+    const companyBlock = `<div>
+      <strong>Société ${e((lease.tenantName ?? "").toLocaleUpperCase("fr"))}</strong>${lease.tenantLegalForm ? `, ${e(lease.tenantLegalForm)}` : ""}<br>
+      ${[
+        lease.tenantRccm ? `RCCM n°&nbsp;${e(lease.tenantRccm)}` : "",
+        lease.tenantCompanyNationalId ? `Id.Nat n°&nbsp;${e(lease.tenantCompanyNationalId)}` : "",
+        lease.tenantTaxId ? `NIF n°&nbsp;${e(lease.tenantTaxId)}` : "",
+      ].filter(Boolean).join(" &mdash; ") || "RCCM / Id.Nat / NIF&nbsp;: N/A"}<br>
+      Siège&nbsp;: ${e(lease.tenantCompanyAddress ?? lease.tenantAddress ?? "N/A")}<br>
+      Représentée par ${e(lease.tenantRepresentativeName ?? "N/A")}${lease.tenantRepresentativeTitle ? `, en sa qualité de ${e(lease.tenantRepresentativeTitle)}` : ""}<br>
+      Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
+    </div>`;
     const tenantsBlock = allTenants
       .map(
-        (t, i) => `<div${i > 0 ? ' style="margin-top:12px;"' : ""}>
+        (t, i) => (isCompanyTenant && i === 0 ? companyBlock : `<div${i > 0 ? ' style="margin-top:12px;"' : ""}>
       <strong>${e((t.name ?? "").toLocaleUpperCase("fr"))}</strong> &mdash; ${e(t.idDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(t.idNumber || "N/A")}</em><br>
       Adresse&nbsp;: ${e(t.address ?? (i === 0 ? "[ADRESSE DU PRENEUR]" : "N/A"))}<br>
       Téléphone&nbsp;: ${e(t.phone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(t.email ?? "N/A")}
-    </div>`,
+    </div>`),
       )
       .join("");
     const solidarityClause = multi
@@ -1754,10 +1850,16 @@ export class ContractsService {
       : "";
     const signatureTenantBlocks = allTenants
       .map(
-        (t) => `<div style="flex:1;text-align:center;">
+        (t, i) => `<div style="flex:1;text-align:center;">
         <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
         <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
-          <div style="font-size:12px;color:#333;">${e((t.name ?? "").toLocaleUpperCase("fr"))}</div>
+          <div style="font-size:12px;color:#333;">${
+            isCompanyTenant && i === 0
+              ? `${e((lease.tenantRepresentativeName ?? "").toLocaleUpperCase("fr"))}${
+                  lease.tenantRepresentativeTitle ? `<br>${e(lease.tenantRepresentativeTitle)}` : ""
+                }<br>pour ${e((lease.tenantName ?? "").toLocaleUpperCase("fr"))}`
+              : e((t.name ?? "").toLocaleUpperCase("fr"))
+          }</div>
           <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
         </div>
       </div>`,

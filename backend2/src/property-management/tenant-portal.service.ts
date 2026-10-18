@@ -263,8 +263,17 @@ export class TenantPortalService {
     const detailSet: Record<string, unknown> = {};
     const CUSTOMER_FIELDS = ["firstName", "lastName", "email", "phone", "address"];
 
+    const [typeRow] = await this.db
+      .select({ tenantType: tenantDetails.tenantType })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, request.tenantId))
+      .limit(1);
+    const isCompany = typeRow?.tenantType === "company";
+
     for (const field of TenantPortalService.EDITABLE_FIELDS) {
       if (!(field in changes)) continue;
+      // Societe : firstName porte la raison sociale (geree par le gestionnaire), lastName est null.
+      if (isCompany && TenantPortalService.COMPANY_LOCKED_FIELDS.includes(field)) continue;
       const value = changes[field];
       if (CUSTOMER_FIELDS.includes(field)) customerSet[field] = value;
       else detailSet[field] = value;
@@ -649,6 +658,14 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         address: customers.address,
         entityName: tenantDetails.entityName,
         sex: tenantDetails.sex,
+        // Societe : mentions legales visibles du locataire (pas rccm/NIF/Id.Nat editables, pas la piece du representant).
+        tenantType: tenantDetails.tenantType,
+        companyName: tenantDetails.companyName,
+        legalForm: tenantDetails.legalForm,
+        rccm: tenantDetails.rccm,
+        taxId: tenantDetails.taxId,
+        companyAddress: tenantDetails.companyAddress,
+        representativeName: tenantDetails.representativeName,
       })
       .from(customers)
       .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
@@ -821,6 +838,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
         address: tenant.address,
         entityName: tenant.entityName,
         sex: tenant.sex,
+        tenantType: tenant.tenantType,
+        companyName: tenant.companyName,
+        legalForm: tenant.legalForm,
+        rccm: tenant.rccm,
+        taxId: tenant.taxId,
+        companyAddress: tenant.companyAddress,
+        representativeName: tenant.representativeName,
       },
       leases: leasesOut,
       // payments contient a la fois les loyers regles (status 'paid') et les
@@ -853,6 +877,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
     "professionalStatus", "mainActivity", "entityName", "entityAddress",
   ] as const;
 
+  private static readonly COMPANY_LOCKED_FIELDS: readonly string[] = ["firstName", "lastName"];
+
   private parseChanges(raw: string | null): Record<string, unknown> {
     if (!raw) return {};
     try {
@@ -875,8 +901,16 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background
     if (!token?.trim()) throw new BadRequestException("Token requis.");
     const { tenantId, organizationId } = await this.resolveTenantIdByToken(token);
 
+    const [typeRow] = await this.db
+      .select({ tenantType: tenantDetails.tenantType })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, tenantId))
+      .limit(1);
+    const isCompany = typeRow?.tenantType === "company";
+
     const changes: Record<string, string> = {};
     for (const field of TenantPortalService.EDITABLE_FIELDS) {
+      if (isCompany && TenantPortalService.COMPANY_LOCKED_FIELDS.includes(field)) continue;
       const value = body?.[field];
       if (value === undefined || value === null) continue;
       const str = String(value).trim();

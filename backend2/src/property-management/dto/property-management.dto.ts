@@ -14,6 +14,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -765,15 +766,26 @@ export class CreateMaintenanceDto {
 
 export class UpdateMaintenanceDto extends PartialType(CreateMaintenanceDto) {}
 
+// Validation conditionnelle selon le type de locataire (entreprise vs personne).
+const isCompanyTenant = (o: { tenant_type?: string }) => o.tenant_type === "company";
+const isNotCompanyTenant = (o: { tenant_type?: string }) => o.tenant_type !== "company";
+// Regex volontairement tolerantes : de vrais RCCM/NIF congolais ont des formats varies.
+const RCCM_REGEX = /^[A-Z0-9\/.\-_ °º]{3,60}$/i;
+const NIF_REGEX = /^[A-Z0-9\/.\-_ °º]{3,30}$/i;
+
 export class CreateTenantDto {
   @ApiProperty({ example: "Jean" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   firstName: string;
 
   @ApiProperty({ example: "Dupont" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   lastName: string;
 
   @ApiPropertyOptional({ example: "jean.dupont@example.com" })
@@ -787,8 +799,10 @@ export class CreateTenantDto {
   phone: string;
 
   @ApiProperty({ example: "12 Avenue des Palmiers" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   address: string;
 
   @ApiPropertyOptional({ example: "jdupont" })
@@ -797,27 +811,113 @@ export class CreateTenantDto {
   username?: string | null;
 
   @ApiProperty({ example: "1992-03-14" })
+  @ValidateIf(isNotCompanyTenant)
   @IsDateString()
   birth_date: string;
 
   @ApiProperty({ example: "M", enum: ["M", "F"] })
+  @ValidateIf(isNotCompanyTenant)
   @IsIn(["M", "F"])
   sex: "M" | "F";
 
   @ApiProperty({ example: "Congolaise" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   nationality: string;
 
   @ApiProperty({ example: "marié" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   marital_status: string;
 
   @ApiPropertyOptional({ example: "Kinshasa" })
   @IsOptional()
   @IsString()
   origin_province?: string | null;
+
+  @ApiPropertyOptional({ example: "individual", enum: ["individual", "company"], description: "Type de locataire (defaut individual)" })
+  @IsOptional()
+  @IsIn(["individual", "company"])
+  tenant_type?: "individual" | "company";
+
+  @ApiPropertyOptional({ example: "Societe Congo SARL", description: "Raison sociale (requis si tenant_type=company)" })
+  @ValidateIf(isCompanyTenant)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  company_name?: string | null;
+
+  @ApiPropertyOptional({ example: "SARL", description: "Forme juridique" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  legal_form?: string | null;
+
+  @ApiPropertyOptional({ example: "CD/KIN/RCCM/21-B-00000", description: "Registre du commerce" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  @Matches(RCCM_REGEX, { message: "rccm invalide" })
+  rccm?: string | null;
+
+  @ApiPropertyOptional({ example: "01-123-N12345X", description: "Identification nationale" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  company_national_id?: string | null;
+
+  @ApiPropertyOptional({ example: "A1234567B", description: "Numero d impot (NIF)" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(NIF_REGEX, { message: "tax_id invalide" })
+  tax_id?: string | null;
+
+  @ApiPropertyOptional({ example: "Siege social", description: "Siege de la societe" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  company_address?: string | null;
+
+  @ApiPropertyOptional({ example: "Jean Dupont", description: "Representant legal (requis si tenant_type=company)" })
+  @ValidateIf(isCompanyTenant)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  representative_name?: string | null;
+
+  @ApiPropertyOptional({ example: "Directeur general", description: "Fonction du representant" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  representative_title?: string | null;
+
+  @ApiPropertyOptional({ example: "+243810000000", description: "Telephone du representant" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  representative_phone?: string | null;
+
+  @ApiPropertyOptional({ example: "rep@example.com" })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(191)
+  representative_email?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456", description: "Piece du representant" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  representative_id_number?: string | null;
+
+  @ApiPropertyOptional({ description: "Confirmer un changement de type alors qu un bail actif existe" })
+  @IsOptional()
+  @IsBoolean()
+  confirm_type_change?: boolean;
 
   @ApiPropertyOptional({ example: "+243820000000" })
   @IsOptional()
@@ -835,28 +935,38 @@ export class CreateTenantDto {
   id_number?: string | null;
 
   @ApiProperty({ example: "Marie Dupont" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   contacted_person: string;
 
   @ApiProperty({ example: "+243830000000" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   contacted_person_phone_number: string;
 
   @ApiProperty({ example: "salarié" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   prossional_status: string;
 
   @ApiProperty({ example: "Comptable" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   main_activity: string;
 
   @ApiProperty({ example: "NGLU SARL" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   entity_name: string;
 
   @ApiPropertyOptional({ example: "45 Boulevard du 30 Juin" })
@@ -870,8 +980,10 @@ export class CreateTenantDto {
   hiring_date?: string | null;
 
   @ApiProperty({ example: "CDI" })
+  @ValidateIf(isNotCompanyTenant)
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   contract_type: string;
 
   @ApiPropertyOptional({ example: 1500 })
@@ -910,6 +1022,7 @@ export class CreateTenantDto {
   moving_reason?: string | null;
 
   @ApiProperty({ example: 3 })
+  @ValidateIf(isNotCompanyTenant)
   @Type(() => Number)
   @IsInt()
   @Min(1)

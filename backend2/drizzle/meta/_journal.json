@@ -2052,6 +2052,13 @@
       "when": 1781935200000,
       "tag": "0317_domus_payment_allocations",
       "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "5",
+      "when": 1782021600000,
+      "tag": "0318_domus_tenant_company",
+      "breakpoints": true
     }
   ]
 }

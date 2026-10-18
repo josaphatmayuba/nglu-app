@@ -55,6 +55,12 @@ describe("tenantBadge", () => {
     expect(b).toEqual({ label: "Pro · Entreprise", tone: "brand" });
   });
 
+  it("locataire tenantType company (sans nom SARL) -> Pro Entreprise", () => {
+    const l = lease();
+    const b = badge(tenant({ tenantType: "company", companyName: "Ngolu" }), [l], l);
+    expect(b).toEqual({ label: "Pro · Entreprise", tone: "brand" });
+  });
+
   it("entreprise partie -> Pro Entreprise · ancien", () => {
     const l = lease({ status: "ended", endDate: "2025-01-01" });
     const b = badge(tenant({ entityName: "Immo SARL" }), [l], l);

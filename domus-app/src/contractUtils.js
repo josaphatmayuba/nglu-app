@@ -119,6 +119,34 @@ export function landlordSignatureOf(contract) {
   return isRealSignature(sig) ? sig : null;
 }
 
+// Locataire entreprise : champs societe + representant lus a plat sur le contrat/bail
+// (ou sur contract.tenant / contract.lease si l'API les imbrique). null pour un particulier.
+export function companyTenantOf(src) {
+  const c = src || {};
+  const cand = [c, c.tenant, c.lease].find((x) => x && x.tenantType === "company");
+  return cand || null;
+}
+
+// Bloc « preneur » entreprise : parties vides omises.
+// « {companyName}, {legalForm}, RCCM {rccm}, Id.Nat {companyNationalId}, NIF {taxId},
+//   siege {companyAddress}, representee par {representativeName}, en sa qualite de {representativeTitle} »
+export function companyPreneurText(src) {
+  const c = companyTenantOf(src);
+  if (!c) return "";
+  const head = [
+    c.companyName,
+    c.legalForm,
+    c.rccm && `RCCM ${c.rccm}`,
+    c.companyNationalId && `Id.Nat ${c.companyNationalId}`,
+    c.taxId && `NIF ${c.taxId}`,
+    c.companyAddress && `siège ${c.companyAddress}`,
+  ].filter((v) => String(v || "").trim()).join(", ");
+  const rep = c.representativeName
+    ? `représentée par ${c.representativeName}${c.representativeTitle ? `, en sa qualité de ${c.representativeTitle}` : ""}`
+    : "";
+  return [head, rep].filter(Boolean).join(", ");
+}
+
 function landlordPrintBlock(contract, withSignature = true) {
   const company = contract?.companyInfo || {};
   const landlordInfo = contract?.landlordInfo || {};
@@ -282,6 +310,13 @@ function signatureGridHtml(contract, withSignatures = true) {
         <div class="signature-date">Signé le : ${landlordDate}</div>
       </div>`;
 
+  // Locataire entreprise : le signataire est le representant legal.
+  const companyTenant = companyTenantOf(contract);
+  const tenantSignerName = companyTenant?.representativeName || contract?.tenantName;
+  const tenantQuality = companyTenant
+    ? `<div class="signature-name">Pour ${escapeHtml(companyTenant.companyName || "")}${companyTenant.representativeTitle ? `, ${escapeHtml(companyTenant.representativeTitle)}` : ""}</div>`
+    : "";
+
   // Bail multi-locataires (2 a 4) : un bloc de signature par locataire.
   const signers = Array.isArray(contract?.printTenants) ? contract.printTenants : [];
   if (signers.length >= 2) {
@@ -303,7 +338,8 @@ function signatureGridHtml(contract, withSignatures = true) {
       ${landlordBlock}
       <div>
         <h2>Signature du locataire</h2>${tenantSignature}
-        ${contract?.tenantName ? `<div class="signature-name">${escapeHtml(String(contract.tenantName).toLocaleUpperCase("fr"))}</div>` : ""}
+        ${tenantSignerName ? `<div class="signature-name">${escapeHtml(String(tenantSignerName).toLocaleUpperCase("fr"))}</div>` : ""}
+        ${tenantQuality}
         <div class="signature-date">Signé le : ${tenantDate}</div>
       </div>
     </div>`;

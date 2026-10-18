@@ -476,7 +476,13 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   const isPaid = payment.status === "paid";
   // Quittance detachable : elle doit s'identifier seule (locataire + logement).
   // paymentDate = echeance tant que non paye, date du paiement une fois paye.
-  const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "—";
+  let tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || lease.companyName || "—";
+  // Locataire entreprise : raison sociale (deja dans tenantFirstName) + RCCM / NIF.
+  if (lease.tenantType === "company") {
+    const rccm = lease.rccm ?? lease.tenantRccm;
+    const nif = lease.taxId ?? lease.tenantTaxId;
+    tenantName = [tenantName, rccm && `RCCM ${rccm}`, nif && `NIF ${nif}`].filter(Boolean).join(" · ");
+  }
   const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
   const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";

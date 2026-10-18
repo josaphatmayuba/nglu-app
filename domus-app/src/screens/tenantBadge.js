@@ -53,7 +53,7 @@ export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now())
   if (daysToEnd !== null && daysToEnd < 0) return { label: "Bail expiré", tone: "danger" };
   // Bail actif proche de la fin : à renouveler (seulement si encore actif).
   if (daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 60) return { label: "Bail à renouveler", tone: "warning" };
-  const isCompany = Boolean(tenant?.entityName) && /\b(sarl|sas|sa|sprl|entreprise|company|ltd|inc|group)\b/i.test(String(tenant.entityName));
+  const isCompany = tenant?.tenantType === "company" || Boolean(tenant?.entityName) && /\b(sarl|sas|sa|sprl|entreprise|company|ltd|inc|group)\b/i.test(String(tenant.entityName));
   if (isCompany) return { label: `Pro · Entreprise${hasActive ? "" : " · ancien"}`, tone: "brand" };
   // Ancienneté = depuis le TOUT PREMIER bail (historique complet).
   const firstStart = tenantLeases

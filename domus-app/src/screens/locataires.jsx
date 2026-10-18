@@ -61,6 +61,7 @@ function labelForMarital(status) {
 }
 
 function tenantName(t) {
+  if (isCompanyTenant(t) && t.companyName) return t.companyName;
   const n = [t.firstName, t.lastName].filter(Boolean).join(" ").trim();
   return n || t.entityName || t.username || `Locataire #${t.id}`;
 }
@@ -218,7 +219,7 @@ export function Locataires({ go } = {}) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return view;
-    return view.filter((t) => [t._name, t.phone, t.email, t.address, t.entityName, t.mainActivity]
+    return view.filter((t) => [t._name, t.phone, t.email, t.address, t.entityName, t.mainActivity, t.companyName, t.rccm, t.taxId, t.representativeName]
       .some((v) => String(v || "").toLowerCase().includes(q)));
   }, [view, query]);
 
@@ -244,7 +245,7 @@ export function Locataires({ go } = {}) {
 
   const activeCount = view.filter(isActive).length;
   const occupants = view.reduce((s, t) => s + Number(t.occupantNumber || 0), 0);
-  const salaried = view.filter((t) => /salar|fonction/i.test(String(t.professionalStatus || ""))).length;
+  const salaried = view.filter((t) => !isCompanyTenant(t) && /salar|fonction/i.test(String(t.professionalStatus || ""))).length;
 
   // Bloquer uniquement au PREMIER chargement (data absente). Un reload en
   // arriere-plan (event realtime "onboarding created" apres generation du lien)
@@ -434,6 +435,9 @@ export function Locataires({ go } = {}) {
                 <div className={`immo-letter-avatar ${LETTER_TONES[index % LETTER_TONES.length]}`}>{tenant._initials}</div>
                 <div className="immo-tenant-main">
                   <h3>{tenant._name}</h3>
+                  {isCompanyTenant(tenant) && (
+                    <p>{[tenant.legalForm, tenant.rccm && `RCCM ${tenant.rccm}`].filter(Boolean).join(" · ") || t("Entreprise")}</p>
+                  )}
                   <p>{tenant.email || "email non renseigne"}</p>
                   <p>{tenant.phone || "telephone non renseigne"}</p>
                   <span className={`immo-mini-badge ${badge.tone}`}>{badge.label}</span>
@@ -470,20 +474,36 @@ export function Locataires({ go } = {}) {
           busy={saving}
           error={actionError}
           onClose={() => { setModal(null); setActionError(""); }}
-          onSave={async (form) => {
+          onSave={async (formIn) => {
+            let form = formIn;
             setSaving(true);
             setActionError("");
             try {
               let saved;
-              if (form._onboardingId) {
-                // On persiste d'abord les corrections du gestionnaire dans le
-                // dossier, puis on valide (qui crée le locataire depuis ce dossier).
-                await api.updateOnboarding(form._onboardingId, tenantPayload(form));
-                saved = await api.validateOnboarding(form._onboardingId);
-              } else if (form.id) {
-                saved = await api.updateTenant(form.id, tenantPayload(form));
-              } else {
-                saved = await api.createTenant(tenantPayload(form));
+              const persist = async () => {
+                if (form._onboardingId) {
+                  // On persiste d'abord les corrections du gestionnaire dans le
+                  // dossier, puis on valide (qui crée le locataire depuis ce dossier).
+                  await api.updateOnboarding(form._onboardingId, tenantPayload(form));
+                  return api.validateOnboarding(form._onboardingId);
+                }
+                return form.id
+                  ? api.updateTenant(form.id, tenantPayload(form))
+                  : api.createTenant(tenantPayload(form));
+              };
+              try {
+                saved = await persist();
+              } catch (e) {
+                if (e?.status !== 409 || e?.code !== "TENANT_TYPE_CHANGE_REQUIRES_CONFIRMATION") throw e;
+                const ok = await confirm({
+                  title: t("Changer le type de locataire"),
+                  message: t("Ce locataire a un bail actif. Changer son type (personne / entreprise) modifiera ses informations sur les futurs documents. Confirmer le changement ?"),
+                  confirmLabel: t("Confirmer le changement"),
+                  danger: true,
+                });
+                if (!ok) return;
+                form = { ...form, _confirmTypeChange: true };
+                saved = await persist();
               }
               // Après validation, l'id du locataire créé est dans saved.customer ;
               // sinon (create/update tenant) c'est saved.id / form.id.
@@ -628,7 +648,9 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             <div className="avatar large">{tenant._initials}</div>
             <div>
               <h3>{tenant._name}</h3>
-              <p>{[tenant.mainActivity, tenant.entityName].filter(Boolean).join(" · ") || tenant.address || "—"}</p>
+              <p>{isCompanyTenant(tenant)
+                ? ([tenant.legalForm, tenant.rccm && `RCCM ${tenant.rccm}`].filter(Boolean).join(" · ") || t("Entreprise"))
+                : ([tenant.mainActivity, tenant.entityName].filter(Boolean).join(" · ") || tenant.address || "—")}</p>
             </div>
             <span className={`chip ${active ? "chip-emerald" : "chip-ink"}`}>
               {active ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />} {active ? "Actif" : "Inactif"}
@@ -685,6 +707,29 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             </div>
           )}
 
+          {isCompanyTenant(tenant) ? (
+            <>
+              <div className="info-grid">
+                <Info2 icon={Building2} label={t("Raison sociale")} value={tenant.companyName || "—"} />
+                <Info2 icon={Briefcase} label={t("Forme juridique")} value={tenant.legalForm || "—"} />
+                <Info2 icon={IdCard} label={t("RCCM")} value={tenant.rccm || "—"} />
+                <Info2 icon={IdCard} label={t("Id. Nat.")} value={tenant.companyNationalId || "—"} />
+                <Info2 icon={IdCard} label={t("NIF")} value={tenant.taxId || "—"} />
+                <Info2 icon={MapPin} label={t("Adresse du siège")} value={tenant.companyAddress || "—"} />
+                <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
+                <Info2 icon={Phone} label={t("Telephone 2")} value={tenant.phone2 || "—"} />
+                <Info2 icon={Mail} label={t("Email")} value={tenant.email || "—"} />
+              </div>
+              <h4 style={{ margin: "12px 0 6px" }}>{t("Représentant légal")}</h4>
+              <div className="info-grid">
+                <Info2 icon={User} label={t("Nom du représentant")} value={tenant.representativeName || "—"} />
+                <Info2 icon={Briefcase} label={t("Fonction")} value={tenant.representativeTitle || "—"} />
+                <Info2 icon={Phone} label={t("Telephone")} value={tenant.representativePhone || "—"} />
+                <Info2 icon={Mail} label={t("Email")} value={tenant.representativeEmail || "—"} />
+                <Info2 icon={IdCard} label={t("N° de la pièce du représentant")} value={tenant.representativeIdNumber || "—"} />
+              </div>
+            </>
+          ) : (
           <div className="info-grid">
             <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
             <Info2 icon={Phone} label={t("Telephone 2")} value={tenant.phone2 || "—"} />
@@ -705,8 +750,9 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus ? t(labelForMarital(tenant.maritalStatus)) : "—"} />
             <Info2 icon={IdCard} label={t("Piece d'identite")} value={[tenant.idDocumentType, tenant.idNumber].filter(Boolean).join(" · ") || "—"} />
           </div>
+          )}
 
-          {tenant.idDocumentName && (
+          {!isCompanyTenant(tenant) && tenant.idDocumentName && (
             <div className="action-strip" style={{ marginTop: 8 }}>
               <ProofButton className="btn" path={`/tenants/${tenant.id}/id-document/file`} title={tenant.idDocumentName}>
                 <IdCard size={16} /> Voir la copie de la piece
@@ -721,6 +767,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
             </div>
           )}
 
+          {!isCompanyTenant(tenant) && (
           <div className="timeline">
             <div className="timeline-item done">
               <b>Contact d'urgence</b>
@@ -747,6 +794,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
               <span>{tenant.originProvince || t("Province non renseignee")}</span>
             </div>
           </div>
+          )}
 
           <TenantCommunications tenantId={tenant.id} />
         </div>
@@ -1010,7 +1058,14 @@ export function OnboardingLinkModal({ value, onClose, onGenerated }) {
   );
 }
 
+const TENANT_TYPE_OPTIONS = [["individual", "Personne"], ["company", "Entreprise"]];
+const LEGAL_FORM_OPTIONS = ["SARL", "SA", "SAS", "SNC", "SCS", "ETS", "ASBL", "ONG", "Autre"].map((v) => [v, v]);
+const isCompanyTenant = (x) => (x?.tenantType || x?.tenant_type) === "company";
+
 const emptyTenant = {
+  tenant_type: "individual", company_name: "", legal_form: "", rccm: "", company_national_id: "", tax_id: "",
+  company_address: "", representative_name: "", representative_title: "", representative_phone: "",
+  representative_email: "", representative_id_number: "", _confirmTypeChange: false, _originalType: "",
   firstName: "", lastName: "", email: "", phone: "", phone2: "", address: "",
   id_document_type: "", id_number: "", _idFile: null,
   birth_date: "", sex: "M", nationality: "Congolaise", marital_status: "célibataire",
@@ -1055,8 +1110,23 @@ function tenantToForm(t) {
   return {
     ...emptyTenant,
     id: t.id,
-    firstName: t.firstName || "",
-    lastName: t.lastName || "",
+    tenant_type: isCompanyTenant(t) ? "company" : "individual",
+    _originalType: isCompanyTenant(t) ? "company" : "individual",
+    company_name: t.companyName || "",
+    legal_form: t.legalForm || "",
+    rccm: t.rccm || "",
+    company_national_id: t.companyNationalId || "",
+    tax_id: t.taxId || "",
+    company_address: t.companyAddress || "",
+    representative_name: t.representativeName || "",
+    representative_title: t.representativeTitle || "",
+    representative_phone: t.representativePhone || "",
+    representative_email: t.representativeEmail || "",
+    representative_id_number: t.representativeIdNumber || "",
+    // Pour une société, customer.firstName = raison sociale : ne pas le recopier
+    // dans le prénom si l'utilisateur repasse en « Personne ».
+    firstName: isCompanyTenant(t) ? "" : (t.firstName || ""),
+    lastName: isCompanyTenant(t) ? "" : (t.lastName || ""),
     email: t.email || "",
     phone: t.phone || "",
     phone2: t.phone2 || "",
@@ -1096,6 +1166,9 @@ function isMarried(status) {
 const s = (v) => String(v ?? "").trim();
 
 function canSaveTenant(f) {
+  if (f.tenant_type === "company") {
+    return [f.company_name, f.representative_name, f.phone].every((v) => s(v));
+  }
   const required = [
     f.firstName, f.lastName, f.phone, f.address, f.birth_date, f.sex, f.nationality,
     f.marital_status, f.contacted_person, f.contacted_person_phone_number,
@@ -1116,9 +1189,32 @@ function canSaveTenant(f) {
 }
 
 function tenantPayload(f) {
+  const typeFlag = f._confirmTypeChange ? { confirm_type_change: true } : {};
+  if (f.tenant_type === "company") {
+    return {
+      tenant_type: "company",
+      company_name: s(f.company_name),
+      legal_form: s(f.legal_form) || null,
+      rccm: s(f.rccm) || null,
+      company_national_id: s(f.company_national_id) || null,
+      tax_id: s(f.tax_id) || null,
+      company_address: s(f.company_address) || null,
+      representative_name: s(f.representative_name),
+      representative_title: s(f.representative_title) || null,
+      representative_phone: s(f.representative_phone) || null,
+      representative_email: s(f.representative_email) || null,
+      representative_id_number: s(f.representative_id_number) || null,
+      email: s(f.email) || null,
+      phone: s(f.phone),
+      phone2: s(f.phone2) || null,
+      ...typeFlag,
+    };
+  }
   const married = isMarried(f.marital_status);
   const childN = Number(f.child_number || 0);
   const payload = {
+    ...typeFlag,
+    ...(f._onboardingId ? {} : { tenant_type: "individual" }),
     firstName: s(f.firstName),
     lastName: s(f.lastName),
     email: s(f.email) || null,
@@ -1161,6 +1257,7 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
   const [form, setForm] = useState(value);
   const set = (patch) => setForm((cur) => ({ ...cur, ...patch }));
   const married = isMarried(form.marital_status);
+  const isCompany = form.tenant_type === "company";
   const childCount = Math.max(0, Math.min(20, parseInt(form.child_number, 10) || 0));
 
   // Synchronise le nombre de champs d'âge avec le nombre d'enfants (comme le CRM).
@@ -1191,6 +1288,68 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
             <span style={{ fontSize: 13, lineHeight: 1.4 }}>Un locataire actif sera cree dans votre annuaire a partir de ce dossier. Aucun bail n'est cree a cette etape — vous pourrez le creer ensuite depuis la fiche.</span>
           </div>
         )}
+        {/* Dossier d'inscription : toujours une personne (SaveTenantOnboardingDto n'accepte pas les champs société). */}
+        {!form._onboardingId && (
+        <FormSection icon={<Building2 size={14} />} title={t("Type de locataire")}>
+          <div className="domus-property-field">
+            <span>{t("Type")}</span>
+            <div className="domus-radio-cards">
+              {TENANT_TYPE_OPTIONS.map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  className={form.tenant_type === val ? "active" : ""}
+                  onClick={() => set({ tenant_type: val })}
+                >
+                  <i /> {t(label)}
+                </button>
+              ))}
+            </div>
+            {value.id && form.tenant_type !== form._originalType && (
+              <small className="muted">{t("Le changement de type sera confirmé à l'enregistrement si un bail est actif.")}</small>
+            )}
+          </div>
+        </FormSection>
+        )}
+
+        {isCompany && (
+          <>
+            <FormSection icon={<Building2 size={14} />} title={t("Société")}>
+              <DomusPropertyField label={t("Raison sociale")} value={form.company_name} onChange={(v) => set({ company_name: v })} required placeholder={t("ex. SARL Ngolu")} />
+              <div className="domus-property-form-grid">
+                <DomusPropertySelect label={t("Forme juridique")} value={form.legal_form} onChange={(v) => set({ legal_form: v })} options={[["", "—"], ...LEGAL_FORM_OPTIONS.map(([v, l]) => [v, t(l)])]} />
+                <DomusPropertyField label={t("RCCM")} value={form.rccm} onChange={(v) => set({ rccm: v })} placeholder={t("Optionnel")} />
+              </div>
+              <div className="domus-property-form-grid">
+                <DomusPropertyField label={t("Id. Nat.")} value={form.company_national_id} onChange={(v) => set({ company_national_id: v })} placeholder={t("Optionnel")} />
+                <DomusPropertyField label={t("NIF")} value={form.tax_id} onChange={(v) => set({ tax_id: v })} placeholder={t("Optionnel")} />
+              </div>
+              <DomusPropertyField label={t("Adresse du siège")} value={form.company_address} onChange={(v) => set({ company_address: v })} placeholder="ex. 12 Av. des Palmiers" />
+            </FormSection>
+
+            <FormSection icon={<Phone size={14} />} title={t("Contact de l'entreprise")}>
+              <div className="domus-property-form-grid">
+                <DomusPhoneField label={t("Téléphone de l'entreprise")} value={form.phone} onChange={(v) => set({ phone: v })} required />
+                <DomusPhoneField label={t("Telephone 2")} value={form.phone2} onChange={(v) => set({ phone2: v })} />
+              </div>
+              <DomusPropertyField label={t("Email de l'entreprise")} type="email" value={form.email} onChange={(v) => set({ email: v })} placeholder={t("Optionnel")} />
+            </FormSection>
+
+            <FormSection icon={<User size={14} />} title={t("Représentant légal")}>
+              <div className="domus-property-form-grid">
+                <DomusPropertyField label={t("Nom du représentant")} value={form.representative_name} onChange={(v) => set({ representative_name: v })} required placeholder="ex. Jean Tshisekedi" />
+                <DomusPropertyField label={t("Fonction")} value={form.representative_title} onChange={(v) => set({ representative_title: v })} placeholder="ex. Gérant" />
+              </div>
+              <div className="domus-property-form-grid">
+                <DomusPhoneField label={t("Téléphone du représentant")} value={form.representative_phone} onChange={(v) => set({ representative_phone: v })} />
+                <DomusPropertyField label={t("Email du représentant")} type="email" value={form.representative_email} onChange={(v) => set({ representative_email: v })} placeholder={t("Optionnel")} />
+              </div>
+              <DomusPropertyField label={t("N° de la pièce du représentant")} value={form.representative_id_number} onChange={(v) => set({ representative_id_number: v })} placeholder="ex. CNI-0123456" />
+            </FormSection>
+          </>
+        )}
+
+        {!isCompany && (<>
         <FormSection icon={<User size={14} />} title="Identite">
           <div className="domus-property-form-grid">
             <DomusPropertyField label="Prenom" value={form.firstName} onChange={(v) => set({ firstName: v })} required placeholder="ex. Jean" />
@@ -1304,6 +1463,7 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
           </div>
           <DomusPropertyField label="Motif du demenagement" value={form.moving_reason} onChange={(v) => set({ moving_reason: v })} placeholder="Optionnel" textarea />
         </FormSection>
+        </>)}
 
       </div>
 
