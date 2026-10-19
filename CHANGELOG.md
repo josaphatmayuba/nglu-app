@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — locataire entreprise : libellé « Nom de l'entreprise » au lieu de « Raison sociale » (v3.232.1, ticket Jira à créer).**
+  - Formulaire d'inscription, fiche/formulaire locataire et portail locataire : terme plus clair pour les locataires.
+
 - **Domus — carnet papier : cahier complet en une seule impression (v3.232.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix par défaut « Cahier complet (une impression) » : couverture, guide, exemple, « Les deux cahiers », pages à remplir et dos dans un seul PDF, en imposition « coupe et empile » (2 ans : 7 feuilles A4, 3 ans : 8 feuilles), chaque feuille en blanc (cahier du locataire) puis en rose (cahier du bailleur, avec sa propre couverture). On coupe, on trie, on empile, on agrafe : plus d'assemblage à la main.
   - Les passages 1 et 2 restent disponibles pour économiser le papier autocopiant (couverture sur carton).

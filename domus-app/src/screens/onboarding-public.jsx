@@ -37,7 +37,7 @@ const PRO_OPTIONS = [
 
 const LEGAL_FORM_OPTIONS = [["", t("Sélectionnez…")], ...["SARL", "SA", "SAS", "SNC", "SCS", "ETS", "ASBL", "ONG", "Autre"].map((v) => [v, v === "Autre" ? t("Autre") : v])];
 const COMPANY_REQUIRED_FIELDS = [
-  ["company_name", t("Raison sociale")], ["company_address", t("Adresse du siège")],
+  ["company_name", t("Nom de l'entreprise")], ["company_address", t("Adresse du siège")],
   ["representative_name", t("Nom du représentant")],
 ];
 const COMPANY_PAYLOAD_KEYS = [
@@ -302,7 +302,7 @@ export function TenantOnboardingPublic({ token }) {
             <>
               <Card icon={<Building2 size={18} />} tone="violet" title={t("Société")}
                 subtitle={t("Informations légales de l'entreprise")}>
-                <Field label={t("Raison sociale")} value={values.company_name} onChange={(v) => set("company_name", v)} required />
+                <Field label={t("Nom de l'entreprise")} value={values.company_name} onChange={(v) => set("company_name", v)} required />
                 <div className="domus-property-form-grid">
                   <SelectField label={t("Forme juridique")} value={values.legal_form} options={LEGAL_FORM_OPTIONS} onChange={(v) => set("legal_form", v)} />
                   <Field label={t("RCCM")} value={values.rccm} onChange={(v) => set("rccm", v)} />

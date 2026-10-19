@@ -102,7 +102,7 @@ const INFO_FIELDS = [
 // mais non editable (verrouillee cote backend, geree par le gestionnaire), comme
 // le RCCM/NIF/piece du representant. editable=true => champs du formulaire.
 const infoHeadFor = (tenant, editable = false) => (tenant?.tenantType === "company"
-  ? (editable ? [] : [["firstName", "Raison sociale"]])
+  ? (editable ? [] : [["firstName", "Nom de l'entreprise"]])
   : INFO_FIELDS.slice(0, 2));
 
 // Champ simple (memes classes que onboarding-public.jsx — on duplique plutot
