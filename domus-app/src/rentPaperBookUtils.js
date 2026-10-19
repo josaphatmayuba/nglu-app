@@ -146,7 +146,7 @@ export const PAPER_BOOK_CSS = `
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
   /* Ligne de coupe au milieu exact du papier choisi (A4 : 148,5 mm ; Letter : 139,7 mm du bord gauche). */
-  .paper .sheet.cut::after { left: calc(var(--sheet-w) / 2); border-left: .6pt dashed #555; }
+  .paper .sheet.cut::after { left: 50%; border-left: .6pt dashed #555; }
   .paper .sheet.cut .bk { right: 4mm; }
   .paper .sheet.cut .foot span:last-child { display: none; }
   .paper .sheet.full { width: 210mm; height: 297mm; display: block; }
@@ -240,6 +240,9 @@ export const PAPER_BOOK_CSS = `
   .paper.ink-blue .covpage .qr { color: #6f9bd6; border-color: #b9d0ef; }
   .paper.ink-blue .covpage .calc b, .paper.ink-blue .covpage .step b { color: #3f6fae; }
   @media print {
+    /* Feuille = page réellement imprimée (vw/vh) : la ligne de coupe/pli reste au milieu du papier, même si le navigateur ajoute des marges égales. */
+    .paper .sheet.cut, .paper .sheet.fold { width: 100vw; height: 100vh; }
+    .paper .sheet.cut .a5, .paper .sheet.fold .a5 { width: 50vw; height: 100vh; }
     .paper { display: block; padding: 0; gap: 0; }
     .paper .intro, .paper .caption { display: none !important; }
     .paper .sheet { box-shadow: none; break-after: page; page-break-after: always; }
@@ -261,7 +264,7 @@ const introFor = (n) => {
   return {
     cahier: `<b>Deux cahiers A5 complets et identiques</b> : le <b>cahier blanc du locataire</b> (montré ici) et le <b>cahier rose du bailleur</b>, avec sa propre couverture « Exemplaire du bailleur ». Chacun contient : couverture, guide en 2 pages, exemple rempli, « Les deux cahiers », puis les ${P} pages à remplir. Une page rose est montrée en exemple sous la page Loyers de l'année 1.`,
     "1": `<b>Passage 1, 5 feuilles A4.</b> Feuille 1 en <b>carton</b> : les deux couvertures, à couper au milieu (une par cahier). Feuilles 2 et 3 en <b>papier normal, à imprimer 2 fois</b> (une fois par cahier) : le guide 1/2 et 2/2, puis l'exemple et « Les deux cahiers ». Ordre de chaque cahier : couverture, guide 1/2, guide 2/2, exemple, les deux cahiers, puis les ${P} pages autocopiantes. Pour le dos, un carton A5 vierge par cahier.`,
-    coupe: `<b>Cahier coupé A5, ${(P + 6) / 2} feuilles, au recto seulement, sur papier normal.</b> Chaque feuille porte 2 pages : la feuille 1 = pages 1 et 2, la feuille 2 = pages 3 et 4, etc. 1) <b>Coupez chaque feuille sur la ligne pointillée</b>, au milieu du papier. Choisissez bien le papier (A4 ou Letter) : la ligne est calculée pour lui. 2) <b>Posez les morceaux dans l'ordre</b> : le morceau de gauche, puis celui de droite, puis la feuille suivante ; les grands numéros en bas doivent se suivre de 1 à ${P + 6}. 3) <b>Agrafez sur le bord gauche</b> (2 agrafes). Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
+    coupe: `<b>Cahier coupé A5, ${(P + 6) / 2} feuilles, au recto seulement, sur papier normal.</b> Chaque feuille porte 2 pages : la feuille 1 = pages 1 et 2, la feuille 2 = pages 3 et 4, etc. 1) <b>Coupez chaque feuille sur la ligne pointillée</b>, au milieu du papier. Dans la fenêtre d'impression : papier A4 ou Letter, Marges « Aucune », En-têtes et pieds de page décochés, Échelle 100 %. 2) <b>Posez les morceaux dans l'ordre</b> : le morceau de gauche, puis celui de droite, puis la feuille suivante ; les grands numéros en bas doivent se suivre de 1 à ${P + 6}. 3) <b>Agrafez sur le bord gauche</b> (2 agrafes). Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
     pleine: `<b>Feuilles entières, ${P + 6} feuilles, au recto seulement, sur papier normal.</b> Une page du carnet = une feuille entière, en portrait. Rien à plier, rien à couper : les feuilles sortent dans l'ordre (1, 2, 3…). Agrafez-les sur le <b>bord gauche</b> (2 agrafes) ou dans le coin en haut à gauche. Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
     simple: `<b>Cahier simple, ${(P + 6) / 2} feuilles A4, au recto seulement, sur papier normal.</b> Pas de recto-verso, pas de coupe. 1) <b>Pliez chaque feuille en deux</b>, l'impression à l'extérieur : la page de droite devant, celle de gauche derrière. 2) <b>Empilez les feuilles pliées dans l'ordre</b> : feuille 1 dessus, puis 2, 3… jusqu'à ${(P + 6) / 2} dessous, tous les plis du même côté (à gauche). 3) <b>Agrafez le long du pli</b>, à 5 mm du bord (2 ou 3 agrafes). Les numéros de page en bas doivent se suivre de 1 à ${P + 6}. Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
     "plie-essai": `<b>Feuille d'essai.</b> Imprimez-la d'abord sur une feuille de papier normal, avec les réglages que vous utiliserez pour le cahier : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Retournez la feuille : vous saurez tout de suite si le réglage est bon, avant d'utiliser l'autocopiant.`,

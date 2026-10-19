@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — ligne de coupe toujours au milieu du papier imprimé (v3.238.2).**
+  - À l'impression, la feuille et ses deux moitiés suivent la page réellement imprimée (100vw / 50vw) : la ligne de coupe ou de pli reste au milieu même si le navigateur ajoute des marges égales. Mesuré dans les PDF : Letter 0,13 mm, Letter avec 10 mm de marges 0,13 mm, A4 0,06 mm d'écart.
+  - Rappel d'impression : Marges « Aucune », En-têtes et pieds de page décochés, Échelle 100 %.
+
 - **Domus — cahier coupé A5 : ligne de coupe remise, au milieu exact du papier (v3.238.1).**
   - La ligne pointillée « couper ici » est calculée sur la largeur du papier choisi : 139,7 mm du bord sur Letter, 148,5 mm sur A4 (mesuré sur le rendu : écart inférieur à 0,2 mm). Elle était mal placée avant parce que la page était toujours en A4.
 
