@@ -145,6 +145,13 @@ export const PAPER_BOOK_CSS = `
   .paper .sheet.dup .a5 { background: var(--pink); }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
+  .paper .sheet.full { width: 210mm; height: 297mm; display: block; }
+  .paper.letter .sheet.full { width: 215.9mm; height: 279.4mm; }
+  .paper .sheet.full::after { display: none; }
+  .paper .sheet.full .a5 { zoom: 1.414; }
+  .paper.letter .sheet.full .a5 { zoom: 1.33; margin: 0 auto; }
+  .paper .sheet.full .bk { right: 4mm; }
+  .paper .sheet.full .foot span:last-child { display: none; }
   .paper .sheet.fold .foot span:last-child { display: none; } /* un seul numéro : celui du cahier (.bk) */
   .paper .bk { position: absolute; bottom: 1.2mm; font-size: 11pt; font-weight: 700; color: #555; font-variant-numeric: tabular-nums; }
   .paper .sheet.fold .a5:first-child .bk { left: 4mm; } .paper .sheet.fold .a5:last-child .bk { right: 4mm; }
@@ -249,6 +256,7 @@ const introFor = (n) => {
   return {
     cahier: `<b>Deux cahiers A5 complets et identiques</b> : le <b>cahier blanc du locataire</b> (montré ici) et le <b>cahier rose du bailleur</b>, avec sa propre couverture « Exemplaire du bailleur ». Chacun contient : couverture, guide en 2 pages, exemple rempli, « Les deux cahiers », puis les ${P} pages à remplir. Une page rose est montrée en exemple sous la page Loyers de l'année 1.`,
     "1": `<b>Passage 1, 5 feuilles A4.</b> Feuille 1 en <b>carton</b> : les deux couvertures, à couper au milieu (une par cahier). Feuilles 2 et 3 en <b>papier normal, à imprimer 2 fois</b> (une fois par cahier) : le guide 1/2 et 2/2, puis l'exemple et « Les deux cahiers ». Ordre de chaque cahier : couverture, guide 1/2, guide 2/2, exemple, les deux cahiers, puis les ${P} pages autocopiantes. Pour le dos, un carton A5 vierge par cahier.`,
+    pleine: `<b>Feuilles entières, ${P + 6} feuilles, au recto seulement, sur papier normal.</b> Une page du carnet = une feuille entière, en portrait. Rien à plier, rien à couper : les feuilles sortent dans l'ordre (1, 2, 3…). Agrafez-les sur le <b>bord gauche</b> (2 agrafes) ou dans le coin en haut à gauche. Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
     simple: `<b>Cahier simple, ${(P + 6) / 2} feuilles A4, au recto seulement, sur papier normal.</b> Pas de recto-verso, pas de coupe. 1) <b>Pliez chaque feuille en deux</b>, l'impression à l'extérieur : la page de droite devant, celle de gauche derrière. 2) <b>Empilez les feuilles pliées dans l'ordre</b> : feuille 1 dessus, puis 2, 3… jusqu'à ${(P + 6) / 2} dessous, tous les plis du même côté (à gauche). 3) <b>Agrafez le long du pli</b>, à 5 mm du bord (2 ou 3 agrafes). Les numéros de page en bas doivent se suivre de 1 à ${P + 6}. Imprimez le cahier du locataire, puis celui du bailleur (choix « Cahier »).`,
     "plie-essai": `<b>Feuille d'essai.</b> Imprimez-la d'abord sur une feuille de papier normal, avec les réglages que vous utiliserez pour le cahier : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Retournez la feuille : vous saurez tout de suite si le réglage est bon, avant d'utiliser l'autocopiant.`,
     plie: `<b>Cahier plié, ${Math.ceil((P + 6) / 4)} feuilles A4 en recto-verso.</b> Mettez le papier blanc pour le cahier du locataire, ou le rose pour celui du bailleur (choix « Cahier »). Dans la fenêtre d'impression : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Chaque page porte son numéro dans le cahier (en bas, côté extérieur) et, près du pli, « Feuille 1 · côté A ». Ensuite : <b>pliez chaque feuille en deux</b>, côté A à l'extérieur. Glissez la feuille ${Math.ceil((P + 6) / 4)} pliée dans la feuille ${Math.ceil((P + 6) / 4) - 1}, et ainsi de suite jusqu'à la <b>feuille 1</b>, qui est à l'extérieur avec la couverture devant. Vérifiez que les numéros se suivent de 1 à ${Math.ceil((P + 6) / 4) * 4}, puis mettez <b>2 agrafes dans le pli</b>. Avant l'autocopiant, faites la « feuille d'essai » sur du papier normal.`,
@@ -505,15 +513,15 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   return { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES };
 }
 
-// pass : "simple" (recto seul, feuilles pliées puis empilées, sans copie, défaut) | "plie" (livret plié recto-verso) | "plie-r" / "plie-v" (recto-verso à la main) | "complet" (tout le cahier, coupé) | "1" (couvertures + guide) | "2" (liasses autocopiantes) | "cahier" (vue écran page par page).
+// pass : "pleine" (1 page = 1 feuille portrait, recto, sans copie, défaut) | "simple" (recto seul, feuilles pliées puis empilées, sans copie) | "plie" (livret plié recto-verso) | "plie-r" / "plie-v" (recto-verso à la main) | "complet" (tout le cahier, coupé) | "1" (couvertures + guide) | "2" (liasses autocopiantes) | "cahier" (vue écran page par page).
 // ink : "" | "ink-pale" | "ink-blue". duplicate : imprime aussi le 2e exemplaire
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
 // years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
 // paper : "a4" | "letter" (feuille, moitiés et ligne de pliage aux dimensions du papier).
-export function paperBookHtml(lease, { pass = "simple", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4" } = {}) {
+export function paperBookHtml(lease, { pass = "pleine", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4" } = {}) {
   const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
-  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, pass === "simple", pass === "simple" || pass.startsWith("plie") ? 5 : 0);
+  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, pass === "simple" || pass === "pleine", pass === "simple" || pass === "pleine" || pass.startsWith("plie") ? 5 : 0);
   const INTRO = introFor(n);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
   const a5 = (html, d, cls = "") => `<div class="a5 ${cls}">${d === null ? "" : tag(d)}${html}</div>`;
@@ -521,6 +529,17 @@ export function paperBookHtml(lease, { pass = "simple", ink = "", duplicate = tr
   let out = "";
   if (pass === "cahier") {
     out = `<p class="print-msg">Choisissez « Cahier complet » ou un passage pour imprimer.</p><div class="single">${a5(COVER, null, "covpage")}${a5(COVER_B, null, "covpage")}${a5(HOWTO, null, "covpage")}${a5(HOWTO2, null, "covpage")}${a5(EXAMPLE, null, "covpage")}${a5(TWO, null, "covpage")}${SLOTS.map((s, i) => a5(s, false) + (i === 1 ? a5(s, true, "dup") : "")).join("")}</div>`;
+  } else if (pass === "pleine") {
+    // Feuilles entières : 1 page du carnet = 1 feuille portrait, recto seul, dans l'ordre ; on agrafe, rien à monter.
+    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [HOWTO, null, "covpage"], [HOWTO2, null, "covpage"], [EXAMPLE, null, "covpage"], [TWO, null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
+    const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
+    colors.forEach((d) => {
+      const B = book(d);
+      B.forEach(([html, tg, cls], i) => {
+        out += `<div class="caption">Feuille ${i + 1} / ${B.length} · cahier du ${d ? "bailleur" : "locataire"}</div>`;
+        out += `<div class="sheet full">${a5(`${html}<span class="bk">${i + 1}</span>`, tg, cls)}</div>`;
+      });
+    });
   } else if (pass === "simple") {
     // Cahier simple : recto seul, chaque feuille pliée en deux (impression dehors) = 1 feuillet ; feuillets empilés, agrafés au pli.
     // Feuille i : gauche = page 2i+2 (dos du feuillet), droite = page 2i+1 (devant). Sans copie : pas de feuille rose.

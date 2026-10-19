@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : feuilles entières, rien à monter (v3.237.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Feuilles entières : rien à monter, on agrafe (papier normal) » : une page du carnet = une feuille A4 ou Letter entière en portrait, au recto seulement, dans l'ordre. Ni pliage, ni coupe, ni recto-verso : on agrafe sur le bord gauche. 2 ans : 14 feuilles ; 3 ans : 16 feuilles par cahier.
+  - Sans copie : cahier du locataire et cahier du bailleur, la même ligne écrite et signée dans les deux. Numéro de page du cahier sur chaque feuille, renvois du guide alignés.
+  - Les autres méthodes (cahier simple plié, cahier plié recto-verso, cahier coupé, passages) restent disponibles.
+
 - **Domus — lien d'inscription locataire : SMS/email pointaient vers l'ancienne page CRM (v3.236.1, ticket Jira à créer).** Le backend générait `APP_URL/onboarding/tenant?token=` (page CRM sans le type Entreprise ni les derniers champs) ; seule l'app Domus réécrivait le lien copié. Il génère désormais `APP_URL/domus/onboarding/tenant?token=`, comme le portail et la pré-qualification. L'ancienne route CRM reste servie pour les liens déjà envoyés.
 
 - **Domus — carnet papier : papier Letter, un seul numéro de page, montants entiers (v3.236.0, ticket Jira à créer : instance Jira inaccessible).**
