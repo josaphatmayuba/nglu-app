@@ -756,6 +756,7 @@ const EN = {
   "La personne qui engage l'entreprise": "The person who legally represents the company",
   "Le changement de type sera confirmé à l'enregistrement si un bail est actif.": "The type change will need confirmation on save if a lease is active.",
   "Raison sociale": "Company name",
+  "Nom de l'entreprise": "Company name",
   "Forme juridique": "Legal form",
   "RCCM": "RCCM (trade register)",
   "Id. Nat.": "National ID (Id. Nat.)",

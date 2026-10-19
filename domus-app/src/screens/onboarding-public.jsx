@@ -37,7 +37,7 @@ const PRO_OPTIONS = [
 
 const LEGAL_FORM_OPTIONS = [["", t("Sélectionnez…")], ...["SARL", "SA", "SAS", "SNC", "SCS", "ETS", "ASBL", "ONG", "Autre"].map((v) => [v, v === "Autre" ? t("Autre") : v])];
 const COMPANY_REQUIRED_FIELDS = [
-  ["company_name", t("Raison sociale")], ["company_address", t("Adresse du siège")],
+  ["company_name", t("Nom de l'entreprise")], ["company_address", t("Adresse du siège")],
   ["representative_name", t("Nom du représentant")],
 ];
 const COMPANY_PAYLOAD_KEYS = [
@@ -125,6 +125,8 @@ export function TenantOnboardingPublic({ token }) {
           child_number: 0,
           salary_currency_id: rec?.defaultCurrencyId ?? "",
           ...(rec?.data || {}),
+          ...(rec?.data?.tenant_type === "company" && !String(rec?.data?.company_name ?? "").trim() && rec?.data?.firstName
+            ? { company_name: rec.data.firstName } : {}),
           phone: rec?.phone,
         });
         if (rec?.status === "submitted") setSubmitted(true);
@@ -291,7 +293,14 @@ export function TenantOnboardingPublic({ token }) {
               {[["individual", t("Une personne")], ["company", t("Une entreprise")]].map(([val, label]) => (
                 <button key={val} type="button"
                   className={(isCompany ? "company" : "individual") === val ? "active" : ""}
-                  onClick={() => set("tenant_type", val)}>
+                  onClick={() => setValues((c) => ({
+                    ...c,
+                    tenant_type: val,
+                    // Nom de l'entreprise vide : on reprend le nom deja saisi (firstName cote customer).
+                    ...(val === "company" && !String(c.company_name ?? "").trim()
+                      ? { company_name: [c.firstName, c.lastName].filter(Boolean).join(" ").trim() }
+                      : {}),
+                  }))}>
                   <i /> {label}
                 </button>
               ))}
@@ -302,7 +311,7 @@ export function TenantOnboardingPublic({ token }) {
             <>
               <Card icon={<Building2 size={18} />} tone="violet" title={t("Société")}
                 subtitle={t("Informations légales de l'entreprise")}>
-                <Field label={t("Raison sociale")} value={values.company_name} onChange={(v) => set("company_name", v)} required />
+                <Field label={t("Nom de l'entreprise")} value={values.company_name} onChange={(v) => set("company_name", v)} required />
                 <div className="domus-property-form-grid">
                   <SelectField label={t("Forme juridique")} value={values.legal_form} options={LEGAL_FORM_OPTIONS} onChange={(v) => set("legal_form", v)} />
                   <Field label={t("RCCM")} value={values.rccm} onChange={(v) => set("rccm", v)} />

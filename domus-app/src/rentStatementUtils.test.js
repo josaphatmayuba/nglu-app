@@ -124,3 +124,27 @@ describe("bail sans echeancier (legacy) - echeance au jour du bail", () => {
     expect(html).toMatch(/Payé <b>0 \$<\/b>/);
   });
 });
+
+describe("bail au prorata hors echeances (montant du = echeancier, pas le montant paye)", () => {
+  const sched = [
+    { periodStart: "2026-07-19", periodEnd: "2026-07-31", dueDate: "2026-07-19", amount: 167.74, prorated: true, days: 13, periodDays: 31 },
+    { periodStart: "2026-08-01", periodEnd: "2026-08-31", dueDate: "2026-08-01", amount: 400 },
+    { periodStart: "2026-09-01", periodEnd: "2026-09-30", dueDate: "2026-09-01", amount: 400 },
+    { periodStart: "2026-10-01", periodEnd: "2026-10-31", dueDate: "2026-10-01", amount: 400 },
+    { periodStart: "2026-11-01", periodEnd: "2026-11-30", dueDate: "2026-11-01", amount: 400 },
+  ];
+  const l = { id: 24, startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$", schedule: sched, book: { graceDays: 30 } };
+  const pays = [
+    pay(216, "2026-08-06", 170, { transactionId: 106 }),
+    pay(217, "2026-09-09", 400, { transactionId: 107 }),
+    pay(218, "2026-10-09", 400, { transactionId: 108 }),
+    { id: 233, paymentDate: "2026-10-01", amount: 400, status: "pending", periodStart: "2026-10-01", periodEnd: "2026-10-31", currencySymbol: "$" },
+  ];
+  it("170 paye sur 167,74 du : solde 397,74 et octobre reste 397,74", () => {
+    const s = buildStatement(l, pays, { today: "2026-10-19" });
+    expect(s.months[0].amount).toBe(167.74);
+    expect(s.balances["$"]).toBeCloseTo(-397.74, 2);
+    expect(s.months.find((m) => m.key === "2026-10").left).toBeCloseTo(397.74, 2);
+    expect(s.months.find((m) => m.key === "2026-11").left).toBe(400);
+  });
+});

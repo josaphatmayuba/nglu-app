@@ -711,7 +711,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
           {isCompanyTenant(tenant) ? (
             <>
               <div className="info-grid">
-                <Info2 icon={Building2} label={t("Raison sociale")} value={tenant.companyName || "—"} />
+                <Info2 icon={Building2} label={t("Nom de l'entreprise")} value={tenant.companyName || "—"} />
                 <Info2 icon={Briefcase} label={t("Forme juridique")} value={tenant.legalForm || "—"} />
                 <Info2 icon={IdCard} label={t("RCCM")} value={tenant.rccm || "—"} />
                 <Info2 icon={IdCard} label={t("Id. Nat.")} value={tenant.companyNationalId || "—"} />
@@ -1313,7 +1313,7 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
         {isCompany && (
           <>
             <FormSection icon={<Building2 size={14} />} title={t("Société")}>
-              <DomusPropertyField label={t("Raison sociale")} value={form.company_name} onChange={(v) => set({ company_name: v })} required placeholder={t("ex. SARL Ngolu")} />
+              <DomusPropertyField label={t("Nom de l'entreprise")} value={form.company_name} onChange={(v) => set({ company_name: v })} required placeholder={t("ex. SARL Ngolu")} />
               <div className="domus-property-form-grid">
                 <DomusPropertySelect label={t("Forme juridique")} value={form.legal_form} onChange={(v) => set({ legal_form: v })} options={[["", "—"], ...LEGAL_FORM_OPTIONS.map(([v, l]) => [v, t(l)])]} />
                 <DomusPropertyField label={t("RCCM")} value={form.rccm} onChange={(v) => set({ rccm: v })} placeholder={t("Optionnel")} />

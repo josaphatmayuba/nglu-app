@@ -85,7 +85,10 @@ export function collectDues(lease, payments) {
   }
   const dueDay = Number(lease?.book?.dueDay) || Number(/^\d{4}-\d{2}-(\d{2})/.exec(String(lease?.startDate || ""))?.[1]) || 1;
   const lines = buildFullRentSchedule(lease, payments || []);
-  return lines
+  // Prorata : le montant dû est celui de l'échéancier (400 × 13/31 = 167,74), pas le montant
+  // payé (170) ; le trop/moins payé se reporte sur les échéances suivantes (même calcul que la carte).
+  const schedAmount = new Map((Array.isArray(lease?.schedule) ? lease.schedule : []).map((e) => [day10(e.periodStart), Number(e.amount) || 0]));
+  const dues = lines
     .filter((l) => l && l.status !== "voided" && l.status !== false && (l.rentMonth || l.periodStart))
     .map((l) => {
       const key = l.rentMonth || day10(l.periodStart).slice(0, 7);
@@ -98,7 +101,7 @@ export function collectDues(lease, payments) {
       return {
         key,
         dueDate,
-        amount: Number(l.amount) || 0,
+        amount: schedAmount.get(day10(l.periodStart)) ?? (Number(l.amount) || 0),
         left: isPaid ? 0 : Math.max(0, Number(l.remaining ?? l.amount) || 0),
         settled: isPaid,
         paidOn: isPaid ? day10(l.paymentDate) : null,
@@ -109,6 +112,16 @@ export function collectDues(lease, payments) {
       };
     })
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  if (!schedAmount.size) return dues;
+  // Reste par échéance = total payé (devise du bail) réparti dans l'ordre des échéances.
+  let pool = collectPayments(lease, payments).filter((p) => p.symbol === sym0).reduce((s, p) => s + p.amount, 0);
+  return dues.map((d) => {
+    if (d.symbol !== sym0) return d;
+    const take = Math.min(pool, d.amount);
+    pool -= take;
+    const left = Math.round((d.amount - take) * 100) / 100;
+    return d.settled ? d : { ...d, left: left > EPS ? left : 0 };
+  });
 }
 
 // Statut de la frise : temps | retard | avance | du | avenir (avec délai de grâce).
