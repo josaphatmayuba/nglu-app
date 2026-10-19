@@ -5,10 +5,11 @@
 import QRCode from "qrcode";
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
+import { mountPrintShell } from "./printShell.js";
 
 // Montant du carnet : « 300 $ » (devise apres le nombre, usage francophone),
 // et non « $ 300 » comme moneyExact utilise ailleurs dans l'app.
-function moneyAfter(n, currency = "CDF") {
+export function moneyAfter(n, currency = "CDF") {
   const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
   return `${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} ${symbol}`;
 }
@@ -561,30 +562,6 @@ export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPayment
   ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}`;
 }
 
-export function rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Carnet de quittances — ${escapeHtml(lease.reference || `Bail ${lease.id}`)}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    /* Pas de size fixe : A4 ou Letter au choix de l'imprimante ; marge 0 pour
-       que 50vh = la moitie exacte de la feuille (cf. .receipt-wrap). */
-    @page { margin: 0; }
-    body { margin: 0; }
-${RENT_BOOK_PRINT_CSS}
-  </style>
-</head>
-<body class="rent-book">
-  <div class="print-actions"><button type="button">Imprimer / Enregistrer en PDF</button></div>
-${rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId)}
-</body>
-</html>`;
-}
-
 // Ouvre une fenêtre d'impression avec le carnet de quittances du bail
 // (même pattern que openContractPrint dans contractUtils.js).
 // portalUrl : lien du portail locataire DE CE BAIL (token réel, renvoyé par
@@ -596,7 +573,7 @@ ${rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId)}
 // pour CE mois précis, sans passer par le dossier général — les mois
 // "virtuels" générés par buildFullRentSchedule (sans id, pas encore de ligne
 // de paiement en base) n'ont pas de QR tant qu'ils n'existent pas réellement.
-export async function openRentBookPrint(rawLease, payments, portalUrl, { onError, schedule } = {}) {
+export async function openRentBookPrint(rawLease, payments, portalUrl, { onError, schedule, format } = {}) {
   // `schedule` (réponse rent-book, option prorata) est rattaché au bail.
   const lease = schedule && !rawLease?.schedule ? { ...rawLease, schedule } : rawLease;
   const win = window.open("", "_blank", "width=920,height=1100");
@@ -630,13 +607,22 @@ export async function openRentBookPrint(rawLease, payments, portalUrl, { onError
         }),
     );
   }
-  win.document.open();
-  win.document.write(rentBookPrintHtml(lease, payments, qrDataUrl, receiptQrByPaymentId));
-  win.document.close();
+  // Fenêtre unique : barre de choix du format (quittances / relevé / carnet à remplir),
+  // défaut selon le bail (cf. printShell.defaultFormat). Les QR sont calculés une seule fois.
+  try {
+    mountPrintShell(win, {
+      lease,
+      payments,
+      qrDataUrl,
+      format,
+      receiptsCss: RENT_BOOK_PRINT_CSS,
+      receiptsHtml: () => rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId),
+    });
+  } catch (err) {
+    const msg = "Impossible de préparer l'impression du carnet. Fermez cette fenêtre et réessayez.";
+    try { win.document.open(); win.document.write(`<p style="font:16px Arial;padding:24px">${escapeHtml(msg)}</p>`); win.document.close(); } catch { /* fenêtre fermée */ }
+    if (onError) onError(msg); else window.alert(msg);
+    return;
+  }
   win.focus();
-  const triggerPrint = () => {
-    try { win.focus(); win.print(); } catch { /* popup fermée */ }
-  };
-  const btn = win.document.querySelector(".print-actions button");
-  if (btn) btn.addEventListener("click", triggerPrint);
 }

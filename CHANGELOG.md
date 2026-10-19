@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — 3 carnets au choix à l'impression d'un bail (v3.230.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Popup d'impression : 3 formats. (1) Carnet de quittances, inchangé. (2) Relevé de compte (état des échéances/paiements du bail). (3) Carnet à remplir à la main : pages A5 sur A4 paysage, en 2 cahiers locataire/bailleur autocopiants. Format par défaut choisi selon `endDate` du bail.
+  - Règles d'affichage : pas de colonne « Reste » ni de tranches ; devise = celle du bail ; nom du gestionnaire affiché ; mode économie d'encre ; mention « Durée : 3 ans ». Nouveaux fichiers front `domus-app/src/printShell.js`, `rentStatementUtils.js`, `rentPaperBookUtils.js` (+ tests), `rentBookUtils.js` adapté.
+  - Backend : `GET /leases/:id/rent-book` renvoie en plus `lease.book` (garantie, délai de grâce, jour d'échéance, occupants, province/état civil, délégués) via `backend2/src/property-management/rent-book-extras.ts`. Aucune migration, aucune nouvelle route (pas de changement de whitelist middleware). Lectures best-effort (un échec n'empêche pas le carnet) ; réglages du bailleur lus strictement par organisation.
+  - Corrections de revue : nom/téléphone du bailleur plus jamais lus dans les réglages de l'organisation n°1 (repli supprimé) ; `tenant_details` filtré par organisation ; situation « Dû » (et non « En retard ») pendant le délai de grâce.
+  - Vérifications : `tsc --noEmit` OK ; jest `rent-book-extras` 7/7 ; vitest 112/112 (`--pool=threads`). Non vérifié : rendu papier réel (impression A5/A4 paysage, autocopiants) et QA visuelle en dev après déploiement.
+
 - **Domus — locataire Entreprise aussi dans l'onboarding (v3.229.1, ticket Jira à créer : instance Jira inaccessible).** Formulaire public d'inscription : choix « Je suis : une personne / une entreprise » ; en entreprise, infos société (raison sociale, forme juridique, RCCM, Id.Nat, NIF, siège) et représentant légal (téléphone normalisé +243), sans état civil/famille/salaire. `SaveTenantOnboardingDto` accepte le type et les champs société (mêmes validateurs que la création) ; `validatedTenantPayload` : pour une entreprise, requis = raison sociale, représentant, téléphone du lien, adresse, et les anciens champs personne d'un brouillon ne sont pas transmis ; chemin personne inchangé. Validation gestionnaire : sélecteur Personne/Entreprise de nouveau visible sur un dossier ; liste des dossiers : « Entreprise · » + raison sociale. Vérifié : `tsc --noEmit` OK, jest tenant-company 20/20, vitest 80/80.
 
 - **Domus — locataire de type Entreprise (personne morale) + correctif d'isolation des dossiers d'inscription (v3.229.0, ticket Jira à créer : instance Jira inaccessible le 2026-10-18).**

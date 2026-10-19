@@ -103,6 +103,7 @@ import {
 import { leaseAccessibleBy } from "./lease-access";
 import { ObjectStorageService } from "./object-storage.service";
 import { LeaseAllocationService, type ExplicitAllocation } from "./lease-allocation.service";
+import { buildRentBookExtras } from "./rent-book-extras";
 import { isLeaseFlagged } from "./lease-allocation";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
@@ -5460,6 +5461,7 @@ export class PropertyManagementService {
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         rentAmount: realEstateLeases.rentAmount,
+        securityDepositContract: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
         allocationLedgerAt: realEstateLeases.allocationLedgerAt,
@@ -5568,13 +5570,84 @@ export class PropertyManagementService {
     }
 
     // Bail flagge : echeances imputees (meme forme que getLeaseDueState.dues) pour le carnet imprime.
-    const { allocationLedgerAt: _ledgerAt, ...leaseOut } = lease as any;
+    const { allocationLedgerAt: _ledgerAt, securityDepositContract, ...leaseOut } = lease as any;
+    const graceDays = await readOverdueGraceDays(this.db, orgId);
     let ledgerDues: LeaseDueEntry[] | undefined;
     if (isLeaseFlagged(lease)) {
-      const graceDays = await readOverdueGraceDays(this.db, orgId);
       const today = this.parseDateOnly(this.formatDateOnly(new Date()));
       ledgerDues = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))?.dues;
     }
+
+    // Champs complementaires du carnet papier / releve : lectures best-effort,
+    // une erreur (table/colonne absente en prod) ne doit jamais casser la route.
+    let depositReceived: { amount: string; date: string | null; currencySymbol: string | null; status: string } | null = null;
+    try {
+      const [dep] = await this.db
+        .select({
+          amount: realEstateSecurityDeposits.amount,
+          paymentDate: realEstateSecurityDeposits.paymentDate,
+          status: realEstateSecurityDeposits.status,
+          currencySymbol: currencies.currencySymbol,
+        })
+        .from(realEstateSecurityDeposits)
+        .leftJoin(currencies, eq(currencies.id, realEstateSecurityDeposits.currencyId))
+        .where(and(
+          eq(realEstateSecurityDeposits.leaseId, leaseId),
+          eq(realEstateSecurityDeposits.organizationId, orgId),
+          eq(realEstateSecurityDeposits.status, "held"),
+          eq(realEstateSecurityDeposits.isActive, 1),
+        ))
+        .orderBy(desc(realEstateSecurityDeposits.id))
+        .limit(1);
+      if (dep) depositReceived = { amount: dep.amount, date: dep.paymentDate || null, currencySymbol: dep.currencySymbol || null, status: dep.status };
+    } catch (err) {
+      this.logger.warn(`rentBook: garantie illisible (bail ${leaseId}): ${(err as Error)?.message}`);
+    }
+    let tenantExtra: any = null;
+    try {
+      if (lease.tenantId) {
+        [tenantExtra] = await this.db
+          .select({
+            occupantNumber: tenantDetails.occupantNumber,
+            originProvince: tenantDetails.originProvince,
+            maritalStatus: tenantDetails.maritalStatus,
+            tenantType: tenantDetails.tenantType,
+            companyName: tenantDetails.companyName,
+          })
+          .from(tenantDetails)
+          .innerJoin(customers, and(eq(customers.id, tenantDetails.customerId), eq(customers.organizationId, orgId)))
+          .where(eq(tenantDetails.customerId, lease.tenantId))
+          .limit(1);
+      }
+    } catch (err) {
+      this.logger.warn(`rentBook: infos locataire illisibles (bail ${leaseId}): ${(err as Error)?.message}`);
+    }
+    let settingLandlord: any = null;
+    try {
+      // Org STRICTE (pas de repli sur l'org 1 : fuite inter-org du nom/telephone bailleur).
+      [settingLandlord] = await this.db
+        .select({ name: appSettings.landlordName, phone: appSettings.landlordPhone })
+        .from(appSettings)
+        .where(eq(appSettings.organizationId, orgId))
+        .limit(1);
+    } catch (err) {
+      this.logger.warn(`rentBook: reglages bailleur illisibles: ${(err as Error)?.message}`);
+    }
+    const book = buildRentBookExtras({
+      graceDays,
+      startDate: lease.startDate,
+      rentAmount: lease.rentAmount,
+      rentProrationEnabled: !!lease.rentProrationEnabled,
+      dueDates: ((ledgerDues ?? schedule ?? []) as any[]).map((e) => e.dueDate),
+      depositContract: securityDepositContract,
+      depositReceived,
+      tenant: tenantExtra,
+      ownerName: lease.ownerName,
+      ownerPhone: lease.ownerPhone || lease.ownerPhone2,
+      settingLandlordName: settingLandlord?.name as string | null,
+      settingLandlordPhone: settingLandlord?.phone as string | null,
+      delegates: delegateRows,
+    });
 
     return {
       lease: {
@@ -5584,6 +5657,7 @@ export class PropertyManagementService {
         payTo,
         allocationLedger: isLeaseFlagged(lease),
         ...(ledgerDues ? { dues: ledgerDues } : {}),
+        book,
       },
       payments,
       portalUrl: portalUrl || null,
