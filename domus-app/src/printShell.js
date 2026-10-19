@@ -17,6 +17,9 @@ export const PAGE_RULES = {
   receipts: "@page { margin: 0; }",
   statement: "@page { size: A4 portrait; margin: 12mm; }",
   paper: "@page { size: A4 landscape; margin: 0; }",
+  paperLetter: "@page { size: letter landscape; margin: 0; }",
+  paperFull: "@page { size: A4 portrait; margin: 0; }",
+  paperFullLetter: "@page { size: letter portrait; margin: 0; }",
 };
 
 export const SHELL_CSS = `
@@ -49,10 +52,27 @@ function shellBarHtml(format, years = 3) {
   <span id="ps-paper" hidden style="display:contents">
     <label>Vue :
       <select id="ps-pass">
-        <option value="complet">Cahier complet (une impression)</option>
+        <option value="pleine" selected>Feuilles entières : rien à monter, on agrafe (papier normal)</option>
+        <option value="simple">Cahier simple : recto, plier et empiler (papier normal)</option>
+        <option value="plie-essai">Cahier plié : feuille d'essai (à faire d'abord)</option>
+        <option value="plie">Cahier plié (recto-verso)</option>
+        <option value="plie-r">Cahier plié à la main : rectos</option>
+        <option value="plie-v">Cahier plié à la main : versos</option>
+        <option value="complet">Cahier coupé (une impression, recto)</option>
         <option value="2">Passage 2 : pages autocopiantes</option>
         <option value="1">Passage 1 : couvertures et guide</option>
         <option value="cahier">Vue cahier (écran)</option>
+      </select></label>
+    <label>Papier :
+      <select id="ps-size">
+        <option value="a4">A4</option>
+        <option value="letter">Letter (US)</option>
+      </select></label>
+    <label>Cahier :
+      <select id="ps-copy">
+        <option value="tenant">Du locataire</option>
+        <option value="landlord">Du bailleur</option>
+        <option value="both">Les deux (locataire puis bailleur)</option>
       </select></label>
     <label>Durée :
       <select id="ps-years">
@@ -119,16 +139,23 @@ ${PAPER_BOOK_CSS}</style>
     const ink = $("ps-ink").value;
     const dup = $("ps-dup").checked;
     const years = Number($("ps-years").value);
+    const copy = $("ps-copy").value;
+    const size = $("ps-size").value;
+    const folded = pass.startsWith("plie") || pass === "simple" || pass === "pleine";
+    $("ps-copy").parentElement.hidden = !folded || pass === "plie-essai";
+    $("ps-dup").parentElement.hidden = folded;
     let html;
     if (fmt === "statement") {
       html = state.cache.statement ||= statementBodyHtml(ctx.lease, ctx.payments, { qrDataUrl: ctx.qrDataUrl });
     } else if (fmt === "paper") {
-      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years });
+      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years, copy, paper: size });
     } else {
       html = state.cache.receipts ||= `<div class="rent-book">${ctx.receiptsHtml()}</div>`;
     }
     $("book").innerHTML = html;
-    $("page-rule").textContent = PAGE_RULES[fmt];
+    $("page-rule").textContent = fmt !== "paper" ? PAGE_RULES[fmt]
+      : pass === "pleine" ? (size === "letter" ? PAGE_RULES.paperFullLetter : PAGE_RULES.paperFull)
+      : size === "letter" ? PAGE_RULES.paperLetter : PAGE_RULES.paper;
     $("ps-paper").hidden = fmt !== "paper";
     const note = $("ps-ink-note");
     note.hidden = fmt !== "paper";
@@ -137,14 +164,15 @@ ${PAPER_BOOK_CSS}</style>
     const preview = fmt === "paper" && pass === "cahier";
     hint.hidden = !(fmt === "paper");
     hint.textContent = fmt === "paper"
-      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
+      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : pass === "pleine" ? "Imprimer : A4 portrait, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "simple" ? "Imprimer : A4 paysage, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "plie" ? "Imprimer : A4 paysage, Recto verso, retourner sur le bord court, échelle 100 %, sans marges ni en-têtes." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
       : "";
+    if (size === "letter") hint.textContent = hint.textContent.replace("A4 paysage", "Letter paysage (papier Letter dans le bac)").replace("A4 portrait", "Letter portrait (papier Letter dans le bac)");
     $("ps-print").disabled = preview;
     doc.title = `${{ receipts: "Carnet de quittances", statement: "Relevé de compte", paper: "Carnet à remplir" }[fmt]} — ${ctx.lease?.reference || `Bail ${ctx.lease?.id ?? ""}`}`;
     fit(fmt, pass);
   };
 
-  ["ps-format", "ps-pass", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
+  ["ps-format", "ps-pass", "ps-size", "ps-copy", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
   win.addEventListener("resize", () => fit($("ps-format").value, $("ps-pass").value));
   $("ps-print").addEventListener("click", async () => {
     try {

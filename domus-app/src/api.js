@@ -591,7 +591,7 @@ export const api = {
 };
 
 // ── Onboarding public (page locataire Domus, sans authentification) ──
-// Le backend renvoie un lien vers la page CRM (APP_URL/onboarding/tenant?token=).
+// Le backend renvoie APP_URL/domus/onboarding/tenant?token= (ancien: page CRM).
 // Domus possède sa PROPRE page publique : on réécrit le lien vers une URL propre
 // sous /domus/. nginx assure le fallback SPA (`@dev_domus_spa`/`@prod_domus_spa`
 // → /domus/index.html) pour ce deep-link, donc pas besoin de routage par hash.

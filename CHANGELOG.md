@@ -10,6 +10,38 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier, feuilles entières en Letter : la page remplit la feuille et le numéro de page est visible (v3.237.2).**
+
+- **Domus — SMS d'inscription locataire complet et poli (v3.237.1, ticket Jira à créer).** Le jeton du lien (32 octets aléatoires, inchangés) est encodé en base64url (43 car. au lieu de 64 en hex) : le lien laisse la place au texte dans un SMS de 160 car., qui n'est plus rogné. Texte par défaut : « Bonjour {firstName}, svp completez votre dossier : {url} » ; l'email ajoute « Merci beaucoup. ». L'ancien modèle par défaut en base est mis à jour au démarrage s'il n'a pas été personnalisé. Les anciens liens restent valides (recherche par hash).
+
+- **Domus — carnet papier : feuilles entières, rien à monter (v3.237.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Feuilles entières : rien à monter, on agrafe (papier normal) » : une page du carnet = une feuille A4 ou Letter entière en portrait, au recto seulement, dans l'ordre. Ni pliage, ni coupe, ni recto-verso : on agrafe sur le bord gauche. 2 ans : 14 feuilles ; 3 ans : 16 feuilles par cahier.
+  - Sans copie : cahier du locataire et cahier du bailleur, la même ligne écrite et signée dans les deux. Numéro de page du cahier sur chaque feuille, renvois du guide alignés.
+  - Les autres méthodes (cahier simple plié, cahier plié recto-verso, cahier coupé, passages) restent disponibles.
+
+- **Domus — lien d'inscription locataire : SMS/email pointaient vers l'ancienne page CRM (v3.236.1, ticket Jira à créer).** Le backend générait `APP_URL/onboarding/tenant?token=` (page CRM sans le type Entreprise ni les derniers champs) ; seule l'app Domus réécrivait le lien copié. Il génère désormais `APP_URL/domus/onboarding/tenant?token=`, comme le portail et la pré-qualification. L'ancienne route CRM reste servie pour les liens déjà envoyés.
+
+- **Domus — carnet papier : papier Letter, un seul numéro de page, montants entiers (v3.236.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix « Papier : A4 / Letter ». En Letter, la feuille, les moitiés et la ligne de pliage sont aux dimensions du Letter (279,4 × 215,9 mm) : le pli tombe au milieu. Avant, le cahier était toujours en A4 et l'imprimante le décalait sur du Letter.
+  - Cahier simple et cahier plié : un seul numéro de page (celui du cahier) au lieu de deux, et les renvois du guide (hausses, départ, corrections) pointent vers les numéros du cahier.
+  - Colonne « À payer » élargie : les montants en CDF ne sont plus coupés (« 950 000 C »). Colonnes de l'exemple ajustées.
+
+- **Domus — carnet papier : cahier simple, par défaut (v3.235.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier simple : recto, plier et empiler (papier normal) » : impression au recto seulement, sans recto-verso ni coupe. Chaque feuille A4 pliée en deux (impression à l'extérieur) devient un feuillet ; on empile les feuillets dans l'ordre (feuille 1 dessus) et on agrafe le long du pli. 2 ans : 7 feuilles ; 3 ans : 8 feuilles par cahier.
+  - Sans copie : un cahier du locataire et un cahier du bailleur sur papier normal, la même ligne étant écrite et signée dans les deux. Le guide et la page « Les deux cahiers » sont adaptés (plus de rose, d'autocopiant ni de carton).
+  - Chaque page porte son numéro dans le cahier et « Feuille N ». Les autres méthodes (cahier plié recto-verso, cahier coupé, passages) restent disponibles.
+
+- **Domus — cahier plié : impression fiable (v3.234.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Chaque page porte son vrai numéro dans le cahier (1 à 16, en bas côté extérieur) et, près du pli, « Feuille N · côté A/B », pour monter le cahier sans se tromper.
+  - Nouveau choix « Cahier » : locataire (papier blanc), bailleur (papier rose) ou les deux (toutes les blanches, puis toutes les roses). On n'alterne plus blanc et rose feuille par feuille.
+  - Nouvelle « feuille d'essai » recto-verso à imprimer d'abord sur papier normal : elle montre si le réglage « retourner sur le bord court / long » est le bon.
+  - Explication du montage : plier chaque feuille, côté A à l'extérieur, les emboîter (feuille 1 à l'extérieur), agrafer dans le pli.
+
+- **Domus — carnet papier : cahier plié en recto-verso, par défaut (v3.233.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier plié (recto-verso) » : imposition livret (16 pages A5 sur 4 feuilles A4 recto-verso, pour 2 ans comme pour 3 ans ; 2 pages Notes ajoutées en 2 ans). On empile les feuilles, on plie au milieu, on agrafe dans le pli : pas de coupe. Marge de reliure côté pli. Chaque feuille en blanc (locataire) puis en rose (bailleur).
+  - Recto-verso à la main : options « rectos » puis « versos » pour les imprimantes sans recto-verso automatique.
+  - Le cahier coupé (une impression, recto) et les passages 1 et 2 restent disponibles.
+
 - **Domus — relevé de compte, bail au prorata : montant dû = échéancier, pas le montant payé (v3.232.3, ticket Jira à créer).**
   - Build PWA : précache domus porté à 6 Mio (bundle > 2 Mio faisait échouer le deploy dev), comme hr/farmos/compta/batipro.
   - Un 1er mois prorata payé 170 $ pour 167,74 $ dus s'affichait « dû 170 $ » (solde 400 $ au lieu de 397,74 $, comme la carte). Le reste par échéance répartit désormais le total payé dans l'ordre des échéances.

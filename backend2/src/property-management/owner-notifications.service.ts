@@ -101,7 +101,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       name: "Lien d'inscription locataire",
       eventType: "tenant_onboarding",
       subject: "Votre lien d'inscription locataire",
-      body: "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
+      body: "Bonjour {firstName}, svp completez votre dossier : {url}",
     },
     {
       name: "Enquete de prelocation",
@@ -266,6 +266,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
     default_notice: "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
     default_notice_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de paiement sera depose. Merci de l'inviter a contacter {contacts}.",
+    tenant_onboarding: "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
     tenant_created_owner: "Nouveau dossier locataire : {tenantName} ({tenantPhone}). {profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. {occupants} occupants. Contact : {emergencyContact}.",
   };
 
