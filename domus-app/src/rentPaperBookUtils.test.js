@@ -295,3 +295,13 @@ describe("feuilles entieres (defaut)", () => {
     expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain('class="paper  letter"');
   });
 });
+
+describe("feuilles entieres : dimensions", () => {
+  it("Letter portrait : page A5 de 148,5 x 210 mm agrandie x1,33, pour tenir dans 215,9 x 279,4 mm (numero visible)", () => {
+    expect(PAPER_BOOK_CSS).toContain(".paper.letter .sheet.full { width: 215.9mm; height: 279.4mm; }");
+    expect(PAPER_BOOK_CSS).toContain(".paper.letter .sheet.full .a5 { zoom: 1.33; width: 148.5mm; height: 210mm; margin: 0 auto; }");
+    // 210 mm x 1,33 = 279,3 mm <= 279,4 mm : le bas de page (et son numero) reste sur la feuille
+    expect(210 * 1.33).toBeLessThanOrEqual(279.4);
+    expect(148.5 * 1.33).toBeLessThanOrEqual(215.9);
+  });
+});
