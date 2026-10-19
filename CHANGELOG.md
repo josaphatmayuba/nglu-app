@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — relevé de compte : échéance au bon jour et totaux avec devise (v3.230.1, ticket Jira à créer : instance Jira inaccessible).**
+  - Bail sans échéancier : un mois non payé était daté du 1er du mois au lieu du jour d'échéance du bail (ex. 01/10 au lieu du 18/10), ce qui avançait le passage « En retard ». Le relevé utilise maintenant le jour d'échéance.
+  - « Total payé » et « Payé » affichent « 0 $ » (devise du bail) au lieu de « 0 » quand il n'y a aucun paiement.
+
 - **Domus — 3 carnets au choix à l'impression d'un bail (v3.230.0, ticket Jira à créer : instance Jira inaccessible).**
   - Popup d'impression : 3 formats. (1) Carnet de quittances, inchangé. (2) Relevé de compte (état des échéances/paiements du bail). (3) Carnet à remplir à la main : pages A5 sur A4 paysage, en 2 cahiers locataire/bailleur autocopiants. Format par défaut choisi selon `endDate` du bail.
   - Règles d'affichage : pas de colonne « Reste » ni de tranches ; devise = celle du bail ; nom du gestionnaire affiché ; mode économie d'encre ; mention « Durée : 3 ans ». Nouveaux fichiers front `domus-app/src/printShell.js`, `rentStatementUtils.js`, `rentPaperBookUtils.js` (+ tests), `rentBookUtils.js` adapté.
