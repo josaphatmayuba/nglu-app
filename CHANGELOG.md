@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — cahier coupé A5 : ligne de coupe remise, au milieu exact du papier (v3.238.1).**
+  - La ligne pointillée « couper ici » est calculée sur la largeur du papier choisi : 139,7 mm du bord sur Letter, 148,5 mm sur A4 (mesuré sur le rendu : écart inférieur à 0,2 mm). Elle était mal placée avant parce que la page était toujours en A4.
+
 - **Domus — carnet papier : cahier coupé A5, par défaut (v3.238.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix par défaut « Cahier coupé A5 : recto, couper et poser dans l'ordre (papier normal) » : 2 pages A5 par feuille A4 ou Letter, au recto seulement ; feuille 1 = pages 1 et 2, feuille 2 = pages 3 et 4… On coupe chaque feuille en deux, on pose les morceaux dans l'ordre (gauche, droite, feuille suivante) et on agrafe sur le bord gauche. 2 ans : 7 feuilles ; 3 ans : 8 feuilles. Aucune ligne de coupe imprimée.
   - Sans copie, un seul numéro de page par page, renvois du guide alignés. Le papier choisi (A4 / Letter) est mémorisé dans le navigateur.
