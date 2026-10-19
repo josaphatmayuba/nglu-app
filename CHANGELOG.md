@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : cahier plié en recto-verso, par défaut (v3.233.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier plié (recto-verso) » : imposition livret (16 pages A5 sur 4 feuilles A4 recto-verso, pour 2 ans comme pour 3 ans ; 2 pages Notes ajoutées en 2 ans). On empile les feuilles, on plie au milieu, on agrafe dans le pli : pas de coupe. Marge de reliure côté pli. Chaque feuille en blanc (locataire) puis en rose (bailleur).
+  - Recto-verso à la main : options « rectos » puis « versos » pour les imprimantes sans recto-verso automatique.
+  - Le cahier coupé (une impression, recto) et les passages 1 et 2 restent disponibles.
+
 - **Domus — relevé de compte, bail au prorata : montant dû = échéancier, pas le montant payé (v3.232.3, ticket Jira à créer).**
   - Build PWA : précache domus porté à 6 Mio (bundle > 2 Mio faisait échouer le deploy dev), comme hr/farmos/compta/batipro.
   - Un 1er mois prorata payé 170 $ pour 167,74 $ dus s'affichait « dû 170 $ » (solde 400 $ au lieu de 397,74 $, comme la carte). Le reste par échéance répartit désormais le total payé dans l'ordre des échéances.
