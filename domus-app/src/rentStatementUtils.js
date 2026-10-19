@@ -94,7 +94,7 @@ export function collectDues(lease, payments) {
         ? day10(l.dueDate)
         : l.periodStart
           ? day10(l.periodStart)
-          : isPaid ? clampDay(key, dueDay) : day10(l.paymentDate) || clampDay(key, dueDay);
+          : clampDay(key, dueDay); // jamais paymentDate : la ligne factice d'un mois non payé est datée du 1er
       return {
         key,
         dueDate,
@@ -202,9 +202,9 @@ const balTag = (b, sym) => (b < -EPS
   ? `<span class="bal du">${escapeHtml(moneyAfter(-b, sym))} dû</span>`
   : b > EPS ? `<span class="bal adv">${escapeHtml(moneyAfter(b, sym))} d'avance</span>` : `<span class="bal ok">À jour</span>`);
 
-const sumsText = (map) => {
+const sumsText = (map, sym0) => {
   const e = Object.entries(map || {});
-  return e.length ? e.map(([s, v]) => moneyAfter(v, s)).join(" + ") : "0";
+  return e.length ? e.map(([s, v]) => moneyAfter(v, s)).join(" + ") : moneyAfter(0, sym0);
 };
 const openingText = (map) => {
   const e = Object.entries(map || {}).filter(([, v]) => Math.abs(v) > EPS);
@@ -321,7 +321,7 @@ export function statementBodyHtml(lease, payments, { qrDataUrl, today } = {}) {
     const close = `<tr class="close"><td class="date">${fmtDateShort(closeDate)}</td><td colspan="4"><div class="close-box"><div><b>Arrêté de compte ${escapeHtml(yr.year)}${isCurrent ? " (en cours)" : ""}</b> · solde à reporter ${closingTags(yr.closing, sym0)}</div><div class="sig"><span>Bailleur</span><span>Locataire</span></div></div></td></tr>`;
     return `<section class="year"><div class="year-head"><h2>${escapeHtml(yr.year)}</h2><div class="sums">
       ${i > 0 ? `<span>Report <b>${escapeHtml(openingText(yr.opening))}</b></span>` : ""}
-      <span>Loyers dus <b>${escapeHtml(sumsText(yr.dueSum))}</b></span><span>Payé <b>${escapeHtml(sumsText(yr.paySum))}</b></span>
+      <span>Loyers dus <b>${escapeHtml(sumsText(yr.dueSum, sym0))}</b></span><span>Payé <b>${escapeHtml(sumsText(yr.paySum, sym0))}</b></span>
       <span>À temps <b>${yr.monthsOnTime}/${yr.monthsDue} mois</b></span></div></div>
       <div class="tbl"><table><thead><tr><th>Date</th><th>Opération</th><th class="r">Dû</th><th class="r">Payé</th><th class="r">Solde</th></tr></thead><tbody>${report}${rows}${close}</tbody></table></div></section>`;
   }).join("") : `<p class="muted">Aucune opération à ce jour.</p>`;
@@ -340,7 +340,7 @@ export function statementBodyHtml(lease, payments, { qrDataUrl, today } = {}) {
   <section class="box status" aria-label="Situation">
     <div class="main"><span class="big ${st.situation.kind}">${escapeHtml(st.situation.label)}</span><span class="muted">au ${fmtDateShort(st.today)}</span></div>
     <div class="kv"><span>Prochaine échéance</span><strong>${next ? `${fmtDateShort(next.dueDate)} · ${escapeHtml(moneyAfter(next.left, next.symbol))}` : "—"}</strong></div>
-    <div class="kv"><span>Total payé depuis l'entrée</span><strong>${escapeHtml(sumsText(st.totalPaid))}</strong></div>
+    <div class="kv"><span>Total payé depuis l'entrée</span><strong>${escapeHtml(sumsText(st.totalPaid, sym0))}</strong></div>
   </section>
   <section class="box" aria-label="Frise des mois">
     <h3 style="font-size:13px;margin-bottom:6px">Mois par mois</h3>

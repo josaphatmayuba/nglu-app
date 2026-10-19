@@ -110,3 +110,17 @@ describe("corrections revue", () => {
     expect(html).toMatch(/class="dot">400\s\$</);
   });
 });
+
+describe("bail sans echeancier (legacy) - echeance au jour du bail", () => {
+  const legacy = { id: 63, reference: "BL-63", startDate: "2026-10-18", rentAmount: 300, currencySymbol: "$", allocationLedger: false, book: { graceDays: 30, dueDay: 18 } };
+  it("mois non paye date au jour d'echeance, pas au 1er", () => {
+    const st = buildStatement(legacy, [], { today: "2026-10-19" });
+    expect(st.months[0].dueDate).toBe("2026-10-18");
+    expect(st.situation.kind).not.toBe("late");
+  });
+  it("aucun paiement : totaux affiches avec la devise", () => {
+    const html = statementBodyHtml(legacy, [], { today: "2026-10-19" });
+    expect(html).toContain("Total payé depuis l'entrée</span><strong>0 $");
+    expect(html).toMatch(/Payé <b>0 \$<\/b>/);
+  });
+});
