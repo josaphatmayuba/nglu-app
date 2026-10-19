@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : cahier coupé A5, par défaut (v3.238.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier coupé A5 : recto, couper et poser dans l'ordre (papier normal) » : 2 pages A5 par feuille A4 ou Letter, au recto seulement ; feuille 1 = pages 1 et 2, feuille 2 = pages 3 et 4… On coupe chaque feuille en deux, on pose les morceaux dans l'ordre (gauche, droite, feuille suivante) et on agrafe sur le bord gauche. 2 ans : 7 feuilles ; 3 ans : 8 feuilles. Aucune ligne de coupe imprimée.
+  - Sans copie, un seul numéro de page par page, renvois du guide alignés. Le papier choisi (A4 / Letter) est mémorisé dans le navigateur.
+  - Les autres méthodes restent disponibles.
+
 - **Domus — carnet papier, feuilles entières en Letter : la page remplit la feuille et le numéro de page est visible (v3.237.2).**
 
 - **Domus — SMS d'inscription locataire complet et poli (v3.237.1, ticket Jira à créer).** Le jeton du lien (32 octets aléatoires, inchangés) est encodé en base64url (43 car. au lieu de 64 en hex) : le lien laisse la place au texte dans un SMS de 160 car., qui n'est plus rogné. Texte par défaut : « Bonjour {firstName}, svp completez votre dossier : {url} » ; l'email ajoute « Merci beaucoup. ». L'ancien modèle par défaut en base est mis à jour au démarrage s'il n'a pas été personnalisé. Les anciens liens restent valides (recherche par hash).

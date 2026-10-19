@@ -52,7 +52,8 @@ function shellBarHtml(format, years = 3) {
   <span id="ps-paper" hidden style="display:contents">
     <label>Vue :
       <select id="ps-pass">
-        <option value="pleine" selected>Feuilles entières : rien à monter, on agrafe (papier normal)</option>
+        <option value="coupe" selected>Cahier coupé A5 : recto, couper et poser dans l'ordre (papier normal)</option>
+        <option value="pleine">Feuilles entières : rien à monter, on agrafe (papier normal)</option>
         <option value="simple">Cahier simple : recto, plier et empiler (papier normal)</option>
         <option value="plie-essai">Cahier plié : feuille d'essai (à faire d'abord)</option>
         <option value="plie">Cahier plié (recto-verso)</option>
@@ -141,7 +142,7 @@ ${PAPER_BOOK_CSS}</style>
     const years = Number($("ps-years").value);
     const copy = $("ps-copy").value;
     const size = $("ps-size").value;
-    const folded = pass.startsWith("plie") || pass === "simple" || pass === "pleine";
+    const folded = pass.startsWith("plie") || ["simple", "pleine", "coupe"].includes(pass);
     $("ps-copy").parentElement.hidden = !folded || pass === "plie-essai";
     $("ps-dup").parentElement.hidden = folded;
     let html;
@@ -164,7 +165,7 @@ ${PAPER_BOOK_CSS}</style>
     const preview = fmt === "paper" && pass === "cahier";
     hint.hidden = !(fmt === "paper");
     hint.textContent = fmt === "paper"
-      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : pass === "pleine" ? "Imprimer : A4 portrait, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "simple" ? "Imprimer : A4 paysage, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "plie" ? "Imprimer : A4 paysage, Recto verso, retourner sur le bord court, échelle 100 %, sans marges ni en-têtes." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
+      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : pass === "coupe" ? "Imprimer : A4 paysage, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "pleine" ? "Imprimer : A4 portrait, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "simple" ? "Imprimer : A4 paysage, recto seulement, échelle 100 %, sans marges ni en-têtes." : pass === "plie" ? "Imprimer : A4 paysage, Recto verso, retourner sur le bord court, échelle 100 %, sans marges ni en-têtes." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
       : "";
     if (size === "letter") hint.textContent = hint.textContent.replace("A4 paysage", "Letter paysage (papier Letter dans le bac)").replace("A4 portrait", "Letter portrait (papier Letter dans le bac)");
     $("ps-print").disabled = preview;
@@ -172,6 +173,9 @@ ${PAPER_BOOK_CSS}</style>
     fit(fmt, pass);
   };
 
+  // Papier mémorisé (A4 / Letter) : simple confort, ignoré si le stockage est indisponible.
+  try { const saved = win.localStorage.getItem("domus.paperSize"); if (saved === "a4" || saved === "letter") $("ps-size").value = saved; } catch { /* stockage indisponible */ }
+  $("ps-size").addEventListener("change", () => { try { win.localStorage.setItem("domus.paperSize", $("ps-size").value); } catch { /* stockage indisponible */ } });
   ["ps-format", "ps-pass", "ps-size", "ps-copy", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
   win.addEventListener("resize", () => fit($("ps-format").value, $("ps-pass").value));
   $("ps-print").addEventListener("click", async () => {

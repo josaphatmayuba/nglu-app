@@ -281,7 +281,7 @@ describe("papier Letter", () => {
 
 describe("feuilles entieres (defaut)", () => {
   it("2 ans : 14 feuilles portrait dans l'ordre 1..14, sans copie, renvois au numero du cahier", () => {
-    const h = paperBookHtml(base, { years: 2 });
+    const h = paperBookHtml(base, { pass: "pleine", years: 2 });
     expect((h.match(/class="sheet full"/g) || []).length).toBe(14);
     expect([...h.matchAll(/<span class="bk">(\d+)<\/span>/g)].map((m) => +m[1])).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
     expect(h).toContain("Exemplaire du locataire");
@@ -289,10 +289,10 @@ describe("feuilles entieres (defaut)", () => {
     expect(h).toContain("s'écrit page 11.");
   });
   it("bailleur et les deux ; 3 ans = 16 feuilles ; Letter", () => {
-    expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
-    expect((paperBookHtml(base, { years: 2, copy: "both" }).match(/class="sheet full"/g) || []).length).toBe(28);
-    expect((paperBookHtml(base, { years: 3 }).match(/class="sheet full"/g) || []).length).toBe(16);
-    expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain('class="paper  letter"');
+    expect(paperBookHtml(base, { pass: "pleine", years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
+    expect((paperBookHtml(base, { pass: "pleine", years: 2, copy: "both" }).match(/class="sheet full"/g) || []).length).toBe(28);
+    expect((paperBookHtml(base, { pass: "pleine", years: 3 }).match(/class="sheet full"/g) || []).length).toBe(16);
+    expect(paperBookHtml(base, { pass: "pleine", years: 2, paper: "letter" })).toContain('class="paper  letter"');
   });
 });
 
@@ -303,5 +303,21 @@ describe("feuilles entieres : dimensions", () => {
     // 210 mm x 1,33 = 279,3 mm <= 279,4 mm : le bas de page (et son numero) reste sur la feuille
     expect(210 * 1.33).toBeLessThanOrEqual(279.4);
     expect(148.5 * 1.33).toBeLessThanOrEqual(215.9);
+  });
+});
+
+describe("cahier coupe A5 (defaut)", () => {
+  it("2 ans : 7 feuilles, feuille i = pages 2i-1 / 2i, numeros 1..14 dans l'ordre, sans copie", () => {
+    const h = paperBookHtml(base, { years: 2 });
+    expect((h.match(/class="sheet cut"/g) || []).length).toBe(7);
+    expect([...h.matchAll(/<span class="bk">(\d+)<\/span>/g)].map((m) => +m[1])).toEqual(Array.from({ length: 14 }, (_, i) => i + 1));
+    expect([...h.matchAll(/cahier du locataire · pages (\d+) et (\d+)/g)].map((m) => `${m[1]}-${m[2]}`)).toEqual(["1-2", "3-4", "5-6", "7-8", "9-10", "11-12", "13-14"]);
+    expect(h).not.toMatch(/cahier rose|se copie|dup/);
+    expect(h).toContain("s'écrit page 11.");
+  });
+  it("pas de ligne de coupe imprimee ; bailleur ; Letter", () => {
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut::after { display: none; }");
+    expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
+    expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain("letter");
   });
 });
