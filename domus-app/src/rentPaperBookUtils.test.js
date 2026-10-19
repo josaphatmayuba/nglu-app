@@ -315,8 +315,9 @@ describe("cahier coupe A5 (defaut)", () => {
     expect(h).not.toMatch(/cahier rose|se copie|dup/);
     expect(h).toContain("s'écrit page 11.");
   });
-  it("pas de ligne de coupe imprimee ; bailleur ; Letter", () => {
-    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut::after { display: none; }");
+  it("ligne de coupe au milieu du papier ; bailleur ; Letter", () => {
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut::after { left: 50%;");
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut, .paper .sheet.fold { width: 100vw; height: 100vh; }");
     expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
     expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain("letter");
   });

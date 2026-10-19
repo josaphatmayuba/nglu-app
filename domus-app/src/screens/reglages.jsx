@@ -549,8 +549,8 @@ const DEFAULT_MESSAGES = [
     eventType: "tenant_onboarding",
     subject: "Votre lien d'inscription locataire",
     body:
-      "Bonjour {firstName}, complétez votre dossier locataire Domus via ce lien : {url}. " +
-      "Merci de le faire dès que possible. — Votre gestionnaire",
+      // Court : avec le lien (~73 car.), un SMS de 160 car. garde ~85 car. de texte.
+      "Bonjour {firstName}, svp complétez votre dossier locataire : {url} Merci beaucoup.",
   },
   {
     name: "Confirmation de bail",
