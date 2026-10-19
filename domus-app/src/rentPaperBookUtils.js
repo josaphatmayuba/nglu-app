@@ -143,6 +143,12 @@ export const PAPER_BOOK_CSS = `
   .paper .sheet.dup .a5 { background: var(--pink); }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
+  .paper .bk { position: absolute; bottom: 1.2mm; font-size: 11pt; font-weight: 700; color: #555; font-variant-numeric: tabular-nums; }
+  .paper .sheet.fold .a5:first-child .bk { left: 4mm; } .paper .sheet.fold .a5:last-child .bk { right: 4mm; }
+  .paper .fl { position: absolute; bottom: 1.6mm; font-size: 5.8pt; color: #777; }
+  .paper .sheet.fold .a5:first-child .fl { right: 3mm; } .paper .sheet.fold .a5:last-child .fl { left: 3mm; }
+  .paper .essai { display: grid; align-content: center; gap: 5mm; height: 100%; text-align: center; font-size: 13pt; }
+  .paper .essai b { font-size: 26pt; }
   .paper .sheet::after { content: "✂ couper ici"; position: absolute; left: 50%; top: 0; bottom: 0; border-left: .4pt dashed #777; font-size: 6pt; color: #777; padding: 1mm 0 0 1mm; }
   .paper .single { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .paper .single .a5 { box-shadow: 0 2px 8px rgba(0,0,0,.25); }
@@ -240,7 +246,8 @@ const introFor = (n) => {
   return {
     cahier: `<b>Deux cahiers A5 complets et identiques</b> : le <b>cahier blanc du locataire</b> (montré ici) et le <b>cahier rose du bailleur</b>, avec sa propre couverture « Exemplaire du bailleur ». Chacun contient : couverture, guide en 2 pages, exemple rempli, « Les deux cahiers », puis les ${P} pages à remplir. Une page rose est montrée en exemple sous la page Loyers de l'année 1.`,
     "1": `<b>Passage 1, 5 feuilles A4.</b> Feuille 1 en <b>carton</b> : les deux couvertures, à couper au milieu (une par cahier). Feuilles 2 et 3 en <b>papier normal, à imprimer 2 fois</b> (une fois par cahier) : le guide 1/2 et 2/2, puis l'exemple et « Les deux cahiers ». Ordre de chaque cahier : couverture, guide 1/2, guide 2/2, exemple, les deux cahiers, puis les ${P} pages autocopiantes. Pour le dos, un carton A5 vierge par cahier.`,
-    plie: `<b>Cahier plié, ${Math.ceil((P + 6) / 4)} feuilles A4 en recto-verso</b>, chacune imprimée sur blanc puis sur rose. Dans la fenêtre d'impression : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Séparez les feuilles blanches et roses. Avec les blanches : posez la feuille 1 sur la table, <b>la face avec la couverture contre la table</b>, puis les feuilles 2, 3… par-dessus, dans le même sens. <b>Pliez le paquet au milieu</b>, vers le haut. La couverture se retrouve devant : c'est le <b>cahier du locataire</b>. Agrafez dans le pli (2 agrafes). Faites pareil avec les roses : c'est le <b>cahier du bailleur</b>. Conseil : faites d'abord un essai avec une feuille de papier normal.`,
+    "plie-essai": `<b>Feuille d'essai.</b> Imprimez-la d'abord sur une feuille de papier normal, avec les réglages que vous utiliserez pour le cahier : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Retournez la feuille : vous saurez tout de suite si le réglage est bon, avant d'utiliser l'autocopiant.`,
+    plie: `<b>Cahier plié, ${Math.ceil((P + 6) / 4)} feuilles A4 en recto-verso.</b> Mettez le papier blanc pour le cahier du locataire, ou le rose pour celui du bailleur (choix « Cahier »). Dans la fenêtre d'impression : <b>Recto verso</b>, <b>retourner sur le bord court</b>, échelle 100 %. Chaque page porte son numéro dans le cahier (en bas, côté extérieur) et, près du pli, « Feuille 1 · côté A ». Ensuite : <b>pliez chaque feuille en deux</b>, côté A à l'extérieur. Glissez la feuille ${Math.ceil((P + 6) / 4)} pliée dans la feuille ${Math.ceil((P + 6) / 4) - 1}, et ainsi de suite jusqu'à la <b>feuille 1</b>, qui est à l'extérieur avec la couverture devant. Vérifiez que les numéros se suivent de 1 à ${Math.ceil((P + 6) / 4) * 4}, puis mettez <b>2 agrafes dans le pli</b>. Avant l'autocopiant, faites la « feuille d'essai » sur du papier normal.`,
     "plie-r": `<b>Cahier plié, recto-verso à la main : étape 1, les rectos.</b> Imprimez ces ${Math.ceil((P + 6) / 4)} feuilles (blanc puis rose). Remettez ensuite le paquet dans le bac, côté imprimé dessus ou dessous selon votre imprimante, puis choisissez « Cahier plié : versos ». Faites d'abord un essai avec une feuille de papier normal.`,
     "plie-v": `<b>Cahier plié, recto-verso à la main : étape 2, les versos.</b> Imprimez sur le dos des feuilles déjà imprimées, dans le même ordre. Ensuite : séparez blanches et roses, empilez chaque couleur dans l'ordre, pliez au milieu et agrafez dans le pli.`,
     complet: `<b>Cahier complet en une seule impression, ${(P + 6) / 2} feuilles A4</b>, imprimées sur blanc puis sur rose, soit ${P + 6} impressions. Coupez chaque feuille au milieu, puis <b>séparez les moitiés blanches et roses</b>. Avec les blanches : posez la pile des moitiés gauches (pages 1 à ${(P + 6) / 2}) sur la pile des moitiés droites (pages ${(P + 6) / 2 + 1} à ${P + 6}), c'est le <b>cahier du locataire</b>, de la couverture au dos. Faites pareil avec les roses : c'est le <b>cahier du bailleur</b>. Agrafez chaque cahier sur le bord gauche, au même endroit.`,
@@ -481,7 +488,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3) {
 // ink : "" | "ink-pale" | "ink-blue". duplicate : imprime aussi le 2e exemplaire
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
 // years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
-export function paperBookHtml(lease, { pass = "plie", ink = "", duplicate = true, qrDataUrl = null, years } = {}) {
+export function paperBookHtml(lease, { pass = "plie", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant" } = {}) {
   const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
   const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n);
@@ -500,16 +507,26 @@ export function paperBookHtml(lease, { pass = "plie", ink = "", duplicate = true
       return [...b, [BACK, null, "covpage"]];
     };
     const sides = pass === "plie-r" ? ["recto"] : pass === "plie-v" ? ["verso"] : ["recto", "verso"];
-    imposeBooklet(book(false).length).forEach((sh, i) => {
-      (duplicate ? [false, true] : [false]).forEach((d) => {
-        const B = book(d);
+    // copy : "tenant" (papier blanc) | "landlord" (papier rose) | "both" (toutes les blanches, puis toutes les roses).
+    const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
+    const N = book(false).length;
+    // Repères imprimés : vrai numéro de page du cahier + « Feuille i · côté A/B » près du pli.
+    const mark = (html, num, i, side) => `${html}<span class="bk">${num}</span><span class="fl">Feuille ${i + 1} · côté ${side === "recto" ? "A" : "B"}</span>`;
+    colors.forEach((d) => {
+      const B = book(d);
+      imposeBooklet(N).forEach((sh, i) => {
         sides.forEach((side) => {
           const [l, r] = sh[side];
-          out += `<div class="caption">Feuille ${i + 1} · ${d ? "rose (cahier du bailleur)" : "blanche (cahier du locataire)"} · ${side} · pages ${l + 1} et ${r + 1}</div>`;
-          out += sheet(a5(B[l][0], B[l][1], B[l][2]), a5(B[r][0], B[r][1], B[r][2]), `fold${d ? " dup" : ""}`);
+          out += `<div class="caption">Feuille ${i + 1} / ${N / 4} · ${d ? "rose (cahier du bailleur)" : "blanche (cahier du locataire)"} · côté ${side === "recto" ? "A" : "B"} · pages ${l + 1} et ${r + 1}</div>`;
+          out += sheet(a5(mark(B[l][0], l + 1, i, side), B[l][1], B[l][2]), a5(mark(B[r][0], r + 1, i, side), B[r][1], B[r][2]), `fold${d ? " dup" : ""}`);
         });
       });
     });
+  } else if (pass === "plie-essai") {
+    // Feuille d'essai recto-verso sur papier normal : vérifie le sens du retournement avant l'autocopiant.
+    const box = (t) => `<div class="essai">${t}</div>`;
+    out += `<div class="caption">Feuille d'essai · côté A</div>` + sheet(a5(box("<b>Côté A</b><span>gauche</span>"), null, "covpage"), a5(box("<b>Côté A · page 1</b><span>Retournez la feuille comme une page de livre, de droite à gauche.</span><span>Derrière ce texte, vous devez lire « C'est bon », dans le bon sens.</span>"), null, "covpage"), "fold");
+    out += `<div class="caption">Feuille d'essai · côté B</div>` + sheet(a5(box("<b>C'est bon</b><span>Le recto-verso est bien réglé : imprimez le cahier avec les mêmes réglages.</span>"), null, "covpage"), a5(box("<b>Pas bon</b><span>Si vous lisez ceci derrière la page 1, ou si « C'est bon » est à l'envers : changez « Retourner sur le bord court » pour « bord long » (ou l'inverse), puis refaites l'essai.</span>"), null, "covpage"), "fold");
   } else if (pass === "complet") {
     // Tout le cahier, couverture -> dos, en imposition « coupe et empile » ; feuille rose = couverture du bailleur.
     const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [HOWTO, null, "covpage"], [HOWTO2, null, "covpage"], [EXAMPLE, null, "covpage"], [TWO, null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];

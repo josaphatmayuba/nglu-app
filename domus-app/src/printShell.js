@@ -49,13 +49,20 @@ function shellBarHtml(format, years = 3) {
   <span id="ps-paper" hidden style="display:contents">
     <label>Vue :
       <select id="ps-pass">
-        <option value="plie">Cahier plié (recto-verso)</option>
+        <option value="plie-essai">Cahier plié : feuille d'essai (à faire d'abord)</option>
+        <option value="plie" selected>Cahier plié (recto-verso)</option>
         <option value="plie-r">Cahier plié à la main : rectos</option>
         <option value="plie-v">Cahier plié à la main : versos</option>
         <option value="complet">Cahier coupé (une impression, recto)</option>
         <option value="2">Passage 2 : pages autocopiantes</option>
         <option value="1">Passage 1 : couvertures et guide</option>
         <option value="cahier">Vue cahier (écran)</option>
+      </select></label>
+    <label>Cahier :
+      <select id="ps-copy">
+        <option value="tenant">Locataire (papier blanc)</option>
+        <option value="landlord">Bailleur (papier rose)</option>
+        <option value="both">Les deux (blanches puis roses)</option>
       </select></label>
     <label>Durée :
       <select id="ps-years">
@@ -122,11 +129,15 @@ ${PAPER_BOOK_CSS}</style>
     const ink = $("ps-ink").value;
     const dup = $("ps-dup").checked;
     const years = Number($("ps-years").value);
+    const copy = $("ps-copy").value;
+    const folded = pass.startsWith("plie");
+    $("ps-copy").parentElement.hidden = !folded || pass === "plie-essai";
+    $("ps-dup").parentElement.hidden = folded;
     let html;
     if (fmt === "statement") {
       html = state.cache.statement ||= statementBodyHtml(ctx.lease, ctx.payments, { qrDataUrl: ctx.qrDataUrl });
     } else if (fmt === "paper") {
-      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years });
+      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years, copy });
     } else {
       html = state.cache.receipts ||= `<div class="rent-book">${ctx.receiptsHtml()}</div>`;
     }
@@ -147,7 +158,7 @@ ${PAPER_BOOK_CSS}</style>
     fit(fmt, pass);
   };
 
-  ["ps-format", "ps-pass", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
+  ["ps-format", "ps-pass", "ps-copy", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
   win.addEventListener("resize", () => fit($("ps-format").value, $("ps-pass").value));
   $("ps-print").addEventListener("click", async () => {
     try {

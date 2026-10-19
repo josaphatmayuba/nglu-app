@@ -185,24 +185,45 @@ describe("cahier plie (livret recto-verso)", () => {
       { recto: [9, 6], verso: [7, 8] },
     ]);
   });
-  const sides = (h) => [...h.matchAll(/· (recto|verso) · pages (\d+) et (\d+)/g)].map((m) => `${m[1]} ${m[2]}-${m[3]}`);
-  it("2 ans : 4 feuilles recto-verso x blanc/rose, 16 pages (2 pages Notes), couverture page 1, dos page 16", () => {
-    const h = paperBookHtml(base, { pass: "plie", years: 2, duplicate: true });
-    expect((h.match(/class="sheet fold/g) || []).length).toBe(16);
-    expect(sides(h).slice(0, 4)).toEqual(["recto 16-1", "verso 2-15", "recto 16-1", "verso 2-15"]);
-    expect((h.match(/<h2>Notes<\/h2>/g) || []).length).toBe(4);
-    expect(h).toContain("4 feuilles A4 en recto-verso");
-    expect(h).toContain("Exemplaire du bailleur");
+  const sides = (h) => [...h.matchAll(/côté (A|B) · pages (\d+) et (\d+)/g)].map((m) => `${m[1]} ${m[2]}-${m[3]}`);
+  it("2 ans, cahier du locataire (defaut) : 4 feuilles A/B, 16 pages dont 2 Notes, couverture page 1, dos page 16", () => {
+    const h = paperBookHtml(base, { pass: "plie", years: 2 });
+    expect((h.match(/class="sheet fold/g) || []).length).toBe(8);
+    expect(sides(h)).toEqual(["A 16-1", "B 2-15", "A 14-3", "B 4-13", "A 12-5", "B 6-11", "A 10-7", "B 8-9"]);
+    expect((h.match(/<h2>Notes<\/h2>/g) || []).length).toBe(2);
+    expect(h).toContain("Exemplaire du locataire");
+    expect(h).not.toContain("Exemplaire du bailleur");
+    expect(h).not.toContain('class="sheet fold dup"');
+  });
+  it("reperes imprimes : numero de page du cahier et feuille/cote", () => {
+    const h = paperBookHtml(base, { pass: "plie", years: 2 });
+    for (let n = 1; n <= 16; n++) expect(h).toContain(`<span class="bk">${n}</span>`);
+    expect(h).toContain('<span class="fl">Feuille 1 · côté A</span>');
+    expect(h).toContain('<span class="fl">Feuille 4 · côté B</span>');
+  });
+  it("cahier du bailleur seul, puis les deux (blanches puis roses)", () => {
+    const b = paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" });
+    expect(b).toContain("Exemplaire du bailleur");
+    expect((b.match(/class="sheet fold dup"/g) || []).length).toBe(8);
+    const both = paperBookHtml(base, { pass: "plie", years: 2, copy: "both" });
+    const caps = [...both.matchAll(/(blanche|rose) \(cahier/g)].map((m) => m[1]);
+    expect(caps).toEqual([...Array(8).fill("blanche"), ...Array(8).fill("rose")]);
   });
   it("3 ans : 16 pages sans page Notes ; defaut = plie", () => {
-    const h = paperBookHtml(base, { years: 3, duplicate: false });
+    const h = paperBookHtml(base, { years: 3 });
     expect((h.match(/class="sheet fold/g) || []).length).toBe(8);
     expect(h).not.toContain("<h2>Notes</h2>");
   });
-  it("recto-verso a la main : rectos seuls puis versos seuls", () => {
-    const r = sides(paperBookHtml(base, { pass: "plie-r", years: 2, duplicate: false }));
-    const v = sides(paperBookHtml(base, { pass: "plie-v", years: 2, duplicate: false }));
-    expect(r).toEqual(["recto 16-1", "recto 14-3", "recto 12-5", "recto 10-7"]);
-    expect(v).toEqual(["verso 2-15", "verso 4-13", "verso 6-11", "verso 8-9"]);
+  it("recto-verso a la main : cotes A seuls puis cotes B seuls", () => {
+    expect(sides(paperBookHtml(base, { pass: "plie-r", years: 2 }))).toEqual(["A 16-1", "A 14-3", "A 12-5", "A 10-7"]);
+    expect(sides(paperBookHtml(base, { pass: "plie-v", years: 2 }))).toEqual(["B 2-15", "B 4-13", "B 6-11", "B 8-9"]);
+  });
+  it("feuille d'essai : 1 feuille recto-verso, C'est bon derriere la page 1", () => {
+    const h = paperBookHtml(base, { pass: "plie-essai" });
+    expect((h.match(/class="sheet fold/g) || []).length).toBe(2);
+    const [a, b] = h.split("Feuille d'essai · côté B");
+    expect(a).toContain("Côté A · page 1");
+    // cote B, moitie gauche (derriere la page 1 apres retournement bord court) = « C'est bon »
+    expect(b.indexOf("C'est bon")).toBeLessThan(b.indexOf("Pas bon"));
   });
 });

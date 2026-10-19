@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — cahier plié : impression fiable (v3.234.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Chaque page porte son vrai numéro dans le cahier (1 à 16, en bas côté extérieur) et, près du pli, « Feuille N · côté A/B », pour monter le cahier sans se tromper.
+  - Nouveau choix « Cahier » : locataire (papier blanc), bailleur (papier rose) ou les deux (toutes les blanches, puis toutes les roses). On n'alterne plus blanc et rose feuille par feuille.
+  - Nouvelle « feuille d'essai » recto-verso à imprimer d'abord sur papier normal : elle montre si le réglage « retourner sur le bord court / long » est le bon.
+  - Explication du montage : plier chaque feuille, côté A à l'extérieur, les emboîter (feuille 1 à l'extérieur), agrafer dans le pli.
+
 - **Domus — carnet papier : cahier plié en recto-verso, par défaut (v3.233.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix par défaut « Cahier plié (recto-verso) » : imposition livret (16 pages A5 sur 4 feuilles A4 recto-verso, pour 2 ans comme pour 3 ans ; 2 pages Notes ajoutées en 2 ans). On empile les feuilles, on plie au milieu, on agrafe dans le pli : pas de coupe. Marge de reliure côté pli. Chaque feuille en blanc (locataire) puis en rose (bailleur).
   - Recto-verso à la main : options « rectos » puis « versos » pour les imprimantes sans recto-verso automatique.
