@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 - **Domus — relevé de compte, bail au prorata : montant dû = échéancier, pas le montant payé (v3.232.3, ticket Jira à créer).**
+  - Build PWA : précache domus porté à 6 Mio (bundle > 2 Mio faisait échouer le deploy dev), comme hr/farmos/compta/batipro.
   - Un 1er mois prorata payé 170 $ pour 167,74 $ dus s'affichait « dû 170 $ » (solde 400 $ au lieu de 397,74 $, comme la carte). Le reste par échéance répartit désormais le total payé dans l'ordre des échéances.
 
 - **Domus — inscription locataire entreprise : « Nom de l'entreprise » prérempli (v3.232.2, ticket Jira à créer).**
