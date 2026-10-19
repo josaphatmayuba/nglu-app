@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : cahier complet en une seule impression (v3.232.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier complet (une impression) » : couverture, guide, exemple, « Les deux cahiers », pages à remplir et dos dans un seul PDF, en imposition « coupe et empile » (2 ans : 7 feuilles A4, 3 ans : 8 feuilles), chaque feuille en blanc (cahier du locataire) puis en rose (cahier du bailleur, avec sa propre couverture). On coupe, on trie, on empile, on agrafe : plus d'assemblage à la main.
+  - Les passages 1 et 2 restent disponibles pour économiser le papier autocopiant (couverture sur carton).
+
 - **Domus — carnet papier : durée 2 ans ou 3 ans au choix (v3.231.0, ticket Jira à créer : instance Jira inaccessible).**
   - Fenêtre d'impression, format « Carnet à remplir » : nouveau choix « Durée : 2 ans / 3 ans ». Par défaut 2 ans si le bail se termine dans 24 mois ou moins, sinon 3 ans (bail sans date de fin : 3 ans).
   - Version 2 ans : 8 pages par cahier (4 liasses autocopiantes au lieu de 5). La couverture, la numérotation des pages, les renvois du guide et l'explication des passages suivent la durée choisie. La version 3 ans est inchangée.
