@@ -598,7 +598,10 @@ export class PropertyManagementService {
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto, orgId: number) {
     // SCRUM-229 — store the phone identifier in canonical E.164.
     const phoneE164 = this.normalizePhoneOrBadRequest(input.phone);
-    const token = randomBytes(32).toString("hex");
+    // Memes 32 octets aleatoires, encodes en base64url (43 car. au lieu de 64
+    // en hex) pour que le lien laisse la place au texte dans un SMS de 160 car.
+    // Recherche par hash : les anciens liens hex restent valides.
+    const token = randomBytes(32).toString("base64url");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
     const data = JSON.stringify({
@@ -650,7 +653,7 @@ export class PropertyManagementService {
     // Texte pilote depuis Reglages > Messages (evenement "tenant_onboarding").
     const message = await this.ownerNotifications.renderMessage(
       "tenant_onboarding",
-      "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
+      "Bonjour {firstName}, svp completez votre dossier : {url}",
       {
         firstName: (data.firstName as string) || "",
         lastName: (data.lastName as string) || "",
@@ -708,8 +711,8 @@ export class PropertyManagementService {
     // canaux), pilote par le template "tenant_onboarding" des Reglages.
     const text = await this.ownerNotifications.renderMessage(
       "tenant_onboarding",
-      "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}. " +
-        `Merci de le faire des que possible. — ${companyName}`,
+      "Bonjour {firstName}, svp completez votre dossier : {url} " +
+        `Merci beaucoup. — ${companyName}`,
       {
         firstName: (data.firstName as string) || "",
         lastName: (data.lastName as string) || "",

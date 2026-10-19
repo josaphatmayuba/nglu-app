@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — SMS d'inscription locataire complet et poli (v3.236.2, ticket Jira à créer).** Le jeton du lien (32 octets aléatoires, inchangés) est encodé en base64url (43 car. au lieu de 64 en hex) : le lien laisse la place au texte dans un SMS de 160 car., qui n'est plus rogné. Texte par défaut : « Bonjour {firstName}, svp completez votre dossier : {url} » ; l'email ajoute « Merci beaucoup. ». L'ancien modèle par défaut en base est mis à jour au démarrage s'il n'a pas été personnalisé. Les anciens liens restent valides (recherche par hash).
+
 - **Domus — carnet papier : feuilles entières, rien à monter (v3.237.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix par défaut « Feuilles entières : rien à monter, on agrafe (papier normal) » : une page du carnet = une feuille A4 ou Letter entière en portrait, au recto seulement, dans l'ordre. Ni pliage, ni coupe, ni recto-verso : on agrafe sur le bord gauche. 2 ans : 14 feuilles ; 3 ans : 16 feuilles par cahier.
   - Sans copie : cahier du locataire et cahier du bailleur, la même ligne écrite et signée dans les deux. Numéro de page du cahier sur chaque feuille, renvois du guide alignés.
