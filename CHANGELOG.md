@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : cahier simple, par défaut (v3.235.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix par défaut « Cahier simple : recto, plier et empiler (papier normal) » : impression au recto seulement, sans recto-verso ni coupe. Chaque feuille A4 pliée en deux (impression à l'extérieur) devient un feuillet ; on empile les feuillets dans l'ordre (feuille 1 dessus) et on agrafe le long du pli. 2 ans : 7 feuilles ; 3 ans : 8 feuilles par cahier.
+  - Sans copie : un cahier du locataire et un cahier du bailleur sur papier normal, la même ligne étant écrite et signée dans les deux. Le guide et la page « Les deux cahiers » sont adaptés (plus de rose, d'autocopiant ni de carton).
+  - Chaque page porte son numéro dans le cahier et « Feuille N ». Les autres méthodes (cahier plié recto-verso, cahier coupé, passages) restent disponibles.
+
 - **Domus — cahier plié : impression fiable (v3.234.0, ticket Jira à créer : instance Jira inaccessible).**
   - Chaque page porte son vrai numéro dans le cahier (1 à 16, en bas côté extérieur) et, près du pli, « Feuille N · côté A/B », pour monter le cahier sans se tromper.
   - Nouveau choix « Cahier » : locataire (papier blanc), bailleur (papier rose) ou les deux (toutes les blanches, puis toutes les roses). On n'alterne plus blanc et rose feuille par feuille.

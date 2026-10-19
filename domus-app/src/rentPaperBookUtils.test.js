@@ -209,8 +209,8 @@ describe("cahier plie (livret recto-verso)", () => {
     const caps = [...both.matchAll(/(blanche|rose) \(cahier/g)].map((m) => m[1]);
     expect(caps).toEqual([...Array(8).fill("blanche"), ...Array(8).fill("rose")]);
   });
-  it("3 ans : 16 pages sans page Notes ; defaut = plie", () => {
-    const h = paperBookHtml(base, { years: 3 });
+  it("3 ans : 16 pages sans page Notes (plie)", () => {
+    const h = paperBookHtml(base, { pass: "plie", years: 3 });
     expect((h.match(/class="sheet fold/g) || []).length).toBe(8);
     expect(h).not.toContain("<h2>Notes</h2>");
   });
@@ -225,5 +225,33 @@ describe("cahier plie (livret recto-verso)", () => {
     expect(a).toContain("Côté A · page 1");
     // cote B, moitie gauche (derriere la page 1 apres retournement bord court) = « C'est bon »
     expect(b.indexOf("C'est bon")).toBeLessThan(b.indexOf("Pas bon"));
+  });
+});
+
+describe("cahier simple (recto, plier, empiler, sans copie)", () => {
+  const caps = (h) => [...h.matchAll(/Feuille (\d+) \/ (\d+) · cahier du (\w+) · devant : page (\d+), derrière : page (\d+)/g)].map((m) => `${m[1]}:${m[4]}/${m[5]}`);
+  it("defaut : 2 ans = 7 feuilles recto, feuille i = devant 2i-1 / derriere 2i", () => {
+    const h = paperBookHtml(base, { years: 2 });
+    expect((h.match(/class="sheet fold"/g) || []).length).toBe(7);
+    expect(caps(h)).toEqual(["1:1/2", "2:3/4", "3:5/6", "4:7/8", "5:9/10", "6:11/12", "7:13/14"]);
+    expect(h).toContain("au recto seulement");
+    for (let n = 1; n <= 14; n++) expect(h).toContain(`<span class="bk">${n}</span>`);
+  });
+  it("moitie droite = page devant (impaire), moitie gauche = derriere (paire)", () => {
+    const h = paperBookHtml(base, { years: 2 });
+    const first = h.split('<div class="sheet fold">')[1];
+    expect(first.indexOf('<span class="bk">2</span>')).toBeLessThan(first.indexOf('<span class="bk">1</span>'));
+    expect(first).toContain("Exemplaire du locataire");
+  });
+  it("sans copie : pas de rose, pas d'autocopiant ni de carton dans le guide", () => {
+    const h = paperBookHtml(base, { years: 2, copy: "both" });
+    expect(h).not.toContain("dup");
+    expect(h).toContain("Exemplaire du bailleur");
+    expect(h).toContain("exactement la même ligne");
+    expect(h).not.toMatch(/cahier rose|page rose|se copie/);
+    expect((h.match(/class="sheet fold"/g) || []).length).toBe(14);
+  });
+  it("3 ans : 8 feuilles", () => {
+    expect((paperBookHtml(base, { years: 3 }).match(/class="sheet fold"/g) || []).length).toBe(8);
   });
 });
