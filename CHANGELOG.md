@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — lien d'inscription locataire court (v3.238.3, ticket Jira à créer).** Le lien envoyé par SMS/email devient `APP_URL/domus/i/<jeton>` (≈73 car. au lieu de 95 ; même jeton, même sécurité) : un SMS de 160 car. garde ≈85 car. de texte. L'app Domus reconnaît ce chemin ; les anciens liens (`/domus/onboarding/tenant?token=`, page CRM) restent valides. L'email par défaut n'ajoute plus le nom de la société en signature ; l'exemple « Lien d'inscription » des Réglages est raccourci et poli.
+
 - **Domus — ligne de coupe toujours au milieu du papier imprimé (v3.238.2).**
   - À l'impression, la feuille et ses deux moitiés suivent la page réellement imprimée (100vw / 50vw) : la ligne de coupe ou de pli reste au milieu même si le navigateur ajoute des marges égales. Mesuré dans les PDF : Letter 0,13 mm, Letter avec 10 mm de marges 0,13 mm, A4 0,06 mm d'écart.
   - Rappel d'impression : Marges « Aucune », En-têtes et pieds de page décochés, Échelle 100 %.

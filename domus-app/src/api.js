@@ -591,18 +591,20 @@ export const api = {
 };
 
 // ── Onboarding public (page locataire Domus, sans authentification) ──
-// Le backend renvoie APP_URL/domus/onboarding/tenant?token= (ancien: page CRM).
+// Le backend renvoie le lien court APP_URL/domus/i/<token> (avant :
+// /domus/onboarding/tenant?token=, et encore avant la page CRM).
 // Domus possède sa PROPRE page publique : on réécrit le lien vers une URL propre
 // sous /domus/. nginx assure le fallback SPA (`@dev_domus_spa`/`@prod_domus_spa`
 // → /domus/index.html) pour ce deep-link, donc pas besoin de routage par hash.
 // Base injectee par vite : "/domus/" (defaut) ou "/" (build --mode avelomi).
 export const ONBOARDING_PATH = `${import.meta.env.BASE_URL}onboarding/tenant`;
+export const ONBOARDING_SHORT_PATH = `${import.meta.env.BASE_URL}i/`;
 export function domusOnboardingUrl(backendUrl) {
   try {
     const u = new URL(backendUrl);
-    const token = u.searchParams.get("token");
+    const token = u.searchParams.get("token") || u.pathname.match(/\/i\/([A-Za-z0-9_-]+)\/?$/)?.[1];
     if (!token) return backendUrl || "";
-    return `${u.origin}${ONBOARDING_PATH}?token=${encodeURIComponent(token)}`;
+    return `${u.origin}${ONBOARDING_SHORT_PATH}${encodeURIComponent(token)}`;
   } catch {
     return backendUrl || "";
   }

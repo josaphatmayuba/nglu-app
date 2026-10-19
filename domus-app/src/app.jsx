@@ -116,6 +116,9 @@ function useOnboardingRoute() {
     if (/\/onboarding\/tenant\/?$/.test(pathname || "")) {
       return new URLSearchParams(search || "").get("token") || "";
     }
+    // Lien court envoyé par SMS : /domus/i/<token> (voir ONBOARDING_SHORT_PATH).
+    const short = (pathname || "").match(/\/i\/([A-Za-z0-9_-]+)\/?$/);
+    if (short) return short[1];
     const m = (hash || "").match(/^#\/onboarding(?:\?(.*))?$/);
     if (m) return new URLSearchParams(m[1] || "").get("token") || "";
     return null;

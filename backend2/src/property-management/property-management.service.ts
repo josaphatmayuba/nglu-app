@@ -705,14 +705,11 @@ export class PropertyManagementService {
       throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
     }
 
-    const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
-    const companyName = (company?.name as string | null) || "votre gestionnaire";
     // Meme texte que le SMS (regle Domus : un seul contenu sert aux deux
     // canaux), pilote par le template "tenant_onboarding" des Reglages.
     const text = await this.ownerNotifications.renderMessage(
       "tenant_onboarding",
-      "Bonjour {firstName}, svp completez votre dossier : {url} " +
-        `Merci beaucoup. — ${companyName}`,
+      "Bonjour {firstName}, svp completez votre dossier : {url} Merci beaucoup.",
       {
         firstName: (data.firstName as string) || "",
         lastName: (data.lastName as string) || "",
@@ -8246,9 +8243,10 @@ export class PropertyManagementService {
   }
 
   private onboardingUrl(token: string) {
-    // Page publique Domus (types Personne/Entreprise), comme portail et
-    // prescreening. L'ancienne route CRM /onboarding/tenant reste servie.
-    return `${env.appUrl.replace(/\/$/, "")}/domus/onboarding/tenant?token=${token}`;
+    // Page publique Domus (types Personne/Entreprise), en lien court /domus/i/
+    // pour laisser la place au texte dans un SMS de 160 car. Les anciens liens
+    // /domus/onboarding/tenant?token= et CRM /onboarding/tenant restent servis.
+    return `${env.appUrl.replace(/\/$/, "")}/domus/i/${token}`;
   }
 
   private ensureTenantForm(input: CreateTenantDto) {
