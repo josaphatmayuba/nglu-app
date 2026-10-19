@@ -132,16 +132,21 @@ export class PropertyManagementController {
   @ApiCreatedResponse({ description: "Created tenant" })
   @Permissions("create-propertyManagement")
   @Post("tenants")
-  createTenant(@Body() body: CreateTenantDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.createTenant(body, orgId);
+  createTenant(@Body() body: CreateTenantDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createTenant(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Update a tenant customer and extended details" })
   @ApiOkResponse({ description: "Updated tenant" })
   @Permissions("update-propertyManagement")
   @Put("tenants/:id")
-  updateTenant(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTenantDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.updateTenant(id, body, orgId);
+  updateTenant(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateTenantDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.updateTenant(id, body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Upload the tenant identity document copy (scan/photo)" })
@@ -278,28 +283,28 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Send the onboarding link by SMS on demand" })
   @Permissions("create-propertyManagement")
   @Post("onboarding/:id/send-sms")
-  sendOnboardingSms(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.sendOnboardingSms(id);
+  sendOnboardingSms(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendOnboardingSms(id, orgId);
   }
 
   @ApiOperation({ summary: "Send the onboarding link by email on demand" })
   @Permissions("create-propertyManagement")
   @Post("onboarding/:id/send-email")
-  sendOnboardingEmail(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.sendOnboardingEmail(id);
+  sendOnboardingEmail(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.sendOnboardingEmail(id, orgId);
   }
 
   @ApiOperation({ summary: "Admin update tenant onboarding draft" })
   @Permissions("update-propertyManagement")
   @Put("onboarding/:id")
-  updateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
-    return this.propertyManagementService.saveOnboardingByAdmin(id, body);
+  updateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.saveOnboardingByAdmin(id, body, orgId);
   }
 
   @Permissions("update-propertyManagement")
   @Patch("onboarding/:id")
-  updateTenantOnboardingPatch(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
-    return this.propertyManagementService.saveOnboardingByAdmin(id, body);
+  updateTenantOnboardingPatch(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.saveOnboardingByAdmin(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Validate onboarding dossier and create tenant customer" })

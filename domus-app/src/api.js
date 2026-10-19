@@ -69,7 +69,13 @@ async function jsonFetch(path, init = {}, retried = false) {
       clearToken();
     }
     const body = await res.text().catch(() => "");
-    throw new Error(cleanApiError(res, body));
+    const apiErr = new Error(cleanApiError(res, body));
+    apiErr.status = res.status;
+    try {
+      const parsed = JSON.parse(body);
+      apiErr.code = parsed?.code || parsed?.message?.code || parsed?.error?.code;
+    } catch {}
+    throw apiErr;
   }
   // 204/empty → null
   const text = await res.text();

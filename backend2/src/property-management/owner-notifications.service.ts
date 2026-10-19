@@ -823,9 +823,15 @@ export class OwnerNotificationsService implements OnModuleInit {
 
   // "Mr Prenom Nom" / "Mme Prenom Nom" selon tenant_details.sex (M/F) ; sans
   // sexe renseigne, nom complet seul. Utilise pour {tenantName} dans les SMS.
-  civilName(sex: string | null | undefined, firstName?: string | null, lastName?: string | null) {
+  civilName(
+    sex: string | null | undefined,
+    firstName?: string | null,
+    lastName?: string | null,
+    tenantType?: string | null,
+  ) {
     const name = this.fullName(firstName, lastName);
-    if (!name) return name;
+    // Entreprise : aucune civilite (Mr/Mme n'a pas de sens pour une raison sociale).
+    if (!name || tenantType === "company") return name;
     const s = String(sex || "").trim().toUpperCase();
     const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
     return civility ? `${civility} ${name}` : name;
@@ -835,12 +841,12 @@ export class OwnerNotificationsService implements OnModuleInit {
   async civilNameForTenant(tenantId: number, orgId?: number): Promise<string> {
     try {
       const [t] = await this.db
-        .select({ firstName: customers.firstName, lastName: customers.lastName, sex: tenantDetails.sex })
+        .select({ firstName: customers.firstName, lastName: customers.lastName, sex: tenantDetails.sex, tenantType: tenantDetails.tenantType })
         .from(customers)
         .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
         .where(orgId ? and(eq(customers.id, tenantId), eq(customers.organizationId, orgId)) : eq(customers.id, tenantId))
         .limit(1);
-      return t ? this.civilName(t.sex, t.firstName, t.lastName) : "";
+      return t ? this.civilName(t.sex, t.firstName, t.lastName, t.tenantType) : "";
     } catch {
       return "";
     }
@@ -870,6 +876,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         email: customers.email,
         status: customers.status,
         sex: tenantDetails.sex,
+        tenantType: tenantDetails.tenantType,
       })
       .from(realEstateLeases)
       .innerJoin(customers, and(eq(customers.id, realEstateLeases.tenantId), eq(customers.organizationId, orgId)))
@@ -886,6 +893,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         phone: customers.phone,
         email: customers.email,
         sex: tenantDetails.sex,
+        tenantType: tenantDetails.tenantType,
         position: realEstateLeaseCotenants.position,
       })
       .from(realEstateLeaseCotenants)
@@ -910,6 +918,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       phone: string | null;
       email: string | null;
       sex: string | null;
+      tenantType?: string | null;
       position: number | null;
     };
     const rows: Row[] = [];
@@ -954,7 +963,7 @@ export class OwnerNotificationsService implements OnModuleInit {
           customerId: Number(r.customerId),
           name: this.fullName(r.firstName, r.lastName),
           firstName: r.firstName || "",
-          civilName: this.civilName(r.sex, r.firstName, r.lastName),
+          civilName: this.civilName(r.sex, r.firstName, r.lastName, r.tenantType),
           phone,
           email,
           isPrincipal: Number(r.customerId) === Number(r.principalId),

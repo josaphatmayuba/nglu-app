@@ -98,6 +98,13 @@ const INFO_FIELDS = [
   ["address", "Adresse"],
 ];
 
+// Locataire entreprise : la raison sociale (firstName cote customer) est affichee
+// mais non editable (verrouillee cote backend, geree par le gestionnaire), comme
+// le RCCM/NIF/piece du representant. editable=true => champs du formulaire.
+const infoHeadFor = (tenant, editable = false) => (tenant?.tenantType === "company"
+  ? (editable ? [] : [["firstName", "Raison sociale"]])
+  : INFO_FIELDS.slice(0, 2));
+
 // Champ simple (memes classes que onboarding-public.jsx — on duplique plutot
 // que de coupler deux pages publiques entre elles).
 function Field({ label, value, onChange, type = "text", placeholder = "", disabled = false, autoComplete }) {
@@ -138,6 +145,7 @@ function buildForm(rec) {
 
 function tenantName(tenant) {
   const n = [tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ").trim();
+  if (tenant?.tenantType === "company") return tenant.companyName || n || t("Locataire");
   if (!n) return tenant?.entityName || t("Locataire");
   // Civilité Mr/Mme selon le sexe (nom seul si inconnu).
   const s = String(tenant?.sex || "").trim().toUpperCase();
@@ -730,7 +738,7 @@ export function TenantPortalPublic({ token }) {
               {editing ? (
                 <form onSubmit={submitChanges}>
                   <div className="domus-property-form-grid">
-                    {INFO_FIELDS.slice(0, 2).map(([key, label]) => (
+                    {infoHeadFor(data?.tenant, true).map(([key, label]) => (
                       <Field key={key} label={t(label)} value={form?.[key]} disabled={formBusy}
                         autoComplete={key === "firstName" ? "given-name" : "family-name"}
                         onChange={(v) => setForm((f) => ({ ...(f || {}), [key]: v }))} />
@@ -761,7 +769,7 @@ export function TenantPortalPublic({ token }) {
                 </form>
               ) : (
                 <>
-                  {[...INFO_FIELDS.slice(0, 2), ["phone", "Téléphone"], ...INFO_FIELDS.slice(2)].map(([key, label]) => {
+                  {[...infoHeadFor(data?.tenant), ["phone", "Téléphone"], ...INFO_FIELDS.slice(2)].map(([key, label]) => {
                     const current = data?.tenant?.[key];
                     const asked = pendingRequest?.changes?.[key];
                     const hasAsked = asked != null && norm(asked) !== norm(current);

@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { CONTRACT_PRINT_CSS, contractPrintBody, escapeHtml, landlordSignatureOf } from "./contractUtils.js";
+import { CONTRACT_PRINT_CSS, companyTenantOf, contractPrintBody, escapeHtml, landlordSignatureOf } from "./contractUtils.js";
 
 const formatDateTime = (value) => {
   if (!value) return "";
@@ -53,10 +53,16 @@ export const contractSignaturesHtml = (contract) => {
   </div>`;
 };
 
-const legacyContractSignaturesHtml = (contract) => `
+const legacyContractSignaturesHtml = (contract) => {
+  const co = companyTenantOf(contract);
+  const signerLine = co
+    ? `<div class="signed-on">${escapeHtml(co.representativeName || "")}${co.companyName ? ` - pour ${escapeHtml(co.companyName)}` : ""}${co.representativeTitle ? `, ${escapeHtml(co.representativeTitle)}` : ""}</div>`
+    : "";
+  return `
   <div class="domus-contract-signatures">
     <div>
       <h3>Signature du locataire</h3>
+      ${signerLine}
       ${
         contract?.signatureData
           ? `<div class="signature-body"><div class="signature-img"><img src="${contract.signatureData}" alt="Signature locataire" /></div></div>
@@ -66,6 +72,7 @@ const legacyContractSignaturesHtml = (contract) => `
     </div>
     <div>${landlordSignatureHtml(contract)}</div>
   </div>`;
+};
 
 // jsPDF n'embarque que les polices standard (Times, encodage WinAnsi) : tout caract\u00e8re hors
 // WinAnsi sort en charabia ("1 650,00" avec espace fine U+202F -> "1 /650,00", puces \u25e6 -> "%\u00e6").

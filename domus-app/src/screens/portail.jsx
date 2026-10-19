@@ -21,6 +21,7 @@ const STORAGE_TENANT = "domus-portail-tenant-id";
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 function tenantLabel(t) {
+  if (t?.tenantType === "company" && t?.companyName) return t.companyName;
   const n = [t?.firstName, t?.lastName].filter(Boolean).join(" ").trim();
   return n || t?.entityName || t?.username || `Locataire #${t?.id}`;
 }
@@ -31,7 +32,7 @@ function tenantCivilLabel(t) {
   const s = String(t?.sex || "").trim().toUpperCase();
   const civility = s.startsWith("F") ? "Mme" : s.startsWith("M") ? "Mr" : "";
   const hasName = [t?.firstName, t?.lastName].some(Boolean);
-  return civility && hasName ? `${civility} ${label}` : label;
+  return civility && hasName && t?.tenantType !== "company" ? `${civility} ${label}` : label;
 }
 
 function initials(name) {

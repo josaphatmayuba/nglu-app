@@ -100,7 +100,7 @@ export function OwnerPortalPublic({ token }) {
 
   const tenant = data?.tenant || {};
   const leases = data?.leases || [];
-  const tenantName = [tenant.firstName, tenant.lastName].filter(Boolean).join(" ") || t("Locataire");
+  const tenantName = (tenant.tenantType === "company" && tenant.companyName) || [tenant.firstName, tenant.lastName].filter(Boolean).join(" ") || t("Locataire");
 
   return (
     <div className="onb-page">

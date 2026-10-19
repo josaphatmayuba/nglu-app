@@ -47,7 +47,7 @@ function onboardingLocation(record) {
   const d = parseOnboardingData(record);
   const building = d.buildingName || d.propertyName || d.building;
   const unit = d.unitName || d.unitLabel || d.apartment || d.apt;
-  return [building, unit].filter(Boolean).join(" · ");
+  return [d.tenant_type === "company" ? t("Entreprise") : null, building, unit].filter(Boolean).join(" · ");
 }
 
 async function loadOnboardingModule() {

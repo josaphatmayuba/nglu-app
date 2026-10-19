@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DomusPropertyGuard } from "../auth/guards/domus-property.guard";
+import { AuditModule } from "../audit/audit.module";
 import { CompatModule } from "../compat/compat.module";
 import { DatabaseModule } from "../database/database.module";
 import { LedgerModule } from "../ledger/ledger.module";
@@ -35,7 +36,7 @@ import { TenantPrescreeningService } from "./prescreening/tenant-prescreening.se
 import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.service";
 
 @Module({
-  imports: [DatabaseModule, SystemEmailModule, CompatModule, LedgerModule, WorkflowModule, ProjectsModule],
+  imports: [AuditModule, DatabaseModule, SystemEmailModule, CompatModule, LedgerModule, WorkflowModule, ProjectsModule],
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,
