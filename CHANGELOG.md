@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — inscription locataire entreprise : « Nom de l'entreprise » prérempli (v3.232.2, ticket Jira à créer).**
+  - Si le nom de l'entreprise est vide, il reprend le nom déjà saisi (firstName côté customer) au chargement du dossier entreprise et au passage « Une personne » → « Une entreprise ».
+
 - **Domus — locataire entreprise : libellé « Nom de l'entreprise » au lieu de « Raison sociale » (v3.232.1, ticket Jira à créer).**
   - Formulaire d'inscription, fiche/formulaire locataire et portail locataire : terme plus clair pour les locataires.
 

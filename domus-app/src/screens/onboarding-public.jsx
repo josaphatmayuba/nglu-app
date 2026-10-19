@@ -125,6 +125,8 @@ export function TenantOnboardingPublic({ token }) {
           child_number: 0,
           salary_currency_id: rec?.defaultCurrencyId ?? "",
           ...(rec?.data || {}),
+          ...(rec?.data?.tenant_type === "company" && !String(rec?.data?.company_name ?? "").trim() && rec?.data?.firstName
+            ? { company_name: rec.data.firstName } : {}),
           phone: rec?.phone,
         });
         if (rec?.status === "submitted") setSubmitted(true);
@@ -291,7 +293,14 @@ export function TenantOnboardingPublic({ token }) {
               {[["individual", t("Une personne")], ["company", t("Une entreprise")]].map(([val, label]) => (
                 <button key={val} type="button"
                   className={(isCompany ? "company" : "individual") === val ? "active" : ""}
-                  onClick={() => set("tenant_type", val)}>
+                  onClick={() => setValues((c) => ({
+                    ...c,
+                    tenant_type: val,
+                    // Nom de l'entreprise vide : on reprend le nom deja saisi (firstName cote customer).
+                    ...(val === "company" && !String(c.company_name ?? "").trim()
+                      ? { company_name: [c.firstName, c.lastName].filter(Boolean).join(" ").trim() }
+                      : {}),
+                  }))}>
                   <i /> {label}
                 </button>
               ))}
