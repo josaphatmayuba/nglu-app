@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
+import { buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeBooklet, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
 
 const base = {
   id: 49, reference: "BL-2026-0049", startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$",
@@ -169,9 +169,40 @@ describe("cahier complet en une impression", () => {
     expect(h).toContain("Dos du carnet");
     expect(h).toContain("8/8");
   });
-  it("3 ans : 8 feuilles ; defaut = complet", () => {
-    const h = paperBookHtml({ ...base }, { years: 3, duplicate: false });
+  it("3 ans : 8 feuilles (cahier coupe)", () => {
+    const h = paperBookHtml({ ...base }, { pass: "complet", years: 3, duplicate: false });
     expect((h.match(/class="sheet/g) || []).length).toBe(8);
     expect(h).toContain("Cahier complet en une seule impression, 8 feuilles A4");
+  });
+});
+
+describe("cahier plie (livret recto-verso)", () => {
+  it("imposition livret 16 pages", () => {
+    expect(imposeBooklet(16)).toEqual([
+      { recto: [15, 0], verso: [1, 14] },
+      { recto: [13, 2], verso: [3, 12] },
+      { recto: [11, 4], verso: [5, 10] },
+      { recto: [9, 6], verso: [7, 8] },
+    ]);
+  });
+  const sides = (h) => [...h.matchAll(/· (recto|verso) · pages (\d+) et (\d+)/g)].map((m) => `${m[1]} ${m[2]}-${m[3]}`);
+  it("2 ans : 4 feuilles recto-verso x blanc/rose, 16 pages (2 pages Notes), couverture page 1, dos page 16", () => {
+    const h = paperBookHtml(base, { pass: "plie", years: 2, duplicate: true });
+    expect((h.match(/class="sheet fold/g) || []).length).toBe(16);
+    expect(sides(h).slice(0, 4)).toEqual(["recto 16-1", "verso 2-15", "recto 16-1", "verso 2-15"]);
+    expect((h.match(/<h2>Notes<\/h2>/g) || []).length).toBe(4);
+    expect(h).toContain("4 feuilles A4 en recto-verso");
+    expect(h).toContain("Exemplaire du bailleur");
+  });
+  it("3 ans : 16 pages sans page Notes ; defaut = plie", () => {
+    const h = paperBookHtml(base, { years: 3, duplicate: false });
+    expect((h.match(/class="sheet fold/g) || []).length).toBe(8);
+    expect(h).not.toContain("<h2>Notes</h2>");
+  });
+  it("recto-verso a la main : rectos seuls puis versos seuls", () => {
+    const r = sides(paperBookHtml(base, { pass: "plie-r", years: 2, duplicate: false }));
+    const v = sides(paperBookHtml(base, { pass: "plie-v", years: 2, duplicate: false }));
+    expect(r).toEqual(["recto 16-1", "recto 14-3", "recto 12-5", "recto 10-7"]);
+    expect(v).toEqual(["verso 2-15", "verso 4-13", "verso 6-11", "verso 8-9"]);
   });
 });

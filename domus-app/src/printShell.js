@@ -49,7 +49,10 @@ function shellBarHtml(format, years = 3) {
   <span id="ps-paper" hidden style="display:contents">
     <label>Vue :
       <select id="ps-pass">
-        <option value="complet">Cahier complet (une impression)</option>
+        <option value="plie">Cahier plié (recto-verso)</option>
+        <option value="plie-r">Cahier plié à la main : rectos</option>
+        <option value="plie-v">Cahier plié à la main : versos</option>
+        <option value="complet">Cahier coupé (une impression, recto)</option>
         <option value="2">Passage 2 : pages autocopiantes</option>
         <option value="1">Passage 1 : couvertures et guide</option>
         <option value="cahier">Vue cahier (écran)</option>
@@ -137,7 +140,7 @@ ${PAPER_BOOK_CSS}</style>
     const preview = fmt === "paper" && pass === "cahier";
     hint.hidden = !(fmt === "paper");
     hint.textContent = fmt === "paper"
-      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
+      ? (preview ? "La vue cahier est un aperçu : choisissez « Cahier complet » ou un passage pour imprimer." : pass === "plie" ? "Imprimer : A4 paysage, Recto verso, retourner sur le bord court, échelle 100 %, sans marges ni en-têtes." : "Imprimer : A4 paysage, échelle 100 %, sans marges ni en-têtes.")
       : "";
     $("ps-print").disabled = preview;
     doc.title = `${{ receipts: "Carnet de quittances", statement: "Relevé de compte", paper: "Carnet à remplir" }[fmt]} — ${ctx.lease?.reference || `Bail ${ctx.lease?.id ?? ""}`}`;
