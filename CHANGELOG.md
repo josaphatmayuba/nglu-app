@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — lien d'inscription locataire : SMS/email pointaient vers l'ancienne page CRM (v3.236.1, ticket Jira à créer).** Le backend générait `APP_URL/onboarding/tenant?token=` (page CRM sans le type Entreprise ni les derniers champs) ; seule l'app Domus réécrivait le lien copié. Il génère désormais `APP_URL/domus/onboarding/tenant?token=`, comme le portail et la pré-qualification. L'ancienne route CRM reste servie pour les liens déjà envoyés.
+
 - **Domus — carnet papier : papier Letter, un seul numéro de page, montants entiers (v3.236.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix « Papier : A4 / Letter ». En Letter, la feuille, les moitiés et la ligne de pliage sont aux dimensions du Letter (279,4 × 215,9 mm) : le pli tombe au milieu. Avant, le cahier était toujours en A4 et l'imprimante le décalait sur du Letter.
   - Cahier simple et cahier plié : un seul numéro de page (celui du cahier) au lieu de deux, et les renvois du guide (hausses, départ, corrections) pointent vers les numéros du cahier.

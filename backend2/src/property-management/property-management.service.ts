@@ -8243,7 +8243,9 @@ export class PropertyManagementService {
   }
 
   private onboardingUrl(token: string) {
-    return `${env.appUrl.replace(/\/$/, "")}/onboarding/tenant?token=${token}`;
+    // Page publique Domus (types Personne/Entreprise), comme portail et
+    // prescreening. L'ancienne route CRM /onboarding/tenant reste servie.
+    return `${env.appUrl.replace(/\/$/, "")}/domus/onboarding/tenant?token=${token}`;
   }
 
   private ensureTenantForm(input: CreateTenantDto) {
