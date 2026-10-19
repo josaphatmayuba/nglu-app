@@ -120,7 +120,7 @@ describe("corrections revue", () => {
     expect(h).toContain("taux d'exemple");
   });
   it("vue cahier : message d'impression", () => {
-    expect(paperBookHtml(base, { pass: "cahier" })).toContain("Choisissez Passage 1 ou Passage 2 pour imprimer.");
+    expect(paperBookHtml(base, { pass: "cahier" })).toContain("Choisissez « Cahier complet » ou un passage pour imprimer.");
   });
 });
 
@@ -153,5 +153,25 @@ describe("carnet 2 ans", () => {
     expect(p2).toContain("5 liasses A4");
     expect(p2).toContain("10/10");
     expect((p2.match(/class="sheet/g) || []).length).toBe(10);
+  });
+});
+
+describe("cahier complet en une impression", () => {
+  const pages = (h) => [...h.matchAll(/pages (\d+) et (\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  it("2 ans : 7 feuilles x blanc/rose, couverture -> dos, gauche n / droite n+7", () => {
+    const h = paperBookHtml(base, { pass: "complet", years: 2, duplicate: true });
+    expect((h.match(/class="sheet/g) || []).length).toBe(14);
+    expect(h).toContain("7 feuilles A4");
+    const p = pages(h).filter((_, i) => i % 2 === 0);
+    expect(p).toEqual([[1, 8], [2, 9], [3, 10], [4, 11], [5, 12], [6, 13], [7, 14]]);
+    expect(h).toContain("Exemplaire du locataire");
+    expect(h).toContain("Exemplaire du bailleur");
+    expect(h).toContain("Dos du carnet");
+    expect(h).toContain("8/8");
+  });
+  it("3 ans : 8 feuilles ; defaut = complet", () => {
+    const h = paperBookHtml({ ...base }, { years: 3, duplicate: false });
+    expect((h.match(/class="sheet/g) || []).length).toBe(8);
+    expect(h).toContain("Cahier complet en une seule impression, 8 feuilles A4");
   });
 });
