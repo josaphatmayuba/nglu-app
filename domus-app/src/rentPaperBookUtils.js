@@ -139,10 +139,13 @@ export const PAPER_BOOK_CSS = `
   .paper .intro b { color: #17211d; }
   .paper .print-msg { display: none; }
   .paper .caption { font-size: 12px; color: var(--muted); font-weight: 700; margin-bottom: -8px; }
-  .paper .sheet { width: 297mm; height: 210mm; background: #fff; color: #222; display: grid; grid-template-columns: 1fr 1fr; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,.25); overflow: hidden; }
+  .paper { --sheet-w: 297mm; --sheet-h: 210mm; --half-w: 148.5mm; }
+  .paper.letter { --sheet-w: 279.4mm; --sheet-h: 215.9mm; --half-w: 139.7mm; }
+  .paper .sheet { width: var(--sheet-w); height: var(--sheet-h); background: #fff; color: #222; display: grid; grid-template-columns: 1fr 1fr; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,.25); overflow: hidden; }
   .paper .sheet.dup .a5 { background: var(--pink); }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
+  .paper .sheet.fold .foot span:last-child { display: none; } /* un seul numéro : celui du cahier (.bk) */
   .paper .bk { position: absolute; bottom: 1.2mm; font-size: 11pt; font-weight: 700; color: #555; font-variant-numeric: tabular-nums; }
   .paper .sheet.fold .a5:first-child .bk { left: 4mm; } .paper .sheet.fold .a5:last-child .bk { right: 4mm; }
   .paper .fl { position: absolute; bottom: 1.6mm; font-size: 5.8pt; color: #777; }
@@ -153,7 +156,7 @@ export const PAPER_BOOK_CSS = `
   .paper .single { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .paper .single .a5 { box-shadow: 0 2px 8px rgba(0,0,0,.25); }
   .paper .single .a5.dup { background: var(--pink); }
-  .paper .a5 { width: 148.5mm; height: 210mm; padding: 8mm 7mm 7mm 14mm; background: #fff; color: #222; position: relative; display: flex; flex-direction: column; gap: 2.4mm; overflow: hidden; }
+  .paper .a5 { width: var(--half-w); height: var(--sheet-h); padding: 8mm 7mm 7mm 14mm; background: #fff; color: #222; position: relative; display: flex; flex-direction: column; gap: 2.4mm; overflow: hidden; }
   .paper .tag { position: absolute; top: 3mm; right: 7mm; font-size: 6pt; font-weight: 400; letter-spacing: .05em; text-transform: uppercase; border: .4pt solid var(--soft); color: #555; padding: .4mm 1.4mm; }
   .paper .foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 6pt; color: var(--ink2); border-top: .4pt dotted #999; padding-top: 1mm; }
   .paper h1 { font-size: 30pt; line-height: .95; margin: 0; font-weight: 400; color: transparent; -webkit-text-stroke: .5pt #777; }
@@ -180,7 +183,7 @@ export const PAPER_BOOK_CSS = `
   .paper td { height: 8.6mm; }
   .paper td.m { color: #333; font-weight: 700; font-size: 7.5pt; white-space: nowrap; }
   .paper td.m small { display: block; font-weight: 400; font-size: 5.8pt; color: var(--ink2); }
-  .paper td.due { font-weight: 700; white-space: nowrap; }
+  .paper td.due { font-weight: 700; white-space: normal; overflow-wrap: anywhere; line-height: 1.15; }
   .paper td.due small { display: block; font-weight: 400; font-size: 5.6pt; }
   .paper tr.rep td { border-top: .75pt solid var(--line); font-weight: 700; height: 6mm; background: none; font-size: 7pt; }
   .paper .via { display: grid; gap: .2mm; font-size: 5.8pt; line-height: 1.05; }
@@ -261,10 +264,11 @@ const dots = () => `<span class="dots"></span>`;
 const val = (v) => (v ? esc(v) : dots());
 const lastDay = (y, m) => `${pad(new Date(y, m + 1, 0).getDate())}/${pad(m + 1)}/${y}`;
 
-function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false) {
+function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset = 0) {
   const years = buildLeaseYears(L.start, nYears);
   const P = 2 * nYears + 4; // conditions + (loyers, eau) × N + hausses/garantie + fin + notes
-  const pRaise = P - 2, pEnd = P - 1, pNotes = P;
+  // offset : pages placées avant « Conditions » dans le cahier relié (couverture, guides, exemple, deux cahiers = 5).
+  const pRaise = P - 2 + offset, pEnd = P - 1 + offset, pNotes = P + offset;
   const sm = years[0][0].m;
   const startY = years[0][0].y;
   const endCell = years[nYears - 1][11];
@@ -359,7 +363,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false) {
   ];
   const EXAMPLE = `<h2>Exemple d'une page remplie <small>année 1, ${MF[exM[0].m].toLowerCase()} à ${MF[exM[5].m].toLowerCase()}</small></h2>
       <table>
-        <colgroup><col style="width:15%"><col style="width:10%"><col style="width:11%"><col style="width:17%"><col style="width:21%"><col style="width:13%"><col style="width:13%"></colgroup>
+        <colgroup><col style="width:17%"><col style="width:14%"><col style="width:9%"><col style="width:15%"><col style="width:19%"><col style="width:13%"><col style="width:13%"></colgroup>
         <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé</th><th>Moyen</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${EXR.map((r) => `<tr><td class="m">${r[0]}${r[5] ? ` <span class="numk">${r[5]}</span>` : ""}</td><td class="due">${r[1]}</td><td>${r[2] ? pe(r[2]) : ""}</td><td>${r[3] ? pe(r[3]) : ""}</td><td>${r[4]}</td><td>${r[2] ? pe("~ K.") : ""}</td><td>${r[2] ? pe("~ D.") : ""}</td></tr>`).join("")}
@@ -445,7 +449,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false) {
     const range = `${MS[months[0].m]} ${months[0].y} → ${MS[last.m]} ${last.y}`;
     SLOTS.push(`<h2>Loyers, année ${k + 1} du bail <small>${range}</small></h2>
       <table>
-        <colgroup><col style="width:15%"><col style="width:10%"><col style="width:11%"><col style="width:17%"><col style="width:21%"><col style="width:13%"><col style="width:13%"></colgroup>
+        <colgroup><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:16%"><col style="width:21%"><col style="width:13%"><col style="width:13%"></colgroup>
         <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>écrire $ ou FC (+ taux)</small></th><th>Moyen</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${rows}
@@ -505,10 +509,11 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false) {
 // ink : "" | "ink-pale" | "ink-blue". duplicate : imprime aussi le 2e exemplaire
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
 // years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
-export function paperBookHtml(lease, { pass = "simple", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant" } = {}) {
+// paper : "a4" | "letter" (feuille, moitiés et ligne de pliage aux dimensions du papier).
+export function paperBookHtml(lease, { pass = "simple", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4" } = {}) {
   const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
-  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, pass === "simple");
+  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, pass === "simple", pass === "simple" || pass.startsWith("plie") ? 5 : 0);
   const INTRO = introFor(n);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
   const a5 = (html, d, cls = "") => `<div class="a5 ${cls}">${d === null ? "" : tag(d)}${html}</div>`;
@@ -587,5 +592,5 @@ export function paperBookHtml(lease, { pass = "simple", ink = "", duplicate = tr
     });
   }
   const intro = INTRO[pass] || INTRO["2"];
-  return `<div class="paper ${esc(ink || "")}"><p class="intro">${intro}</p>${out}</div>`;
+  return `<div class="paper ${esc(ink || "")}${paper === "letter" ? " letter" : ""}"><p class="intro">${intro}</p>${out}</div>`;
 }

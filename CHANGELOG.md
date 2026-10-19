@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : papier Letter, un seul numéro de page, montants entiers (v3.236.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Nouveau choix « Papier : A4 / Letter ». En Letter, la feuille, les moitiés et la ligne de pliage sont aux dimensions du Letter (279,4 × 215,9 mm) : le pli tombe au milieu. Avant, le cahier était toujours en A4 et l'imprimante le décalait sur du Letter.
+  - Cahier simple et cahier plié : un seul numéro de page (celui du cahier) au lieu de deux, et les renvois du guide (hausses, départ, corrections) pointent vers les numéros du cahier.
+  - Colonne « À payer » élargie : les montants en CDF ne sont plus coupés (« 950 000 C »). Colonnes de l'exemple ajustées.
+
 - **Domus — carnet papier : cahier simple, par défaut (v3.235.0, ticket Jira à créer : instance Jira inaccessible).**
   - Nouveau choix par défaut « Cahier simple : recto, plier et empiler (papier normal) » : impression au recto seulement, sans recto-verso ni coupe. Chaque feuille A4 pliée en deux (impression à l'extérieur) devient un feuillet ; on empile les feuillets dans l'ordre (feuille 1 dessus) et on agrafe le long du pli. 2 ans : 7 feuilles ; 3 ans : 8 feuilles par cahier.
   - Sans copie : un cahier du locataire et un cahier du bailleur sur papier normal, la même ligne étant écrite et signée dans les deux. Le guide et la page « Les deux cahiers » sont adaptés (plus de rose, d'autocopiant ni de carton).

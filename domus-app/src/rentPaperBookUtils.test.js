@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeBooklet, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
+import { PAPER_BOOK_CSS, buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeBooklet, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
 
 const base = {
   id: 49, reference: "BL-2026-0049", startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$",
@@ -253,5 +253,28 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
   });
   it("3 ans : 8 feuilles", () => {
     expect((paperBookHtml(base, { years: 3 }).match(/class="sheet fold"/g) || []).length).toBe(8);
+  });
+});
+
+describe("cahier relie : renvois du guide = numeros du cahier", () => {
+  it("2 ans simple : hausses p.11, depart p.12, corrections p.13", () => {
+    const h = paperBookHtml(base, { years: 2 });
+    expect(h).toContain("s'écrit page 11.");
+    expect(h).toContain("remplissez la page 12");
+    expect(h).toContain("correction page 13.");
+    expect(h).toContain("Notez la hausse page 11");
+  });
+  it("cahier coupe et passages : numerotation inchangee", () => {
+    expect(paperBookHtml(base, { pass: "2", years: 2 })).toContain("8/8");
+    expect(paperBookHtml(base, { pass: "1", years: 2 })).toContain("s'écrit page 6.");
+  });
+});
+
+describe("papier Letter", () => {
+  it("classe letter : feuille et moities aux dimensions Letter", () => {
+    const h = paperBookHtml(base, { years: 2, paper: "letter" });
+    expect(h.startsWith('<div class="paper  letter">') || h.startsWith('<div class="paper letter">')).toBe(true);
+    expect(PAPER_BOOK_CSS).toContain(".paper.letter { --sheet-w: 279.4mm; --sheet-h: 215.9mm; --half-w: 139.7mm; }");
+    expect(paperBookHtml(base, { years: 2 })).not.toContain("letter");
   });
 });
