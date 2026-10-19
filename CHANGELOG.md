@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier : durée 2 ans ou 3 ans au choix (v3.231.0, ticket Jira à créer : instance Jira inaccessible).**
+  - Fenêtre d'impression, format « Carnet à remplir » : nouveau choix « Durée : 2 ans / 3 ans ». Par défaut 2 ans si le bail se termine dans 24 mois ou moins, sinon 3 ans (bail sans date de fin : 3 ans).
+  - Version 2 ans : 8 pages par cahier (4 liasses autocopiantes au lieu de 5). La couverture, la numérotation des pages, les renvois du guide et l'explication des passages suivent la durée choisie. La version 3 ans est inchangée.
+
 - **Domus — relevé de compte : échéance au bon jour et totaux avec devise (v3.230.1, ticket Jira à créer : instance Jira inaccessible).**
   - Bail sans échéancier : un mois non payé était daté du 1er du mois au lieu du jour d'échéance du bail (ex. 01/10 au lieu du 18/10), ce qui avançait le passage « En retard ». Le relevé utilise maintenant le jour d'échéance.
   - « Total payé » et « Payé » affichent « 0 $ » (devise du bail) au lieu de « 0 » quand il n'y a aucun paiement.

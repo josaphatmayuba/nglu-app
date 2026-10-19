@@ -2,7 +2,7 @@
 // identiques blanc/rose en papier autocopiant). Porté de qa/domus/carnet-a5-imprimable.html
 // avec les vraies données du bail (GET /leases/:id/rent-book -> lease.book).
 // Règles : pas de colonne « Reste », pas de report, 1 mois = 1 paiement complet ;
-// champs inconnus = pointillés à remplir ; « Durée : 3 ans » (jamais « indéterminée »).
+// champs inconnus = pointillés à remplir ; « Durée : 2 ans » ou « 3 ans » (jamais « indéterminée »).
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
 import { fmtDateShort, moneyAfter } from "./rentBookUtils.js";
@@ -16,7 +16,7 @@ const pad = (n) => String(n).padStart(2, "0");
 
 // ── Fonctions pures ─────────────────────────────────────────────────────────
 
-// 3 années de bail de 12 mois à partir du mois d'entrée (ex. juil. → juin).
+// N années de bail de 12 mois à partir du mois d'entrée (ex. juil. → juin).
 export function buildLeaseYears(startDate, count = 3) {
   const m = /^(\d{4})-(\d{2})/.exec(String(startDate || ""));
   const now = new Date();
@@ -52,6 +52,16 @@ export function imposeCutStack(pageCount = 10) {
   const half = Math.floor(pageCount / 2);
   return Array.from({ length: half }, (_, i) => [i, i + half]);
 }
+
+// Durée du carnet par défaut : bail à date de fin de 2 ans ou moins → 2 ans ; sinon (ou sans fin) → 3 ans.
+export function defaultPaperYears(lease) {
+  const a = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const b = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+  if (!a || !b) return 3;
+  const months = (Number(b[1]) - Number(a[1])) * 12 + (Number(b[2]) - Number(a[2]));
+  return months <= 24 ? 2 : 3;
+}
+const normYears = (n) => (Number(n) === 2 ? 2 : 3);
 
 // Bail en FC/CDF → « Le $ est accepté… » ; sinon « Le FC est accepté… ».
 export function conditionsSentence(symbol) {
@@ -216,10 +226,13 @@ export const PAPER_INK_NOTES = {
   "ink-blue": "Imprimez en mode COULEUR (pas « Niveaux de gris », sinon le bleu redevient gris) : traits et titres faits avec l'encre couleur, le noir sert seulement au texte.",
 };
 
-const INTRO = {
-  cahier: "<b>Deux cahiers A5 complets et identiques</b> : le <b>cahier blanc du locataire</b> (montré ici) et le <b>cahier rose du bailleur</b>, avec sa propre couverture « Exemplaire du bailleur ». Chacun contient : couverture, guide en 2 pages, exemple rempli, « Les deux cahiers », puis les 10 pages à remplir. Une page rose est montrée en exemple sous la page Loyers de l'année 1.",
-  "1": "<b>Passage 1, 5 feuilles A4.</b> Feuille 1 en <b>carton</b> : les deux couvertures, à couper au milieu (une par cahier). Feuilles 2 et 3 en <b>papier normal, à imprimer 2 fois</b> (une fois par cahier) : le guide 1/2 et 2/2, puis l'exemple et « Les deux cahiers ». Ordre de chaque cahier : couverture, guide 1/2, guide 2/2, exemple, les deux cahiers, puis les 10 pages autocopiantes. Pour le dos, un carton A5 vierge par cahier.",
-  "2": "<b>Passage 2, 5 liasses A4 autocopiantes</b> (blanche puis rose), soit 10 impressions. Coupez chaque liasse au milieu, puis <b>séparez les feuilles blanches et roses</b>. Avec les blanches : empilez les moitiés gauches (pages 1 à 5) sur les moitiés droites (pages 6 à 10), c'est le <b>cahier du locataire</b>. Faites pareil avec les roses : c'est le <b>cahier du bailleur</b>. Agrafez chaque cahier sur le bord gauche, au même endroit, pour que les pages se superposent bien.",
+const introFor = (n) => {
+  const P = 2 * n + 4; const half = P / 2;
+  return {
+    cahier: `<b>Deux cahiers A5 complets et identiques</b> : le <b>cahier blanc du locataire</b> (montré ici) et le <b>cahier rose du bailleur</b>, avec sa propre couverture « Exemplaire du bailleur ». Chacun contient : couverture, guide en 2 pages, exemple rempli, « Les deux cahiers », puis les ${P} pages à remplir. Une page rose est montrée en exemple sous la page Loyers de l'année 1.`,
+    "1": `<b>Passage 1, 5 feuilles A4.</b> Feuille 1 en <b>carton</b> : les deux couvertures, à couper au milieu (une par cahier). Feuilles 2 et 3 en <b>papier normal, à imprimer 2 fois</b> (une fois par cahier) : le guide 1/2 et 2/2, puis l'exemple et « Les deux cahiers ». Ordre de chaque cahier : couverture, guide 1/2, guide 2/2, exemple, les deux cahiers, puis les ${P} pages autocopiantes. Pour le dos, un carton A5 vierge par cahier.`,
+    "2": `<b>Passage 2, ${half} liasses A4 autocopiantes</b> (blanche puis rose), soit ${P} impressions. Coupez chaque liasse au milieu, puis <b>séparez les feuilles blanches et roses</b>. Avec les blanches : empilez les moitiés gauches (pages 1 à ${half}) sur les moitiés droites (pages ${half + 1} à ${P}), c'est le <b>cahier du locataire</b>. Faites pareil avec les roses : c'est le <b>cahier du bailleur</b>. Agrafez chaque cahier sur le bord gauche, au même endroit, pour que les pages se superposent bien.`,
+  };
 };
 
 // ── HTML ────────────────────────────────────────────────────────────────────
@@ -227,11 +240,13 @@ const dots = () => `<span class="dots"></span>`;
 const val = (v) => (v ? esc(v) : dots());
 const lastDay = (y, m) => `${pad(new Date(y, m + 1, 0).getDate())}/${pad(m + 1)}/${y}`;
 
-function slotsAndPages(L, lease, qrDataUrl) {
-  const years = buildLeaseYears(L.start, 3);
+function slotsAndPages(L, lease, qrDataUrl, nYears = 3) {
+  const years = buildLeaseYears(L.start, nYears);
+  const P = 2 * nYears + 4; // conditions + (loyers, eau) × N + hausses/garantie + fin + notes
+  const pRaise = P - 2, pEnd = P - 1, pNotes = P;
   const sm = years[0][0].m;
   const startY = years[0][0].y;
-  const endCell = years[2][11];
+  const endCell = years[nYears - 1][11];
   const fm = L.firstMonth;
   const money = (n) => esc(moneyAfter(n, L.symbol));
   const sig = (a, b) => `<div class="sig"><span>${a}</span><span>${b}</span></div>`;
@@ -244,7 +259,7 @@ function slotsAndPages(L, lease, qrDataUrl) {
 
   const coverFor = (who) => `<div class="cover">
       <div style="display:grid;gap:3.5mm"><span class="lbl">Carnet n° ${esc(L.carnet)}</span><h1>Carnet<br>de loyer</h1>
-      <div class="duree" style="font-size:12pt;font-weight:400;color:transparent;-webkit-text-stroke:.4pt #777">Durée : 3 ans</div>
+      <div class="duree" style="font-size:12pt;font-weight:400;color:transparent;-webkit-text-stroke:.4pt #777">Durée : ${nYears} ans</div>
       <div class="yrs"><span>${MS[sm]} ${startY}</span><span>→</span><span>${MS[endCell.m]} ${endCell.y}</span></div>
       <div class="badge2">Exemplaire du ${who}</div></div>
       <div style="display:grid;gap:2.5mm;border-top:.5pt solid var(--soft);padding-top:3mm">
@@ -281,17 +296,17 @@ function slotsAndPages(L, lease, qrDataUrl) {
       <div class="gs"><b>D. Cas particuliers</b><ul>
         <li><b>Plusieurs mois payés d'avance :</b> remplissez chaque ligne payée, avec la même date et le loyer de ce mois, et signez chaque ligne.</li>
         <li><b>Mois non payé :</b> laissez la ligne vide. Quand le loyer en retard est payé en entier, remplissez sa ligne avec la vraie date de paiement.</li>
-        <li><b>Hausse de loyer :</b> barrez le montant « À payer » imprimé, écrivez le nouveau à côté et paraphez tous les deux. Notez la hausse page 8, avec les signatures.</li>
+        <li><b>Hausse de loyer :</b> barrez le montant « À payer » imprimé, écrivez le nouveau à côté et paraphez tous les deux. Notez la hausse page ${pRaise}, avec les signatures.</li>
         <li><b>Eau, courant, travaux :</b> sur la page « Eau, courant et travaux » de la même année. Si des travaux du locataire sont déduits du loyer, écrivez-les aussi dans « Montant payé » avec le mot « Travaux ».</li>
-        <li><b>Garantie :</b> tout complément, retenue ou remboursement s'écrit page 8.</li>
-        <li><b>Départ du locataire :</b> remplissez la page 9 (compte de sortie et clés).</li>
+        <li><b>Garantie :</b> tout complément, retenue ou remboursement s'écrit page ${pRaise}.</li>
+        <li><b>Départ du locataire :</b> remplissez la page ${pEnd} (compte de sortie et clés).</li>
       </ul></div>
       <div class="gs"><b>E. Fin de l'année de bail (${lastDay(years[0][11].y, years[0][11].m).slice(0, 5)})</b><ol>
         <li>Comptez les lignes vides et écrivez les mois non payés en bas de la page.</li>
         <li>Signez le bilan tous les deux, cahiers superposés : la signature se copie aussi dans le cahier du bailleur.</li>
       </ol></div>
       <div class="gs"><b>F. Erreurs, photos, perte</b><ul>
-        <li><b>Erreur :</b> barrez d'un seul trait, écrivez juste à côté, paraphez tous les deux. Expliquez la correction page 10.</li>
+        <li><b>Erreur :</b> barrez d'un seul trait, écrivez juste à côté, paraphez tous les deux. Expliquez la correction page ${pNotes}.</li>
         <li><b>Photo :</b> chaque mois, scannez le QR de la page et envoyez la photo. Domus en garde une copie.</li>
         <li><b>Carnet perdu ou abîmé :</b> prévenez ${lostWho}. Un carnet C2 est refait à partir de l'autre cahier et des photos, et ce carnet C1 est annulé.</li>
       </ul></div>
@@ -382,7 +397,7 @@ function slotsAndPages(L, lease, qrDataUrl) {
       <div class="g2">${sig("Le bailleur", "Signature")}${sig("Le locataire", "Signature")}${manager ? sig("Le gestionnaire", "Signature et cachet") : ""}${sig("1er témoin", "Nom et téléphone")}${sig("2e témoin", "Nom et téléphone")}</div>
       <div class="g2"><div class="sig" style="height:18mm"><span>Vu par le chef de quartier (cachet, facultatif)</span><span></span></div>
       <div style="display:grid;gap:1mm"><div class="kv"><span class="lbl">Fait à</span><div class="wl"></div></div><div class="kv"><span class="lbl">Le</span><div class="wl"></div></div></div></div>
-      ${foot("1/10")}`);
+      ${foot(`1/${P}`)}`);
   years.forEach((months, k) => {
     const last = months[11];
     const lastLabel = lastDay(last.y, last.m);
@@ -401,14 +416,14 @@ function slotsAndPages(L, lease, qrDataUrl) {
       <div class="kv"><span class="lbl">Mois non payés au ${lastLabel}</span><div class="wl"></div></div>
       <div class="g2">${sig(`Bilan au ${lastLabel} · bailleur`, "Signature")}${sig(`Bilan au ${lastLabel} · locataire`, "Signature")}</div>
       ${qr("Scannez pour envoyer la photo de cette page à Domus.")}
-      ${foot(`${2 + k * 2}/10`)}`);
+      ${foot(`${2 + k * 2}/${P}`)}`);
     SLOTS.push(`<h2>Eau, courant et travaux, année ${k + 1} <small>${range}</small></h2>
       <table><colgroup><col style="width:13%"><col style="width:17%"><col style="width:14%"><col style="width:13%"><col style="width:15%"><col style="width:14%"><col style="width:14%"></colgroup>
       <thead><tr><th>Date</th><th>Nature</th><th>Montant</th><th>Payé par</th><th>Déduit du loyer ?</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead><tbody>${empty(13, 7)}</tbody></table>
       <p class="note">Nature : eau (REGIDESO), courant (SNEL) ou travaux. Travaux déduits du loyer : écrivez-les aussi sur la page Loyers, dans « Montant payé ».</p>
       <div class="g2"><div class="kv"><span class="lbl">Total eau et courant</span><div class="wl"></div></div><div class="kv"><span class="lbl">Travaux restant à déduire</span><div class="wl"></div></div></div>
       ${qr("Scannez pour envoyer la photo de cette page à Domus.")}
-      ${foot(`${3 + k * 2}/10`)}`);
+      ${foot(`${3 + k * 2}/${P}`)}`);
   });
   const depRow = L.depositReceived
     ? `<tr><td class="pre">${L.depositReceived.date ? fmtDateShort(L.depositReceived.date) : ""}</td><td class="pre">Reçue${L.depositMonths ? ` (${L.depositMonths} mois)` : ""}</td><td class="pre">${esc(moneyAfter(L.depositReceived.amount, L.depositReceived.symbol))}</td><td class="pre">${esc(moneyAfter(L.depositReceived.amount, L.depositReceived.symbol))}</td><td></td></tr>${empty(6, 5)}`
@@ -419,7 +434,7 @@ function slotsAndPages(L, lease, qrDataUrl) {
       <table><thead><tr><th>Date</th><th>Mouvement</th><th>Montant</th><th>Total</th><th>Signatures</th></tr></thead>
       <tbody>${depRow}</tbody></table>
       <p class="note">Mouvements : reçue, complément, retenue (dégâts, impayés), restitution.</p>
-      ${foot("8/10")}`);
+      ${foot(`${pRaise}/${P}`)}`);
   SLOTS.push(`<h2>Fin du bail et départ</h2>
       <div class="g2"><div class="kv"><span class="lbl">Préavis donné le</span><div class="wl"></div></div><div class="kv"><span class="lbl">Sortie le</span><div class="wl"></div></div></div>
       <table><colgroup><col style="width:70%"><col></colgroup><thead><tr><th>Compte de sortie</th><th>Montant</th></tr></thead><tbody>
@@ -429,12 +444,12 @@ function slotsAndPages(L, lease, qrDataUrl) {
       <div class="kv"><span class="lbl">Clés rendues : nombre et date</span><div class="wl"></div></div>
       <div class="g2">${sig("Le bailleur", "Signature")}${sig("Le locataire", "Signature")}</div>
       ${qr("Scannez pour envoyer cette page et clôturer le bail dans Domus.")}
-      ${foot("9/10")}`);
+      ${foot(`${pEnd}/${P}`)}`);
   SLOTS.push(`<h2>Corrections et notes</h2>
       <p class="note">Toute correction faite dans le carnet est expliquée ici, datée et signée par les deux.</p>
       <table><colgroup><col style="width:16%"><col style="width:11%"><col><col style="width:22%"></colgroup>
       <thead><tr><th>Date</th><th>Page</th><th>Ce qui a été corrigé, et pourquoi</th><th>Signatures</th></tr></thead><tbody>${empty(16, 4)}</tbody></table>
-      ${foot("10/10")}`);
+      ${foot(`${pNotes}/${P}`)}`);
 
   return { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS };
 }
@@ -442,9 +457,12 @@ function slotsAndPages(L, lease, qrDataUrl) {
 // pass : "1" (couvertures + guide) | "2" (liasses autocopiantes) | "cahier" (vue écran page par page).
 // ink : "" | "ink-pale" | "ink-blue". duplicate : imprime aussi le 2e exemplaire
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
-export function paperBookHtml(lease, { pass = "2", ink = "", duplicate = true, qrDataUrl = null } = {}) {
+// years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
+export function paperBookHtml(lease, { pass = "2", ink = "", duplicate = true, qrDataUrl = null, years } = {}) {
+  const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
-  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS } = slotsAndPages(L, lease, qrDataUrl);
+  const { COVER, COVER_B, HOWTO, HOWTO2, EXAMPLE, TWO, SLOTS } = slotsAndPages(L, lease, qrDataUrl, n);
+  const INTRO = introFor(n);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
   const a5 = (html, d, cls = "") => `<div class="a5 ${cls}">${d === null ? "" : tag(d)}${html}</div>`;
   const sheet = (l, r, cls = "") => `<div class="sheet ${cls}">${l}${r}</div>`;

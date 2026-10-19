@@ -3,7 +3,7 @@
 // format : Carnet de quittances | Relevé de compte | Carnet à remplir (A5 sur A4 paysage).
 import { escapeHtml } from "./contractUtils.js";
 import { STATEMENT_CSS, statementBodyHtml } from "./rentStatementUtils.js";
-import { PAPER_BOOK_CSS, PAPER_INK_NOTES, paperBookHtml } from "./rentPaperBookUtils.js";
+import { PAPER_BOOK_CSS, PAPER_INK_NOTES, defaultPaperYears, paperBookHtml } from "./rentPaperBookUtils.js";
 
 export const PRINT_FORMATS = ["receipts", "statement", "paper"];
 
@@ -37,7 +37,7 @@ export const SHELL_CSS = `
   }
 `;
 
-function shellBarHtml(format) {
+function shellBarHtml(format, years = 3) {
   const opt = (v, label, cur) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
   return `
   <label>Format :
@@ -52,6 +52,11 @@ function shellBarHtml(format) {
         <option value="2">Passage 2 : pages autocopiantes</option>
         <option value="1">Passage 1 : couvertures et guide</option>
         <option value="cahier">Vue cahier (écran)</option>
+      </select></label>
+    <label>Durée :
+      <select id="ps-years">
+        ${opt("2", "2 ans", String(years))}
+        ${opt("3", "3 ans", String(years))}
       </select></label>
     <label>Encre :
       <select id="ps-ink">
@@ -89,7 +94,7 @@ ${PAPER_BOOK_CSS}</style>
   <style id="page-rule">${PAGE_RULES[format]}</style>
 </head>
 <body>
-  <div id="print-shell">${shellBarHtml(format)}</div>
+  <div id="print-shell">${shellBarHtml(format, defaultPaperYears(ctx.lease))}</div>
   <div id="book"></div>
 </body>
 </html>`);
@@ -112,11 +117,12 @@ ${PAPER_BOOK_CSS}</style>
     const pass = $("ps-pass").value;
     const ink = $("ps-ink").value;
     const dup = $("ps-dup").checked;
+    const years = Number($("ps-years").value);
     let html;
     if (fmt === "statement") {
       html = state.cache.statement ||= statementBodyHtml(ctx.lease, ctx.payments, { qrDataUrl: ctx.qrDataUrl });
     } else if (fmt === "paper") {
-      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl });
+      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years });
     } else {
       html = state.cache.receipts ||= `<div class="rent-book">${ctx.receiptsHtml()}</div>`;
     }
@@ -137,7 +143,7 @@ ${PAPER_BOOK_CSS}</style>
     fit(fmt, pass);
   };
 
-  ["ps-format", "ps-pass", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
+  ["ps-format", "ps-pass", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
   win.addEventListener("resize", () => fit($("ps-format").value, $("ps-pass").value));
   $("ps-print").addEventListener("click", async () => {
     try {

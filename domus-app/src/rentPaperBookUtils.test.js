@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLeaseYears, conditionsSentence, firstMonthProrata, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
+import { buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
 
 const base = {
   id: 49, reference: "BL-2026-0049", startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$",
@@ -121,5 +121,37 @@ describe("corrections revue", () => {
   });
   it("vue cahier : message d'impression", () => {
     expect(paperBookHtml(base, { pass: "cahier" })).toContain("Choisissez Passage 1 ou Passage 2 pour imprimer.");
+  });
+});
+
+describe("carnet 2 ans", () => {
+  it("duree par defaut : 2 ans si le bail finit dans 24 mois ou moins, sinon 3 ans", () => {
+    expect(defaultPaperYears({ startDate: "2026-07-19" })).toBe(3);
+    expect(defaultPaperYears({ startDate: "2026-07-19", endDate: "2028-07-18" })).toBe(2);
+    expect(defaultPaperYears({ startDate: "2026-07-19", endDate: "2027-07-18" })).toBe(2);
+    expect(defaultPaperYears({ startDate: "2026-07-19", endDate: "2029-07-18" })).toBe(3);
+  });
+  it("8 pages, 4 liasses, couverture 2 ans, renvois du guide renumerotes", () => {
+    const p1 = paperBookHtml(base, { pass: "1", years: 2 });
+    const p2 = paperBookHtml(base, { pass: "2", years: 2, duplicate: true });
+    expect(p1).toContain("Durée : 2 ans");
+    expect(p1).toContain("juin 2028");
+    expect(p1).not.toContain("juin 2029");
+    expect(p1).toContain("s'écrit page 6.");
+    expect(p1).toContain("remplissez la page 7");
+    expect(p1).toContain("correction page 8.");
+    expect(p2).toContain("4 liasses A4");
+    expect(p2).toContain("Liasse 4 ");
+    expect(p2).not.toContain("Liasse 5 ");
+    expect(p2).toContain("8/8");
+    expect(p2).not.toContain("/10<");
+    expect(p2).not.toContain("année 3 du bail");
+    expect((p2.match(/class="sheet/g) || []).length).toBe(8);
+  });
+  it("3 ans inchange : 10 pages, 5 liasses", () => {
+    const p2 = paperBookHtml(base, { pass: "2", years: 3 });
+    expect(p2).toContain("5 liasses A4");
+    expect(p2).toContain("10/10");
+    expect((p2.match(/class="sheet/g) || []).length).toBe(10);
   });
 });
