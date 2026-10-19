@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — relevé de compte, bail au prorata : montant dû = échéancier, pas le montant payé (v3.232.3, ticket Jira à créer).**
+  - Un 1er mois prorata payé 170 $ pour 167,74 $ dus s'affichait « dû 170 $ » (solde 400 $ au lieu de 397,74 $, comme la carte). Le reste par échéance répartit désormais le total payé dans l'ordre des échéances.
+
 - **Domus — inscription locataire entreprise : « Nom de l'entreprise » prérempli (v3.232.2, ticket Jira à créer).**
   - Si le nom de l'entreprise est vide, il reprend le nom déjà saisi (firstName côté customer) au chargement du dossier entreprise et au passage « Une personne » → « Une entreprise ».
 
