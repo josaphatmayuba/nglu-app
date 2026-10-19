@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — carnet papier, feuilles entières en Letter : la page remplit la feuille et le numéro de page est visible (v3.237.1).**
+
 - **Domus — SMS d'inscription locataire complet et poli (v3.237.1, ticket Jira à créer).** Le jeton du lien (32 octets aléatoires, inchangés) est encodé en base64url (43 car. au lieu de 64 en hex) : le lien laisse la place au texte dans un SMS de 160 car., qui n'est plus rogné. Texte par défaut : « Bonjour {firstName}, svp completez votre dossier : {url} » ; l'email ajoute « Merci beaucoup. ». L'ancien modèle par défaut en base est mis à jour au démarrage s'il n'a pas été personnalisé. Les anciens liens restent valides (recherche par hash).
 
 - **Domus — carnet papier : feuilles entières, rien à monter (v3.237.0, ticket Jira à créer : instance Jira inaccessible).**

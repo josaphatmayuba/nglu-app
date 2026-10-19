@@ -149,7 +149,8 @@ export const PAPER_BOOK_CSS = `
   .paper.letter .sheet.full { width: 215.9mm; height: 279.4mm; }
   .paper .sheet.full::after { display: none; }
   .paper .sheet.full .a5 { zoom: 1.414; }
-  .paper.letter .sheet.full .a5 { zoom: 1.33; margin: 0 auto; }
+  .paper.letter .sheet.full .a5 { zoom: 1.33; width: 148.5mm; height: 210mm; margin: 0 auto; }
+  .paper .sheet.full .a5 { width: 148.5mm; height: 210mm; }
   .paper .sheet.full .bk { right: 4mm; }
   .paper .sheet.full .foot span:last-child { display: none; }
   .paper .sheet.fold .foot span:last-child { display: none; } /* un seul numéro : celui du cahier (.bk) */
