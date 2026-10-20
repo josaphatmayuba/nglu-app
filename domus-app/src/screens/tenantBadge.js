@@ -3,7 +3,8 @@
 //
 // Le badge combine, par ordre de priorité :
 //   1. retard en cours          -> danger
-//   2. mauvais payeur historique -> danger  (passé inclus, même parti)
+//   2. mauvais payeur (retards graves sur 12 mois) -> danger, même parti ;
+//      3 mois à jour d'affilée -> « En amélioration » (warning), 6 -> statut levé
 //   3. bail à renouveler         -> warning (seulement si encore actif)
 //   4. entreprise / fidélité Or/Argent/Bronze
 //   5. ancien locataire (parti sans historique marquant)
@@ -14,6 +15,13 @@
 import { parseDomusDate } from "../dateRange.jsx";
 
 const YEAR_MS = 365 * 86400000;
+// Rehabilitation « Mauvais payeur » : mois consecutifs payes dans la grace.
+export const IMPROVING_STREAK = 3;
+export const CLEARED_STREAK = 6;
+
+function latestLease(leases) {
+  return [...(leases || [])].sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0] || null;
+}
 
 // Liaison locataire -> ses baux -> bail actif -> unité (comme le CRM).
 export function tenantLeaseInfo(tenant, leases, units) {
@@ -39,10 +47,21 @@ export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now())
   }
   // Retard historique cumulé sur TOUS les baux (actifs comme terminés), évalué
   // AVANT le cas "ancien" pour qu'un mauvais payeur parti reste signalé.
+  // Mauvais payeur = retards GRAVES récurrents : échéance réglée (ou toujours due)
+  // après la grâce de l'échéance suivante (ex. septembre payé en novembre), même
+  // s'il a tout soldé depuis. Payer en retard avant l'échéance suivante n'en fait pas un.
+  // Seuls les 12 derniers mois comptent (recentSevereLateCount / recentDueCount) ;
+  // puis rehabilitation : 3 mois a jour d'affilee -> « En amelioration », 6 -> statut leve.
+  // Champs absents (ancien backend) : repli sur l'historique complet / lateCount.
   const totalLate = tenantLeases.reduce((s, l) => s + Number(l.lateCount || 0), 0);
-  const totalDue = tenantLeases.reduce((s, l) => s + Number(l.dueCount || 0), 0);
-  if (totalDue >= 3 && totalLate / totalDue > 0.3) {
-    return { label: `Mauvais payeur · ${totalLate} retards`, tone: "danger" };
+  const totalSevere = tenantLeases.reduce((s, l) => s + Number(l.recentSevereLateCount ?? l.severeLateCount ?? l.lateCount ?? 0), 0);
+  const totalDue = tenantLeases.reduce((s, l) => s + Number(l.recentDueCount ?? l.dueCount ?? 0), 0);
+  if (totalDue >= 3 && totalSevere >= 2 && totalSevere / totalDue > 0.3) {
+    // Serie du bail actif, sinon du plus recent (locataire parti).
+    const ref = activeLease?.onTimeStreak != null ? activeLease : latestLease(tenantLeases);
+    const streak = Number(ref?.onTimeStreak ?? 0);
+    if (streak < IMPROVING_STREAK) return { label: `Mauvais payeur · ${totalSevere} retards`, tone: "danger" };
+    if (streak < CLEARED_STREAK) return { label: `En amélioration · ${streak} mois à jour`, tone: "warning" };
   }
   const hasActive = tenantLeases.some((l) => l.status === "active");
   const daysToEnd = hasActive && activeLease?.endDate

@@ -19,6 +19,7 @@ function makeService(opts: {
   smsOk?: boolean;
   emailThrows?: boolean;
   recipients?: any[];
+  graceDays?: number;
 } = {}) {
   const updates: { table: any; vals: any }[] = [];
   const sentSms: any[] = [];
@@ -71,6 +72,10 @@ function makeService(opts: {
               Promise.resolve(table === realEstateRentPayments ? payments : []).then(resolve, reject),
             limit: () =>
               Promise.resolve(table === realEstateLeases && lease ? [lease] : []),
+            // Reglage org (delai de grace) : vide = defaut (5 jours).
+            orderBy: () => ({
+              limit: () => Promise.resolve(opts.graceDays != null ? [{ days: opts.graceDays }] : []),
+            }),
           }),
         };
         return chain;
@@ -183,6 +188,12 @@ const leaseStarted = (monthsAgo: number, extra: Record<string, unknown> = {}) =>
   unitName: "Appt 3B",
   ...extra,
 });
+
+// Date figee au 20 du mois : toutes les echeances du 1er ont passe la grace (5 j).
+beforeAll(() => {
+  jest.useFakeTimers({ now: new Date(2026, 9, 20, 12), doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
+});
+afterAll(() => jest.useRealTimers());
 
 describe("sendDefaultNotice — seuil de plus d'un mois impaye", () => {
   it("refuse un locataire a jour et n'envoie rien", async () => {
@@ -333,5 +344,36 @@ describe("sendDefaultNotice — plusieurs locataires par bail", () => {
     });
     await service.sendDefaultNotice(10, ORG);
     expect(sentSms.filter((m) => m.phone === "+243900000000")).toHaveLength(1);
+  });
+});
+
+describe("sendDefaultNotice — seules les echeances hors grace sont reclamees", () => {
+  it("mois courant encore dans la grace : exclu du montant et du nombre de mois, cite en information", async () => {
+    // Le 3 du mois, grace 5 j : l'echeance du 1er n'est pas encore en retard.
+    jest.setSystemTime(new Date(2026, 9, 3, 12));
+    try {
+      const { service, sentSms, sentEmails, updates } = makeService({ lease: leaseStarted(2), payments: [] });
+      const res = await service.sendDefaultNotice(10, ORG);
+      expect(res.monthsBehind).toBe(2);
+      expect(res.balance).toBe(200);
+      expect(sentSms[0].message).toContain("2 mois");
+      expect(sentSms[0].message).toContain("200 $");
+      expect(sentEmails[0].html).toContain("Total reclame");
+      expect(sentEmails[0].html).toContain("Pour information : 100 $");
+      expect(updates.find((u) => u.table === realEstateLeases)!.vals.defaultNoticeMonthsBehind).toBe(2);
+    } finally {
+      jest.setSystemTime(new Date(2026, 9, 20, 12));
+    }
+  });
+
+  it("1 seul mois hors grace + 1 en grace : refuse (le mois en grace ne fait pas franchir le seuil)", async () => {
+    jest.setSystemTime(new Date(2026, 9, 3, 12));
+    try {
+      const { service, sentSms } = makeService({ lease: leaseStarted(1), payments: [] });
+      await expect(service.sendDefaultNotice(10, ORG)).rejects.toBeInstanceOf(BadRequestException);
+      expect(sentSms).toHaveLength(0);
+    } finally {
+      jest.setSystemTime(new Date(2026, 9, 20, 12));
+    }
   });
 });

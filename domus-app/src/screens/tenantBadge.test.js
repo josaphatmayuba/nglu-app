@@ -39,6 +39,44 @@ describe("tenantBadge", () => {
     expect(b.label).toContain("Mauvais payeur");
   });
 
+  it("paie en retard mais avant l'echeance suivante + grace -> PAS mauvais payeur", () => {
+    // 3 retards sur 3, tous rattrapes le mois meme : severeLateCount = 0.
+    const l = lease({ lateCount: 3, severeLateCount: 0, dueCount: 3 });
+    expect(badge(tenant(), [l], l).label).not.toContain("Mauvais payeur");
+  });
+
+  it("depasse regulierement l'echeance suivante + grace -> mauvais payeur meme tout solde", () => {
+    const l = lease({ lateCount: 4, severeLateCount: 3, dueCount: 6 });
+    expect(badge(tenant(), [l], l)).toEqual({ label: "Mauvais payeur · 3 retards", tone: "danger" });
+  });
+
+  it("un seul retard grave isole -> pas mauvais payeur", () => {
+    const l = lease({ lateCount: 1, severeLateCount: 1, dueCount: 3 });
+    expect(badge(tenant(), [l], l).label).not.toContain("Mauvais payeur");
+  });
+
+  it("retards graves anciens (hors 12 mois) -> plus mauvais payeur", () => {
+    const l = lease({ lateCount: 5, severeLateCount: 5, recentSevereLateCount: 0, recentDueCount: 12, dueCount: 24, startDate: yearsAgo(2) });
+    expect(badge(tenant(), [l], l).label).not.toContain("Mauvais payeur");
+  });
+
+  it("3 a 5 mois a jour d'affilee -> En amelioration (warning)", () => {
+    const l = lease({ severeLateCount: 3, recentSevereLateCount: 3, recentDueCount: 8, dueCount: 8, onTimeStreak: 4 });
+    expect(badge(tenant(), [l], l)).toEqual({ label: "En amélioration · 4 mois à jour", tone: "warning" });
+  });
+
+  it("6 mois a jour d'affilee -> statut leve", () => {
+    const l = lease({ severeLateCount: 3, recentSevereLateCount: 3, recentDueCount: 9, dueCount: 9, onTimeStreak: 6 });
+    const b = badge(tenant(), [l], l);
+    expect(b.label).not.toContain("Mauvais payeur");
+    expect(b.label).not.toContain("amélioration");
+  });
+
+  it("moins de 3 mois a jour -> reste Mauvais payeur", () => {
+    const l = lease({ severeLateCount: 3, recentSevereLateCount: 3, recentDueCount: 8, dueCount: 8, onTimeStreak: 2 });
+    expect(badge(tenant(), [l], l).label).toBe("Mauvais payeur · 3 retards");
+  });
+
   it("sous le seuil (2/10) -> pas mauvais payeur", () => {
     const l = lease({ lateCount: 2, dueCount: 10, startDate: yearsAgo(4) });
     expect(badge(tenant(), [l], l).label).not.toContain("Mauvais payeur");

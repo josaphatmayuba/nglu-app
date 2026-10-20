@@ -19,7 +19,9 @@ import {
   computeLeaseNextDue,
   computeLeaseTotalDue,
   computeProratedOverdueStats,
+  paymentBehaviour,
   scheduleForLease,
+  type DueBehaviourRecord,
   type LeaseNextDue,
   type OverdueStats,
 } from "./lease-proration";
@@ -72,12 +74,17 @@ export function computeLeaseOverdueStats(
   let unpaidCount = 0;
   let isOverdue = false;
   let overdueDueDate: string | null = null;
+  const records: DueBehaviourRecord[] = [];
+  let overdueAmount = 0;
+  let graceDueAmount = 0;
+  const paidTotal = payments.reduce((s, p) => s + p.amount, 0);
   // Chaque echeance est ancree sur `start` + N cycles (clamp fin de mois).
   let period = 0;
   let dueDate = start;
 
   while (dueDate.getTime() <= today.getTime() && (!boundary || dueDate.getTime() <= boundary.getTime())) {
     dueCount += 1;
+    const nextDue = addBillingCycle(start, billingCycle, period + 1);
 
     // Couverture par montants cumules : l'echeance N est couverte par le paiement
     // qui fait atteindre N loyers cumules (paiement groupe/avance couvre plusieurs).
@@ -88,13 +95,23 @@ export function computeLeaseOverdueStats(
       if (cumulated + 0.0001 >= (period + 1) * unit) { coveringPayment = p.date; break; }
     }
 
+    records.push({ dueDate, nextDue, settledAt: coveringPayment, open: !coveringPayment });
     if (coveringPayment) {
       if (isPastGrace(dueDate, coveringPayment, graceDays)) lateCount += 1;
-    } else if (isPastGrace(dueDate, today, graceDays)) {
-      lateCount += 1;
-      unpaidCount += 1;
-      isOverdue = true;
-      if (overdueDueDate === null) overdueDueDate = formatDateOnly(dueDate);
+    } else {
+      // Reste du de cette echeance (montants reels seulement si loyer exploitable).
+      const remaining = rentAmount > 0
+        ? Math.max(0, Math.min(rentAmount, roundMoney((period + 1) * rentAmount - Math.max(period * rentAmount, paidTotal), 2)))
+        : 0;
+      if (isPastGrace(dueDate, today, graceDays)) {
+        lateCount += 1;
+        unpaidCount += 1;
+        isOverdue = true;
+        if (overdueDueDate === null) overdueDueDate = formatDateOnly(dueDate);
+        overdueAmount = roundMoney(overdueAmount + remaining, 2);
+      } else {
+        graceDueAmount = roundMoney(graceDueAmount + remaining, 2);
+      }
     }
 
     period += 1;
@@ -110,6 +127,9 @@ export function computeLeaseOverdueStats(
     overdueDueDate,
     overdueDays: overdueDueDate ? daysSince(overdueDueDate, today) : 0,
     graceDays,
+    ...paymentBehaviour(records, today, graceDays),
+    overdueAmount,
+    graceDueAmount,
   };
 }
 
@@ -223,6 +243,20 @@ export function flaggedStatsFromState(
     const last = d.allocations.map((a) => a.paymentDate).filter((x): x is string => !!x).sort().pop();
     if (last && isPastGrace(d.dueDate, parseDateOnly(last), graceDays)) lateCount += 1;
   }
+  // Retard grave : echeance soldee (dernier paiement impute) ou toujours ouverte apres
+  // la grace de l'echeance SUIVANTE ; repli sur +1 mois pour la derniere echeance.
+  const records: DueBehaviourRecord[] = echues.map((d) => {
+    const idx = state.dues.indexOf(d);
+    const next = state.dues[idx + 1]?.dueDate;
+    const last = d.allocations.map((a) => a.paymentDate).filter((x): x is string => !!x).sort().pop();
+    return {
+      dueDate: parseDateOnly(d.dueDate),
+      nextDue: next ? parseDateOnly(next) : addBillingCycle(parseDateOnly(d.dueDate), "monthly", 1),
+      settledAt: d.remaining > 0 ? null : (last ? parseDateOnly(last) : null),
+      open: d.remaining > 0,
+    };
+  });
+  const sumRemaining = (xs: typeof echues) => roundMoney(xs.reduce((s, d) => s + d.remaining, 0), 2);
   const overdueDueDate = unpaid.length ? unpaid[0].dueDate : null;
   const futur = state.dues.find((d) => d.dueDate > todayStr && d.remaining > 0);
   return {
@@ -235,6 +269,9 @@ export function flaggedStatsFromState(
       overdueDueDate,
       overdueDays: overdueDueDate ? daysSince(overdueDueDate, today) : 0,
       graceDays,
+      ...paymentBehaviour(records, today, graceDays),
+      overdueAmount: sumRemaining(unpaid),
+      graceDueAmount: sumRemaining(echues.filter((d) => d.remaining > 0 && !isPastGrace(d.dueDate, today, graceDays))),
     },
     next: futur
       ? { rentProrationEnabled: prorationEnabled, nextDueDate: futur.dueDate, nextDueAmount: futur.remaining, isProratedNext: false }
@@ -495,6 +532,55 @@ export function formatMoneyFr(amount: unknown, symbol?: string | null): string {
     ? n.toLocaleString("fr-FR", { maximumFractionDigits: 2 })
     : String(amount ?? "");
   return symbol ? `${formatted} ${symbol}` : formatted;
+}
+
+/** Echeance echue non soldee, pour le preavis (montant reclame = reste). */
+export interface NoticeDueLine {
+  periodStart: string;
+  periodEnd: string | null;
+  dueDate: string;
+  amount: number;
+  remaining: number;
+  prorated: boolean;
+}
+
+/**
+ * Couverture sequentielle (plus anciennes d'abord) des echeances par le total verse :
+ * bail non flagge, sans imputation par echeance.
+ */
+export function coverDuesSequentially(
+  periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }>,
+  paidTotal: number,
+  decimals: number,
+): NoticeDueLine[] {
+  let left = Math.max(0, paidTotal);
+  return periods.map((p) => {
+    const used = Math.min(left, p.amount);
+    left = roundMoney(left - used, decimals);
+    return { ...p, remaining: Math.max(0, roundMoney(p.amount - used, decimals)) };
+  });
+}
+
+/**
+ * Preavis : seules les echeances dont la grace est depassee sont reclamees (late) ;
+ * celles echues mais encore dans la grace sont mentionnees a titre d'information.
+ */
+export function splitNoticeDues(lines: NoticeDueLine[], today: Date, graceDays: number, decimals: number) {
+  const todayStr = formatDateOnly(today);
+  const open = lines.filter((l) => l.dueDate <= todayStr && l.remaining > 0);
+  const late = open.filter((l) => isPastGrace(l.dueDate, today, graceDays));
+  const inGrace = open.filter((l) => !isPastGrace(l.dueDate, today, graceDays));
+  const sum = (xs: NoticeDueLine[]) => roundMoney(xs.reduce((s, l) => s + l.remaining, 0), decimals);
+  return { late, inGrace, lateTotal: sum(late), inGraceTotal: sum(inGrace) };
+}
+
+/** Libelle de periode : « juillet 2026 (du 07/07 au 31/07, prorata) » ou « aout 2026 ». */
+export function noticePeriodLabel(l: NoticeDueLine): string {
+  const d = parseDateOnly(l.periodStart);
+  const month = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
+  if (!l.prorated) return month;
+  const dm = (s: string) => parseDateOnly(s).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  return l.periodEnd ? `${month} (du ${dm(l.periodStart)} au ${dm(l.periodEnd)}, prorata)` : `${month} (prorata)`;
 }
 
 /**
