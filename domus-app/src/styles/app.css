@@ -1764,6 +1764,8 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .domus-dialog-body { padding:8px 24px 4px; }
 /* Apercu SMS avant envoi (useSmsSend) */
 .domus-sms-modal { max-width:520px; }
+/* Au-dessus des fenetres immo-modal (z-index 200) qui l ouvrent. */
+.modal-layer:has(> .domus-sms-modal) { z-index:300; }
 .domus-sms-body { display:grid; gap:10px; }
 .domus-sms-summary { margin:0; font-size:13px; font-weight:600; color:#334155; }
 .domus-sms-banner { margin:0; padding:9px 12px; border-radius:8px; font-size:13px; line-height:1.45; }
@@ -1778,6 +1780,7 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .domus-sms-missing ul { margin:4px 0 0; padding-left:18px; }
 .domus-sms-actions .btn { min-height:44px; }
 @media (max-width:480px) {
+  .modal-layer:has(> .domus-sms-modal) { padding:0; }
   .domus-sms-modal { width:100%; max-width:none; max-height:100vh; height:100%; border-radius:0; display:flex; flex-direction:column; }
   .domus-sms-body { flex:1; overflow:auto; padding:8px 12px; }
   .domus-sms-actions { position:sticky; bottom:0; background:#fff; padding-bottom:calc(8px + env(safe-area-inset-bottom)); }

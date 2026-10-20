@@ -208,7 +208,7 @@ function PromptDialog({ opts, onClose }) {
 
 function SmsSendDialog({ state, onDone }) {
   const { send, opts } = state;
-  const { title = t("Vérifier le SMS avant l'envoi") } = opts;
+  const { title = t("Vérifier le SMS avant l'envoi"), warning = "", danger = false } = opts;
   const [preview, setPreview] = useState(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -262,6 +262,7 @@ function SmsSendDialog({ state, onDone }) {
       <div className="domus-dialog-body domus-sms-body">
         {!preview && <p className="domus-dialog-message">{t("Préparation de l'aperçu…")}</p>}
         {notice && <p className="domus-sms-banner domus-sms-banner-warn" role="alert">{notice}</p>}
+        {warning && <p className="domus-sms-banner domus-sms-banner-warn">{warning}</p>}
         {preview?.smsDisabled && (
           <p className="domus-sms-banner domus-sms-banner-warn" role="status">
             {t("L'envoi de SMS est désactivé dans les réglages : les SMS seront notés « ignorés » et ne partiront pas.")}
@@ -313,7 +314,7 @@ function SmsSendDialog({ state, onDone }) {
       <div className="modal-actions domus-sms-actions">
         <button className="btn" autoFocus onClick={() => onDone(null)} disabled={busy}>{t("Annuler")}</button>
         <button
-          className="btn btn-primary"
+          className={`btn ${danger ? "btn-danger" : "btn-primary"}`}
           onClick={confirmSend}
           disabled={!preview || busy}
         >

@@ -748,7 +748,6 @@ const REMIND_TARGETS = [
 function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
   const isNotice = kind === "notice";
   const [sel, setSel] = useState({ tenant: true, emergency: true, owner: isNotice, delegates: false });
-  const [step, setStep] = useState("choose");
   const chosen = REMIND_TARGETS.filter((o) => sel[o.key]);
   const closeIfIdle = busy ? undefined : onClose;
   return (
@@ -757,12 +756,11 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
         <div className="immo-modal-head">
           <div>
             <div className="eyebrow">{card.name}</div>
-            <h3>{isNotice ? t("Préavis pour défaut de paiement") : t("Relancer")}{step === "choose" ? "" : ` — ${t("confirmation")}`}</h3>
+            <h3>{isNotice ? t("Préavis pour défaut de paiement") : t("Relancer")}</h3>
           </div>
           <button className="immo-flat-icon" onClick={onClose} disabled={busy} aria-label={t("Fermer")}><X size={16} /></button>
         </div>
         <div className="immo-modal-body">
-          {step === "choose" ? (
             <>
               <p className="immo-quickpay-note">
                 {isNotice
@@ -776,32 +774,14 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
                 </label>
               ))}
             </>
-          ) : (
-            <>
-              <p>
-                {isNotice
-                  ? t("Le préavis est tracé sur le bail (date d'envoi) et ne peut pas être annulé. Envoyer à :")
-                  : t("Les messages seront envoyés immédiatement à :")}
-              </p>
-              <ul style={{ margin: "6px 0 0 18px" }}>{chosen.map((o) => <li key={o.key}><strong>{t(o.label)}</strong></li>)}</ul>
-            </>
-          )}
         </div>
+        {/* « Continuer » ouvre l'aperçu SMS (useSmsSend) : texte exact + numéros,
+            c'est lui qui porte « Confirmer l'envoi ». */}
         <div className="immo-modal-foot">
-          {step === "choose" ? (
-            <>
-              <button className="immo-btn" onClick={onClose}>{t("Annuler")}</button>
-              <button className="immo-btn primary" onClick={() => setStep("confirm")} disabled={!chosen.length}>{t("Continuer")}</button>
-            </>
-          ) : (
-            <>
-              <button className="immo-btn" onClick={() => setStep("choose")} disabled={busy}>{t("Retour")}</button>
-              <button className={`immo-btn ${isNotice ? "danger" : "primary"}`} onClick={() => onSend(sel)} disabled={busy}
-                style={isNotice ? { background: "#dc2626", color: "#fff" } : undefined}>
-                {busy ? t("Envoi…") : <><BellRing size={16} /> {t("Confirmer l'envoi")}</>}
-              </button>
-            </>
-          )}
+          <button className="immo-btn" onClick={onClose} disabled={busy}>{t("Annuler")}</button>
+          <button className="immo-btn primary" onClick={() => onSend(sel)} disabled={!chosen.length || busy}>
+            {busy ? t("Envoi…") : t("Continuer")}
+          </button>
         </div>
       </div>
     </div>
@@ -1310,7 +1290,11 @@ export function Loyers({ go }) {
     setNoticingLeaseId(card.lease.id);
     try {
       // Aperçu obligatoire : texte exact + numéros, rien ne part avant « Confirmer l'envoi ».
-      const res = await smsSend((extra) => api.sendDefaultNotice(card.lease.id, targets, extra), { title: t("Préavis : vérifier le message") });
+      const res = await smsSend((extra) => api.sendDefaultNotice(card.lease.id, targets, extra), {
+        title: t("Préavis : vérifier le message"),
+        warning: t("Le préavis est tracé sur le bail (date d'envoi) et ne peut pas être annulé."),
+        danger: true,
+      });
       if (!res) return;
       const channels = [
         res?.smsSent ? "SMS" : null,

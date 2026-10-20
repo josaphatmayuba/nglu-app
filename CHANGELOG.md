@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — aperçu SMS : une seule confirmation (v3.241.1).** « Continuer » dans Relancer / Préavis ouvre directement l'aperçu (l'ancienne étape qui listait seulement les types de destinataires est retirée) ; l'avertissement du préavis passe dans l'aperçu ; la fenêtre d'aperçu s'affiche au-dessus de la fenêtre qui l ouvre (elle passait derrière).
 - **Domus — aperçu obligatoire du SMS avant envoi, lot 1 (v3.241.0).**
   - Relancer, Préavis pour défaut de paiement, Relancer les impayés, lien d'inscription (Locataires et Inscriptions) et Renvoyer le SMS ouvrent d'abord une fenêtre : texte exact, destinataires (rôle, nom, numéro), nombre de SMS facturés, personnes sans numéro, bandeau si les SMS sont désactivés. Rien ne part avant « Confirmer l'envoi ».
   - Le texte de l'aperçu est produit par le même code que l'envoi (`backend2/src/compat/sms-preview.ts`, capture AsyncLocalStorage dans `CompatService.sendSms` / `SystemEmailService.send`, écritures métier sautées). Les mêmes routes acceptent `{ preview: true }` puis `{ previewHash }` ; si le texte a changé entre-temps, 409 et nouvel aperçu. Sans ces champs, comportement historique : envois automatiques et anciens appels inchangés.
