@@ -108,7 +108,7 @@ import { isLeaseFlagged } from "./lease-allocation";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, type LeaseDueEntry } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
@@ -4921,41 +4921,51 @@ export class PropertyManagementService {
     const totalPaid = payments
       .filter((p) => p.status !== "pending" && p.status !== "settled")
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : 0;
-
-    // Mois exigibles depuis le debut du bail, mois courant inclus.
-    const now = new Date();
-    const start = new Date(`${lease.startDate}T00:00:00`);
-    const elapsedPast = Math.max(
-      0,
-      (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()),
-    );
-    const monthsDue = elapsedPast + 1;
-    let monthsBehind = Math.max(0, monthsDue - monthsCovered);
-    let balance = computeLeaseTotalDue(lease as any, totalPaid, 2, now);
-    let nextDueForLate: string | null = lease.nextInvoiceDate;
-    if ((lease as any).rentProrationEnabled) {
-      // Prorata opt-in : solde et retard par montants dus de periode.
-      const decimals = await this.currencyDecimals((lease as any).currencyId);
-      const todayStr = this.formatDateOnly(new Date());
-      const schedule = scheduleForLease(lease as any, decimals, totalPaid, todayStr);
-      const cov = applyCoverage(schedule, [totalPaid], todayStr, decimals);
-      const dueCount = schedule.filter((p) => p.dueDate <= todayStr).length;
-      monthsBehind = Math.max(0, dueCount - Math.min(cov.coveredCount, dueCount));
-      balance = computeLeaseTotalDue(lease as any, totalPaid, decimals, now);
-      nextDueForLate = cov.nextDueDate;
-    }
-
+    // Le preavis ne reclame que les echeances dont le delai de grace est depasse
+    // (meme regle que la carte Loyers) ; une echeance encore dans la grace est
+    // seulement mentionnee a titre d'information ({currentDue}).
+    const graceDays = await readOverdueGraceDays(this.db, orgId);
+    const todayStr = this.formatDateOnly(new Date());
+    const today = this.parseDateOnly(todayStr);
+    const decimals = await this.currencyDecimals((lease as any).currencyId);
+    let lines: NoticeDueLine[];
     if (isLeaseFlagged(lease)) {
-      // Bail flagge : retard et dette depuis l'etat impute (meme source que l'ecran Loyers).
-      const graceDays = await readOverdueGraceDays(this.db, orgId);
-      const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+      // Bail flagge : echeances imputees (meme source que l'ecran Loyers).
       const st = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))!;
-      const openDues = st.dues.filter((d) => d.dueDate <= this.formatDateOnly(today) && d.remaining > 0);
-      monthsBehind = openDues.length;
-      balance = st.totalDue;
-      nextDueForLate = openDues.length ? openDues[0].dueDate : null;
+      lines = st.dues.map((d) => ({
+        periodStart: d.periodStart,
+        periodEnd: d.periodEnd,
+        dueDate: d.dueDate,
+        amount: d.amount,
+        remaining: d.remaining,
+        prorated: rent > 0 && d.amount < rent - 0.005,
+      }));
+    } else if ((lease as any).rentProrationEnabled) {
+      // Prorata opt-in : montants dus par periode, couverts dans l'ordre.
+      const schedule = scheduleForLease(lease as any, decimals, totalPaid, todayStr);
+      lines = coverDuesSequentially(
+        schedule.filter((p) => p.dueDate <= todayStr).map((p) => ({
+          periodStart: p.periodStart, periodEnd: p.periodEnd, dueDate: p.dueDate, amount: p.amount, prorated: p.prorated,
+        })),
+        totalPaid,
+        decimals,
+      );
+    } else {
+      // Loyer fixe : une echeance par cycle depuis le debut du bail.
+      const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
+      const end = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
+      const periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }> = [];
+      for (let i = 0; i < 1200; i++) {
+        const due = this.formatDateOnly(addScheduleCycle(start, lease.billingCycle as any, i));
+        if (due > todayStr || (end && due > end)) break;
+        periods.push({ periodStart: due, periodEnd: null, dueDate: due, amount: rent, prorated: false });
+      }
+      lines = coverDuesSequentially(periods, totalPaid, decimals);
     }
+    const { late, inGrace, lateTotal, inGraceTotal } = splitNoticeDues(lines, today, graceDays, decimals);
+    const monthsBehind = late.length;
+    const balance = lateTotal;
+    const nextDueForLate: string | null = late.length ? late[0].dueDate : null;
 
     if (monthsBehind <= 1) {
       throw new BadRequestException(
@@ -4977,16 +4987,27 @@ export class PropertyManagementService {
       lease.propertyId ? Number(lease.propertyId) : null,
       orgId,
     );
+    const fmtDay = (s: string) =>
+      this.parseDateOnly(s).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const money = (n: number) => formatMoneyFr(n, lease.currencySymbol);
+    const currentDueLimit = inGrace.length
+      ? this.formatDateOnly(new Date(this.parseDateOnly(inGrace[0].dueDate).getTime() + graceDays * 86_400_000))
+      : null;
     const vars = {
       tenantName,
       firstName: lease.tenantFirstName || tenantName,
       reference: lease.reference || String(lease.id),
       address: place,
       property: place,
-      // totalDebt = dette TOTALE (loyers dus - verses) ; amount = meme valeur (ancien nom) ;
+      // amount / totalDebt = montant RECLAME : echeances dont la grace est depassee
+      // (le mois encore dans la grace n'y est pas, cf. {currentDue}) ;
       // rentAmount = loyer MENSUEL.
-      amount: formatMoneyFr(balance, lease.currencySymbol),
-      totalDebt: formatMoneyFr(balance, lease.currencySymbol),
+      amount: money(balance),
+      totalDebt: money(balance),
+      asOf: fmtDay(todayStr),
+      dueDetail: late.map((l) => `${noticePeriodLabel(l)} : ${money(l.remaining)}`).join(" ; "),
+      currentDue: inGrace.length ? money(inGraceTotal) : "",
+      currentDueDate: currentDueLimit ? fmtDay(currentDueLimit) : "",
       rentAmount: `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim(),
       monthsBehind: String(monthsBehind),
       daysLate: String(daysLate),
@@ -5001,6 +5022,21 @@ export class PropertyManagementService {
     // Texte pilote depuis Reglages > Messages (evenement "default_notice").
     // Chaque locataire du bail recoit SON preavis (nom + lien portail propres) ;
     // un echec pour l'un ne bloque pas les autres.
+    // Email : detail par echeance reclamee (le SMS garde le total seul).
+    const td = 'style="padding:4px 8px;border-bottom:1px solid #eee"';
+    const noticeDetailHtml =
+      `<p><strong>Loyers impayes au ${this.escapeHtml(vars.asOf)}</strong></p>` +
+      `<table style="border-collapse:collapse">` +
+      late.map((l) =>
+        `<tr><td ${td}>${this.escapeHtml(noticePeriodLabel(l))}</td><td ${td} align="right">${this.escapeHtml(money(l.remaining))}</td></tr>`,
+      ).join("") +
+      `<tr><td ${td}><strong>Total reclame</strong></td><td ${td} align="right"><strong>${this.escapeHtml(vars.amount)}</strong></td></tr>` +
+      `</table>` +
+      (vars.currentDue
+        ? `<p><em>Pour information : ${this.escapeHtml(vars.currentDue)} sont exigibles au plus tard le ${this.escapeHtml(vars.currentDueDate)}.</em></p>`
+        : "") +
+      `<p><em>Les loyers continuent de courir jusqu'a la liberation des lieux.</em></p>`;
+
     let smsSent = false;
     let emailSent = false;
     for (const r of targets.tenant ? recipients : []) {
@@ -5033,7 +5069,7 @@ export class PropertyManagementService {
 
         if (r.email) {
           const html = await this.tenantPortal.appendPortalFooterToEmail(
-            `<p>${this.escapeHtml(tenantMsg)}</p>`,
+            `<p>${this.escapeHtml(tenantMsg)}</p>${noticeDetailHtml}`,
             r.customerId,
             orgId,
           );

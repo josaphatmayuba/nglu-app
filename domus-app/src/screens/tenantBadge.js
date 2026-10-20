@@ -39,10 +39,15 @@ export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now())
   }
   // Retard historique cumulé sur TOUS les baux (actifs comme terminés), évalué
   // AVANT le cas "ancien" pour qu'un mauvais payeur parti reste signalé.
+  // Mauvais payeur = retards GRAVES récurrents : échéance réglée (ou toujours due)
+  // après la grâce de l'échéance suivante (ex. septembre payé en novembre), même
+  // s'il a tout soldé depuis. Payer en retard avant l'échéance suivante n'en fait pas un.
+  // severeLateCount absent (ancien backend) : repli sur lateCount.
   const totalLate = tenantLeases.reduce((s, l) => s + Number(l.lateCount || 0), 0);
+  const totalSevere = tenantLeases.reduce((s, l) => s + Number(l.severeLateCount ?? l.lateCount ?? 0), 0);
   const totalDue = tenantLeases.reduce((s, l) => s + Number(l.dueCount || 0), 0);
-  if (totalDue >= 3 && totalLate / totalDue > 0.3) {
-    return { label: `Mauvais payeur · ${totalLate} retards`, tone: "danger" };
+  if (totalDue >= 3 && totalSevere >= 2 && totalSevere / totalDue > 0.3) {
+    return { label: `Mauvais payeur · ${totalSevere} retards`, tone: "danger" };
   }
   const hasActive = tenantLeases.some((l) => l.status === "active");
   const daysToEnd = hasActive && activeLease?.endDate

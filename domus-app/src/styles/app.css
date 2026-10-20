@@ -919,6 +919,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-tenant-lease p { display:flex; align-items:center; gap:8px; margin:0 0 8px; color:#3f3f46; }
 .immo-tenant-lease > div { display:flex; align-items:center; justify-content:space-between; gap:9px; }
 .immo-tenant-lease span.danger { color:#dc2626; } .immo-tenant-lease strong { color:#09090b; font-weight:800; } .immo-tenant-lease strong.danger { color:#dc2626; }
+.immo-tenant-lease > div + div { margin-top:4px; } .immo-tenant-lease span.warning, .immo-tenant-lease strong.warning { color:#b45309; } .immo-tenant-lease strong.warning { font-weight:700; }
 
 /* Carte locataire cliquable (ouvre le tiroir de détail) */
 .immo-tenant-card.is-clickable { text-align:left; cursor:pointer; font:inherit; width:100%; display:block; transition:border-color .15s, box-shadow .15s, transform .15s; }

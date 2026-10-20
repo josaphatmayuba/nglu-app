@@ -4,6 +4,7 @@
  * Aucun acces DB / Nest : le service charge les donnees et applique le plan.
  */
 import {
+  addBillingCycle,
   applyCoverage,
   buildLeaseSchedule,
   cycleMonths,
@@ -117,6 +118,16 @@ export interface OverdueStats {
   lateRatio: number;
   isOverdue: boolean;
   overdueDueDate: string | null;
+  /**
+   * Retards graves (badge « Mauvais payeur ») : echeance soldee — ou toujours
+   * impayee — apres la grace de l'echeance SUIVANTE (ex. septembre paye en novembre).
+   * Un retard rattrape avant l'echeance suivante + grace n'en est pas un.
+   */
+  severeLateCount: number;
+  /** Reste du des echeances dont la grace est depassee (montant en retard). */
+  overdueAmount: number;
+  /** Reste du des echeances echues mais encore dans la grace. */
+  graceDueAmount: number;
 }
 
 /**
@@ -135,12 +146,21 @@ export function computeProratedOverdueStats(
   let unpaidCount = 0;
   let isOverdue = false;
   let overdueDueDate: string | null = null;
+  let severeLateCount = 0;
+  let overdueAmount = 0;
+  let graceDueAmount = 0;
   let cumulDue = 0;
-  for (const period of schedule) {
+  const paidTotal = paymentRows.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  for (let i = 0; i < schedule.length; i++) {
+    const period = schedule[i];
     const dueDate = parseDateOnly(period.dueDate);
     if (dueDate.getTime() > today.getTime()) break;
     dueCount += 1;
+    const prevCumul = cumulDue;
     cumulDue = roundMoney(cumulDue + period.amount, decimals);
+    const remaining = Math.max(0, Math.min(period.amount, roundMoney(cumulDue - Math.max(prevCumul, paidTotal), decimals)));
+    // Grace de l'echeance suivante : periode i+1 (l'echeancier deborde toujours d'au moins une periode).
+    const nextDue = schedule[i + 1] ? parseDateOnly(schedule[i + 1].dueDate) : addBillingCycle(dueDate, "monthly", 1);
     let coveringPayment: Date | null = null;
     let cumulated = 0;
     for (const p of paymentRows) {
@@ -152,6 +172,9 @@ export function computeProratedOverdueStats(
     }
     const graceLimit = new Date(dueDate.getTime());
     graceLimit.setUTCDate(graceLimit.getUTCDate() + graceDays);
+    const nextGraceLimit = new Date(nextDue.getTime());
+    nextGraceLimit.setUTCDate(nextGraceLimit.getUTCDate() + graceDays);
+    if ((coveringPayment ?? today).getTime() > nextGraceLimit.getTime()) severeLateCount += 1;
     if (coveringPayment) {
       if (coveringPayment.getTime() > graceLimit.getTime()) lateCount += 1;
     } else if (today.getTime() > graceLimit.getTime()) {
@@ -159,6 +182,10 @@ export function computeProratedOverdueStats(
       unpaidCount += 1;
       isOverdue = true;
       if (overdueDueDate === null) overdueDueDate = period.dueDate;
+    }
+    if (!coveringPayment) {
+      if (today.getTime() > graceLimit.getTime()) overdueAmount = roundMoney(overdueAmount + remaining, decimals);
+      else graceDueAmount = roundMoney(graceDueAmount + remaining, decimals);
     }
   }
   return {
@@ -168,6 +195,9 @@ export function computeProratedOverdueStats(
     lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
     isOverdue,
     overdueDueDate,
+    severeLateCount,
+    overdueAmount,
+    graceDueAmount,
   };
 }
 

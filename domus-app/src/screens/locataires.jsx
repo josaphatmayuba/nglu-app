@@ -162,6 +162,18 @@ function leaseRentLabel(activeLease, activeUnit, dueView = false) {
   return `${sym} ${Number(amount).toLocaleString("fr-FR")}`.trim();
 }
 
+// Total EN RETARD (echeances dont la grace est depassee, meme regle que le preavis) ;
+// null si le backend ne le fournit pas encore (repli sur l'affichage historique).
+function overdueTotalOf(activeLease) {
+  const n = Number(activeLease?.overdueAmount);
+  return activeLease?.overdueAmount != null && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function moneyLabel(amount, activeLease) {
+  const sym = activeLease?.currencySymbol || "";
+  return `${sym} ${Number(amount).toLocaleString("fr-FR")}`.trim();
+}
+
 function DomusTenantMoneyField({ label, value, currencyId, onAmountChange, onCurrencyChange }) {
   const options = tenantCurrencyOptions.length
     ? tenantCurrencyOptions
@@ -447,9 +459,24 @@ export function Locataires({ go } = {}) {
                 <div className="immo-tenant-lease">
                   <p>{unitKindIcon(activeUnit?.unitKind)} {activeLease?.propertyName || activeUnit?.name || activeUnit?.code || "—"}</p>
                   <div>
-                    <span className={isLate ? "danger" : ""}>Loyer · echeance {leaseDueLabel(activeLease)}</span>
-                    <strong className={isLate ? "danger" : ""}>{leaseRentLabel(activeLease, activeUnit, true)}</strong>
+                    {isLate && overdueTotalOf(activeLease) != null ? (
+                      <>
+                        <span className="danger">{t("Retard")} · {tf("depuis le {date}", { date: leaseDueLabel(activeLease) })}</span>
+                        <strong className="danger">{moneyLabel(overdueTotalOf(activeLease), activeLease)}</strong>
+                      </>
+                    ) : (
+                      <>
+                        <span className={isLate ? "danger" : ""}>Loyer · echeance {leaseDueLabel(activeLease)}</span>
+                        <strong className={isLate ? "danger" : ""}>{leaseRentLabel(activeLease, activeUnit, true)}</strong>
+                      </>
+                    )}
                   </div>
+                  {isLate && Number(activeLease?.graceDueAmount) > 0 && (
+                    <div>
+                      <span className="warning">{t("Dû · en grâce")}</span>
+                      <strong className="warning">+ {moneyLabel(activeLease.graceDueAmount, activeLease)}</strong>
+                    </div>
+                  )}
                 </div>
               </button>
             );

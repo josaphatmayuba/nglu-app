@@ -75,3 +75,29 @@ describe("paymentOverdueFields", () => {
     expect(paymentOverdueFields("pending", "2026-09-13", d("2026-10-14"), 30).isOverdue).toBe(true);
   });
 });
+
+describe("computeLeaseOverdueStats — retards graves et montants (preavis, badge)", () => {
+  it("paye en retard AVANT l'echeance suivante + grace : retard simple, pas grave", () => {
+    // Sept du 01/09, paye le 20/09 (apres grace 5 j, avant 01/10 + 5).
+    const s = computeLeaseOverdueStats("2026-09-01", null, "monthly", [{ date: "2026-09-20", amount: 100 }], 100, d("2026-09-25"), 5);
+    expect(s.lateCount).toBe(1);
+    expect(s.severeLateCount).toBe(0);
+  });
+  it("septembre paye en novembre (apres la grace d'octobre) : grave, meme tout solde", () => {
+    const s = computeLeaseOverdueStats(
+      "2026-09-01", null, "monthly",
+      [{ date: "2026-11-10", amount: 300 }], 100, d("2026-11-12"), 5,
+    );
+    // Sept (grace oct. depassee) et Oct (grace nov. depassee le 10/11) graves ; Nov paye a temps.
+    expect(s.severeLateCount).toBe(2);
+    expect(s.overdueAmount).toBe(0);
+  });
+  it("montant en retard vs en grace : le mois courant dans la grace n'est pas en retard", () => {
+    const s = computeLeaseOverdueStats("2026-08-01", null, "monthly", [{ date: "2026-08-02", amount: 50 }], 100, d("2026-10-03"), 5);
+    // Aout reste 50, Sept 100 en retard ; Oct (01/10, grace jusqu'au 06/10) 100 en grace.
+    expect(s.overdueAmount).toBe(150);
+    expect(s.graceDueAmount).toBe(100);
+    // Aout toujours du apres la grace de septembre : grave ; Sept pas encore (grace oct. non depassee).
+    expect(s.severeLateCount).toBe(1);
+  });
+});
