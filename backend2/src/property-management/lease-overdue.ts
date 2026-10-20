@@ -19,7 +19,9 @@ import {
   computeLeaseNextDue,
   computeLeaseTotalDue,
   computeProratedOverdueStats,
+  paymentBehaviour,
   scheduleForLease,
+  type DueBehaviourRecord,
   type LeaseNextDue,
   type OverdueStats,
 } from "./lease-proration";
@@ -72,7 +74,7 @@ export function computeLeaseOverdueStats(
   let unpaidCount = 0;
   let isOverdue = false;
   let overdueDueDate: string | null = null;
-  let severeLateCount = 0;
+  const records: DueBehaviourRecord[] = [];
   let overdueAmount = 0;
   let graceDueAmount = 0;
   const paidTotal = payments.reduce((s, p) => s + p.amount, 0);
@@ -93,8 +95,7 @@ export function computeLeaseOverdueStats(
       if (cumulated + 0.0001 >= (period + 1) * unit) { coveringPayment = p.date; break; }
     }
 
-    // Retard grave : solde (ou toujours impaye) apres la grace de l'echeance suivante.
-    if (isPastGrace(nextDue, coveringPayment ?? today, graceDays)) severeLateCount += 1;
+    records.push({ dueDate, nextDue, settledAt: coveringPayment, open: !coveringPayment });
     if (coveringPayment) {
       if (isPastGrace(dueDate, coveringPayment, graceDays)) lateCount += 1;
     } else {
@@ -126,7 +127,7 @@ export function computeLeaseOverdueStats(
     overdueDueDate,
     overdueDays: overdueDueDate ? daysSince(overdueDueDate, today) : 0,
     graceDays,
-    severeLateCount,
+    ...paymentBehaviour(records, today, graceDays),
     overdueAmount,
     graceDueAmount,
   };
@@ -244,13 +245,16 @@ export function flaggedStatsFromState(
   }
   // Retard grave : echeance soldee (dernier paiement impute) ou toujours ouverte apres
   // la grace de l'echeance SUIVANTE ; repli sur +1 mois pour la derniere echeance.
-  let severeLateCount = 0;
-  echues.forEach((d) => {
+  const records: DueBehaviourRecord[] = echues.map((d) => {
     const idx = state.dues.indexOf(d);
-    const next = state.dues[idx + 1]?.dueDate ?? formatDateOnly(addBillingCycle(parseDateOnly(d.dueDate), "monthly", 1));
+    const next = state.dues[idx + 1]?.dueDate;
     const last = d.allocations.map((a) => a.paymentDate).filter((x): x is string => !!x).sort().pop();
-    const settledAt = d.remaining > 0 ? today : (last ? parseDateOnly(last) : null);
-    if (settledAt && isPastGrace(next, settledAt, graceDays)) severeLateCount += 1;
+    return {
+      dueDate: parseDateOnly(d.dueDate),
+      nextDue: next ? parseDateOnly(next) : addBillingCycle(parseDateOnly(d.dueDate), "monthly", 1),
+      settledAt: d.remaining > 0 ? null : (last ? parseDateOnly(last) : null),
+      open: d.remaining > 0,
+    };
   });
   const sumRemaining = (xs: typeof echues) => roundMoney(xs.reduce((s, d) => s + d.remaining, 0), 2);
   const overdueDueDate = unpaid.length ? unpaid[0].dueDate : null;
@@ -265,7 +269,7 @@ export function flaggedStatsFromState(
       overdueDueDate,
       overdueDays: overdueDueDate ? daysSince(overdueDueDate, today) : 0,
       graceDays,
-      severeLateCount,
+      ...paymentBehaviour(records, today, graceDays),
       overdueAmount: sumRemaining(unpaid),
       graceDueAmount: sumRemaining(echues.filter((d) => d.remaining > 0 && !isPastGrace(d.dueDate, today, graceDays))),
     },

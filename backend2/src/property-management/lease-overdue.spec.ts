@@ -101,3 +101,32 @@ describe("computeLeaseOverdueStats — retards graves et montants (preavis, badg
     expect(s.severeLateCount).toBe(1);
   });
 });
+
+describe("computeLeaseOverdueStats — amelioration (fenetre 12 mois, mois a jour d'affilee)", () => {
+  // Bail du 01/01/2025, loyer 100, grace 5 : jan-mars 2025 payes en mai (graves), puis tout a temps.
+  const pays = [
+    { date: "2025-05-03", amount: 500 }, // couvre jan-mai 2025 : jan-mars graves (soldes apres la grace du mois suivant), avril non (03/05 <= 06/05)
+    ...["06", "07", "08", "09", "10", "11", "12"].map((m) => ({ date: `2025-${m}-02`, amount: 100 })),
+    ...["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"].map((m) => ({ date: `2026-${m}-02`, amount: 100 })),
+  ];
+  const s = computeLeaseOverdueStats("2025-01-01", null, "monthly", pays, 100, d("2026-10-20"), 5);
+  it("retards graves anciens comptes dans l'historique, pas dans la fenetre de 12 mois", () => {
+    expect(s.severeLateCount).toBe(3);
+    expect(s.recentSevereLateCount).toBe(0);
+    expect(s.recentDueCount).toBe(12);
+  });
+  it("mois a jour d'affilee depuis la derniere echeance", () => {
+    expect(s.onTimeStreak).toBeGreaterThanOrEqual(17);
+  });
+  it("echeance courante encore dans la grace : neutre, ne casse pas la serie", () => {
+    const t = computeLeaseOverdueStats("2026-07-01", null, "monthly",
+      [{ date: "2026-07-02", amount: 100 }, { date: "2026-08-02", amount: 100 }, { date: "2026-09-02", amount: 100 }],
+      100, d("2026-10-03"), 5);
+    expect(t.onTimeStreak).toBe(3);
+  });
+  it("echeance impayee apres sa grace : serie a 0", () => {
+    const t = computeLeaseOverdueStats("2026-07-01", null, "monthly",
+      [{ date: "2026-07-02", amount: 100 }, { date: "2026-08-02", amount: 100 }], 100, d("2026-09-20"), 5);
+    expect(t.onTimeStreak).toBe(0);
+  });
+});

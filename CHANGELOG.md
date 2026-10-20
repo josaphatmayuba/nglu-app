@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — « Mauvais payeur » : fenêtre de 12 mois et réhabilitation (v3.240.0, ticket Jira à créer).**
+  - Seuls les retards graves des 12 derniers mois comptent (`recentSevereLateCount` / `recentDueCount`) : un retard ancien ne marque plus le locataire.
+  - Réhabilitation automatique selon les mois payés dans la grâce d'affilée (`onTimeStreak`, échéance encore en grâce = neutre) : 3 à 5 mois → badge orange « En amélioration · N mois à jour », 6 mois → statut levé. Moins de 3 → « Mauvais payeur » reste.
+  - Valeurs fixes (12 / 3 / 6) ; réglage org possible plus tard (migration nécessaire).
+
 - **Domus — préavis, carte Locataires et « Mauvais payeur » alignés sur le délai de grâce (v3.239.0, ticket Jira à créer).**
   - Préavis pour défaut de paiement : `{monthsBehind}` et `{amount}`/`{totalDebt}` ne comptent plus que les échéances dont le délai de grâce est dépassé (avant : le mois courant encore en grâce était ajouté, ex. 4 mois / 11 419,35 $ au lieu de 3 mois / 8 419,35 $). Le seuil « plus d'un mois » suit la même règle. Nouvelles variables : `{asOf}`, `{dueDetail}`, `{currentDue}`, `{currentDueDate}`. L'email joint le détail mois par mois (prorata indiqué), le mois en grâce « pour information » et la mention « les loyers continuent de courir ». Le SMS garde le total seul.
   - Carte Locataires en retard : affiche le total en retard (au lieu du seul montant de la plus ancienne échéance) et, en orange, le montant encore dans la grâce. Nouveaux champs bail `overdueAmount`, `graceDueAmount`.
