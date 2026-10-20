@@ -229,7 +229,7 @@ export const api = {
   // Historique des communications (email + SMS) envoyées à ce locataire.
   tenantCommunications: (id) => get(`/tenants/${id}/communications`),
   // Renvoi d'un SMS dont l'envoi a echoue (reprend destinataire + texte du log).
-  resendSmsLog: (logId) => post(`/sms-logs/${logId}/resend`),
+  resendSmsLog: (logId, extra) => post(`/sms-logs/${logId}/resend`, extra),
   // Communiqués SMS : aperçu des destinataires, envoi (asynchrone), historique, suivi, renvoi des échecs.
   announcementPreview: (b) => post("/announcements/preview", b),
   createAnnouncement: (b) => post("/announcements", b),
@@ -242,7 +242,7 @@ export const api = {
   updateOnboarding: (id, b) => patch(`/onboarding/${id}`, b),
   validateOnboarding: (id) => post(`/onboarding/${id}/validate`),
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
-  sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),
+  sendOnboardingSms: (id, extra) => post(`/onboarding/${id}/send-sms`, extra),
   sendOnboardingEmail: (id) => post(`/onboarding/${id}/send-email`),
 
   owners: () => get("/owners"),
@@ -341,9 +341,10 @@ export const api = {
   sendReminder: (b) => post("/payments/reminder", b),
   // Preavis pour defaut de paiement : reserve aux baux qui doivent plus d'un
   // mois de loyer (le backend revalide le seuil et refuse sinon).
-  sendDefaultNotice: (leaseId, targets) => post("/payments/default-notice", { leaseId, targets }),
-  runOverdueReminders: () => post("/payments/run-overdue-reminders"),
-  remindLease: (leaseId, targets) => post("/payments/remind-lease", { leaseId, targets }),
+  // extra = { preview: true } (aperçu) ou { previewHash } (confirmation) : voir useSmsSend.
+  sendDefaultNotice: (leaseId, targets, extra) => post("/payments/default-notice", { leaseId, targets, ...extra }),
+  runOverdueReminders: (extra) => post("/payments/run-overdue-reminders", extra),
+  remindLease: (leaseId, targets, extra) => post("/payments/remind-lease", { leaseId, targets, ...extra }),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
   // manquantes en statut pending, une ligne par mois calendaire ecoule non couvert.

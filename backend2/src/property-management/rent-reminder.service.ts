@@ -21,6 +21,7 @@ import { formatMoneyFr, loadFlaggedDueStates, loadLeaseTotalDue, readOverdueGrac
 import { isLeaseFlagged } from "./lease-allocation";
 import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
+import { isPreviewing, notePreviewMissing } from "../compat/sms-preview";
 
 /** Marqueur interne : SMS non envoye car desactive (pas un echec). */
 const SMS_SKIPPED = "__sms_skipped__";
@@ -95,6 +96,9 @@ export class RentReminderService {
   async runOverdueReminders(
     only?: { leaseId: number; orgId: number; targets?: ReminderTargets },
     schedule?: { hour: number },
+    // Bouton « Relancer les impayes » : limite a l'organisation de l'utilisateur
+    // (la passe automatique, sans scope, couvre toujours toutes les organisations).
+    scope?: { orgId: number },
   ) {
     const configs = new Map<number, ReminderConfig>();
     // Passe automatique : tout le monde. Relance manuelle : destinataires choisis.
@@ -154,6 +158,7 @@ export class RentReminderService {
           only
             ? and(eq(realEstateLeases.id, only.leaseId), eq(realEstateLeases.organizationId, only.orgId))
             : or(lte(realEstateLeases.nextInvoiceDate, cutoffStr), isNotNull(realEstateLeases.allocationLedgerAt)),
+          scope ? eq(realEstateLeases.organizationId, scope.orgId) : undefined,
         ),
       );
 
@@ -273,7 +278,10 @@ export class RentReminderService {
                 ? tenantMsg
                 : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, lease.organizationId),
             );
-            const err = await this.safeSms(r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel);
+            const err = await this.safeSms(
+              r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel,
+              `Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`,
+            );
             if (err === SMS_SKIPPED) {
               smsSkipped += 1;
             } else if (err) {
@@ -282,6 +290,8 @@ export class RentReminderService {
             } else {
               sentCount += 1;
             }
+          } else {
+            notePreviewMissing(`Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`);
           }
 
           if (r.email) {
@@ -314,7 +324,12 @@ export class RentReminderService {
           multi ? { ...baseVars, tenantName: groupName } : baseVars,
           multi ? undefined : { tenantId: lease.tenantId },
         );
-        await this.safeSms(lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId);
+        await this.safeSms(
+          lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId, undefined,
+          `Contact d'urgence · bail ${lease.reference || lease.leaseId}`,
+        );
+      } else if (targets.emergency) {
+        notePreviewMissing(`Contact d'urgence · bail ${lease.reference || lease.leaseId}`);
       }
 
       // Le PROPRIETAIRE du bien est prevenu du retard au meme rythme que le
@@ -333,7 +348,7 @@ export class RentReminderService {
       // Throttle par BAIL, pose UNE seule fois apres la boucle. Tous les SMS ont
       // echoue : on ne marque PAS la periode comme relancee, pour que la
       // prochaine passe automatique (ou un nouveau clic) puisse le renvoyer.
-      if (targets.tenant && smsStatus !== "failed") {
+      if (targets.tenant && smsStatus !== "failed" && !isPreviewing()) {
         await this.db
           .update(realEstateLeases)
           .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
@@ -537,6 +552,7 @@ export class RentReminderService {
     leaseId: number,
     organizationId: number,
     related: { relatedType: string; relatedId: number } = { relatedType: "real-estate-lease", relatedId: leaseId },
+    previewLabel?: string,
   ): Promise<string | null> {
     try {
       const res = await this.sms.sendSms({
@@ -545,6 +561,7 @@ export class RentReminderService {
         organizationId,
         smsType: "payment_reminder",
         ...related,
+        previewLabel,
       });
       if (!res?.success) {
         if ((res as any)?.skipped) return SMS_SKIPPED;

@@ -51,6 +51,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
+import { isPreviewing, notePreviewMissing } from "../compat/sms-preview";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.service";
@@ -667,13 +668,17 @@ export class PropertyManagementService {
     const result = await this.sms.sendSms({
       phone,
       message,
+      // Sans organisation, l'envoi etait trace (et l'interrupteur SMS lu) sur l'organisation 1.
+      organizationId: orgId,
       // Option A : Twilio rappellera cet endpoint public signe pour tracer la
       // livraison reelle (voir handleSmsStatusCallback).
       statusCallback: `${env.appUrl.replace(/\/$/, "")}/api/tenant-onboarding/sms-status`,
+      previewLabel: ["Futur locataire", [data.firstName, data.lastName].filter(Boolean).join(" ")].filter(Boolean).join(" · "),
     });
     if (!result?.success) {
       throw new BadRequestException(result?.message || "Impossible d'envoyer le SMS.");
     }
+    if (isPreviewing()) return null;
 
     await this.db
       .update(tenantOnboardings)
@@ -5064,7 +5069,9 @@ export class PropertyManagementService {
               ? tenantMsg
               : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, orgId),
           );
-          if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel)) smsSent = true;
+          if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel, `Locataire · ${r.name || tenantName}`)) smsSent = true;
+        } else {
+          notePreviewMissing(`Locataire · ${r.name || tenantName}`);
         }
 
         if (r.email) {
@@ -5110,7 +5117,9 @@ export class PropertyManagementService {
         groupVars,
         multi ? undefined : { tenantId: lease.tenantId },
       );
-      contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId);
+      contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId, undefined, "Contact d'urgence");
+    } else if (targets.emergency) {
+      notePreviewMissing("Contact d'urgence");
     }
 
     // Le proprietaire est prevenu qu'un preavis a ete notifie sur son bien.
@@ -5128,7 +5137,7 @@ export class PropertyManagementService {
 
     // Trace : date d'envoi (preuve que le locataire a ete averti) + mois dus a
     // cet instant. Ecrite seulement si au moins un canal locataire a abouti.
-    if (targets.tenant) {
+    if (targets.tenant && !isPreviewing()) {
       await this.db
         .update(realEstateLeases)
         .set({
@@ -5158,6 +5167,7 @@ export class PropertyManagementService {
     leaseId: number,
     orgId: number,
     related: { relatedType: string; relatedId: number } = { relatedType: "real-estate-lease", relatedId: leaseId },
+    previewLabel?: string,
   ) {
     try {
       const res = await this.sms.sendSms({
@@ -5166,6 +5176,7 @@ export class PropertyManagementService {
         organizationId: orgId,
         smsType: "default_notice",
         ...related,
+        previewLabel,
       });
       if (!res?.success) {
         this.logger.warn(`Default notice SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
@@ -5989,6 +6000,11 @@ export class PropertyManagementService {
    * le corps exacts du log d'origine ; sendSms cree une NOUVELLE ligne de log,
    * l'ancienne reste telle quelle pour garder l'historique des tentatives.
    */
+  /** Bandeau « SMS desactives » de l'apercu avant envoi. */
+  smsDisabled(orgId: number) {
+    return this.sms.isSmsDisabled(orgId);
+  }
+
   async resendSmsLog(logId: number, orgId: number) {
     const rows = await this.db
       .select({
@@ -6012,6 +6028,7 @@ export class PropertyManagementService {
       smsType: log.smsType,
       relatedType: log.relatedType ?? undefined,
       relatedId: log.relatedId ?? undefined,
+      previewLabel: "Même destinataire que l'envoi d'origine",
     });
     return { success: Boolean(res?.success), message: res?.message ?? null };
   }

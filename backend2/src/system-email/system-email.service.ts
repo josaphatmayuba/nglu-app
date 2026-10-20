@@ -6,6 +6,7 @@ import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import { systemEmailLogs } from "../database/schema";
 import type { Database } from "../database/types";
+import { isPreviewing } from "../compat/sms-preview";
 
 export type SystemEmailType =
   | "contract_signature"
@@ -113,6 +114,8 @@ export class SystemEmailService {
   }
 
   async send(input: SendInput) {
+    // Apercu SMS « Confirmer l'envoi » : l'email associe ne part pas non plus.
+    if (isPreviewing()) return { sent: true, skipped: false, logId: 0 };
     const logId = await this.createLog(input, "pending");
 
     if (!this.isConfigured()) {

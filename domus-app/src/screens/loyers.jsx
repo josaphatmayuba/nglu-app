@@ -13,7 +13,7 @@ import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, pay
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
-import { useToast } from "../components/Dialog.jsx";
+import { useSmsSend, useToast } from "../components/Dialog.jsx";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
@@ -1160,6 +1160,7 @@ export function Loyers({ go }) {
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
   const toast = useToast();
+  const smsSend = useSmsSend();
   const [proofView, setProofView] = useState(null);
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
@@ -1308,7 +1309,9 @@ export function Loyers({ go }) {
     if (!card.lease?.id || noticingLeaseId) return;
     setNoticingLeaseId(card.lease.id);
     try {
-      const res = await api.sendDefaultNotice(card.lease.id, targets);
+      // Aperçu obligatoire : texte exact + numéros, rien ne part avant « Confirmer l'envoi ».
+      const res = await smsSend((extra) => api.sendDefaultNotice(card.lease.id, targets, extra), { title: t("Préavis : vérifier le message") });
+      if (!res) return;
       const channels = [
         res?.smsSent ? "SMS" : null,
         res?.emailSent ? "email" : null,
@@ -1329,7 +1332,8 @@ export function Loyers({ go }) {
     if (!card.lease?.id || remindingLeaseId) return;
     setRemindingLeaseId(card.lease.id);
     try {
-      const res = await api.remindLease(card.lease.id, targets);
+      const res = await smsSend((extra) => api.remindLease(card.lease.id, targets, extra), { title: t("Relance : vérifier le message") });
+      if (!res) return;
       if (res?.enabled === false) toast.info?.(t("Envoi des rappels désactivé sur cet environnement."));
       else if (!targets?.tenant) toast.success(t("Rappel envoyé."));
       else if (res?.smsStatus === "no_phone") toast.error(tf(t("Aucun SMS : {name} n'a pas de numéro de téléphone (courriel seulement)."), { name: card.name }));
@@ -1404,7 +1408,9 @@ export function Loyers({ go }) {
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-            onClick={() => api.runOverdueReminders().then(() => toast.success(t("Rappels lancés"))).catch((e) => toast.error(e.message))}>
+            onClick={() => smsSend((extra) => api.runOverdueReminders(extra), { title: t("Relancer les impayés : vérifier les messages") })
+              .then((res) => { if (res) toast.success(t("Rappels lancés")); })
+              .catch((e) => toast.error(e.message))}>
             <BellRing size={16} /> Relancer les impayés
           </button>
         </div>

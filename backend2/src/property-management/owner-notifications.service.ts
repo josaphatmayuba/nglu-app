@@ -696,6 +696,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         smsType,
         relatedType,
         relatedId,
+        // Libelle affiche dans l'apercu « Confirmer l'envoi » (ignore a l'envoi reel).
+        previewLabel: `${smsType.includes("delegate") ? "Délégué" : "Propriétaire"} · ${target.name}`,
       });
       if (!res?.success) {
         this.logger.warn(`Owner SMS not sent (${smsType}, owner ${target.id}, ${target.phone}): ${res?.message}`);

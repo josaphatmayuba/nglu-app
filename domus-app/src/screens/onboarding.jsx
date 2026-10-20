@@ -15,7 +15,7 @@ import { t, tf } from "../i18n.js";
 import { useDateRange } from "../dateRange.jsx";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
-import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ApiError, Loading } from "./dashboard.jsx";
 import {
   OnboardingCard, OnboardingLinkModal, isPendingOnboarding, onboardingUrl,
@@ -185,6 +185,7 @@ export function Onboarding({ go } = {}) {
   const dateRange = useDateRange();
   const confirm = useConfirm();
   const toast = useToast();
+  const smsSend = useSmsSend();
 
   const onboarding = useMemo(() => {
     const list = Array.isArray(data?.onboarding) ? data.onboarding : [];
@@ -230,7 +231,12 @@ export function Onboarding({ go } = {}) {
   const openLink = (value) => { if (value) window.open(value, "_blank", "noopener,noreferrer"); };
   const resendSms = async (record) => {
     setSendingId(`${record.id}:sms`);
-    try { await api.sendOnboardingSms(record.id); await reload(); toast.success(t("SMS envoyé.")); }
+    try {
+      const res = await smsSend((extra) => api.sendOnboardingSms(record.id, extra), { title: t("Lien d'inscription : vérifier le SMS") });
+      if (!res) return;
+      await reload();
+      toast.success(t("SMS envoyé."));
+    }
     catch (e) { toast.error(e.message || String(e)); }
     finally { setSendingId(null); }
   };

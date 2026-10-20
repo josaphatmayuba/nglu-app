@@ -14,7 +14,7 @@ import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
-import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
 import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
@@ -197,6 +197,7 @@ export function Locataires({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
   const confirm = useConfirm();
   const toast = useToast();
+  const smsSend = useSmsSend();
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
   const dateRange = useDateRange();
   const tenants = useMemo(
@@ -279,7 +280,8 @@ export function Locataires({ go } = {}) {
     setActionError("");
     setSendingId(`${record.id}:sms`);
     try {
-      await api.sendOnboardingSms(record.id);
+      const res = await smsSend((extra) => api.sendOnboardingSms(record.id, extra), { title: t("Lien d'inscription : vérifier le SMS") });
+      if (!res) return;
       await reload();
       toast.success(t("SMS envoyé."));
     } catch (e) {
@@ -847,6 +849,7 @@ function TenantCommunications({ tenantId }) {
   const [error, setError] = useState("");
   const [resendingId, setResendingId] = useState(null);
   const toast = useToast();
+  const smsSend = useSmsSend();
 
   const load = () => api.tenantCommunications(tenantId);
 
@@ -865,7 +868,8 @@ function TenantCommunications({ tenantId }) {
   const resend = async (logId) => {
     setResendingId(logId);
     try {
-      const res = await api.resendSmsLog(logId);
+      const res = await smsSend((extra) => api.resendSmsLog(logId, extra), { title: t("Renvoyer le SMS : vérifier le message") });
+      if (!res) return;
       if (res?.success) toast.success(t("SMS renvoyé."));
       else toast.error(res?.message || t("Le renvoi a échoué."));
       const fresh = await load();

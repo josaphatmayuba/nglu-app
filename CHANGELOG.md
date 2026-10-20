@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — aperçu obligatoire du SMS avant envoi, lot 1 (v3.241.0).**
+  - Relancer, Préavis pour défaut de paiement, Relancer les impayés, lien d'inscription (Locataires et Inscriptions) et Renvoyer le SMS ouvrent d'abord une fenêtre : texte exact, destinataires (rôle, nom, numéro), nombre de SMS facturés, personnes sans numéro, bandeau si les SMS sont désactivés. Rien ne part avant « Confirmer l'envoi ».
+  - Le texte de l'aperçu est produit par le même code que l'envoi (`backend2/src/compat/sms-preview.ts`, capture AsyncLocalStorage dans `CompatService.sendSms` / `SystemEmailService.send`, écritures métier sautées). Les mêmes routes acceptent `{ preview: true }` puis `{ previewHash }` ; si le texte a changé entre-temps, 409 et nouvel aperçu. Sans ces champs, comportement historique : envois automatiques et anciens appels inchangés.
+  - Correctifs : « Relancer les impayés » ne relance plus que l'organisation de l'utilisateur (avant : toutes) ; SMS du lien d'inscription et de la pré-sélection rattachés à la bonne organisation (avant : organisation 1, et interrupteur SMS lu au mauvais endroit).
+
 - **Domus — « Mauvais payeur » : fenêtre de 12 mois et réhabilitation (v3.240.0, ticket Jira à créer).**
   - Seuls les retards graves des 12 derniers mois comptent (`recentSevereLateCount` / `recentDueCount`) : un retard ancien ne marque plus le locataire.
   - Réhabilitation automatique selon les mois payés dans la grâce d'affilée (`onTimeStreak`, échéance encore en grâce = neutre) : 3 à 5 mois → badge orange « En amélioration · N mois à jour », 6 mois → statut levé. Moins de 3 → « Mauvais payeur » reste.
