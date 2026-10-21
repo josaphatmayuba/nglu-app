@@ -277,6 +277,8 @@ export class OwnerNotificationsService implements OnModuleInit {
       "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. Merci de regulariser rapidement. Contact : {contacts}",
       // v3.242.2 : ~175 caracteres avec un long nom, le nom du bailleur sautait au raccourcissement.
       "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
+      // Meme texte stocke avec {monthlyRent} (constate en dev).
+      "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({monthlyRent}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
     ],
     payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
     default_notice: [
