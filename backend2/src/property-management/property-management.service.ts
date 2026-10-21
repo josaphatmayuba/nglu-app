@@ -5070,10 +5070,9 @@ export class PropertyManagementService {
         };
         const tenantMsg = await this.ownerNotifications.renderMessage(
           "default_notice",
-          "Bonjour {tenantName}, ceci est un préavis : vous devez {monthsBehind} mois de loyer ({amount}) à votre propriétaire {ownerName}. Sans paiement, le bail pourra être annulé. Contactez le bailleur au {ownerPhone}.",
+          "PRÉAVIS - {tenantName}, vous devez {monthsBehind} mois de loyer ({amount}). Sans paiement, le bail pourra être annulé. Bailleur : {ownerName}, {ownerPhone}.",
           rVars,
-          // Preavis : jusqu'a 2 SMS pour garder l'annulation du bail et le contact du bailleur.
-          { tenantId: r.customerId, maxLength: 306 },
+          { tenantId: r.customerId },
         );
         const rel = multi
           ? { relatedType: "tenant", relatedId: r.customerId }
@@ -5082,7 +5081,7 @@ export class PropertyManagementService {
         if (r.phone) {
           // Preavis : pas de lien portail ajoute au SMS (inutile ici, et il prenait la place
           // du message). Il reste dans l'email, et dans le SMS seulement si le modele contient {url}.
-          const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg, 306);
+          const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg);
           if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel, `Locataire · ${r.name || tenantName}`)) smsSent = true;
         } else {
           notePreviewMissing(`Locataire · ${r.name || tenantName}`);

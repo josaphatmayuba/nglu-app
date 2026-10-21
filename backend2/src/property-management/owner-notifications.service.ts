@@ -173,7 +173,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "default_notice",
       subject: "Preavis pour defaut de paiement — bail {reference}",
       body:
-        "Bonjour {tenantName}, ceci est un préavis : vous devez {monthsBehind} mois de loyer ({amount}) à votre propriétaire {ownerName}. Sans paiement, le bail pourra être annulé. Contactez le bailleur au {ownerPhone}.",
+        "PRÉAVIS - {tenantName}, vous devez {monthsBehind} mois de loyer ({amount}). Sans paiement, le bail pourra être annulé. Bailleur : {ownerName}, {ownerPhone}.",
     },
     {
       name: "Preavis defaut de paiement — personne de contact",
@@ -586,8 +586,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     eventType: string,
     fallback: string,
     vars: Record<string, string>,
-    // maxLength : 160 = 1 SMS (defaut) ; 306 = 2 SMS, reserve aux messages qui ne tiennent pas en 1 (preavis).
-    opts?: { tenantId?: number | null; sex?: string | null; maxLength?: number },
+    opts?: { tenantId?: number | null; sex?: string | null },
   ): Promise<string> {
     let text = fallback;
     // Civilite (Mr/Mme) pour tout message ADRESSE au locataire : {tenantName} et
@@ -621,7 +620,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     }
     // Un template mal rempli peut laisser des placeholders inconnus : on les
     // retire plutot que d'envoyer "{foo}" tel quel au destinataire.
-    return this.fitOneSms(this.tidy(text.replace(/\{[a-zA-Z]+\}/g, "")), opts?.maxLength);
+    return this.fitOneSms(this.tidy(text.replace(/\{[a-zA-Z]+\}/g, "")));
   }
 
   /**
