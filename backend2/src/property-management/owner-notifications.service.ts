@@ -704,7 +704,13 @@ export class OwnerNotificationsService implements OnModuleInit {
     };
 
     const url = text.match(/https?:\/\/\S+/)?.[0] ?? "";
-    if (!url) return clip(text, limit);
+    if (!url) {
+      // Telephone en fin de message (« Bailleur : X, +243... ») : garde integralement,
+      // comme un lien — c'est le texte qui precede qui est raccourci.
+      const phone = text.match(/\+?\d[\d .-]{6,}\d\.?$/)?.[0] ?? "";
+      if (!phone || phone.length >= limit - 10) return clip(text, limit);
+      return `${clip(text.slice(0, -phone.length).trimEnd(), limit - phone.length - 1)} ${phone}`.slice(0, limit);
+    }
 
     // On garde " <url>" en fin de message et on rogne ce qui precede.
     const body = text.replace(url, "").trim();

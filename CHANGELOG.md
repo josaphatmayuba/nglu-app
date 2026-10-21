@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **SMS trop long : le téléphone du bailleur n'est plus coupé (v3.242.3).** `fitOneSms` garde intégralement un numéro de téléphone placé en fin de message (comme un lien) et raccourcit le texte qui précède. Constaté en prod : « Bailleur : ANICET NGOMA NDELE,... » perdait le numéro avec un long nom et « 11 mois et 24 jours ».
 - **Domus — SMS plus courts et plus clairs (v3.242.2).**
   - Le numéro de bail (`{reference}`) est retiré de tous les SMS, y compris des modèles personnalisés dans Réglages › Messages (règle dans `renderMessage`). Il reste dans les objets d'email.
   - Relance de loyer en retard : « Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}. » Plus de lien portail ajouté au SMS (il coupait le message) ; il reste dans l'email.
