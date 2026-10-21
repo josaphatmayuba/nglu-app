@@ -4999,6 +4999,11 @@ export class PropertyManagementService {
       lease.propertyId ? Number(lease.propertyId) : null,
       orgId,
     );
+    // Le preavis nomme le bailleur et son telephone : proprietaire du bien, sinon la societe.
+    const landlord = await this.ownerNotifications.landlordForProperty(lease.propertyId ? Number(lease.propertyId) : null, orgId);
+    const noticeCompany = await readOrgAppSetting(this.db, orgId, { name: appSettings.companyName, phone: appSettings.phone });
+    const noticeOwnerName = landlord.name || String(noticeCompany?.name || "");
+    const noticeOwnerPhone = landlord.phone || String(noticeCompany?.phone || "").trim();
     const fmtDay = (s: string) =>
       this.parseDateOnly(s).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
     const money = (n: number) => formatMoneyFr(n, lease.currencySymbol);
@@ -5026,6 +5031,10 @@ export class PropertyManagementService {
       ownerContact: contacts.ownerContact,
       managerContact: contacts.managerContact,
       contacts: contacts.contacts,
+      // Le preavis doit nommer le bailleur : proprietaire du bien, sinon la societe.
+      ownerName: noticeOwnerName,
+      landlordName: noticeOwnerName,
+      ownerPhone: noticeOwnerPhone,
       url: "",
     };
     // Nom(s) pour le proprietaire / la personne de contact : "A & B" si plusieurs locataires.
@@ -5061,21 +5070,19 @@ export class PropertyManagementService {
         };
         const tenantMsg = await this.ownerNotifications.renderMessage(
           "default_notice",
-          "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({totalDebt}). " +
-            "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
+          "Bonjour {tenantName}, ceci est un préavis : vous devez {monthsBehind} mois de loyer ({amount}) à votre propriétaire {ownerName}. Sans paiement, le bail pourra être annulé. Contactez le bailleur au {ownerPhone}.",
           rVars,
-          { tenantId: r.customerId },
+          // Preavis : jusqu'a 2 SMS pour garder l'annulation du bail et le contact du bailleur.
+          { tenantId: r.customerId, maxLength: 306 },
         );
         const rel = multi
           ? { relatedType: "tenant", relatedId: r.customerId }
           : { relatedType: "real-estate-lease", relatedId: leaseId };
 
         if (r.phone) {
-          const smsWithFooter = this.ownerNotifications.fitOneSms(
-            rVars.url && tenantMsg.includes(rVars.url)
-              ? tenantMsg
-              : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, orgId),
-          );
+          // Preavis : pas de lien portail ajoute au SMS (inutile ici, et il prenait la place
+          // du message). Il reste dans l'email, et dans le SMS seulement si le modele contient {url}.
+          const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg, 306);
           if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel, `Locataire · ${r.name || tenantName}`)) smsSent = true;
         } else {
           notePreviewMissing(`Locataire · ${r.name || tenantName}`);

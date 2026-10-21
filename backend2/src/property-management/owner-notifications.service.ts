@@ -173,8 +173,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "default_notice",
       subject: "Preavis pour defaut de paiement — bail {reference}",
       body:
-        "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). " +
-        "Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
+        "Bonjour {tenantName}, ceci est un préavis : vous devez {monthsBehind} mois de loyer ({amount}) à votre propriétaire {ownerName}. Sans paiement, le bail pourra être annulé. Contactez le bailleur au {ownerPhone}.",
     },
     {
       name: "Preavis defaut de paiement — personne de contact",
@@ -258,14 +257,18 @@ export class OwnerNotificationsService implements OnModuleInit {
   ];
 
   /** Anciens textes par defaut (trop longs pour 1 SMS) : remplaces au demarrage uniquement si la ligne est restee identique. */
-  private static readonly LEGACY_DEFAULT_BODIES: Record<string, string> = {
+  private static readonly LEGACY_DEFAULT_BODIES: Record<string, string | string[]> = {
     contract_signature: "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
     lease_created: "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
     contract_signed: "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). Pour toute question, contactez {contacts}. — {companyName}",
     payment_received: "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
     payment_reminder: "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}) est en retard de {lateLabel}. Montant du : {amount}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
     payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
-    default_notice: "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+    default_notice: [
+      "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
+      // Version courte precedente : ne disait pas « preavis » d'entree ni le nom du bailleur.
+      "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
+    ],
     default_notice_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de paiement sera depose. Merci de l'inviter a contacter {contacts}.",
     tenant_onboarding: "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
     tenant_created_owner: "Nouveau dossier locataire : {tenantName} ({tenantPhone}). {profession} chez {employer}, revenu {income}. {maritalStatus} {spouse}. {occupants} occupants. Contact : {emergencyContact}.",
@@ -316,7 +319,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         const body = row.body || "";
         const legacy = row.eventType ? OwnerNotificationsService.LEGACY_DEFAULT_BODIES[row.eventType] : undefined;
         const fresh = OwnerNotificationsService.DEFAULT_TEMPLATES.find((t) => t.eventType === row.eventType);
-        if (legacy && fresh && norm(body) === norm(legacy)) {
+        const legacyList = legacy === undefined ? [] : Array.isArray(legacy) ? legacy : [legacy];
+        if (fresh && legacyList.some((l) => norm(body) === norm(l))) {
           await this.db.update(emailTemplates).set({ body: fresh.body }).where(eq(emailTemplates.id, row.id));
           this.logger.log(`Message template shortened for SMS: ${row.eventType}`);
           continue;
@@ -582,7 +586,8 @@ export class OwnerNotificationsService implements OnModuleInit {
     eventType: string,
     fallback: string,
     vars: Record<string, string>,
-    opts?: { tenantId?: number | null; sex?: string | null },
+    // maxLength : 160 = 1 SMS (defaut) ; 306 = 2 SMS, reserve aux messages qui ne tiennent pas en 1 (preavis).
+    opts?: { tenantId?: number | null; sex?: string | null; maxLength?: number },
   ): Promise<string> {
     let text = fallback;
     // Civilite (Mr/Mme) pour tout message ADRESSE au locataire : {tenantName} et
@@ -616,7 +621,7 @@ export class OwnerNotificationsService implements OnModuleInit {
     }
     // Un template mal rempli peut laisser des placeholders inconnus : on les
     // retire plutot que d'envoyer "{foo}" tel quel au destinataire.
-    return this.fitOneSms(this.tidy(text.replace(/\{[a-zA-Z]+\}/g, "")));
+    return this.fitOneSms(this.tidy(text.replace(/\{[a-zA-Z]+\}/g, "")), opts?.maxLength);
   }
 
   /**
@@ -766,6 +771,26 @@ export class OwnerNotificationsService implements OnModuleInit {
    * n'exige pas de telephone : on veut le nom meme si le bailleur n'est pas
    * joignable par SMS. Retourne "" si le bien n'a pas de proprietaire assigne.
    */
+  /** Bailleur d'un bien (nom + telephone) pour le preavis ; telephone "" si absent. */
+  async landlordForProperty(propertyId: number | null | undefined, orgId: number): Promise<{ name: string; phone: string }> {
+    if (!propertyId) return { name: "", phone: "" };
+    try {
+      const [row] = await this.db
+        .select({ name: realEstateOwners.displayName, phone: realEstateOwners.phone, phone2: realEstateOwners.phone2 })
+        .from(realEstateProperties)
+        .innerJoin(realEstateOwners, eq(realEstateOwners.id, realEstateProperties.ownerId))
+        .where(and(
+          eq(realEstateProperties.id, propertyId),
+          eq(realEstateProperties.organizationId, orgId),
+          eq(realEstateOwners.organizationId, orgId),
+        ))
+        .limit(1);
+      return { name: row?.name || "", phone: (row?.phone || row?.phone2 || "").trim() };
+    } catch {
+      return { name: "", phone: "" };
+    }
+  }
+
   async ownerNameForProperty(propertyId: number | null | undefined, orgId: number): Promise<string> {
     if (!propertyId) return "";
     try {

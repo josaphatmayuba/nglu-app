@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — SMS de préavis réécrit (v3.242.1).** Texte clair : « Bonjour {tenantName}, ceci est un préavis : vous devez {monthsBehind} mois de loyer ({amount}) à votre propriétaire {ownerName}. Sans paiement, le bail pourra être annulé. Contactez le bailleur au {ownerPhone}. » Plus de lien portail dans le SMS (il reste dans l'email). Bailleur = propriétaire du bien (nom + téléphone), sinon la société. Ce message peut aller jusqu'à 2 SMS (`renderMessage(..., { maxLength: 306 })`) pour ne pas couper le numéro. Les organisations qui avaient gardé l'ancien texte par défaut reçoivent le nouveau au démarrage ; un texte personnalisé n'est pas touché.
 - **Aperçu SMS avant envoi, lots 2 à 4 + coût des SMS (v3.242.0).**
   - Domus : aperçu avant l'envoi d'un contrat pour signature, le renvoi du lien à un signataire, le message de bienvenue, la génération du lien portail et le refus d'un justificatif (le refus n'est enregistré qu'après confirmation). Le lien de signature, recréé à chaque envoi, est masqué dans l'aperçu et les anciens liens restent valides tant qu'on n'a pas confirmé.
   - Domus : le renvoi d'un communiqué aux destinataires en échec montre le texte et le nombre de SMS avant de confirmer.
