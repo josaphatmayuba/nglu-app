@@ -425,6 +425,8 @@ export class RentReminderService {
           isNotNull(realEstateLeases.endDate),
           lte(realEstateLeases.endDate, horizonStr),
           gte(realEstateLeases.endDate, todayStr),
+          // Resiliation programmee active : pas de rappel de fin de bail.
+          sql`NOT EXISTS (SELECT 1 FROM real_estate_lease_scheduled_terminations st WHERE st.lease_id = ${realEstateLeases.id} AND st.status = 'scheduled')`,
         ),
       );
 

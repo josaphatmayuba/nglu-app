@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : résiliation programmée d'un bail (v3.243.0).**
+  - Date d'effet future (jusqu'à 6 mois, avant la fin du bail) : le bail reste actif, le logement reste loué, une ligne `real_estate_lease_scheduled_terminations` est créée (migration 0319). SMS locataire immédiat optionnel (événement `lease_termination_scheduled`, réglable dans Réglages). Un seul planning actif par bail (409 sinon).
+  - Exécution automatique chaque jour à 00:30 UTC (`LeaseScheduledTerminationService`, idempotente, retry sur erreur) : bail résilié, échéances futures annulées, logement recalculé. Pas de 2e SMS. Les rappels de fin de bail sont exclus pendant le planning.
+  - `POST /property-management/leases/:id/scheduled-termination/cancel` (statut `cancelled`, jamais de DELETE) tant que la date n'est pas atteinte ; résiliation immédiate avec planning actif : planning `obsolete`.
+  - Occupation du logement : `recomputeUnitOccupancy` (vacant seulement s'il n'y a plus aucun bail actif) utilisé par la résiliation, `updateLease` et `deleteLease` (ne libère plus à tort une unité ayant un autre bail actif). `availableFrom` exposé sur les logements, `soonVacantUnits` au tableau de bord.
+  - domus-app : modale « Programmer la résiliation », badge « Résiliation prévue le … », action « Annuler la résiliation », « Libre le … » sur les logements, sélecteur de logement trié (Libre / Libre le … / Loué).
 - **Relance de loyer : montant = retard réel, bailleur cohérent (v3.242.4).**
   - `{amount}` des SMS de retard (locataire, contact d'urgence, propriétaire, délégué) = montant **en retard** (échéances dont la grâce est dépassée, = « Retard » de la carte Loyers) via `loadLeaseOverdueAmount`, au lieu du total dû qui incluait le mois encore dans sa grâce (constaté : « en retard … (6 000 $) » pour 3 000 $ de retard). Le total dû reste disponible via `{totalDue}`.
   - SMS au contact d'urgence : `{contacts}` cite le bailleur seul (même nom et numéro que le SMS au locataire). Avant, le raccourcissement à 160 caractères gardait le dernier numéro, celui du gestionnaire, accolé au nom du propriétaire.

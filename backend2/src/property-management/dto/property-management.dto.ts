@@ -2291,6 +2291,14 @@ export class SignInspectionDto {
   signerName: string;
 }
 
+export class CancelScheduledTerminationDto {
+  @ApiPropertyOptional({ description: "Motif d'annulation (facultatif)." })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  reason?: string;
+}
+
 export class TerminateLeaseDto {
   @ApiProperty({ example: "2027-03-31", description: "Date d'effet de la resiliation (YYYY-MM-DD)." })
   @IsDateString()

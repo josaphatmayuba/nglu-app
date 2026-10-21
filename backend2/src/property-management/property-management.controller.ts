@@ -63,6 +63,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  CancelScheduledTerminationDto,
   TerminateLeaseDto,
   CreateTenantDto,
   CreateUnitDto,
@@ -1036,14 +1037,22 @@ export class PropertyManagementController {
     @CurrentUserId() userId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    const result = await this.propertyManagementService.terminateLease(id, body, orgId, userId, scope);
-    // Contrat envoye mais pas signe : les liens de signature sont desactives (best-effort).
-    try {
-      await this.contractsService.resetSignersForLease(id, orgId);
-    } catch {
-      /* ne bloque jamais la resiliation */
-    }
-    return result;
+    // Liens de signature desactives (best-effort) dans executeTermination.
+    return this.propertyManagementService.terminateLease(id, body, orgId, userId, scope);
+  }
+
+  @ApiOperation({ summary: "Annuler une resiliation programmee (tant que la date d'effet n'est pas atteinte)" })
+  @Permissions("delete-propertyManagement")
+  @Post("leases/:id/scheduled-termination/cancel")
+  @HttpCode(200)
+  cancelScheduledTermination(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelScheduledTerminationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.cancelScheduledTermination(id, body?.reason, orgId, userId, scope);
   }
 
   @ApiOperation({ summary: "Delete a lease" })

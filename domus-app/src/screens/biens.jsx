@@ -797,7 +797,7 @@ function PropertyTable({ rows, onOpen, onEdit, onDelete, go }) {
               <td>{property.tenant}</td>
               <td>{property.area}</td>
               <td><b>{property.rent}</b><span className="muted"> /mois</span></td>
-              <td><StatusPill status={property.status} /></td>
+              <td><StatusPill status={property.status} availableFrom={property.availableFrom} /></td>
               <td className="row-actions">
                 <button title="Modifier" onClick={(e) => { e.stopPropagation(); onEdit(property); }}><Edit3 size={15} /></button>
                 <button title="Paiements" onClick={(e) => { e.stopPropagation(); go?.("loyers"); }}>$</button>
@@ -925,7 +925,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
             <h3>{property.name}</h3>
             <p>{property.address}</p>
           </div>
-          <StatusPill status={property.status} />
+          <StatusPill status={property.status} availableFrom={property.availableFrom} />
         </section>
 
         <div className="domus-property-detail-grid">
@@ -1545,9 +1545,18 @@ function Kpi({ label, value }) {
   );
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, availableFrom }) {
   const cls = status === "Retard" ? "late" : status === "Loue" ? "leased" : status === "Maintenance" ? "maintenance" : "free";
-  return <span className={`status-pill ${cls}`}><i /> {status}</span>;
+  // Résiliation programmée : le logement reste compté loué, la date de libération s'affiche en plus.
+  const freeOn = availableFrom && (status === "Loue" || status === "Retard")
+    ? tf(t("Libre le {date}"), { date: String(availableFrom).slice(0, 10).split("-").reverse().join("/") })
+    : "";
+  return (
+    <span className={`status-pill ${cls}`}>
+      <i /> {status}
+      {freeOn && <small className="domus-free-on" style={{ marginLeft: 6, fontWeight: 600, color: "#b45309" }}>{freeOn}</small>}
+    </span>
+  );
 }
 
 function normalizeProperty(property) {
@@ -1631,6 +1640,7 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = n
     type,
     status,
     rawStatus,
+    availableFrom: unit.availableFrom || null,
     paymentStatus: leaseState?.status || "ok",
     name: owner.name || unit.propertyName || `Propriete #${unit.propertyId}`,
     address: [unit.propertyAddress || owner.address, owner.city].filter(Boolean).join(" - ") || "Adresse non renseignee",

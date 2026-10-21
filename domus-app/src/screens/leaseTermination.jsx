@@ -10,9 +10,15 @@ import { useToast } from "../components/Dialog.jsx";
 const REASON_MIN = 5;
 const REASON_MAX = 2000;
 const dayOf = (v) => String(v || "").slice(0, 10);
-const todayLocalISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// Jour courant en UTC, comme l'API (formatDateOnly(new Date())).
+const todayLocalISO = () => new Date().toISOString().slice(0, 10);
+// Résiliation programmée : au plus tard aujourd'hui + 6 mois (miroir de TERMINATION_MAX_FUTURE_MONTHS côté API).
+const MAX_FUTURE_MONTHS = 6;
+const maxLocalISO = () => {
+  // Même règle que l'API : setUTCMonth(+6) sans écrêtage.
+  const d = new Date(`${todayLocalISO()}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + MAX_FUTURE_MONTHS);
+  return d.toISOString().slice(0, 10);
 };
 const fmtDay = (iso) => (iso ? new Date(`${iso}T00:00:00Z`).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }) : "");
 const tenantLabel = (l) => [l.tenantFirstName, l.tenantLastName].filter(Boolean).join(" ") || l.tenantName || t("Locataire");
@@ -22,6 +28,8 @@ const LAYERS = ".modal-layer, .immo-modal-scrim, .edl-screen";
 export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, onOpenDeposit, onOpenExitInspection }) {
   const toast = useToast();
   const today = todayLocalISO();
+  const endDay = dayOf(lease.endDate);
+  const maxDate = (() => { const m = maxLocalISO(); return endDay && endDay < m ? endDay : m; })();
   const minDate = dayOf(lease.startDate);
   const [date, setDate] = useState(() => (minDate && today < minDate ? minDate : today));
   const [reason, setReason] = useState("");
@@ -41,7 +49,8 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   onCloseRef.current = onClose;
 
   const dateFormatOk = /^\d{4}-\d{2}-\d{2}$/.test(date);
-  const dateValid = dateFormatOk && (!minDate || date >= minDate) && date <= today;
+  const dateValid = dateFormatOk && (!minDate || date >= minDate) && date <= maxDate;
+  const scheduled = dateFormatOk && date > today;
   const trimmed = reason.trim();
   const reasonValid = trimmed.length >= REASON_MIN && trimmed.length <= REASON_MAX;
 
@@ -102,7 +111,10 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
         reason: trimmed,
         notifyTenant: notifyChecked,
       });
-      if (notifyChecked && res?.sms?.failed > 0) toast.error?.(t("Bail résilié, mais l'envoi du SMS a échoué pour au moins un locataire."));
+      if (res?.scheduled) {
+        if (notifyChecked && res?.sms?.failed > 0) toast.error?.(t("Résiliation programmée, mais l'envoi du SMS a échoué pour au moins un locataire."));
+        else toast.success?.(tf(t("Résiliation programmée le {date}."), { date: fmtDay(date) }));
+      } else if (notifyChecked && res?.sms?.failed > 0) toast.error?.(t("Bail résilié, mais l'envoi du SMS a échoué pour au moins un locataire."));
       else toast.success?.(t("Bail résilié."));
       onDone?.(res);
     } catch (e) {
@@ -119,8 +131,8 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   };
   const dateError = dateValid
     ? ""
-    : date > today && dateFormatOk
-      ? t("La date ne peut pas être dans le futur.")
+    : date > maxDate && dateFormatOk
+      ? tf(t("La date doit être au plus tard le {max}."), { max: fmtDay(maxDate) })
       : tf(t("La date doit être le {min} ou après."), { min: fmtDay(minDate) });
 
   return (
@@ -131,7 +143,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
           <div className="domus-modal-title">
             <span className="domus-modal-title-icon"><FileX size={20} /></span>
             <div>
-              <h2 id={`term-title-${lease.id}`}>{t("Résilier le bail")}</h2>
+              <h2 id={`term-title-${lease.id}`}>{scheduled ? t("Programmer la résiliation") : t("Résilier le bail")}</h2>
               <p>{tenantLabel(lease)} · {[lease.propertyName || lease.propertyAddress, lease.unitName].filter(Boolean).join(" · ") || "—"}</p>
             </div>
           </div>
@@ -148,7 +160,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
                 type="date"
                 value={date}
                 min={minDate || undefined}
-                max={today}
+                max={maxDate}
                 onChange={(e) => setDate(e.target.value)}
                 aria-invalid={!dateValid}
                 aria-describedby={dateError ? ids.dateErr : undefined}
@@ -242,12 +254,18 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
 
         {error && <p id={ids.error} role="alert" className="domus-terminate-error domus-terminate-error-box">{error}</p>}
 
-        <p className="domus-terminate-final">{t("Cette action est définitive : le bail passera en Résilié et les échéances futures seront annulées.")}</p>
+        {scheduled ? (
+          <p className="domus-terminate-final">
+            {tf(t("Le bail reste actif jusqu'au {date} ; les échéances après cette date seront annulées automatiquement."), { date: fmtDay(date) })}
+          </p>
+        ) : (
+          <p className="domus-terminate-final">{t("Cette action est définitive : le bail passera en Résilié et les échéances futures seront annulées.")}</p>
+        )}
 
         <div className="domus-modal-footer">
           <button type="button" className="domus-modal-cancel" onClick={onClose} disabled={busy}>{t("Annuler")}</button>
           <button type="button" className="domus-modal-submit domus-terminate-submit" onClick={submit} disabled={!canSubmit}>
-            <FileX size={14} /> {busy ? t("Résiliation…") : t("Résilier")}
+            <FileX size={14} /> {busy ? t("Résiliation…") : scheduled ? t("Programmer la résiliation") : t("Résilier")}
           </button>
         </div>
       </div>

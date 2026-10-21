@@ -231,6 +231,14 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Pour toute question, contactez votre gestionnaire {managerContact}.",
     },
     {
+      name: "Resiliation programmee — locataire",
+      eventType: "lease_termination_scheduled",
+      subject: "Votre bail prendra fin le {terminationDate}",
+      body:
+        "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, prendra fin le {terminationDate}. " +
+        "Pour toute question, contactez votre gestionnaire {managerContact}.",
+    },
+    {
       name: "Proprietaire — fin de bail",
       eventType: "lease_expiring_owner",
       subject: "Fin de bail {reference} sur votre bien",

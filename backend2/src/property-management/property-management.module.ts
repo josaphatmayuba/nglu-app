@@ -26,6 +26,7 @@ import { OwnerNotificationsService } from "./owner-notifications.service";
 import { OwnerPortalPublicController } from "./owner-portal-public.controller";
 import { OwnerPortalService } from "./owner-portal.service";
 import { GeocodingService } from "./geocoding.service";
+import { LeaseScheduledTerminationService } from "./lease-scheduled-termination.service";
 import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 import { TenantPortalPublicController } from "./tenant-portal-public.controller";
@@ -58,6 +59,7 @@ import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.servic
     InspectionsService,
     ContractTemplatesService,
     RentReminderService,
+    LeaseScheduledTerminationService,
     TenantPortalService,
     OwnerPortalService,
     DelegatePortalService,

@@ -90,6 +90,11 @@ function monthsBetween(a, b) {
 }
 
 // Réplique leaseDisplayInfo du CRM, sans moment (Date natif).
+const todayYmd = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 function leaseInfo(l) {
   // Date seule AAAA-MM-JJ lue en jour LOCAL (new Date("YYYY-MM-DD") = minuit UTC).
   const start = l.startDate ? parseDomusDate(l.startDate) : null;
@@ -104,9 +109,18 @@ function leaseInfo(l) {
 
   // Bail résilié avec motif (statut ended + termination_reason) : distinct d'un « Terminé » de renouvellement.
   const terminated = isTerminatedLease(l);
-  const variant = isExpired || terminated ? "expired" : daysLeft !== null && daysLeft <= 60 ? "pendingSignature" : "signed";
-  const tone = isExpired || terminated ? "danger" : daysLeft !== null && daysLeft <= 60 ? "warning" : "success";
-  const statusText = terminated ? t("Résilié") : isExpired ? "Expiré" : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
+  // Résiliation programmée (bail encore actif) : prioritaire sur « À renouveler ».
+  const scheduledDate = !terminated && !isExpired && l.scheduledTerminationDate ? String(l.scheduledTerminationDate).slice(0, 10) : "";
+  const scheduledReached = Boolean(scheduledDate) && scheduledDate <= todayYmd();
+  const variant = isExpired || terminated ? "expired" : scheduledDate ? "signed" : daysLeft !== null && daysLeft <= 60 ? "pendingSignature" : "signed";
+  const tone = isExpired || terminated ? "danger" : scheduledDate || (daysLeft !== null && daysLeft <= 60) ? "warning" : "success";
+  const statusText = terminated
+    ? t("Résilié")
+    : isExpired
+      ? "Expiré"
+      : scheduledDate
+        ? tf(t("Résiliation prévue le {date}"), { date: scheduledDate.split("-").reverse().join("/") })
+        : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
 
   // dueCount/lateCount viennent du backend (withOverdueStats) : échéances
   // réellement rapprochées des paiements enregistrés, pas juste la durée
@@ -119,7 +133,7 @@ function leaseInfo(l) {
   const paidLateCount = lateCount !== null ? Math.max(0, lateCount - (unpaidCount || 0)) : null;
 
   return {
-    terminated, variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
+    scheduledDate, scheduledReached, terminated, variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
     dueCount, lateCount, unpaidCount, paidLateCount, paidOnTimeCount, isOverdue: !!l.isOverdue,
     reference: `#${l.reference || `LEASE-${l.id}`}`,
     propertyLabel: [l.propertyAddress || l.propertyName, l.unitName].filter(Boolean).join(" · ") || "—",
@@ -476,6 +490,10 @@ export function Baux({ go } = {}) {
                         setOpenMenuId(null);
                         setTerminateModal({ lease, rev: 0 });
                       }}
+                      onCancelScheduled={() => {
+                        setOpenMenuId(null);
+                        handleCancelScheduledTermination(lease, setBusyAction, setActionError, reload, confirm);
+                      }}
                       onCancelLease={() => {
                         setOpenMenuId(null);
                         handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm);
@@ -621,6 +639,7 @@ function LeaseActionsMenu({
   onEdit,
   onRenew,
   onDelete,
+  onCancelScheduled,
   onCancelLease,
   onClose,
 }) {
@@ -677,7 +696,11 @@ function LeaseActionsMenu({
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
           {renewable && <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>}
           {/* Résilier uniquement si le contrat est signé. */}
-          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> {t("Résilier le bail")}</button>
+          {info.scheduledDate && !info.scheduledReached ? (
+            <button disabled={disabled} style={{ height: 44 }} onClick={onCancelScheduled}><X size={15} /> {t("Annuler la résiliation")}</button>
+          ) : (
+            <button disabled={disabled} style={{ height: 44 }} className="danger" onClick={onDelete}><Trash2 size={15} /> {t("Résilier le bail")}</button>
+          )}
           <button disabled={disabled} className="danger" onClick={onCancelLease}><Trash2 size={15} /> {t("Annuler le bail (erreur de saisie)")}</button>
         </>
       )}
@@ -958,7 +981,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 value={form.unitId}
                 required
                 onChange={setUnit}
-                options={propertyUnits.map((unit) => [String(unit.id), unitLabel(unit, properties)])}
+                options={[...propertyUnits].sort((a, b) => unitRank(a) - unitRank(b)).map((unit) => [String(unit.id), unitLabel(unit, properties, true)])}
               />
             </div>
             <LeaseSelect
@@ -1688,6 +1711,27 @@ async function handleCancelContract(contract, setBusyAction, setActionError, rel
 }
 
 // Annulation d'un bail créé par erreur (statut "cancelled", bail masqué) : distincte de la résiliation avec motif.
+async function handleCancelScheduledTermination(lease, setBusyAction, setActionError, reload, confirm) {
+  const date = String(lease.scheduledTerminationDate || "").slice(0, 10).split("-").reverse().join("/");
+  const ok = await confirm({
+    title: t("Annuler la résiliation"),
+    message: tf(t("Annuler la résiliation prévue le {date} ? Le bail continuera normalement."), { date }),
+    confirmLabel: t("Annuler la résiliation"),
+    danger: true,
+  });
+  if (!ok) return;
+  setBusyAction(`cancel-term-${lease.id}`);
+  setActionError("");
+  try {
+    await api.cancelScheduledTermination(lease.id, {});
+    await reload();
+  } catch (e) {
+    setActionError(e.message || t("Impossible d'annuler la résiliation."));
+  } finally {
+    setBusyAction("");
+  }
+}
+
 async function handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm) {
   const ok = await confirm({
     title: t("Annuler le bail (erreur de saisie)"),
@@ -1768,9 +1812,22 @@ function dateOnly(value) {
   return value ? String(value).slice(0, 10) : "";
 }
 
-function unitLabel(unit, properties) {
+// Libres d'abord (0), puis libres bientôt (1), puis loués (2) : simple tri, aucun blocage.
+function unitRank(unit) {
+  if (String(unit.status || "").toLowerCase() === "vacant") return 0;
+  return unit.availableFrom ? 1 : 2;
+}
+
+function unitLabel(unit, properties, withState = false) {
   const property = properties.find((item) => String(item.id) === String(unit.propertyId));
-  return [property?.name || unit.propertyName, unit.name || unit.code || `Unite #${unit.id}`].filter(Boolean).join(" · ");
+  const base = [property?.name || unit.propertyName, unit.name || unit.code || `Unite #${unit.id}`].filter(Boolean).join(" · ");
+  if (!withState) return base;
+  const state = String(unit.status || "").toLowerCase() === "vacant"
+    ? t("Libre")
+    : unit.availableFrom
+      ? tf(t("Libre le {date}"), { date: String(unit.availableFrom).slice(0, 10).split("-").reverse().join("/") })
+      : t("Loué");
+  return `${base} · ${state}`;
 }
 
 function tenantLabel(tenant) {
