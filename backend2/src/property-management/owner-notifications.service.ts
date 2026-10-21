@@ -128,7 +128,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "lease_created",
       subject: "Votre bail {reference} est confirme",
       body:
-        "Bonjour {tenantName}, bail {reference} actif : {address}, loyer {amount}. " +
+        "Bonjour {tenantName}, votre bail est actif : {address}, {unit}, loyer {amount}. " +
         "Proprietaire : {landlordName}. {companyName}",
     },
     {
@@ -136,7 +136,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "contract_signed",
       subject: "Bienvenue ! Votre bail {reference} est signe et confirme",
       body:
-        "Bonjour {tenantName}, bail {reference} signe. Bienvenue au {address}, appt {unit}, " +
+        "Bonjour {tenantName}, votre bail est signé. Bienvenue au {address}, appt {unit}, " +
         "du {startDate} au {endDate}. Contact : {contacts}",
     },
     {
@@ -144,15 +144,14 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "payment_received",
       subject: "Paiement recu — bail {reference}",
       body:
-        "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !",
+        "Bonjour {firstName}, paiement de {amount} reçu. Quittance : {url}. Merci !",
     },
     {
       name: "Rappel de loyer en retard",
       eventType: "payment_reminder",
       subject: "Rappel : loyer en retard — bail {reference}",
       body:
-        "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. " +
-        "Merci de regulariser rapidement. Contact : {contacts}",
+        "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
     },
     {
       name: "Rappel de loyer — personne de contact",
@@ -166,7 +165,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       name: "Justificatif de paiement refuse",
       eventType: "payment_proof_rejected",
       subject: "Justificatif de paiement refuse — bail {reference}",
-      body: "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}",
+      body: "Bonjour {tenantName}, justificatif refusé : {reason}. Renvoyez-le ici : {url}",
     },
     {
       name: "Preavis pour defaut de paiement — locataire",
@@ -259,10 +258,24 @@ export class OwnerNotificationsService implements OnModuleInit {
   /** Anciens textes par defaut (trop longs pour 1 SMS) : remplaces au demarrage uniquement si la ligne est restee identique. */
   private static readonly LEGACY_DEFAULT_BODIES: Record<string, string | string[]> = {
     contract_signature: "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
-    lease_created: "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
-    contract_signed: "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). Pour toute question, contactez {contacts}. — {companyName}",
-    payment_received: "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
-    payment_reminder: "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}) est en retard de {lateLabel}. Montant du : {amount}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
+    lease_created: [
+      "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
+      "Bonjour {tenantName}, bail {reference} actif : {address}, loyer {amount}. Proprietaire : {landlordName}. {companyName}",
+    ],
+    contract_signed: [
+      "Bonjour {tenantName}, bail {reference} signe. Bienvenue au {address}, appt {unit}, du {startDate} au {endDate}. Contact : {contacts}",
+      "Bonjour {tenantName}, felicitations ! Votre contrat de bail {reference} est bien signe. Bienvenue dans votre nouveau logement : {address}, appartement {unit}. Votre bailleur est {landlordName}. Votre location court du {startDate} au {endDate} ({duration}). Pour toute question, contactez {contacts}. — {companyName}",
+    ],
+    payment_received: [
+      "Bonjour {firstName}, nous confirmons la reception de votre paiement de {amount} pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. Merci !",
+      "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !",
+    ],
+    payment_proof_rejected: "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}",
+    payment_reminder: [
+      "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}) est en retard de {lateLabel}. Montant du : {amount}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
+      // Version courte precedente : numero de bail inutile, et le lien portail ajoute coupait le message.
+      "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. Merci de regulariser rapidement. Contact : {contacts}",
+    ],
     payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
     default_notice: [
       "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
@@ -616,6 +629,9 @@ export class OwnerNotificationsService implements OnModuleInit {
         `Template ${eventType} unreadable, falling back to default: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    // Le numero de bail n'apporte rien au destinataire et coute des caracteres
+    // (1 SMS max) : retire de tout message, meme d'un modele personnalise.
+    text = text.replace(/\s*\(bail \{reference\}\)/g, "").replace(/\s*\{reference\}/g, "");
     for (const [key, value] of Object.entries(vars)) {
       text = text.replace(new RegExp(`\\{${key}\\}`, "g"), value ?? "");
     }
@@ -1307,7 +1323,7 @@ export class OwnerNotificationsService implements OnModuleInit {
             url: portalUrl,
           };
           const fallback =
-            "Bonjour {firstName}, paiement de {amount} recu (bail {reference}). Quittance : {url}. Merci !";
+            "Bonjour {firstName}, paiement de {amount} reçu. Quittance : {url}. Merci !";
           const message = await this.renderMessage("payment_received", fallback, vars);
           // Footer ajoute seulement si le template n'a pas deja place le lien :
           // sinon le locataire recevrait deux fois la meme URL (et 2 segments SMS).
@@ -1360,7 +1376,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       if (!lease) return;
 
       const fallback =
-        "Bonjour {tenantName}, justificatif refuse (bail {reference}) : {reason}. Renvoyez-le ici : {url}";
+        "Bonjour {tenantName}, justificatif refusé : {reason}. Renvoyez-le ici : {url}";
       const recipients = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
       const multi = recipients.length > 1;
       for (const r of recipients) {
