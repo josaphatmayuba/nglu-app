@@ -62,7 +62,12 @@ function makeService(opts: { recipients: any[]; smsFailPhones?: string[]; row?: 
         from: () => chain,
         leftJoin: () => chain,
         innerJoin: () => chain,
-        where: () => Promise.resolve([row]),
+        where: () => {
+          const done: any = Promise.resolve([row]);
+          // Paiements du montant en retard (loadOverdueByLease) : aucun.
+          done.orderBy = () => Promise.resolve([]);
+          return done;
+        },
       };
       return chain;
     },

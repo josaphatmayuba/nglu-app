@@ -17,7 +17,7 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
-import { formatMoneyFr, loadFlaggedDueStates, loadLeaseTotalDue, readOverdueGraceDays, resolveCurrencySymbol, type LeaseDueState } from "./lease-overdue";
+import { loadFlaggedDueStates, loadLeaseOverdueAmount, readOverdueGraceDays, resolveCurrencySymbol, type LeaseDueState } from "./lease-overdue";
 import { isLeaseFlagged } from "./lease-allocation";
 import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
@@ -208,20 +208,18 @@ export class RentReminderService {
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
       );
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-      // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), identique
-      // dans les SMS locataire / contact / proprietaire / delegue.
+      // {amount} = montant EN RETARD (= « Retard » de la carte Loyers : echeances dont la
+      // grace est depassee), identique dans les SMS locataire / contact / proprietaire /
+      // delegue. {totalDue} = « Reste a payer » (inclut le mois encore dans sa grace).
       // Bail sans devise : devise par defaut de l'organisation (jamais un montant nu).
       lease.currencySymbol = await resolveCurrencySymbol(this.db, Number(lease.organizationId), lease.currencySymbol);
-      const ledger = ledgerByLease.get(Number(lease.leaseId));
-      const totalDue = ledger
-        ? { value: ledger.totalDue, text: formatMoneyFr(ledger.totalDue, lease.currencySymbol) }
-        : await loadLeaseTotalDue(
-          this.db,
-          Number(lease.organizationId),
-          { ...lease, id: Number(lease.leaseId) },
-          lease.currencySymbol,
-        );
-      const amount = totalDue.text;
+      const overdue = await loadLeaseOverdueAmount(
+        this.db,
+        Number(lease.organizationId),
+        { ...lease, id: Number(lease.leaseId) },
+        lease.currencySymbol,
+      );
+      const amount = overdue.text;
       const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
       // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
@@ -246,6 +244,7 @@ export class RentReminderService {
         firstName: lease.tenantFirstName || tenantName,
         reference: lease.reference || "",
         amount,
+        totalDue: overdue.totalDue.text,
         monthlyRent: amount,
         address: place,
         daysLate: String(daysLate),
@@ -273,7 +272,7 @@ export class RentReminderService {
           };
           const tenantMsg = await this.ownerNotifications.renderMessage(
             "payment_reminder",
-            "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
+            "Bonjour {tenantName}, loyer en retard de {lateLabel} ({amount}). Merci de régulariser. Bailleur : {ownerName}, {ownerPhone}.",
             vars,
             { tenantId: r.customerId },
           );
@@ -326,7 +325,17 @@ export class RentReminderService {
           "payment_reminder_contact",
           "Bonjour, {tenantName} a {lateLabel} de retard de loyer. Montant du : {amount}. " +
             "Merci de l'inviter a regulariser : {contacts}",
-          multi ? { ...baseVars, tenantName: groupName } : baseVars,
+          {
+            ...baseVars,
+            ...(multi ? { tenantName: groupName } : {}),
+            // Le SMS est ramene a 160 caracteres en gardant le DERNIER numero : avec
+            // « proprietaire X au ..., gestionnaire Y au ... », le nom du proprietaire
+            // restait accole au numero du gestionnaire. On cite le bailleur seul, comme
+            // le SMS du locataire (meme nom, meme numero).
+            contacts: landlord.phone
+              ? `proprietaire ${landlord.name || companyName} au ${landlord.phone}`
+              : baseVars.contacts,
+          },
           multi ? undefined : { tenantId: lease.tenantId },
         );
         await this.safeSms(

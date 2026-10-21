@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+- **Relance de loyer : montant = retard réel, bailleur cohérent (v3.242.4).**
+  - `{amount}` des SMS de retard (locataire, contact d'urgence, propriétaire, délégué) = montant **en retard** (échéances dont la grâce est dépassée, = « Retard » de la carte Loyers) via `loadLeaseOverdueAmount`, au lieu du total dû qui incluait le mois encore dans sa grâce (constaté : « en retard … (6 000 $) » pour 3 000 $ de retard). Le total dû reste disponible via `{totalDue}`.
+  - SMS au contact d'urgence : `{contacts}` cite le bailleur seul (même nom et numéro que le SMS au locataire). Avant, le raccourcissement à 160 caractères gardait le dernier numéro, celui du gestionnaire, accolé au nom du propriétaire.
+  - Relance locataire raccourcie : « Bonjour {tenantName}, loyer en retard de {lateLabel} ({amount}). Merci de régulariser. Bailleur : {ownerName}, {ownerPhone}. » (~154 caractères au lieu de ~175 ; l'ancien défaut est migré automatiquement s'il n'a pas été personnalisé).
+  - `fitOneSms` : si le message reste trop long, le nom collé au numéro final (« Bailleur : X, » / « proprietaire X au ») est réduit au premier mot au lieu de disparaître dans l'ellipse.
 - **SMS trop long : le téléphone du bailleur n'est plus coupé (v3.242.3).** `fitOneSms` garde intégralement un numéro de téléphone placé en fin de message (comme un lien) et raccourcit le texte qui précède. Constaté en prod : « Bailleur : ANICET NGOMA NDELE,... » perdait le numéro avec un long nom et « 11 mois et 24 jours ».
 - **Domus — SMS plus courts et plus clairs (v3.242.2).**
   - Le numéro de bail (`{reference}`) est retiré de tous les SMS, y compris des modèles personnalisés dans Réglages › Messages (règle dans `renderMessage`). Il reste dans les objets d'email.

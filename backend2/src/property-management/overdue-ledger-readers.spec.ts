@@ -153,7 +153,7 @@ describe("lecteurs sur bail flagge (etat impute)", () => {
     expect(p.nextDue.get(11)).toBeDefined();
   });
 
-  it("SMS locataire + contact (RentReminderService) : 6 000 $", async () => {
+  it("SMS locataire + contact (RentReminderService) : 3 000 $ en retard (oct. dans la grace exclu)", async () => {
     const row = {
       ...lease11,
       leaseId: 11,
@@ -202,10 +202,10 @@ describe("lecteurs sur bail flagge (etat impute)", () => {
     await service.runLeaseReminder(11, ORG, { tenant: true, emergency: true, owner: false, delegates: false });
     const msgs = sentSms.map((m) => norm(m.message));
     expect(msgs).toHaveLength(2);
-    for (const m of msgs) expect(m).toContain("6 000 $");
+    for (const m of msgs) expect(m).toContain("3 000 $");
   });
 
-  it("SMS proprietaire + delegue (notifyPaymentOverdue) : 6 000 $", async () => {
+  it("SMS proprietaire + delegue (notifyPaymentOverdue) : 3 000 $ en retard", async () => {
     const leaseRow = {
       ...lease11,
       reference: "LEASE-11",
@@ -234,8 +234,8 @@ describe("lecteurs sur bail flagge (etat impute)", () => {
     svc.ownerTenantLabel = async (_l: number, _o: number, fb: string) => fb;
     await svc.notifyPaymentOverdue(11, 3, 43, ORG);
     const byType = Object.fromEntries(sentSms.map((m) => [m.smsType, norm(m.message)]));
-    expect(byType.payment_overdue_owner).toContain("6 000 $");
-    expect(byType.payment_overdue_delegate).toContain("6 000 $");
+    expect(byType.payment_overdue_owner).toContain("3 000 $");
+    expect(byType.payment_overdue_delegate).toContain("3 000 $");
   });
 
   it("rent-book : lease.allocationLedger + lease.dues pour un bail flagge, legacy sinon", async () => {

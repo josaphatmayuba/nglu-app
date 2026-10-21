@@ -41,7 +41,7 @@ import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { normalizePhoneKey } from "./notification-utils";
-import { formatMoneyFr, loadLeaseTotalDue, resolveCurrencySymbol } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseOverdueAmount, resolveCurrencySymbol } from "./lease-overdue";
 import { toGsm7 } from "../compat/sms-preview";
 
 /**
@@ -151,7 +151,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "payment_reminder",
       subject: "Rappel : loyer en retard — bail {reference}",
       body:
-        "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
+        "Bonjour {tenantName}, loyer en retard de {lateLabel} ({amount}). Merci de régulariser. Bailleur : {ownerName}, {ownerPhone}.",
     },
     {
       name: "Rappel de loyer — personne de contact",
@@ -275,6 +275,8 @@ export class OwnerNotificationsService implements OnModuleInit {
       "Bonjour {tenantName}, nous constatons que le loyer de {address} (bail {reference}) est en retard de {lateLabel}. Montant du : {amount}. Nous vous invitons gentiment a regulariser ce paiement des que possible afin d'eviter l'annulation de votre contrat de location. Pour tout reglement ou question, contactez {contacts}. — {companyName}",
       // Version courte precedente : numero de bail inutile, et le lien portail ajoute coupait le message.
       "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. Merci de regulariser rapidement. Contact : {contacts}",
+      // v3.242.2 : ~175 caracteres avec un long nom, le nom du bailleur sautait au raccourcissement.
+      "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
     ],
     payment_reminder_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que son loyer pour {address} est en retard de {lateLabel}. Montant du : {amount}. Merci de bien vouloir l'inviter a regulariser ce paiement aupres de {contacts}. — {companyName}",
     default_notice: [
@@ -709,7 +711,19 @@ export class OwnerNotificationsService implements OnModuleInit {
       // comme un lien — c'est le texte qui precede qui est raccourci.
       const phone = text.match(/\+?\d[\d .-]{6,}\d\.?$/)?.[0] ?? "";
       if (!phone || phone.length >= limit - 10) return clip(text, limit);
-      return `${clip(text.slice(0, -phone.length).trimEnd(), limit - phone.length - 1)} ${phone}`.slice(0, limit);
+      const room = limit - phone.length - 1;
+      let before = text.slice(0, -phone.length).trimEnd();
+      // Nom accole au numero (« Bailleur : ANICET NGOMA NDELE, » / « proprietaire X au ») :
+      // on le reduit au premier mot plutot que de le perdre dans l'ellipse.
+      // C'est alors le texte qui precede le nom qui est raccourci.
+      if (before.length > room) {
+        const m = before.match(/(:\s*(?:(?:proprietaire|gestionnaire)\s+)?|\b(?:proprietaire|gestionnaire)\s+)([^\s,]+)[^,:]*?(,|\s+au)$/i);
+        if (m) {
+          const tail = `${m[1]}${m[2]}${m[3]}`;
+          before = `${clip(before.slice(0, m.index).trimEnd(), room - tail.length - 1)} ${tail}`;
+        }
+      }
+      return `${clip(before, room)} ${phone}`.slice(0, limit);
     }
 
     // On garde " <url>" en fin de message et on rogne ce qui precede.
@@ -1491,8 +1505,8 @@ export class OwnerNotificationsService implements OnModuleInit {
         propertyId,
       );
 
-      // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), comme le SMS locataire.
-      const totalDue = await loadLeaseTotalDue(this.db, orgId, lease, lease.currencySymbol);
+      // {amount} = montant EN RETARD (« Retard » de la carte Loyers), comme le SMS locataire.
+      const overdue = await loadLeaseOverdueAmount(this.db, orgId, lease, lease.currencySymbol);
 
       const vars = {
         ownerName: owner.name,
@@ -1504,7 +1518,8 @@ export class OwnerNotificationsService implements OnModuleInit {
           .join(", "),
         unit: lease.unitName || "",
         property: [lease.propertyName, lease.unitName].filter(Boolean).join(", "),
-        amount: totalDue.text,
+        amount: overdue.text,
+        totalDue: overdue.totalDue.text,
         daysLate: String(daysLate),
         url,
       };

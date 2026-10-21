@@ -644,3 +644,29 @@ export async function loadLeaseTotalDue(
   const value = computeLeaseTotalDue(lease, paidTotal, decimals, now);
   return { value, text: formatMoneyFr(value, currencySymbol) };
 }
+
+/**
+ * Montant cite par une RELANCE de retard (= « Retard » de la carte Loyers) :
+ * reste du des seules echeances dont la grace est depassee. Une echeance encore
+ * dans sa grace n'est pas « en retard » et n'y figure pas. Repli sur le total du
+ * si rien n'est en retard (relance manuelle pendant la grace).
+ */
+export async function loadLeaseOverdueAmount(
+  db: Database,
+  orgId: number,
+  lease: LeaseForOverdue,
+  currencySymbol?: string | null,
+  now: Date = new Date(),
+): Promise<{ value: number; text: string; totalDue: { value: number; text: string } }> {
+  const graceDays = await readOverdueGraceDays(db, orgId);
+  const today = parseDateOnly(formatDateOnly(now));
+  const [entry, totalDue] = await Promise.all([
+    loadOverdueByLease(db, orgId, graceDays, [lease], today).then((m) => m.get(lease.id)),
+    loadLeaseTotalDue(db, orgId, lease, currencySymbol, now),
+  ]);
+  // Jamais plus que le total du (sources differentes : on garde la plus prudente).
+  const overdue = Math.min(entry?.stats.overdueAmount ?? 0, totalDue.value);
+  return overdue > 0
+    ? { value: overdue, text: formatMoneyFr(overdue, currencySymbol), totalDue }
+    : { ...totalDue, totalDue };
+}
