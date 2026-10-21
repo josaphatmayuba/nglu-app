@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : SMS de résiliation raccourcis (v3.243.1).** L'adresse en tête faisait couper la date de fin (« prendra... »). Nouveau texte : « votre bail du logement {unit} prendra fin le / est résilié à compter du {date}. Questions : gestionnaire {contact}. » ; anciens textes par défaut migrés au démarrage.
+
 - **Domus : résiliation programmée d'un bail (v3.243.0).**
   - Date d'effet future (jusqu'à 6 mois, avant la fin du bail) : le bail reste actif, le logement reste loué, une ligne `real_estate_lease_scheduled_terminations` est créée (migration 0319). SMS locataire immédiat optionnel (événement `lease_termination_scheduled`, réglable dans Réglages). Un seul planning actif par bail (409 sinon).
   - Exécution automatique chaque jour à 00:30 UTC (`LeaseScheduledTerminationService`, idempotente, retry sur erreur) : bail résilié, échéances futures annulées, logement recalculé. Pas de 2e SMS. Les rappels de fin de bail sont exclus pendant le planning.

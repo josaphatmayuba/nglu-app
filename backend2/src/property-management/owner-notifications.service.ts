@@ -227,16 +227,14 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "lease_terminated",
       subject: "Votre bail est resilie",
       body:
-        "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
-        "Pour toute question, contactez votre gestionnaire {managerContact}.",
+        "Bonjour {tenantName}, votre bail du logement {unit} est resilie a compter du {terminationDate}. Questions : gestionnaire {managerContact}.",
     },
     {
       name: "Resiliation programmee — locataire",
       eventType: "lease_termination_scheduled",
       subject: "Votre bail prendra fin le {terminationDate}",
       body:
-        "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, prendra fin le {terminationDate}. " +
-        "Pour toute question, contactez votre gestionnaire {managerContact}.",
+        "Bonjour {tenantName}, votre bail du logement {unit} prendra fin le {terminationDate}. Questions : gestionnaire {managerContact}.",
     },
     {
       name: "Proprietaire — fin de bail",
@@ -265,6 +263,13 @@ export class OwnerNotificationsService implements OnModuleInit {
 
   /** Anciens textes par defaut (trop longs pour 1 SMS) : remplaces au demarrage uniquement si la ligne est restee identique. */
   private static readonly LEGACY_DEFAULT_BODIES: Record<string, string | string[]> = {
+    // L adresse en tete faisait couper la date de fin par fitOneSms.
+    lease_terminated:
+      "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
+      "Pour toute question, contactez votre gestionnaire {managerContact}.",
+    lease_termination_scheduled:
+      "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, prendra fin le {terminationDate}. " +
+      "Pour toute question, contactez votre gestionnaire {managerContact}.",
     contract_signature: "Bonjour {tenantName}, votre contrat de bail est pret a etre signe. Signez-le ici : {url} (lien valable 7 jours). — {companyName}",
     lease_created: [
       "Bonjour {tenantName}, bienvenue ! Votre bail ({reference}) pour {address}, loyer {amount}, est actif. Proprietaire : {landlordName}. — {companyName}",
@@ -670,6 +675,8 @@ export class OwnerNotificationsService implements OnModuleInit {
     const orphans = [
       // Phrase de contact sans gestionnaire ("Pour toute question, contactez votre gestionnaire .")
       /\s*Pour toute question,?\s*contactez(?:\s+votre\s+gestionnaire)?\s*:?\s*(?=[.]|$)\.?/gi,
+      // Variante courte ("Questions : gestionnaire .")
+      /\s*Questions\s*:\s*(?:gestionnaire)?\s*(?=[.]|$)\.?/gi,
       // "<mot d'introduction>" suivi immediatement d'une ponctuation de fin
       /\s*\b(chez|revenu|contact|contactez|contactez-nous|proprietaire|bailleur|appartement|appt|unite|de|a|au|pour|du|avec)\b\s*:?\s*(?=[.,;)]|$)/gi,
       // "Marie a ." / "Marie(e) avec ." -> mention retiree quand le conjoint

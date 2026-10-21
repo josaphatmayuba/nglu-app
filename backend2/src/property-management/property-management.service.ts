@@ -3031,10 +3031,8 @@ export class PropertyManagementService {
       this.ownerNotifications.renderMessage(
         scheduled ? "lease_termination_scheduled" : "lease_terminated",
         scheduled
-          ? "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, prendra fin le {terminationDate}. " +
-              "Pour toute question, contactez votre gestionnaire {managerContact}."
-          : "Bonjour {tenantName}, votre bail pour {address}, appartement {unit}, est resilie a compter du {terminationDate}. " +
-              "Pour toute question, contactez votre gestionnaire {managerContact}.",
+          ? "Bonjour {tenantName}, votre bail du logement {unit} prendra fin le {terminationDate}. Questions : gestionnaire {managerContact}."
+          : "Bonjour {tenantName}, votre bail du logement {unit} est resilie a compter du {terminationDate}. Questions : gestionnaire {managerContact}.",
         { ...vars, tenantName: r.name || tenantName, firstName: r.firstName || r.name || tenantName },
         { tenantId: r.customerId },
       );
