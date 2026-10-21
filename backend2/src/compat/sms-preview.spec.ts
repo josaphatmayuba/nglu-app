@@ -1,5 +1,5 @@
 import { ConflictException } from "@nestjs/common";
-import { captureSms, isPreviewing, notePreviewMissing, smsSegments, withSmsPreview } from "./sms-preview";
+import { captureSms, isPreviewing, notePreviewMissing, smsSegments, toGsm7, withSmsPreview } from "./sms-preview";
 
 // Faux envoi : reproduit l'appel CompatService.sendSms (capture d'abord, sinon envoi reel).
 function makeAction(text: () => string) {
@@ -54,6 +54,20 @@ describe("withSmsPreview", () => {
     text = "Montant du : 50 USD";
     await expect(withSmsPreview({ previewHash: hash }, a.run)).rejects.toBeInstanceOf(ConflictException);
     expect(a.sent).toEqual([]);
+  });
+});
+
+describe("toGsm7", () => {
+  it("ramene montants fr-FR, ellipse et accents au GSM : 1 SMS au lieu de 3", () => {
+    const raw = `Bonjour, loyer de ${(5700000).toLocaleString("fr-FR")} $ en retard… Arrêtez d’attendre « svp »`;
+    expect(smsSegments(raw).unicode).toBe(true);
+    const gsm = toGsm7(raw);
+    expect(gsm).toBe("Bonjour, loyer de 5 700 000 $ en retard... Arretez d'attendre \" svp \"");
+    expect(smsSegments(gsm)).toMatchObject({ unicode: false, segments: 1 });
+  });
+
+  it("garde les caracteres deja GSM (é, è, à) et les liens intacts", () => {
+    expect(toGsm7("Échéance réglée à https://x.org/a?token=Ab9")).toBe("Échéance réglée à https://x.org/a?token=Ab9");
   });
 });
 

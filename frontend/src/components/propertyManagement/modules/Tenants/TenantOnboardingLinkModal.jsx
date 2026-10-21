@@ -26,6 +26,7 @@ import { generateTenantOnboarding } from "../../../../redux/rtk/features/propert
 import PhoneInput from "../../../Shared/PhoneInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
 import { useSmsCooldown } from "../../shared/useSmsCooldown";
+import { confirmSms } from "../../shared/confirmSms";
 
 const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const dispatch = useDispatch();
@@ -128,14 +129,14 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
       message.warning("Aucun numéro saisi à l'étape 1.");
       return;
     }
+    const text =
+      `${greeting}, voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien : ${link} ` +
+      `Merci de le compléter dès que possible. — ${companyName}`;
+    // Aperçu : rien ne part avant « Confirmer l'envoi ».
+    if (!(await confirmSms({ phone: contact.phone, text }))) return;
     setSmsBusy(true);
     try {
-      const { data } = await axios.post("send-sms", {
-        phone: contact.phone,
-        message:
-          `${greeting}, voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien : ${link} ` +
-          `Merci de le compléter dès que possible. — ${companyName}`,
-      });
+      const { data } = await axios.post("send-sms", { phone: contact.phone, message: text });
       if (data?.success) {
         message.success("SMS envoye");
         startSmsCooldown();

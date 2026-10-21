@@ -14,7 +14,7 @@ import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
-import { useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
+import { SmsNotice, useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
 import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
@@ -577,6 +577,7 @@ function Info2({ icon: Icon, label, value }) {
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
 function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
   const toast = useToast();
+  const smsSend = useSmsSend();
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
 
@@ -635,7 +636,8 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
   const generatePortalLink = async () => {
     setPortalBusy(true);
     try {
-      const res = await api.generateTenantPortalLink(tenant.id);
+      const res = await smsSend((extra) => api.generateTenantPortalLink(tenant.id, extra), { title: t("Lien portail : vérifier le SMS") });
+      if (!res) return;
       const url = domusPortalUrl(res?.url);
       setPortalUrl(url);
       toast.success(t("Lien portail créé, SMS envoyé au locataire."));
@@ -1496,6 +1498,11 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
 
       </div>
 
+      {!form.id && form.phone && (
+        <div style={{ margin: "0 24px" }}>
+          <SmsNotice>{tf(t("Un SMS de confirmation sera envoyé au {phone} après l'enregistrement."), { phone: form.phone })}</SmsNotice>
+        </div>
+      )}
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
       {validating ? (
         <div className="modal-actions">

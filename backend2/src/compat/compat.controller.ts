@@ -16,6 +16,7 @@ import type { Response } from "express";
 import { createReadStream, existsSync } from "fs";
 import { join } from "path";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { CompatService } from "./compat.service";
 
 function filePath(name: string) {
@@ -77,8 +78,10 @@ export class CompatController {
   @Post("send-sms")
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
-  sendSms(@Body() body: Record<string, any>) {
-    return this.compat.sendSms(body);
+  sendSms(@Body() body: Record<string, any>, @CurrentOrg() orgId: number) {
+    // Organisation de l'utilisateur connecte, jamais celle envoyee par le navigateur
+    // (avant : body.organizationId ou, a defaut, l'organisation 1).
+    return this.compat.sendSms({ ...body, organizationId: orgId });
   }
 
   @Get("report/purchase")

@@ -1779,6 +1779,8 @@ button.immo-pay-m.future { border:2px dashed #d4d4dc; background:transparent; }
 .domus-sms-missing { font-size:13px; color:#9a3412; }
 .domus-sms-missing ul { margin:4px 0 0; padding-left:18px; }
 .domus-sms-actions .btn { min-height:44px; }
+.domus-sms-notice { display:flex; gap:8px; align-items:flex-start; margin:10px 0 0; padding:8px 10px; border-radius:8px; background:#eef2ff; color:#3730a3; font-size:13px; line-height:1.45; }
+.domus-sms-notice svg { flex:none; margin-top:2px; }
 @media (max-width:480px) {
   .modal-layer:has(> .domus-sms-modal) { padding:0; }
   .domus-sms-modal { width:100%; max-width:none; max-height:100vh; height:100%; border-radius:0; display:flex; flex-direction:column; }

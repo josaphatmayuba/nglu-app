@@ -526,6 +526,23 @@ export function paymentOverdueFields(
 }
 
 /** Format monetaire unique des SMS : separateur de milliers, decimales si non entier, devise de la DB. */
+/**
+ * Devise d'un montant envoye par SMS/email : celle du bail, sinon la devise par
+ * defaut de l'organisation (Reglages, appSetting.currencyId) — meme regle que
+ * l'ecran Loyers. Un montant n'est jamais affiche sans devise.
+ */
+export async function resolveCurrencySymbol(db: Database, orgId: number, symbol?: string | null): Promise<string> {
+  if (symbol && symbol.trim()) return symbol;
+  const row = await readOrgAppSetting(db, orgId, { currencyId: appSettings.currencyId });
+  if (!row?.currencyId) return "";
+  const [c] = await db
+    .select({ symbol: currencies.currencySymbol, code: currencies.currencyCode })
+    .from(currencies)
+    .where(eq(currencies.id, Number(row.currencyId)))
+    .limit(1);
+  return (c?.symbol || c?.code || "").trim();
+}
+
 export function formatMoneyFr(amount: unknown, symbol?: string | null): string {
   const n = Number(amount ?? 0);
   const formatted = Number.isFinite(n)

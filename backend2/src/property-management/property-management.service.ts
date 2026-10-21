@@ -109,7 +109,7 @@ import { isLeaseFlagged } from "./lease-allocation";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, resolveCurrencySymbol, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
@@ -1137,7 +1137,10 @@ export class PropertyManagementService {
     try {
       const tenant: any = await this.findTenant(tenantId, orgId);
       const phone = tenant?.phone;
-      if (!phone) return;
+      if (!phone) {
+        notePreviewMissing(`Locataire · ${[tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ")}`);
+        return;
+      }
 
       // Message volontairement court : appendPortalFooterToSms ajoute ensuite
       // "Cliquez ici pour voir votre dossier : <lien>" (~99 caracteres avec un
@@ -1177,6 +1180,7 @@ export class PropertyManagementService {
         smsType: "tenant_created",
         relatedType: "tenant",
         relatedId: tenantId,
+        previewLabel: `Locataire · ${[tenant.firstName, tenant.lastName].filter(Boolean).join(" ")}`,
       });
       if (!res?.success) {
         this.logger.warn(`Tenant created SMS not sent (tenant ${tenantId}, ${phone}): ${res?.message}`);
@@ -3066,7 +3070,8 @@ export class PropertyManagementService {
       throw new BadRequestException("Aucun justificatif a refuser sur cette echeance.");
     }
 
-    await this.db
+    // Apercu SMS : le SMS est calcule, le refus n'est pas enregistre.
+    if (!isPreviewing()) await this.db
       .update(realEstateRentPayments)
       .set({
         proofUrl: null,
@@ -3078,7 +3083,7 @@ export class PropertyManagementService {
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
 
     const lease = await this.getLeaseOrThrow(pending.leaseId, orgId);
-    await this.publishPaymentUpdate("updated", paymentId, {
+    if (!isPreviewing()) await this.publishPaymentUpdate("updated", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
@@ -4764,6 +4769,7 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
 
     const lease = rows[0];
+    lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
     // Email a CHAQUE locataire du bail (principal + colocataires actifs), dedoublonne.
     const recipients = ((await this.ownerNotifications.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [])
       .filter((r) => r.email);
@@ -4911,6 +4917,7 @@ export class PropertyManagementService {
       .limit(1);
 
     if (!lease) throw new NotFoundException("Bail introuvable.");
+    lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
     // Couverture en montant : total deja verse / loyer mensuel. Les echeances
     // "pending" (generees mais non encaissees) ne comptent pas comme payees.

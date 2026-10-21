@@ -67,9 +67,37 @@ export function smsSegments(text: string) {
   return { unicode, length: [...s].length, segments };
 }
 
+// Equivalents GSM des caracteres courants en francais qui forceraient l'UCS-2.
+const GSM_SUBSTITUTES: Record<string, string> = {
+  " ": " ", " ": " ", " ": " ", " ": " ",
+  "…": "...", "’": "'", "‘": "'", "“": "\"", "”": "\"", "«": "\"", "»": "\"",
+  "–": "-", "—": "-", "œ": "oe", "Œ": "OE", "ç": "c",
+};
+
+/**
+ * Ramene un texte au jeu GSM-7 (comme le « Smart Encoding » de Twilio) : les
+ * accents hors GSM (ê, ô, î...) perdent leur accent, la ponctuation typographique
+ * devient ASCII. Les caracteres sans equivalent (emoji...) sont gardes.
+ */
+export function toGsm7(text: string): string {
+  let out = "";
+  for (const ch of String(text ?? "")) {
+    if (GSM_BASIC.includes(ch) || GSM_EXT.includes(ch)) { out += ch; continue; }
+    if (GSM_SUBSTITUTES[ch] !== undefined) { out += GSM_SUBSTITUTES[ch]; continue; }
+    const bare = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+    out += bare && [...bare].every((c) => GSM_BASIC.includes(c)) ? bare : ch;
+  }
+  return out;
+}
+
+// Lien de signature : jeton neuf a chaque envoi (les anciens liens restent valides
+// tant qu'on n'a pas confirme). Il est masque dans l'apercu et ignore par l'empreinte.
+const SIGNING_TOKEN = /\/sign\/[A-Za-z0-9-]{8,}/g;
+const maskSigning = (text: string) => text.replace(SIGNING_TOKEN, "/sign/(lien-personnel-cree-a-l-envoi)");
+
 function previewHash(messages: CapturedSms[]) {
   return createHash("sha256")
-    .update(JSON.stringify(messages.map((m) => [m.phone, m.message])))
+    .update(JSON.stringify(messages.map((m) => [m.phone, maskSigning(m.message)])))
     .digest("hex");
 }
 
@@ -96,7 +124,7 @@ export async function withSmsPreview<T>(
       hash: previewHash(messages),
       smsDisabled: options.smsDisabled ? await options.smsDisabled() : false,
       missing,
-      messages: messages.map((m) => ({ phone: m.phone, label: m.label, text: m.message, ...smsSegments(m.message) })),
+      messages: messages.map((m) => ({ phone: m.phone, label: m.label, text: maskSigning(m.message), ...smsSegments(m.message) })),
     };
   }
   if (options.previewHash) {

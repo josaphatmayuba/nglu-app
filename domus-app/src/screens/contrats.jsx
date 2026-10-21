@@ -19,7 +19,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { ContractSigners } from "../components/ContractSigners.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
-import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
+import { useConfirm, usePrompt, useSmsSend, useToast } from "../components/Dialog.jsx";
 
 async function loadContractsModule() {
   const [contracts, leases, templates] = await Promise.all([
@@ -62,6 +62,7 @@ export function Contrats() {
   const confirm = useConfirm();
   const promptDialog = usePrompt();
   const toast = useToast();
+  const smsSend = useSmsSend();
 
   const contracts = useMemo(
     () => (Array.isArray(data?.contracts) ? data.contracts : []).filter((c) => contractInDateRange(c, dateRange)),
@@ -187,7 +188,8 @@ export function Contrats() {
     setBusy(`send-${id}`);
     setActionError("");
     try {
-      const res = await api.sendContract(id);
+      const res = await smsSend((extra) => api.sendContract(id, extra), { title: t("Contrat : vérifier le SMS de signature") });
+      if (!res) return;
       if (res?.signingUrl) {
         setSigningLinks((prev) => ({ ...prev, [id]: res.signingUrl }));
       }
@@ -218,7 +220,8 @@ export function Contrats() {
     setBusy("welcome");
     setActionError("");
     try {
-      await api.sendContractWelcome(selectedId);
+      const res = await smsSend((extra) => api.sendContractWelcome(selectedId, extra), { title: t("Bienvenue : vérifier le message") });
+      if (!res) return;
       await reload();
       await loadDetail(selectedId);
     } catch (e) {

@@ -32,6 +32,16 @@ export const useToast = () => useDialogs().toast;
 // puis avec { previewHash } à la confirmation : le serveur refuse si le texte a changé.
 export const useSmsSend = () => useDialogs().smsSend;
 
+// Mention dans un formulaire dont l'enregistrement envoie un SMS automatiquement
+// (création de locataire, de bail, paiement) : prévenir avant d'enregistrer.
+export function SmsNotice({ children }) {
+  return (
+    <p className="domus-sms-notice" role="note">
+      <MessageSquare size={14} aria-hidden="true" /> <span>{children}</span>
+    </p>
+  );
+}
+
 let toastSeq = 0;
 
 export function DialogProvider({ children }) {

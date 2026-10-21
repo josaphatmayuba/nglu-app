@@ -13,7 +13,10 @@ import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, pay
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
-import { useSmsSend, useToast } from "../components/Dialog.jsx";
+import { SmsNotice, useSmsSend, useToast } from "../components/Dialog.jsx";
+
+// Enregistrer un paiement envoie automatiquement un SMS de reçu (locataire + propriétaire).
+const PAY_SMS_NOTE = "Un SMS de reçu sera envoyé au locataire et au propriétaire après l'enregistrement.";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
@@ -944,6 +947,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
             </button>
           )}
           {err && <div className="api-error" style={{ marginTop: 10 }}>{err}</div>}
+          <SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice>
         </div>
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
@@ -975,6 +979,7 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
   const [viewingProof, setViewingProof] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const smsSend = useSmsSend();
 
   const activeKey = method ?? methods[0]?.key;
   const tenant = tenantName(payment);
@@ -984,7 +989,9 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
     if (busy || !rejectReason.trim()) return;
     setBusy(true); setErr(null);
     try {
-      await api.rejectPaymentProof(payment.id, rejectReason.trim());
+      // Aperçu du SMS au locataire : le refus n'est enregistré qu'après « Confirmer l'envoi ».
+      const res = await smsSend((extra) => api.rejectPaymentProof(payment.id, rejectReason.trim(), extra), { title: t("Refus du justificatif : vérifier le SMS") });
+      if (!res) return;
       onConfirmed(`Justificatif de ${tenant} refusé — le locataire a été prévenu`);
     } catch (e) {
       setErr(e.message || String(e));
@@ -1097,6 +1104,7 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
               placeholder="Ex. : capture illisible, montant différent, mauvais mois…" />
           </div>
         )}
+        {!rejecting && <div className="immo-modal-body" style={{ paddingTop: 0 }}><SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice></div>}
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={rejecting ? () => setRejecting(false) : onClose} disabled={busy}>{rejecting ? "Retour" : "Annuler"}</button>
           {payment.proofUrl && !rejecting && (
@@ -2019,6 +2027,7 @@ export function Paiement({ go }) {
                 <AlertTriangle size={16} style={{ flex: "none", marginTop: 1 }} /> {err}
               </div>
             )}
+            <SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice>
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button type="button" className="btn" style={{ minHeight: 44 }} disabled={submitting} onClick={() => setStep(2)}>
                 <ArrowLeft size={16} /> Modifier

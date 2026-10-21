@@ -268,8 +268,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Generate a secure tenant portal link and notify the tenant by SMS" })
   @Permissions("update-propertyManagement")
   @Post("tenants/:id/portal-link")
-  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId);
+  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId));
   }
 
   @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })
@@ -1269,7 +1269,7 @@ export class PropertyManagementController {
     @Body() body: RejectPendingPaymentDto,
     @CurrentOrg() orgId: number,
   ) {
-    return this.propertyManagementService.rejectPendingPayment(id, body, orgId);
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.rejectPendingPayment(id, body, orgId));
   }
 
   @ApiOperation({ summary: "Annule (soft) un paiement de loyer saisi par erreur — contre-passe la compta" })
@@ -2034,8 +2034,8 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("contracts/:id/send")
   @HttpCode(200)
-  sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.contractsService.sendContract(id, orgId);
+  sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.contractsService.sendContract(id, orgId));
   }
 
   @ApiOperation({ summary: "List the signers of a contract with signing progress" })
@@ -2061,8 +2061,9 @@ export class PropertyManagementController {
     @Param("signerId", ParseIntPipe) signerId: number,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Body() body: SmsPreviewBody = {},
   ) {
-    return this.contractsService.resendSigner(id, signerId, orgId, scope);
+    return this.smsPreview(body, orgId, () => this.contractsService.resendSigner(id, signerId, orgId, scope));
   }
 
   @ApiOperation({ summary: "Send the post-signature welcome message (email + SMS) to the tenant, if never sent" })
@@ -2070,8 +2071,8 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("contracts/:id/send-welcome")
   @HttpCode(200)
-  sendContractWelcome(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.contractsService.sendWelcomeMessage(id, orgId);
+  sendContractWelcome(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.contractsService.sendWelcomeMessage(id, orgId));
   }
 
   @ApiOperation({ summary: "Mark a contract as signed manually (paper contract signed by hand, scan/photo imported)" })

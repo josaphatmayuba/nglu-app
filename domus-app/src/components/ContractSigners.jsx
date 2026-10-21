@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Copy, Send } from "lucide-react";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { useToast } from "./Dialog.jsx";
+import { useSmsSend, useToast } from "./Dialog.jsx";
 
 // Libelles passes par t() au rendu (cles = texte source).
 const SIGNER_STATUS = {
@@ -18,6 +18,7 @@ const ROLE_LABEL = { principal: "Principal", cotenant: "Co-locataire" };
 
 export function ContractSigners({ contract, onChanged }) {
   const toast = useToast();
+  const smsSend = useSmsSend();
   const [busyId, setBusyId] = useState(null);
   const [links, setLinks] = useState({}); // signerId -> url (disponible apres un renvoi)
   const signers = Array.isArray(contract?.signers) ? contract.signers : [];
@@ -30,7 +31,8 @@ export function ContractSigners({ contract, onChanged }) {
   const resend = async (s) => {
     setBusyId(s.id);
     try {
-      const res = await api.resendContractSigner(contract.id, s.id);
+      const res = await smsSend((extra) => api.resendContractSigner(contract.id, s.id, extra), { title: t("Lien de signature : vérifier le SMS") });
+      if (!res) return;
       if (res?.signingUrl) setLinks((prev) => ({ ...prev, [s.id]: res.signingUrl }));
       toast.success(t("Lien renvoyé à") + " " + (s.name || t("ce signataire")) + ".");
       onChanged?.();

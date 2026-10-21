@@ -17,7 +17,7 @@ import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
-import { formatMoneyFr, loadFlaggedDueStates, loadLeaseTotalDue, readOverdueGraceDays, type LeaseDueState } from "./lease-overdue";
+import { formatMoneyFr, loadFlaggedDueStates, loadLeaseTotalDue, readOverdueGraceDays, resolveCurrencySymbol, type LeaseDueState } from "./lease-overdue";
 import { isLeaseFlagged } from "./lease-allocation";
 import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
@@ -210,6 +210,8 @@ export class RentReminderService {
       const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
       // {amount} = TOTAL DU (= « Reste a payer » de la carte Loyers), identique
       // dans les SMS locataire / contact / proprietaire / delegue.
+      // Bail sans devise : devise par defaut de l'organisation (jamais un montant nu).
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, Number(lease.organizationId), lease.currencySymbol);
       const ledger = ledgerByLease.get(Number(lease.leaseId));
       const totalDue = ledger
         ? { value: ledger.totalDue, text: formatMoneyFr(ledger.totalDue, lease.currencySymbol) }

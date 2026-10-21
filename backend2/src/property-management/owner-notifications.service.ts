@@ -41,7 +41,8 @@ import { DelegatePortalService } from "./delegate-portal.service";
 import { OwnerPortalService } from "./owner-portal.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { normalizePhoneKey } from "./notification-utils";
-import { formatMoneyFr, loadLeaseTotalDue } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, resolveCurrencySymbol } from "./lease-overdue";
+import { toGsm7 } from "../compat/sms-preview";
 
 /**
  * Proprietaire a notifier. `propertyId` n'est renseigne que lorsque la
@@ -663,8 +664,13 @@ export class OwnerNotificationsService implements OnModuleInit {
    * la contrainte. Si le texte contient une URL, elle est preservee integrale :
    * un lien tronque est inutilisable, donc c'est le corps du message qui est
    * coupe, sur une frontiere de phrase ou de mot, avec une ellipse.
+   *
+   * Le texte est d'abord ramene au jeu GSM-7 (toGsm7) : un seul caractere hors
+   * GSM (espace fine des montants fr-FR, « … », ê, ’...) fait passer le SMS en
+   * UCS-2, soit 70 caracteres par SMS — 160 caracteres partaient en 3 SMS.
    */
   fitOneSms(text: string, limit = 160): string {
+    text = toGsm7(text);
     if (text.length <= limit) return text;
 
     // Coupe sur une frontiere de mot et garantit <= limit : le .trim() et le
@@ -672,8 +678,8 @@ export class OwnerNotificationsService implements OnModuleInit {
     // ultime slice() protege contre tout depassement residuel.
     const clip = (t: string, max: number) => {
       if (t.length <= max) return t;
-      const head = t.slice(0, max - 1).replace(/\s+\S*$/, "").trimEnd();
-      return `${head}…`.slice(0, max);
+      const head = t.slice(0, max - 3).replace(/\s+\S*$/, "").trimEnd();
+      return `${head}...`.slice(0, max);
     };
 
     const url = text.match(/https?:\/\/\S+/)?.[0] ?? "";
@@ -1158,6 +1164,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
       const owner = await this.resolveOwnerForProperty(Number(lease.propertyId), orgId);
       if (!owner) return;
@@ -1247,6 +1254,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
       // Quittance a CHAQUE locataire du bail, avec SON lien portail.
       const recipients = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
@@ -1357,6 +1365,7 @@ export class OwnerNotificationsService implements OnModuleInit {
             organizationId: orgId,
             smsType: "payment_proof_rejected",
             ...this.tenantRelated(multi, r.customerId, "real-estate-rent-payment", paymentId),
+            previewLabel: `Locataire · ${r.name}`,
           });
           if (!res?.success) {
             this.logger.warn(`Proof rejection SMS not sent (payment ${paymentId}, tenant ${r.customerId}): ${res?.message}`);
@@ -1426,6 +1435,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
       const { url } = await this.ownerPortal.generateOwnerPortalLink(
         owner.id,
@@ -1554,6 +1564,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
       const { url } = await this.ownerPortal.generateOwnerPortalLink(
         owner.id,
@@ -1619,6 +1630,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
         .limit(1);
       if (!lease) return;
+      lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
       const owner = await this.resolveOwnerForProperty(Number(lease.propertyId), orgId);
       if (!owner) return;

@@ -224,7 +224,7 @@ export const api = {
   tenantChangeRequests: (status = "pending") => get(`/tenant-change-requests?status=${encodeURIComponent(status)}`),
   approveTenantChangeRequest: (id, note) => post(`/tenant-change-requests/${id}/approve`, { note }),
   rejectTenantChangeRequest: (id, note) => post(`/tenant-change-requests/${id}/reject`, { note }),
-  generateTenantPortalLink: (id) => post(`/tenants/${id}/portal-link`),
+  generateTenantPortalLink: (id, extra) => post(`/tenants/${id}/portal-link`, extra),
   revokeTenantPortalLink: (id) => del(`/tenants/${id}/portal-link`),
   // Historique des communications (email + SMS) envoyées à ce locataire.
   tenantCommunications: (id) => get(`/tenants/${id}/communications`),
@@ -363,7 +363,7 @@ export const api = {
 
   // Refuse le justificatif d'une echeance pending (motif obligatoire) : aucune
   // ecriture comptable, le locataire est prevenu et peut renvoyer.
-  rejectPaymentProof: (paymentId, reason) => post(`/payments/${paymentId}/reject-proof`, { reason }),
+  rejectPaymentProof: (paymentId, reason, extra) => post(`/payments/${paymentId}/reject-proof`, { reason, ...extra }),
 
   // Annule (soft) un paiement saisi par erreur : contre-passe la compta.
   voidPayment: (paymentId, reason) => post(`/payments/${paymentId}/void`, { reason }),
@@ -553,10 +553,10 @@ export const api = {
   contract: (id) => get(`/contracts/${id}`),
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
-  sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
+  sendContractWelcome: (id, extra) => post(`/contracts/${id}/send-welcome`, extra),
   // Signataires d'un bail multi-locataires (1..N) : liste + renvoi du lien (429 si < 10 min).
   contractSigners: (id) => get(`/contracts/${id}/signers`),
-  resendContractSigner: (id, signerId) => post(`/contracts/${id}/signers/${signerId}/resend`),
+  resendContractSigner: (id, signerId, extra) => post(`/contracts/${id}/signers/${signerId}/resend`, extra),
   deleteContract: (id) => del(`/contracts/${id}`),
   changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
   markContractSignedManually: (id, file) => {
