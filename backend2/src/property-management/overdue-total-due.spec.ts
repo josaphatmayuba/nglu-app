@@ -91,7 +91,11 @@ describe("SMS de retard du bail 11 : meme total du partout", () => {
     jest.useRealTimers();
   });
 
-  const payments = [{ amount: "3000.00" }, { amount: "3000.00" }];
+  // Bail 11 au 16/10 : toutes les echeances ont depasse la grace => retard = total du.
+  const payments = [
+    { leaseId: 11, paymentDate: "2026-07-20", amount: "3000.00" },
+    { leaseId: 11, paymentDate: "2026-08-20", amount: "3000.00" },
+  ];
 
   it("locataire + contact (RentReminderService) : 4 645,16 $", async () => {
     const row = {
