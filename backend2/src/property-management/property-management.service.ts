@@ -5070,7 +5070,7 @@ export class PropertyManagementService {
         };
         const tenantMsg = await this.ownerNotifications.renderMessage(
           "default_notice",
-          "PRÉAVIS - {tenantName}, vous devez {monthsBehind} mois de loyer ({amount}). Sans paiement, le bail pourra être annulé. Bailleur : {ownerName}, {ownerPhone}.",
+          "Bonjour {tenantName}, {monthsBehind} mois de loyer impayés ({amount}). Sans paiement, un préavis pourra être déposé. Bailleur : {ownerName}, {ownerPhone}.",
           rVars,
           { tenantId: r.customerId },
         );

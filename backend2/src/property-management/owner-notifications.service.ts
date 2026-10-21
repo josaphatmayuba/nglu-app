@@ -173,7 +173,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       eventType: "default_notice",
       subject: "Preavis pour defaut de paiement — bail {reference}",
       body:
-        "PRÉAVIS - {tenantName}, vous devez {monthsBehind} mois de loyer ({amount}). Sans paiement, le bail pourra être annulé. Bailleur : {ownerName}, {ownerPhone}.",
+        "Bonjour {tenantName}, {monthsBehind} mois de loyer impayés ({amount}). Sans paiement, un préavis pourra être déposé. Bailleur : {ownerName}, {ownerPhone}.",
     },
     {
       name: "Preavis defaut de paiement — personne de contact",
@@ -268,6 +268,7 @@ export class OwnerNotificationsService implements OnModuleInit {
       "Bonjour {tenantName}, malgre nos rappels, {monthsBehind} mois de loyer restent impayes pour {address} (bail {reference}), soit {amount}. Sans regularisation de votre part, un preavis pour defaut de paiement sera depose. Merci de contacter {contacts} sans tarder.",
       // Version courte precedente : ne disait pas « preavis » d'entree ni le nom du bailleur.
       "Bonjour {tenantName}, {monthsBehind} mois de loyer impayes ({amount}). Sans paiement, un preavis de defaut sera depose. Contact : {contacts}",
+      "PRÉAVIS - {tenantName}, vous devez {monthsBehind} mois de loyer ({amount}). Sans paiement, le bail pourra être annulé. Bailleur : {ownerName}, {ownerPhone}.",
     ],
     default_notice_contact: "Bonjour, en tant que personne de contact de {tenantName}, nous vous informons que {monthsBehind} mois de loyer ({amount}) restent impayes pour {address}. Sans regularisation, un preavis pour defaut de paiement sera depose. Merci de l'inviter a contacter {contacts}.",
     tenant_onboarding: "Bonjour {firstName}, completez votre dossier locataire Domus ici : {url}",
