@@ -21,6 +21,7 @@ import {
   suppliers,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { captureSms } from "./sms-preview";
 
 @Injectable()
 export class CompatService {
@@ -111,8 +112,24 @@ export class CompatService {
     }
   }
 
+  /** Interrupteur Reglages (appSetting.smsEnabled) : NULL = actif, 0 = SMS desactives. */
+  async isSmsDisabled(organizationId: number) {
+    const row = await readOrgAppSetting(this.db, organizationId, { smsEnabled: appSettings.smsEnabled });
+    return Boolean(row && row.smsEnabled != null && Number(row.smsEnabled) === 0);
+  }
+
   async sendSms(body: Record<string, any>) {
     if (!body.phone) return { success: false, message: "Phone is required." };
+
+    // Apercu « Confirmer l'envoi » : message enregistre, rien n'est envoye ni trace.
+    if (captureSms({
+      phone: String(body.phone),
+      message: body.message || body.text || "Message de NgoluApp",
+      smsType: body.smsType || "notification",
+      label: body.previewLabel ?? null,
+    })) {
+      return { success: true, status: "preview", sid: null };
+    }
 
     const smsType = body.smsType || "notification";
     const organizationId = body.organizationId ?? 1;

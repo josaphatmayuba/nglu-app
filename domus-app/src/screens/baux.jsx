@@ -36,7 +36,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
-import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
+import { SmsNotice, useConfirm, usePrompt, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
@@ -150,6 +150,7 @@ function contractChip(contract, isExpired) {
 const fmtDate = (d) => (d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "UTC" }) : "—");
 
 export function Baux({ go } = {}) {
+  const smsSend = useSmsSend();
   const { data, loading, error, reload } = useApi(loadLeaseModule, []);
   useRealtimeReload(reload, ["leases", "properties", "units", "tenants", "contracts"]);
   const dateRange = useDateRange();
@@ -449,7 +450,7 @@ export function Baux({ go } = {}) {
                       }}
                       onResend={() => {
                         setOpenMenuId(null);
-                        handleResendContract(contract, setBusyAction, setActionError, reload);
+                        handleResendContract(contract, setBusyAction, setActionError, reload, smsSend);
                       }}
                       onCancelSend={() => {
                         setOpenMenuId(null);
@@ -1146,6 +1147,9 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
           </section>
         </div>
 
+        {!form.id && (
+          <SmsNotice>{t("À la création, des SMS partent automatiquement : bienvenue au locataire (bail actif) et récapitulatif au propriétaire et aux délégués du bien.")}</SmsNotice>
+        )}
         {error && <div className="api-error">{error}</div>}
         <div className="domus-modal-footer">
           <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Annuler</button>
@@ -1634,7 +1638,7 @@ async function handleRenewLease(lease, setBusyAction, setActionError, reload, co
   }
 }
 
-async function handleResendContract(contract, setBusyAction, setActionError, reload) {
+async function handleResendContract(contract, setBusyAction, setActionError, reload, smsSend) {
   if (!contract?.id) {
     setActionError("Aucun contrat à renvoyer.");
     return;
@@ -1642,7 +1646,8 @@ async function handleResendContract(contract, setBusyAction, setActionError, rel
   setBusyAction(`resend-${contract.id}`);
   setActionError("");
   try {
-    const res = await api.sendContract(contract.id);
+    const res = await smsSend((extra) => api.sendContract(contract.id, extra), { title: t("Contrat : vérifier le SMS de signature") });
+    if (!res) return;
     const link = res?.signingUrl || signingUrlFromContract({ ...contract, ...res });
     if (link) {
       try {

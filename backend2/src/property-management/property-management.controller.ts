@@ -95,6 +95,10 @@ import {
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
 import { RentReminderService } from "./rent-reminder.service";
+import { withSmsPreview } from "../compat/sms-preview";
+
+/** Apercu avant envoi : { preview: true } = voir le SMS ; { previewHash } = confirmer ce qui a ete vu. */
+type SmsPreviewBody = { preview?: boolean; previewHash?: string };
 
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("property-management")
@@ -111,6 +115,17 @@ export class PropertyManagementController {
     private readonly delegatesService: DelegatesService,
     private readonly delegatePortalService: DelegatePortalService,
   ) {}
+
+  private smsPreview<T>(body: SmsPreviewBody | undefined, orgId: number, run: () => Promise<T>) {
+    return withSmsPreview(
+      {
+        preview: body?.preview === true,
+        previewHash: typeof body?.previewHash === "string" ? body.previewHash : undefined,
+        smsDisabled: () => this.propertyManagementService.smsDisabled(orgId),
+      },
+      run,
+    );
+  }
 
   @ApiOperation({ summary: "Property management dashboard totals" })
   @ApiOkResponse({ description: "Dashboard metrics" })
@@ -207,8 +222,8 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("sms-logs/:id/resend")
   @HttpCode(200)
-  resendSmsLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.resendSmsLog(id, orgId);
+  resendSmsLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.resendSmsLog(id, orgId));
   }
 
   @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
@@ -253,8 +268,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Generate a secure tenant portal link and notify the tenant by SMS" })
   @Permissions("update-propertyManagement")
   @Post("tenants/:id/portal-link")
-  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId);
+  generateTenantPortalLink(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.generateTenantPortalLinkAndNotify(id, orgId));
   }
 
   @ApiOperation({ summary: "Revoke the tenant portal link (soft invalidation)" })
@@ -283,8 +298,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Send the onboarding link by SMS on demand" })
   @Permissions("create-propertyManagement")
   @Post("onboarding/:id/send-sms")
-  sendOnboardingSms(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.sendOnboardingSms(id, orgId);
+  sendOnboardingSms(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.sendOnboardingSms(id, orgId));
   }
 
   @ApiOperation({ summary: "Send the onboarding link by email on demand" })
@@ -1254,7 +1269,7 @@ export class PropertyManagementController {
     @Body() body: RejectPendingPaymentDto,
     @CurrentOrg() orgId: number,
   ) {
-    return this.propertyManagementService.rejectPendingPayment(id, body, orgId);
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.rejectPendingPayment(id, body, orgId));
   }
 
   @ApiOperation({ summary: "Annule (soft) un paiement de loyer saisi par erreur — contre-passe la compta" })
@@ -1286,18 +1301,18 @@ export class PropertyManagementController {
   @Post("payments/default-notice")
   @HttpCode(200)
   sendDefaultNotice(
-    @Body() body: { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
+    @Body() body: SmsPreviewBody & { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
     @CurrentOrg() orgId: number,
   ) {
-    return this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId, body.targets);
+    return this.smsPreview(body, orgId, () => this.propertyManagementService.sendDefaultNotice(body.leaseId, orgId, body.targets));
   }
 
   @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/run-overdue-reminders")
   @HttpCode(200)
-  runOverdueReminders() {
-    return this.rentReminderService.runOverdueReminders();
+  runOverdueReminders(@CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.rentReminderService.runOverdueReminders(undefined, undefined, { orgId }));
   }
 
   @ApiOperation({ summary: "Send an overdue rent reminder to ONE lease's tenant now (manual, resends)" })
@@ -1305,10 +1320,10 @@ export class PropertyManagementController {
   @Post("payments/remind-lease")
   @HttpCode(200)
   remindLease(
-    @Body() body: { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
+    @Body() body: SmsPreviewBody & { leaseId: number; targets?: { tenant?: boolean; emergency?: boolean; owner?: boolean; delegates?: boolean } },
     @CurrentOrg() orgId: number,
   ) {
-    return this.rentReminderService.runLeaseReminder(Number(body.leaseId), orgId, body.targets);
+    return this.smsPreview(body, orgId, () => this.rentReminderService.runLeaseReminder(Number(body.leaseId), orgId, body.targets));
   }
 
   @ApiOperation({ summary: "List maintenance requests" })
@@ -2019,8 +2034,8 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("contracts/:id/send")
   @HttpCode(200)
-  sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.contractsService.sendContract(id, orgId);
+  sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.contractsService.sendContract(id, orgId));
   }
 
   @ApiOperation({ summary: "List the signers of a contract with signing progress" })
@@ -2046,8 +2061,9 @@ export class PropertyManagementController {
     @Param("signerId", ParseIntPipe) signerId: number,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Body() body: SmsPreviewBody = {},
   ) {
-    return this.contractsService.resendSigner(id, signerId, orgId, scope);
+    return this.smsPreview(body, orgId, () => this.contractsService.resendSigner(id, signerId, orgId, scope));
   }
 
   @ApiOperation({ summary: "Send the post-signature welcome message (email + SMS) to the tenant, if never sent" })
@@ -2055,8 +2071,8 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("contracts/:id/send-welcome")
   @HttpCode(200)
-  sendContractWelcome(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.contractsService.sendWelcomeMessage(id, orgId);
+  sendContractWelcome(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
+    return this.smsPreview(body, orgId, () => this.contractsService.sendWelcomeMessage(id, orgId));
   }
 
   @ApiOperation({ summary: "Mark a contract as signed manually (paper contract signed by hand, scan/photo imported)" })

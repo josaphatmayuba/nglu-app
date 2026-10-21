@@ -8,6 +8,7 @@ import { useSelector } from "react-redux";
 import { avatarColors } from "../../shared/constants";
 import { initials, parseOnboardingData } from "../../shared/tenants";
 import { useSmsCooldown } from "../../shared/useSmsCooldown";
+import { confirmSms } from "../../shared/confirmSms";
 
 const statusMeta = {
   sent: { label: "Non rempli", tone: "warning" },
@@ -51,14 +52,14 @@ const OnboardingCard = ({ record, index = 0, onEdit, onValidate, onDelete }) => 
       message.warning("Lien ou numéro manquant.");
       return;
     }
+    const text =
+      `${greeting}, voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien : ${record.url} ` +
+      `Merci de le compléter dès que possible. — ${companyName}`;
+    // Aperçu : rien ne part avant « Confirmer l'envoi ».
+    if (!(await confirmSms({ phone, text }))) return;
     setSmsBusy(true);
     try {
-      const { data: r } = await axios.post("send-sms", {
-        phone,
-        message:
-          `${greeting}, voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien : ${record.url} ` +
-          `Merci de le compléter dès que possible. — ${companyName}`,
-      });
+      const { data: r } = await axios.post("send-sms", { phone, message: text });
       if (r?.success) { message.success("SMS renvoyé"); startSmsCooldown(); }
       else message.error(r?.message || "Impossible d'envoyer le SMS.");
     } catch (e) {

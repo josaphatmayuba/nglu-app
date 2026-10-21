@@ -631,6 +631,15 @@ export class RejectPendingPaymentDto {
   @IsNotEmpty()
   @MaxLength(500)
   reason!: string;
+
+  // Apercu SMS avant envoi : { preview: true } puis { previewHash } (voir compat/sms-preview.ts).
+  @IsOptional()
+  @IsBoolean()
+  preview?: boolean;
+
+  @IsOptional()
+  @IsString()
+  previewHash?: string;
 }
 
 export class CollectDepositDto {

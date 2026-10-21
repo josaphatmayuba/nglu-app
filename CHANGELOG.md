@@ -10,6 +10,19 @@ This project follows:
 
 ## [Unreleased]
 
+- **Aperçu SMS avant envoi, lots 2 à 4 + coût des SMS (v3.242.0).**
+  - Domus : aperçu avant l'envoi d'un contrat pour signature, le renvoi du lien à un signataire, le message de bienvenue, la génération du lien portail et le refus d'un justificatif (le refus n'est enregistré qu'après confirmation). Le lien de signature, recréé à chaque envoi, est masqué dans l'aperçu et les anciens liens restent valides tant qu'on n'a pas confirmé.
+  - Domus : le renvoi d'un communiqué aux destinataires en échec montre le texte et le nombre de SMS avant de confirmer.
+  - Domus : mention « un SMS sera envoyé » dans les formulaires qui en déclenchent un (création de locataire avec numéro, création de bail, enregistrement ou confirmation d'un paiement).
+  - CRM : « SMS » (lien d'inscription) et « Renvoyer SMS » affichent le numéro, le texte exact et le nombre de SMS avant l'envoi ; la route `/send-sms` utilise l'organisation de l'utilisateur connecté (avant : valeur du navigateur ou organisation 1).
+  - Coût : `fitOneSms` ramène le texte au jeu GSM-7 (`toGsm7` : espace fine des montants fr-FR, « … », guillemets « », apostrophe ’, accents hors GSM comme ê/ô/ç). Un seul de ces caractères faisait partir un SMS de 160 caractères en 3 SMS ; il en coûte désormais 1. S'applique aussi aux SMS automatiques (texte quasi identique, accents hors GSM retirés).
+  - Montants : un bail sans devise utilise la devise par défaut de l'organisation dans les SMS (relances, préavis, rappels, notifications propriétaire), comme l'écran Loyers. Avant : montant sans devise.
+- **Domus — aperçu SMS : une seule confirmation (v3.241.1).** « Continuer » dans Relancer / Préavis ouvre directement l'aperçu (l'ancienne étape qui listait seulement les types de destinataires est retirée) ; l'avertissement du préavis passe dans l'aperçu ; la fenêtre d'aperçu s'affiche au-dessus de la fenêtre qui l ouvre (elle passait derrière).
+- **Domus — aperçu obligatoire du SMS avant envoi, lot 1 (v3.241.0).**
+  - Relancer, Préavis pour défaut de paiement, Relancer les impayés, lien d'inscription (Locataires et Inscriptions) et Renvoyer le SMS ouvrent d'abord une fenêtre : texte exact, destinataires (rôle, nom, numéro), nombre de SMS facturés, personnes sans numéro, bandeau si les SMS sont désactivés. Rien ne part avant « Confirmer l'envoi ».
+  - Le texte de l'aperçu est produit par le même code que l'envoi (`backend2/src/compat/sms-preview.ts`, capture AsyncLocalStorage dans `CompatService.sendSms` / `SystemEmailService.send`, écritures métier sautées). Les mêmes routes acceptent `{ preview: true }` puis `{ previewHash }` ; si le texte a changé entre-temps, 409 et nouvel aperçu. Sans ces champs, comportement historique : envois automatiques et anciens appels inchangés.
+  - Correctifs : « Relancer les impayés » ne relance plus que l'organisation de l'utilisateur (avant : toutes) ; SMS du lien d'inscription et de la pré-sélection rattachés à la bonne organisation (avant : organisation 1, et interrupteur SMS lu au mauvais endroit).
+
 - **Domus — « Mauvais payeur » : fenêtre de 12 mois et réhabilitation (v3.240.0, ticket Jira à créer).**
   - Seuls les retards graves des 12 derniers mois comptent (`recentSevereLateCount` / `recentDueCount`) : un retard ancien ne marque plus le locataire.
   - Réhabilitation automatique selon les mois payés dans la grâce d'affilée (`onTimeStreak`, échéance encore en grâce = neutre) : 3 à 5 mois → badge orange « En amélioration · N mois à jour », 6 mois → statut levé. Moins de 3 → « Mauvais payeur » reste.

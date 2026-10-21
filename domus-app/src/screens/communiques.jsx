@@ -9,6 +9,7 @@ import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Modal } from "./biens.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 
 const MAX_LEN = 480;
 const BIG_AUDIENCE = 50;
@@ -58,6 +59,7 @@ function leaseTenants(lease) {
 }
 
 export function AnnouncementModal({ presetPropertyId = null, onClose, onSent }) {
+  const confirm = useConfirm();
   const [mode, setMode] = useState("property");
   const [propertyId, setPropertyId] = useState(presetPropertyId ? String(presetPropertyId) : "");
   const [selected, setSelected] = useState([]);
@@ -171,6 +173,8 @@ export function AnnouncementModal({ presetPropertyId = null, onClose, onSent }) 
   };
 
   const resend = async () => {
+    // Renvoi des echecs : le texte du communique est montre avant de confirmer.
+    if (!(await confirm({ title: t("Renvoyer aux destinataires en échec"), message: tf(t("{n} SMS seront renvoyés avec ce texte : « {text} »"), { n: job.failedCount, text: message }), confirmLabel: t("Confirmer l'envoi") }))) return;
     setBusy(true); setError("");
     try { await api.resendAnnouncementFailed(job.id); setJob({ ...job, status: "sending" }); poll(job.id); }
     catch (e) { setError(e?.message || t("Erreur")); }
@@ -379,6 +383,7 @@ export function Communiques() {
 }
 
 function AnnouncementDetail({ announcement, onClose }) {
+  const confirm = useConfirm();
   const [a, setA] = useState(announcement);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -399,6 +404,8 @@ function AnnouncementDetail({ announcement, onClose }) {
   useEffect(() => { load(); return () => clearTimeout(timer.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resend = async () => {
+    // Renvoi des echecs : le texte du communique est montre avant de confirmer.
+    if (!(await confirm({ title: t("Renvoyer aux destinataires en échec"), message: tf(t("{n} SMS seront renvoyés avec ce texte : « {text} »"), { n: a.failedCount, text: a.message }), confirmLabel: t("Confirmer l'envoi") }))) return;
     setBusy(true); setErr("");
     try { await api.resendAnnouncementFailed(a.id); load(); }
     catch (e) { setErr(e?.message || t("Erreur")); }

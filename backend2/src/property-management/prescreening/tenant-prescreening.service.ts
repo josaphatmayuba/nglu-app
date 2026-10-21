@@ -115,6 +115,8 @@ export class TenantPrescreeningService {
         await this.sms.sendSms({
           phone,
           message: text,
+          // Sans organisation, l'envoi etait trace (et l'interrupteur SMS lu) sur l'organisation 1.
+          organizationId,
         });
         await this.db
           .update(tenantPrescreenings)

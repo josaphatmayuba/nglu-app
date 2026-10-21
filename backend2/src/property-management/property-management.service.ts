@@ -51,6 +51,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
+import { isPreviewing, notePreviewMissing } from "../compat/sms-preview";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { WhatsappClientService } from "../whatsapp-client/whatsapp-client.service";
@@ -108,7 +109,7 @@ import { isLeaseFlagged } from "./lease-allocation";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
-import { formatMoneyFr, loadLeaseTotalDue, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
+import { formatMoneyFr, loadLeaseTotalDue, resolveCurrencySymbol, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
 import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
@@ -667,13 +668,17 @@ export class PropertyManagementService {
     const result = await this.sms.sendSms({
       phone,
       message,
+      // Sans organisation, l'envoi etait trace (et l'interrupteur SMS lu) sur l'organisation 1.
+      organizationId: orgId,
       // Option A : Twilio rappellera cet endpoint public signe pour tracer la
       // livraison reelle (voir handleSmsStatusCallback).
       statusCallback: `${env.appUrl.replace(/\/$/, "")}/api/tenant-onboarding/sms-status`,
+      previewLabel: ["Futur locataire", [data.firstName, data.lastName].filter(Boolean).join(" ")].filter(Boolean).join(" · "),
     });
     if (!result?.success) {
       throw new BadRequestException(result?.message || "Impossible d'envoyer le SMS.");
     }
+    if (isPreviewing()) return null;
 
     await this.db
       .update(tenantOnboardings)
@@ -1132,7 +1137,10 @@ export class PropertyManagementService {
     try {
       const tenant: any = await this.findTenant(tenantId, orgId);
       const phone = tenant?.phone;
-      if (!phone) return;
+      if (!phone) {
+        notePreviewMissing(`Locataire · ${[tenant?.firstName, tenant?.lastName].filter(Boolean).join(" ")}`);
+        return;
+      }
 
       // Message volontairement court : appendPortalFooterToSms ajoute ensuite
       // "Cliquez ici pour voir votre dossier : <lien>" (~99 caracteres avec un
@@ -1172,6 +1180,7 @@ export class PropertyManagementService {
         smsType: "tenant_created",
         relatedType: "tenant",
         relatedId: tenantId,
+        previewLabel: `Locataire · ${[tenant.firstName, tenant.lastName].filter(Boolean).join(" ")}`,
       });
       if (!res?.success) {
         this.logger.warn(`Tenant created SMS not sent (tenant ${tenantId}, ${phone}): ${res?.message}`);
@@ -3061,7 +3070,8 @@ export class PropertyManagementService {
       throw new BadRequestException("Aucun justificatif a refuser sur cette echeance.");
     }
 
-    await this.db
+    // Apercu SMS : le SMS est calcule, le refus n'est pas enregistre.
+    if (!isPreviewing()) await this.db
       .update(realEstateRentPayments)
       .set({
         proofUrl: null,
@@ -3073,7 +3083,7 @@ export class PropertyManagementService {
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
 
     const lease = await this.getLeaseOrThrow(pending.leaseId, orgId);
-    await this.publishPaymentUpdate("updated", paymentId, {
+    if (!isPreviewing()) await this.publishPaymentUpdate("updated", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
@@ -4759,6 +4769,7 @@ export class PropertyManagementService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
 
     const lease = rows[0];
+    lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
     // Email a CHAQUE locataire du bail (principal + colocataires actifs), dedoublonne.
     const recipients = ((await this.ownerNotifications.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [])
       .filter((r) => r.email);
@@ -4906,6 +4917,7 @@ export class PropertyManagementService {
       .limit(1);
 
     if (!lease) throw new NotFoundException("Bail introuvable.");
+    lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
     // Couverture en montant : total deja verse / loyer mensuel. Les echeances
     // "pending" (generees mais non encaissees) ne comptent pas comme payees.
@@ -5064,7 +5076,9 @@ export class PropertyManagementService {
               ? tenantMsg
               : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, orgId),
           );
-          if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel)) smsSent = true;
+          if (await this.safeNoticeSms(r.phone, smsWithFooter, leaseId, orgId, rel, `Locataire · ${r.name || tenantName}`)) smsSent = true;
+        } else {
+          notePreviewMissing(`Locataire · ${r.name || tenantName}`);
         }
 
         if (r.email) {
@@ -5110,7 +5124,9 @@ export class PropertyManagementService {
         groupVars,
         multi ? undefined : { tenantId: lease.tenantId },
       );
-      contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId);
+      contactNotified = await this.safeNoticeSms(lease.emergencyPhone, contactMsg, leaseId, orgId, undefined, "Contact d'urgence");
+    } else if (targets.emergency) {
+      notePreviewMissing("Contact d'urgence");
     }
 
     // Le proprietaire est prevenu qu'un preavis a ete notifie sur son bien.
@@ -5128,7 +5144,7 @@ export class PropertyManagementService {
 
     // Trace : date d'envoi (preuve que le locataire a ete averti) + mois dus a
     // cet instant. Ecrite seulement si au moins un canal locataire a abouti.
-    if (targets.tenant) {
+    if (targets.tenant && !isPreviewing()) {
       await this.db
         .update(realEstateLeases)
         .set({
@@ -5158,6 +5174,7 @@ export class PropertyManagementService {
     leaseId: number,
     orgId: number,
     related: { relatedType: string; relatedId: number } = { relatedType: "real-estate-lease", relatedId: leaseId },
+    previewLabel?: string,
   ) {
     try {
       const res = await this.sms.sendSms({
@@ -5166,6 +5183,7 @@ export class PropertyManagementService {
         organizationId: orgId,
         smsType: "default_notice",
         ...related,
+        previewLabel,
       });
       if (!res?.success) {
         this.logger.warn(`Default notice SMS not sent (lease ${leaseId}, ${phone}): ${res?.message}`);
@@ -5989,6 +6007,11 @@ export class PropertyManagementService {
    * le corps exacts du log d'origine ; sendSms cree une NOUVELLE ligne de log,
    * l'ancienne reste telle quelle pour garder l'historique des tentatives.
    */
+  /** Bandeau « SMS desactives » de l'apercu avant envoi. */
+  smsDisabled(orgId: number) {
+    return this.sms.isSmsDisabled(orgId);
+  }
+
   async resendSmsLog(logId: number, orgId: number) {
     const rows = await this.db
       .select({
@@ -6012,6 +6035,7 @@ export class PropertyManagementService {
       smsType: log.smsType,
       relatedType: log.relatedType ?? undefined,
       relatedId: log.relatedId ?? undefined,
+      previewLabel: "Même destinataire que l'envoi d'origine",
     });
     return { success: Boolean(res?.success), message: res?.message ?? null };
   }

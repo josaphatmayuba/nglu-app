@@ -34,6 +34,7 @@ import { CreateContractDto, SignContractDto } from "./dto/property-management.dt
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
+import { isPreviewing } from "../compat/sms-preview";
 
 type ContractRow = typeof realEstateContracts.$inferSelect;
 type SignerRow = typeof realEstateContractSigners.$inferSelect;
@@ -436,7 +437,8 @@ export class ContractsService {
         .from(realEstateContractSigners)
         .where(and(eq(realEstateContractSigners.contractId, id), eq(realEstateContractSigners.organizationId, orgId)))
         .limit(1);
-      if (previous.length) {
+      // Apercu SMS : aucune ecriture (le contenu regenere ne change pas le SMS).
+      if (previous.length && !isPreviewing()) {
         const lease = await this.getLeaseDetails(contract.leaseId, orgId);
         const company = await this.getCompanyInfo(orgId);
         const content = await this.renderContent(lease, company, orgId);
@@ -479,7 +481,7 @@ export class ContractsService {
       const wanted = new Set(candidates.map((c) => c.customerId));
       // Retire (soft) les signataires qui ne sont plus locataires du bail.
       for (const row of existing) {
-        if (row.isActive === 1 && !wanted.has(row.customerId)) {
+        if (row.isActive === 1 && !wanted.has(row.customerId) && !isPreviewing()) {
           await this.db
             .update(realEstateContractSigners)
             .set({ isActive: 0, signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
@@ -505,7 +507,10 @@ export class ContractsService {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         };
         let signerId: number;
-        if (row) {
+        if (isPreviewing()) {
+          // Apercu : rien n'est ecrit, les liens deja envoyes restent valides.
+          signerId = row?.id ?? 0;
+        } else if (row) {
           signerId = row.id;
           if (keepSigned) {
             await this.db.update(realEstateContractSigners).set(common).where(eq(realEstateContractSigners.id, row.id));
@@ -549,7 +554,7 @@ export class ContractsService {
     // recopie sur le contrat QUE pour un contrat ancien sans lignes signataires (repli) :
     // sinon un colocataire pourrait signer a la place du principal avec ce jeton.
     const main = targets.find((t) => t.role === "principal" && !t.skip) ?? targets.find((t) => !t.skip);
-    const resetRes = await this.db
+    const resetRes = isPreviewing() ? null : await this.db
       .update(realEstateContracts)
       .set({
         status: "sent",
@@ -559,7 +564,7 @@ export class ContractsService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "signed")));
-    if (this.affected(resetRes) < 1) {
+    if (resetRes && this.affected(resetRes) < 1) {
       throw new GoneException("This contract has already been signed.");
     }
 
@@ -889,6 +894,7 @@ export class ContractsService {
             smsType: "lease_welcome",
             relatedType: "real-estate-lease",
             relatedId: contract.leaseId,
+            previewLabel: `Locataire · ${r.name}`,
           });
           if (res?.success) {
             smsSent = true;
@@ -906,10 +912,12 @@ export class ContractsService {
       throw new BadRequestException("Le message de bienvenue n'a pas pu être envoyé (email et SMS en échec).");
     }
 
-    await this.db
-      .update(realEstateContracts)
-      .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateContracts.id, contract.id));
+    if (!isPreviewing()) {
+      await this.db
+        .update(realEstateContracts)
+        .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateContracts.id, contract.id));
+    }
 
     await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoye : ${sentTo.join(" / ")}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
@@ -1121,8 +1129,14 @@ export class ContractsService {
     const expiry = new Date();
     expiry.setDate(expiry.getDate() + 7);
 
+    // Apercu : meme refus que l'envoi si un lien est parti il y a moins de 10 min, sans rien ecrire.
+    if (isPreviewing()) {
+      if (signer.lastResentAt && Date.now() - new Date(signer.lastResentAt as any).getTime() < 10 * 60_000) {
+        throw new HttpException("Un lien a deja ete renvoye a ce signataire il y a moins de 10 minutes.", HttpStatus.TOO_MANY_REQUESTS);
+      }
+    }
     // Throttle atomique : la pose de lastResentAt ne passe que si > 10 min.
-    const res = await this.db
+    const res = isPreviewing() ? null : await this.db
       .update(realEstateContractSigners)
       .set({
         signerToken: token,
@@ -1139,13 +1153,13 @@ export class ContractsService {
           sql`(${realEstateContractSigners.lastResentAt} IS NULL OR ${realEstateContractSigners.lastResentAt} < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 10 MINUTE))`,
         ),
       );
-    if (this.affected(res) < 1) {
+    if (res && this.affected(res) < 1) {
       throw new HttpException("Un lien a deja ete renvoye a ce signataire il y a moins de 10 minutes.", HttpStatus.TOO_MANY_REQUESTS);
     }
 
     // Le jeton reste sur la ligne signataire UNIQUEMENT (jamais recopie sur le contrat).
     // Les anciens jetons globaux du contrat sont neutralises : ils ne servent plus.
-    await this.db
+    if (!isPreviewing()) await this.db
       .update(realEstateContracts)
       .set({ signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
@@ -1378,6 +1392,7 @@ export class ContractsService {
   }
 
   private async publishContractUpdate(action: DataUpdateAction, contractId: number, leaseId?: number | null) {
+    if (isPreviewing()) return;
     return this.realtimeData.publishDataUpdated({
       entity: "contract",
       action,
@@ -1627,6 +1642,7 @@ export class ContractsService {
             smsType: "contract_signature",
             relatedType: "real-estate-contract",
             relatedId: contractId,
+            previewLabel: `Signataire · ${s.name}`,
           });
           if (!smsRes?.success) this.logger.warn(`Contract signing SMS not sent (contract ${contractId}): ${smsRes?.message}`);
           res.smsTo = s.phone;
@@ -2159,6 +2175,7 @@ export class ContractsService {
     details: string | null,
     signerId?: number | null,
   ) {
+    if (isPreviewing()) return; // apercu SMS : aucune trace
     await this.db.insert(realEstateContractAuditLogs).values({
       organizationId: orgId,
       contractId,

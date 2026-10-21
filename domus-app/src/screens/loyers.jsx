@@ -13,7 +13,10 @@ import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, pay
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
-import { useToast } from "../components/Dialog.jsx";
+import { SmsNotice, useSmsSend, useToast } from "../components/Dialog.jsx";
+
+// Enregistrer un paiement envoie automatiquement un SMS de reçu (locataire + propriétaire).
+const PAY_SMS_NOTE = "Un SMS de reçu sera envoyé au locataire et au propriétaire après l'enregistrement.";
 import { fmtDateLong, openRentBookPrint } from "../rentBookUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { ProofModal } from "../components/ProofModal.jsx";
@@ -748,7 +751,6 @@ const REMIND_TARGETS = [
 function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
   const isNotice = kind === "notice";
   const [sel, setSel] = useState({ tenant: true, emergency: true, owner: isNotice, delegates: false });
-  const [step, setStep] = useState("choose");
   const chosen = REMIND_TARGETS.filter((o) => sel[o.key]);
   const closeIfIdle = busy ? undefined : onClose;
   return (
@@ -757,12 +759,11 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
         <div className="immo-modal-head">
           <div>
             <div className="eyebrow">{card.name}</div>
-            <h3>{isNotice ? t("Préavis pour défaut de paiement") : t("Relancer")}{step === "choose" ? "" : ` — ${t("confirmation")}`}</h3>
+            <h3>{isNotice ? t("Préavis pour défaut de paiement") : t("Relancer")}</h3>
           </div>
           <button className="immo-flat-icon" onClick={onClose} disabled={busy} aria-label={t("Fermer")}><X size={16} /></button>
         </div>
         <div className="immo-modal-body">
-          {step === "choose" ? (
             <>
               <p className="immo-quickpay-note">
                 {isNotice
@@ -776,32 +777,14 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
                 </label>
               ))}
             </>
-          ) : (
-            <>
-              <p>
-                {isNotice
-                  ? t("Le préavis est tracé sur le bail (date d'envoi) et ne peut pas être annulé. Envoyer à :")
-                  : t("Les messages seront envoyés immédiatement à :")}
-              </p>
-              <ul style={{ margin: "6px 0 0 18px" }}>{chosen.map((o) => <li key={o.key}><strong>{t(o.label)}</strong></li>)}</ul>
-            </>
-          )}
         </div>
+        {/* « Continuer » ouvre l'aperçu SMS (useSmsSend) : texte exact + numéros,
+            c'est lui qui porte « Confirmer l'envoi ». */}
         <div className="immo-modal-foot">
-          {step === "choose" ? (
-            <>
-              <button className="immo-btn" onClick={onClose}>{t("Annuler")}</button>
-              <button className="immo-btn primary" onClick={() => setStep("confirm")} disabled={!chosen.length}>{t("Continuer")}</button>
-            </>
-          ) : (
-            <>
-              <button className="immo-btn" onClick={() => setStep("choose")} disabled={busy}>{t("Retour")}</button>
-              <button className={`immo-btn ${isNotice ? "danger" : "primary"}`} onClick={() => onSend(sel)} disabled={busy}
-                style={isNotice ? { background: "#dc2626", color: "#fff" } : undefined}>
-                {busy ? t("Envoi…") : <><BellRing size={16} /> {t("Confirmer l'envoi")}</>}
-              </button>
-            </>
-          )}
+          <button className="immo-btn" onClick={onClose} disabled={busy}>{t("Annuler")}</button>
+          <button className="immo-btn primary" onClick={() => onSend(sel)} disabled={!chosen.length || busy}>
+            {busy ? t("Envoi…") : t("Continuer")}
+          </button>
         </div>
       </div>
     </div>
@@ -964,6 +947,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
             </button>
           )}
           {err && <div className="api-error" style={{ marginTop: 10 }}>{err}</div>}
+          <SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice>
         </div>
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
@@ -995,6 +979,7 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
   const [viewingProof, setViewingProof] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const smsSend = useSmsSend();
 
   const activeKey = method ?? methods[0]?.key;
   const tenant = tenantName(payment);
@@ -1004,7 +989,9 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
     if (busy || !rejectReason.trim()) return;
     setBusy(true); setErr(null);
     try {
-      await api.rejectPaymentProof(payment.id, rejectReason.trim());
+      // Aperçu du SMS au locataire : le refus n'est enregistré qu'après « Confirmer l'envoi ».
+      const res = await smsSend((extra) => api.rejectPaymentProof(payment.id, rejectReason.trim(), extra), { title: t("Refus du justificatif : vérifier le SMS") });
+      if (!res) return;
       onConfirmed(`Justificatif de ${tenant} refusé — le locataire a été prévenu`);
     } catch (e) {
       setErr(e.message || String(e));
@@ -1117,6 +1104,7 @@ function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClos
               placeholder="Ex. : capture illisible, montant différent, mauvais mois…" />
           </div>
         )}
+        {!rejecting && <div className="immo-modal-body" style={{ paddingTop: 0 }}><SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice></div>}
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={rejecting ? () => setRejecting(false) : onClose} disabled={busy}>{rejecting ? "Retour" : "Annuler"}</button>
           {payment.proofUrl && !rejecting && (
@@ -1160,6 +1148,7 @@ export function Loyers({ go }) {
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
   const toast = useToast();
+  const smsSend = useSmsSend();
   const [proofView, setProofView] = useState(null);
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
@@ -1308,7 +1297,13 @@ export function Loyers({ go }) {
     if (!card.lease?.id || noticingLeaseId) return;
     setNoticingLeaseId(card.lease.id);
     try {
-      const res = await api.sendDefaultNotice(card.lease.id, targets);
+      // Aperçu obligatoire : texte exact + numéros, rien ne part avant « Confirmer l'envoi ».
+      const res = await smsSend((extra) => api.sendDefaultNotice(card.lease.id, targets, extra), {
+        title: t("Préavis : vérifier le message"),
+        warning: t("Le préavis est tracé sur le bail (date d'envoi) et ne peut pas être annulé."),
+        danger: true,
+      });
+      if (!res) return;
       const channels = [
         res?.smsSent ? "SMS" : null,
         res?.emailSent ? "email" : null,
@@ -1329,7 +1324,8 @@ export function Loyers({ go }) {
     if (!card.lease?.id || remindingLeaseId) return;
     setRemindingLeaseId(card.lease.id);
     try {
-      const res = await api.remindLease(card.lease.id, targets);
+      const res = await smsSend((extra) => api.remindLease(card.lease.id, targets, extra), { title: t("Relance : vérifier le message") });
+      if (!res) return;
       if (res?.enabled === false) toast.info?.(t("Envoi des rappels désactivé sur cet environnement."));
       else if (!targets?.tenant) toast.success(t("Rappel envoyé."));
       else if (res?.smsStatus === "no_phone") toast.error(tf(t("Aucun SMS : {name} n'a pas de numéro de téléphone (courriel seulement)."), { name: card.name }));
@@ -1404,7 +1400,9 @@ export function Loyers({ go }) {
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-            onClick={() => api.runOverdueReminders().then(() => toast.success(t("Rappels lancés"))).catch((e) => toast.error(e.message))}>
+            onClick={() => smsSend((extra) => api.runOverdueReminders(extra), { title: t("Relancer les impayés : vérifier les messages") })
+              .then((res) => { if (res) toast.success(t("Rappels lancés")); })
+              .catch((e) => toast.error(e.message))}>
             <BellRing size={16} /> Relancer les impayés
           </button>
         </div>
@@ -2029,6 +2027,7 @@ export function Paiement({ go }) {
                 <AlertTriangle size={16} style={{ flex: "none", marginTop: 1 }} /> {err}
               </div>
             )}
+            <SmsNotice>{t(PAY_SMS_NOTE)}</SmsNotice>
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button type="button" className="btn" style={{ minHeight: 44 }} disabled={submitting} onClick={() => setStep(2)}>
                 <ArrowLeft size={16} /> Modifier

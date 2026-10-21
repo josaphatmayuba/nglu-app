@@ -14,7 +14,7 @@ import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
-import { useConfirm, useToast } from "../components/Dialog.jsx";
+import { SmsNotice, useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
 import { nextDueAmountOf, nextDueDateOf } from "../prorationUtils.js";
@@ -197,6 +197,7 @@ export function Locataires({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
   const confirm = useConfirm();
   const toast = useToast();
+  const smsSend = useSmsSend();
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
   const dateRange = useDateRange();
   const tenants = useMemo(
@@ -279,7 +280,8 @@ export function Locataires({ go } = {}) {
     setActionError("");
     setSendingId(`${record.id}:sms`);
     try {
-      await api.sendOnboardingSms(record.id);
+      const res = await smsSend((extra) => api.sendOnboardingSms(record.id, extra), { title: t("Lien d'inscription : vérifier le SMS") });
+      if (!res) return;
       await reload();
       toast.success(t("SMS envoyé."));
     } catch (e) {
@@ -575,6 +577,7 @@ function Info2({ icon: Icon, label, value }) {
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
 function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
   const toast = useToast();
+  const smsSend = useSmsSend();
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
 
@@ -633,7 +636,8 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
   const generatePortalLink = async () => {
     setPortalBusy(true);
     try {
-      const res = await api.generateTenantPortalLink(tenant.id);
+      const res = await smsSend((extra) => api.generateTenantPortalLink(tenant.id, extra), { title: t("Lien portail : vérifier le SMS") });
+      if (!res) return;
       const url = domusPortalUrl(res?.url);
       setPortalUrl(url);
       toast.success(t("Lien portail créé, SMS envoyé au locataire."));
@@ -847,6 +851,7 @@ function TenantCommunications({ tenantId }) {
   const [error, setError] = useState("");
   const [resendingId, setResendingId] = useState(null);
   const toast = useToast();
+  const smsSend = useSmsSend();
 
   const load = () => api.tenantCommunications(tenantId);
 
@@ -865,7 +870,8 @@ function TenantCommunications({ tenantId }) {
   const resend = async (logId) => {
     setResendingId(logId);
     try {
-      const res = await api.resendSmsLog(logId);
+      const res = await smsSend((extra) => api.resendSmsLog(logId, extra), { title: t("Renvoyer le SMS : vérifier le message") });
+      if (!res) return;
       if (res?.success) toast.success(t("SMS renvoyé."));
       else toast.error(res?.message || t("Le renvoi a échoué."));
       const fresh = await load();
@@ -1492,6 +1498,11 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
 
       </div>
 
+      {!form.id && form.phone && (
+        <div style={{ margin: "0 24px" }}>
+          <SmsNotice>{tf(t("Un SMS de confirmation sera envoyé au {phone} après l'enregistrement."), { phone: form.phone })}</SmsNotice>
+        </div>
+      )}
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
       {validating ? (
         <div className="modal-actions">
