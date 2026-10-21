@@ -801,7 +801,7 @@ export class ContractsService {
     const buildMessage = (name: string) => {
       let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
       let text =
-        `Bonjour ${name}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
+        `Bonjour ${name}, félicitations ! Votre contrat de bail est bien signé et confirmé. ` +
         `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
         `Votre bailleur est ${landlordName}. ` +
         `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +

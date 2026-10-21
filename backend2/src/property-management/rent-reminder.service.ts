@@ -232,6 +232,11 @@ export class RentReminderService {
         lease.propertyId ? Number(lease.propertyId) : null,
         lease.organizationId,
       );
+      // Bailleur cite dans la relance : proprietaire du bien (nom + telephone), sinon la societe.
+      const landlord = await this.ownerNotifications.landlordForProperty(
+        lease.propertyId ? Number(lease.propertyId) : null,
+        Number(lease.organizationId),
+      );
       const recipients = recipientsMap.get(Number(lease.leaseId)) ?? [];
       const multi = recipients.length > 1;
       // Nom(s) affiche(s) a la personne de contact : "A & B" si plusieurs locataires.
@@ -249,6 +254,8 @@ export class RentReminderService {
         ownerContact: propertyContacts.ownerContact,
         managerContact: propertyContacts.managerContact,
         contacts: propertyContacts.contacts || `${companyName}${contactLine}`,
+        ownerName: landlord.name || companyName,
+        ownerPhone: landlord.phone || companyPhone,
         url: "",
       };
       let anyEmail = false;
@@ -266,20 +273,16 @@ export class RentReminderService {
           };
           const tenantMsg = await this.ownerNotifications.renderMessage(
             "payment_reminder",
-            "Bonjour {tenantName}, votre loyer (bail {reference}) a {lateLabel} de retard. Montant du : {amount}. " +
-              "Merci de regulariser rapidement. Contact : {contacts}",
+            "Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}.",
             vars,
             { tenantId: r.customerId },
           );
           const rel = this.related(multi, r.customerId, lease.leaseId);
 
           if (r.phone) {
-            // Footer seulement si le modele n'a pas deja place {url} lui-meme.
-            const smsWithFooter = this.ownerNotifications.fitOneSms(
-              vars.url && tenantMsg.includes(vars.url)
-                ? tenantMsg
-                : await this.tenantPortal.appendPortalFooterToSms(tenantMsg, r.customerId, lease.organizationId),
-            );
+            // Pas de lien portail ajoute au SMS : il coupait le message (1 SMS max). Il reste
+            // dans l'email, et dans le SMS seulement si le modele contient {url}.
+            const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg);
             const err = await this.safeSms(
               r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel,
               `Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`,

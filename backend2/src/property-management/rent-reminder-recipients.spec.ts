@@ -75,6 +75,7 @@ function makeService(opts: { recipients: any[]; smsFailPhones?: string[]; row?: 
   };
   const ownerNotifications = {
     propertyContactVars: async () => ({ ownerContact: "", managerContact: "", contacts: "Marie" }),
+    landlordForProperty: async () => ({ name: "Jean Mukendi", phone: "+243811111111" }),
     renderMessage: async (_e: string, fallback: string, vars: Record<string, string>) => {
       let out = fallback;
       for (const [k, v] of Object.entries(vars)) out = out.replace(new RegExp(`\\{${k}\\}`, "g"), v ?? "");
@@ -112,16 +113,16 @@ describe("runOverdueReminders — locataires multiples", () => {
     expect(updates).toHaveLength(1);
   });
 
-  it("2 locataires : 2 SMS personnalises avec leur propre lien, throttle pose UNE fois", async () => {
+  it("2 locataires : 2 SMS personnalises (sans lien portail), throttle pose UNE fois", async () => {
     const { service, sentSms, updates } = makeService({
       recipients: [person(7, "Jean", "+243900000000"), person(8, "Marie", "+243900000001")],
     });
     await manual(service);
     expect(sentSms).toHaveLength(2);
     expect(sentSms[0].message).toContain("Jean");
-    expect(sentSms[0].message).toContain("https://p/7");
+    expect(sentSms[0].message).not.toContain("https://p/7"); // plus de lien portail dans le SMS de relance
     expect(sentSms[1].message).toContain("Marie");
-    expect(sentSms[1].message).toContain("https://p/8");
+    expect(sentSms[1].message).not.toContain("https://p/8");
     expect(sentSms.map((m) => [m.relatedType, m.relatedId])).toEqual([["tenant", 7], ["tenant", 8]]);
     expect(updates).toHaveLength(1);
   });

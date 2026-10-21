@@ -102,6 +102,8 @@ function makeService(opts: {
     appendPortalFooterToEmail: async (html: string) => html,
   };
   const ownerNotifications = {
+    ownerNameForProperty: async () => "Jean Mukendi",
+    landlordForProperty: async () => ({ name: "Jean Mukendi", phone: "+243811111111" }),
     propertyContactVars: async () => ({
       ownerContact: "proprietaire Marie au +243811111111",
       managerContact: "",

@@ -127,6 +127,7 @@ describe("SMS de retard du bail 11 : meme total du partout", () => {
     const renderer = new OwnerNotificationsService(db, sms as any, {} as any, {} as any, {} as any);
     const ownerNotifications = {
       propertyContactVars: async () => ({ ownerContact: "", managerContact: "", contacts: "Marie" }),
+      landlordForProperty: async () => ({ name: "Jean Mukendi", phone: "+243811111111" }),
       renderMessage: renderer.renderMessage.bind(renderer),
       fitOneSms: (t: string) => t,
       leaseRecipients: async () =>

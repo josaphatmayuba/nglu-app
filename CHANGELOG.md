@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus — SMS plus courts et plus clairs (v3.242.2).**
+  - Le numéro de bail (`{reference}`) est retiré de tous les SMS, y compris des modèles personnalisés dans Réglages › Messages (règle dans `renderMessage`). Il reste dans les objets d'email.
+  - Relance de loyer en retard : « Bonjour {tenantName}, votre loyer est en retard de {lateLabel} ({amount}). Merci de régulariser rapidement. Bailleur : {ownerName}, {ownerPhone}. » Plus de lien portail ajouté au SMS (il coupait le message) ; il reste dans l'email.
+  - Bail actif : l'appartement (`{unit}`) figure dans le message.
+  - Textes par défaut non personnalisés (bail actif, bienvenue, paiement reçu, justificatif refusé, relance) mis à jour automatiquement au démarrage.
+- **Domus — SMS de préavis réécrit (v3.242.1).** Texte clair en 1 seul SMS : « Bonjour {tenantName}, {monthsBehind} mois de loyer impayés ({amount}). Sans paiement, un préavis pourra être déposé. Bailleur : {ownerName}, {ownerPhone}. » Plus de lien portail dans le SMS (il reste dans l'email). Bailleur = propriétaire du bien (nom + téléphone), sinon la société. Les organisations qui avaient gardé l'ancien texte par défaut reçoivent le nouveau au démarrage ; un texte personnalisé n'est pas touché.
 - **Aperçu SMS avant envoi, lots 2 à 4 + coût des SMS (v3.242.0).**
   - Domus : aperçu avant l'envoi d'un contrat pour signature, le renvoi du lien à un signataire, le message de bienvenue, la génération du lien portail et le refus d'un justificatif (le refus n'est enregistré qu'après confirmation). Le lien de signature, recréé à chaque envoi, est masqué dans l'aperçu et les anciens liens restent valides tant qu'on n'a pas confirmé.
   - Domus : le renvoi d'un communiqué aux destinataires en échec montre le texte et le nombre de SMS avant de confirmer.
