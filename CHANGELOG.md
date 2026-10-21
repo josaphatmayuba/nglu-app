@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : récapitulatif de résiliation = retard réel (v3.243.3).** La ligne « Impayés » de la modale comptait toutes les échéances jusqu'à la date d'effet (y compris les mois à venir d'une résiliation programmée et ceux encore en délai de grâce). Elle compte désormais le retard réel à ce jour, délai de grâce dépassé, même calcul que la carte Loyers et le préavis (helper `noticeDueLines` partagé).
 - **Domus : SMS de résiliation raccourcis (v3.243.1).** L'adresse en tête faisait couper la date de fin (« prendra... »). Nouveau texte : « votre bail du logement {unit} prendra fin le / est résilié à compter du {date}. Questions : gestionnaire {contact}. » ; anciens textes par défaut migrés au démarrage.
 
 - **Domus : résiliation programmée d'un bail (v3.243.0).**

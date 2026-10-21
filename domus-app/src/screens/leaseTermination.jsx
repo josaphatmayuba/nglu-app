@@ -203,7 +203,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
                   <strong>{countLine(preview.futureCount, preview.futureTotal)}</strong>
                 </div>
                 <div className="immo-pay-row">
-                  <span>{t("Impayés restant dus (avant cette date)")}</span>
+                  <span>{t("Impayés en retard (délai de grâce dépassé)")}</span>
                   <strong className={preview.unpaidCount > 0 ? "domus-terminate-warn" : undefined}>
                     {countLine(preview.unpaidCount, preview.unpaidTotal)}
                   </strong>

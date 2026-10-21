@@ -65,7 +65,7 @@ const EN = {
   "Récapitulatif": "Summary",
   "Calcul en cours…": "Calculating…",
   "Échéances futures annulées": "Future instalments cancelled",
-  "Impayés restant dus (avant cette date)": "Unpaid amounts still due (before this date)",
+  "Impayés en retard (délai de grâce dépassé)": "Overdue unpaid (grace period exceeded)",
   "Caution détenue": "Deposit held",
   "Aucune": "None",
   "Restituer la caution": "Return the deposit",

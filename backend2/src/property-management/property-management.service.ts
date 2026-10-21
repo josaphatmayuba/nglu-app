@@ -2618,8 +2618,11 @@ export class PropertyManagementService {
     const scheduled = day > this.formatDateOnly(new Date());
     const rows = await this.terminationDueRows(this.db, leaseId, orgId);
     const future = rows.filter((r) => r.periodDay > day);
-    const unpaid = rows.filter((r) => r.periodDay <= day);
     const sum = (list: Array<{ total: number }>) => Math.round(list.reduce((a, r) => a + r.total, 0) * 100) / 100;
+    // Impayes = retard reel a ce jour (delai de grace depasse), meme regle que
+    // la carte Loyers et le preavis ; une echeance encore en grace n est pas comptee.
+    const { lines, graceDays, today, decimals } = await this.noticeDueLines(lease, leaseId, orgId);
+    const { late, lateTotal } = splitNoticeDues(lines, today, graceDays, decimals);
 
     const [cur] = lease.currencyId
       ? await this.db
@@ -2654,8 +2657,8 @@ export class PropertyManagementService {
       currency: { symbol: cur?.symbol ?? null, name: cur?.name ?? null, code: cur?.code ?? null },
       futureCount: future.length,
       futureTotal: sum(future),
-      unpaidCount: unpaid.length,
-      unpaidTotal: sum(unpaid),
+      unpaidCount: late.length,
+      unpaidTotal: lateTotal,
       deposit: dep
         ? { id: Number(dep.id), amount: Number(dep.amount) || 0, currencySymbol: dep.symbol ?? cur?.symbol ?? null, currencyCode: dep.code ?? cur?.code ?? null }
         : null,
@@ -5161,61 +5164,7 @@ export class PropertyManagementService {
     if (!lease) throw new NotFoundException("Bail introuvable.");
     lease.currencySymbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
 
-    // Couverture en montant : total deja verse / loyer mensuel. Les echeances
-    // "pending" (generees mais non encaissees) ne comptent pas comme payees.
-    const payments = await this.db
-      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
-      .from(realEstateRentPayments)
-      .where(and(
-        eq(realEstateRentPayments.leaseId, leaseId),
-        eq(realEstateRentPayments.organizationId, orgId),
-        ne(realEstateRentPayments.status, "voided"),
-      ));
-    const rent = Number(lease.rentAmount) || 0;
-    const totalPaid = payments
-      .filter((p) => p.status !== "pending" && p.status !== "settled")
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    // Le preavis ne reclame que les echeances dont le delai de grace est depasse
-    // (meme regle que la carte Loyers) ; une echeance encore dans la grace est
-    // seulement mentionnee a titre d'information ({currentDue}).
-    const graceDays = await readOverdueGraceDays(this.db, orgId);
-    const todayStr = this.formatDateOnly(new Date());
-    const today = this.parseDateOnly(todayStr);
-    const decimals = await this.currencyDecimals((lease as any).currencyId);
-    let lines: NoticeDueLine[];
-    if (isLeaseFlagged(lease)) {
-      // Bail flagge : echeances imputees (meme source que l'ecran Loyers).
-      const st = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))!;
-      lines = st.dues.map((d) => ({
-        periodStart: d.periodStart,
-        periodEnd: d.periodEnd,
-        dueDate: d.dueDate,
-        amount: d.amount,
-        remaining: d.remaining,
-        prorated: rent > 0 && d.amount < rent - 0.005,
-      }));
-    } else if ((lease as any).rentProrationEnabled) {
-      // Prorata opt-in : montants dus par periode, couverts dans l'ordre.
-      const schedule = scheduleForLease(lease as any, decimals, totalPaid, todayStr);
-      lines = coverDuesSequentially(
-        schedule.filter((p) => p.dueDate <= todayStr).map((p) => ({
-          periodStart: p.periodStart, periodEnd: p.periodEnd, dueDate: p.dueDate, amount: p.amount, prorated: p.prorated,
-        })),
-        totalPaid,
-        decimals,
-      );
-    } else {
-      // Loyer fixe : une echeance par cycle depuis le debut du bail.
-      const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
-      const end = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
-      const periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }> = [];
-      for (let i = 0; i < 1200; i++) {
-        const due = this.formatDateOnly(addScheduleCycle(start, lease.billingCycle as any, i));
-        if (due > todayStr || (end && due > end)) break;
-        periods.push({ periodStart: due, periodEnd: null, dueDate: due, amount: rent, prorated: false });
-      }
-      lines = coverDuesSequentially(periods, totalPaid, decimals);
-    }
+    const { lines, graceDays, today, todayStr, decimals } = await this.noticeDueLines(lease, leaseId, orgId);
     const { late, inGrace, lateTotal, inGraceTotal } = splitNoticeDues(lines, today, graceDays, decimals);
     const monthsBehind = late.length;
     const balance = lateTotal;
@@ -5416,6 +5365,70 @@ export class PropertyManagementService {
   }
 
   /** Envoi SMS best-effort : un echec n'annule pas le reste du preavis. */
+  /**
+   * Echeances echues du bail, meme source que la carte Loyers : imputees si
+   * le bail est flagge, sinon couverture en montant. Partage par le preavis
+   * et le recapitulatif de resiliation (retard reel = grace depassee).
+   */
+  private async noticeDueLines(lease: any, leaseId: number, orgId: number) {
+    // Couverture en montant : total deja verse / loyer mensuel. Les echeances
+    // "pending" (generees mais non encaissees) ne comptent pas comme payees.
+    const payments = await this.db
+      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.leaseId, leaseId),
+        eq(realEstateRentPayments.organizationId, orgId),
+        ne(realEstateRentPayments.status, "voided"),
+      ));
+    const rent = Number(lease.rentAmount) || 0;
+    const totalPaid = payments
+      .filter((p) => p.status !== "pending" && p.status !== "settled")
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    // Le preavis ne reclame que les echeances dont le delai de grace est depasse
+    // (meme regle que la carte Loyers) ; une echeance encore dans la grace est
+    // seulement mentionnee a titre d'information ({currentDue}).
+    const graceDays = await readOverdueGraceDays(this.db, orgId);
+    const todayStr = this.formatDateOnly(new Date());
+    const today = this.parseDateOnly(todayStr);
+    const decimals = await this.currencyDecimals((lease as any).currencyId);
+    let lines: NoticeDueLine[];
+    if (isLeaseFlagged(lease)) {
+      // Bail flagge : echeances imputees (meme source que l'ecran Loyers).
+      const st = (await loadFlaggedDueStates(this.db, orgId, [lease as any], today, graceDays)).get(Number(leaseId))!;
+      lines = st.dues.map((d) => ({
+        periodStart: d.periodStart,
+        periodEnd: d.periodEnd,
+        dueDate: d.dueDate,
+        amount: d.amount,
+        remaining: d.remaining,
+        prorated: rent > 0 && d.amount < rent - 0.005,
+      }));
+    } else if ((lease as any).rentProrationEnabled) {
+      // Prorata opt-in : montants dus par periode, couverts dans l'ordre.
+      const schedule = scheduleForLease(lease as any, decimals, totalPaid, todayStr);
+      lines = coverDuesSequentially(
+        schedule.filter((p) => p.dueDate <= todayStr).map((p) => ({
+          periodStart: p.periodStart, periodEnd: p.periodEnd, dueDate: p.dueDate, amount: p.amount, prorated: p.prorated,
+        })),
+        totalPaid,
+        decimals,
+      );
+    } else {
+      // Loyer fixe : une echeance par cycle depuis le debut du bail.
+      const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
+      const end = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
+      const periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }> = [];
+      for (let i = 0; i < 1200; i++) {
+        const due = this.formatDateOnly(addScheduleCycle(start, lease.billingCycle as any, i));
+        if (due > todayStr || (end && due > end)) break;
+        periods.push({ periodStart: due, periodEnd: null, dueDate: due, amount: rent, prorated: false });
+      }
+      lines = coverDuesSequentially(periods, totalPaid, decimals);
+    }
+    return { lines, graceDays, today, todayStr, decimals };
+  }
+
   private async safeNoticeSms(
     phone: string,
     message: string,
