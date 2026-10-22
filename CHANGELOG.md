@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : import du bail signé à la main non bloquant (v3.243.4, Lot B).** Envoi via un gestionnaire global (file IndexedDB, progression, retry automatique 5/15/30/60 s, reprise au démarrage et au retour réseau) avec panneau flottant sans spinner ; la modale peut être fermée pendant l'envoi, badge « Envoi… » sur la carte du bail, contrôle 10 Mo. Les rechargements de l'écran Baux sont silencieux (plus de spinner plein écran ni de modale démontée). Backend : message de bienvenue non attendu (réponse rapide), ré-import du même fichier (nom + taille) idempotent (200), audit avec le nom réel de l'utilisateur.
 - **Domus : récapitulatif de résiliation = retard réel (v3.243.3).** La ligne « Impayés » de la modale comptait toutes les échéances jusqu'à la date d'effet (y compris les mois à venir d'une résiliation programmée et ceux encore en délai de grâce). Elle compte désormais le retard réel à ce jour, délai de grâce dépassé, même calcul que la carte Loyers et le préavis (helper `noticeDueLines` partagé).
 - **Domus : SMS de résiliation raccourcis (v3.243.1).** L'adresse en tête faisait couper la date de fin (« prendra... »). Nouveau texte : « votre bail du logement {unit} prendra fin le / est résilié à compter du {date}. Questions : gestionnaire {contact}. » ; anciens textes par défaut migrés au démarrage.
 

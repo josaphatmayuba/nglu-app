@@ -1972,3 +1972,24 @@ fieldset.immo-alloc { min-width:0; }
 button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px; }
 .immo-pay-mini-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
 .immo-pay-mini-actions .immo-btn, .immo-pay-panel .immo-btn { min-height:36px; padding:0 10px; font-size:12px; }
+
+/* Gestionnaire d'envois (panneau flottant, sans spinner) */
+.domus-uploads-panel { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom, 0px)); margin-left:auto; max-width:420px; display:flex; flex-direction:column; gap:8px; z-index:230; }
+.domus-upload-row { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 32px -16px rgba(15,23,42,.35); padding:10px 12px; min-height:44px; display:flex; flex-direction:column; gap:6px; }
+.domus-upload-row.failed { border-color:var(--rose); }
+.domus-upload-ref { font-size:13px; font-weight:700; color:var(--ink-800); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.domus-upload-progress { display:flex; flex-direction:column; gap:4px; }
+.domus-upload-bar { background:var(--ink-100); border-radius:999px; height:6px; overflow:hidden; }
+.domus-upload-bar span { background:var(--iris-600); display:block; height:100%; transition:width .2s ease; }
+.domus-upload-bar span.done { background:var(--emerald); }
+.domus-upload-bar span.waiting_network { background:var(--amber); }
+.domus-upload-state { font-size:12px; color:var(--ink-600); }
+.domus-upload-row.done .domus-upload-state { color:var(--emerald); font-weight:700; }
+.domus-upload-row.failed .domus-upload-state, .domus-upload-error { color:var(--rose); font-weight:700; font-size:12px; }
+.domus-upload-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.domus-upload-actions .immo-btn { min-height:44px; min-width:44px; font-size:13px; }
+.domus-upload-badge { display:inline-flex; align-items:center; background:var(--iris-50); color:var(--iris-700); border-radius:7px; font-size:11px; font-weight:800; padding:3px 8px; }
+.domus-upload-badge.waiting_network { background:var(--ink-100); color:var(--ink-600); }
+.domus-upload-inline-error { color:var(--rose); font-size:13px; font-weight:700; }
+@media (max-width:900px) { .domus-uploads-panel { bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
+.domus-upload-pick[data-disabled="true"] { opacity:.55; cursor:not-allowed; pointer-events:none; }

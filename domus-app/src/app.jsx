@@ -40,6 +40,7 @@ import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
 import { DialogProvider } from "./components/Dialog.jsx";
+import { UploadsProvider } from "./uploads/uploadManager.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 
 const NAV = [
@@ -342,6 +343,7 @@ export default function App() {
   return (
     <DateRangeProvider>
     <DialogProvider>
+    <UploadsProvider>
     <div className="shell" data-layout={device.mode} data-mobile={device.isMobile ? "true" : "false"}>
       <aside className="sidebar">
         <div className="brand">
@@ -437,6 +439,7 @@ export default function App() {
       </div>
       <AiAssistant />
     </div>
+    </UploadsProvider>
     </DialogProvider>
     </DateRangeProvider>
   );

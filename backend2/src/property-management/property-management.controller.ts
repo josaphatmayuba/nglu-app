@@ -2104,11 +2104,9 @@ export class PropertyManagementController {
     @Param("id", ParseIntPipe) id: number,
     @UploadedFile() document: any,
     @CurrentOrg() orgId: number,
-    @Req() req: Request,
+    @CurrentUserId() userId: number,
   ) {
-    const user = (req as Request & { user?: { firstName?: string; lastName?: string; username?: string } }).user;
-    const createdByName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.username || null : null;
-    return this.contractsService.markSignedManually(id, document, orgId, createdByName);
+    return this.contractsService.markSignedManually(id, document, orgId, userId);
   }
 
   @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })

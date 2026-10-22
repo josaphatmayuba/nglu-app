@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import { BadRequestException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { normalizePhoneKey } from "./notification-utils";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -608,7 +608,7 @@ export class ContractsService {
 
   // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
   // et on marque le contrat "signed" comme pour une signature électronique.
-  async markSignedManually(id: number, file: unknown, orgId: number, createdByName?: string | null) {
+  async markSignedManually(id: number, file: unknown, orgId: number, userId?: number | null) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
@@ -620,6 +620,17 @@ export class ContractsService {
     // Contrat déjà signé : on refuse seulement s'il a encore sa preuve attachée.
     // Si le scan a été supprimé (signedDocumentId détaché), on autorise le ré-import.
     if (contract.status === "signed" && contract.signedDocumentId) {
+      // Idempotence (retry apres coupure reseau) : meme nom + meme taille que le scan deja importe => 200.
+      const [existing] = await this.db
+        .select({ originalName: realEstateLeaseDocuments.originalName, sizeBytes: realEstateLeaseDocuments.sizeBytes })
+        .from(realEstateLeaseDocuments)
+        .where(eq(realEstateLeaseDocuments.id, contract.signedDocumentId))
+        .limit(1);
+      const f = file as { originalname?: string; size?: number } | undefined;
+      const sameName = (existing?.originalName ?? null) === (f?.originalname ? String(f.originalname).slice(0, 255) : null);
+      if (existing && sameName && Number(existing.sizeBytes) === Number(f?.size)) {
+        return this.getContract(id, orgId);
+      }
       throw new GoneException("This contract has already been signed.");
     }
 
@@ -643,7 +654,8 @@ export class ContractsService {
     });
     const documentId = Number(docResult.insertId);
 
-    await this.db
+    // Condition anti-course : seul le premier import concurrent gagne (statut pas encore signe, ou scan detache).
+    const claimed = await this.db
       .update(realEstateContracts)
       .set({
         status: "signed",
@@ -652,7 +664,20 @@ export class ContractsService {
         signedDocumentId: documentId,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContracts.id, id));
+      .where(
+        and(
+          eq(realEstateContracts.id, id),
+          or(ne(realEstateContracts.status, "signed"), isNull(realEstateContracts.signedDocumentId)),
+        ),
+      );
+    if (this.affected(claimed) < 1) {
+      // Perdu la course : soft delete du document insere, pas de second log ni de bienvenue.
+      await this.db
+        .update(realEstateLeaseDocuments)
+        .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateLeaseDocuments.id, documentId));
+      return this.getContract(id, orgId);
+    }
 
     // Scan papier = tous les signataires actifs ont signe (methode papier) ; liens invalides.
     await this.db
@@ -673,18 +698,31 @@ export class ContractsService {
         ),
       );
 
+    let importerName: string | null = null;
+    if (userId) {
+      const [u] = await this.db
+        .select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (u) importerName = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.username || null;
+    }
     await this.log(
       id,
       orgId,
       "signed",
       null,
       null,
-      `Signature papier importee${createdByName ? ` par ${createdByName}` : ""}`,
+      `Signature papier importée${importerName ? ` par ${importerName}` : ""}`,
     );
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
 
-    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort.
-    await this.claimAndDeliverWelcome(contract, orgId);
+    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort, sans bloquer la réponse.
+    void this.claimAndDeliverWelcome(contract, orgId)
+      .then(() => this.publishContractUpdate("status_changed", id, contract.leaseId))
+      .catch((err) =>
+      this.logger.warn(`Contract ${id}: welcome delivery failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
 
     return this.getContract(id, orgId);
   }

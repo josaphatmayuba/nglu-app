@@ -39,6 +39,7 @@ import { Autocomplete } from "../components/Autocomplete.jsx";
 import { SmsNotice, useConfirm, usePrompt, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
+import { MAX_UPLOAD_BYTES, UploadProgress, useUploadSuccess, useUploads } from "../uploads/uploadManager.jsx";
 import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
 import { TerminateLeaseModal } from "./leaseTermination.jsx";
 
@@ -167,6 +168,12 @@ export function Baux({ go } = {}) {
   const smsSend = useSmsSend();
   const { data, loading, error, reload } = useApi(loadLeaseModule, []);
   useRealtimeReload(reload, ["leases", "properties", "units", "tenants", "contracts"]);
+  const { itemForContract } = useUploads();
+  // Envoi d'un bail signé terminé (gestionnaire global) : mise à jour de la modale ouverte + liste.
+  useUploadSuccess(({ contractId, contract }) => {
+    setContractPreview((prev) => (prev && prev.id === contractId && contract ? contract : prev));
+    reload();
+  });
   const dateRange = useDateRange();
   const confirm = useConfirm();
   const leases = useMemo(
@@ -264,8 +271,9 @@ export function Baux({ go } = {}) {
     });
   }, [enriched, filter, query]);
 
-  if (loading) return <Loading />;
-  if (error) return <ApiError error={error} />;
+  // Loader plein écran seulement au 1er chargement : les rechargements suivants sont silencieux.
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ApiError error={error} />;
 
   const chips = [
     { key: "all", label: "Tous", count: counts.all },
@@ -365,6 +373,11 @@ export function Baux({ go } = {}) {
               <div className="immo-lease-progress">
                 <div>
                   <span className="mono">{info.reference}</span>
+                  {(() => {
+                    const up = contract ? itemForContract(contract.id) : null;
+                    if (!up) return null;
+                    return <span className={`domus-upload-badge ${up.status}`}>{up.status === "failed" ? t("Échec") : up.status === "waiting_network" ? t("En attente de réseau") : t("Envoi…")}</span>;
+                  })()}
                   <span>{info.years} an{info.years > 1 ? "s" : ""} · {info.elapsedMonths} mois écoulés</span>
                 </div>
                 <span className="immo-progress"><span className={info.tone} style={{ width: `${info.progress}%` }} /></span>
@@ -582,11 +595,12 @@ export function Baux({ go } = {}) {
       {contractPreview && (
         <ContractPreviewModal
           contract={contractPreview}
+          leaseRef={((Array.isArray(data?.leases) ? data.leases : []).find((l) => String(l.id) === String(contractPreview.leaseId)) || {}).reference}
           onClose={() => setContractPreview(null)}
-          onSigned={(updated) => { setContractPreview(updated); reload(); }}
         />
       )}
       {actionError && !leaseModal && <div className="domus-floating-error">{actionError}</div>}
+      {error && data && !actionError && <div className="domus-floating-error" role="alert">{error?.message || t("Impossible de charger les données")}</div>}
     </>
   );
 }
@@ -1349,10 +1363,12 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   );
 }
 
-function ContractPreviewModal({ contract, onClose, onSigned }) {
+function ContractPreviewModal({ contract, leaseRef, onClose }) {
   const confirm = useConfirm();
   const toast = useToast();
-  const [signBusy, setSignBusy] = useState(false);
+  const { enqueueSignedContract, itemForContract } = useUploads();
+  const upload = itemForContract(contract.id);
+  const signBusy = Boolean(upload);
   const [signError, setSignError] = useState("");
   const raw = contract.contractContent || "";
   // Texte brut (sans balises) → on préserve les sauts de ligne (articles séparés)
@@ -1368,21 +1384,22 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setSignError(t("Fichier trop lourd (max 10 Mo)"));
+      return;
+    }
     if (!(await confirm({
       title: t("Signature manuscrite"),
       message: t("Confirmer : le locataire a bien signé ce bail à la main sur papier ?"),
       confirmLabel: t("Confirmer"),
     }))) return;
-    setSignBusy(true);
     setSignError("");
-    try {
-      const updated = await api.markContractSignedManually(contract.id, file);
-      onSigned?.(updated);
-    } catch (err) {
-      setSignError(err?.message || "Import de la signature impossible.");
-    } finally {
-      setSignBusy(false);
-    }
+    // Envoi délégué au gestionnaire global : la modale peut être fermée librement.
+    enqueueSignedContract(file, {
+      contractId: contract.id,
+      leaseId: contract.leaseId,
+      ref: leaseRef ? `#${leaseRef}` : `#LEASE-${contract.leaseId}`,
+    });
   }
 
   return (
@@ -1406,9 +1423,10 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
         </div>
         {canMarkSigned && (
           <div className="domus-contract-manual-sign">
-            {signError && <div className="domus-floating-error">{signError}</div>}
-            <label className="immo-btn">
-              <FileSignature size={15} /> Marquer signe a la main (importer le PDF/scan)
+            {signError && <div className="domus-upload-inline-error" role="alert">{signError}</div>}
+            {upload && <UploadProgress item={upload} />}
+            <label className="immo-btn domus-upload-pick" aria-disabled={signBusy} data-disabled={signBusy ? "true" : undefined}>
+              <FileSignature size={15} /> {signBusy ? t("Envoi en cours…") : t("Marquer signé à la main (importer le PDF/scan)")}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -1422,7 +1440,7 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
         {contract.signedDocumentId && (
           <div className="domus-contract-manual-sign">
             <ProofButton className="immo-btn" path={`/leases/documents/${contract.signedDocumentId}/file`} title={t("Bail signé")}>
-              <FileText size={15} /> Voir le bail signe importe
+              <FileText size={15} /> {t("Voir le bail signé importé")}
             </ProofButton>
           </div>
         )}
