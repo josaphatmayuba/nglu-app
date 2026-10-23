@@ -1,5 +1,5 @@
 // SCRUM-247 — Contrats & signature (liste, détail, envoi, modèles).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarX, Check, Clock, Copy, FileCheck2, FilePen, FilePlus, History,
   Download, Printer, Search, Send, ShieldCheck, TriangleAlert, X, FileCheck,
@@ -9,7 +9,7 @@ import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
   CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, auditDetails, auditEventLabel, auditIsSigned, contractRef, contractStatusMeta,
-  formatAuditWhen, formatSignedAt, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, landlordSignatureOf,
+  contractDraftMarkScreen, formatAuditWhen, formatSignedAt, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, landlordSignatureOf,
   openContractPrint, signingUrlFromContract,
 } from "../contractUtils.js";
 import { SignedScanViewer, useSignedScanActions } from "../components/SignedScanViewer.jsx";
@@ -77,7 +77,8 @@ export function Contrats() {
 
   const [selectedId, setSelectedId] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detail, setDetail] = useState(null);
+  const [detailRaw, setDetail] = useState(null);
+  const detailReq = useRef(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -87,6 +88,8 @@ export function Contrats() {
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [signingLinks, setSigningLinks] = useState({});
+  // Le détail n'est exposé que s'il correspond au contrat sélectionné (pas d'audit / scan du contrat précédent).
+  const detail = detailRaw && String(detailRaw.id) === String(selectedId) ? detailRaw : null;
 
   const leasesById = useMemo(() => {
     const map = new Map();
@@ -133,6 +136,7 @@ export function Contrats() {
   const scanActions = useSignedScanActions(detail, toast.error);
 
   const loadDetail = useCallback(async (id) => {
+    detailReq.current = id || null;
     if (!id) {
       setDetail(null);
       return;
@@ -140,12 +144,14 @@ export function Contrats() {
     setDetailLoading(true);
     try {
       const full = await api.contract(id);
+      if (String(detailReq.current) !== String(id)) return; // une autre ouverture a pris le relais
       setDetail(full);
     } catch (e) {
+      if (String(detailReq.current) !== String(id)) return;
       setActionError(e.message || "Impossible de charger le contrat.");
       setDetail(null);
     } finally {
-      setDetailLoading(false);
+      if (String(detailReq.current) === String(id)) setDetailLoading(false);
     }
   }, []);
 
@@ -289,8 +295,10 @@ export function Contrats() {
     }
   };
 
-  if (loading) return <Loading />;
-  if (error) return <ApiError error={error} />;
+  // Loader plein écran seulement au 1er chargement : les rechargements suivants sont silencieux
+  // (sinon la modale est démontée et la liste remonte en haut).
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ApiError error={error} />;
 
   const signingLink = signingUrlFromContract(detail || selectedSummary, signingLinks);
   const canSend = detail && !["signed", "expired", "deleted"].includes(detail.status);
@@ -353,6 +361,18 @@ export function Contrats() {
         </div>
       </div>
     </>
+  );
+
+  const draftMark = contractDraftMarkScreen(detail);
+  const generatedDetails = (
+    <details className="signed-scan-generated">
+      <summary>{t("Version générée (non signée)")}</summary>
+      <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
+      <button type="button" className="btn" onClick={() => openContractPrint(detail, { onError: toast.error, generated: true })}>
+        <Printer size={14} /> {t("Imprimer cette version")}
+      </button>
+      {templateBlock}
+    </details>
   );
 
   return (
@@ -432,7 +452,7 @@ export function Contrats() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600, fontSize: 15 }}>{contractRef(selectedSummary)}</span>
                   <span className={`chip ${statusMeta.chip}`}>{statusMeta.label}</span>
-                  {detailLoading && <span className="muted" style={{ fontSize: 12 }}>Chargement…</span>}
+                  {detailLoading && detail && <span className="muted" style={{ fontSize: 12 }}>Chargement…</span>}
                 </div>
                 <div className="contrats-detail-actions">
                   <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
@@ -499,6 +519,11 @@ export function Contrats() {
                 </div>
               )}
 
+              {!detail ? (
+                <p className="muted signed-scan-loading" role="status" aria-busy={detailLoading ? "true" : undefined}>
+                  {detailLoading ? t("Chargement du contrat…") : t("Contrat indisponible.")}
+                </p>
+              ) : (
               <div className="contrats-detail-grid">
                 <div className="contrats-paper">
                   {proofMissing && (
@@ -517,16 +542,14 @@ export function Contrats() {
                       <div className="signed-scan-import-row">
                         <SignedScanImportButton contract={detail} leaseRef={selectedLease?.reference} replace label={t("Remplacer le scan")} />
                       </div>
-                      <details className="signed-scan-generated">
-                        <summary>{t("Version générée (non signée)")}</summary>
-                        <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
-                        <button type="button" className="btn" onClick={() => openContractPrint(detail, { onError: toast.error, generated: true })}>
-                          <Printer size={14} /> {t("Imprimer cette version")}
-                        </button>
-                        {templateBlock}
-                      </details>
+                      {generatedDetails}
                     </>
-                  ) : templateBlock}
+                  ) : proofMissing ? generatedDetails : (
+                    <>
+                      {draftMark && <div className="contrats-draft-mark screen-only" aria-hidden="true">{t("PROJET – non signé")}</div>}
+                      {templateBlock}
+                    </>
+                  )}
                 </div>
 
                 <div className="contrats-audit">
@@ -572,6 +595,7 @@ export function Contrats() {
                   )}
                 </div>
               </div>
+              )}
               </div>
               </div>
             </div>
@@ -620,6 +644,7 @@ export function Contrats() {
 
       {scanActions.proofModal}
       {actionError && <div className="domus-floating-error">{actionError}</div>}
+      {error && data && !actionError && <div className="domus-floating-error" role="alert">{error?.message || t("Impossible de charger les données")}</div>}
     </>
   );
 }

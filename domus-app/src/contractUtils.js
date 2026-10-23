@@ -30,6 +30,8 @@ export function isProofMissing(c) {
 // Méta de statut (libellé + chip) : « Signé (papier) » pour un bail signé à la main.
 export function contractStatusMeta(c) {
   const base = CONTRACT_STATUS[c?.status] || CONTRACT_STATUS.draft;
+  // Résumés de liste sans signatureData : on ne peut pas conclure à une preuve manquante.
+  if (c && "signatureData" in c && isProofMissing(c)) return { ...base, label: t("Preuve manquante"), chip: "chip-amber" };
   return isPaperSigned(c) ? { ...base, label: t("Signé (papier)") } : base;
 }
 
@@ -46,6 +48,7 @@ export const AUDIT_EVENT_LABEL = {
   signed: "Signé électroniquement",
   signed_paper: "Signé sur papier (scan importé)",
   scan_replaced: "Scan signé remplacé",
+  scan_removed: "Scan de preuve supprimé",
   welcome_sent: "Message de bienvenue envoyé",
   template_changed: "Modèle de bail modifié",
   status_changed: "Statut mis à jour",
@@ -68,7 +71,17 @@ export function auditDetails(log) {
   const d = String(log?.details || "");
   const m = d.match(/^Contract created for lease #(\d+)/);
   if (m) return `Contrat généré pour le bail n°${m[1]}`;
-  return d;
+  const tpl = d.match(/^Template changed to "(.*)"$/);
+  if (tpl) return `Modèle changé : "${tpl[1]}"`;
+  const signedBy = d.match(/^Signed by (.+)$/);
+  if (signedBy) return `Signé par ${signedBy[1] === "tenant" ? "locataire" : signedBy[1]}`;
+  const sentTo = d.match(/^Sent to (.+)$/);
+  if (sentTo) return `Envoyé à ${sentTo[1].replace(/^no email/, "aucun e-mail").replace(/\(email en echec\)/, "(e-mail en échec)")}`;
+  const resentTo = d.match(/^Resent to (.+)$/);
+  if (resentTo) return `Renvoyé à ${resentTo[1].replace(/^no email/, "aucun e-mail")}`;
+  return d
+    .replace(/Signature papier importee/g, "Signature papier importée")
+    .replace(/Message de bienvenue envoye/g, "Message de bienvenue envoyé");
 }
 
 export function contractRef(contract) {
@@ -425,6 +438,11 @@ export function contractWatermark(contract, generated = false) {
 // Mention « PROJET – non signé » : affichage ÉCRAN seulement (masquée à l'impression, absente du PDF).
 export function contractDraftMark(contract) {
   return contract?.status !== "signed" ? "PROJET – non signé" : "";
+}
+
+// Mention « PROJET – non signé » visible dans la modale de l'app (écran seulement, jamais imprimée).
+export function contractDraftMarkScreen(contract) {
+  return ["draft", "sent", "viewed"].includes(contract?.status) ? "PROJET – non signé" : "";
 }
 
 export function contractPrintBody(contract, { generated = false, forScreen = true } = {}) {

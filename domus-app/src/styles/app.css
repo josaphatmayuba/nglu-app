@@ -160,6 +160,10 @@ body {
 .contrats-layout { display:grid; grid-template-columns:1fr 280px; gap:12px; margin-top:16px; align-items:start; }
 .contrats-main { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .contrats-table-wrap { overflow:auto; }
+.contrats-table td .chip { white-space:normal; max-width:100%; text-align:center; }
+@media (max-width:600px) { .contrats-table th, .contrats-table td { padding-left:8px; padding-right:8px; } .contrats-table td:last-child { min-width:92px; } }
+.contrats-draft-mark { align-items:center; background:var(--ink-50); border:1px dashed var(--border); border-radius:8px; color:var(--ink-500); display:flex; font-size:11px; font-weight:700; justify-content:center; letter-spacing:.08em; margin:0 0 10px; padding:6px 10px; text-transform:uppercase; }
+@media print { .contrats-draft-mark.screen-only { display:none; } }
 .contrats-table tbody tr { cursor:pointer; }
 .contrats-table tbody tr:hover { background:var(--ink-50); }
 .contrats-row-active { background:var(--iris-50) !important; }
@@ -1974,7 +1978,7 @@ button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px;
 .immo-pay-mini-actions .immo-btn, .immo-pay-panel .immo-btn { min-height:36px; padding:0 10px; font-size:12px; }
 
 /* Gestionnaire d'envois (panneau flottant, sans spinner) */
-.domus-uploads-panel { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom, 0px)); margin-left:auto; max-width:420px; display:flex; flex-direction:column; gap:8px; z-index:230; }
+.domus-uploads-panel { position:fixed; left:12px; right:92px; bottom:calc(12px + env(safe-area-inset-bottom, 0px)); margin-left:auto; max-width:420px; display:flex; flex-direction:column; gap:8px; z-index:230; }
 .domus-upload-row { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 32px -16px rgba(15,23,42,.35); padding:10px 12px; min-height:44px; display:flex; flex-direction:column; gap:6px; }
 .domus-upload-row.failed { border-color:var(--rose); }
 .domus-upload-ref { font-size:13px; font-weight:700; color:var(--ink-800); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1991,7 +1995,8 @@ button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px;
 .domus-upload-badge { display:inline-flex; align-items:center; background:var(--iris-50); color:var(--iris-700); border-radius:7px; font-size:11px; font-weight:800; padding:3px 8px; }
 .domus-upload-badge.waiting_network { background:var(--ink-100); color:var(--ink-600); }
 .domus-upload-inline-error { color:var(--rose); font-size:13px; font-weight:700; }
-@media (max-width:900px) { .domus-uploads-panel { bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
+/* Le bouton Assistant IA (58 px, coin bas-droit) ne doit pas recouvrir le panneau : décalé à gauche (desktop), au-dessus (mobile, barre incluse). */
+@media (max-width:900px) { .domus-uploads-panel { right:12px; bottom:calc(150px + env(safe-area-inset-bottom, 0px)); } }
 .domus-upload-pick[data-disabled="true"] { opacity:.55; cursor:not-allowed; pointer-events:none; }
 .contrats-sig-paper { height:36px; border-radius:8px; background:var(--ink-50); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-700); }
 .signed-scan { display:grid; gap:10px; margin:10px 0; }

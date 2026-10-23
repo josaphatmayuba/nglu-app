@@ -605,7 +605,7 @@ export class ContractsService {
         "sent",
         null,
         null,
-        `Sent to ${out.emailTo ?? t.email ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""}${multi ? ` - ${t.name}` : ""}${out.skipped.length ? ` (${out.skipped.join(", ")})` : ""}${out.error ? " (email en echec)" : ""}`,
+        `Envoyé à ${out.emailTo ?? t.email ?? "aucun e-mail"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""}${multi ? ` - ${t.name}` : ""}${out.skipped.length ? ` (${out.skipped.join(", ")})` : ""}${out.error ? " (e-mail en échec)" : ""}`,
         t.signerId,
       );
     }
@@ -734,7 +734,8 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({
         status: "signed",
-        signedAt: sql`CURRENT_TIMESTAMP`,
+        // Scan détaché puis ré-importé : on conserve la date de signature d'origine.
+        ...(contract.status === "signed" && contract.signedAt ? {} : { signedAt: sql`CURRENT_TIMESTAMP` }),
         signerToken: null,
         signedDocumentId: documentId,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1033,7 +1034,7 @@ export class ContractsService {
         .where(eq(realEstateContracts.id, contract.id));
     }
 
-    await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoye : ${sentTo.join(" / ")}`);
+    await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoyé : ${sentTo.join(" / ")}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
     return { message: "Message de bienvenue envoyé.", emailSent, smsSent };
@@ -1102,7 +1103,7 @@ export class ContractsService {
         })
         .where(eq(realEstateContracts.id, contract.id));
 
-      await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+      await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signé par ${contract.tenantName ?? "locataire"}`);
       await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
       // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
@@ -1141,7 +1142,7 @@ export class ContractsService {
     if (this.affected(signerRes) < 1) {
       throw new GoneException("This contract has already been signed.");
     }
-    await this.log(contract.id, orgId, "signed", ip, ua, `Signed by ${signer.signerName ?? contract.tenantName ?? "tenant"}`, signer.id);
+    await this.log(contract.id, orgId, "signed", ip, ua, `Signé par ${signer.signerName ?? contract.tenantName ?? "locataire"}`, signer.id);
 
     // 2) Contrat -> signed SEULEMENT si plus aucun signataire actif non signe.
     const remaining = await this.db
@@ -1178,7 +1179,7 @@ export class ContractsService {
           .update(realEstateContractSigners)
           .set({ signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
           .where(eq(realEstateContractSigners.contractId, contract.id));
-        await this.log(contract.id, orgId, "all_signed", ip, ua, "Tous les signataires ont signe");
+        await this.log(contract.id, orgId, "all_signed", ip, ua, "Tous les signataires ont signé");
       }
     }
 
@@ -1291,7 +1292,7 @@ export class ContractsService {
       "resent",
       null,
       null,
-      `Resent to ${out.emailTo ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""} - ${signer.signerName ?? ""}`,
+      `Renvoyé à ${out.emailTo ?? "aucun e-mail"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""} - ${signer.signerName ?? ""}`,
       signer.id,
     );
     if (out.error) throw out.error;
@@ -1328,7 +1329,7 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ status: "draft", signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, contract.id), eq(realEstateContracts.organizationId, orgId)));
-    await this.log(contract.id, orgId, "signers_reset", null, null, "Locataires du bail modifies : contrat remis en brouillon, a regenerer et renvoyer.");
+    await this.log(contract.id, orgId, "signers_reset", null, null, "Locataires du bail modifiés : contrat remis en brouillon, à régénérer et renvoyer.");
     await this.publishContractUpdate("status_changed", contract.id, leaseId);
     return { reset: true, contractId: contract.id };
   }
@@ -1478,7 +1479,7 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ contractContent: content, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
-    await this.log(id, orgId, "template_changed", null, null, `Template changed to "${template.name}"`);
+    await this.log(id, orgId, "template_changed", null, null, `Modèle changé : "${template.name}"`);
     await this.publishContractUpdate("updated", id, rows[0].leaseId);
     return this.getContract(id, orgId);
   }

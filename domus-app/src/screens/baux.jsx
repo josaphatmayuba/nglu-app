@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
-import { contractStatusMeta, escapeHtml, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
+import { contractDraftMarkScreen, contractStatusMeta, escapeHtml, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
 import { downloadSignedScan, scanNeedsProofModal } from "../signedScan.js";
 import { SignedScanViewer, useSignedScanActions } from "../components/SignedScanViewer.jsx";
 import { SignedScanImportButton } from "../components/SignedScanImportButton.jsx";
@@ -1206,13 +1206,13 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
 
 function LeaseDetailModal({ lease, info, contract, onClose, go }) {
   const rows = [
-    ["Reference", info.reference],
+    [t("Référence"), info.reference],
     [(lease.coTenants || []).length ? "Locataires" : "Locataire", tenantNames(lease)],
     ["Bien", info.propertyLabel],
-    ["Debut", fmtDate(info.start)],
+    [t("Début"), fmtDate(info.start)],
     ["Fin", fmtDate(info.end)],
     ["Loyer", `${moneyExact(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
-    ["Depot", moneyExact(lease.securityDeposit || 0, lease.currencySymbol || "$")],
+    [t("Dépôt"), moneyExact(lease.securityDeposit || 0, lease.currencySymbol || "$")],
     ["Statut", info.statusText],
     ...(info.terminated
       ? [
@@ -1257,6 +1257,11 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lease.id]);
 
+  // Remplacement du scan terminé en arrière-plan : on relit la liste des documents.
+  useUploadSuccess(({ leaseId }) => {
+    if (String(leaseId) === String(lease.id)) reloadDocuments();
+  });
+
   async function handleUploadDocument(e) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -1277,7 +1282,7 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
     if (!(await confirm({
       title: t("Supprimer le document"),
       message: signedScanIds.includes(Number(documentId))
-        ? t("Ce document est la preuve de signature du bail. Le contrat apparaîtra en \"Preuve manquante\". Préférez \"Remplacer\".")
+        ? t("Ce document est la preuve de signature du bail. Le contrat apparaîtra en \"Preuve manquante\". Préférez \"Remplacer le scan\".")
         : t("Supprimer ce document ?"),
       confirmLabel: t("Supprimer"),
       danger: true,
@@ -1302,7 +1307,7 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
           <div className="domus-modal-title">
             <span className="domus-modal-title-icon"><Eye size={20} /></span>
             <div>
-              <h2>Detail du bail</h2>
+              <h2>{t("Détail du bail")}</h2>
               <p>{tenantName(lease)}</p>
             </div>
           </div>
@@ -1323,7 +1328,7 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
           </div>
         )}
         <div className="domus-detail-notes">
-          <p><strong>Bail signe a la main</strong></p>
+          <p><strong>{t("Bail signé à la main")}</strong></p>
           {docError && <div className="domus-floating-error">{docError}</div>}
           {documents.length > 0 && (
             <ul className="domus-lease-documents">
@@ -1344,8 +1349,13 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
               ))}
             </ul>
           )}
+          {contract?.signedDocumentId && (
+            <div className="signed-scan-import-row">
+              <SignedScanImportButton contract={contract} leaseRef={info.reference} replace label={t("Remplacer le scan")} />
+            </div>
+          )}
           <label className="immo-btn">
-            <FilePlus size={15} /> Importer le bail signe (photo/scan/PDF)
+            <FilePlus size={15} /> {t("Importer le bail signé (photo/scan/PDF)")}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -1384,9 +1394,10 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
   const body = raw
     ? (hasHtmlMarkup(raw) ? raw : `<pre class="domus-contract-plain">${escapeHtml(raw)}</pre>`)
     : "<p>Aucun contenu de contrat.</p>";
-  const statusLabel = contractStatusMeta(contract).label || contract.status || "Contrat";
+  const statusLabel = contractStatusMeta(contract).label || contract.status || "Contrat";  // « Signé (papier) » / « Preuve manquante »
   const scan = hasSignedScan(contract);
   const proofMissing = isProofMissing(contract);
+  const draftMark = contractDraftMarkScreen(contract);
   const generated = isPaperSigned(contract) || proofMissing;
   const scanActions = useSignedScanActions(contract, toast.error);
   // Signé sans preuve attachée (scan supprimé) → on ré-affiche l'import.
@@ -1488,11 +1499,22 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
               <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }} />
             </details>
           </div>
+        ) : proofMissing ? (
+          <div className="domus-contract-content">
+            <details className="signed-scan-generated">
+              <summary>{t("Version générée (non signée)")}</summary>
+              <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
+              <button type="button" className="immo-btn" onClick={() => openContractPrint(contract, { onError: toast.error, generated: true })}>
+                <Printer size={15} /> {t("Imprimer cette version")}
+              </button>
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }} />
+            </details>
+          </div>
         ) : (
-          <div
-            className="domus-contract-content"
-            dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
-          />
+          <div className="domus-contract-content">
+            {draftMark && <div className="contrats-draft-mark screen-only" aria-hidden="true">{t("PROJET – non signé")}</div>}
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }} />
+          </div>
         )}
         {scanActions.proofModal}
       </div>

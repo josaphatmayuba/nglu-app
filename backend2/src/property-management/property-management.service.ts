@@ -14,6 +14,7 @@ import {
   customers,
   emailTemplates,
   realEstateContracts,
+  realEstateContractAuditLogs,
   realEstateExpenseInstallments,
   realEstateLeaseDocuments,
   realEstateLeases,
@@ -6061,6 +6062,17 @@ export class PropertyManagementService {
           eq(realEstateContracts.organizationId, orgId),
         ));
       for (const contract of linkedContracts) {
+        // Audit du contrat (même format que ContractsService.log) : la preuve de signature a été retirée.
+        await this.db.insert(realEstateContractAuditLogs).values({
+          organizationId: orgId,
+          contractId: contract.id,
+          event: "scan_removed",
+          ip: null,
+          userAgent: null,
+          details: "Scan de preuve supprimé",
+          signerId: null,
+          createdAt: sql`CURRENT_TIMESTAMP`,
+        });
         await this.realtimeData.publishDataUpdated({
           entity: "contract",
           action: "updated",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  auditDetails, auditEventLabel, auditIsSigned, contractDraftMark, contractPrintBody, contractStatusMeta, contractWatermark,
+  auditDetails, auditEventLabel, auditIsSigned, contractDraftMark, contractDraftMarkScreen, contractPrintBody, contractStatusMeta, contractWatermark,
   hasSignedScan, isPaperSigned, isProofMissing,
 } from "./contractUtils.js";
 
@@ -69,5 +69,31 @@ describe("audit", () => {
   it("détail anglais traduit", () => {
     expect(auditDetails({ details: "Contract created for lease #42" })).toBe("Contrat généré pour le bail n°42");
     expect(auditDetails({ details: "autre" })).toBe("autre");
+  });
+});
+
+describe("auditDetails - anciens textes normalisés", () => {
+  it("traduit/accentue les anciens textes", () => {
+    expect(auditDetails({ details: "Signature papier importee par Jean" })).toBe("Signature papier importée par Jean");
+    expect(auditDetails({ details: "Message de bienvenue envoye : a@b.c" })).toBe("Message de bienvenue envoyé : a@b.c");
+    expect(auditDetails({ details: 'Template changed to "Bail A"' })).toBe('Modèle changé : "Bail A"');
+    expect(auditDetails({ details: "Signed by Marie" })).toBe("Signé par Marie");
+    expect(auditDetails({ details: "Sent to x@y.z / SMS +243" })).toBe("Envoyé à x@y.z / SMS +243");
+    expect(auditDetails({ details: "Sent to no email (email en echec)" })).toBe("Envoyé à aucun e-mail (e-mail en échec)");
+  });
+  it("scan_removed et textes déjà français inchangés", () => {
+    expect(auditEventLabel({ event: "scan_removed" })).toBe("Scan de preuve supprimé");
+    expect(auditDetails({ details: "Signé par Marie" })).toBe("Signé par Marie");
+  });
+});
+
+describe("preuve manquante / mention écran", () => {
+  it("statut « Preuve manquante » sur un contrat complet, pas sur un résumé de liste", () => {
+    expect(contractStatusMeta({ status: "signed", signatureData: null, signedDocumentId: null, signers: [] }).label).toBe("Preuve manquante");
+    expect(contractStatusMeta({ status: "signed", signedDocumentId: null }).label).toBe("Signé");
+  });
+  it("mention PROJET pour brouillon / envoyé / vu seulement", () => {
+    for (const status of ["draft", "sent", "viewed"]) expect(contractDraftMarkScreen({ status })).toBe("PROJET – non signé");
+    expect(contractDraftMarkScreen({ status: "signed" })).toBe("");
   });
 });

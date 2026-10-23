@@ -31,7 +31,7 @@ export const landlordSignatureHtml = (contract) => {
       </div>`;
 };
 
-const NO_SIG_TEXT = (contract) => (isPaperSigned(contract) ? "Signé sur papier (voir scan)" : "Aucune signature locataire enregistree.");
+const NO_SIG_TEXT = (contract) => (isPaperSigned(contract) ? "Signé sur papier (voir scan)" : "Aucune signature locataire enregistrée.");
 
 const tenantSignatureBlockHtml = (sigData, signedAt, name, contract) => `
     <div>

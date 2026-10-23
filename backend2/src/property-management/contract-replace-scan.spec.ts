@@ -116,4 +116,21 @@ describe("ContractsService.markSignedManually - remplacement du scan", () => {
     await expect(svc.markSignedManually(1, newFile, 5, 3, false)).rejects.toThrow("Contrat déjà signé électroniquement.");
     expect(svc.objectStorage.putDocument).not.toHaveBeenCalled();
   });
+
+  it("ré-import d'un scan détaché : la date de signature d'origine est conservée", async () => {
+    const fake = makeFakeDb([[row({ signedDocumentId: null, signedAt: new Date("2026-01-05") })]]);
+    const svc = makeService(fake);
+    await svc.markSignedManually(1, newFile, 5, 3, false);
+    const claim = fake.sets.find((s: any) => s.signedDocumentId === 101 && s.status === "signed");
+    expect(claim).toBeDefined();
+    expect("signedAt" in claim).toBe(false);
+  });
+
+  it("premier import : signedAt posé", async () => {
+    const fake = makeFakeDb([[row({ status: "sent", signedDocumentId: null, signedAt: null })]]);
+    const svc = makeService(fake);
+    await svc.markSignedManually(1, newFile, 5, 3, false);
+    const claim = fake.sets.find((s: any) => s.status === "signed" && s.signedDocumentId === 101);
+    expect("signedAt" in claim).toBe(true);
+  });
 });
