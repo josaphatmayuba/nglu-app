@@ -2,15 +2,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarX, Check, Clock, Copy, FileCheck2, FilePen, FilePlus, History,
-  Printer, Search, Send, ShieldCheck, X, FileCheck,
+  Download, Printer, Search, Send, ShieldCheck, TriangleAlert, X, FileCheck,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
-  AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef,
-  formatAuditWhen, formatSignedAt, hasHtmlMarkup, landlordSignatureOf, openContractPrint, signingUrlFromContract,
+  CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, auditDetails, auditEventLabel, auditIsSigned, contractRef, contractStatusMeta,
+  formatAuditWhen, formatSignedAt, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, landlordSignatureOf,
+  openContractPrint, signingUrlFromContract,
 } from "../contractUtils.js";
+import { SignedScanViewer, useSignedScanActions } from "../components/SignedScanViewer.jsx";
+import { SignedScanImportButton } from "../components/SignedScanImportButton.jsx";
+import { useUploadSuccess } from "../uploads/uploadManager.jsx";
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -120,6 +124,14 @@ export function Contrats() {
     }
   }, [filtered, selectedId]);
 
+  // Import / remplacement du scan terminé (envoi en arrière-plan) : on relit liste + détail.
+  useUploadSuccess(({ contractId }) => {
+    reload();
+    if (String(contractId) === String(selectedId)) loadDetail(selectedId);
+  });
+
+  const scanActions = useSignedScanActions(detail, toast.error);
+
   const loadDetail = useCallback(async (id) => {
     if (!id) {
       setDetail(null);
@@ -154,7 +166,7 @@ export function Contrats() {
 
   const selectedSummary = filtered.find((c) => String(c.id) === String(selectedId)) || null;
   const selectedLease = selectedSummary?.leaseId ? leasesById.get(String(selectedSummary.leaseId)) : null;
-  const statusMeta = CONTRACT_STATUS[detail?.status || selectedSummary?.status] || CONTRACT_STATUS.draft;
+  const statusMeta = contractStatusMeta(detail || selectedSummary);
 
   const createLeaseOptions = useMemo(
     () => leases
@@ -282,6 +294,66 @@ export function Contrats() {
 
   const signingLink = signingUrlFromContract(detail || selectedSummary, signingLinks);
   const canSend = detail && !["signed", "expired", "deleted"].includes(detail.status);
+  const scan = hasSignedScan(detail);
+  const paper = isPaperSigned(detail);
+  const proofMissing = isProofMissing(detail);
+
+  const templateBlock = (
+    <>
+      {!detail?.contractContent && (
+        <>
+          <div className="contrats-paper-head">
+            <div className="font-display" style={{ fontWeight: 700, fontSize: 14 }}>CONTRAT DE BAIL</div>
+            <div className="muted" style={{ fontSize: 11 }}>
+              {selectedLease
+                ? `${TEMPLATE_TYPE_LABEL.residential} · ${selectedLease.unitName || "logement"}`
+                : "Document locatif"}
+            </div>
+          </div>
+          {selectedLease && (
+            <div className="contrats-paper-meta">
+              <p><span className="muted">Locataire :</span> {selectedSummary.tenantName || "—"}</p>
+              <p><span className="muted">Logement :</span> {[selectedLease.propertyName, selectedLease.unitName].filter(Boolean).join(" · ") || "—"}</p>
+              <p><span className="muted">Loyer :</span> {money(selectedLease.rentAmount, selectedLease.currencySymbol || "$")}/mois</p>
+              <p>
+                <span className="muted">Durée :</span>{" "}
+                {selectedLease.startDate ? new Date(selectedLease.startDate).toLocaleDateString("fr-FR") : "—"}
+                {" — "}
+                {selectedLease.endDate ? new Date(selectedLease.endDate).toLocaleDateString("fr-FR") : "—"}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+      <div className="contrats-paper-body">
+        {detail && hasHtmlMarkup(detail.contractContent) ? (
+          <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
+        ) : (
+          <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
+        )}
+      </div>
+      <div className="contrats-paper-sigs">
+        <div>
+          <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
+          {landlordSignatureOf(detail) ? (
+            <img src={landlordSignatureOf(detail)} alt="Signature bailleur" className="contrats-sig-img" />
+          ) : (
+            <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
+          )}
+        </div>
+        <div>
+          <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Locataire</div>
+          {detail?.signatureData ? (
+            <img src={detail.signatureData} alt="Signature" className="contrats-sig-img" />
+          ) : paper ? (
+            <div className="contrats-sig-paper">{t("Signé sur papier")}</div>
+          ) : (
+            <div className="contrats-sig-pending">en attente…</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -328,7 +400,7 @@ export function Contrats() {
                   </tr>
                 )}
                 {filtered.map((c) => {
-                  const meta = CONTRACT_STATUS[c.status] || CONTRACT_STATUS.draft;
+                  const meta = contractStatusMeta(c);
                   const active = String(c.id) === String(selectedId);
                   return (
                     <tr
@@ -364,12 +436,22 @@ export function Contrats() {
                 </div>
                 <div className="contrats-detail-actions">
                   <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail, { onError: toast.error })}>
+                  <button type="button" className="btn" disabled={!detail} onClick={() => {
+                    if (!detail) return;
+                    if (scan) scanActions.print();
+                    else openContractPrint(detail, { onError: toast.error, generated: paper || proofMissing });
+                  }}>
                     <Printer size={14} /> Imprimer
                   </button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail)}>
-                    <FileCheck size={14} /> PDF
-                  </button>
+                  {scan ? (
+                    <button type="button" className="btn" disabled={!detail} onClick={scanActions.download}>
+                      <Download size={14} /> {t("Télécharger le contrat signé")}
+                    </button>
+                  ) : (
+                    <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail, { generated: paper || proofMissing })}>
+                      <FileCheck size={14} /> PDF
+                    </button>
+                  )}
                   {signingLink && (
                     <button type="button" className="btn" onClick={copySigningLink}>
                       <Copy size={14} /> Lien
@@ -419,56 +501,32 @@ export function Contrats() {
 
               <div className="contrats-detail-grid">
                 <div className="contrats-paper">
-                  <div className="contrats-paper-head">
-                    <div className="font-display" style={{ fontWeight: 700, fontSize: 14 }}>CONTRAT DE BAIL</div>
-                    <div className="muted" style={{ fontSize: 11 }}>
-                      {selectedLease
-                        ? `${TEMPLATE_TYPE_LABEL.residential} · ${selectedLease.unitName || "logement"}`
-                        : "Document locatif"}
-                    </div>
-                  </div>
-                  {selectedLease && (
-                    <div className="contrats-paper-meta">
-                      <p><span className="muted">Locataire :</span> {selectedSummary.tenantName || "—"}</p>
-                      <p><span className="muted">Logement :</span> {[selectedLease.propertyName, selectedLease.unitName].filter(Boolean).join(" · ") || "—"}</p>
-                      <p><span className="muted">Loyer :</span> {money(selectedLease.rentAmount, selectedLease.currencySymbol || "$")}/mois</p>
-                      <p>
-                        <span className="muted">Durée :</span>{" "}
-                        {selectedLease.startDate ? new Date(selectedLease.startDate).toLocaleDateString("fr-FR") : "—"}
-                        {" — "}
-                        {selectedLease.endDate ? new Date(selectedLease.endDate).toLocaleDateString("fr-FR") : "—"}
-                      </p>
+                  {proofMissing && (
+                    <div className="signed-scan-missing" role="alert">
+                      <p><TriangleAlert size={15} /> {t("Preuve manquante : le contrat est marqué signé mais aucun scan n'est attaché.")}</p>
+                      <SignedScanImportButton contract={detail} leaseRef={selectedLease?.reference} label={t("Importer le scan")} />
                     </div>
                   )}
-                  <div className="contrats-paper-body">
-                    {detail && hasHtmlMarkup(detail.contractContent) ? (
-                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
-                    ) : (
-                      <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
-                    )}
-                  </div>
-                  <div className="contrats-paper-sigs">
-                    <div>
-                      <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
-                      {landlordSignatureOf(detail) ? (
-                        <img
-                          src={landlordSignatureOf(detail)}
-                          alt="Signature bailleur"
-                          className="contrats-sig-img"
-                        />
-                      ) : (
-                        <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Locataire</div>
-                      {detail?.signatureData ? (
-                        <img src={detail.signatureData} alt="Signature" className="contrats-sig-img" />
-                      ) : (
-                        <div className="contrats-sig-pending">en attente…</div>
-                      )}
-                    </div>
-                  </div>
+                  {scan ? (
+                    <>
+                      <div className="signed-scan-banner">
+                        <FileCheck size={15} />
+                        <span>{tf("Signé sur papier le {date} — le scan ci-dessous fait foi", { date: detail.signedAt ? new Date(detail.signedAt).toLocaleDateString("fr-FR") : "—" })}</span>
+                      </div>
+                      <SignedScanViewer key={detail.signedDocumentId} contract={detail} />
+                      <div className="signed-scan-import-row">
+                        <SignedScanImportButton contract={detail} leaseRef={selectedLease?.reference} replace label={t("Remplacer le scan")} />
+                      </div>
+                      <details className="signed-scan-generated">
+                        <summary>{t("Version générée (non signée)")}</summary>
+                        <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
+                        <button type="button" className="btn" onClick={() => openContractPrint(detail, { onError: toast.error, generated: true })}>
+                          <Printer size={14} /> {t("Imprimer cette version")}
+                        </button>
+                        {templateBlock}
+                      </details>
+                    </>
+                  ) : templateBlock}
                 </div>
 
                 <div className="contrats-audit">
@@ -480,19 +538,26 @@ export function Contrats() {
                     )}
                     {(detail?.auditLogs || []).map((log) => (
                       <div key={log.id} className="contrats-timeline-item">
-                        <span className={`contrats-timeline-dot ${log.event === "signed" ? "done" : ""}`} />
+                        <span className={`contrats-timeline-dot ${auditIsSigned(log) ? "done" : ""}`} />
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{AUDIT_EVENT_LABEL[log.event] || log.event}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{log.details || "—"}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{auditEventLabel(log)}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>{auditDetails(log) || "—"}</div>
                           <div className="muted" style={{ fontSize: 11 }}>{formatAuditWhen(log.createdAt)}</div>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="contrats-legal-note">
-                    <ShieldCheck size={16} />
-                    Signature électronique horodatée et liée à un lien sécurisé unique — valeur probante.
-                  </div>
+                  {paper ? (
+                    <div className="contrats-legal-note">
+                      <ShieldCheck size={16} />
+                      {t("Signature manuscrite : le scan importé fait foi.")}
+                    </div>
+                  ) : detail?.status === "signed" && !proofMissing ? (
+                    <div className="contrats-legal-note">
+                      <ShieldCheck size={16} />
+                      Signature électronique horodatée et liée à un lien sécurisé unique — valeur probante.
+                    </div>
+                  ) : null}
                   {detail?.signedAt && (
                     <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
                       Signé le {formatSignedAt(detail.signedAt)}
@@ -553,6 +618,7 @@ export function Contrats() {
         </div>
       )}
 
+      {scanActions.proofModal}
       {actionError && <div className="domus-floating-error">{actionError}</div>}
     </>
   );

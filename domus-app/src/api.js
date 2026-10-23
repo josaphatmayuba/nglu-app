@@ -635,8 +635,9 @@ export const api = {
   resendContractSigner: (id, signerId, extra) => post(`/contracts/${id}/signers/${signerId}/resend`, extra),
   deleteContract: (id) => del(`/contracts/${id}`),
   changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
-  markContractSignedManually: (id, file, onProgress, signal) => {
+  markContractSignedManually: (id, file, onProgress, signal, { replace = false } = {}) => {
     const form = new FormData();
+    if (replace) form.append("replace", "true");
     form.append("document", file);
     return xhrUpload(`/contracts/${id}/mark-signed-manually`, form, { onProgress, signal });
   },

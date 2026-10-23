@@ -28,7 +28,10 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
-import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
+import { contractStatusMeta, escapeHtml, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
+import { downloadSignedScan, scanNeedsProofModal } from "../signedScan.js";
+import { SignedScanViewer, useSignedScanActions } from "../components/SignedScanViewer.jsx";
+import { SignedScanImportButton } from "../components/SignedScanImportButton.jsx";
 import { openRentBookPrint } from "../rentBookUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
@@ -469,7 +472,7 @@ export function Baux({ go } = {}) {
                       }}
                       onDownloadContract={() => {
                         setOpenMenuId(null);
-                        handleContractDownload(lease, contractsByLease, setBusyAction, setActionError, reload);
+                        handleContractDownload(lease, contractsByLease, setBusyAction, setActionError, reload, setContractPreview);
                       }}
                       onExportCsv={() => {
                         downloadLeaseCsv(lease, info);
@@ -590,7 +593,7 @@ export function Baux({ go } = {}) {
         <InspectionComparison lease={inspectionView.lease} onClose={() => setInspectionView(null)} />
       )}
       {detailLease && (
-        <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
+        <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} contract={contractsByLease.get(String(detailLease.lease.id)) || null} onClose={() => setDetailLease(null)} go={go} />
       )}
       {contractPreview && (
         <ContractPreviewModal
@@ -1201,7 +1204,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
   );
 }
 
-function LeaseDetailModal({ lease, info, onClose, go }) {
+function LeaseDetailModal({ lease, info, contract, onClose, go }) {
   const rows = [
     ["Reference", info.reference],
     [(lease.coTenants || []).length ? "Locataires" : "Locataire", tenantNames(lease)],
@@ -1225,6 +1228,8 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   const [documents, setDocuments] = useState([]);
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState("");
+  // Document qui sert de preuve de signature du contrat de ce bail (avertissement a la suppression).
+  const signedScanIds = contract?.signedDocumentId ? [Number(contract.signedDocumentId)] : [];
   const [rentBookBusy, setRentBookBusy] = useState(false);
 
   async function handleRentBook() {
@@ -1271,7 +1276,9 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   async function handleDeleteDocument(documentId) {
     if (!(await confirm({
       title: t("Supprimer le document"),
-      message: t("Supprimer ce document ?"),
+      message: signedScanIds.includes(Number(documentId))
+        ? t("Ce document est la preuve de signature du bail. Le contrat apparaîtra en \"Preuve manquante\". Préférez \"Remplacer\".")
+        : t("Supprimer ce document ?"),
       confirmLabel: t("Supprimer"),
       danger: true,
     }))) return;
@@ -1347,6 +1354,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
               onChange={handleUploadDocument}
             />
           </label>
+          <span className="muted signed-scan-hint">{t("PDF de plusieurs pages recommandé")}</span>
         </div>
         <LeaseInspectionsSection lease={lease} />
         {go && (
@@ -1376,9 +1384,15 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
   const body = raw
     ? (hasHtmlMarkup(raw) ? raw : `<pre class="domus-contract-plain">${escapeHtml(raw)}</pre>`)
     : "<p>Aucun contenu de contrat.</p>";
-  const statusLabel = (CONTRACT_STATUS[contract.status] || {}).label || contract.status || "Contrat";
+  const statusLabel = contractStatusMeta(contract).label || contract.status || "Contrat";
+  const scan = hasSignedScan(contract);
+  const proofMissing = isProofMissing(contract);
+  const generated = isPaperSigned(contract) || proofMissing;
+  const scanActions = useSignedScanActions(contract, toast.error);
   // Signé sans preuve attachée (scan supprimé) → on ré-affiche l'import.
-  const canMarkSigned = contract.status !== "signed" || !contract.signedDocumentId;
+  // Jamais d'import papier sur un contrat signe electroniquement.
+  const electronicallySigned = contract.status === "signed" && Boolean(contract.signatureData) && !contract.signedDocumentId;
+  const canMarkSigned = !electronicallySigned && (contract.status !== "signed" || !contract.signedDocumentId);
 
   async function handleMarkSignedManually(e) {
     const file = e.target.files?.[0];
@@ -1417,11 +1431,28 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
         <div className="domus-contract-manual-sign">
-          <button type="button" className="immo-btn" onClick={() => openContractPrint(contract, { onError: toast.error })}>
+          <button
+            type="button"
+            className="immo-btn"
+            onClick={() => (scan
+              ? scanActions.print()
+              : openContractPrint(contract, { onError: toast.error, generated }))}
+          >
             <Printer size={15} /> Imprimer
           </button>
+          {scan && (
+            <button type="button" className="immo-btn" onClick={scanActions.download}>
+              <FileText size={15} /> {t("Télécharger le contrat signé")}
+            </button>
+          )}
         </div>
-        {canMarkSigned && (
+        {proofMissing && (
+          <div className="domus-contract-manual-sign signed-scan-missing" role="alert">
+            <p>{t("Preuve manquante : le contrat est marqué signé mais aucun scan n'est attaché.")}</p>
+            <SignedScanImportButton contract={contract} leaseRef={leaseRef} label={t("Importer le scan")} />
+          </div>
+        )}
+        {canMarkSigned && !proofMissing && (
           <div className="domus-contract-manual-sign">
             {signError && <div className="domus-upload-inline-error" role="alert">{signError}</div>}
             {upload && <UploadProgress item={upload} />}
@@ -1435,19 +1466,35 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
                 onChange={handleMarkSignedManually}
               />
             </label>
+            <span className="muted signed-scan-hint">{t("PDF de plusieurs pages recommandé")}</span>
           </div>
         )}
-        {contract.signedDocumentId && (
-          <div className="domus-contract-manual-sign">
-            <ProofButton className="immo-btn" path={`/leases/documents/${contract.signedDocumentId}/file`} title={t("Bail signé")}>
-              <FileText size={15} /> {t("Voir le bail signé importé")}
-            </ProofButton>
+        {scan ? (
+          <div className="domus-contract-content">
+            <div className="signed-scan-banner">
+              <FileCheck size={15} />
+              <span>{tf("Signé sur papier le {date} — le scan ci-dessous fait foi", { date: contract.signedAt ? new Date(contract.signedAt).toLocaleDateString("fr-FR") : "—" })}</span>
+            </div>
+            <SignedScanViewer key={contract.signedDocumentId} contract={contract} />
+            <div className="signed-scan-import-row">
+              <SignedScanImportButton contract={contract} leaseRef={leaseRef} replace label={t("Remplacer le scan")} />
+            </div>
+            <details className="signed-scan-generated">
+              <summary>{t("Version générée (non signée)")}</summary>
+              <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
+              <button type="button" className="immo-btn" onClick={() => openContractPrint(contract, { onError: toast.error, generated: true })}>
+                <Printer size={15} /> {t("Imprimer cette version")}
+              </button>
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }} />
+            </details>
           </div>
+        ) : (
+          <div
+            className="domus-contract-content"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
+          />
         )}
-        <div
-          className="domus-contract-content"
-          dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
-        />
+        {scanActions.proofModal}
       </div>
     </div>
   );
@@ -1639,12 +1686,16 @@ async function handleContractPreview(lease, contractsByLease, setContractPreview
   }
 }
 
-async function handleContractDownload(lease, contractsByLease, setBusyAction, setActionError, reload) {
+async function handleContractDownload(lease, contractsByLease, setBusyAction, setActionError, reload, setContractPreview) {
   setBusyAction(`download-${lease.id}`);
   setActionError("");
   try {
     const contract = await ensureContract(lease, contractsByLease);
-    await downloadSignedContractPdf(contract);
+    if (hasSignedScan(contract)) {
+      // Mobile natif + PDF : le telechargement passe par la ProofModal de l'apercu du contrat.
+      if (scanNeedsProofModal(contract)) setContractPreview(contract);
+      else await downloadSignedScan(contract);
+    } else await downloadSignedContractPdf(contract, { generated: isPaperSigned(contract) || isProofMissing(contract) });
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de telecharger le contrat.");

@@ -2105,8 +2105,9 @@ export class PropertyManagementController {
     @UploadedFile() document: any,
     @CurrentOrg() orgId: number,
     @CurrentUserId() userId: number,
+    @Body("replace") replace?: string,
   ) {
-    return this.contractsService.markSignedManually(id, document, orgId, userId);
+    return this.contractsService.markSignedManually(id, document, orgId, userId, replace === "true" || replace === "1");
   }
 
   @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })

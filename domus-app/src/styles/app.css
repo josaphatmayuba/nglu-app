@@ -1993,3 +1993,23 @@ button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px;
 .domus-upload-inline-error { color:var(--rose); font-size:13px; font-weight:700; }
 @media (max-width:900px) { .domus-uploads-panel { bottom:calc(76px + env(safe-area-inset-bottom, 0px)); } }
 .domus-upload-pick[data-disabled="true"] { opacity:.55; cursor:not-allowed; pointer-events:none; }
+.contrats-sig-paper { height:36px; border-radius:8px; background:var(--ink-50); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-700); }
+.signed-scan { display:grid; gap:10px; margin:10px 0; }
+.signed-scan-loading { padding:24px 12px; text-align:center; background:var(--ink-50); border-radius:10px; }
+.signed-scan-error { color:var(--rose); font-weight:700; font-size:13px; margin:0; }
+.signed-scan-img-btn { background:none; border:1px solid var(--border); border-radius:10px; cursor:zoom-in; padding:4px; }
+.signed-scan-img { display:block; max-width:100%; height:auto; margin:0 auto; }
+.signed-scan-card { align-items:center; background:var(--ink-50); border:1px solid var(--border); border-radius:10px; grid-template-columns:auto 1fr; padding:14px; }
+.signed-scan-meta { display:grid; gap:2px; min-width:0; word-break:break-all; }
+.signed-scan-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1 / -1; }
+.signed-scan-actions .immo-btn, .signed-scan-import .immo-btn, .signed-scan-generated > .immo-btn, .signed-scan-generated > .btn { min-height:44px; }
+.signed-scan-banner { align-items:center; background:var(--iris-50); border-radius:10px; color:var(--iris-700); display:flex; font-size:13px; font-weight:700; gap:8px; padding:10px 12px; }
+.signed-scan-missing { background:var(--ink-50); border:1px solid var(--rose); border-radius:10px; display:grid; gap:8px; margin:0 0 12px; padding:12px; }
+.signed-scan-missing p { align-items:center; color:var(--rose); display:flex; font-size:13px; font-weight:700; gap:6px; margin:0; }
+.signed-scan-import { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }
+.signed-scan-import .domus-upload-progress { flex:1 1 100%; }
+.signed-scan-hint { font-size:12px; }
+.signed-scan-import-row { margin:8px 0; }
+.signed-scan-generated { border-top:1px dashed var(--border); margin-top:12px; padding-top:10px; }
+.signed-scan-generated summary { cursor:pointer; font-size:13px; font-weight:700; min-height:44px; display:flex; align-items:center; }
+.signed-scan-note { background:var(--ink-100); border-radius:8px; color:var(--ink-600); font-size:12px; margin:8px 0; padding:8px 10px; }

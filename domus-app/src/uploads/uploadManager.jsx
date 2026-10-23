@@ -104,7 +104,7 @@ export function UploadsProvider({ children }) {
     abortersRef.current.set(id, controller);
     patch(id, { status: "uploading", progress: 0, error: "" }, true);
     try {
-      let updated = await api.markContractSignedManually(rec.contractId, rec.file, (p) => patch(id, { progress: p }), controller.signal);
+      let updated = await api.markContractSignedManually(rec.contractId, rec.file, (p) => patch(id, { progress: p }), controller.signal, { replace: rec.replace === true });
       abortersRef.current.delete(id);
       runningRef.current.delete(id);
       if (!aliveRef.current) return;
@@ -114,7 +114,12 @@ export function UploadsProvider({ children }) {
       }
       patch(id, { status: "done", progress: 100 });
       storeDelete(id).catch(() => {});
-      toastRef.current?.success?.(t("Bail signé importé"));
+      if (rec.replace && updated && updated.replaced === false) {
+        // Remplacement demande avec le meme fichier que le scan actuel : rien n'a change.
+        toastRef.current?.info?.(t("Fichier identique au scan actuel, rien n'a été remplacé."));
+      } else {
+        toastRef.current?.success?.(rec.replace ? t("Scan signé remplacé") : t("Bail signé importé"));
+      }
       listenersRef.current.forEach((fn) => {
         try { fn({ contractId: rec.contractId, leaseId: rec.leaseId, contract: updated }); } catch {}
       });
@@ -142,14 +147,14 @@ export function UploadsProvider({ children }) {
     }
   }, [patch, remove]);
 
-  const enqueueSignedContract = useCallback((file, { contractId, leaseId, ref }) => {
+  const enqueueSignedContract = useCallback((file, { contractId, leaseId, ref, replace = false }) => {
     for (const r of recordsRef.current.values()) {
       if (r.contractId === contractId && r.status !== "done") return false;
     }
     const id = `signed-${contractId}-${Date.now()}`;
     const owner = identityRef.current;
     if (!owner) return false;
-    const rec = { id, kind: "signed-contract", userId: owner.userId, orgId: owner.orgId, retriable: false, contractId, leaseId: leaseId ?? null, ref: ref || "", file, status: "queued", progress: 0, attempts: 0, error: "" };
+    const rec = { id, kind: "signed-contract", replace: replace === true, userId: owner.userId, orgId: owner.orgId, retriable: false, contractId, leaseId: leaseId ?? null, ref: ref || "", file, status: "queued", progress: 0, attempts: 0, error: "" };
     recordsRef.current.set(id, rec);
     storePut({ ...rec }).catch(() => {});
     sync();
