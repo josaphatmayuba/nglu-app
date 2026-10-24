@@ -2066,6 +2066,13 @@
       "when": 1782108000000,
       "tag": "0319_domus_lease_scheduled_termination",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "5",
+      "when": 1782194400000,
+      "tag": "0320_batipro_project_domus_visible",
+      "breakpoints": true
     }
   ]
 }

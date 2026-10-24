@@ -113,6 +113,7 @@ const EN = {
   "Inactif": "Inactive",
   // Écran: placeholder.jsx
   "Ecran en cours de construction": "Screen under construction",
+  "En construction": "Under construction",
   "La maquette de cet ecran est validee. L'implementation cablee sur l'API arrive dans une prochaine story.": "The mockup for this screen is validated. The API-wired implementation is coming in a next story.",
   // Écran: carte.jsx
   "Patrimoine geolocalise": "Geolocalized portfolio",

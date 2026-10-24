@@ -209,6 +209,8 @@ export function Biens({ go }) {
       rentByCurrency,
       coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
       units: own,
+      // Bien venant d'un chantier BatiPro coche "Afficher dans Domus".
+      underConstruction: property.status === "under_construction",
     };
   }), [properties, unitsByProperty, photosByProperty, currency.defaultCurrencySymbol]);
 
@@ -591,7 +593,7 @@ function PropertyGroupCard({ card, onOpen, onEdit, onDelete, fallbackSymbol }) {
     <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
       <div className={`immo-property-media${card.coverPhoto ? " has-photo" : ""}`}>
         {card.coverPhoto ? <img className="immo-property-photo" src={card.coverPhoto.url} alt={card.name} /> : null}
-        <span className="immo-status-chip">{card.unitsCount} unite{card.unitsCount > 1 ? "s" : ""}</span>
+        <span className="immo-status-chip">{card.underConstruction ? t("En construction") : `${card.unitsCount} unite${card.unitsCount > 1 ? "s" : ""}`}</span>
         <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
           <div className="property-menu immo-property-context-menu" onClick={(e) => e.stopPropagation()}>
@@ -731,7 +733,7 @@ function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
     <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
       <div className={`immo-property-media${property.coverPhoto ? " has-photo" : ""}`}>
         {property.coverPhoto ? <img className="immo-property-photo" src={property.coverPhoto.url} alt={property.name} /> : null}
-        <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? "Sans lot" : property.status}</span>
+        <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? (property.raw?.status === "under_construction" ? t("En construction") : "Sans lot") : property.status}</span>
         <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
           <div className="property-menu immo-property-context-menu" onClick={(e) => e.stopPropagation()}>
@@ -1189,6 +1191,7 @@ function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurren
                 ["available", "Disponible"],
                 ["occupied", "Occupe"],
                 ["maintenance", "Maintenance"],
+                ["under_construction", t("En construction")],
               ].map(([status, label]) => (
                 <button
                   key={status}

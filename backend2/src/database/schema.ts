@@ -3026,6 +3026,9 @@ export const batiproProjects = mysqlTable("batipro_projects", {
   ownerSmsEnabled: tinyint("owner_sms_enabled").default(0).notNull(),
   ownerSmsLastProgressStep: int("owner_sms_last_progress_step").default(0).notNull(),
   ownerSmsLastQuoteAt: datetime("owner_sms_last_quote_at"),
+  // Chantier affiche dans Domus comme bien "en construction" (migration 0320).
+  domusVisible: tinyint("domus_visible").default(0).notNull(),
+  domusPropertyId: bigint("domus_property_id", { mode: "number" }),
   manager: varchar("manager", { length: 255 }),
   status: varchar("status", { length: 40 }).default("Planifie").notNull(),
   progress: int("progress").default(0).notNull(),
