@@ -328,10 +328,6 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     setBookBusy(true);
     try { await onReceipt?.(card); } finally { setBookBusy(false); }
   };
-  // Preavis pour defaut de paiement : uniquement au-dela d'UN mois de loyer du
-  // (monthsBehind = mois entiers encore dus, mois courant inclus). Un locataire
-  // qui doit le seul mois en cours n'est pas en defaut : pas de bouton.
-  const canNotifyDefault = Boolean(lease) && monthsBehind > 1;
   const noticeSentAt = lease?.defaultNoticeSentAt || null;
   const noticeLabel = noticeSentAt
     ? new Date(noticeSentAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
@@ -435,6 +431,10 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   // cases rouges de la frise (même règle que computeLeaseOverdueStats). Un mois
   // passé mais dans la grâce est « échu » (ambre), pas en retard. Repli : unpaidCount backend.
   const lateMonths = frise.lateCount;
+  // Preavis pour defaut de paiement : uniquement au-dela d'UN mois EN RETARD
+  // (grace depassee, cases rouges), meme regle que le backend. Un mois encore
+  // dans la grace (Du) ne compte pas.
+  const canNotifyDefault = Boolean(lease) && lateMonths > 1;
   const behindTxt = status === "late" ? tf("{n} en retard", { n: lateMonths || Number(lease?.unpaidCount) || 1 }) : status === "pending" ? t("1 à régler") : t("À jour");
   const frieseAria = totalMonths
     ? `${paidCount}${fixedTotal ? ` / ${totalMonths}` : ""} ${t("mois payés")}, ${behindTxt}`
@@ -640,7 +640,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           {canNotifyDefault && (
             <button type="button" className="immo-btn danger"
               title={noticeLabel ? t("Renotifier le préavis") : t("Notifier un préavis pour défaut de paiement")}
-              disabled={noticing} onClick={() => onDefaultNotice?.(card)}>
+              disabled={noticing} onClick={() => onDefaultNotice?.({ ...card, noticeMonths: lateMonths, noticeAmount: lateDue.late })}>
               <AlertTriangle size={14} /> {noticing ? "…" : t("Préavis")}
             </button>
           )}
@@ -767,7 +767,7 @@ function RemindModal({ card, kind = "remind", busy, onClose, onSend }) {
             <>
               <p className="immo-quickpay-note">
                 {isNotice
-                  ? tf(t("{months} mois impayés ({balance}). Choisis qui reçoit un SMS."), { months: card.monthsBehind, balance: money(card.balance, card.symbol) })
+                  ? tf(t("{months} mois impayés ({balance}). Choisis qui reçoit un SMS."), { months: card.noticeMonths ?? card.monthsBehind, balance: money(card.noticeAmount ?? card.balance, card.symbol) })
                   : t("Choisis qui reçoit un SMS.")}
               </p>
               {REMIND_TARGETS.map((o) => (
