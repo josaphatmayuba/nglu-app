@@ -12,6 +12,17 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Message d'erreur lisible : le `message` NestJS (string ou liste de validation)
+// plutôt que le JSON brut tronqué ; repli sur le statut HTTP.
+function apiError(res, body) {
+  try {
+    const msg = JSON.parse(body)?.message;
+    const text = Array.isArray(msg) ? msg.join(" ; ") : msg;
+    if (text) return new Error(String(text));
+  } catch { /* corps non JSON */ }
+  return new Error(`API ${res.status} ${res.statusText}${body ? ` - ${body.slice(0, 200)}` : ""}`);
+}
+
 async function jsonFetch(path, init = {}, retried = false) {
   const { base = BASE, ...fetchInit } = init;
   const res = await fetch(`${base}${path}`, {
@@ -34,7 +45,7 @@ async function jsonFetch(path, init = {}, retried = false) {
       window.dispatchEvent(new CustomEvent("batipro:auth-changed"));
     }
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 160)}`);
+    throw apiError(res, body);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -46,7 +57,7 @@ async function uploadForm(path, formData, retried = false) {
   if (!res.ok) {
     if (res.status === 401 && !retried && (await restoreSession())) return uploadForm(path, formData, true);
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 160)}`);
+    throw apiError(res, body);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -73,7 +84,7 @@ async function publicJson(path, init = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+    throw apiError(res, body);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -82,7 +93,7 @@ async function publicUpload(path, formData) {
   const res = await fetch(`${PUBLIC_BASE}${path}`, { method: "POST", body: formData });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+    throw apiError(res, body);
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -276,7 +287,7 @@ export const publicDocApi = {
     const res = await fetch(`${PUBLIC_DOC_BASE}/${encodeURIComponent(token)}/accept`, { method: "POST" });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+      throw apiError(res, body);
     }
     const text = await res.text();
     return text ? JSON.parse(text) : null;

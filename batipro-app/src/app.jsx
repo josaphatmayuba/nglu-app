@@ -2299,12 +2299,21 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     setError("");
     const clean = lines.filter((l) => l.designation.trim());
     if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    // Un BC = une seule devise (règlement/comptabilisation mono-devise). Si toutes
+    // les lignes sont dans une autre devise que le chantier (ex. FC), le BC prend
+    // cette devise ; sinon son total ignorerait ces lignes (0 $).
+    const lineCurrencies = [...new Set(clean.map((l) => Number(l.currency_id || docCurrencyId) || 0))];
+    if (lineCurrencies.length > 1) {
+      setError("Un bon de commande ne peut contenir qu'une seule devise. Faites un bon par devise (ex. un bon en $ et un bon en FC).");
+      return;
+    }
+    const poCurrencyId = lineCurrencies[0] || (docCurrencyId ? Number(docCurrencyId) : undefined);
     setBusy(true);
     try {
       const payload = {
         project_id: projectId,
         type: "purchase_order",
-        currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
+        currency_id: poCurrencyId || undefined,
         supplier_id: supplierId ? Number(supplierId) : undefined,
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
@@ -3504,7 +3513,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveSituation = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: form.currency_id || null, status: form.status || "En_validation" };
+      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: form.currency_id ? Number(form.currency_id) : null, status: form.status || "En_validation" };
       form.id ? await api.updateSituation(form.id, payload) : await api.createSituation(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -3513,7 +3522,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveChangeOrder = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: form.currency_id || null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
+      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: form.currency_id ? Number(form.currency_id) : null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
       form.id ? await api.updateChangeOrder(form.id, payload) : await api.createChangeOrder(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -4091,7 +4100,7 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
     try {
       const payload = {
         name: form.name, trade: form.trade || null, project_id: form.project_id ? Number(form.project_id) : null,
-        contract_amount: n(form.contract_amount), currency_id: form.currency_id || null,
+        contract_amount: n(form.contract_amount), currency_id: form.currency_id ? Number(form.currency_id) : null,
         status: form.status || "En_cours",
       };
       form.id ? await api.updateSubcontractor(form.id, payload) : await api.createSubcontractor(payload);
