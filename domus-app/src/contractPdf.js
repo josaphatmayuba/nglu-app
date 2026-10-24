@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { CONTRACT_PRINT_CSS, companyTenantOf, contractPrintBody, escapeHtml, landlordSignatureOf } from "./contractUtils.js";
+import { CONTRACT_PRINT_CSS, companyTenantOf, contractPrintBody, escapeHtml, isPaperSigned, landlordSignatureOf } from "./contractUtils.js";
 
 const formatDateTime = (value) => {
   if (!value) return "";
@@ -31,7 +31,9 @@ export const landlordSignatureHtml = (contract) => {
       </div>`;
 };
 
-const tenantSignatureBlockHtml = (sigData, signedAt, name) => `
+const NO_SIG_TEXT = (contract) => (isPaperSigned(contract) ? "Signé sur papier (voir scan)" : "Aucune signature locataire enregistrée.");
+
+const tenantSignatureBlockHtml = (sigData, signedAt, name, contract) => `
     <div>
       <h3>Signature du locataire</h3>
       ${name ? `<div class="signed-on">${escapeHtml(name)}</div>` : ""}
@@ -39,7 +41,7 @@ const tenantSignatureBlockHtml = (sigData, signedAt, name) => `
         sigData
           ? `<div class="signature-body"><div class="signature-img"><img src="${sigData}" alt="Signature locataire" /></div></div>
              <div class="signed-on">${signedAt ? `Date de signature : ${escapeHtml(formatDateTime(signedAt))}` : "Date de signature : —"}</div>`
-          : `<div class="signature-body"><div class="signature-empty">Aucune signature locataire enregistree.</div></div>`
+          : `<div class="signature-body"><div class="signature-empty">${NO_SIG_TEXT(contract)}</div></div>`
       }
     </div>`;
 
@@ -48,7 +50,7 @@ export const contractSignaturesHtml = (contract) => {
   if (signers.length < 2) return legacyContractSignaturesHtml(contract);
   return `
   <div class="domus-contract-signatures">
-    ${signers.map((s) => tenantSignatureBlockHtml(s.signatureData, s.signedAt, s.name)).join("")}
+    ${signers.map((s) => tenantSignatureBlockHtml(s.signatureData, s.signedAt, s.name, contract)).join("")}
     <div>${landlordSignatureHtml(contract)}</div>
   </div>`;
 };
@@ -67,7 +69,7 @@ const legacyContractSignaturesHtml = (contract) => {
         contract?.signatureData
           ? `<div class="signature-body"><div class="signature-img"><img src="${contract.signatureData}" alt="Signature locataire" /></div></div>
              <div class="signed-on">${contract.signedAt ? `Date de signature : ${escapeHtml(formatDateTime(contract.signedAt))}` : "Date de signature : —"}</div>`
-          : `<div class="signature-body"><div class="signature-empty">Aucune signature locataire enregistree.</div></div>`
+          : `<div class="signature-body"><div class="signature-empty">${NO_SIG_TEXT(contract)}</div></div>`
       }
     </div>
     <div>${landlordSignatureHtml(contract)}</div>
@@ -108,12 +110,14 @@ const sanitizeTextNodes = (root) => {
 const PDF_OVERRIDE_CSS = `
   .contract-doc, .contract-doc * { font-family: "Times New Roman", Times, serif !important; letter-spacing: 0 !important; font-variant: normal !important; }
   .contract-doc .contract-content .article-heading, .contract-doc .contract-content .doc-title { letter-spacing: .06em !important; }
+  .contract-doc { position: relative; }
+  .contract-doc .contract-watermark { position: absolute !important; top: 320px !important; }
   .contract-doc ul, .contract-doc ul ul, .contract-doc ul ul ul { list-style-type: disc !important; }
   .contract-doc ol ul, .contract-doc ol ol ul { list-style-type: disc !important; }
 `;
 
 // Rend le contrat (m\u00eame design que la vue imprimable) et le t\u00e9l\u00e9charge automatiquement en PDF.
-export const downloadSignedContractPdf = async (contract) => {
+export const downloadSignedContractPdf = async (contract, { generated = false } = {}) => {
   const pageWidthPx = 794; // A4 \u00e0 96dpi
   // jsPDF clone l'\u00e9l\u00e9ment source avec ses styles inline : l'h\u00f4te doit rester neutre
   // (aucun offset), c'est le wrapper non clon\u00e9 qui le sort de l'\u00e9cran.
@@ -121,7 +125,7 @@ export const downloadSignedContractPdf = async (contract) => {
   wrapper.style.cssText = "position:fixed;left:-12000px;top:0;z-index:-1;";
   const host = document.createElement("div");
   host.style.cssText = `width:${pageWidthPx}px;background:#fff;`;
-  host.innerHTML = `<style>${CONTRACT_PRINT_CSS}${PDF_OVERRIDE_CSS}</style><div class="contract-doc">${contractPrintBody(contract)}</div>`;
+  host.innerHTML = `<style>${CONTRACT_PRINT_CSS}${PDF_OVERRIDE_CSS}</style><div class="contract-doc">${contractPrintBody(contract, { generated, forScreen: false })}</div>`;
   sanitizeTextNodes(host);
   wrapper.appendChild(host);
   document.body.appendChild(wrapper);
@@ -135,7 +139,7 @@ export const downloadSignedContractPdf = async (contract) => {
       width: pageWidthPt - marginPt * 2,
       windowWidth: pageWidthPx,
     });
-    const filename = `contrat-${contract.id}${contract.signedAt ? "-signe" : ""}.pdf`;
+    const filename = `contrat-${contract.id}${contract.signedAt && !generated ? "-signe" : ""}.pdf`;
     pdf.save(filename);
     return filename;
   } finally {

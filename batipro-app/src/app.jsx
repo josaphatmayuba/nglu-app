@@ -597,6 +597,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {p.ownerName && <span style={{ fontSize: 12, color: "var(--ink-500)" }} title="Propriétaire du chantier">Propriétaire : {p.ownerName}</span>}
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
+          {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
           {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
@@ -4589,6 +4590,7 @@ function payloadFor(kind, form) {
       owner_name: (form.ownerName || "").trim() || null,
       owner_phone: form.ownerPhone || null,
       owner_sms_enabled: form.ownerPhone && form.ownerSmsEnabled ? 1 : 0,
+      domus_visible: form.domusVisible ? 1 : 0,
     };
   }
   return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null, supplier_id: form.supplier_id ? Number(form.supplier_id) : null };
@@ -4605,8 +4607,9 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
         contractAmount: editing.contractAmount ?? 0, billedAmount: editing.billedAmount ?? 0,
         dueDate: editing.dueDate ? String(editing.dueDate).slice(0, 10) : "", location: editing.location || "",
         ownerName: editing.ownerName || "", ownerPhone: editing.ownerPhone || "", ownerSmsEnabled: Number(editing.ownerSmsEnabled) === 1,
+        domusVisible: Number(editing.domusVisible) === 1,
       }
-      : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false })
+      : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false, domusVisible: false })
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const [suppliers, setSuppliers] = React.useState([]);
@@ -4660,6 +4663,10 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
                 <span>Envoyer des SMS au propriétaire (dépenses, devis, avancement)</span>
               </label>
               {!form.ownerPhone && <small id="owner-sms-hint" className="owner-sms-hint">Renseignez un numéro pour activer les SMS.</small>}
+              <label className="owner-sms-toggle">
+                <input type="checkbox" checked={Boolean(form.domusVisible)} onChange={(e) => set("domusVisible", e.target.checked)} />
+                <span>Afficher dans Domus (bien « En construction »)</span>
+              </label>
             </>
           ) : (
             <>

@@ -1,4 +1,5 @@
 // Utilitaires contrats Domus (aperçu, impression, libellés).
+import { t } from "./i18n.js";
 export const CONTRACT_STATUS = {
   draft: { label: "Brouillon", chip: "chip-ink", tone: "muted" },
   sent: { label: "Envoyé", chip: "chip-amber", tone: "warning" },
@@ -7,6 +8,34 @@ export const CONTRACT_STATUS = {
   expired: { label: "Expiré", chip: "chip-rose", tone: "muted" },
   deleted: { label: "Supprimé", chip: "chip-ink", tone: "muted" },
 };
+
+// Signé sur papier : le scan importé fait foi (signers en méthode « paper » ou scan attaché).
+export function hasSignedScan(c) {
+  return Boolean(c?.signedDocumentId);
+}
+
+export function isPaperSigned(c) {
+  if (!c || c.status !== "signed") return false;
+  if (c.signedDocumentId) return true;
+  return Array.isArray(c.signers) && c.signers.some((s) => s?.method === "paper");
+}
+
+// Signé mais sans aucune preuve : ni scan actif, ni signature électronique.
+export function isProofMissing(c) {
+  if (!c || c.status !== "signed" || c.signedDocumentId) return false;
+  const paper = Array.isArray(c.signers) && c.signers.some((s) => s?.method === "paper");
+  // Résumés de liste : hasSignatureData (booléen) remplace signatureData (trop lourd).
+  const hasSig = "signatureData" in c ? Boolean(c.signatureData) : Boolean(c.hasSignatureData);
+  return !hasSig || paper;
+}
+
+// Méta de statut (libellé + chip) : « Signé (papier) » pour un bail signé à la main.
+export function contractStatusMeta(c) {
+  const base = CONTRACT_STATUS[c?.status] || CONTRACT_STATUS.draft;
+  // Résumés de liste sans signatureData : on ne peut pas conclure à une preuve manquante.
+  if (c && ("signatureData" in c || "hasSignatureData" in c) && isProofMissing(c)) return { ...base, label: t("Preuve manquante"), chip: "chip-amber" };
+  return isPaperSigned(c) ? { ...base, label: t("Signé (papier)") } : base;
+}
 
 export const TEMPLATE_TYPE_LABEL = {
   residential: "Bail résidentiel",
@@ -19,11 +48,43 @@ export const AUDIT_EVENT_LABEL = {
   sent: "Envoyé pour signature",
   viewed: "Consulté par le locataire",
   signed: "Signé électroniquement",
+  signed_paper: "Signé sur papier (scan importé)",
+  scan_replaced: "Scan signé remplacé",
+  scan_removed: "Scan de preuve supprimé",
   welcome_sent: "Message de bienvenue envoyé",
   template_changed: "Modèle de bail modifié",
   status_changed: "Statut mis à jour",
   deleted: "Contrat retiré",
 };
+
+// Libellé d'un event d'audit ; anciennes lignes : « signed » + détail « Signature papier… » = papier.
+export function auditEventLabel(log) {
+  const ev = log?.event;
+  if (ev === "signed" && String(log?.details || "").startsWith("Signature papier")) return AUDIT_EVENT_LABEL.signed_paper;
+  return AUDIT_EVENT_LABEL[ev] || ev;
+}
+
+export function auditIsSigned(log) {
+  return log?.event === "signed" || log?.event === "signed_paper" || auditEventLabel(log) === AUDIT_EVENT_LABEL.signed_paper;
+}
+
+// Détail d'audit : anciennes lignes créées en anglais traduites.
+export function auditDetails(log) {
+  const d = String(log?.details || "");
+  const m = d.match(/^Contract created for lease #(\d+)/);
+  if (m) return `Contrat généré pour le bail n°${m[1]}`;
+  const tpl = d.match(/^Template changed to "(.*)"$/);
+  if (tpl) return `Modèle changé : "${tpl[1]}"`;
+  const signedBy = d.match(/^Signed by (.+)$/);
+  if (signedBy) return `Signé par ${signedBy[1] === "tenant" ? "locataire" : signedBy[1]}`;
+  const sentTo = d.match(/^Sent to (.+)$/);
+  if (sentTo) return `Envoyé à ${sentTo[1].replace(/^no email/, "aucun e-mail").replace(/\(email en echec\)/, "(e-mail en échec)")}`;
+  const resentTo = d.match(/^Resent to (.+)$/);
+  if (resentTo) return `Renvoyé à ${resentTo[1].replace(/^no email/, "aucun e-mail")}`;
+  return d
+    .replace(/Signature papier importee/g, "Signature papier importée")
+    .replace(/Message de bienvenue envoye/g, "Message de bienvenue envoyé");
+}
 
 export function contractRef(contract) {
   if (!contract?.id) return "—";
@@ -279,6 +340,24 @@ export const CONTRACT_PRINT_CSS = `
     }
     .contract-doc .signature-name { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin-top: 8px; }
     .contract-doc .signature-date { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin-top: 10px; }
+    .contract-doc .signature-paper { border: 1px solid #d6c39a; display: inline-block; font-style: italic; min-width: 240px; padding: 22px 18px; }
+    .contract-doc .contract-watermark {
+      color: rgba(0, 0, 0, 0.08);
+      font-size: 84px;
+      font-weight: bold;
+      left: 0;
+      letter-spacing: .08em;
+      pointer-events: none;
+      position: fixed;
+      right: 0;
+      text-align: center;
+      text-transform: uppercase;
+      top: 38%;
+      transform: rotate(-30deg);
+      white-space: nowrap;
+      z-index: 0;
+    }
+    @media print { .contract-doc .contract-watermark.screen-only { display: none; } }
     .contract-doc .signature-line { border-bottom: 1px solid #1a1a1a; display: inline-block; min-width: 240px; padding: 34px 0 8px; }
     .contract-doc .signature p { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin: 26px 0 0; text-align: center; }
     .contract-doc .typed-signature {
@@ -301,10 +380,13 @@ function signatureGridHtml(contract, withSignatures = true) {
     ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
     : SIG_DOTS;
   const hasTenantSig = withSignatures && contract?.signatureData;
-  const tenantDate = hasTenantSig && contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : SIG_DOTS;
+  const paper = isPaperSigned(contract);
+  const tenantDate = (hasTenantSig || paper) && contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : SIG_DOTS;
   const tenantSignature = hasTenantSig
     ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
-    : `<div class="signature-line"></div>`;
+    : paper
+      ? `<div class="signature-paper">Signé sur papier (voir scan)</div>`
+      : `<div class="signature-line"></div>`;
   const landlordBlock = `<div>
         <h2>Signature du bailleur</h2>${landlordPrintBlock(contract, withSignatures)}
         <div class="signature-date">Signé le : ${landlordDate}</div>
@@ -322,11 +404,14 @@ function signatureGridHtml(contract, withSignatures = true) {
   if (signers.length >= 2) {
     const tenantBlocks = signers.map((s) => {
       const sig = withSignatures && isRealSignature(s.signatureData) ? s.signatureData : null;
-      const date = sig && s.signedAt ? escapeHtml(formatSignedAt(s.signedAt)) : SIG_DOTS;
+      const paperSigned = !sig && isPaperSigned(contract);
+      const date = (sig || paperSigned) && s.signedAt ? escapeHtml(formatSignedAt(s.signedAt)) : SIG_DOTS;
       return `<div>
         <h2>Signature du locataire</h2>${sig
           ? `<img class="signature-image" src="${sig}" alt="Signature du locataire" />`
-          : `<div class="signature-line"></div>`}
+          : paperSigned
+            ? `<div class="signature-paper">Signé sur papier (voir scan)</div>`
+            : `<div class="signature-line"></div>`}
         <div class="signature-name">${escapeHtml(s.name || "")}</div>
         <div class="signature-date">Signé le : ${date}</div>
       </div>`;
@@ -345,8 +430,27 @@ function signatureGridHtml(contract, withSignatures = true) {
     </div>`;
 }
 
-export function contractPrintBody(contract) {
-  return `
+// Filigrane imprimé (impression + PDF) : uniquement « NON SIGNÉ » pour la version générée (generated=true)
+// d'un bail déjà signé sur papier. Un brouillon imprimé pour signature manuscrite puis scanné ne porte JAMAIS de filigrane.
+export function contractWatermark(contract, generated = false) {
+  if (generated && (isPaperSigned(contract) || isProofMissing(contract))) return "NON SIGNÉ";
+  return "";
+}
+
+// Mention « PROJET – non signé » : affichage ÉCRAN seulement (masquée à l'impression, absente du PDF).
+export function contractDraftMark(contract) {
+  return contract?.status !== "signed" ? "PROJET – non signé" : "";
+}
+
+// Mention « PROJET – non signé » visible dans la modale de l'app (écran seulement, jamais imprimée).
+export function contractDraftMarkScreen(contract) {
+  return ["draft", "sent", "viewed"].includes(contract?.status) ? "PROJET – non signé" : "";
+}
+
+export function contractPrintBody(contract, { generated = false, forScreen = true } = {}) {
+  const wm = contractWatermark(contract, generated);
+  const draft = forScreen && !wm ? contractDraftMark(contract) : "";
+  return `${wm ? `<div class="contract-watermark" aria-hidden="true">${escapeHtml(wm)}</div>` : ""}${draft ? `<div class="contract-watermark screen-only" aria-hidden="true">${escapeHtml(draft)}</div>` : ""}
   <div class="header">
     <div class="doc-ref">${escapeHtml(contractRef(contract))}</div>
   </div>
@@ -354,7 +458,7 @@ export function contractPrintBody(contract) {
   <div class="signature">${signatureGridHtml(contract)}</div>`;
 }
 
-export function contractPrintHtml(contract) {
+export function contractPrintHtml(contract, opts = {}) {
   return `<!doctype html>
 <html>
 <head>
@@ -370,12 +474,12 @@ ${CONTRACT_PRINT_CSS}
 </head>
 <body class="contract-doc">
   <div class="print-actions">${landlordSignatureOf(contract) || contract?.signatureData ? '<label><input type="checkbox" id="sig-toggle" checked /> Inclure les signatures électroniques (décochez pour signer à la main)</label> ' : ""}<button type="button">Imprimer / PDF</button></div>
-${contractPrintBody(contract)}
+${contractPrintBody(contract, opts)}
 </body>
 </html>`;
 }
 
-export function openContractPrint(contract, { autoPrint = true, onError } = {}) {
+export function openContractPrint(contract, { autoPrint = true, onError, generated = false } = {}) {
   const win = window.open("", "_blank", "width=920,height=1100");
   if (!win) {
     const msg = "Autorisez les fenêtres popup pour imprimer le contrat.";
@@ -383,7 +487,7 @@ export function openContractPrint(contract, { autoPrint = true, onError } = {}) 
     return;
   }
   win.document.open();
-  win.document.write(contractPrintHtml(contract));
+  win.document.write(contractPrintHtml(contract, { generated }));
   win.document.close();
   win.focus();
   // La popup about:blank hérite de la CSP de l'app : pas de onclick inline, on pilote depuis l'opener.

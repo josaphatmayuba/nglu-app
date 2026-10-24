@@ -29,6 +29,8 @@ export class CreateBatiproProjectDto {
   @IsString() @MaxLength(32) @Matches(/^\+\d{6,15}$/, { message: "owner_phone doit etre au format international (+243...)." })
   owner_phone?: string | null;
   @IsOptional() @IsIn([true, false, 0, 1]) owner_sms_enabled?: boolean | number;
+  // Coche : le chantier apparait dans Domus comme bien "en construction".
+  @IsOptional() @IsIn([true, false, 0, 1]) domus_visible?: boolean | number;
 }
 
 export class UpdateBatiproProjectDto extends CreateBatiproProjectDto {

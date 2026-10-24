@@ -63,6 +63,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  CancelScheduledTerminationDto,
   TerminateLeaseDto,
   CreateTenantDto,
   CreateUnitDto,
@@ -1036,14 +1037,22 @@ export class PropertyManagementController {
     @CurrentUserId() userId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    const result = await this.propertyManagementService.terminateLease(id, body, orgId, userId, scope);
-    // Contrat envoye mais pas signe : les liens de signature sont desactives (best-effort).
-    try {
-      await this.contractsService.resetSignersForLease(id, orgId);
-    } catch {
-      /* ne bloque jamais la resiliation */
-    }
-    return result;
+    // Liens de signature desactives (best-effort) dans executeTermination.
+    return this.propertyManagementService.terminateLease(id, body, orgId, userId, scope);
+  }
+
+  @ApiOperation({ summary: "Annuler une resiliation programmee (tant que la date d'effet n'est pas atteinte)" })
+  @Permissions("delete-propertyManagement")
+  @Post("leases/:id/scheduled-termination/cancel")
+  @HttpCode(200)
+  cancelScheduledTermination(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelScheduledTerminationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.cancelScheduledTermination(id, body?.reason, orgId, userId, scope);
   }
 
   @ApiOperation({ summary: "Delete a lease" })
@@ -2095,11 +2104,10 @@ export class PropertyManagementController {
     @Param("id", ParseIntPipe) id: number,
     @UploadedFile() document: any,
     @CurrentOrg() orgId: number,
-    @Req() req: Request,
+    @CurrentUserId() userId: number,
+    @Body("replace") replace?: string,
   ) {
-    const user = (req as Request & { user?: { firstName?: string; lastName?: string; username?: string } }).user;
-    const createdByName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.username || null : null;
-    return this.contractsService.markSignedManually(id, document, orgId, createdByName);
+    return this.contractsService.markSignedManually(id, document, orgId, userId, replace === "true" || replace === "1");
   }
 
   @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })

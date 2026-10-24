@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
-import { BadRequestException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { BadRequestException, ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { normalizePhoneKey } from "./notification-utils";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -170,7 +170,7 @@ export class ContractsService {
     });
 
     const id = Number(result.insertId);
-    await this.log(id, orgId, "created", null, null, `Contract created for lease #${dto.leaseId}`);
+    await this.log(id, orgId, "created", null, null, `Contrat généré pour le bail n°${dto.leaseId}`);
     await this.publishContractUpdate("created", id, dto.leaseId);
     return this.getContract(id, orgId);
   }
@@ -327,6 +327,9 @@ export class ContractsService {
         welcomeMessageSentAt: realEstateContracts.welcomeMessageSentAt,
         createdAt: realEstateContracts.createdAt,
         signerToken: realEstateContracts.signerToken,
+        signedDocumentId: realEstateContracts.signedDocumentId,
+        // Booleen calcule : la signature (mediumtext) n'est jamais renvoyee dans la liste.
+        hasSignatureData: sql<boolean>`(${realEstateContracts.signatureData} IS NOT NULL AND ${realEstateContracts.signatureData} <> '')`.mapWith(Boolean),
       })
       .from(realEstateContracts)
       .where(and(eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "deleted")))
@@ -404,9 +407,26 @@ export class ContractsService {
       ? signers.map((s) => ({ name: s.name, signatureData: s.signatureData, signedAt: s.signedAt }))
       : (await this.loadSigningCandidates(rows[0].leaseId, orgId)).map((c) => ({ name: c.name, signatureData: null, signedAt: null }));
 
+    // Metadonnees du scan signe (nom, type, taille) pour la visionneuse ; null si absent ou archive.
+    let signedDocument: { id: number; originalName: string | null; mimeType: string | null; sizeBytes: number | null } | null = null;
+    if (rows[0].signedDocumentId) {
+      const [doc] = await this.db
+        .select({
+          id: realEstateLeaseDocuments.id,
+          originalName: realEstateLeaseDocuments.originalName,
+          mimeType: realEstateLeaseDocuments.mimeType,
+          sizeBytes: realEstateLeaseDocuments.sizeBytes,
+        })
+        .from(realEstateLeaseDocuments)
+        .where(and(eq(realEstateLeaseDocuments.id, rows[0].signedDocumentId), eq(realEstateLeaseDocuments.isActive, 1)))
+        .limit(1);
+      if (doc) signedDocument = { ...doc, sizeBytes: doc.sizeBytes == null ? null : Number(doc.sizeBytes) };
+    }
+
     return {
       ...rows[0],
       ...(tenantCompany ?? {}),
+      signedDocument,
       printTenants,
       signers,
       signersSigned: signers.filter((x) => x.status === "signed").length,
@@ -587,7 +607,7 @@ export class ContractsService {
         "sent",
         null,
         null,
-        `Sent to ${out.emailTo ?? t.email ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""}${multi ? ` - ${t.name}` : ""}${out.skipped.length ? ` (${out.skipped.join(", ")})` : ""}${out.error ? " (email en echec)" : ""}`,
+        `Envoyé à ${out.emailTo ?? t.email ?? "aucun e-mail"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""}${multi ? ` - ${t.name}` : ""}${out.skipped.length ? ` (${out.skipped.join(", ")})` : ""}${out.error ? " (e-mail en échec)" : ""}`,
         t.signerId,
       );
     }
@@ -608,7 +628,7 @@ export class ContractsService {
 
   // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
   // et on marque le contrat "signed" comme pour une signature électronique.
-  async markSignedManually(id: number, file: unknown, orgId: number, createdByName?: string | null) {
+  async markSignedManually(id: number, file: unknown, orgId: number, userId?: number | null, replace = false) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
@@ -617,10 +637,30 @@ export class ContractsService {
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
     const contract = rows[0];
+    // Signé électroniquement (signature manuscrite numérique, pas de scan) : jamais d'import papier par-dessus.
+    if (contract.status === "signed" && contract.signatureData && !contract.signedDocumentId) {
+      throw new GoneException("Contrat déjà signé électroniquement.");
+    }
     // Contrat déjà signé : on refuse seulement s'il a encore sa preuve attachée.
     // Si le scan a été supprimé (signedDocumentId détaché), on autorise le ré-import.
     if (contract.status === "signed" && contract.signedDocumentId) {
-      throw new GoneException("This contract has already been signed.");
+      // Idempotence (retry apres coupure reseau) : meme nom + meme taille que le scan deja importe => 200.
+      const [existing] = await this.db
+        .select({ originalName: realEstateLeaseDocuments.originalName, sizeBytes: realEstateLeaseDocuments.sizeBytes })
+        .from(realEstateLeaseDocuments)
+        .where(eq(realEstateLeaseDocuments.id, contract.signedDocumentId))
+        .limit(1);
+      const f = file as { originalname?: string; size?: number } | undefined;
+      const sameName = (existing?.originalName ?? null) === (f?.originalname ? String(f.originalname).slice(0, 255) : null);
+      if (existing && sameName && Number(existing.sizeBytes) === Number(f?.size)) {
+        const current = await this.getContract(id, orgId);
+        // Remplacement demandé avec le meme fichier : rien n'a change (replaced:false).
+        return replace ? { ...current, replaced: false } : current;
+      }
+      if (!replace) throw new GoneException("This contract has already been signed.");
+    } else if (replace) {
+      // Remplacement : uniquement pour un contrat signé qui a encore un scan actif.
+      throw new BadRequestException("Remplacement impossible : le contrat n'a pas de scan signé.");
     }
 
     const stored = await this.objectStorage.putDocument(
@@ -643,16 +683,80 @@ export class ContractsService {
     });
     const documentId = Number(docResult.insertId);
 
-    await this.db
+    // Repli : le remplacement perd la course parce que le scan a ete detache entre-temps => chemin d'import.
+    let fellBack = false;
+    if (replace) {
+      // Condition anti-course : seul le premier remplacement concurrent gagne (le scan courant doit etre inchange).
+      const swapped = await this.db
+        .update(realEstateContracts)
+        .set({ signedDocumentId: documentId, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(
+          and(
+            eq(realEstateContracts.id, id),
+            eq(realEstateContracts.status, "signed"),
+            eq(realEstateContracts.signedDocumentId, contract.signedDocumentId as number),
+          ),
+        );
+      if (this.affected(swapped) < 1) {
+        const [cur] = await this.db
+          .select({ signedDocumentId: realEstateContracts.signedDocumentId })
+          .from(realEstateContracts)
+          .where(eq(realEstateContracts.id, id))
+          .limit(1);
+        if (!cur || cur.signedDocumentId != null) {
+          // Un autre remplacement a gagne : le nouveau document est archive.
+          await this.db
+            .update(realEstateLeaseDocuments)
+            .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(eq(realEstateLeaseDocuments.id, documentId));
+          throw new ConflictException("Le scan du bail a été modifié entre-temps. Rechargez puis réessayez.");
+        }
+        fellBack = true;
+      } else {
+        // Ancien scan archive (soft delete) : l'objet de stockage est conserve.
+        await this.db
+          .update(realEstateLeaseDocuments)
+          .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateLeaseDocuments.id, contract.signedDocumentId as number));
+        await this.log(
+          id,
+          orgId,
+          "scan_replaced",
+          null,
+          null,
+          `Scan du bail remplacé par ${originalName ? String(originalName).slice(0, 255) : "un nouveau fichier"}`,
+        );
+        await this.publishContractUpdate("status_changed", id, contract.leaseId);
+        return { ...(await this.getContract(id, orgId)), replaced: true };
+      }
+    }
+
+    // Condition anti-course : seul le premier import concurrent gagne (statut pas encore signe, ou scan detache).
+    const claimed = await this.db
       .update(realEstateContracts)
       .set({
         status: "signed",
-        signedAt: sql`CURRENT_TIMESTAMP`,
+        // Scan détaché puis ré-importé : on conserve la date de signature d'origine.
+        ...(contract.status === "signed" && contract.signedAt ? {} : { signedAt: sql`CURRENT_TIMESTAMP` }),
         signerToken: null,
         signedDocumentId: documentId,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContracts.id, id));
+      .where(
+        and(
+          eq(realEstateContracts.id, id),
+          or(ne(realEstateContracts.status, "signed"), isNull(realEstateContracts.signedDocumentId)),
+        ),
+      );
+    if (this.affected(claimed) < 1) {
+      // Perdu la course : soft delete du document insere, pas de second log ni de bienvenue.
+      await this.db
+        .update(realEstateLeaseDocuments)
+        .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateLeaseDocuments.id, documentId));
+      if (fellBack) throw new ConflictException("Le scan du bail a été modifié entre-temps. Rechargez puis réessayez.");
+      return this.getContract(id, orgId);
+    }
 
     // Scan papier = tous les signataires actifs ont signe (methode papier) ; liens invalides.
     await this.db
@@ -673,18 +777,31 @@ export class ContractsService {
         ),
       );
 
+    let importerName: string | null = null;
+    if (userId) {
+      const [u] = await this.db
+        .select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      if (u) importerName = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.username || null;
+    }
     await this.log(
       id,
       orgId,
-      "signed",
+      "signed_paper",
       null,
       null,
-      `Signature papier importee${createdByName ? ` par ${createdByName}` : ""}`,
+      `Signature papier importée${importerName ? ` par ${importerName}` : ""}`,
     );
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
 
-    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort.
-    await this.claimAndDeliverWelcome(contract, orgId);
+    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort, sans bloquer la réponse.
+    void this.claimAndDeliverWelcome(contract, orgId)
+      .then(() => this.publishContractUpdate("status_changed", id, contract.leaseId))
+      .catch((err) =>
+      this.logger.warn(`Contract ${id}: welcome delivery failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
 
     return this.getContract(id, orgId);
   }
@@ -919,7 +1036,7 @@ export class ContractsService {
         .where(eq(realEstateContracts.id, contract.id));
     }
 
-    await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoye : ${sentTo.join(" / ")}`);
+    await this.log(contract.id, orgId, "welcome_sent", null, null, `Message de bienvenue envoyé : ${sentTo.join(" / ")}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
     return { message: "Message de bienvenue envoyé.", emailSent, smsSent };
@@ -988,7 +1105,7 @@ export class ContractsService {
         })
         .where(eq(realEstateContracts.id, contract.id));
 
-      await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+      await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signé par ${contract.tenantName ?? "locataire"}`);
       await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
       // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
@@ -1027,7 +1144,7 @@ export class ContractsService {
     if (this.affected(signerRes) < 1) {
       throw new GoneException("This contract has already been signed.");
     }
-    await this.log(contract.id, orgId, "signed", ip, ua, `Signed by ${signer.signerName ?? contract.tenantName ?? "tenant"}`, signer.id);
+    await this.log(contract.id, orgId, "signed", ip, ua, `Signé par ${signer.signerName ?? contract.tenantName ?? "locataire"}`, signer.id);
 
     // 2) Contrat -> signed SEULEMENT si plus aucun signataire actif non signe.
     const remaining = await this.db
@@ -1064,7 +1181,7 @@ export class ContractsService {
           .update(realEstateContractSigners)
           .set({ signerToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
           .where(eq(realEstateContractSigners.contractId, contract.id));
-        await this.log(contract.id, orgId, "all_signed", ip, ua, "Tous les signataires ont signe");
+        await this.log(contract.id, orgId, "all_signed", ip, ua, "Tous les signataires ont signé");
       }
     }
 
@@ -1177,7 +1294,7 @@ export class ContractsService {
       "resent",
       null,
       null,
-      `Resent to ${out.emailTo ?? "no email"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""} - ${signer.signerName ?? ""}`,
+      `Renvoyé à ${out.emailTo ?? "aucun e-mail"}${out.smsTo ? ` / SMS ${out.smsTo}` : ""} - ${signer.signerName ?? ""}`,
       signer.id,
     );
     if (out.error) throw out.error;
@@ -1214,7 +1331,7 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ status: "draft", signerToken: null, signerTokenExpiry: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, contract.id), eq(realEstateContracts.organizationId, orgId)));
-    await this.log(contract.id, orgId, "signers_reset", null, null, "Locataires du bail modifies : contrat remis en brouillon, a regenerer et renvoyer.");
+    await this.log(contract.id, orgId, "signers_reset", null, null, "Locataires du bail modifiés : contrat remis en brouillon, à régénérer et renvoyer.");
     await this.publishContractUpdate("status_changed", contract.id, leaseId);
     return { reset: true, contractId: contract.id };
   }
@@ -1364,7 +1481,7 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ contractContent: content, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
-    await this.log(id, orgId, "template_changed", null, null, `Template changed to "${template.name}"`);
+    await this.log(id, orgId, "template_changed", null, null, `Modèle changé : "${template.name}"`);
     await this.publishContractUpdate("updated", id, rows[0].leaseId);
     return this.getContract(id, orgId);
   }

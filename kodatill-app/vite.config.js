@@ -49,7 +49,7 @@ export default defineConfig({
           {
             urlPattern: ({ url, request }) => request.method === "GET"
               && url.pathname.startsWith("/api/")
-              && !url.pathname.startsWith("/api/events"),
+              && !url.pathname.startsWith("/api/events") && !/\/(auth|events)(\/|$)/.test(url.pathname),
             handler: "NetworkFirst",
             options: {
               cacheName: "kodatill-api-cache",

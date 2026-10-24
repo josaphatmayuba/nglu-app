@@ -1,16 +1,20 @@
 // SCRUM-247 — Contrats & signature (liste, détail, envoi, modèles).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarX, Check, Clock, Copy, FileCheck2, FilePen, FilePlus, History,
-  Printer, Search, Send, ShieldCheck, X, FileCheck,
+  Download, Printer, Search, Send, ShieldCheck, TriangleAlert, X, FileCheck,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
-  AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef,
-  formatAuditWhen, formatSignedAt, hasHtmlMarkup, landlordSignatureOf, openContractPrint, signingUrlFromContract,
+  CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, auditDetails, auditEventLabel, auditIsSigned, contractRef, contractStatusMeta,
+  contractDraftMarkScreen, formatAuditWhen, formatSignedAt, hasHtmlMarkup, hasSignedScan, isPaperSigned, isProofMissing, landlordSignatureOf,
+  openContractPrint, signingUrlFromContract,
 } from "../contractUtils.js";
+import { SignedScanViewer, useSignedScanActions } from "../components/SignedScanViewer.jsx";
+import { SignedScanImportButton } from "../components/SignedScanImportButton.jsx";
+import { useUploadSuccess } from "../uploads/uploadManager.jsx";
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -73,8 +77,10 @@ export function Contrats() {
 
   const [selectedId, setSelectedId] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detail, setDetail] = useState(null);
+  const [detailRaw, setDetail] = useState(null);
+  const detailReq = useRef(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailFailed, setDetailFailed] = useState(false);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createLeaseId, setCreateLeaseId] = useState("");
@@ -83,6 +89,8 @@ export function Contrats() {
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [signingLinks, setSigningLinks] = useState({});
+  // Le détail n'est exposé que s'il correspond au contrat sélectionné (pas d'audit / scan du contrat précédent).
+  const detail = detailRaw && String(detailRaw.id) === String(selectedId) ? detailRaw : null;
 
   const leasesById = useMemo(() => {
     const map = new Map();
@@ -120,7 +128,22 @@ export function Contrats() {
     }
   }, [filtered, selectedId]);
 
+  // Import / remplacement du scan terminé (envoi en arrière-plan) : on relit liste + détail.
+  // La réponse de l'envoi est le détail complet : on l'applique tout de suite (même fermée),
+  // puis on relit pour rester aligné avec le serveur.
+  useUploadSuccess(({ contractId, contract }) => {
+    reload();
+    if (contract && typeof contract === "object" && String(contract.id) === String(contractId)) {
+      setDetail((prev) => (prev && String(prev.id) !== String(contractId) ? prev : { ...(prev || {}), ...contract }));
+    }
+    if (String(contractId) === String(selectedId) && detailOpen) loadDetail(selectedId);
+  });
+
+  const scanActions = useSignedScanActions(detail, toast.error);
+
   const loadDetail = useCallback(async (id) => {
+    detailReq.current = id || null;
+    setDetailFailed(false);
     if (!id) {
       setDetail(null);
       return;
@@ -128,33 +151,40 @@ export function Contrats() {
     setDetailLoading(true);
     try {
       const full = await api.contract(id);
+      if (String(detailReq.current) !== String(id)) return; // une autre ouverture a pris le relais
       setDetail(full);
     } catch (e) {
+      if (String(detailReq.current) !== String(id)) return;
       setActionError(e.message || "Impossible de charger le contrat.");
       setDetail(null);
+      setDetailFailed(true);
     } finally {
-      setDetailLoading(false);
+      if (String(detailReq.current) === String(id)) setDetailLoading(false);
     }
   }, []);
 
+  // Le détail n'est lu qu'à l'ouverture de la modale (pas de GET pour le contrat présélectionné
+  // d'office) ; chaque réouverture relit, donc jamais de détail périmé.
   useEffect(() => {
+    if (!detailOpen) return;
     loadDetail(selectedId);
-  }, [selectedId, loadDetail]);
+  }, [selectedId, detailOpen, loadDetail]);
 
   const metrics = useMemo(() => {
-    const signed = contracts.filter((c) => c.status === "signed").length;
+    const signed = contracts.filter((c) => c.status === "signed" && !isProofMissing(c)).length;
+    const proofMissing = contracts.filter((c) => isProofMissing(c)).length;
     const pending = contracts.filter((c) => ["sent", "viewed"].includes(c.status)).length;
     const draft = contracts.filter((c) => c.status === "draft").length;
     const expiring = leases.filter((l) => {
       const d = daysUntilEnd(l);
       return d != null && d >= 0 && d <= 30 && (l.status || "active") === "active";
     }).length;
-    return { signed, pending, draft, expiring };
+    return { signed, proofMissing, pending, draft, expiring };
   }, [contracts, leases]);
 
   const selectedSummary = filtered.find((c) => String(c.id) === String(selectedId)) || null;
   const selectedLease = selectedSummary?.leaseId ? leasesById.get(String(selectedSummary.leaseId)) : null;
-  const statusMeta = CONTRACT_STATUS[detail?.status || selectedSummary?.status] || CONTRACT_STATUS.draft;
+  const statusMeta = contractStatusMeta(detail || selectedSummary);
 
   const createLeaseOptions = useMemo(
     () => leases
@@ -277,11 +307,85 @@ export function Contrats() {
     }
   };
 
-  if (loading) return <Loading />;
-  if (error) return <ApiError error={error} />;
+  // Loader plein écran seulement au 1er chargement : les rechargements suivants sont silencieux
+  // (sinon la modale est démontée et la liste remonte en haut).
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ApiError error={error} />;
 
   const signingLink = signingUrlFromContract(detail || selectedSummary, signingLinks);
   const canSend = detail && !["signed", "expired", "deleted"].includes(detail.status);
+  const scan = hasSignedScan(detail);
+  const paper = isPaperSigned(detail);
+  const proofMissing = isProofMissing(detail);
+
+  const templateBlock = (
+    <>
+      {!detail?.contractContent && (
+        <>
+          <div className="contrats-paper-head">
+            <div className="font-display" style={{ fontWeight: 700, fontSize: 14 }}>CONTRAT DE BAIL</div>
+            <div className="muted" style={{ fontSize: 11 }}>
+              {selectedLease
+                ? `${TEMPLATE_TYPE_LABEL.residential} · ${selectedLease.unitName || "logement"}`
+                : "Document locatif"}
+            </div>
+          </div>
+          {selectedLease && (
+            <div className="contrats-paper-meta">
+              <p><span className="muted">Locataire :</span> {selectedSummary.tenantName || "—"}</p>
+              <p><span className="muted">Logement :</span> {[selectedLease.propertyName, selectedLease.unitName].filter(Boolean).join(" · ") || "—"}</p>
+              <p><span className="muted">Loyer :</span> {money(selectedLease.rentAmount, selectedLease.currencySymbol || "$")}/mois</p>
+              <p>
+                <span className="muted">Durée :</span>{" "}
+                {selectedLease.startDate ? new Date(selectedLease.startDate).toLocaleDateString("fr-FR") : "—"}
+                {" — "}
+                {selectedLease.endDate ? new Date(selectedLease.endDate).toLocaleDateString("fr-FR") : "—"}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+      <div className="contrats-paper-body">
+        {detail && hasHtmlMarkup(detail.contractContent) ? (
+          <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
+        ) : (
+          <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
+        )}
+      </div>
+      <div className="contrats-paper-sigs">
+        <div>
+          <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
+          {landlordSignatureOf(detail) ? (
+            <img src={landlordSignatureOf(detail)} alt="Signature bailleur" className="contrats-sig-img" />
+          ) : (
+            <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
+          )}
+        </div>
+        <div>
+          <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Locataire</div>
+          {detail?.signatureData ? (
+            <img src={detail.signatureData} alt="Signature" className="contrats-sig-img" />
+          ) : paper ? (
+            <div className="contrats-sig-paper">{t("Signé sur papier")}</div>
+          ) : (
+            <div className="contrats-sig-pending">en attente…</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  const draftMark = contractDraftMarkScreen(detail);
+  const generatedDetails = (
+    <details className="signed-scan-generated">
+      <summary>{t("Version générée (non signée)")}</summary>
+      <p className="signed-scan-note">{t("Texte généré par Domus, sans signature. Le document signé fait foi.")}</p>
+      <button type="button" className="btn" onClick={() => openContractPrint(detail, { onError: toast.error, generated: true })}>
+        <Printer size={14} /> {t("Imprimer cette version")}
+      </button>
+      {templateBlock}
+    </details>
+  );
 
   return (
     <>
@@ -304,6 +408,7 @@ export function Contrats() {
 
       <MetricsGrid>
         <Metric tone="green" icon={<FileCheck2 size={20} />} label={t("Signés")} value={metrics.signed} />
+        {metrics.proofMissing > 0 && <Metric tone="red" icon={<FileCheck2 size={20} />} label={t("Preuve manquante")} value={metrics.proofMissing} />}
         <Metric tone="amber" icon={<Clock size={20} />} label={t("En attente de signature")} value={metrics.pending} />
         <Metric tone="brand" icon={<FilePen size={20} />} label={t("Brouillons")} value={metrics.draft} />
         <Metric tone="red" icon={<CalendarX size={20} />} label={t("Baux expirent < 30 j")} value={metrics.expiring} />
@@ -328,7 +433,7 @@ export function Contrats() {
                   </tr>
                 )}
                 {filtered.map((c) => {
-                  const meta = CONTRACT_STATUS[c.status] || CONTRACT_STATUS.draft;
+                  const meta = contractStatusMeta(c);
                   const active = String(c.id) === String(selectedId);
                   return (
                     <tr
@@ -360,16 +465,26 @@ export function Contrats() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600, fontSize: 15 }}>{contractRef(selectedSummary)}</span>
                   <span className={`chip ${statusMeta.chip}`}>{statusMeta.label}</span>
-                  {detailLoading && <span className="muted" style={{ fontSize: 12 }}>Chargement…</span>}
+                  {detailLoading && detail && <span className="muted" style={{ fontSize: 12 }}>Chargement…</span>}
                 </div>
                 <div className="contrats-detail-actions">
-                  <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail, { onError: toast.error })}>
+                  <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer" aria-label={t("Fermer")}><X size={14} /></button>
+                  <button type="button" className="btn" disabled={!detail} onClick={() => {
+                    if (!detail) return;
+                    if (scan) scanActions.print();
+                    else openContractPrint(detail, { onError: toast.error, generated: paper || proofMissing });
+                  }}>
                     <Printer size={14} /> Imprimer
                   </button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail)}>
-                    <FileCheck size={14} /> PDF
-                  </button>
+                  {scan ? (
+                    <button type="button" className="btn" disabled={!detail} onClick={scanActions.download}>
+                      <Download size={14} /> {t("Télécharger le contrat signé")}
+                    </button>
+                  ) : (
+                    <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail, { generated: paper || proofMissing })}>
+                      <FileCheck size={14} /> PDF
+                    </button>
+                  )}
                   {signingLink && (
                     <button type="button" className="btn" onClick={copySigningLink}>
                       <Copy size={14} /> Lien
@@ -417,58 +532,37 @@ export function Contrats() {
                 </div>
               )}
 
+              {!detail ? (
+                <p className="muted signed-scan-loading" role="status" aria-busy={detailLoading || !detailFailed ? "true" : undefined}>
+                  {detailLoading || !detailFailed ? t("Chargement du contrat…") : t("Contrat indisponible.")}
+                </p>
+              ) : (
               <div className="contrats-detail-grid">
                 <div className="contrats-paper">
-                  <div className="contrats-paper-head">
-                    <div className="font-display" style={{ fontWeight: 700, fontSize: 14 }}>CONTRAT DE BAIL</div>
-                    <div className="muted" style={{ fontSize: 11 }}>
-                      {selectedLease
-                        ? `${TEMPLATE_TYPE_LABEL.residential} · ${selectedLease.unitName || "logement"}`
-                        : "Document locatif"}
-                    </div>
-                  </div>
-                  {selectedLease && (
-                    <div className="contrats-paper-meta">
-                      <p><span className="muted">Locataire :</span> {selectedSummary.tenantName || "—"}</p>
-                      <p><span className="muted">Logement :</span> {[selectedLease.propertyName, selectedLease.unitName].filter(Boolean).join(" · ") || "—"}</p>
-                      <p><span className="muted">Loyer :</span> {money(selectedLease.rentAmount, selectedLease.currencySymbol || "$")}/mois</p>
-                      <p>
-                        <span className="muted">Durée :</span>{" "}
-                        {selectedLease.startDate ? new Date(selectedLease.startDate).toLocaleDateString("fr-FR") : "—"}
-                        {" — "}
-                        {selectedLease.endDate ? new Date(selectedLease.endDate).toLocaleDateString("fr-FR") : "—"}
-                      </p>
+                  {proofMissing && (
+                    <div className="signed-scan-missing" role="alert">
+                      <p><TriangleAlert size={15} /> {t("Preuve manquante : le contrat est marqué signé mais aucun scan n'est attaché.")}</p>
+                      <SignedScanImportButton contract={detail} leaseRef={selectedLease?.reference} label={t("Importer le scan")} />
                     </div>
                   )}
-                  <div className="contrats-paper-body">
-                    {detail && hasHtmlMarkup(detail.contractContent) ? (
-                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
-                    ) : (
-                      <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
-                    )}
-                  </div>
-                  <div className="contrats-paper-sigs">
-                    <div>
-                      <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Bailleur</div>
-                      {landlordSignatureOf(detail) ? (
-                        <img
-                          src={landlordSignatureOf(detail)}
-                          alt="Signature bailleur"
-                          className="contrats-sig-img"
-                        />
-                      ) : (
-                        <div className="contrats-sig-landlord">{detail?.landlordInfo?.name || detail?.landlordName || detail?.companyInfo?.companyName || "Domus"}</div>
-                      )}
-                    </div>
-                    <div>
-                      <div className="muted" style={{ fontSize: 10, marginBottom: 4 }}>Locataire</div>
-                      {detail?.signatureData ? (
-                        <img src={detail.signatureData} alt="Signature" className="contrats-sig-img" />
-                      ) : (
-                        <div className="contrats-sig-pending">en attente…</div>
-                      )}
-                    </div>
-                  </div>
+                  {scan ? (
+                    <>
+                      <div className="signed-scan-banner">
+                        <FileCheck size={15} />
+                        <span>{tf("Signé sur papier le {date} — le scan ci-dessous fait foi", { date: detail.signedAt ? new Date(detail.signedAt).toLocaleDateString("fr-FR") : "—" })}</span>
+                      </div>
+                      <SignedScanViewer key={detail.signedDocumentId} contract={detail} />
+                      <div className="signed-scan-import-row">
+                        <SignedScanImportButton contract={detail} leaseRef={selectedLease?.reference} replace label={t("Remplacer le scan")} />
+                      </div>
+                      {generatedDetails}
+                    </>
+                  ) : proofMissing ? generatedDetails : (
+                    <>
+                      {draftMark && <div className="contrats-draft-mark screen-only" aria-hidden="true">{t("PROJET – non signé")}</div>}
+                      {templateBlock}
+                    </>
+                  )}
                 </div>
 
                 <div className="contrats-audit">
@@ -480,19 +574,26 @@ export function Contrats() {
                     )}
                     {(detail?.auditLogs || []).map((log) => (
                       <div key={log.id} className="contrats-timeline-item">
-                        <span className={`contrats-timeline-dot ${log.event === "signed" ? "done" : ""}`} />
+                        <span className={`contrats-timeline-dot ${auditIsSigned(log) ? "done" : ""}`} />
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{AUDIT_EVENT_LABEL[log.event] || log.event}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{log.details || "—"}</div>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{auditEventLabel(log)}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>{auditDetails(log) || "—"}</div>
                           <div className="muted" style={{ fontSize: 11 }}>{formatAuditWhen(log.createdAt)}</div>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="contrats-legal-note">
-                    <ShieldCheck size={16} />
-                    Signature électronique horodatée et liée à un lien sécurisé unique — valeur probante.
-                  </div>
+                  {paper ? (
+                    <div className="contrats-legal-note">
+                      <ShieldCheck size={16} />
+                      {t("Signature manuscrite : le scan importé fait foi.")}
+                    </div>
+                  ) : detail?.status === "signed" && !proofMissing ? (
+                    <div className="contrats-legal-note">
+                      <ShieldCheck size={16} />
+                      Signature électronique horodatée et liée à un lien sécurisé unique — valeur probante.
+                    </div>
+                  ) : null}
                   {detail?.signedAt && (
                     <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
                       Signé le {formatSignedAt(detail.signedAt)}
@@ -507,6 +608,7 @@ export function Contrats() {
                   )}
                 </div>
               </div>
+              )}
               </div>
               </div>
             </div>
@@ -553,7 +655,9 @@ export function Contrats() {
         </div>
       )}
 
+      {scanActions.proofModal}
       {actionError && <div className="domus-floating-error">{actionError}</div>}
+      {error && data && !actionError && <div className="domus-floating-error" role="alert">{error?.message || t("Impossible de charger les données")}</div>}
     </>
   );
 }
