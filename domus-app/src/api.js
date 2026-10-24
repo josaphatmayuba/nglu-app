@@ -381,7 +381,7 @@ export const api = {
   terminationPreview: (id, date) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}`),
 
   // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
-  leaseDocuments: (id) => get(`/leases/${id}/documents`),
+  leaseDocuments: (id) => jsonFetch(`/leases/${id}/documents`, { method: "GET", cache: "no-store" }),
   uploadLeaseDocument: (id, file, notes = "") => {
     const form = new FormData();
     form.append("document", file);
@@ -626,7 +626,7 @@ export const api = {
   deleteCoupon: (id) => del(`/coupons/${id}`),
 
   contracts: () => get("/contracts"),
-  contract: (id) => get(`/contracts/${id}`),
+  contract: (id) => jsonFetch(`/contracts/${id}`, { method: "GET", cache: "no-store" }),
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id, extra) => post(`/contracts/${id}/send-welcome`, extra),

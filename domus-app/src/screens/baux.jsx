@@ -174,7 +174,7 @@ export function Baux({ go } = {}) {
   const { itemForContract } = useUploads();
   // Envoi d'un bail signé terminé (gestionnaire global) : mise à jour de la modale ouverte + liste.
   useUploadSuccess(({ contractId, contract }) => {
-    setContractPreview((prev) => (prev && prev.id === contractId && contract ? contract : prev));
+    setContractPreview((prev) => (prev && String(prev.id) === String(contractId) && contract && typeof contract === "object" ? { ...prev, ...contract } : prev));
     reload();
   });
   const dateRange = useDateRange();
@@ -1244,11 +1244,14 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
     }
   }
 
+  const docReq = useRef(0);
   async function reloadDocuments() {
+    const req = ++docReq.current;
     try {
-      setDocuments(await api.leaseDocuments(lease.id));
+      const list = await api.leaseDocuments(lease.id);
+      if (req === docReq.current) setDocuments(Array.isArray(list) ? list : []); // dernière requête gagne
     } catch (err) {
-      setDocError(err?.message || "Chargement des documents impossible.");
+      if (req === docReq.current) setDocError(err?.message || "Chargement des documents impossible.");
     }
   }
 
@@ -1423,7 +1426,7 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
     enqueueSignedContract(file, {
       contractId: contract.id,
       leaseId: contract.leaseId,
-      ref: leaseRef ? `#${leaseRef}` : `#LEASE-${contract.leaseId}`,
+      ref: leaseRef ? (String(leaseRef).startsWith("#") ? String(leaseRef) : `#${leaseRef}`) : `#LEASE-${contract.leaseId}`,
     });
   }
 

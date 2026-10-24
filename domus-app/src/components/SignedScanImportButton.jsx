@@ -29,7 +29,7 @@ export function SignedScanImportButton({ contract, leaseRef, replace = false, la
     const queued = enqueueSignedContract(file, {
       contractId: contract.id,
       leaseId: contract.leaseId,
-      ref: leaseRef ? `#${leaseRef}` : `#LEASE-${contract.leaseId}`,
+      ref: leaseRef ? (String(leaseRef).startsWith("#") ? String(leaseRef) : `#${leaseRef}`) : `#LEASE-${contract.leaseId}`,
       replace,
     });
     if (!queued) setError(t("Un envoi est déjà en cours pour ce contrat."));

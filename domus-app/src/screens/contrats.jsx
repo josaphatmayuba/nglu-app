@@ -80,6 +80,7 @@ export function Contrats() {
   const [detailRaw, setDetail] = useState(null);
   const detailReq = useRef(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailFailed, setDetailFailed] = useState(false);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createLeaseId, setCreateLeaseId] = useState("");
@@ -128,15 +129,21 @@ export function Contrats() {
   }, [filtered, selectedId]);
 
   // Import / remplacement du scan terminé (envoi en arrière-plan) : on relit liste + détail.
-  useUploadSuccess(({ contractId }) => {
+  // La réponse de l'envoi est le détail complet : on l'applique tout de suite (même fermée),
+  // puis on relit pour rester aligné avec le serveur.
+  useUploadSuccess(({ contractId, contract }) => {
     reload();
-    if (String(contractId) === String(selectedId)) loadDetail(selectedId);
+    if (contract && typeof contract === "object" && String(contract.id) === String(contractId)) {
+      setDetail((prev) => (prev && String(prev.id) !== String(contractId) ? prev : { ...(prev || {}), ...contract }));
+    }
+    if (String(contractId) === String(selectedId) && detailOpen) loadDetail(selectedId);
   });
 
   const scanActions = useSignedScanActions(detail, toast.error);
 
   const loadDetail = useCallback(async (id) => {
     detailReq.current = id || null;
+    setDetailFailed(false);
     if (!id) {
       setDetail(null);
       return;
@@ -150,14 +157,18 @@ export function Contrats() {
       if (String(detailReq.current) !== String(id)) return;
       setActionError(e.message || "Impossible de charger le contrat.");
       setDetail(null);
+      setDetailFailed(true);
     } finally {
       if (String(detailReq.current) === String(id)) setDetailLoading(false);
     }
   }, []);
 
+  // Le détail n'est lu qu'à l'ouverture de la modale (pas de GET pour le contrat présélectionné
+  // d'office) ; chaque réouverture relit, donc jamais de détail périmé.
   useEffect(() => {
+    if (!detailOpen) return;
     loadDetail(selectedId);
-  }, [selectedId, loadDetail]);
+  }, [selectedId, detailOpen, loadDetail]);
 
   const metrics = useMemo(() => {
     const signed = contracts.filter((c) => c.status === "signed").length;
@@ -520,8 +531,8 @@ export function Contrats() {
               )}
 
               {!detail ? (
-                <p className="muted signed-scan-loading" role="status" aria-busy={detailLoading ? "true" : undefined}>
-                  {detailLoading ? t("Chargement du contrat…") : t("Contrat indisponible.")}
+                <p className="muted signed-scan-loading" role="status" aria-busy={detailLoading || !detailFailed ? "true" : undefined}>
+                  {detailLoading || !detailFailed ? t("Chargement du contrat…") : t("Contrat indisponible.")}
                 </p>
               ) : (
               <div className="contrats-detail-grid">

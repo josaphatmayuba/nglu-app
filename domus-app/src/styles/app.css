@@ -161,7 +161,7 @@ body {
 .contrats-main { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .contrats-table-wrap { overflow:auto; }
 .contrats-table td .chip { white-space:normal; max-width:100%; text-align:center; }
-@media (max-width:600px) { .contrats-table th, .contrats-table td { padding-left:8px; padding-right:8px; } .contrats-table td:last-child { min-width:92px; } }
+@media (max-width:600px) { .contrats-table th, .contrats-table td { padding-left:8px; padding-right:8px; } .contrats-table td:last-child { min-width:92px; } .contrats-table th:nth-child(3), .contrats-table td:nth-child(3):not([colspan]) { display:none; } .contrats-table tbody td:nth-child(2) { word-break:break-word; } }
 .contrats-draft-mark { align-items:center; background:var(--ink-50); border:1px dashed var(--border); border-radius:8px; color:var(--ink-500); display:flex; font-size:11px; font-weight:700; justify-content:center; letter-spacing:.08em; margin:0 0 10px; padding:6px 10px; text-transform:uppercase; }
 @media print { .contrats-draft-mark.screen-only { display:none; } }
 .contrats-table tbody tr { cursor:pointer; }
