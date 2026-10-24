@@ -470,21 +470,30 @@ function OutboxPill() {
   );
 }
 
-function RealtimePill({ online, compact = false, style }) {
+function RealtimePill({ online: sseOnline, compact = false, style }) {
   // Avant la 1re connexion SSE (quelques secondes), « Connexion… » plutot que « Hors ligne ».
+  const [offline, setOffline] = useState(typeof navigator !== "undefined" && navigator.onLine === false);
+  const online = sseOnline && !offline;
   const [grace, setGrace] = useState(true);
   useEffect(() => {
     if (online) { setGrace(false); return undefined; }
     const id = setTimeout(() => setGrace(false), 8000);
     return () => clearTimeout(id);
   }, [online]);
-  const connecting = !online && grace;
+  useEffect(() => {
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  const connecting = !online && grace && !offline;
   const label = online ? t("Direct") : connecting ? t("Connexion…") : t("Hors ligne");
   return (
     <div
       className={`rt-pill ${online ? "rt-on" : connecting ? "" : "rt-off"}`}
       style={style}
-      title={online ? "Temps réel actif - les données se mettent à jour automatiquement" : "Temps réel interrompu - reconnexion..."}
+      title={online ? "Temps réel actif - les données se mettent à jour automatiquement" : connecting ? "Connexion au temps réel…" : "Temps réel interrompu - reconnexion..."}
     >
       <span className="rt-dot" />
       {!compact && <span>{label}</span>}

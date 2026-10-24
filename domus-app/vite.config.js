@@ -68,7 +68,7 @@ export default defineConfig(({ mode }) => {
             // telephone partage, un autre locataire pourrait les relire.
             urlPattern: ({ url, request }) => request.method === "GET"
               && url.pathname.startsWith("/api/")
-              && !url.pathname.startsWith("/api/events")
+              && !url.pathname.startsWith("/api/events") && !/\/(auth|events)(\/|$)/.test(url.pathname)
               // Contrats / documents de bail / scan signe : jamais servis depuis le cache
               // (NetworkFirst retombe sur une copie perimee apres 5 s de reseau lent, p. ex.
               // l'ancien scan apres un remplacement). Le reste garde la lecture hors ligne.

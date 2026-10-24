@@ -171,14 +171,15 @@ export function Contrats() {
   }, [selectedId, detailOpen, loadDetail]);
 
   const metrics = useMemo(() => {
-    const signed = contracts.filter((c) => c.status === "signed").length;
+    const signed = contracts.filter((c) => c.status === "signed" && !isProofMissing(c)).length;
+    const proofMissing = contracts.filter((c) => isProofMissing(c)).length;
     const pending = contracts.filter((c) => ["sent", "viewed"].includes(c.status)).length;
     const draft = contracts.filter((c) => c.status === "draft").length;
     const expiring = leases.filter((l) => {
       const d = daysUntilEnd(l);
       return d != null && d >= 0 && d <= 30 && (l.status || "active") === "active";
     }).length;
-    return { signed, pending, draft, expiring };
+    return { signed, proofMissing, pending, draft, expiring };
   }, [contracts, leases]);
 
   const selectedSummary = filtered.find((c) => String(c.id) === String(selectedId)) || null;
@@ -407,6 +408,7 @@ export function Contrats() {
 
       <MetricsGrid>
         <Metric tone="green" icon={<FileCheck2 size={20} />} label={t("Signés")} value={metrics.signed} />
+        {metrics.proofMissing > 0 && <Metric tone="red" icon={<FileCheck2 size={20} />} label={t("Preuve manquante")} value={metrics.proofMissing} />}
         <Metric tone="amber" icon={<Clock size={20} />} label={t("En attente de signature")} value={metrics.pending} />
         <Metric tone="brand" icon={<FilePen size={20} />} label={t("Brouillons")} value={metrics.draft} />
         <Metric tone="red" icon={<CalendarX size={20} />} label={t("Baux expirent < 30 j")} value={metrics.expiring} />

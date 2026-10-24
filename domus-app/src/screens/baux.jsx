@@ -1229,6 +1229,10 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState("");
   // Document qui sert de preuve de signature du contrat de ce bail (avertissement a la suppression).
+  // Contrat signé sans scan (preuve manquante) ou non signé : l'import passe par « marquer signé à la main ».
+  const canMarkContractSigned = Boolean(contract) && !contract.signedDocumentId
+    && !["deleted", "expired", "cancelled"].includes(contract.status)
+    && (contract.status !== "signed" || isProofMissing(contract));
   const signedScanIds = contract?.signedDocumentId ? [Number(contract.signedDocumentId)] : [];
   const [rentBookBusy, setRentBookBusy] = useState(false);
 
@@ -1357,7 +1361,12 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
               <SignedScanImportButton contract={contract} leaseRef={info.reference} replace label={t("Remplacer le scan")} />
             </div>
           )}
-          {!contract?.signedDocumentId && (<>
+          {!contract?.signedDocumentId && canMarkContractSigned && (
+            <div className="signed-scan-import-row">
+              <SignedScanImportButton contract={contract} leaseRef={info.reference} label={t("Importer le bail signé (photo/scan/PDF)")} />
+            </div>
+          )}
+          {!contract?.signedDocumentId && !canMarkContractSigned && (<>
           <label className="immo-btn">
             <FilePlus size={15} /> {t("Importer le bail signé (photo/scan/PDF)")}
             <input
