@@ -24,14 +24,16 @@ export function isPaperSigned(c) {
 export function isProofMissing(c) {
   if (!c || c.status !== "signed" || c.signedDocumentId) return false;
   const paper = Array.isArray(c.signers) && c.signers.some((s) => s?.method === "paper");
-  return !c.signatureData || paper;
+  // Résumés de liste : hasSignatureData (booléen) remplace signatureData (trop lourd).
+  const hasSig = "signatureData" in c ? Boolean(c.signatureData) : Boolean(c.hasSignatureData);
+  return !hasSig || paper;
 }
 
 // Méta de statut (libellé + chip) : « Signé (papier) » pour un bail signé à la main.
 export function contractStatusMeta(c) {
   const base = CONTRACT_STATUS[c?.status] || CONTRACT_STATUS.draft;
   // Résumés de liste sans signatureData : on ne peut pas conclure à une preuve manquante.
-  if (c && "signatureData" in c && isProofMissing(c)) return { ...base, label: t("Preuve manquante"), chip: "chip-amber" };
+  if (c && ("signatureData" in c || "hasSignatureData" in c) && isProofMissing(c)) return { ...base, label: t("Preuve manquante"), chip: "chip-amber" };
   return isPaperSigned(c) ? { ...base, label: t("Signé (papier)") } : base;
 }
 

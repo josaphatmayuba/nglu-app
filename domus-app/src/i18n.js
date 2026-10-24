@@ -45,6 +45,7 @@ const EN = {
   "Se deconnecter": "Sign out",
   "Direct": "Live",
   "Hors ligne": "Offline",
+  "Connexion…": "Connecting…",
   "en attente": "pending",
   // Common
   "Rechercher": "Search",

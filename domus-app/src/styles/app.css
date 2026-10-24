@@ -1997,6 +1997,18 @@ button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px;
 .domus-upload-inline-error { color:var(--rose); font-size:13px; font-weight:700; }
 /* Le bouton Assistant IA (58 px, coin bas-droit) ne doit pas recouvrir le panneau : décalé à gauche (desktop), au-dessus (mobile, barre incluse). */
 @media (max-width:900px) { .domus-uploads-panel { right:12px; bottom:calc(150px + env(safe-area-inset-bottom, 0px)); } }
+/* Modale ouverte sur mobile : panneau compact (une ligne par envoi), en haut, au-dessus de la modale pour ne pas masquer ses boutons du bas. */
+@media (max-width:900px) {
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-uploads-panel { top:calc(6px + env(safe-area-inset-top, 0px)); bottom:auto; left:8px; right:8px; max-width:none; gap:4px; z-index:100000; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-row { flex-direction:row; align-items:center; gap:8px; padding:4px 10px; min-height:36px; border-radius:10px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-ref { flex:0 1 auto; max-width:40%; font-size:12px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-progress { flex:1 1 auto; min-width:0; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-bar { display:none; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-state { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-actions { flex-wrap:nowrap; flex:0 0 auto; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-actions .immo-btn { min-height:32px; padding:0 8px; font-size:12px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-error { display:none; }
+}
 .domus-upload-pick[data-disabled="true"] { opacity:.55; cursor:not-allowed; pointer-events:none; }
 .contrats-sig-paper { height:36px; border-radius:8px; background:var(--ink-50); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-700); }
 .signed-scan { display:grid; gap:10px; margin:10px 0; }

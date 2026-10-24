@@ -328,6 +328,8 @@ export class ContractsService {
         createdAt: realEstateContracts.createdAt,
         signerToken: realEstateContracts.signerToken,
         signedDocumentId: realEstateContracts.signedDocumentId,
+        // Booleen calcule : la signature (mediumtext) n'est jamais renvoyee dans la liste.
+        hasSignatureData: sql<boolean>`(${realEstateContracts.signatureData} IS NOT NULL AND ${realEstateContracts.signatureData} <> '')`.mapWith(Boolean),
       })
       .from(realEstateContracts)
       .where(and(eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "deleted")))

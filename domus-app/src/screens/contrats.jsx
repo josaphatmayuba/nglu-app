@@ -466,7 +466,7 @@ export function Contrats() {
                   {detailLoading && detail && <span className="muted" style={{ fontSize: 12 }}>Chargement…</span>}
                 </div>
                 <div className="contrats-detail-actions">
-                  <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
+                  <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer" aria-label={t("Fermer")}><X size={14} /></button>
                   <button type="button" className="btn" disabled={!detail} onClick={() => {
                     if (!detail) return;
                     if (scan) scanActions.print();

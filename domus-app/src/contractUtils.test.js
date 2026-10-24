@@ -92,6 +92,11 @@ describe("preuve manquante / mention écran", () => {
     expect(contractStatusMeta({ status: "signed", signatureData: null, signedDocumentId: null, signers: [] }).label).toBe("Preuve manquante");
     expect(contractStatusMeta({ status: "signed", signedDocumentId: null }).label).toBe("Signé");
   });
+  it("résumé de liste : hasSignatureData décide de « Preuve manquante »", () => {
+    expect(contractStatusMeta({ status: "signed", signedDocumentId: null, hasSignatureData: false }).label).toBe("Preuve manquante");
+    expect(contractStatusMeta({ status: "signed", signedDocumentId: null, hasSignatureData: true }).label).toBe("Signé");
+    expect(contractStatusMeta({ status: "signed", signedDocumentId: 5, hasSignatureData: false }).label).toBe("Signé (papier)");
+  });
   it("mention PROJET pour brouillon / envoyé / vu seulement", () => {
     for (const status of ["draft", "sent", "viewed"]) expect(contractDraftMarkScreen({ status })).toBe("PROJET – non signé");
     expect(contractDraftMarkScreen({ status: "signed" })).toBe("");

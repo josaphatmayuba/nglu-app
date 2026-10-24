@@ -1357,6 +1357,7 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
               <SignedScanImportButton contract={contract} leaseRef={info.reference} replace label={t("Remplacer le scan")} />
             </div>
           )}
+          {!contract?.signedDocumentId && (<>
           <label className="immo-btn">
             <FilePlus size={15} /> {t("Importer le bail signé (photo/scan/PDF)")}
             <input
@@ -1368,6 +1369,7 @@ function LeaseDetailModal({ lease, info, contract, onClose, go }) {
             />
           </label>
           <span className="muted signed-scan-hint">{t("PDF de plusieurs pages recommandé")}</span>
+          </>)}
         </div>
         <LeaseInspectionsSection lease={lease} />
         {go && (

@@ -471,10 +471,18 @@ function OutboxPill() {
 }
 
 function RealtimePill({ online, compact = false, style }) {
-  const label = online ? t("Direct") : t("Hors ligne");
+  // Avant la 1re connexion SSE (quelques secondes), « Connexion… » plutot que « Hors ligne ».
+  const [grace, setGrace] = useState(true);
+  useEffect(() => {
+    if (online) { setGrace(false); return undefined; }
+    const id = setTimeout(() => setGrace(false), 8000);
+    return () => clearTimeout(id);
+  }, [online]);
+  const connecting = !online && grace;
+  const label = online ? t("Direct") : connecting ? t("Connexion…") : t("Hors ligne");
   return (
     <div
-      className={`rt-pill ${online ? "rt-on" : "rt-off"}`}
+      className={`rt-pill ${online ? "rt-on" : connecting ? "" : "rt-off"}`}
       style={style}
       title={online ? "Temps réel actif - les données se mettent à jour automatiquement" : "Temps réel interrompu - reconnexion..."}
     >

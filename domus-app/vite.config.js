@@ -69,6 +69,11 @@ export default defineConfig(({ mode }) => {
             urlPattern: ({ url, request }) => request.method === "GET"
               && url.pathname.startsWith("/api/")
               && !url.pathname.startsWith("/api/events")
+              // Contrats / documents de bail / scan signe : jamais servis depuis le cache
+              // (NetworkFirst retombe sur une copie perimee apres 5 s de reseau lent, p. ex.
+              // l'ancien scan apres un remplacement). Le reste garde la lecture hors ligne.
+              && !/\/property-management\/contracts(\/|$)/.test(url.pathname)
+              && !/\/property-management\/leases\/(\d+\/documents|documents\/\d+\/file)/.test(url.pathname)
               && !url.pathname.startsWith("/api/tenant-portal")
               && !url.pathname.startsWith("/api/tenant-onboarding")
               && !url.pathname.startsWith("/api/tenant-prescreening"),
