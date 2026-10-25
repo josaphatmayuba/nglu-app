@@ -33,7 +33,7 @@ const decodeHTML = (str) => {
   return el.value;
 };
 
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
 
 // Group transactions by currency, compute revenue/expense per currency.
 function computeKpisByCurrency(transactions) {

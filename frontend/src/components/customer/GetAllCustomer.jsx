@@ -31,12 +31,8 @@ const initialsFrom = (name = "") =>
     .join("")
     .toUpperCase() || "CL";
 
-const compactMoney = (value) => {
-  const amount = Number(value || 0);
-  if (amount >= 1000000) return `CDF ${(amount / 1000000).toFixed(1)}M`;
-  if (amount >= 1000) return `CDF ${Math.round(amount / 1000)}K`;
-  return `CDF ${amount}`;
-};
+const compactMoney = (value) =>
+  `CDF ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
 const getCustomerTotal = (customer) =>
   Number(

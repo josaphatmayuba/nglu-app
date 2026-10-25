@@ -78,9 +78,9 @@ const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 function money(value, currency) {
   const code = currency || "USD";
   try {
-    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(value || 0);
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(value || 0);
   } catch {
-    return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 0 })}`;
+    return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })}`;
   }
 }
 // Regroupe un total par devise projet (chaque projet peut avoir sa propre devise).
@@ -726,8 +726,8 @@ const BPF_MODES = [
   { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
-const bpfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-const bpfSigned = (v) => (v > 0 ? "+" : "") + bpfNf.format(Math.round(Number(v || 0)));
+const bpfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const bpfSigned = (v) => (v > 0 ? "+" : "") + bpfNf.format(Number(v || 0));
 function bpfMonth(key) {
   const [y, m] = key.split("-");
   const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];

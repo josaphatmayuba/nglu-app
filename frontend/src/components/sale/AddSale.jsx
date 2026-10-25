@@ -45,7 +45,7 @@ const TVA_OPTIONS = [
 ];
 
 const formatAmount = (n, symbol) => {
-  const amount = Math.round(Number(n || 0)).toLocaleString("fr-FR");
+  const amount = Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
   return `${symbol || "CDF"} ${amount}`;
 };
 

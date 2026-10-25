@@ -41,8 +41,7 @@ const formatCurrency = (value, currencySymbol = '$') => {
         style: 'currency',
         currency: 'USD',
         currencyDisplay: 'symbol',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
+        maximumFractionDigits: 2,
     }).format(value || 0).replace('$', currencySymbol);
 
     return formattedValue;

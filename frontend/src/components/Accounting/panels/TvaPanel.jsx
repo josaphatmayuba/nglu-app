@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { AlertTriangle, CheckCircle, Clock, Info } from "lucide-react";
 import moment from "moment";
 
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
 
 const STATUS = {
   en_cours: { label: "Current",  icon: Clock,        class: "text-amber-600 bg-amber-50" },

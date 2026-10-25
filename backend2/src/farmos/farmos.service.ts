@@ -3498,7 +3498,7 @@ export class FarmosService {
       Object.entries(obj).map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
     return {
       totalDeaths,
-      totalLoss: Math.round(totalLoss),
+      totalLoss: Math.round(totalLoss * 100) / 100,
       eventsCount: rows.length,
       byMonth: Object.entries(byMonth).map(([key, value]) => ({ key, value })).sort((a, b) => a.key.localeCompare(b.key)),
       bySpecies: sortDesc(bySpecies),
@@ -4200,8 +4200,8 @@ export class FarmosService {
 
     return {
       months: buckets.map((b) => b.key),
-      revenue: buckets.map((b) => Math.round(b.revenue)),
-      expense: buckets.map((b) => Math.round(b.expense)),
+      revenue: buckets.map((b) => Math.round(b.revenue * 100) / 100),
+      expense: buckets.map((b) => Math.round(b.expense * 100) / 100),
       byCategory,
     };
   }
@@ -4245,8 +4245,8 @@ export class FarmosService {
     const byAnimal = animals
       .map((a) => {
         const id = Number(a.id);
-        const revenue = Math.round(revenueByAnimal.get(id) ?? 0);
-        const cost = Math.round(costByAnimal.get(id) ?? 0);
+        const revenue = Math.round((revenueByAnimal.get(id) ?? 0) * 100) / 100;
+        const cost = Math.round((costByAnimal.get(id) ?? 0) * 100) / 100;
         return {
           animalId: id, name: a.name, species: a.species, lot: a.lot, barn: a.barn,
           revenue, cost, profit: revenue - cost,

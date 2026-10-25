@@ -23,7 +23,7 @@ const DetailQuote = () => {
   }, [dispatch, id]);
 
   const fmtMoney = (n) =>
-    `${currencySymbol || "CDF"} ${Math.round(Number(n || 0)).toLocaleString("fr-FR")}`;
+    `${currencySymbol || "CDF"} ${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`;
 
   if (loading || !quote) {
     return (

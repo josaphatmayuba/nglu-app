@@ -46,7 +46,7 @@ const AddQuote = () => {
   const handleLineChange = () => forceUpdate((n) => n + 1);
 
   const formatAmount = (n) =>
-    `${currencySymbol || "CDF"} ${Math.round(Number(n || 0)).toLocaleString("fr-FR")}`;
+    `${currencySymbol || "CDF"} ${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`;
 
   const onFormSubmit = async (values) => {
     setLoader(true);

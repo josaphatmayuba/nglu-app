@@ -3791,8 +3791,8 @@ function buildFinanceSummaryByCurrency(sales, expenses) {
   }));
   return {
     months: buckets.map((b) => b.key),
-    revenue: buckets.map((b) => Math.round(b.revenue)),
-    expense: buckets.map((b) => Math.round(b.expense)),
+    revenue: buckets.map((b) => Math.round(b.revenue * 100) / 100),
+    expense: buckets.map((b) => Math.round(b.expense * 100) / 100),
     byCategory,
   };
 }
@@ -4215,7 +4215,7 @@ const printForecastReport = async (lang, horizon = 6, species = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
-  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
+  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 2 });
   const horizonLabel = horizon >= 12 ? L(`${horizon / 12} an(s)`, `${horizon / 12} year(s)`) : L(`${horizon} mois`, `${horizon} months`);
   const spDef = species ? speciesById(species) : null;
   const speciesLabel = spDef ? (lang === "fr" ? spDef.fr : spDef.en) : null;
@@ -4241,8 +4241,8 @@ const printForecastReport = async (lang, horizon = 6, species = null) => {
     }
     const parts = [];
     for (const [code, net] of byCur.entries()) {
-      cashRows.push(`<tr><td>${esc(code)}</td><td class="num">${nf.format(Math.round(net))}</td></tr>`);
-      parts.push(`<b>${nf.format(Math.round(net))} ${esc(code)}</b>`);
+      cashRows.push(`<tr><td>${esc(code)}</td><td class="num">${nf.format(net)}</td></tr>`);
+      parts.push(`<b>${nf.format(net)} ${esc(code)}</b>`);
     }
     if (parts.length) netLine = L(`Sur ${horizonLabel}, le flux net cumulé projeté est de ${parts.join(", ")} (entrées de ventes moins dépenses prévues).`, `Over ${horizonLabel}, the projected cumulative net flow is ${parts.join(", ")} (sales inflows minus expected expenses).`);
   }
@@ -4311,9 +4311,9 @@ const printMortalityReport = (events, lang, moneyUnit = "", speciesLabel = null)
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
   const spSuffix = speciesLabel ? ` · ${esc(speciesLabel)}` : "";
-  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
+  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 2 });
   const cur = moneyUnit ? " " + esc(moneyUnit) : "";
-  const money = (v) => nf.format(Math.round(Number(v || 0))) + cur;
+  const money = (v) => nf.format(Number(v || 0)) + cur;
   const list = Array.isArray(events) ? events.slice().sort((a, b) => String(b.eventDate ?? "").localeCompare(String(a.eventDate ?? ""))) : [];
   const spLabel = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.fr : s.en) : (id || "—"); };
   let totalDeaths = 0, totalLoss = 0, confirmedCount = 0;
@@ -9046,6 +9046,8 @@ const FC_MODES = [
 const fcNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const fcPctNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 const fcSigned = (v) => (v > 0 ? "+" : "") + fcNf.format(Math.round(Number(v || 0)));
+const fcMoneyNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const fcMoneySigned = (v) => (v > 0 ? "+" : "") + fcMoneyNf.format(Number(v || 0));
 const fcSignedPct = (v) => `${Number(v || 0) > 0 ? "+" : ""}${fcPctNf.format(Number(v || 0))}%`;
 function fcMonth(key) {
   const [y, m] = key.split("-");
@@ -9087,7 +9089,7 @@ function FcChart({ serie }) {
       max={max}
       series={[{ name: serie.code, data: values, color: "var(--forest-700)" }]}
       colors={["var(--forest-700)"]}
-      formatter={(v) => `${fcSigned(v)} ${serie.code}`}
+      formatter={(v) => `${fcMoneySigned(v)} ${serie.code}`}
     />
   );
 }
@@ -9409,7 +9411,7 @@ const ForecastScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }
             <div style={{ fontSize: 15, lineHeight: 1.5 }}>
               {L("À ce rythme, les ventes élevage projetées à", "At this pace, projected livestock sales at")} <strong>{horizonLabel}</strong> {L("représentent", "amount to")}{" "}
               {summary.map((s, i) => (
-                <strong key={s.code} style={{ color: s.cumul >= 0 ? "var(--forest-700)" : "#c0392b" }}>{i > 0 ? " et " : ""}{fcSigned(s.cumul)} {s.code}</strong>
+                <strong key={s.code} style={{ color: s.cumul >= 0 ? "var(--forest-700)" : "#c0392b" }}>{i > 0 ? " et " : ""}{fcMoneySigned(s.cumul)} {s.code}</strong>
               ))}.
             </div>
           </div>
@@ -9519,7 +9521,7 @@ const ForecastScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }
             <p style={{ fontSize: 13, margin: "10px 0 0", padding: "10px 0 0", borderTop: "1px solid var(--border-1)" }}>
               {L("Recette de vente déduite du cheptel", "Sales revenue from projected herd")} :{" "}
               {herdRevenue.map(([code, amt], i) => (
-                <strong key={code} style={{ color: "var(--forest-700)" }}>{i > 0 ? " et " : ""}{fcNf.format(Math.round(amt))} {code}</strong>
+                <strong key={code} style={{ color: "var(--forest-700)" }}>{i > 0 ? " et " : ""}{fcMoneyNf.format(Number(amt))} {code}</strong>
               ))}{" "}
               <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "var(--ink-100)", color: "var(--fg-2)" }}>{L("estimé", "estimated")}</span>
             </p>

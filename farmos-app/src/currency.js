@@ -59,11 +59,11 @@ export function currencyOptions(currencies) {
     .filter((option) => option.id != null);
 }
 
-const nf0 = new Intl.NumberFormat("fr-CA", { maximumFractionDigits: 0 });
+const nf0 = new Intl.NumberFormat("fr-CA", { maximumFractionDigits: 2 });
 const nf2 = new Intl.NumberFormat("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatMoney(value, currencyId, currencies, fallback = "", precision = 0) {
-  const amount = precision === 2 ? nf2.format(Number(value || 0)) : nf0.format(Math.round(Number(value || 0)));
+  const amount = precision === 2 ? nf2.format(Number(value || 0)) : nf0.format(Number(value || 0));
   const symbol = symbolFor(currencyId, currencies, fallback);
   return `${amount}${symbol ? " " + symbol : ""}`;
 }

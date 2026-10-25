@@ -18,8 +18,8 @@ const MODES = [
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
 
-const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-const fmtSigned = (v) => (v > 0 ? "+" : "") + nf.format(Math.round(Number(v || 0)));
+const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const fmtSigned = (v) => (v > 0 ? "+" : "") + nf.format(Number(v || 0));
 function monthLabel(key) {
   const [y, m] = key.split("-");
   const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];

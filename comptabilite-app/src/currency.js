@@ -40,8 +40,8 @@ export function symbolFor(currencyId, currencies, fallback) {
   return (c && cleanCurrencySymbol(c)) || fallback;
 }
 
-const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-export const fmt = (v) => nf.format(Math.round(Number(v || 0)));
+const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+export const fmt = (v) => nf.format(Number(v || 0));
 // Montant + devise (ex. "1 250 000 CDF").
 export const money = (v, sym) => `${fmt(v)}${sym ? " " + sym : ""}`;
 // Montant compact en millions (ex. "1,3 M CDF").
