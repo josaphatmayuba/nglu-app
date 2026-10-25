@@ -578,6 +578,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
   const [tab, setTab] = React.useState("apercu");
   const p = project;
   const [budget, setBudget] = React.useState(null);
+  const [shareOpen, setShareOpen] = React.useState(false);
   React.useEffect(() => {
     if (tab !== "apercu" || !p.id) return;
     api.budgetSummary(p.id).then(setBudget).catch(() => setBudget(null));
@@ -599,9 +600,11 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
+          {canMutate && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
           {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
       </div>
+      {shareOpen && <ShareTrackingModal project={p} onClose={() => setShareOpen(false)} />}
 
       <div className="selected-banner grad-amber">
         <div>
@@ -3631,6 +3634,110 @@ function Situations({ projects, canMutate, fixedProjectId }) {
 }
 
 const SUBMISSION_STATUS_TONE = { submitted: "amber", validated: "emerald", returned: "rose" };
+
+const SHARE_STATUS = { active: ["Actif", "emerald"], revoked: ["Révoqué", "rose"], expired: ["Expiré", "ink"] };
+const fmtShareDate = (d) => (d ? new Date(d).toLocaleString("fr-CA", { dateStyle: "short", timeStyle: "short" }) : "—");
+
+// Liens publics de suivi financier pour le propriétaire (lecture seule, sans compte).
+// Le jeton n'est affiché qu'une fois, à la création (seul son hash est stocké).
+function ShareTrackingModal({ project, onClose }) {
+  const [links, setLinks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [days, setDays] = React.useState("90");
+  const [sendSms, setSendSms] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [created, setCreated] = React.useState(null); // { url, sms_sent }
+  const [copied, setCopied] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.shareLinks(project.id).then(setLinks).catch((e) => setError(e.message || String(e))).finally(() => setLoading(false));
+  }, [project.id]);
+  React.useEffect(load, [load]);
+
+  const create = async () => {
+    setBusy(true); setError(""); setCopied(false);
+    try {
+      const res = await api.createShareLink(project.id, { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) });
+      setCreated({ url: res.url, sms_sent: res.sms_sent });
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const revoke = async (l) => {
+    if (!window.confirm("Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.")) return;
+    setError("");
+    try { await api.revokeShareLink(project.id, l.id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const copy = () => { try { navigator.clipboard.writeText(created.url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card">
+        <div className="modal-head">
+          <div><h2 className="font-display">Partager le suivi</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien en lecture seule pour le propriétaire (sans compte).</p></div>
+          <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div className="form-grid">
+          <label className="field">
+            <span>Expiration</span>
+            <select value={days} onChange={(e) => setDays(e.target.value)}>
+              <option value="30">30 jours</option>
+              <option value="90">90 jours</option>
+              <option value="365">1 an (sans expiration)</option>
+            </select>
+          </label>
+          {project.ownerPhone && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
+              <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+              <span>Envoyer par SMS au propriétaire ({project.ownerPhone})</span>
+            </label>
+          )}
+          <button type="button" className="btn btn-amber grad-amber btn-touch" disabled={busy} onClick={create}>{busy ? "Création…" : "Créer un lien"}</button>
+        </div>
+
+        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+
+        {created && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <p style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
+              Lien créé. Copiez-le maintenant : il ne sera plus affichable ensuite.
+              {created.sms_sent === true && " SMS envoyé."}
+              {created.sms_sent === false && " L'envoi du SMS a échoué : partagez le lien manuellement."}
+            </p>
+            <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+            <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
+          </div>
+        )}
+
+        <div>
+          <p className="kv-title">Liens existants</p>
+          {loading ? <p className="muted">Chargement…</p> : !links.length ? <p className="muted">Aucun lien.</p> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {links.map((l) => {
+                const [label, tone] = SHARE_STATUS[l.status] || [l.status, "ink"];
+                return (
+                  <div key={l.id} style={{ border: "1px solid var(--ink-100, #e2e8f0)", borderRadius: 10, padding: "8px 10px", fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <strong>{l.recipientName || "Propriétaire"}</strong>
+                      <span className={`chip ${tone}`}>{label}</span>
+                    </div>
+                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {fmtShareDate(l.expiresAt)}</div>
+                    <div style={{ color: "var(--ink-500)" }}>Dernière consultation : {fmtShareDate(l.lastViewedAt)}</div>
+                    {l.status === "active" && <div><button type="button" className="btn btn-ghost btn-touch" onClick={() => revoke(l)}>Révoquer</button></div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SubcontractorLinkModal({ projectId, subcontractors, onClose }) {
   const [subId, setSubId] = React.useState("");

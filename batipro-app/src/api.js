@@ -184,6 +184,10 @@ export const api = {
   uploadLevelPlan: (levelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-levels/${levelId}/plan`, fd); },
   levelPlanUrl: (levelId) => blobUrl(`/building-levels/${levelId}/plan`),
   deleteLevelPlan: (levelId) => jsonFetch(`/building-levels/${levelId}/plan`, { method: "DELETE" }),
+  // Liens publics de suivi financier du chantier (proprietaire)
+  shareLinks: (projectId) => jsonFetch(`/projects/${projectId}/share-links`),
+  createShareLink: (projectId, b) => jsonFetch(`/projects/${projectId}/share-links`, { method: "POST", body: JSON.stringify(b || {}) }),
+  revokeShareLink: (projectId, linkId) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/revoke`, { method: "POST" }),
   // Portail sous-traitant (Phase 0) — cote gestionnaire
   createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),
   submissions: (projectId) => jsonFetch(`/documents/submissions${projectId ? `?project_id=${projectId}` : ""}`),
@@ -292,4 +296,21 @@ export const publicDocApi = {
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   },
+};
+
+// Suivi financier public (proprietaire) : aucun JWT, autorisation = token opaque.
+const PUBLIC_TRACKING_BASE = `${API_ROOT}/batipro/public/tracking`;
+export const trackingApi = {
+  get: async (token) => {
+    const res = await fetch(`${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const err = apiError(res, body);
+      err.invalid = res.status === 404 || res.status === 410;
+      throw err;
+    }
+    return res.json();
+  },
+  photoUrl: (token, photoId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
+  attachmentUrl: (token, documentId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
 };

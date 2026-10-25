@@ -5,6 +5,7 @@ import {
   datetime,
   decimal,
   double,
+  index,
   json,
   mediumtext,
   mysqlEnum,
@@ -3158,6 +3159,26 @@ export const batiproSubcontractors = mysqlTable("batipro_subcontractors", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// Liens publics de suivi financier d'un chantier (migration 0321). Seul le hash
+// du jeton est stocke. recipient_type : 'owner' (Lot 1), 'subcontractor' (Lot 2).
+export const batiproShareLinks = mysqlTable("batipro_share_links", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  recipientType: varchar("recipient_type", { length: 20 }).default("owner").notNull(),
+  recipientName: varchar("recipient_name", { length: 255 }),
+  recipientPhone: varchar("recipient_phone", { length: 32 }),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  lastViewedAt: timestamp("last_viewed_at"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+}, (t) => ({
+  projectIdx: index("idx_batipro_share_links_project").on(t.organizationId, t.projectId),
+}));
 
 // Modele architectural 3D d'un chantier (0..1 par projet). Phase 1 = saisie
 // parametrique (source_type='parametric', geometrie dans les niveaux). Phase 2

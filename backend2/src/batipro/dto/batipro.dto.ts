@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
@@ -426,4 +426,12 @@ export class CreateStockMovementDto {
   @IsOptional() @IsInt() phase_id?: number;
   @IsNumber() @Min(0.001) quantity!: number;
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
+}
+
+// Lien public de suivi financier (Lot 1 : proprietaire). expires_in_days : 30, 90 (defaut) ou 365 ("sans expiration", 1 an max).
+export class CreateBatiproShareLinkDto {
+  @IsOptional() @IsString() @MaxLength(255) recipient_name?: string;
+  @IsOptional() @IsString() @MaxLength(32) recipient_phone?: string;
+  @IsOptional() @IsIn([30, 90, 365]) expires_in_days?: number;
+  @IsOptional() @IsBoolean() send_sms?: boolean;
 }

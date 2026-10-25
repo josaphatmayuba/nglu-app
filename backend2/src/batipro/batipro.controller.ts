@@ -22,6 +22,7 @@ import {
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
   CreateBatiproSituationDocumentDto,
+  CreateBatiproShareLinkDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
@@ -46,6 +47,7 @@ import {
   UpdateBatiproTaskDto,
   UpdateBatiproWorkerDto,
 } from "./dto/batipro.dto";
+import { BatiproShareService } from "./batipro-share.service";
 import { BatiproService } from "./batipro.service";
 
 @ApiTags("batipro")
@@ -53,7 +55,7 @@ import { BatiproService } from "./batipro.service";
 @UseGuards(JwtAuthGuard, PermissionsGuard, BatiproProjectGuard)
 @Controller("batipro")
 export class BatiproController {
-  constructor(private readonly batipro: BatiproService) {}
+  constructor(private readonly batipro: BatiproService, private readonly share: BatiproShareService) {}
 
   @ApiOperation({ summary: "BatiPro dashboard snapshot" })
   @Permissions("readAll-batipro")
@@ -106,6 +108,38 @@ export class BatiproController {
   @Put("projects/:id")
   updateProject(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproProjectDto, @CurrentOrg() orgId: number) {
     return this.batipro.updateProject(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Liens publics de suivi financier du chantier (proprietaire)" })
+  @Permissions("update-batipro")
+  @Get("projects/:projectId/share-links")
+  listShareLinks(@Param("projectId", ParseIntPipe) projectId: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.share.listLinks(projectId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Creer un lien public de suivi (option SMS au proprietaire)" })
+  @Permissions("update-batipro")
+  @Post("projects/:projectId/share-links")
+  createShareLink(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Body() body: CreateBatiproShareLinkDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.share.createLink(projectId, body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Revoquer un lien public de suivi (revoked_at, pas de suppression)" })
+  @Permissions("update-batipro")
+  @Post("projects/:projectId/share-links/:linkId/revoke")
+  revokeShareLink(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Param("linkId", ParseIntPipe) linkId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.share.revokeLink(projectId, linkId, orgId, scope);
   }
 
   @ApiOperation({ summary: "Soft-delete BatiPro project" })

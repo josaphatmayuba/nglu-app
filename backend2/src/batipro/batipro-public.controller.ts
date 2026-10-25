@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
+import { BatiproShareService } from "./batipro-share.service";
 import { BatiproService } from "./batipro.service";
 import { SubmitSubcontractorDocumentDto } from "./dto/batipro.dto";
 
@@ -77,5 +78,48 @@ export class BatiproPublicDocumentsController {
   @Post(":token/accept")
   accept(@Param("token") token: string, @Ip() ip: string, @Req() req: Request) {
     return this.batipro.acceptDocument(token, { ip, ua: req.headers["user-agent"] });
+  }
+}
+
+// Suivi financier public d'un chantier pour le proprietaire (lecture seule).
+// Autorisation = jeton opaque (hache en base). Aucune route d'ecriture.
+@Throttle({ default: { ttl: 60000, limit: 60 } })
+@ApiTags("batipro-public")
+@Controller("batipro/public/tracking")
+export class BatiproPublicTrackingController {
+  constructor(private readonly share: BatiproShareService) {}
+
+  private send(res: Response, file: { body: any; contentType: string; contentLength?: number }) {
+    res.set({
+      "Content-Type": file.contentType,
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Content-Disposition": file.contentType === "application/octet-stream" ? "attachment" : "inline",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Suivi financier du chantier (public — token opaque)" })
+  @ApiParam({ name: "token", type: String })
+  @Header("Cache-Control", "no-store")
+  @Get(":token")
+  tracking(@Param("token") token: string) {
+    return this.share.getPublicTracking(token);
+  }
+
+  @ApiOperation({ summary: "Photo du chantier ou d'une facture de CE chantier (stream verifie)" })
+  @Throttle({ default: { ttl: 60000, limit: 300 } })
+  @Get(":token/photos/:photoId")
+  async photo(@Param("token") token: string, @Param("photoId", ParseIntPipe) photoId: number, @Res({ passthrough: true }) res: Response) {
+    return this.send(res, await this.share.getPublicPhoto(token, photoId));
+  }
+
+  @ApiOperation({ summary: "Fichier joint d'une facture fournisseur de CE chantier (stream verifie)" })
+  @Throttle({ default: { ttl: 60000, limit: 300 } })
+  @Get(":token/invoices/:documentId/attachment")
+  async invoiceAttachment(@Param("token") token: string, @Param("documentId", ParseIntPipe) documentId: number, @Res({ passthrough: true }) res: Response) {
+    return this.send(res, await this.share.getPublicInvoiceAttachment(token, documentId));
   }
 }

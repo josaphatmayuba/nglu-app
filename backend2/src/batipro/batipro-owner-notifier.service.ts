@@ -88,6 +88,35 @@ export class BatiproOwnerNotifier {
         `Chantier ${project.code} ${this.cut(project.name, nameMax)}: statut passe de ${this.statusLabel(oldStatus)} a ${this.statusLabel(newStatus)}.`, project.ownerName));
   }
 
+  // Envoi explicite (action du gestionnaire) du lien de suivi : 1 seul SMS, lien en
+  // fin de message. Ne depend pas du flag ownerSmsEnabled (l'utilisateur a choisi
+  // d'envoyer). Ne throw jamais ; renvoie true si la passerelle a accepte.
+  async sendShareLink(orgId: number, projectId: number, phone: string, url: string): Promise<boolean> {
+    try {
+      const [project] = await this.db
+        .select({ code: batiproProjects.code, name: batiproProjects.name, ownerName: batiproProjects.ownerName })
+        .from(batiproProjects)
+        .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
+        .limit(1);
+      if (!project || !phone.trim()) return false;
+      const message = this.fit((nameMax) => `Chantier ${this.cut(project.code, 12)} ${this.cut(project.name, nameMax)}: suivi financier ${url}`, project.ownerName);
+      const res: any = await this.compat.sendSms({
+        phone,
+        message,
+        // Le jeton ne doit pas finir en clair dans sms_logs.
+        logMessage: message.split(url).join("[lien]"),
+        smsType: "batipro_owner_share_link",
+        organizationId: orgId,
+        relatedType: "batipro_project",
+        relatedId: projectId,
+      });
+      return res?.success !== false;
+    } catch (err) {
+      this.logger.warn(`SMS lien de suivi chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+  }
+
   // Garde commune + envoi ; jamais de throw.
   private async run(
     evt: string,
