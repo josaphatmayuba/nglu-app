@@ -532,6 +532,7 @@ const MESSAGE_EVENTS = [
   ["payment_overdue_owner", "Propriétaire · loyer en retard"],
   ["lease_expiring", "Fin de bail · locataire"],
   ["lease_terminated", "Bail résilié · locataire"],
+  ["lease_termination_scheduled", "Résiliation programmée · locataire"],
   ["lease_expiring_owner", "Propriétaire · fin de bail"],
   ["custom", "Autre / personnalisé"],
 ];

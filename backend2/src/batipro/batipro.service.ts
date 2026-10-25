@@ -30,6 +30,8 @@ import {
   journalEntries,
   journalEntryLines,
   projects,
+  realEstateProperties,
+  realEstateUnits,
   subAccounts,
   supplierTags,
   suppliers,
@@ -283,8 +285,10 @@ export class BatiproService {
       ownerName: String(input.owner_name ?? "").trim() || null,
       ownerPhone: this.normalizeOwnerPhone(input.owner_phone),
       ownerSmsEnabled: this.normalizeOwnerPhone(input.owner_phone) ? this.toFlag(input.owner_sms_enabled) : 0,
+      domusVisible: this.toFlag(input.domus_visible),
     }).$returningId();
     const id = Number(result.id);
+    await this.syncDomusProperty(id, orgId);
     await this.publish("createProject", ["projects"], "created", id, orgId);
     return this.getProject(id, orgId);
   }
@@ -296,6 +300,76 @@ export class BatiproService {
 
   private toFlag(value: boolean | number | string | null | undefined): number {
     return value === true || value === 1 || value === "1" || value === "true" ? 1 : 0;
+  }
+
+  // Chantier coche "Afficher dans Domus" : un bien Domus lui est lie, au statut
+  // "under_construction" tant que le chantier n'est pas termine/livre, puis
+  // "available". Nom et adresse suivent le chantier tant que le bien est en
+  // construction ; une fois livre, Domus en devient maitre (on ne l'ecrase plus).
+  // Decoche ou chantier supprime : le bien est masque (soft delete) seulement
+  // s'il est encore en construction et sans lot, sinon il vit sa vie dans Domus.
+  private async syncDomusProperty(projectId: number, orgId: number) {
+    const [project] = await this.db
+      .select()
+      .from(batiproProjects)
+      .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId)))
+      .limit(1);
+    if (!project) return;
+    const wanted = Number(project.domusVisible) === 1 && Number(project.isActive) === 1;
+    const finished = ["termine", "terminé", "livre", "livré"].includes(String(project.status ?? "").toLowerCase());
+    const [property] = project.domusPropertyId
+      ? await this.db
+        .select({ id: realEstateProperties.id, status: realEstateProperties.status, isActive: realEstateProperties.isActive })
+        .from(realEstateProperties)
+        .where(and(eq(realEstateProperties.id, project.domusPropertyId), eq(realEstateProperties.organizationId, orgId)))
+        .limit(1)
+      : [];
+    const underConstruction = property?.status === "under_construction";
+
+    if (!wanted) {
+      if (!property || !underConstruction || Number(property.isActive) !== 1) return;
+      const [unit] = await this.db
+        .select({ id: realEstateUnits.id })
+        .from(realEstateUnits)
+        .where(and(eq(realEstateUnits.propertyId, property.id), eq(realEstateUnits.isActive, 1)))
+        .limit(1);
+      if (!unit) {
+        await this.db.update(realEstateProperties)
+          .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateProperties.id, property.id));
+      }
+      return;
+    }
+
+    const status = finished ? "available" : "under_construction";
+    if (property) {
+      if (!underConstruction && Number(property.isActive) === 1) return;
+      await this.db.update(realEstateProperties)
+        .set({
+          name: project.name,
+          address: project.location ?? null,
+          status,
+          isActive: 1,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(eq(realEstateProperties.id, property.id));
+      return;
+    }
+    const [created] = await this.db.insert(realEstateProperties).values({
+      organizationId: orgId,
+      name: project.name,
+      code: `BP-${project.code}`,
+      propertyType: "building",
+      status,
+      address: project.location ?? null,
+      currencyId: project.currencyId ?? null,
+      description: `Chantier BatiPro ${project.code}`,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).$returningId();
+    await this.db.update(batiproProjects)
+      .set({ domusPropertyId: Number(created.id) })
+      .where(eq(batiproProjects.id, projectId));
   }
 
   async updateProject(id: number, input: UpdateBatiproProjectDto, orgId: number) {
@@ -330,7 +404,9 @@ export class BatiproService {
       patch.ownerSmsEnabled = 0;
       delete patch.ownerSmsLastProgressStep;
     }
+    if (input.domus_visible !== undefined) patch.domusVisible = this.toFlag(input.domus_visible);
     if (Object.keys(patch).length) await this.db.update(batiproProjects).set(patch).where(eq(batiproProjects.id, id));
+    await this.syncDomusProperty(id, orgId);
     await this.publish("updateProject", ["projects"], "updated", id, orgId);
     if (input.status !== undefined && input.status !== before.status) {
       void this.ownerNotifier.notifyStatusChange(orgId, id, before.status ?? null, input.status);
@@ -341,6 +417,7 @@ export class BatiproService {
   async deleteProject(id: number, orgId: number) {
     await this.getProject(id, orgId);
     await this.db.update(batiproProjects).set({ isActive: 0 }).where(and(eq(batiproProjects.id, id), eq(batiproProjects.organizationId, orgId)));
+    await this.syncDomusProperty(id, orgId);
     await this.publish("deleteProject", ["projects"], "deleted", id, orgId);
     return { message: "Chantier supprime." };
   }

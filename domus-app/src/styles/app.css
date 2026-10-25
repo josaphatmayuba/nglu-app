@@ -160,6 +160,10 @@ body {
 .contrats-layout { display:grid; grid-template-columns:1fr 280px; gap:12px; margin-top:16px; align-items:start; }
 .contrats-main { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .contrats-table-wrap { overflow:auto; }
+.contrats-table td .chip { white-space:normal; max-width:100%; text-align:center; }
+@media (max-width:600px) { .contrats-table th, .contrats-table td { padding-left:8px; padding-right:8px; } .contrats-table td:last-child { min-width:92px; } .contrats-table th:nth-child(3), .contrats-table td:nth-child(3):not([colspan]) { display:none; } .contrats-table tbody td:nth-child(2) { word-break:break-word; } }
+.contrats-draft-mark { align-items:center; background:var(--ink-50); border:1px dashed var(--border); border-radius:8px; color:var(--ink-500); display:flex; font-size:11px; font-weight:700; justify-content:center; letter-spacing:.08em; margin:0 0 10px; padding:6px 10px; text-transform:uppercase; }
+@media print { .contrats-draft-mark.screen-only { display:none; } }
 .contrats-table tbody tr { cursor:pointer; }
 .contrats-table tbody tr:hover { background:var(--ink-50); }
 .contrats-row-active { background:var(--iris-50) !important; }
@@ -1972,3 +1976,57 @@ fieldset.immo-alloc { min-width:0; }
 button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px; }
 .immo-pay-mini-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
 .immo-pay-mini-actions .immo-btn, .immo-pay-panel .immo-btn { min-height:36px; padding:0 10px; font-size:12px; }
+
+/* Gestionnaire d'envois (panneau flottant, sans spinner) */
+.domus-uploads-panel { position:fixed; left:12px; right:92px; bottom:calc(12px + env(safe-area-inset-bottom, 0px)); margin-left:auto; max-width:420px; display:flex; flex-direction:column; gap:8px; z-index:230; }
+.domus-upload-row { background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 32px -16px rgba(15,23,42,.35); padding:10px 12px; min-height:44px; display:flex; flex-direction:column; gap:6px; }
+.domus-upload-row.failed { border-color:var(--rose); }
+.domus-upload-ref { font-size:13px; font-weight:700; color:var(--ink-800); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.domus-upload-progress { display:flex; flex-direction:column; gap:4px; }
+.domus-upload-bar { background:var(--ink-100); border-radius:999px; height:6px; overflow:hidden; }
+.domus-upload-bar span { background:var(--iris-600); display:block; height:100%; transition:width .2s ease; }
+.domus-upload-bar span.done { background:var(--emerald); }
+.domus-upload-bar span.waiting_network { background:var(--amber); }
+.domus-upload-state { font-size:12px; color:var(--ink-600); }
+.domus-upload-row.done .domus-upload-state { color:var(--emerald); font-weight:700; }
+.domus-upload-row.failed .domus-upload-state, .domus-upload-error { color:var(--rose); font-weight:700; font-size:12px; }
+.domus-upload-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.domus-upload-actions .immo-btn { min-height:44px; min-width:44px; font-size:13px; }
+.domus-upload-badge { display:inline-flex; align-items:center; background:var(--iris-50); color:var(--iris-700); border-radius:7px; font-size:11px; font-weight:800; padding:3px 8px; }
+.domus-upload-badge.waiting_network { background:var(--ink-100); color:var(--ink-600); }
+.domus-upload-inline-error { color:var(--rose); font-size:13px; font-weight:700; }
+/* Le bouton Assistant IA (58 px, coin bas-droit) ne doit pas recouvrir le panneau : décalé à gauche (desktop), au-dessus (mobile, barre incluse). */
+@media (max-width:900px) { .domus-uploads-panel { right:12px; bottom:calc(150px + env(safe-area-inset-bottom, 0px)); } }
+/* Modale ouverte sur mobile : panneau compact (une ligne par envoi), en haut, au-dessus de la modale pour ne pas masquer ses boutons du bas. */
+@media (max-width:900px) {
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-uploads-panel { top:calc(6px + env(safe-area-inset-top, 0px)); bottom:auto; left:8px; right:8px; max-width:none; gap:4px; z-index:100000; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-row { flex-direction:row; align-items:center; gap:8px; padding:4px 10px; min-height:36px; border-radius:10px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-ref { flex:0 1 auto; max-width:40%; font-size:12px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-progress { flex:1 1 auto; min-width:0; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-bar { display:none; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-state { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-actions { flex-wrap:nowrap; flex:0 0 auto; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-actions .immo-btn { min-height:32px; padding:0 8px; font-size:12px; }
+  body:has(.immo-modal-scrim, .modal-scrim) .domus-upload-error { display:none; }
+}
+.domus-upload-pick[data-disabled="true"] { opacity:.55; cursor:not-allowed; pointer-events:none; }
+.contrats-sig-paper { height:36px; border-radius:8px; background:var(--ink-50); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-700); }
+.signed-scan { display:grid; gap:10px; margin:10px 0; }
+.signed-scan-loading { padding:24px 12px; text-align:center; background:var(--ink-50); border-radius:10px; }
+.signed-scan-error { color:var(--rose); font-weight:700; font-size:13px; margin:0; }
+.signed-scan-img-btn { background:none; border:1px solid var(--border); border-radius:10px; cursor:zoom-in; padding:4px; }
+.signed-scan-img { display:block; max-width:100%; height:auto; margin:0 auto; }
+.signed-scan-card { align-items:center; background:var(--ink-50); border:1px solid var(--border); border-radius:10px; grid-template-columns:auto 1fr; padding:14px; }
+.signed-scan-meta { display:grid; gap:2px; min-width:0; word-break:break-all; }
+.signed-scan-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1 / -1; }
+.signed-scan-actions .immo-btn, .signed-scan-import .immo-btn, .signed-scan-generated > .immo-btn, .signed-scan-generated > .btn { min-height:44px; }
+.signed-scan-banner { align-items:center; background:var(--iris-50); border-radius:10px; color:var(--iris-700); display:flex; font-size:13px; font-weight:700; gap:8px; padding:10px 12px; }
+.signed-scan-missing { background:var(--ink-50); border:1px solid var(--rose); border-radius:10px; display:grid; gap:8px; margin:0 0 12px; padding:12px; }
+.signed-scan-missing p { align-items:center; color:var(--rose); display:flex; font-size:13px; font-weight:700; gap:6px; margin:0; }
+.signed-scan-import { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }
+.signed-scan-import .domus-upload-progress { flex:1 1 100%; }
+.signed-scan-hint { font-size:12px; }
+.signed-scan-import-row { margin:8px 0; }
+.signed-scan-generated { border-top:1px dashed var(--border); margin-top:12px; padding-top:10px; }
+.signed-scan-generated summary { cursor:pointer; font-size:13px; font-weight:700; min-height:44px; display:flex; align-items:center; }
+.signed-scan-note { background:var(--ink-100); border-radius:8px; color:var(--ink-600); font-size:12px; margin:8px 0; padding:8px 10px; }

@@ -597,6 +597,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {p.ownerName && <span style={{ fontSize: 12, color: "var(--ink-500)" }} title="Propriétaire du chantier">Propriétaire : {p.ownerName}</span>}
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
+          {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
           {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
@@ -2298,12 +2299,21 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     setError("");
     const clean = lines.filter((l) => l.designation.trim());
     if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    // Un BC = une seule devise (règlement/comptabilisation mono-devise). Si toutes
+    // les lignes sont dans une autre devise que le chantier (ex. FC), le BC prend
+    // cette devise ; sinon son total ignorerait ces lignes (0 $).
+    const lineCurrencies = [...new Set(clean.map((l) => Number(l.currency_id || docCurrencyId) || 0))];
+    if (lineCurrencies.length > 1) {
+      setError("Un bon de commande ne peut contenir qu'une seule devise. Faites un bon par devise (ex. un bon en $ et un bon en FC).");
+      return;
+    }
+    const poCurrencyId = lineCurrencies[0] || (docCurrencyId ? Number(docCurrencyId) : undefined);
     setBusy(true);
     try {
       const payload = {
         project_id: projectId,
         type: "purchase_order",
-        currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
+        currency_id: poCurrencyId || undefined,
         supplier_id: supplierId ? Number(supplierId) : undefined,
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
@@ -3503,7 +3513,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveSituation = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: form.currency_id || null, status: form.status || "En_validation" };
+      const payload = { project_id: projectId, number: Number(form.number), period: form.period || null, progress: Number(form.progress || 0), amount: Number(form.amount || 0), currency_id: form.currency_id ? Number(form.currency_id) : null, status: form.status || "En_validation" };
       form.id ? await api.updateSituation(form.id, payload) : await api.createSituation(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -3512,7 +3522,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
   const saveChangeOrder = async (form) => {
     setBusy(true); setError("");
     try {
-      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: form.currency_id || null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
+      const payload = { project_id: projectId, title: form.title, reference: form.reference || null, amount: Number(form.amount || 0), currency_id: form.currency_id ? Number(form.currency_id) : null, delay_days: Number(form.delay_days || 0), status: form.status || "En_attente", notes: form.notes || null };
       form.id ? await api.updateChangeOrder(form.id, payload) : await api.createChangeOrder(payload);
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -4090,7 +4100,7 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
     try {
       const payload = {
         name: form.name, trade: form.trade || null, project_id: form.project_id ? Number(form.project_id) : null,
-        contract_amount: n(form.contract_amount), currency_id: form.currency_id || null,
+        contract_amount: n(form.contract_amount), currency_id: form.currency_id ? Number(form.currency_id) : null,
         status: form.status || "En_cours",
       };
       form.id ? await api.updateSubcontractor(form.id, payload) : await api.createSubcontractor(payload);
@@ -4589,6 +4599,7 @@ function payloadFor(kind, form) {
       owner_name: (form.ownerName || "").trim() || null,
       owner_phone: form.ownerPhone || null,
       owner_sms_enabled: form.ownerPhone && form.ownerSmsEnabled ? 1 : 0,
+      domus_visible: form.domusVisible ? 1 : 0,
     };
   }
   return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null, supplier_id: form.supplier_id ? Number(form.supplier_id) : null };
@@ -4605,8 +4616,9 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
         contractAmount: editing.contractAmount ?? 0, billedAmount: editing.billedAmount ?? 0,
         dueDate: editing.dueDate ? String(editing.dueDate).slice(0, 10) : "", location: editing.location || "",
         ownerName: editing.ownerName || "", ownerPhone: editing.ownerPhone || "", ownerSmsEnabled: Number(editing.ownerSmsEnabled) === 1,
+        domusVisible: Number(editing.domusVisible) === 1,
       }
-      : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false })
+      : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false, domusVisible: false })
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const [suppliers, setSuppliers] = React.useState([]);
@@ -4660,6 +4672,10 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
                 <span>Envoyer des SMS au propriétaire (dépenses, devis, avancement)</span>
               </label>
               {!form.ownerPhone && <small id="owner-sms-hint" className="owner-sms-hint">Renseignez un numéro pour activer les SMS.</small>}
+              <label className="owner-sms-toggle">
+                <input type="checkbox" checked={Boolean(form.domusVisible)} onChange={(e) => set("domusVisible", e.target.checked)} />
+                <span>Afficher dans Domus (bien « En construction »)</span>
+              </label>
             </>
           ) : (
             <>

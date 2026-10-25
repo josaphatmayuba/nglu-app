@@ -8,6 +8,7 @@
 // session est partagée same-origin avec le CRM via le cookie refresh httpOnly.
 import { enqueue, flushOutbox, isNetworkError } from "./outbox.js";
 import { readToken, restoreSession, clearToken } from "./auth.jsx";
+import { t } from "./i18n.js";
 
 // Message d'erreur lisible : on extrait le `message` du corps NestJS au lieu
 // d'afficher le JSON brut. message peut être une chaîne ou un tableau (validation).
@@ -101,6 +102,80 @@ async function multipartFetch(path, formData) {
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
+}
+
+// Upload multipart en XHR : progression, chien de garde d'inactivite, refresh 401 (1 rejeu).
+// `signal` (AbortSignal) permet d'annuler l'envoi en cours.
+// Erreurs `retriable` (reseau, timeout, 5xx, 408, 429) vs definitives (4xx).
+function xhrUpload(path, formData, { onProgress, inactivityMs = 60000, signal } = {}, retried = false) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let watchdog = null;
+    let timedOut = false;
+    const clearWatchdog = () => clearTimeout(watchdog);
+    const arm = () => {
+      clearWatchdog();
+      watchdog = setTimeout(() => { timedOut = true; xhr.abort(); }, inactivityMs);
+    };
+    const onAbortSignal = () => xhr.abort();
+    if (signal) {
+      if (signal.aborted) {
+        const err = new Error(t("Envoi annulé."));
+        err.status = 0;
+        err.retriable = false;
+        err.aborted = true;
+        reject(err);
+        return;
+      }
+      signal.addEventListener("abort", onAbortSignal, { once: true });
+    }
+    const cleanup = () => { clearWatchdog(); signal?.removeEventListener("abort", onAbortSignal); };
+    xhr.open("POST", `${BASE}${path}`);
+    for (const [k, v] of Object.entries(authHeaders())) xhr.setRequestHeader(k, v);
+    const fail = (message, status, retriable, extra) => {
+      cleanup();
+      const err = new Error(message);
+      err.status = status;
+      err.retriable = retriable;
+      if (extra) Object.assign(err, extra);
+      reject(err);
+    };
+    if (xhr.upload) {
+      xhr.upload.onprogress = (e) => {
+        arm(); // toute progression relance le chien de garde
+        if (onProgress && e.lengthComputable && e.total > 0) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+      };
+      xhr.upload.onload = () => { onProgress?.(100); arm(); }; // attente de la reponse serveur
+    }
+    xhr.onerror = () => fail(t("Connexion interrompue."), 0, true);
+    xhr.onabort = () => (timedOut ? fail(t("Délai dépassé."), 0, true) : fail(t("Envoi annulé."), 0, false, { aborted: true }));
+    xhr.onload = async () => {
+      cleanup();
+      const status = xhr.status;
+      if (status >= 200 && status < 300) {
+        try {
+          resolve(xhr.responseText ? JSON.parse(xhr.responseText) : null);
+        } catch {
+          resolve(null); // reponse 2xx non JSON : l'appelant relit la ressource
+        }
+        return;
+      }
+      if (status === 401 && typeof window !== "undefined") {
+        if (!retried) {
+          const token = await restoreSession();
+          if (token) {
+            xhrUpload(path, formData, { onProgress, inactivityMs, signal }, true).then(resolve, reject);
+            return;
+          }
+        }
+        clearToken();
+      }
+      const msg = cleanApiError({ status, statusText: xhr.statusText }, xhr.responseText || "");
+      fail(msg, status, status === 0 || status >= 500 || status === 408 || status === 429);
+    };
+    arm();
+    xhr.send(formData);
+  });
 }
 
 function authenticatedFileUrl(path) {
@@ -302,10 +377,11 @@ export const api = {
   deleteLease: (id) => del(`/leases/${id}`),
   // Résiliation avec motif (statut ended) + récapitulatif préalable.
   terminateLease: (id, b) => post(`/leases/${id}/terminate`, b),
+  cancelScheduledTermination: (id, b) => post(`/leases/${id}/scheduled-termination/cancel`, b || {}),
   terminationPreview: (id, date) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}`),
 
   // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
-  leaseDocuments: (id) => get(`/leases/${id}/documents`),
+  leaseDocuments: (id) => jsonFetch(`/leases/${id}/documents`, { method: "GET", cache: "no-store" }),
   uploadLeaseDocument: (id, file, notes = "") => {
     const form = new FormData();
     form.append("document", file);
@@ -550,7 +626,7 @@ export const api = {
   deleteCoupon: (id) => del(`/coupons/${id}`),
 
   contracts: () => get("/contracts"),
-  contract: (id) => get(`/contracts/${id}`),
+  contract: (id) => jsonFetch(`/contracts/${id}`, { method: "GET", cache: "no-store" }),
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   sendContractWelcome: (id, extra) => post(`/contracts/${id}/send-welcome`, extra),
@@ -559,10 +635,11 @@ export const api = {
   resendContractSigner: (id, signerId, extra) => post(`/contracts/${id}/signers/${signerId}/resend`, extra),
   deleteContract: (id) => del(`/contracts/${id}`),
   changeContractTemplate: (id, templateId) => patch(`/contracts/${id}/template`, { templateId }),
-  markContractSignedManually: (id, file) => {
+  markContractSignedManually: (id, file, onProgress, signal, { replace = false } = {}) => {
     const form = new FormData();
+    if (replace) form.append("replace", "true");
     form.append("document", file);
-    return multipartFetch(`/contracts/${id}/mark-signed-manually`, form);
+    return xhrUpload(`/contracts/${id}/mark-signed-manually`, form, { onProgress, signal });
   },
 
   // Messages / notifications configurables (table email_templates partagée).

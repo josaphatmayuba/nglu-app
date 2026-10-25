@@ -1175,6 +1175,27 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Resiliation programmee (migration 0319) : bail actif jusqu a effective_date, puis execute par le cron.
+// status = scheduled | cancelled | executed | obsolete.
+export const realEstateLeaseScheduledTerminations = mysqlTable("real_estate_lease_scheduled_terminations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  effectiveDate: date("effective_date", { mode: "string" }).notNull(),
+  reason: text("reason"),
+  notifyTenant: tinyint("notify_tenant").default(0).notNull(),
+  status: varchar("status", { length: 20 }).default("scheduled").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  cancelledBy: bigint("cancelled_by", { mode: "number" }),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelReason: text("cancel_reason"),
+  executedAt: timestamp("executed_at"),
+  lastError: text("last_error"),
+  attempts: int("attempts").default(0).notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
 // Locataires supplementaires d'un bail (1..N personnes par bail). Le locataire
 // principal reste real_estate_leases.tenant_id ; les autres sont ici (customer_id).
 export const realEstateLeaseCotenants = mysqlTable("real_estate_lease_cotenants", {
@@ -3005,6 +3026,9 @@ export const batiproProjects = mysqlTable("batipro_projects", {
   ownerSmsEnabled: tinyint("owner_sms_enabled").default(0).notNull(),
   ownerSmsLastProgressStep: int("owner_sms_last_progress_step").default(0).notNull(),
   ownerSmsLastQuoteAt: datetime("owner_sms_last_quote_at"),
+  // Chantier affiche dans Domus comme bien "en construction" (migration 0320).
+  domusVisible: tinyint("domus_visible").default(0).notNull(),
+  domusPropertyId: bigint("domus_property_id", { mode: "number" }),
   manager: varchar("manager", { length: 255 }),
   status: varchar("status", { length: 40 }).default("Planifie").notNull(),
   progress: int("progress").default(0).notNull(),

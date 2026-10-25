@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { MySqlDialect } from "drizzle-orm/mysql-core";
 import { PropertyManagementService } from "./property-management.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
@@ -8,10 +8,10 @@ import { OwnerNotificationsService } from "./owner-notifications.service";
 
 const dialect = new MySqlDialect();
 
-type Fake = { db: any; sets: any[]; wheres: any[]; selectQueue: any[][] };
+type Fake = { db: any; sets: any[]; wheres: any[]; selectQueue: any[][]; inserts: any[] };
 
 function makeFakeDb(selectQueue: any[][]): Fake {
-  const f: Fake = { db: null, sets: [], wheres: [], selectQueue };
+  const f: Fake = { db: null, sets: [], wheres: [], selectQueue, inserts: [] };
   const chain = (resolve: () => unknown): any => {
     const p: any = new Proxy(function () {}, {
       get: (_t, prop) => {
@@ -24,6 +24,7 @@ function makeFakeDb(selectQueue: any[][]): Fake {
   };
   const api: any = {
     select: () => chain(() => f.selectQueue.shift() ?? []),
+    insert: () => ({ values: (v: any) => { f.inserts.push(v); return Promise.resolve([{ insertId: 5 }]); } }),
     update: () => ({
       set: (v: any) => {
         f.sets.push(v);
@@ -199,5 +200,120 @@ describe("garde apres resiliation", () => {
     expect(svc.terminatedOn({ status: "ended", terminationDate: "2026-06-30" })).toBe("2026-06-30");
     expect(svc.terminatedOn({ status: "ended", terminationDate: null })).toBeNull();
     expect(svc.terminatedOn({ status: "active", terminationDate: "2026-06-30" })).toBeNull();
+  });
+});
+
+// ─── Resiliation programmee ──────────────────────────────────────────────────
+const dayFromNow = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+describe("terminateLease - resiliation programmee", () => {
+  const future = () => dayFromNow(10);
+
+  it("date future : planning insere, bail inchange, aucune echeance annulee, unite non liberee", async () => {
+    const fake = makeFakeDb([[{ status: "active" }], []]);
+    const svc = makeService(fake, { ...LEASE, endDate: null });
+    const res = await svc.terminateLease(9, input({ terminationDate: future() }), 1, 3);
+    expect(res.scheduled).toBe(true);
+    expect(res.schedule).toMatchObject({ id: 5, effectiveDate: future(), status: "scheduled" });
+    expect(fake.inserts[0]).toMatchObject({ organizationId: 1, leaseId: 9, effectiveDate: future(), status: "scheduled", createdBy: 3 });
+    expect(fake.sets).toHaveLength(0); // ni bail ended, ni void, ni vacant
+    expect(svc.publishLeaseUpdate).toHaveBeenCalled();
+    expect(res.sms.requested).toBe(false);
+  });
+
+  it("notifyTenant : SMS immediat de type lease_termination_scheduled", async () => {
+    const fake = makeFakeDb([[{ status: "active" }], []]);
+    const svc = makeService(fake, { ...LEASE, endDate: null });
+    const res = await svc.terminateLease(9, input({ terminationDate: future(), notifyTenant: true }), 1, 3);
+    expect(res.sms).toEqual({ requested: true, sent: 2, failed: 0 });
+    const [arg] = svc.sms.sendSms.mock.calls[0];
+    expect(arg.smsType).toBe("lease_termination_scheduled");
+    expect(arg.message).toContain("prendra fin le");
+    expect(arg.message).not.toContain("Depart du locataire");
+  });
+
+  it("au-dela de 6 mois : 400", async () => {
+    const fake = makeFakeDb([]);
+    const svc = makeService(fake, { ...LEASE, endDate: null });
+    await expect(svc.terminateLease(9, input({ terminationDate: dayFromNow(400) }), 1, 3)).rejects.toBeInstanceOf(BadRequestException);
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("apres la fin du bail : 400", async () => {
+    const fake = makeFakeDb([]);
+    const svc = makeService(fake, { ...LEASE, endDate: dayFromNow(5) });
+    await expect(svc.terminateLease(9, input({ terminationDate: future() }), 1, 3)).rejects.toBeInstanceOf(BadRequestException);
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("planning deja actif : 409", async () => {
+    const fake = makeFakeDb([[{ status: "active" }], [{ id: 3 }]]);
+    const svc = makeService(fake, { ...LEASE, endDate: null });
+    await expect(svc.terminateLease(9, input({ terminationDate: future() }), 1, 3)).rejects.toBeInstanceOf(ConflictException);
+    expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("date du jour : resiliation immediate (non-regression), planning actif passe en obsolete, unite vacante", async () => {
+    const fake = makeFakeDb([[], []]);
+    const svc = makeService(fake, { ...LEASE, endDate: null });
+    const res = await svc.terminateLease(9, input({ terminationDate: dayFromNow(0) }), 1, 3);
+    expect(res.scheduled).toBeUndefined();
+    expect(fake.sets.find((s) => s.status === "ended")).toBeDefined();
+    expect(fake.sets.find((s) => s.status === "obsolete")).toMatchObject({ cancelReason: "superseded" });
+    expect(fake.sets.some((s) => s.status === "vacant")).toBe(true);
+    expect(fake.sets.some((s) => s.status === "occupied")).toBe(false);
+  });
+
+  it("resetSignersForLease appele (best-effort) apres resiliation immediate", async () => {
+    const fake = makeFakeDb([[], []]);
+    const svc = makeService(fake);
+    svc.contracts = { resetSignersForLease: jest.fn().mockRejectedValue(new Error("boom")) };
+    await expect(svc.terminateLease(9, input(), 1, 3)).resolves.toBeDefined();
+    expect(svc.contracts.resetSignersForLease).toHaveBeenCalledWith(9, 1);
+  });
+});
+
+describe("cancelScheduledTermination", () => {
+  it("annulation OK : statut cancelled + auteur + motif, bail inchange", async () => {
+    const fake = makeFakeDb([[{ id: 5, effectiveDate: dayFromNow(10) }]]);
+    const svc = makeService(fake);
+    await svc.cancelScheduledTermination(9, "Le locataire reste", 1, 3);
+    expect(fake.sets[0]).toMatchObject({ status: "cancelled", cancelledBy: 3, cancelReason: "Le locataire reste" });
+    expect(fake.sets.some((s) => s.status === "ended" || s.status === "vacant")).toBe(false);
+  });
+
+  it("date atteinte : 400", async () => {
+    const fake = makeFakeDb([[{ id: 5, effectiveDate: dayFromNow(0) }]]);
+    const svc = makeService(fake);
+    await expect(svc.cancelScheduledTermination(9, undefined, 1, 3)).rejects.toBeInstanceOf(BadRequestException);
+    expect(fake.sets).toHaveLength(0);
+  });
+
+  it("aucun planning : 404", async () => {
+    const fake = makeFakeDb([[]]);
+    const svc = makeService(fake);
+    await expect(svc.cancelScheduledTermination(9, undefined, 1, 3)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("occupation du logement", () => {
+  it("recomputeUnitOccupancy : vacant sans bail actif, occupied sinon", async () => {
+    const a = makeFakeDb([[]]);
+    await makeService(a).recomputeUnitOccupancy(7, 1);
+    expect(a.sets[0].status).toBe("vacant");
+    const b = makeFakeDb([[{ id: 77 }]]);
+    await makeService(b).recomputeUnitOccupancy(7, 1);
+    expect(b.sets[0].status).toBe("occupied");
+  });
+
+  it("deleteLease : l'unite reste occupee si un autre bail actif existe, vacante sinon", async () => {
+    const other = makeFakeDb([[{ id: 77 }]]);
+    await makeService(other).deleteLease(9, 1);
+    expect(other.sets.some((s) => s.status === "vacant")).toBe(false);
+    expect(other.sets.some((s) => s.status === "occupied")).toBe(true);
+    const alone = makeFakeDb([[]]);
+    await makeService(alone).deleteLease(9, 1);
+    expect(alone.sets.find((s) => s.status === "obsolete")).toMatchObject({ cancelReason: "lease_cancelled" });
+    expect(alone.sets.some((s) => s.status === "vacant")).toBe(true);
   });
 });
