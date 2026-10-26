@@ -34,6 +34,7 @@ export const EXPENSE_CATEGORIES = [
   ["management_fee", t("Frais de gestion")],
   ["security", t("Sécurité")],
   ["cleaning", t("Nettoyage")],
+  ["legal_fees", t("Honoraires juridiques")],
   ["other", t("Autre")],
 ];
 const CATEGORY_LABEL = Object.fromEntries(EXPENSE_CATEGORIES);
@@ -60,6 +61,7 @@ const PAYMENT_PLAN_OPTIONS = [
 const emptyExpense = {
   propertyId: "",
   unitId: "",
+  leaseId: "",
   category: "insurance",
   description: "",
   amount: "",
@@ -115,6 +117,7 @@ export function Depenses() {
   const expensesApi = useApi(() => api.propertyExpenses(), []);
   const propertiesApi = useApi(() => api.properties(), []);
   const unitsApi = useApi(() => api.units(), []);
+  const leasesApi = useApi(() => api.leases(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
   const suppliersApi = useApi(() => api.suppliers(), []);
@@ -136,6 +139,7 @@ export function Depenses() {
   }, [expensesApi.data]);
   const properties = useMemo(() => (Array.isArray(propertiesApi.data) ? propertiesApi.data : propertiesApi.data?.data || []), [propertiesApi.data]);
   const units = useMemo(() => (Array.isArray(unitsApi.data) ? unitsApi.data : unitsApi.data?.data || []), [unitsApi.data]);
+  const leases = useMemo(() => (Array.isArray(leasesApi.data) ? leasesApi.data : leasesApi.data?.data || []), [leasesApi.data]);
   const currency = useMemo(
     () => normalizeCurrencyModule(currenciesApi.data, settingApi.data),
     [currenciesApi.data, settingApi.data],
@@ -172,6 +176,7 @@ export function Depenses() {
       const payload = {
         propertyId: toId(form.propertyId),
         unitId: toId(form.unitId) ?? null,
+        leaseId: toId(form.leaseId) ?? null,
         category: form.category,
         description: form.description?.trim(),
         amount: toMoney(form.amount),
@@ -291,6 +296,7 @@ export function Depenses() {
           value={expenseModal}
           properties={properties}
           units={units}
+          leases={leases}
           currencyOptions={currency.currencyOptions}
           defaultCurrencyId={currency.defaultCurrencyId}
           supplierOptions={supplierOptions}
@@ -394,6 +400,7 @@ function expenseToForm(expense, defaultCurrencyId) {
     id: expense.id,
     propertyId: expense.propertyId ? String(expense.propertyId) : "",
     unitId: expense.unitId ? String(expense.unitId) : "",
+    leaseId: expense.leaseId ? String(expense.leaseId) : "",
     category: expense.category || "insurance",
     description: expense.description || "",
     amount: expense.amount ?? "",
@@ -411,10 +418,25 @@ function expenseToForm(expense, defaultCurrencyId) {
   };
 }
 
-function ExpenseModal({ value, properties, units, currencyOptions, defaultCurrencyId, supplierOptions, busy, error, onClose, onSave }) {
+function ExpenseModal({ value, properties, units, leases = [], currencyOptions, defaultCurrencyId, supplierOptions, busy, error, onClose, onSave }) {
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
+  // Baux du bien choisi (filtrés par unité si une unité est choisie) ; un bail déjà
+  // rattaché reste listé même s'il n'est plus dans la liste des baux actifs.
+  const leaseLabel = (l) => [
+    l.reference,
+    [l.tenantFirstName, l.tenantLastName].filter(Boolean).join(" "),
+    l.unitName,
+  ].filter(Boolean).join(" · ") || `#${l.id}`;
+  const propertyLeases = form.propertyId
+    ? leases.filter((l) => String(l.propertyId) === String(form.propertyId) && (!form.unitId || String(l.unitId) === String(form.unitId)))
+    : [];
+  const leaseOptions = [
+    ["", t("— Aucun bail —")],
+    ...propertyLeases.map((l) => [String(l.id), leaseLabel(l)]),
+    ...(form.leaseId && !propertyLeases.some((l) => String(l.id) === String(form.leaseId)) ? [[String(form.leaseId), `#${form.leaseId}`]] : []),
+  ];
   return (
     <Modal
       title={form.id ? t("Modifier la dépense") : t("Nouvelle dépense")}
@@ -426,8 +448,9 @@ function ExpenseModal({ value, properties, units, currencyOptions, defaultCurren
       <div className="domus-property-form">
         <FormSection icon={<Receipt size={14} />} title={t("Dépense")}>
           <div className="domus-property-form-grid">
-            <DomusPropertySelect label={t("Propriété")} value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
-            <DomusPropertySelect label={t("Unité")} value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
+            <DomusPropertySelect label={t("Propriété")} value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "", leaseId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
+            <DomusPropertySelect label={t("Unité")} value={form.unitId} onChange={(unitId) => set({ unitId, leaseId: "" })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
+            <DomusPropertySelect label={t("Bail (facultatif)")} value={form.leaseId} onChange={(leaseId) => set({ leaseId })} options={leaseOptions} />
             <DomusPropertySelect label={t("Catégorie")} value={form.category} required onChange={(category) => set({ category })} options={EXPENSE_CATEGORIES} />
             <DomusPropertyField label={t("Date")} type="date" value={form.expenseDate} onChange={(expenseDate) => set({ expenseDate })} required />
             <MoneyField label={t("Montant")} value={form.amount} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(amount) => set({ amount })} onCurrencyChange={(currencyId) => set({ currencyId })} />

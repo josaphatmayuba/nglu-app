@@ -71,3 +71,27 @@ export default function numberToWords (num){
 
   return result.trim();
 }
+
+// Montant en lettres AVEC centimes, sans jamais arrondir a l'unite.
+// Separation entier / centimes sans flottant : Math.round(x * 100) puis
+// division entiere et modulo 100. Devise = nom/code fourni par l'appelant.
+export function splitAmountCents(amount) {
+  const total = Math.round(Math.abs(Number(amount) || 0) * 100);
+  return { units: Math.floor(total / 100), cents: total % 100 };
+}
+
+export function amountToWords(amount, currencyName) {
+  const { units, cents } = splitAmountCents(amount);
+  const currency = (currencyName || "").toString().trim();
+  const unitsWords = units === 0 ? "Zero" : numberToWords(units);
+  // "One Dollar" et non "One Dollars" : singulier quand l'unité vaut 1.
+  const unitCurrency = units === 1 ? currency.replace(/^(\S+?)s(?=\s|$)/i, "$1") : currency;
+  let result = currency ? `${unitsWords} ${unitCurrency}` : unitsWords;
+  if (cents > 0) {
+    const centName = /usd|eur|cad|dollar|euro|\$|€/i.test(currency)
+      ? cents === 1 ? "Cent" : "Cents"
+      : cents === 1 ? "Centime" : "Centimes";
+    result += ` and ${numberToWords(cents)} ${centName}`;
+  }
+  return result;
+}

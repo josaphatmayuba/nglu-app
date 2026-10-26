@@ -26,6 +26,7 @@ import {
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
+  DecideBatiproQuoteDto,
   CreateStockMovementDto,
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
@@ -638,6 +639,19 @@ export class BatiproController {
     limits: { fileSize: 15 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+  @ApiOperation({ summary: "Marque un devis accepte/refuse hors ligne (negocie hors lien client, sans SMS)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/decision")
+  decideQuote(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DecideBatiproQuoteDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.decideQuote(id, body.decision, orgId, userId || undefined, scope);
+  }
+
       if (allowed.includes(file.mimetype)) cb(null, true);
       else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
     },

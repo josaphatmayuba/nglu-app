@@ -980,12 +980,14 @@ export const realEstateOwners = mysqlTable("real_estate_owners", {
   taxId: varchar("tax_id", { length: 100 }),
   signature: text("signature"),
   notes: text("notes"),
+  // Opt-out du SMS "depense enregistree sur votre bien" (1 = recoit, defaut).
+  notifyExpenseSms: tinyint("notify_expense_sms").default(1).notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
 
-export const realEstateProperties = mysqlTable("real_estate_properties", {
+export const realEstateProperties =mysqlTable("real_estate_properties", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -1574,7 +1576,7 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
 // Domus / SCRUM-310 : depenses portees par un bien immobilier, hors tickets de
 // maintenance (qui ont leur propre table real_estate_maintenance_costs).
 // category : insurance, property_tax, hoa, maintenance_general, management_fee,
-// security, cleaning, other. mortgage exclu de la v1 (ticket dedie, car il faut
+// security, cleaning, legal_fees, other. mortgage exclu de la v1 (ticket dedie, car il faut
 // separer capital et interets).
 export const realEstatePropertyExpenses = mysqlTable("real_estate_property_expenses", {
   id: serial("id").primaryKey(),

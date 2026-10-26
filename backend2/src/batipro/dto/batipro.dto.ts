@@ -221,11 +221,19 @@ export class ReviewSubmissionDto {
 export class DocumentLineDto {
   @IsString() @MaxLength(500) designation!: string;
   @IsOptional() @IsNumber() @Min(0) quantity?: number;
-  @IsOptional() @IsNumber() @Min(0) unit_price?: number;
+  // Prix negatif admis UNIQUEMENT si is_adjustment=true (ligne de remise/ajustement) ;
+  // controle applique par le service (computeDocumentTotals), avec total >= 0.
+  @IsOptional() @IsNumber() unit_price?: number;
+  @IsOptional() @IsBoolean() is_adjustment?: boolean;
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
   @IsOptional() @IsInt() material_id?: number;
   @IsOptional() @IsInt() currency_id?: number;
+}
+
+// Decision prise hors ligne sur un devis (negocie/accepte ou refuse hors du lien client).
+export class DecideBatiproQuoteDto {
+  @IsIn(["accepted", "refused"]) decision!: "accepted" | "refused";
 }
 
 // Creation d'un devis ou d'un bon de commande (direction=outbound impose cote

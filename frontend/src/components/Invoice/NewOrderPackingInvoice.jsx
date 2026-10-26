@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import invoiceGenerator from "@/utils/invoiceGenerator";
 import moment from "moment";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import { decodeHtmlEntity } from "@/utils/functions";
 
 export default function NewOrderPackingInvoice({ data, title }) {
@@ -13,9 +13,7 @@ export default function NewOrderPackingInvoice({ data, title }) {
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
 
-  const numberInText = numberToWords(
-    Math.round((data.totalAmount || 0) - (data.discount || 0))
-  );
+  const numberInText = amountToWords((data.totalAmount || 0) - (data.discount || 0));
 
   const currencyLocal = decodeHtmlEntity(currencySymbol);
 

@@ -51,6 +51,7 @@ const emptyOwner = {
   taxId: "",
   signature: null,
   notes: "",
+  notifyExpenseSms: true,
 };
 
 function ownerToForm(owner) {
@@ -74,6 +75,7 @@ function ownerToForm(owner) {
     taxId: owner.taxId || "",
     signature: owner.signature || null,
     notes: owner.notes || "",
+    notifyExpenseSms: owner.notifyExpenseSms == null ? true : Number(owner.notifyExpenseSms) !== 0,
   };
 }
 
@@ -96,6 +98,7 @@ function ownerPayload(f) {
     taxId: f.taxId.trim() || null,
     signature: f.signature || null,
     notes: f.notes.trim() || null,
+    notifyExpenseSms: f.notifyExpenseSms !== false,
   };
 }
 
@@ -334,6 +337,17 @@ function OwnerModal({ value, busy, error, onClose, onSave }) {
             {t("Ajouter une signature électronique (sinon, signer à la main sur le contrat imprimé)")}
           </label>
           {signEnabled && <SignaturePad value={form.signature} onChange={(v) => set({ signature: v })} />}
+        </FormSection>
+
+        <FormSection icon={<Info size={14} />} title={t("Notifications")}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={form.notifyExpenseSms !== false}
+              onChange={(e) => set({ notifyExpenseSms: e.target.checked })}
+            />
+            {t("Prévenir par SMS à chaque dépense enregistrée sur ses biens")}
+          </label>
         </FormSection>
 
         <FormSection icon={<Info size={14} />} title={t("Notes")}>

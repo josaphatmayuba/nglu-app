@@ -212,6 +212,11 @@ export class CreateOwnerDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ example: true, description: "SMS au proprietaire a chaque depense enregistree sur son bien (defaut: oui)." })
+  @IsOptional()
+  @IsBoolean()
+  notifyExpenseSms?: boolean;
 }
 
 export class UpdateOwnerDto extends PartialType(CreateOwnerDto) {}
@@ -1698,6 +1703,7 @@ export const PROPERTY_EXPENSE_CATEGORIES = [
   "management_fee",
   "security",
   "cleaning",
+  "legal_fees",
   "other",
 ] as const;
 export type PropertyExpenseCategory = (typeof PROPERTY_EXPENSE_CATEGORIES)[number];
@@ -1723,7 +1729,7 @@ export class CreatePropertyExpenseDto {
   @ApiProperty({ example: "insurance", enum: PROPERTY_EXPENSE_CATEGORIES })
   @IsIn(PROPERTY_EXPENSE_CATEGORIES, {
     message:
-      "Categorie invalide. Valeurs autorisees: insurance, property_tax, hoa, maintenance_general, management_fee, security, cleaning, other. " +
+      "Categorie invalide. Valeurs autorisees: insurance, property_tax, hoa, maintenance_general, management_fee, security, cleaning, legal_fees, other. " +
       "La categorie mortgage n'est pas prise en charge dans cette version, elle fera l'objet d'un ticket dedie.",
   })
   category: PropertyExpenseCategory;

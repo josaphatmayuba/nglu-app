@@ -2,7 +2,7 @@ import Button from "@/UI/Button";
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import "jspdf-autotable";
 import moment from "moment";
@@ -13,9 +13,7 @@ export default function NewPurchaseInvoice({ data, title }) {
   const { currencySymbol, currencyName } = useCurrency() || {};
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
-  const numberInText = numberToWords(
-    Math.round(data.totalAmount + (data.totalTax ? data.totalTax : 0))
-  );
+  const numberInText = amountToWords(data.totalAmount + (data.totalTax ? data.totalTax : 0), currencyName);
   const {
     status,
     totalPaidAmount,
@@ -31,7 +29,7 @@ export default function NewPurchaseInvoice({ data, title }) {
   const bottomLeftContent = [
     {
       label: "IN WORDS: ",
-      value: `${numberInText.toUpperCase()} ${currencyName}` || "",
+      value: `${numberInText.toUpperCase()}` || "",
     },
     {
       label: "Terms And Conditions: ",

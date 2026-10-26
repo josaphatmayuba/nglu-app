@@ -1824,7 +1824,7 @@ export class BatiproService {
   // mono-devise (cas d'aujourd'hui, toutes lignes currency_id=NULL), ce sont
   // exactement les memes valeurs qu'avant ce changement.
   private computeDocumentTotals(
-    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
+    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; is_adjustment?: boolean; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
     orgId: number,
     validPhaseIds: Set<number>,
     defaultCurrencyId: number | null = null,
@@ -1886,6 +1886,13 @@ export class BatiproService {
   }
 
   // Pour un bon de commande : si une ligne porte une designation mais aucun
+    // Prix negatif = ligne de remise/ajustement explicite uniquement (quantite jamais negative).
+    for (const line of rawLines) {
+      if (Number(line.quantity ?? 0) < 0) throw new BadRequestException("La quantite ne peut pas etre negative.");
+      if (Number(line.unit_price ?? 0) < 0 && !line.is_adjustment) {
+        throw new BadRequestException(`Prix unitaire negatif refuse pour « ${line.designation} » : cochez « Remise / ajustement ».`);
+      }
+    }
   // material_id (saisie "texte libre"), rattache automatiquement un materiau
   // existant du meme nom (insensible a la casse) ou en cree un a la volee,
   // pour eviter la double saisie fournisseur/achat puis materiaux.
@@ -1929,6 +1936,13 @@ export class BatiproService {
         ...getTableColumns(batiproDocuments),
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
+    // Les remises ne doivent jamais rendre le total d'une devise negatif.
+    for (const t of totalsByCurrencyMap.values()) {
+      if (Math.round(t.totalHt * 100) < 0 || Math.round(t.totalTtc * 100) < 0) {
+        throw new BadRequestException("Le total du document ne peut pas etre negatif : les remises depassent le montant des lignes.");
+      }
+    }
+
         supplierName: suppliers.name,
         subcontractorName: batiproSubcontractors.name,
         projectName: batiproProjects.name,
@@ -3715,6 +3729,26 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
   }
 
   async sitePhotoFile(id: number, orgId: number) {
+  // Decision hors ligne (devis negocie/accepte ou refuse hors du lien client), par un
+  // utilisateur authentifie. Meme effet que l'acceptation publique (status "accepted"
+  // alimente le budget prevu) + trace d'audit dans les notes. Aucun SMS.
+  async decideQuote(id: number, decision: "accepted" | "refused", orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    const doc = await this.getDocument(id, orgId);
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    if (doc.type !== "quote") throw new BadRequestException("Seuls les devis peuvent etre acceptes ou refuses.");
+    if (doc.status === decision) return this.getDocument(id, orgId);
+    if (!["draft", "sent", "viewed"].includes(doc.status as string)) {
+      throw new BadRequestException("Seul un devis brouillon ou envoye peut etre marque accepte ou refuse.");
+    }
+    const auditNote = `\n[${decision === "accepted" ? "Accepté" : "Refusé"} hors ligne] ${new Date().toISOString()} user=${userId ?? "?"}`;
+    await this.db.update(batiproDocuments).set({
+      status: decision,
+      notes: doc.notes ? `${doc.notes}${auditNote}` : auditNote.trim(),
+    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    await this.publish("decideQuote", ["documents"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
+  }
+
     const photo = await this.getSitePhoto(id, orgId);
     const object = await this.objectStorage.getObject(photo.fileKey);
     return { ...object, mimeType: object.contentType };

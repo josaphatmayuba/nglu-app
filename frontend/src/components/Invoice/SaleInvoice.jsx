@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useReactToPrint } from "react-to-print";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
 import { nameRender } from "../../utils/functions";
-import numberToWords from "../../utils/numberToWords";
+import { amountToWords } from "../../utils/numberToWords";
 
 const getCurrencyCode = (currency) => {
   if (!currency) return "N/A";
@@ -159,7 +159,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
           <div className=''>
             <p>
               <b>In Words: </b>
-              {numberToWords(Math.round(data.totalAmount - data?.discount))} {getCurrencyCode(data.currency)}
+              {amountToWords(data.totalAmount - data?.discount, getCurrencyCode(data.currency))}
             </p>
             <p className='mt-4'>
               <span className='font-semibold'>Terms and Conditions:</span>{" "}

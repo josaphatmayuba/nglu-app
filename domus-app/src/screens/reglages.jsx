@@ -529,6 +529,7 @@ const MESSAGE_EVENTS = [
   ["tenant_created_owner", "Propriétaire · nouveau dossier locataire"],
   ["lease_created_owner", "Propriétaire · nouveau bail"],
   ["payment_received_owner", "Propriétaire · paiement reçu"],
+  ["expense_recorded_owner", "Propriétaire · dépense enregistrée"],
   ["payment_overdue_owner", "Propriétaire · loyer en retard"],
   ["lease_expiring", "Fin de bail · locataire"],
   ["lease_terminated", "Bail résilié · locataire"],
@@ -671,6 +672,12 @@ const DEFAULT_MESSAGES = [
     subject: "Paiement reçu — bail {reference}",
     body:
       "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}",
+  },
+  {
+    name: "Propriétaire — dépense enregistrée",
+    eventType: "expense_recorded_owner",
+    subject: "Dépense enregistrée sur votre bien",
+    body: "Depense {property}{unit}: {category} {amount} ({vendor}). {date}",
   },
 ];
 

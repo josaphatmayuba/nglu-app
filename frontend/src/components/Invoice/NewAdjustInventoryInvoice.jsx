@@ -1,7 +1,7 @@
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import moment from "moment";
 import { useEffect } from "react";
@@ -20,12 +20,12 @@ export default function NewAdjustInventoryInvoice({ data, title }) {
       value: `Invoice Date: ${moment(data?.date).format("YYYY-MM-DD")}`,
     },
   ];
-  const numberInText = numberToWords(Math.round(data?.totalAdjustPrice));
+  const numberInText = amountToWords(data?.totalAdjustPrice, currencyName);
 
   const bottomLeftContent = [
     {
       label: "IN WORDS: ",
-      value: `${numberInText.toUpperCase()} ${currencyName}` || "",
+      value: `${numberInText.toUpperCase()}` || "",
     },
     {
       label: "Terms And Conditions: ",

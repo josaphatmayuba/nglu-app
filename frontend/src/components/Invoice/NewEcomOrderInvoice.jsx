@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import invoiceGenerator from "@/utils/invoiceGenerator";
 import moment from "moment";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import { decodeHtmlEntity } from "@/utils/functions";
 import { FaFileDownload } from "react-icons/fa";
 
@@ -14,16 +14,14 @@ export default function NewEcomOrderInvoice({ data, orderStatus, title }) {
   const { currencySymbol, currencyName } = useCurrency() || {};
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
-  const numberInText = numberToWords(
-    Math.round((data.totalAmount || 0) - (data.discount || 0))
-  );
+  const numberInText = amountToWords((data.totalAmount || 0) - (data.discount || 0), currencyName);
 
   const currencyLocal = decodeHtmlEntity(currencySymbol);
 
   const bottomLeftContent = [
     {
       label: "In Words: ",
-      value: `${numberInText.toUpperCase()} ${currencyName}` || "",
+      value: `${numberInText.toUpperCase()}` || "",
     },
     {
       label: "Terms And Conditions: ",

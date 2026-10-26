@@ -1,7 +1,7 @@
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import moment from "moment";
 import { useEffect } from "react";
@@ -12,9 +12,7 @@ export default function NewPurchaseOrderInvoice({ data, title }) {
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
 
-  const numberInText = numberToWords(
-    Math.round(data.totalAmount - data.discount)
-  );
+  const numberInText = amountToWords(data.totalAmount - data.discount);
 
   const currencyLocal = decodeHtmlEntity(currencySymbol);
 

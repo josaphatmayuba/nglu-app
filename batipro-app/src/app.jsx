@@ -76,7 +76,9 @@ const MOB_MORE = ["equipes", "previsionnel", "materiaux", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
-  const code = currency || "USD";
+  // Pas de devise par défaut : sans code, montant brut + mention explicite (comme OwnerTracking).
+  if (!currency) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
+  const code = currency;
   try {
     return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(value || 0);
   } catch {
@@ -87,7 +89,7 @@ function money(value, currency) {
 function moneyByCurrency(projects, field) {
   const byCurrency = new Map();
   for (const p of projects) {
-    const code = p.currencyCode || "USD";
+    const code = p.currencyCode || null;
     byCurrency.set(code, (byCurrency.get(code) || 0) + n(p[field]));
   }
   const entries = [...byCurrency.entries()];
@@ -103,7 +105,7 @@ const projectDue = (p) => p.dueDate || p.due || "-";
 function sumLinesByCurrency(lines, currencies, defaultCurrencyCode) {
   const byCurrency = new Map();
   for (const l of lines || []) {
-    const code = (l.currency_id && resolveCurrencyCode(currencies, l.currency_id)) || defaultCurrencyCode || "USD";
+    const code = (l.currency_id && resolveCurrencyCode(currencies, l.currency_id)) || defaultCurrencyCode || null;
     const ht = n(l.quantity) * n(l.unit_price);
     const vat = ht * (n(l.vat_rate) / 100);
     const cur = byCurrency.get(code) || { code, ht: 0, vat: 0, ttc: 0 };
@@ -1481,7 +1483,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
         })
@@ -1512,6 +1514,20 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
       setScanPhotoId(res?.photoId ?? null);
       const parsed = res?.parsed || {};
       if (parsed.date) {
+  // Devis négocié hors ligne : décision saisie par l'utilisateur (aucun SMS envoyé).
+  const decide = async (d, decision) => {
+    const label = decision === "accepted" ? "accepté" : "refusé";
+    if (!window.confirm(`Marquer le devis ${d.number || `#${d.id}`} comme ${label} ?\n\nCe devis a été négocié/${label} hors ligne (hors du lien client). Aucun message ne sera envoyé au client.`)) return;
+    setError("");
+    try { await api.decideDocument(d.id, decision); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const attachPdf = async (id, file) => {
+    if (!file) return;
+    setError("");
+    try { await api.uploadDocumentAttachment(id, file); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
         const m = parsed.date.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
         if (m) {
           const [, d, mo, y] = m;
@@ -1546,6 +1562,16 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     setBusy(true);
     try {
       const payload = {
+                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
+                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
+                      {canMutate && (
+                        <label className="link" style={{ cursor: "pointer" }}>
+                          <Icon name="filePlus" /> Joindre le PDF
+                          <input type="file" accept="application/pdf" style={{ display: "none" }}
+                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; attachPdf(d.id, f); }} />
+                        </label>
+                      )}
+                      {d.attachedFileKey && <button className="link" onClick={() => setModal({ kind: "attachment", id: d.id })}><Icon name="eye" /> Voir la pièce jointe</button>}
         project_id: projectId,
         currency_id: docCurrencyId ? Number(docCurrencyId) : undefined,
         due_date: dueDate || undefined,
@@ -1555,6 +1581,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
           designation: l.designation.trim(),
           quantity: n(l.quantity),
           unit_price: n(l.unit_price),
+      {modal?.kind === "attachment" && <DocumentAttachmentModal id={modal.id} title="Pièce jointe du devis" onClose={() => setModal(null)} />}
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
           currency_id: l.currency_id ? Number(l.currency_id) : undefined,
@@ -1617,7 +1644,11 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                     </label>
                     <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
                       <span>P.U.</span>
-                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                      <input type="number" min={l.is_adjustment ? undefined : "0"} step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 150px", minWidth: 150, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <input type="checkbox" checked={!!l.is_adjustment} onChange={(e) => setLine(i, "is_adjustment", e.target.checked)} />
+                      <span>Remise / ajustement</span>
                     </label>
                     <label className="field" style={{ flex: "1 1 130px", minWidth: 130 }}>
                       <span>Devise</span>
@@ -1655,6 +1686,9 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
             {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
             <button className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer le devis"}</button>
           </div>
+    if (clean.some((l) => n(l.unit_price) < 0 && !l.is_adjustment)) { setError("Un prix négatif n'est permis que pour une ligne cochée « Remise / ajustement »."); return; }
+    if (clean.some((l) => n(l.quantity) < 0)) { setError("La quantité ne peut pas être négative."); return; }
+    if (sumLinesByCurrency(clean, currencies, docCurrencyCode).some((t) => t.ht < 0 || t.ttc < 0)) { setError("Le total ne peut pas être négatif : les remises dépassent le montant des lignes."); return; }
           {scanPhotoId != null && (
             <div style={{ flex: "1 1 260px", minWidth: 220, maxWidth: 320 }}>
               <p className="eyebrow" style={{ marginBottom: 6 }}>Document scanné</p>
@@ -1667,6 +1701,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     </div>
   );
 }
+          ...(l.is_adjustment ? { is_adjustment: true } : {}),
 
 function DevisShareModal({ docId, onClose, onShared }) {
   const [link, setLink] = React.useState(null);
@@ -2103,7 +2138,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 
 // Modale de consultation de la photo/scan attachee a une facture fournisseur
 // (bouton "Voir photo") — fetch blob authentifie (jamais <img src> direct).
-function DocumentAttachmentModal({ id, onClose }) {
+function DocumentAttachmentModal({ id, onClose, title = "Photo de la facture" }) {
   const [src, setSrc] = React.useState(null);
   const [type, setType] = React.useState(null);
   const [error, setError] = React.useState("");
@@ -2120,7 +2155,7 @@ function DocumentAttachmentModal({ id, onClose }) {
     <div className="modal-scrim" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <div><h2 className="font-display">Photo de la facture</h2></div>
+          <div><h2 className="font-display">{title}</h2></div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div className="modal-body">
@@ -2227,7 +2262,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -2414,8 +2449,15 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                       <input type="number" min="0" step="any" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value)} />
                     </label>
                     <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
+    if (clean.some((l) => n(l.unit_price) < 0 && !l.is_adjustment)) { setError("Un prix négatif n'est permis que pour une ligne cochée « Remise / ajustement »."); return; }
+    if (clean.some((l) => n(l.quantity) < 0)) { setError("La quantité ne peut pas être négative."); return; }
+    if (sumLinesByCurrency(clean, currencies, docCurrencyCode).some((t) => t.ht < 0 || t.ttc < 0)) { setError("Le total ne peut pas être négatif : les remises dépassent le montant des lignes."); return; }
                       <span>P.U.</span>
-                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                      <input type="number" min={l.is_adjustment ? undefined : "0"} step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 150px", minWidth: 150, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <input type="checkbox" checked={!!l.is_adjustment} onChange={(e) => setLine(i, "is_adjustment", e.target.checked)} />
+                      <span>Remise / ajustement</span>
                     </label>
                     <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
                       <span>TVA %</span>
@@ -2438,6 +2480,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                       <span>Matériau suivi en stock</span>
                       <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
                         <option value="">— (texte libre)</option>
+          ...(l.is_adjustment ? { is_adjustment: true } : {}),
                         {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </label>

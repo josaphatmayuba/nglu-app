@@ -1,6 +1,6 @@
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import "jspdf-autotable";
 import moment from "moment";
@@ -11,9 +11,7 @@ export default function NewSalePackingInvoice({ data, title }) {
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
 
-  const numberInText = numberToWords(
-    Math.round(data.totalAmount - data.discount)
-  );
+  const numberInText = amountToWords(data.totalAmount - data.discount);
 
   const currencyLocal = decodeHtmlEntity(currencySymbol);
 

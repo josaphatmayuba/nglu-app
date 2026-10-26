@@ -200,7 +200,8 @@ export const api = {
   createDocument: (b) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(b || {}) }),
   updateDocument: (id, b) => jsonFetch(`/documents/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
-  documentHtmlUrl: (id) => blobUrl(`/documents/${id}/html`),
+  decideDocument: (id, decision) => jsonFetch(`/documents/${id}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
+  documentHtmlUrl:(id) => blobUrl(`/documents/${id}/html`),
   shareDocument: (id) => jsonFetch(`/documents/${id}/share`, { method: "POST", body: "{}" }),
   // Photo/scan de la facture papier attachee a un document (ex. facture fournisseur, BC).
   uploadDocumentAttachment: (id, file) => { const fd = new FormData(); fd.append("file", file); return uploadForm(`/documents/${id}/attachment`, fd); },

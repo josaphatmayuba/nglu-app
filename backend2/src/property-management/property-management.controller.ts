@@ -1500,8 +1500,8 @@ export class PropertyManagementController {
   @Permissions("delete-propertyManagement")
   @Delete("property-expenses/:id")
   @HttpCode(200)
-  deletePropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.deletePropertyExpense(id, orgId);
+  deletePropertyExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.deletePropertyExpense(id, orgId, userId);
   }
 
   @ApiOperation({ summary: "Upload/replace the receipt (justificatif) for a property expense" })

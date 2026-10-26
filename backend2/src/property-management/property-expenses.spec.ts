@@ -130,7 +130,7 @@ describe("PropertyManagementService — validation de categorie (DTO)", () => {
     expect(PROPERTY_EXPENSE_CATEGORIES).not.toContain("mortgage");
   });
 
-  it("accepte les 8 categories valides", () => {
+  it("accepte les 9 categories valides", () => {
     expect(PROPERTY_EXPENSE_CATEGORIES).toEqual([
       "insurance",
       "property_tax",
@@ -139,9 +139,10 @@ describe("PropertyManagementService — validation de categorie (DTO)", () => {
       "management_fee",
       "security",
       "cleaning",
+      "legal_fees",
       "other",
     ]);
-    expect(PROPERTY_EXPENSE_CATEGORIES).toHaveLength(8);
+    expect(PROPERTY_EXPENSE_CATEGORIES).toHaveLength(9);
   });
 });
 
@@ -240,6 +241,55 @@ describe("PropertyManagementService — createPropertyExpense", () => {
     (service as any).ledger = failingLedger;
     (service as any).workflow = failingWorkflow;
     await expect(service.createPropertyExpense(baseInput() as any, ORG, 7)).resolves.toBeDefined();
+  });
+
+  it("envoie le SMS proprietaire a la creation (ecriture non differee)", async () => {
+    const { service } = makeService();
+    const notify = jest.fn().mockResolvedValue(undefined);
+    (service as any).ownerNotifications = { notifyExpenseRecorded: notify };
+    await service.createPropertyExpense(baseInput() as any, ORG, 7);
+    expect(notify).toHaveBeenCalledWith(100, ORG);
+  });
+
+  it("n'envoie pas le SMS a la creation si l'ecriture attend l'approbation (deferred)", async () => {
+    const { service } = makeService();
+    const notify = jest.fn().mockResolvedValue(undefined);
+    (service as any).ownerNotifications = { notifyExpenseRecorded: notify };
+    (service as any).ledger = { post: jest.fn().mockResolvedValue({ id: 0, deferred: true }) };
+    await service.createPropertyExpense(baseInput() as any, ORG, 7);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("un echec d'envoi du SMS ne bloque pas la creation", async () => {
+    const { service } = makeService();
+    (service as any).ownerNotifications = { notifyExpenseRecorded: jest.fn().mockRejectedValue(new Error("sms down")) };
+    await expect(service.createPropertyExpense(baseInput() as any, ORG, 7)).resolves.toBeDefined();
+  });
+
+  it("enregistre le hook post-approbation sur property_expense", () => {
+    const { service } = makeService();
+    const register = jest.fn();
+    (service as any).workflow = { registerApprovalHook: register };
+    service.onModuleInit();
+    expect(register).toHaveBeenCalledWith("property_expense", expect.any(Function));
+  });
+});
+
+describe("PropertyManagementService — suppression : contre-passation comptable", () => {
+  it("contre-passe l'ecriture liee (journalEntryId) puis soft delete", async () => {
+    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 } });
+    const reverse = jest.fn().mockResolvedValue({});
+    (service as any).ledger = { reverse };
+    await service.deletePropertyExpense(5, ORG, 7);
+    expect(reverse).toHaveBeenCalledWith(321, expect.stringContaining("#5"), ORG, 7);
+    expect(updates.find((u) => u.table === realEstatePropertyExpenses)?.vals.isActive).toBe(0);
+  });
+
+  it("refuse la suppression si la contre-passation echoue (periode cloturee)", async () => {
+    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 } });
+    (service as any).ledger = { reverse: jest.fn().mockRejectedValue(new BadRequestException("periode cloturee")) };
+    await expect(service.deletePropertyExpense(5, ORG, 7)).rejects.toThrow(BadRequestException);
+    expect(updates.find((u) => u.table === realEstatePropertyExpenses)).toBeUndefined();
   });
 });
 
