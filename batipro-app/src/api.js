@@ -156,6 +156,7 @@ export const api = {
   createPhase: (b) => jsonFetch("/phases", { method: "POST", body: JSON.stringify(b || {}) }),
   updatePhase: (id, b) => jsonFetch(`/phases/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deletePhase: (id) => jsonFetch(`/phases/${id}`, { method: "DELETE" }),
+  phaseDetail: (id) => jsonFetch(`/phases/${id}/detail`),
   situations: (projectId) => jsonFetch(`/situations${projectId ? `?project_id=${projectId}` : ""}`),
   createSituation: (b) => jsonFetch("/situations", { method: "POST", body: JSON.stringify(b || {}) }),
   updateSituation: (id, b) => jsonFetch(`/situations/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),

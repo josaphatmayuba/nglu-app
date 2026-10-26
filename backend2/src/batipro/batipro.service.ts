@@ -43,6 +43,7 @@ import { ProjectsService } from "../projects/projects.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
 import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { OcrService } from "./ocr.service";
+import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -927,6 +928,74 @@ export class BatiproService {
       .limit(1);
     if (!row) throw new NotFoundException("Phase introuvable.");
     return row;
+  }
+
+  // Detail d'une phase (lecture seule) : prevu (devis clients acceptes) vs devis
+  // de l'artisan (documents inbound du lien public) vs depense (BC). Voir
+  // phase-detail.util.ts pour les regles de calcul.
+  async phaseDetail(id: number, orgId: number, scope: BatiproProjectScope) {
+    const phase = await this.getPhase(id, orgId);
+    await this.assertProjectInScope(phase.projectId, orgId, scope);
+
+    const rows = await this.db
+      .select({
+        lineId: batiproDocumentLines.id,
+        documentId: batiproDocuments.id,
+        designation: batiproDocumentLines.designation,
+        quantity: batiproDocumentLines.quantity,
+        unitPrice: batiproDocumentLines.unitPrice,
+        lineHt: batiproDocumentLines.lineHt,
+        lineActive: batiproDocumentLines.isActive,
+        lineCurrencyId: batiproDocumentLines.currencyId,
+        docType: batiproDocuments.type,
+        docDirection: batiproDocuments.direction,
+        docStatus: batiproDocuments.status,
+        docActive: batiproDocuments.isActive,
+        docNumber: batiproDocuments.number,
+        docCurrencyId: batiproDocuments.currencyId,
+        docPaidAmount: batiproDocuments.paidAmount,
+        docDate: sql<string | null>`COALESCE(${batiproDocuments.issueDate}, DATE(${batiproDocuments.createdAt}))`,
+        submittedBy: sql<string | null>`COALESCE(${batiproSubcontractors.name}, ${batiproDocuments.submittedByCompany}, ${batiproDocuments.submittedByName})`,
+      })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .where(and(
+        eq(batiproDocumentLines.phaseId, id),
+        eq(batiproDocumentLines.isActive, 1),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, phase.projectId),
+        eq(batiproDocuments.isActive, 1),
+      ));
+
+    // Base du paye (TTC) : totaux par devise de batipro_document_totals quand ils
+    // existent, sinon total TTC / paye du document (devise du document seule).
+    const poIds = Array.from(new Set(rows.filter((r) => r.docType === "purchase_order" && r.docDirection === "outbound").map((r) => r.documentId)));
+    const poPayByDoc = new Map<number, PoPayInfo>();
+    if (poIds.length) {
+      const docs = await this.db
+        .select({ id: batiproDocuments.id, totalTtc: batiproDocuments.totalTtc, paid: batiproDocuments.paidAmount })
+        .from(batiproDocuments)
+        .where(and(inArray(batiproDocuments.id, poIds), eq(batiproDocuments.organizationId, orgId)));
+      for (const d of docs) poPayByDoc.set(d.id, { docTotalTtc: Number(d.totalTtc), docPaidAmount: Number(d.paid), totals: [] });
+      const totals = await this.db
+        .select({
+          documentId: batiproDocumentTotals.documentId,
+          currencyId: batiproDocumentTotals.currencyId,
+          totalTtc: batiproDocumentTotals.totalTtc,
+          paid: batiproDocumentTotals.paidAmount,
+        })
+        .from(batiproDocumentTotals)
+        .where(and(inArray(batiproDocumentTotals.documentId, poIds), eq(batiproDocumentTotals.organizationId, orgId), eq(batiproDocumentTotals.isActive, 1)));
+      for (const t of totals) {
+        poPayByDoc.get(t.documentId)?.totals.push({ currencyId: t.currencyId, totalTtc: Number(t.totalTtc), paid: Number(t.paid) });
+      }
+    }
+
+    const currencyRows = await this.db.select({ id: currencies.id, code: currencies.currencyCode }).from(currencies);
+    const currencyCodeById = new Map<number, string>(currencyRows.filter((c) => c.code).map((c) => [c.id, c.code as string]));
+
+    return buildPhaseDetail(phase, rows as PhaseDetailRow[], poPayByDoc, currencyCodeById);
   }
 
   // Le budget d'une phase ne peut pas depasser le budget restant du chantier
@@ -1829,6 +1898,13 @@ export class BatiproService {
     validPhaseIds: Set<number>,
     defaultCurrencyId: number | null = null,
   ) {
+    // Prix negatif = ligne de remise/ajustement explicite uniquement (quantite jamais negative).
+    for (const line of rawLines) {
+      if (Number(line.quantity ?? 0) < 0) throw new BadRequestException("La quantite ne peut pas etre negative.");
+      if (Number(line.unit_price ?? 0) < 0 && !line.is_adjustment) {
+        throw new BadRequestException(`Prix unitaire negatif refuse pour « ${line.designation} » : cochez « Remise / ajustement ».`);
+      }
+    }
     const totalsByCurrencyMap = new Map<number | null, { totalHt: number; totalVat: number; totalTtc: number }>();
     const addToCurrency = (currencyId: number | null, lineHt: number, lineVat: number) => {
       const entry = totalsByCurrencyMap.get(currencyId) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
@@ -1872,6 +1948,13 @@ export class BatiproService {
         totalTtc: Math.round(t.totalTtc * 100) / 100,
       }));
 
+    // Les remises ne doivent jamais rendre le total d'une devise negatif.
+    for (const t of totalsByCurrencyMap.values()) {
+      if (Math.round(t.totalHt * 100) < 0 || Math.round(t.totalTtc * 100) < 0) {
+        throw new BadRequestException("Le total du document ne peut pas etre negatif : les remises depassent le montant des lignes.");
+      }
+    }
+
     // Scalaires retro-compatibles : uniquement le total de la devise par defaut
     // du document (jamais une somme toutes devises confondues).
     const defaultTotals = totalsByCurrencyMap.get(defaultCurrencyId ?? null) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
@@ -1886,13 +1969,6 @@ export class BatiproService {
   }
 
   // Pour un bon de commande : si une ligne porte une designation mais aucun
-    // Prix negatif = ligne de remise/ajustement explicite uniquement (quantite jamais negative).
-    for (const line of rawLines) {
-      if (Number(line.quantity ?? 0) < 0) throw new BadRequestException("La quantite ne peut pas etre negative.");
-      if (Number(line.unit_price ?? 0) < 0 && !line.is_adjustment) {
-        throw new BadRequestException(`Prix unitaire negatif refuse pour « ${line.designation} » : cochez « Remise / ajustement ».`);
-      }
-    }
   // material_id (saisie "texte libre"), rattache automatiquement un materiau
   // existant du meme nom (insensible a la casse) ou en cree un a la volee,
   // pour eviter la double saisie fournisseur/achat puis materiaux.
@@ -1936,13 +2012,6 @@ export class BatiproService {
         ...getTableColumns(batiproDocuments),
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
-    // Les remises ne doivent jamais rendre le total d'une devise negatif.
-    for (const t of totalsByCurrencyMap.values()) {
-      if (Math.round(t.totalHt * 100) < 0 || Math.round(t.totalTtc * 100) < 0) {
-        throw new BadRequestException("Le total du document ne peut pas etre negatif : les remises depassent le montant des lignes.");
-      }
-    }
-
         supplierName: suppliers.name,
         subcontractorName: batiproSubcontractors.name,
         projectName: batiproProjects.name,
@@ -3672,6 +3741,26 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     return { id: doc.id, status: "accepted", message: "Devis accepte. Merci." };
   }
 
+  // Decision hors ligne (devis negocie/accepte ou refuse hors du lien client), par un
+  // utilisateur authentifie. Meme effet que l'acceptation publique (status "accepted"
+  // alimente le budget prevu) + trace d'audit dans les notes. Aucun SMS.
+  async decideQuote(id: number, decision: "accepted" | "refused", orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    const doc = await this.getDocument(id, orgId);
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    if (doc.type !== "quote") throw new BadRequestException("Seuls les devis peuvent etre acceptes ou refuses.");
+    if (doc.status === decision) return this.getDocument(id, orgId);
+    if (!["draft", "sent", "viewed"].includes(doc.status as string)) {
+      throw new BadRequestException("Seul un devis brouillon ou envoye peut etre marque accepte ou refuse.");
+    }
+    const auditNote = `\n[${decision === "accepted" ? "Accepté" : "Refusé"} hors ligne] ${new Date().toISOString()} user=${userId ?? "?"}`;
+    await this.db.update(batiproDocuments).set({
+      status: decision,
+      notes: doc.notes ? `${doc.notes}${auditNote}` : auditNote.trim(),
+    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    await this.publish("decideQuote", ["documents"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
+  }
+
   // ── Galerie photo de chantier (site + documents sources) ────────────────
   // Verifie que le chantier appartient a l'org et reste dans le scope RBAC
   // courant (memes regles que projectDirectFilter : "all" = pas de filtre).
@@ -3729,26 +3818,6 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
   }
 
   async sitePhotoFile(id: number, orgId: number) {
-  // Decision hors ligne (devis negocie/accepte ou refuse hors du lien client), par un
-  // utilisateur authentifie. Meme effet que l'acceptation publique (status "accepted"
-  // alimente le budget prevu) + trace d'audit dans les notes. Aucun SMS.
-  async decideQuote(id: number, decision: "accepted" | "refused", orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
-    const doc = await this.getDocument(id, orgId);
-    await this.assertProjectInScope(doc.projectId, orgId, scope);
-    if (doc.type !== "quote") throw new BadRequestException("Seuls les devis peuvent etre acceptes ou refuses.");
-    if (doc.status === decision) return this.getDocument(id, orgId);
-    if (!["draft", "sent", "viewed"].includes(doc.status as string)) {
-      throw new BadRequestException("Seul un devis brouillon ou envoye peut etre marque accepte ou refuse.");
-    }
-    const auditNote = `\n[${decision === "accepted" ? "Accepté" : "Refusé"} hors ligne] ${new Date().toISOString()} user=${userId ?? "?"}`;
-    await this.db.update(batiproDocuments).set({
-      status: decision,
-      notes: doc.notes ? `${doc.notes}${auditNote}` : auditNote.trim(),
-    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
-    await this.publish("decideQuote", ["documents"], "updated", id, orgId);
-    return this.getDocument(id, orgId);
-  }
-
     const photo = await this.getSitePhoto(id, orgId);
     const object = await this.objectStorage.getObject(photo.fileKey);
     return { ...object, mimeType: object.contentType };

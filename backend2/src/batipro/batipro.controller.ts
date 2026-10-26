@@ -255,6 +255,13 @@ export class BatiproController {
     return this.batipro.phases(orgId, projectId ? Number(projectId) : undefined);
   }
 
+  @ApiOperation({ summary: "Detail d'une phase : prevu vs devis artisan vs depense (lecture seule)" })
+  @Permissions("readAll-batipro")
+  @Get("phases/:id/detail")
+  phaseDetail(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.phaseDetail(id, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Create BatiPro phase" })
   @Permissions("create-batipro")
   @Post("phases")
@@ -632,13 +639,6 @@ export class BatiproController {
     return this.batipro.shareDocument(id, orgId);
   }
 
-  // ── Photo/scan de la facture papier attachee a un document (BC/facture...) ──
-  @ApiOperation({ summary: "Upload/replace the attached file (photo/scan) of a document" })
-  @Permissions("update-batipro")
-  @UseInterceptors(FileInterceptor("file", {
-    limits: { fileSize: 15 * 1024 * 1024 },
-    fileFilter: (_req, file, cb) => {
-      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
   @ApiOperation({ summary: "Marque un devis accepte/refuse hors ligne (negocie hors lien client, sans SMS)" })
   @Permissions("update-batipro")
   @Post("documents/:id/decision")
@@ -652,6 +652,13 @@ export class BatiproController {
     return this.batipro.decideQuote(id, body.decision, orgId, userId || undefined, scope);
   }
 
+  // ── Photo/scan de la facture papier attachee a un document (BC/facture...) ──
+  @ApiOperation({ summary: "Upload/replace the attached file (photo/scan) of a document" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
       if (allowed.includes(file.mimetype)) cb(null, true);
       else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
     },
