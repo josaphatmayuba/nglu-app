@@ -203,7 +203,7 @@ function AddFundModal({ project, Icon, useCurrencies, onClose, onSaved }) {
         </div>
         <div className="form-grid">
           <label className="field"><span>Date de réception</span>
-            <input type="date" value={form.received_at} onChange={(e) => set("received_at", e.target.value)} required />
+            <input type="date" value={form.received_at} max={today()} onChange={(e) => set("received_at", e.target.value)} required />
           </label>
           <label className="field"><span>Montant</span>
             <input type="number" inputMode="decimal" step="0.01" min="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} autoFocus required />
@@ -217,7 +217,7 @@ function AddFundModal({ project, Icon, useCurrencies, onClose, onSaved }) {
             </select>
           </label>
           <label className="field"><span>Nom de l'apporteur</span>
-            <input type="text" value={form.contributor_name} onChange={(e) => set("contributor_name", e.target.value)} maxLength={150} />
+            <input type="text" value={form.contributor_name} onChange={(e) => set("contributor_name", e.target.value)} maxLength={255} />
           </label>
           <BatiproPhoneField label="Téléphone" value={form.contributor_phone} onChange={(v) => set("contributor_phone", v)} />
           <label className="field"><span>Nature</span>

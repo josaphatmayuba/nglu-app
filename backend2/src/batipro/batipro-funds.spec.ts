@@ -27,6 +27,9 @@ function makeDb() {
       }),
     })),
   };
+  // select(...).from(...).where(...).limit(1) : ecriture d'origine deja contre-passee par 777.
+  const chain: any = { from: () => chain, where: () => chain, limit: jest.fn().mockResolvedValue([{ reversedById: 777 }]) };
+  db.select = jest.fn().mockReturnValue(chain);
   return { db, inserts, updates };
 }
 
@@ -152,7 +155,7 @@ describe("BatiPro fonds du chantier - annulation", () => {
   it("ecriture deja contre-passee (Conflict) toleree", async () => {
     const { svc, updates } = setup({ fund: activeFund, reverseError: new ConflictException("Cette ecriture a deja ete contre-passee.") });
     await svc.cancelProjectFund(42, "Doublon", ORG, 9, "all");
-    expect(updates.at(-1)!.patch).toMatchObject({ isActive: 0 });
+    expect(updates.at(-1)!.patch).toMatchObject({ isActive: 0, reversalEntryId: 777 });
   });
 
   it("periode cloturee propagee, la ligne reste active", async () => {

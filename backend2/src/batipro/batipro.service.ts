@@ -4369,6 +4369,31 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     return row?.id ? Number(row.id) : null;
   }
 
+  // Le ledger ne previent pas BatiPro quand une ecriture en attente est approuvee :
+  // on rattrape ici (1 requete) les versements "pending" dont l'ecriture existe
+  // desormais, en base et dans les lignes renvoyees.
+  private async syncApprovedFundingEntries(rows: Array<typeof batiproProjectFunds.$inferSelect>, orgId: number) {
+    const pending = rows.filter((r) => r.isActive === 1 && r.ledgerStatus === "pending" && !r.ledgerEntryId);
+    if (!pending.length) return;
+    const entries = await this.db
+      .select({ id: journalEntries.id, key: journalEntries.idempotencyKey })
+      .from(journalEntries)
+      .where(and(
+        eq(journalEntries.organizationId, orgId),
+        inArray(journalEntries.idempotencyKey, pending.map((r) => `batipro:funding:${r.id}`)),
+      ));
+    const byKey = new Map(entries.map((e) => [e.key, Number(e.id)]));
+    for (const row of pending) {
+      const entryId = byKey.get(`batipro:funding:${row.id}`);
+      if (!entryId) continue;
+      await this.db.update(batiproProjectFunds)
+        .set({ ledgerEntryId: entryId, ledgerStatus: "posted" })
+        .where(and(eq(batiproProjectFunds.id, row.id), eq(batiproProjectFunds.organizationId, orgId)));
+      row.ledgerEntryId = entryId;
+      row.ledgerStatus = "posted";
+    }
+  }
+
   private mapFund(row: typeof batiproProjectFunds.$inferSelect & { currencyCode?: string | null }) {
     return {
       id: row.id,
@@ -4422,6 +4447,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
       .leftJoin(currencies, eq(currencies.id, batiproProjectFunds.currencyId))
       .where(and(eq(batiproProjectFunds.organizationId, orgId), eq(batiproProjectFunds.projectId, projectId)))
       .orderBy(desc(batiproProjectFunds.receivedAt), desc(batiproProjectFunds.id));
+    await this.syncApprovedFundingEntries(rows, orgId);
     const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
     const summary = buildFundsSummary(rows, spendDocs, project.currencyId ?? null, await this.currencyCodeMap());
     return { funds: rows.map((r) => this.mapFund(r)), summary_by_currency: summary };
@@ -4436,6 +4462,9 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     if (!currency) throw new BadRequestException("Devise inconnue.");
     const fundingNature = input.funding_nature ?? "client_advance";
     const receivedAt = String(input.received_at).slice(0, 10);
+    // Pas de versement date dans le futur (marge +2 h : RDC en UTC+1 / UTC+2).
+    const todayRdc = new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 10);
+    if (receivedAt > todayRdc) throw new BadRequestException("La date de reception ne peut pas etre dans le futur.");
     const amountStr = amount.toFixed(2);
     const project = await this.getProject(projectId, orgId);
 
@@ -4532,6 +4561,10 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
           // ConflictException : elle doit bloquer l'annulation (pas de fonds fantome).
           const alreadyReversed = err instanceof ConflictException && /contre-pass/i.test(err.message);
           if (!alreadyReversed) throw err;
+          // Garde la trace de la contre-passation existante.
+          const [orig] = await this.db.select({ reversedById: journalEntries.reversedById }).from(journalEntries)
+            .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId))).limit(1);
+          reversalEntryId = orig?.reversedById ? Number(orig.reversedById) : null;
         }
       } else {
         // Ecriture encore en attente d'approbation : on l'annule pour qu'elle ne soit jamais comptabilisee.
