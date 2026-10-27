@@ -3,6 +3,7 @@ import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
+import ProjectFunds from "./components/ProjectFunds.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -575,6 +576,7 @@ const PROJECT_TABS = [
   { id: "planning", label: "Planning", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
+  { id: "fonds", label: "Fonds", icon: "wallet" },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials, onEdit }) {
   const [tab, setTab] = React.useState("apercu");
@@ -655,6 +657,15 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                   <span>Devis accepté : {money(budget?.quote_accepted, budgetCur)}</span>
                 </div>
               </div>
+              <div onClick={() => setTab("fonds")} style={{ cursor: "pointer" }}>
+                {budget && (budget.funds_received != null || budget.funds_available != null) && (
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: "var(--ink-500)", marginBottom: 12 }}>
+                    {budget.funds_received != null && <span>Fonds reçus : {money(budget.funds_received, budgetCur)}</span>}
+                    {budget.funds_available != null && <span>Disponible : {money(budget.funds_available, budgetCur)}{n(budget.funds_available) < 0 ? " (préfinancé)" : ""}</span>}
+                    {n(budget.funds_shortfall) > 0 && <span className="chip amber" title="Montant engagé non couvert par les fonds reçus">Manque {money(budget.funds_shortfall, budgetCur)}</span>}
+                  </div>
+                )}
+              </div>
               <div onClick={() => setTab("factures")} style={{ cursor: "pointer" }}>
                 <BudgetBar
                   label="Facturation"
@@ -713,6 +724,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         {tab === "planning" && <Planning projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "fonds" && <ProjectFunds project={p} canMutate={canMutate} money={money} Icon={Icon} useCurrencies={useCurrencies} />}
       </div>
     </>
   );

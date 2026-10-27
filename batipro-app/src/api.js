@@ -211,6 +211,12 @@ export const api = {
   // ne cree aucun document — retourne { photoId, rawText, parsed } pour pre-remplir le formulaire.
   ocrScanDocument: (projectId, file) => { const fd = new FormData(); fd.append("scan", file); return uploadForm(`/projects/${projectId}/documents/ocr-scan`, fd); },
   // Bons de commande (Phase 2) : reutilise les endpoints /documents generiques (type=purchase_order)
+  // Fonds du chantier (versements recus)
+  projectFunds: (projectId) => jsonFetch(`/projects/${projectId}/funds`),
+  createProjectFund: (projectId, body) => jsonFetch(`/projects/${projectId}/funds`, { method: "POST", body: JSON.stringify(body) }),
+  cancelProjectFund: (fundId, reason) => jsonFetch(`/funds/${fundId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  uploadFundAttachment: (fundId, file) => { const fd = new FormData(); fd.append("file", file); return uploadForm(`/funds/${fundId}/attachment`, fd); },
+  fundAttachmentUrl: (fundId) => blobUrl(`/funds/${fundId}/attachment`),
   budgetSummary: (projectId) => jsonFetch(`/documents/budget-summary?project_id=${projectId}`),
   // Situations de travaux (Phase 3, type=situation) : coexiste avec les situations legacy (/situations)
   situationsAdvancement: (projectId) => jsonFetch(`/documents/situations-advancement?project_id=${projectId}`),

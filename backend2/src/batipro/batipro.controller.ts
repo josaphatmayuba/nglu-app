@@ -11,7 +11,9 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   BulkUpsertAttendanceDto,
+  CancelBatiproFundDto,
   ConfirmBatiproDocumentDto,
+  CreateBatiproFundDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -141,6 +143,79 @@ export class BatiproController {
     @CurrentBatiproProject() scope: BatiproProjectScope,
   ) {
     return this.share.revokeLink(projectId, linkId, orgId, scope);
+  }
+
+  // ── Fonds du chantier (apports recus, comptabilises au ledger) ──────────────
+  @ApiOperation({ summary: "Fonds du chantier : versements + synthese par devise (recu/decaisse/disponible/reste du/manque)" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:id/funds")
+  listProjectFunds(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.listProjectFunds(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Enregistre un versement de fonds (ecriture ledger batipro_project_funding)" })
+  @Permissions("create-batipro")
+  @Post("projects/:id/funds")
+  createProjectFund(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateBatiproFundDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.createProjectFund(id, body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Joint/remplace la preuve (photo/scan) d'un versement de fonds" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("funds/:id/attachment")
+  uploadFundAttachment(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    if (!file) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.attachFundFile(id, file, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Telecharge la preuve (photo/scan) d'un versement de fonds" })
+  @Permissions("readAll-batipro")
+  @Get("funds/:id/attachment")
+  async fundAttachmentFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.batipro.fundAttachmentFile(id, orgId, scope);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Annule un versement de fonds (contre-passation ledger, soft delete)" })
+  @Permissions("delete-batipro")
+  @Post("funds/:id/cancel")
+  cancelProjectFund(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelBatiproFundDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.cancelProjectFund(id, body.reason, orgId, userId || undefined, scope);
   }
 
   @ApiOperation({ summary: "Soft-delete BatiPro project" })
