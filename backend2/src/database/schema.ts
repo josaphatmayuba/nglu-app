@@ -3182,6 +3182,44 @@ export const batiproShareLinks = mysqlTable("batipro_share_links", {
   projectIdx: index("idx_batipro_share_links_project").on(t.organizationId, t.projectId),
 }));
 
+// Fonds recus pour un chantier (migration 0323). Comptabilise via
+// ledger.postByRules type batipro_project_funding (role debit = payment_method,
+// role credit = funding_nature). Annulation douce (is_active=0 + cancelled_*),
+// contre-passation tracee dans reversal_entry_id. Valeurs admises (applicatif) :
+// contributor_kind owner|partner|other ; funding_nature client_advance|partner_account|equity ;
+// payment_method cash|bank|mobile_money ; ledger_status posted|pending.
+export const batiproProjectFunds = mysqlTable("batipro_project_funds", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  receivedAt: date("received_at", { mode: "string" }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }).notNull(),
+  contributorKind: varchar("contributor_kind", { length: 20 }).default("owner").notNull(),
+  contributorName: varchar("contributor_name", { length: 255 }),
+  contributorPhone: varchar("contributor_phone", { length: 32 }),
+  fundingNature: varchar("funding_nature", { length: 30 }).default("client_advance").notNull(),
+  paymentMethod: varchar("payment_method", { length: 20 }).notNull(),
+  reference: varchar("reference", { length: 120 }),
+  notes: text("notes"),
+  attachedFileKey: varchar("attached_file_key", { length: 512 }),
+  attachedFileFormat: varchar("attached_file_format", { length: 10 }),
+  attachedFileSize: bigint("attached_file_size", { mode: "number" }),
+  ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  ledgerStatus: varchar("ledger_status", { length: 20 }).default("posted").notNull(),
+  reversalEntryId: bigint("reversal_entry_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: bigint("cancelled_by", { mode: "number" }),
+  cancelReason: varchar("cancel_reason", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+}, (t) => ({
+  orgProjectActiveIdx: index("idx_batipro_project_funds_org_project_active").on(t.organizationId, t.projectId, t.isActive),
+  orgCurrencyIdx: index("idx_batipro_project_funds_org_currency").on(t.organizationId, t.currencyId),
+}));
+
 // Modele architectural 3D d'un chantier (0..1 par projet). Phase 1 = saisie
 // parametrique (source_type='parametric', geometrie dans les niveaux). Phase 2
 // (a venir) = import d'un fichier BIM/CAO (source_type='imported', imported_file_*).

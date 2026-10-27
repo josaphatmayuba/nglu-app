@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **BâtiPro : fonds du chantier - étape 1 (v3.249.0).** Migration `0323_batipro_project_funds` (idempotente) : table `batipro_project_funds` (versements de fonds par chantier, devise, apporteur, nature, mode cash/banque/mobile money, reçu, lien écriture comptable, annulation douce) ; sous-comptes par organisation « Mobile Money » (actif), « Avances clients chantier » et « Compte courant associe » (passif) ; règles comptables `batipro_project_funding` (débit trésorerie selon le mode, crédit selon la nature). Backend, écran et solde disponible dans les étapes suivantes.
+
 - **BâtiPro : détail d'une phase (v3.248.0).** Un clic sur une phase du Planning ouvre un détail en lecture seule (visible sans droit de modification) : prévu (devis clients sortants acceptés), devis détaillé de l'artisan (documents inbound du lien public, hors refusés/annulés/brouillons), dépensé (bons de commande non annulés : engagé = lignes de la phase, payé = `paid_amount` au prorata des lignes), reste à dépenser et alertes de dépassement, ventilés par devise (jamais additionnés). Bouton « Modifier la phase » vers l'édition existante. Nouvelle route `GET /api/batipro/phases/:id/detail` (couverte par le préfixe `/batipro` de `middleware/src/whitelist.js`), logique pure dans `phase-detail.util.ts` + spec. Aucune migration.
 
 - **Domus : messages de panne serveur clairs (v3.246.2).** Connexion : une erreur 5xx/429 affiche « Serveur momentanément indisponible » (plus « Identifiants incorrects (HTTP 502) »), serveur injoignable = « Connexion au serveur impossible ». Panneau d'envoi du scan : « Serveur indisponible, nouvel essai bientôt… » quand l'échec vient du serveur et non du réseau. Registre docs/BUGS.md : bugs 30 à 35.

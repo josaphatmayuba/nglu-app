@@ -52,6 +52,12 @@ const SUB_ACCOUNTS: Array<{ name: string; accountName: string }> = [
   // property-management.service.ts, qui resout ces comptes par nom.
   { name: "Emprunts hypothecaires", accountName: "Liability" },
   { name: "Interets demprunt", accountName: "Expense" },
+  // Fonds du chantier BatiPro (migration 0323). Noms SANS accent, identiques a la
+  // migration SQL. Mobile Money = tresorerie (ACTIF) ; avance client et compte
+  // courant associe = DETTES envers l apporteur (Liability), pas un produit.
+  { name: "Mobile Money", accountName: "Asset" },
+  { name: "Avances clients chantier", accountName: "Liability" },
+  { name: "Compte courant associe", accountName: "Liability" },
 ];
 
 // Regles transaction_type_rules (postByRules) liees a l avance fournisseur BatiPro
@@ -64,6 +70,14 @@ const TRANSACTION_TYPE_RULES: Array<{ type: string; role: string; accountName: s
   // Solde de l avance a la reception : DEBIT dette fournisseur / CREDIT avance fournisseur.
   { type: "batipro_advance_offset", role: "payable", accountName: "Accounts Payable", side: "DEBIT", sortOrder: 1 },
   { type: "batipro_advance_offset", role: "supplier_advance", accountName: "Supplier Advance", side: "CREDIT", sortOrder: 2 },
+  // Fonds recus pour un chantier (migration 0323) : DEBIT tresorerie selon le
+  // moyen de paiement / CREDIT selon la nature du financement.
+  { type: "batipro_project_funding", role: "cash", accountName: "Cash", side: "DEBIT", sortOrder: 1 },
+  { type: "batipro_project_funding", role: "bank", accountName: "Bank", side: "DEBIT", sortOrder: 1 },
+  { type: "batipro_project_funding", role: "mobile_money", accountName: "Mobile Money", side: "DEBIT", sortOrder: 1 },
+  { type: "batipro_project_funding", role: "client_advance", accountName: "Avances clients chantier", side: "CREDIT", sortOrder: 2 },
+  { type: "batipro_project_funding", role: "partner_account", accountName: "Compte courant associe", side: "CREDIT", sortOrder: 2 },
+  { type: "batipro_project_funding", role: "equity", accountName: "Shareholder 1 Equity", side: "CREDIT", sortOrder: 2 },
 ];
 
 // debit/credit = noms de sous-comptes (resolus par nom pour cette org).
