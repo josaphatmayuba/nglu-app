@@ -180,6 +180,10 @@ export function LoginScreen() {
         body: JSON.stringify(mfaToken ? { mfaToken, code: mfaCode } : { username, password }),
       });
       if (!res.ok) {
+        // 5xx / 429 = serveur indisponible ou surcharge, pas un mauvais mot de passe.
+        if (res.status >= 500 || res.status === 429) {
+          throw new Error("Serveur momentanément indisponible. Réessayez dans un instant.");
+        }
         const body = await res.text().catch(() => "");
         let message = "Identifiants incorrects";
         try {
@@ -199,7 +203,8 @@ export function LoginScreen() {
       } catch {}
       window.dispatchEvent(new CustomEvent("domus:auth-changed"));
     } catch (err) {
-      setError(err.message || String(err));
+      // fetch rejette en TypeError (« Failed to fetch ») quand le serveur est injoignable.
+      setError(err instanceof TypeError ? "Connexion au serveur impossible. Vérifiez votre connexion puis réessayez." : (err.message || String(err)));
     } finally {
       setSubmitting(false);
     }

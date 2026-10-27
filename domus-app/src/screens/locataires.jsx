@@ -660,7 +660,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
     const cur = tenant.salaryCurrencyId != null ? currency?.currencyById?.get(Number(tenant.salaryCurrencyId)) : null;
     return cur?.symbol || currency?.defaultCurrencySymbol || "CDF";
   })();
-  const money = (v) => (v != null && v !== "" ? `${salarySym} ${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}` : "—");
+  const money = (v) => (v != null && v !== "" ? `${salarySym} ${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}` : "—");
   const childAges = parseChildAges(tenant.childAges);
 
   return (

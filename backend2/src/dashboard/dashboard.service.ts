@@ -152,33 +152,62 @@ export class DashboardService {
       .from(subAccounts)
       .where(eq(subAccounts.organizationId, org));
 
-    const [credits, debits] = await Promise.all([
+    // Regroupement par (compte, devise) : on ne additionne jamais des devises differentes.
+    const where = and(between(transactions.date, start, end), eq(transactions.status, "true"), eq(transactions.organizationId, org));
+    const curCols = {
+      currencyId: transactions.currencyId,
+      currencyCode: currencies.currencyCode,
+      currencySymbol: currencies.currencySymbol,
+    };
+    const [credits, debits, def] = await Promise.all([
       this.db
-        .select({
-          accountId: transactions.creditId,
-          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
-        })
+        .select({ accountId: transactions.creditId, ...curCols, total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` })
         .from(transactions)
-        .where(and(between(transactions.date, start, end), eq(transactions.status, "true"), eq(transactions.organizationId, org)))
-        .groupBy(transactions.creditId),
+        .leftJoin(currencies, eq(currencies.id, transactions.currencyId))
+        .where(where)
+        .groupBy(transactions.creditId, transactions.currencyId, currencies.currencyCode, currencies.currencySymbol),
 
       this.db
-        .select({
-          accountId: transactions.debitId,
-          total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
-        })
+        .select({ accountId: transactions.debitId, ...curCols, total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)` })
         .from(transactions)
-        .where(and(between(transactions.date, start, end), eq(transactions.status, "true"), eq(transactions.organizationId, org)))
-        .groupBy(transactions.debitId),
+        .leftJoin(currencies, eq(currencies.id, transactions.currencyId))
+        .where(where)
+        .groupBy(transactions.debitId, transactions.currencyId, currencies.currencyCode, currencies.currencySymbol),
+
+      this.defaultCurrency(org),
     ]);
 
-    const creditMap = new Map(credits.map((c) => [c.accountId, Number(c.total)]));
-    const debitMap = new Map(debits.map((d) => [d.accountId, Number(d.total)]));
+    // Devise NULL -> devise par defaut du parametre (meme seau que les lignes explicites de cette devise).
+    const net = new Map<string, { accountId: number; currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; value: number }>();
+    const add = (
+      r: { accountId: number | null; currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; total: unknown },
+      sign: 1 | -1,
+    ) => {
+      if (r.accountId == null) return;
+      const currencyId = r.currencyId ?? def?.id ?? null;
+      const key = `${r.accountId}|${currencyId ?? "null"}`;
+      const cur = net.get(key) ?? {
+        accountId: r.accountId,
+        currencyId,
+        currencyCode: r.currencyCode ?? def?.currencyCode ?? null,
+        currencySymbol: r.currencySymbol ?? def?.currencySymbol ?? null,
+        value: 0,
+      };
+      cur.value += sign * Number(r.total);
+      net.set(key, cur);
+    };
+    credits.forEach((r) => add(r, 1));
+    debits.forEach((r) => add(r, -1));
 
-    return allAccounts
-      .map((sa) => ({
-        account: sa.name,
-        amount: Math.round(Math.abs((creditMap.get(sa.id) ?? 0) - (debitMap.get(sa.id) ?? 0))),
+    const nameById = new Map(allAccounts.map((sa) => [sa.id, sa.name]));
+    return [...net.values()]
+      .filter((n) => nameById.has(n.accountId))
+      .map((n) => ({
+        account: nameById.get(n.accountId) as string,
+        currencyId: n.currencyId,
+        currencyCode: n.currencyCode,
+        currencySymbol: n.currencySymbol,
+        amount: Math.round(Math.abs(n.value) * 100) / 100,
       }))
       .filter((i) => i.amount > 0)
       .sort((a, b) => b.amount - a.amount);

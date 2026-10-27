@@ -1,6 +1,6 @@
-import { BadRequestException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, gte, inArray, lt, lte, ne, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
@@ -18,6 +18,7 @@ import {
   batiproNotifications,
   batiproPhases,
   batiproProjectAssignments,
+  batiproProjectFunds,
   batiproProjects,
   batiproSitePhotos,
   batiproSituations,
@@ -29,6 +30,7 @@ import {
   currencies,
   journalEntries,
   journalEntryLines,
+  ledgerPendingEntries,
   projects,
   realEstateProperties,
   realEstateUnits,
@@ -43,10 +45,13 @@ import { ProjectsService } from "../projects/projects.service";
 import { ObjectStorageService } from "../property-management/object-storage.service";
 import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { OcrService } from "./ocr.service";
+import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
+import { buildFundsSummary, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, type SpendDoc } from "./funds.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   BulkUpsertAttendanceDto,
+  CreateBatiproFundDto,
   ConfirmBatiproDocumentDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
@@ -165,9 +170,9 @@ export class BatiproService {
 
   // Liste des chantiers pour les cartes/dashboard : renvoie les colonnes brutes
   // (budget/spent restent les valeurs saisies a la main, conservees telles quelles)
-  // + cost_actual, calcule en batch (1 requete agregee, pas de N+1) de la meme
-  // maniere que projectBudgetSummary (somme des paidAmount des bons de commande
-  // actifs, hors annules), pour que la carte liste affiche le meme "decaisse reel"
+  // + cost_actual, calcule en batch (pas de N+1) avec la MEME definition que
+  // projectBudgetSummary (helper commun projectCostActual : BC payes + factures
+  // fournisseur payees, hors annules), pour que la carte liste affiche le meme "decaisse reel"
   // que l'onglet Apercu du detail. reference_budget = contract_amount || budget,
   // meme regle que projectBudgetSummary.
   async projects(orgId: number, projectScope: BatiproProjectScope = "all") {
@@ -185,38 +190,17 @@ export class BatiproService {
 
     if (!rows.length) return rows.map((r) => ({ ...r, cost_actual: 0, reference_budget: 0 }));
 
-    const projectIds = rows.map((r) => r.id);
-    // Meme filtre devise que projectBudgetSummary, mais applique par-projet via
-    // une jointure sur batiproProjects pour rester en une seule requete batch.
-    const costAgg = await this.db
-      .select({
-        projectId: batiproDocuments.projectId,
-        paid: sql<string>`COALESCE(SUM(${batiproDocuments.paidAmount}), 0)`,
-      })
-      .from(batiproDocuments)
-      .innerJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
-      .where(and(
-        inArray(batiproDocuments.projectId, projectIds),
-        eq(batiproDocuments.organizationId, orgId),
-        eq(batiproDocuments.isActive, 1),
-        eq(batiproDocuments.direction, "outbound"),
-        eq(batiproDocuments.type, "purchase_order"),
-        sql`${batiproDocuments.status} <> 'cancelled'`,
-        sql`(${batiproDocuments.currencyId} = ${batiproProjects.currencyId} OR ${batiproDocuments.currencyId} IS NULL OR ${batiproProjects.currencyId} IS NULL)`,
-      ))
-      .groupBy(batiproDocuments.projectId);
-
-    const costByProject = new Map<number, number>();
-    for (const row of costAgg) {
-      if (row.projectId != null) costByProject.set(row.projectId, Number(row.paid ?? 0));
-    }
+    // Decaisse = definition UNIQUE partagee avec projectBudgetSummary et la
+    // synthese des fonds (BC payes + factures fournisseur payees, devise du
+    // chantier), en batch : 2 requetes pour tous les chantiers, pas de N+1.
+    const spendByProject = await this.loadSpendDocs(orgId, rows.map((r) => r.id));
 
     return rows.map((r) => {
       const contractAmount = Number(r.contractAmount ?? 0);
       const budget = Number(r.budget ?? 0);
       return {
         ...r,
-        cost_actual: costByProject.get(r.id) ?? 0,
+        cost_actual: this.projectCostActual(spendByProject.get(r.id) ?? [], r.currencyId ?? null),
         reference_budget: contractAmount || budget,
       };
     });
@@ -927,6 +911,96 @@ export class BatiproService {
       .limit(1);
     if (!row) throw new NotFoundException("Phase introuvable.");
     return row;
+  }
+
+  // Detail d'une phase (lecture seule) : prevu (devis clients acceptes) vs devis
+  // de l'artisan (documents inbound du lien public) vs depense (BC). Voir
+  // phase-detail.util.ts pour les regles de calcul.
+  async phaseDetail(id: number, orgId: number, scope: BatiproProjectScope) {
+    const phase = await this.getPhase(id, orgId);
+    await this.assertProjectInScope(phase.projectId, orgId, scope);
+
+    const rows = await this.db
+      .select({
+        lineId: batiproDocumentLines.id,
+        documentId: batiproDocuments.id,
+        designation: batiproDocumentLines.designation,
+        quantity: batiproDocumentLines.quantity,
+        unitPrice: batiproDocumentLines.unitPrice,
+        lineHt: batiproDocumentLines.lineHt,
+        lineActive: batiproDocumentLines.isActive,
+        lineCurrencyId: batiproDocumentLines.currencyId,
+        docType: batiproDocuments.type,
+        docDirection: batiproDocuments.direction,
+        docStatus: batiproDocuments.status,
+        docActive: batiproDocuments.isActive,
+        docNumber: batiproDocuments.number,
+        docCurrencyId: batiproDocuments.currencyId,
+        docPaidAmount: batiproDocuments.paidAmount,
+        docDate: sql<string | null>`COALESCE(${batiproDocuments.issueDate}, DATE(${batiproDocuments.createdAt}))`,
+        submittedBy: sql<string | null>`COALESCE(${batiproSubcontractors.name}, ${batiproDocuments.submittedByCompany}, ${batiproDocuments.submittedByName})`,
+      })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .where(and(
+        eq(batiproDocumentLines.phaseId, id),
+        eq(batiproDocumentLines.isActive, 1),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, phase.projectId),
+        eq(batiproDocuments.isActive, 1),
+      ));
+
+    // Base du paye (TTC) : totaux par devise de batipro_document_totals quand ils
+    // existent, sinon total TTC / paye du document (devise du document seule).
+    const poIds = Array.from(new Set(rows.filter((r) => r.docType === "purchase_order" && r.docDirection === "outbound").map((r) => r.documentId)));
+    const poPayByDoc = new Map<number, PoPayInfo>();
+    if (poIds.length) {
+      const docs = await this.db
+        .select({ id: batiproDocuments.id, totalTtc: batiproDocuments.totalTtc, paid: batiproDocuments.paidAmount })
+        .from(batiproDocuments)
+        .where(and(inArray(batiproDocuments.id, poIds), eq(batiproDocuments.organizationId, orgId)));
+      for (const d of docs) poPayByDoc.set(d.id, { docTotalTtc: Number(d.totalTtc), docPaidAmount: Number(d.paid), totals: [], htSums: [] });
+      // Sommes HT sur TOUTES les lignes actives du BC (sans filtre de phase) : une
+      // remise hors phase doit rester dans le net. Devise effective = ligne ?? document.
+      const effCur = sql<number | null>`COALESCE(${batiproDocumentLines.currencyId}, ${batiproDocuments.currencyId})`;
+      const htSums = await this.db
+        .select({
+          documentId: batiproDocumentLines.documentId,
+          currencyId: effCur,
+          pos: sql<string>`COALESCE(SUM(CASE WHEN ${batiproDocumentLines.lineHt} > 0 THEN ${batiproDocumentLines.lineHt} ELSE 0 END), 0)`,
+          net: sql<string>`COALESCE(SUM(${batiproDocumentLines.lineHt}), 0)`,
+        })
+        .from(batiproDocumentLines)
+        .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+        .where(and(
+          inArray(batiproDocumentLines.documentId, poIds),
+          eq(batiproDocumentLines.isActive, 1),
+          eq(batiproDocuments.organizationId, orgId),
+          eq(batiproDocuments.isActive, 1),
+        ))
+        .groupBy(batiproDocumentLines.documentId, effCur);
+      for (const s of htSums) {
+        poPayByDoc.get(s.documentId)?.htSums?.push({ currencyId: s.currencyId != null ? Number(s.currencyId) : null, pos: Number(s.pos), net: Number(s.net) });
+      }
+      const totals = await this.db
+        .select({
+          documentId: batiproDocumentTotals.documentId,
+          currencyId: batiproDocumentTotals.currencyId,
+          totalTtc: batiproDocumentTotals.totalTtc,
+          paid: batiproDocumentTotals.paidAmount,
+        })
+        .from(batiproDocumentTotals)
+        .where(and(inArray(batiproDocumentTotals.documentId, poIds), eq(batiproDocumentTotals.organizationId, orgId), eq(batiproDocumentTotals.isActive, 1)));
+      for (const t of totals) {
+        poPayByDoc.get(t.documentId)?.totals.push({ currencyId: t.currencyId, totalTtc: Number(t.totalTtc), paid: Number(t.paid) });
+      }
+    }
+
+    const currencyRows = await this.db.select({ id: currencies.id, code: currencies.currencyCode }).from(currencies);
+    const currencyCodeById = new Map<number, string>(currencyRows.filter((c) => c.code).map((c) => [c.id, c.code as string]));
+
+    return buildPhaseDetail(phase, rows as PhaseDetailRow[], poPayByDoc, currencyCodeById);
   }
 
   // Le budget d'une phase ne peut pas depasser le budget restant du chantier
@@ -1824,11 +1898,18 @@ export class BatiproService {
   // mono-devise (cas d'aujourd'hui, toutes lignes currency_id=NULL), ce sont
   // exactement les memes valeurs qu'avant ce changement.
   private computeDocumentTotals(
-    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
+    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; is_adjustment?: boolean; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
     orgId: number,
     validPhaseIds: Set<number>,
     defaultCurrencyId: number | null = null,
   ) {
+    // Prix negatif = ligne de remise/ajustement explicite uniquement (quantite jamais negative).
+    for (const line of rawLines) {
+      if (Number(line.quantity ?? 0) < 0) throw new BadRequestException("La quantite ne peut pas etre negative.");
+      if (Number(line.unit_price ?? 0) < 0 && !line.is_adjustment) {
+        throw new BadRequestException(`Prix unitaire negatif refuse pour « ${line.designation} » : cochez « Remise / ajustement ».`);
+      }
+    }
     const totalsByCurrencyMap = new Map<number | null, { totalHt: number; totalVat: number; totalTtc: number }>();
     const addToCurrency = (currencyId: number | null, lineHt: number, lineVat: number) => {
       const entry = totalsByCurrencyMap.get(currencyId) ?? { totalHt: 0, totalVat: 0, totalTtc: 0 };
@@ -1871,6 +1952,13 @@ export class BatiproService {
         totalVat: Math.round(t.totalVat * 100) / 100,
         totalTtc: Math.round(t.totalTtc * 100) / 100,
       }));
+
+    // Les remises ne doivent jamais rendre le total d'une devise negatif.
+    for (const t of totalsByCurrencyMap.values()) {
+      if (Math.round(t.totalHt * 100) < 0 || Math.round(t.totalTtc * 100) < 0) {
+        throw new BadRequestException("Le total du document ne peut pas etre negatif : les remises depassent le montant des lignes.");
+      }
+    }
 
     // Scalaires retro-compatibles : uniquement le total de la devise par defaut
     // du document (jamais une somme toutes devises confondues).
@@ -2881,7 +2969,12 @@ export class BatiproService {
 
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
     const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
-    const costActual = Number(poAgg?.paid ?? 0);
+    // Decaisse reel + fonds recus : definition UNIQUE (funds.util), partagee avec
+    // la liste des chantiers et la synthese des fonds.
+    const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
+    const fundsSummary = buildFundsSummary(await this.loadFundRows(orgId, projectId), spendDocs, projectCurrencyId, await this.currencyCodeMap());
+    const fundsProjectCurrency = fundsSummary.find((r) => r.currency_id === projectCurrencyId);
+    const costActual = this.projectCostActual(spendDocs, projectCurrencyId);
     const billedIssued = Number(invoiceAgg?.issued ?? 0);
     const billedCashed = Number(invoiceAgg?.cashed ?? 0);
     const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
@@ -2931,6 +3024,13 @@ export class BatiproService {
       // Detail risque EVM par phase (badge risque du chantier + tooltip front).
       phases_evm: phasesEvmOut,
       coverage_pct: coveragePct,
+      // Fonds du chantier, DANS LA DEVISE DU CHANTIER (currency_id ci-dessus) :
+      // funds_received = apports actifs recus ; funds_available = recu - decaisse
+      // (cost_actual), negatif si decaisse > recu. Autres devises : GET
+      // /batipro/projects/:id/funds (summary_by_currency).
+      funds_received: fundsProjectCurrency?.received ?? 0,
+      funds_available: fundsProjectCurrency?.available ?? 0,
+      funds_shortfall: fundsProjectCurrency?.shortfall ?? 0,
     };
   }
 
@@ -3658,6 +3758,26 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     return { id: doc.id, status: "accepted", message: "Devis accepte. Merci." };
   }
 
+  // Decision hors ligne (devis negocie/accepte ou refuse hors du lien client), par un
+  // utilisateur authentifie. Meme effet que l'acceptation publique (status "accepted"
+  // alimente le budget prevu) + trace d'audit dans les notes. Aucun SMS.
+  async decideQuote(id: number, decision: "accepted" | "refused", orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    const doc = await this.getDocument(id, orgId);
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    if (doc.type !== "quote") throw new BadRequestException("Seuls les devis peuvent etre acceptes ou refuses.");
+    if (doc.status === decision) return this.getDocument(id, orgId);
+    if (!["draft", "sent", "viewed"].includes(doc.status as string)) {
+      throw new BadRequestException("Seul un devis brouillon ou envoye peut etre marque accepte ou refuse.");
+    }
+    const auditNote = `\n[${decision === "accepted" ? "Accepté" : "Refusé"} hors ligne] ${new Date().toISOString()} user=${userId ?? "?"}`;
+    await this.db.update(batiproDocuments).set({
+      status: decision,
+      notes: doc.notes ? `${doc.notes}${auditNote}` : auditNote.trim(),
+    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    await this.publish("decideQuote", ["documents"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
+  }
+
   // ── Galerie photo de chantier (site + documents sources) ────────────────
   // Verifie que le chantier appartient a l'org et reste dans le scope RBAC
   // courant (memes regles que projectDirectFilter : "all" = pas de filtre).
@@ -4158,6 +4278,370 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
       .where(and(eq(batiproNotifications.id, id), eq(batiproNotifications.organizationId, orgId)));
     await this.publish("notification", ["notifications"], "deleted", id, orgId);
     return { message: "Notification supprimee." };
+  }
+
+  // ── Fonds du chantier (apports proprietaire/associe) ─────────────────────
+  // Chaque versement est comptabilise (DEBIT tresorerie selon payment_method /
+  // CREDIT contrepartie selon funding_nature) via les regles du type
+  // batipro_project_funding (migration 0323). sourceModule DEDIE
+  // "batipro_funding" : le gate d'approbation est indexe sourceModule+relatedId,
+  // "batipro" entrerait en collision avec les ids des documents.
+
+  // Documents de depense (BC sortants + factures fournisseur) de plusieurs
+  // chantiers, avec leur ventilation par devise. 2 requetes au total.
+  private async loadSpendDocs(orgId: number, projectIds: number[]): Promise<Map<number, SpendDoc[]>> {
+    const out = new Map<number, SpendDoc[]>();
+    if (!projectIds.length) return out;
+    const docs = await this.db
+      .select({
+        id: batiproDocuments.id,
+        projectId: batiproDocuments.projectId,
+        type: batiproDocuments.type,
+        direction: batiproDocuments.direction,
+        status: batiproDocuments.status,
+        isActive: batiproDocuments.isActive,
+        currencyId: batiproDocuments.currencyId,
+        parentDocumentId: batiproDocuments.parentDocumentId,
+        totalTtc: batiproDocuments.totalTtc,
+        paidAmount: batiproDocuments.paidAmount,
+      })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        inArray(batiproDocuments.projectId, projectIds),
+        eq(batiproDocuments.isActive, 1),
+        or(
+          and(eq(batiproDocuments.type, "purchase_order"), eq(batiproDocuments.direction, "outbound")),
+          and(eq(batiproDocuments.type, "invoice"), eq(batiproDocuments.direction, "inbound")),
+        ),
+      ));
+    if (!docs.length) return out;
+    const totals = await this.db
+      .select({ documentId: batiproDocumentTotals.documentId, currencyId: batiproDocumentTotals.currencyId, totalTtc: batiproDocumentTotals.totalTtc })
+      .from(batiproDocumentTotals)
+      .where(and(
+        eq(batiproDocumentTotals.organizationId, orgId),
+        eq(batiproDocumentTotals.isActive, 1),
+        inArray(batiproDocumentTotals.documentId, docs.map((d) => d.id)),
+      ));
+    const totalsByDoc = new Map<number, { currencyId: number; totalTtc: string }[]>();
+    for (const t of totals) {
+      const list = totalsByDoc.get(t.documentId) ?? [];
+      list.push({ currencyId: t.currencyId, totalTtc: t.totalTtc });
+      totalsByDoc.set(t.documentId, list);
+    }
+    for (const d of docs) {
+      const list = out.get(d.projectId) ?? [];
+      list.push({ ...d, status: d.status ?? null, parentDocumentId: d.parentDocumentId ?? null, totals: totalsByDoc.get(d.id) ?? [] });
+      out.set(d.projectId, list);
+    }
+    return out;
+  }
+
+  // Decaisse reel d'un chantier DANS SA DEVISE : definition unique (cf.
+  // funds.util disbursedCentsByCurrency), utilisee par projects(),
+  // projectBudgetSummary() et la synthese des fonds.
+  private projectCostActual(docs: SpendDoc[], projectCurrencyId: number | null) {
+    return fromCents(disbursedCentsByCurrency(docs, projectCurrencyId).get(projectCurrencyId) ?? 0);
+  }
+
+  private async loadFundRows(orgId: number, projectId: number) {
+    return this.db
+      .select({ amount: batiproProjectFunds.amount, currencyId: batiproProjectFunds.currencyId, isActive: batiproProjectFunds.isActive })
+      .from(batiproProjectFunds)
+      .where(and(
+        eq(batiproProjectFunds.organizationId, orgId),
+        eq(batiproProjectFunds.projectId, projectId),
+        eq(batiproProjectFunds.isActive, 1),
+      ));
+  }
+
+  private async currencyCodeMap() {
+    const rows = await this.db.select({ id: currencies.id, code: currencies.currencyCode }).from(currencies);
+    return new Map<number, string | null>(rows.map((c) => [c.id, c.code ?? null] as const));
+  }
+
+  // Devise existante ET exploitable (pas de devise fantome a code NULL/vide ni soft-deletee).
+  private async findActiveCurrency(currencyId: number) {
+    const [row] = await this.db
+      .select({ id: currencies.id, currencyCode: currencies.currencyCode })
+      .from(currencies)
+      .where(and(eq(currencies.id, currencyId), eq(currencies.status, "true")))
+      .limit(1);
+    return row && row.currencyCode && row.currencyCode.trim() ? row : null;
+  }
+
+  private async getFundRow(fundId: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(batiproProjectFunds)
+      .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  // Ecriture comptabilisee APRES approbation (gate) : son id n'est pas reporte
+  // sur le versement, on la retrouve par la cle d'idempotence.
+  private async findPostedFundingEntryId(fundId: number, orgId: number) {
+    const [row] = await this.db
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(and(eq(journalEntries.organizationId, orgId), eq(journalEntries.idempotencyKey, `batipro:funding:${fundId}`)))
+      .limit(1);
+    return row?.id ? Number(row.id) : null;
+  }
+
+  // Le ledger ne previent pas BatiPro quand une ecriture en attente est approuvee :
+  // on rattrape ici (1 requete) les versements "pending" dont l'ecriture existe
+  // desormais, en base et dans les lignes renvoyees.
+  private async syncApprovedFundingEntries(rows: Array<typeof batiproProjectFunds.$inferSelect>, orgId: number) {
+    const pending = rows.filter((r) => r.isActive === 1 && r.ledgerStatus === "pending" && !r.ledgerEntryId);
+    if (!pending.length) return;
+    const entries = await this.db
+      .select({ id: journalEntries.id, key: journalEntries.idempotencyKey })
+      .from(journalEntries)
+      .where(and(
+        eq(journalEntries.organizationId, orgId),
+        inArray(journalEntries.idempotencyKey, pending.map((r) => `batipro:funding:${r.id}`)),
+      ));
+    const byKey = new Map(entries.map((e) => [e.key, Number(e.id)]));
+    for (const row of pending) {
+      const entryId = byKey.get(`batipro:funding:${row.id}`);
+      if (!entryId) continue;
+      await this.db.update(batiproProjectFunds)
+        .set({ ledgerEntryId: entryId, ledgerStatus: "posted" })
+        .where(and(eq(batiproProjectFunds.id, row.id), eq(batiproProjectFunds.organizationId, orgId)));
+      row.ledgerEntryId = entryId;
+      row.ledgerStatus = "posted";
+    }
+  }
+
+  private mapFund(row: typeof batiproProjectFunds.$inferSelect & { currencyCode?: string | null }) {
+    return {
+      id: row.id,
+      project_id: row.projectId,
+      received_at: row.receivedAt,
+      amount: Number(row.amount),
+      currency_id: row.currencyId,
+      currency_code: row.currencyCode ?? null,
+      contributor_kind: row.contributorKind,
+      contributor_name: row.contributorName ?? null,
+      contributor_phone: row.contributorPhone ?? null,
+      funding_nature: row.fundingNature,
+      payment_method: row.paymentMethod,
+      reference: row.reference ?? null,
+      notes: row.notes ?? null,
+      has_attachment: !!row.attachedFileKey,
+      attached_file_format: row.attachedFileFormat ?? null,
+      attached_file_size: row.attachedFileSize ?? null,
+      ledger_entry_id: row.ledgerEntryId ?? null,
+      ledger_status: row.ledgerStatus,
+      reversal_entry_id: row.reversalEntryId ?? null,
+      is_active: row.isActive,
+      status: row.isActive === 1 ? "active" : "cancelled",
+      cancelled_at: row.cancelledAt ?? null,
+      cancelled_by: row.cancelledBy ?? null,
+      cancel_reason: row.cancelReason ?? null,
+      created_by: row.createdBy ?? null,
+      created_at: row.createdAt,
+    };
+  }
+
+  private async getProjectFund(fundId: number, orgId: number) {
+    const [row] = await this.db
+      .select({ ...getTableColumns(batiproProjectFunds), currencyCode: currencies.currencyCode })
+      .from(batiproProjectFunds)
+      .leftJoin(currencies, eq(currencies.id, batiproProjectFunds.currencyId))
+      .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Versement introuvable.");
+    return this.mapFund(row);
+  }
+
+  // Liste des versements (actifs ET annules, pour l'historique) + synthese par
+  // devise (actifs seulement). Jamais d'addition inter-devises.
+  async listProjectFunds(projectId: number, orgId: number, scope: BatiproProjectScope) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const project = await this.getProject(projectId, orgId);
+    const rows = await this.db
+      .select({ ...getTableColumns(batiproProjectFunds), currencyCode: currencies.currencyCode })
+      .from(batiproProjectFunds)
+      .leftJoin(currencies, eq(currencies.id, batiproProjectFunds.currencyId))
+      .where(and(eq(batiproProjectFunds.organizationId, orgId), eq(batiproProjectFunds.projectId, projectId)))
+      .orderBy(desc(batiproProjectFunds.receivedAt), desc(batiproProjectFunds.id));
+    await this.syncApprovedFundingEntries(rows, orgId);
+    const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
+    const summary = buildFundsSummary(rows, spendDocs, project.currencyId ?? null, await this.currencyCodeMap());
+    return { funds: rows.map((r) => this.mapFund(r)), summary_by_currency: summary };
+  }
+
+  async createProjectFund(projectId: number, input: CreateBatiproFundDto, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const amount = Number(input.amount);
+    if (!Number.isFinite(amount) || !(amount > 0)) throw new BadRequestException("Le montant doit etre strictement positif.");
+    if (!hasAtMostTwoDecimals(amount)) throw new BadRequestException("Le montant doit avoir au plus 2 decimales.");
+    const currency = await this.findActiveCurrency(Number(input.currency_id));
+    if (!currency) throw new BadRequestException("Devise inconnue.");
+    const fundingNature = input.funding_nature ?? "client_advance";
+    const receivedAt = String(input.received_at).slice(0, 10);
+    // Pas de versement date dans le futur (marge +2 h : RDC en UTC+1 / UTC+2).
+    const todayRdc = new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 10);
+    if (receivedAt > todayRdc) throw new BadRequestException("La date de reception ne peut pas etre dans le futur.");
+    const amountStr = amount.toFixed(2);
+    const project = await this.getProject(projectId, orgId);
+
+    const [inserted] = await this.db.insert(batiproProjectFunds).values({
+      organizationId: orgId,
+      projectId,
+      receivedAt,
+      amount: amountStr,
+      currencyId: currency.id,
+      contributorKind: input.contributor_kind,
+      contributorName: input.contributor_name?.trim() || null,
+      contributorPhone: input.contributor_phone?.trim() || null,
+      fundingNature,
+      paymentMethod: input.payment_method,
+      reference: input.reference?.trim() || null,
+      notes: input.notes?.trim() || null,
+      ledgerStatus: "posted",
+      createdBy: userId ?? null,
+    }).$returningId();
+    const fundId = Number(inserted.id);
+
+    let result: { id: number; deferred?: boolean };
+    try {
+      const analyticProjectId = await this.resolveAnalyticProjectId(projectId, orgId);
+      result = await this.ledger.postByRules(
+        {
+          type: "batipro_project_funding",
+          date: receivedAt,
+          reference: (input.reference?.trim() || `FONDS-${fundId}`).slice(0, 64),
+          particulars: `Apport fonds chantier ${project.code || project.name || projectId}`.slice(0, 255),
+          sourceModule: "batipro_funding",
+          relatedId: String(fundId),
+          idempotencyKey: `batipro:funding:${fundId}`,
+          currencyId: currency.id,
+          amountsByRole: { [input.payment_method]: Number(amountStr), [fundingNature]: Number(amountStr) },
+          dimensions: { projectId: analyticProjectId },
+        },
+        orgId,
+        userId,
+      );
+    } catch (err) {
+      // Compensation : pas de versement actif sans ecriture comptable en face.
+      try {
+        await this.db.update(batiproProjectFunds)
+          .set({ isActive: 0, cancelledAt: new Date(), cancelReason: "Echec de comptabilisation" })
+          .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId)));
+      } catch (compensationError) {
+        console.error("[BatiPro] compensation versement echouee:", fundId, compensationError instanceof Error ? compensationError.message : String(compensationError));
+      }
+      throw err;
+    }
+
+    const deferred = (result as { deferred?: boolean }).deferred === true;
+    await this.db.update(batiproProjectFunds)
+      .set({ ledgerEntryId: !deferred && result.id > 0 ? result.id : null, ledgerStatus: deferred ? "pending" : "posted" })
+      .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId)));
+
+    await this.publish("createProjectFund", ["funds"], "created", fundId, orgId);
+    return this.getProjectFund(fundId, orgId);
+  }
+
+  async cancelProjectFund(fundId: number, reason: string, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {
+    const fund = await this.getFundRow(fundId, orgId);
+    if (!fund) throw new NotFoundException("Versement introuvable.");
+    await this.assertProjectInScope(fund.projectId, orgId, scope);
+    if (fund.isActive !== 1 || fund.cancelledAt) throw new BadRequestException("Ce versement est deja annule.");
+    const motif = String(reason ?? "").trim();
+    if (motif.length < 3) throw new BadRequestException("Un motif d'annulation (3 caracteres minimum) est obligatoire.");
+
+    // Reserve la ligne AVANT de contre-passer : deux annulations simultanees ne
+    // doivent jamais produire deux contre-passations (reverse n'est pas atomique).
+    const claim = await this.db.update(batiproProjectFunds)
+      .set({ cancelledAt: new Date() })
+      .where(and(
+        eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId),
+        eq(batiproProjectFunds.isActive, 1), isNull(batiproProjectFunds.cancelledAt),
+      ));
+    const claimHeader = (Array.isArray(claim) ? claim[0] : claim) as { affectedRows?: number } | undefined;
+    if (Number(claimHeader?.affectedRows ?? 0) === 0) throw new ConflictException("Annulation deja en cours ou effectuee.");
+    const release = () => this.db.update(batiproProjectFunds).set({ cancelledAt: null })
+      .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId), eq(batiproProjectFunds.isActive, 1)));
+
+    let reversalEntryId: number | null = null;
+    try {
+      let entryId = fund.ledgerEntryId ? Number(fund.ledgerEntryId) : null;
+      if (!entryId) entryId = await this.findPostedFundingEntryId(fundId, orgId);
+      if (entryId) {
+        try {
+          // particulars de la contre-passation = "Contre-passation de #id - <motif>" (255 max).
+          const res = await this.ledger.reverse(entryId, `Annulation fonds chantier #${fundId} : ${motif}`.slice(0, 200), orgId, userId);
+          reversalEntryId = res.reversalEntryId ?? null;
+        } catch (err) {
+          // Seul "deja contre-passee" est tolere. Une periode cloturee leve AUSSI une
+          // ConflictException : elle doit bloquer l'annulation (pas de fonds fantome).
+          const alreadyReversed = err instanceof ConflictException && /contre-pass/i.test(err.message);
+          if (!alreadyReversed) throw err;
+          // Garde la trace de la contre-passation existante.
+          const [orig] = await this.db.select({ reversedById: journalEntries.reversedById }).from(journalEntries)
+            .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId))).limit(1);
+          reversalEntryId = orig?.reversedById ? Number(orig.reversedById) : null;
+        }
+      } else {
+        // Ecriture encore en attente d'approbation : on l'annule pour qu'elle ne soit jamais comptabilisee.
+        const res = await this.db.update(ledgerPendingEntries)
+          .set({ status: "cancelled" })
+          .where(and(
+            eq(ledgerPendingEntries.organizationId, orgId),
+            eq(ledgerPendingEntries.sourceModule, "batipro_funding"),
+            eq(ledgerPendingEntries.relatedId, String(fundId)),
+            eq(ledgerPendingEntries.status, "pending"),
+          ));
+        const header = (Array.isArray(res) ? res[0] : res) as { affectedRows?: number } | undefined;
+        // 0 ligne en attente : l'ecriture a pu etre approuvee entre-temps -> ne pas annuler a l'aveugle.
+        if (fund.ledgerStatus === "pending" && Number(header?.affectedRows ?? 0) === 0) {
+          throw new ConflictException("L'ecriture comptable vient d'etre approuvee : reessayez l'annulation.");
+        }
+      }
+    } catch (err) {
+      await release();
+      throw err;
+    }
+
+    await this.db.update(batiproProjectFunds)
+      .set({ isActive: 0, cancelledBy: userId ?? null, cancelReason: motif.slice(0, 255), reversalEntryId })
+      .where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId), eq(batiproProjectFunds.isActive, 1)));
+    await this.publish("cancelProjectFund", ["funds"], "updated", fundId, orgId);
+    return this.getProjectFund(fundId, orgId);
+  }
+
+  async attachFundFile(fundId: number, file: any, orgId: number, scope: BatiproProjectScope) {
+    const fund = await this.getFundRow(fundId, orgId);
+    if (!fund) throw new NotFoundException("Versement introuvable.");
+    await this.assertProjectInScope(fund.projectId, orgId, scope);
+    if (fund.isActive !== 1) throw new BadRequestException("Versement annule : piece jointe non modifiable.");
+    const stored = await this.objectStorage.putDocument(file, `batipro/funds/${orgId}/${fundId}`);
+    await this.db.update(batiproProjectFunds).set({
+      attachedFileKey: stored.objectKey,
+      attachedFileFormat: stored.mimeType === "application/pdf" ? "pdf" : (stored.mimeType.split("/")[1] || null),
+      attachedFileSize: stored.sizeBytes,
+    }).where(and(eq(batiproProjectFunds.id, fundId), eq(batiproProjectFunds.organizationId, orgId)));
+    // Ancien fichier supprime APRES la mise a jour (jamais de lien vers un fichier efface).
+    if (fund.attachedFileKey && fund.attachedFileKey !== stored.objectKey) {
+      try { await this.objectStorage.deleteObject(fund.attachedFileKey); } catch { /* best-effort */ }
+    }
+    await this.publish("attachFundFile", ["funds"], "updated", fundId, orgId);
+    return this.getProjectFund(fundId, orgId);
+  }
+
+  async fundAttachmentFile(fundId: number, orgId: number, scope: BatiproProjectScope) {
+    const fund = await this.getFundRow(fundId, orgId);
+    if (!fund) throw new NotFoundException("Versement introuvable.");
+    await this.assertProjectInScope(fund.projectId, orgId, scope);
+    if (!fund.attachedFileKey) throw new NotFoundException("Aucun fichier attache.");
+    const object = await this.objectStorage.getObject(fund.attachedFileKey);
+    return { ...object, mimeType: object.contentType };
   }
 
   private async publish(kind: string, tables: string[], action: "created" | "updated" | "deleted", entityId: number | string, orgId: number) {

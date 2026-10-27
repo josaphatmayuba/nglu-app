@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
 import SubcontractorSubmit from "./SubcontractorSubmit.jsx";
 import ClientDocument from "./ClientDocument.jsx";
+import OwnerTracking from "./OwnerTracking.jsx";
 import { bootstrapAuth } from "./auth.jsx";
 import { mountVersionBadge } from "./version-badge.js";
 import "./styles.css";
@@ -10,11 +11,16 @@ import "./styles.css";
 // Portail sous-traitant public (sans compte) : /batipro/public/submit/:token.
 // Detecte avant tout bootstrap auth (aucun JWT requis sur cette page).
 const publicMatch = typeof window !== "undefined"
-  ? window.location.pathname.match(/\/batipro\/public\/submit\/([^/?#]+)/)
+  ? window.location.pathname.match(/(?:\/batipro)?\/public\/submit\/([^/?#]+)/)
   : null;
 // Page publique client (devis) : /batipro/public/document/:token.
 const clientDocMatch = typeof window !== "undefined"
-  ? window.location.pathname.match(/\/batipro\/public\/document\/([^/?#]+)/)
+  ? window.location.pathname.match(/(?:\/batipro)?\/public\/document\/([^/?#]+)/)
+  : null;
+
+// Suivi financier public du proprietaire : /batipro/suivi/:token (sans compte).
+const trackingMatch = typeof window !== "undefined"
+  ? window.location.pathname.match(/(?:\/batipro)?\/suivi\/([^/?#]+)/)
   : null;
 
 class ErrorBoundary extends React.Component {
@@ -33,7 +39,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-if (clientDocMatch) {
+if (trackingMatch) {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <ErrorBoundary>
+      <OwnerTracking token={decodeURIComponent(trackingMatch[1])} />
+    </ErrorBoundary>
+  );
+} else if (clientDocMatch) {
   // Page publique client (devis) : pas de bootstrap auth.
   ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>

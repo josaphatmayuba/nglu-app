@@ -41,8 +41,7 @@ const formatCurrency = (value, currencySymbol = '$') => {
         style: 'currency',
         currency: 'USD',
         currencyDisplay: 'symbol',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
+        maximumFractionDigits: 2,
     }).format(value || 0).replace('$', currencySymbol);
 
     return formattedValue;
@@ -162,8 +161,8 @@ const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor
 
 const ChartCard = ({ title, children, loading = false, right = null }) => (
     <Card>
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3 sm:mb-4">
+            <h3 className="min-w-0 text-base sm:text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
             {right}
         </div>
         {loading ? (
@@ -456,7 +455,13 @@ const SalesVsPurchasesLine = ({ data, currencySymbol }) => (
                 <BarChart data={data} barGap={4}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
                     <XAxis dataKey="month" stroke="#71717a" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}M` : v} />
+                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                        const n = Number(v) || 0;
+                        const a = Math.abs(n);
+                        if (a >= 1e6) return `${+(n / 1e6).toFixed(2)}M`;
+                        if (a >= 1e3) return `${+(n / 1e3).toFixed(2)}k`;
+                        return `${+n.toFixed(2)}`;
+                    }} />
                     <Tooltip
                         formatter={(value, name) => [formatCurrency(value, currencySymbol), name === 'current' ? '2026' : '2025']}
                         contentStyle={{
@@ -484,9 +489,41 @@ const SalesVsPurchasesLine = ({ data, currencySymbol }) => (
 );
 
 // Eikhane currencySymbol add kora hoyeche prop-e
+const decodeSymbol = (s) => {
+    if (!s || typeof document === 'undefined') return s || '';
+    const t = document.createElement('textarea');
+    t.innerHTML = s;
+    return t.value;
+};
+
 const AccountWiseTransactions = ({ data = [], currencySymbol }) => {
     const device = useDeviceType();
-    const rows = [...data].sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 6);
+    const [picked, setPicked] = useState(null);
+
+    // Une devise = un graphique : on ne melange jamais FC et $.
+    const groups = useMemo(() => {
+        const map = new Map();
+        (Array.isArray(data) ? data : []).forEach((r) => {
+            const key = r.currencyCode || String(r.currencyId ?? '');
+            if (!map.has(key)) map.set(key, { key, code: r.currencyCode || '', symbol: decodeSymbol(r.currencySymbol) || '', byAccount: new Map() });
+            // Deux devises de meme code (ex. USD en double) : une seule barre par compte.
+            const g = map.get(key);
+            const prev = g.byAccount.get(r.account);
+            g.byAccount.set(r.account, { ...r, amount: Math.round(((prev?.amount || 0) + (Number(r.amount) || 0)) * 100) / 100 });
+        });
+        return [...map.values()].map(({ byAccount, ...g }) => ({ ...g, rows: [...byAccount.values()] }));
+    }, [data]);
+
+    const defaultGroup = groups.reduce((best, g) => (!best || g.rows.length > best.rows.length ? g : best), null);
+    const current = groups.find((g) => g.key === picked) || defaultGroup;
+    const rows = current ? [...current.rows].sort((a, b) => (b.amount || 0) - (a.amount || 0)).slice(0, 6) : [];
+    const fmt = (v) => `${current?.code ? `${current.code} ` : ''}${formatCurrency(v, current?.symbol || '')}`;
+    const compact = (v) => {
+        const n = Number(v) || 0;
+        if (n >= 1e6) return `${current?.symbol || ''}${+(n / 1e6).toFixed(2)}M`;
+        if (n >= 1e3) return `${current?.symbol || ''}${+(n / 1e3).toFixed(1)}k`;
+        return `${current?.symbol || ''}${n}`;
+    };
     const PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#22c55e', '#eab308'];
 
     const margin = device === 'mobile' ? { top: 8, right: 8, left: 4, bottom: 32 } : device === 'tablet' ? { top: 8, right: 8, left: 4, bottom: 28 } : { top: 8, right: 8, left: 4, bottom: 24 };
@@ -495,7 +532,22 @@ const AccountWiseTransactions = ({ data = [], currencySymbol }) => {
     return (
         <ChartCard
             title="Transactions by Account"
-            right={<span className={`text-xs text-gray-500 dark:text-gray-400 ${device === 'mobile' ? 'hidden' : 'hidden sm:inline'}`}>Amount</span>}
+            right={groups.length > 1 ? (
+                <div className="flex flex-wrap gap-1 max-w-full">
+                    {groups.map((g) => (
+                        <button
+                            key={g.key}
+                            type="button"
+                            onClick={() => setPicked(g.key)}
+                            className={`min-h-[32px] px-3 py-1.5 text-xs rounded-md border transition-colors ${current?.key === g.key ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700'}`}
+                        >
+                            {g.code || g.symbol || '?'}
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <span className={`text-xs text-gray-500 dark:text-gray-400 ${device === 'mobile' ? 'hidden' : 'hidden sm:inline'}`}>{current?.code || 'Amount'}</span>
+            )}
         >
             <SafeChartContainer data={rows} emptyTitle="No transactions" emptySubtitle="Import your accounts.">
                 <ResponsiveContainer width="100%" height="100%">
@@ -505,11 +557,12 @@ const AccountWiseTransactions = ({ data = [], currencySymbol }) => {
                         <YAxis
                             stroke="#6b7280"
                             style={{ fontSize }}
-                            tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v)}
+                            tickFormatter={compact}
+                            width={device === 'mobile' ? 56 : 68}
                             axisLine={{ stroke: '#cbd5e1' }}
                         />
                         <Tooltip
-                            formatter={(v) => [formatCurrency(v, currencySymbol), 'Amount']} // Tooltip-e currencySymbol add kora holo
+                            formatter={(v) => [fmt(v), 'Amount']}
                             contentStyle={{
                                 background: 'rgba(255, 255, 255, 0.95)',
                                 border: 'none',

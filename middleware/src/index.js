@@ -56,7 +56,8 @@ app.set('trust proxy', 1);
 // dans les logs (et donc dans toute sauvegarde ou export de ceux-ci). On
 // masque la valeur, sans toucher a la requete elle-meme.
 morgan.token('safeurl', (req) => String(req.originalUrl || req.url || '')
-  .replace(/([?&](?:token|access_token|refresh_token)=)[^&]*/gi, '$1[REDACTED]'));
+  .replace(/([?&](?:token|access_token|refresh_token)=)[^&]*/gi, '$1[REDACTED]')
+  .replace(/(\/batipro\/public\/[a-z-]+\/)[^/?]+/gi, '$1[REDACTED]'));
 app.use(morgan(':method :safeurl :status :response-time ms - :remote-addr'));
 
 // ── Rate limiting global (100 req/min) ────────────────────

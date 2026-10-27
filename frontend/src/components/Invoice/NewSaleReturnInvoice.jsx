@@ -1,7 +1,7 @@
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import moment from "moment";
 import { useEffect } from "react";
@@ -37,14 +37,12 @@ export default function NewSaleReturnInvoice({ data, title }) {
       value: `currency : ${currencyName}`,
     },
   ];
-  const numberInText = numberToWords(
-    Math.round(data.totalAmount + (data.tax ? data.tax : 0))
-  );
+  const numberInText = amountToWords(data.totalAmount + (data.tax ? data.tax : 0), currencyName);
 
   const bottomLeftContent = [
     {
       label: "IN WORDS: ",
-      value: `${numberInText.toUpperCase()} ${currencyName}` || "",
+      value: `${numberInText.toUpperCase()}` || "",
     },
     {
       label: "Terms And Conditions: ",

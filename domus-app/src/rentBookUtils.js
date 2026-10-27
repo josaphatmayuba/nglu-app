@@ -102,21 +102,24 @@ export function integerToWordsFr(value) {
   return parts.join(" ").trim();
 }
 
-// Montant + devise en toutes lettres, ex: "cent cinquante dollars américains".
-// On reste volontairement simple (pas de gestion des centimes en lettres,
-// rares sur des loyers) : la partie décimale est indiquée en chiffres si présente.
+// Montant + devise en toutes lettres, centimes inclus (jamais d'arrondi a l'unite),
+// ex: "cent cinquante dollars américains et cinquante-six cents".
+// Separation entier/centimes sans flottant : Math.round(x * 100) puis / et % 100.
 export function amountToWordsFr(amount, currencySymbol = "CDF") {
-  const value = Number(amount || 0);
-  const intPart = Math.trunc(Math.abs(value));
-  const cents = Math.round((Math.abs(value) - intPart) * 100);
+  const totalCents = Math.round(Math.abs(Number(amount || 0)) * 100);
+  const intPart = Math.floor(totalCents / 100);
+  const cents = totalCents % 100;
   const symbol = currencySymbol || "CDF";
-  const currencyWord = /usd|\$/i.test(symbol)
+  const isUsd = /usd|\$/i.test(symbol);
+  const currencyWord = isUsd
     ? "dollars américains"
     : /cdf|fc/i.test(symbol)
       ? "francs congolais"
       : symbol.trim();
   const base = `${integerToWordsFr(intPart)} ${currencyWord}`;
-  return cents > 0 ? `${base} et ${cents}/100` : base;
+  if (cents === 0) return base;
+  const centWord = isUsd ? (cents === 1 ? "cent" : "cents") : (cents === 1 ? "centime" : "centimes");
+  return `${base} et ${integerToWordsFr(cents)} ${centWord}`;
 }
 
 // ── Carnet complet : une quittance par mois du bail, du mois de début au

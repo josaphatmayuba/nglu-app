@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import Redis from "ioredis";
+import { attachThrottledRedisErrorLog, redisRetryStrategy } from "./redis-error-throttle";
 import { env } from "../config/env";
 import {
   buildPermissionsUpdatedEvent,
@@ -63,9 +64,7 @@ export class RealtimePermissionsPublisher implements OnModuleDestroy {
           password: env.redis.password || undefined,
         });
 
-    this.redis.on("error", (error) => {
-      this.logger.warn(`Redis connection error: ${this.errorMessage(error)}`);
-    });
+    attachThrottledRedisErrorLog(this.redis, this.logger, (e) => this.errorMessage(e));
 
     return this.redis;
   }
@@ -75,6 +74,7 @@ export class RealtimePermissionsPublisher implements OnModuleDestroy {
       enableOfflineQueue: false,
       lazyConnect: true,
       maxRetriesPerRequest: 1,
+      retryStrategy: redisRetryStrategy,
     };
   }
 

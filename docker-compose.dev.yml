@@ -83,6 +83,7 @@ services:
     build:
       context: ./backend2
       dockerfile: Dockerfile.prod
+    image: nglu_dev-backend2:latest
     container_name: nglu_dev_backend2
     restart: unless-stopped
     # Override the Dockerfile CMD (which runs `docker:prod` and skips
@@ -157,6 +158,7 @@ services:
     build:
       context: ./middleware
       dockerfile: Dockerfile
+    image: nglu_dev-middleware:latest
     container_name: nglu_dev_middleware
     restart: unless-stopped
     environment:

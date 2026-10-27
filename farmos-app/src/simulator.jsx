@@ -588,7 +588,7 @@ function calibrate(real, h, animals, speciesFilter, devCode = "", zoneKey = ZONE
         // Bascule en mode "entier" pour que le prix reel/tete soit reellement utilise
         out.prixEntierParKg = Math.round(parTete / h.poidsVenteKg);
         out.modeVente = "entier";
-        notes.push(`Prix vente reel ~${Math.round(parTete).toLocaleString()}${cur}/tete → mode porc entier`);
+        notes.push(`Prix vente reel ~${Number(parTete).toLocaleString(undefined, { maximumFractionDigits: 2 })}${cur}/tete → mode porc entier`);
       }
     }
   }
@@ -641,9 +641,9 @@ function calibrate(real, h, animals, speciesFilter, devCode = "", zoneKey = ZONE
     const moisCouverts = monthsSpan(exp);
     if (moisCouverts > 0) {
       out.salaireMensuelOuvrier = Math.round(sal / moisCouverts);
-      notes.push(`Salaires reels ~${out.salaireMensuelOuvrier.toLocaleString()}${cur}/mois (${Math.round(sal).toLocaleString()}${cur} / ${moisCouverts} mois)`);
+      notes.push(`Salaires reels ~${out.salaireMensuelOuvrier.toLocaleString()}${cur}/mois (${Number(sal).toLocaleString(undefined, { maximumFractionDigits: 2 })}${cur} / ${moisCouverts} mois)`);
     } else {
-      notes.push(`Salaires enregistres: ${Math.round(sal).toLocaleString()}${cur}`);
+      notes.push(`Salaires enregistres: ${Number(sal).toLocaleString(undefined, { maximumFractionDigits: 2 })}${cur}`);
     }
   }
 

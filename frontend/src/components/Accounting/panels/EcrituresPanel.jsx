@@ -6,7 +6,7 @@ import FormattedAmount from "@/components/Shared/FormattedAmount";
 
 const PAGE_SIZE = 15;
 
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
 
 export default function EcrituresPanel({
   transactions = [],

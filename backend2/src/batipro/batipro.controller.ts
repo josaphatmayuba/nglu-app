@@ -11,7 +11,9 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   BulkUpsertAttendanceDto,
+  CancelBatiproFundDto,
   ConfirmBatiproDocumentDto,
+  CreateBatiproFundDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -22,9 +24,11 @@ import {
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
   CreateBatiproSituationDocumentDto,
+  CreateBatiproShareLinkDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
+  DecideBatiproQuoteDto,
   CreateStockMovementDto,
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
@@ -46,6 +50,7 @@ import {
   UpdateBatiproTaskDto,
   UpdateBatiproWorkerDto,
 } from "./dto/batipro.dto";
+import { BatiproShareService } from "./batipro-share.service";
 import { BatiproService } from "./batipro.service";
 
 @ApiTags("batipro")
@@ -53,7 +58,7 @@ import { BatiproService } from "./batipro.service";
 @UseGuards(JwtAuthGuard, PermissionsGuard, BatiproProjectGuard)
 @Controller("batipro")
 export class BatiproController {
-  constructor(private readonly batipro: BatiproService) {}
+  constructor(private readonly batipro: BatiproService, private readonly share: BatiproShareService) {}
 
   @ApiOperation({ summary: "BatiPro dashboard snapshot" })
   @Permissions("readAll-batipro")
@@ -106,6 +111,111 @@ export class BatiproController {
   @Put("projects/:id")
   updateProject(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproProjectDto, @CurrentOrg() orgId: number) {
     return this.batipro.updateProject(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Liens publics de suivi financier du chantier (proprietaire)" })
+  @Permissions("update-batipro")
+  @Get("projects/:projectId/share-links")
+  listShareLinks(@Param("projectId", ParseIntPipe) projectId: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.share.listLinks(projectId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Creer un lien public de suivi (option SMS au proprietaire)" })
+  @Permissions("update-batipro")
+  @Post("projects/:projectId/share-links")
+  createShareLink(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Body() body: CreateBatiproShareLinkDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.share.createLink(projectId, body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Revoquer un lien public de suivi (revoked_at, pas de suppression)" })
+  @Permissions("update-batipro")
+  @Post("projects/:projectId/share-links/:linkId/revoke")
+  revokeShareLink(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Param("linkId", ParseIntPipe) linkId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.share.revokeLink(projectId, linkId, orgId, scope);
+  }
+
+  // ── Fonds du chantier (apports recus, comptabilises au ledger) ──────────────
+  @ApiOperation({ summary: "Fonds du chantier : versements + synthese par devise (recu/decaisse/disponible/reste du/manque)" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:id/funds")
+  listProjectFunds(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.listProjectFunds(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Enregistre un versement de fonds (ecriture ledger batipro_project_funding)" })
+  @Permissions("create-batipro")
+  @Post("projects/:id/funds")
+  createProjectFund(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateBatiproFundDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.createProjectFund(id, body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Joint/remplace la preuve (photo/scan) d'un versement de fonds" })
+  @Permissions("update-batipro")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+    },
+  }))
+  @Post("funds/:id/attachment")
+  uploadFundAttachment(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    if (!file) throw new BadRequestException("Aucun fichier.");
+    return this.batipro.attachFundFile(id, file, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Telecharge la preuve (photo/scan) d'un versement de fonds" })
+  @Permissions("readAll-batipro")
+  @Get("funds/:id/attachment")
+  async fundAttachmentFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.batipro.fundAttachmentFile(id, orgId, scope);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Annule un versement de fonds (contre-passation ledger, soft delete)" })
+  @Permissions("delete-batipro")
+  @Post("funds/:id/cancel")
+  cancelProjectFund(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelBatiproFundDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.cancelProjectFund(id, body.reason, orgId, userId || undefined, scope);
   }
 
   @ApiOperation({ summary: "Soft-delete BatiPro project" })
@@ -218,6 +328,13 @@ export class BatiproController {
   @Get("phases")
   phases(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
     return this.batipro.phases(orgId, projectId ? Number(projectId) : undefined);
+  }
+
+  @ApiOperation({ summary: "Detail d'une phase : prevu vs devis artisan vs depense (lecture seule)" })
+  @Permissions("readAll-batipro")
+  @Get("phases/:id/detail")
+  phaseDetail(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.phaseDetail(id, orgId, scope);
   }
 
   @ApiOperation({ summary: "Create BatiPro phase" })
@@ -595,6 +712,19 @@ export class BatiproController {
   @Post("documents/:id/share")
   shareDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.batipro.shareDocument(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Marque un devis accepte/refuse hors ligne (negocie hors lien client, sans SMS)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/decision")
+  decideQuote(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DecideBatiproQuoteDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.decideQuote(id, body.decision, orgId, userId || undefined, scope);
   }
 
   // ── Photo/scan de la facture papier attachee a un document (BC/facture...) ──

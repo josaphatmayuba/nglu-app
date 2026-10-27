@@ -3,6 +3,7 @@ import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
+import ProjectFunds from "./components/ProjectFunds.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -76,18 +77,20 @@ const MOB_MORE = ["equipes", "previsionnel", "materiaux", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
-  const code = currency || "USD";
+  // Pas de devise par défaut : sans code, montant brut + mention explicite (comme OwnerTracking).
+  if (!currency) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
+  const code = currency;
   try {
-    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 0 }).format(value || 0);
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(value || 0);
   } catch {
-    return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 0 })}`;
+    return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })}`;
   }
 }
 // Regroupe un total par devise projet (chaque projet peut avoir sa propre devise).
 function moneyByCurrency(projects, field) {
   const byCurrency = new Map();
   for (const p of projects) {
-    const code = p.currencyCode || "USD";
+    const code = p.currencyCode || null;
     byCurrency.set(code, (byCurrency.get(code) || 0) + n(p[field]));
   }
   const entries = [...byCurrency.entries()];
@@ -103,7 +106,7 @@ const projectDue = (p) => p.dueDate || p.due || "-";
 function sumLinesByCurrency(lines, currencies, defaultCurrencyCode) {
   const byCurrency = new Map();
   for (const l of lines || []) {
-    const code = (l.currency_id && resolveCurrencyCode(currencies, l.currency_id)) || defaultCurrencyCode || "USD";
+    const code = (l.currency_id && resolveCurrencyCode(currencies, l.currency_id)) || defaultCurrencyCode || null;
     const ht = n(l.quantity) * n(l.unit_price);
     const vat = ht * (n(l.vat_rate) / 100);
     const cur = byCurrency.get(code) || { code, ht: 0, vat: 0, ttc: 0 };
@@ -573,11 +576,13 @@ const PROJECT_TABS = [
   { id: "planning", label: "Planning", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
+  { id: "fonds", label: "Fonds", icon: "wallet" },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials, onEdit }) {
   const [tab, setTab] = React.useState("apercu");
   const p = project;
   const [budget, setBudget] = React.useState(null);
+  const [shareOpen, setShareOpen] = React.useState(false);
   React.useEffect(() => {
     if (tab !== "apercu" || !p.id) return;
     api.budgetSummary(p.id).then(setBudget).catch(() => setBudget(null));
@@ -599,9 +604,11 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
+          {canMutate && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
           {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
       </div>
+      {shareOpen && <ShareTrackingModal project={p} onClose={() => setShareOpen(false)} />}
 
       <div className="selected-banner grad-amber">
         <div>
@@ -649,6 +656,15 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                   <span>Décaissé : {money(budget?.cost_actual, budgetCur)}</span>
                   <span>Devis accepté : {money(budget?.quote_accepted, budgetCur)}</span>
                 </div>
+              </div>
+              <div onClick={() => setTab("fonds")} style={{ cursor: "pointer" }}>
+                {budget && (budget.funds_received != null || budget.funds_available != null) && (
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", fontSize: 11, color: "var(--ink-500)", marginBottom: 12 }}>
+                    {budget.funds_received != null && <span>Fonds reçus : {money(budget.funds_received, budgetCur)}</span>}
+                    {budget.funds_available != null && <span>Disponible : {money(budget.funds_available, budgetCur)}{n(budget.funds_available) < 0 ? " (préfinancé)" : ""}</span>}
+                    {n(budget.funds_shortfall) > 0 && <span className="chip amber" title="Montant engagé non couvert par les fonds reçus">Manque {money(budget.funds_shortfall, budgetCur)}</span>}
+                  </div>
+                )}
               </div>
               <div onClick={() => setTab("factures")} style={{ cursor: "pointer" }}>
                 <BudgetBar
@@ -708,6 +724,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         {tab === "planning" && <Planning projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
+        {tab === "fonds" && <ProjectFunds project={p} canMutate={canMutate} money={money} Icon={Icon} useCurrencies={useCurrencies} />}
       </div>
     </>
   );
@@ -723,8 +740,8 @@ const BPF_MODES = [
   { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
-const bpfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-const bpfSigned = (v) => (v > 0 ? "+" : "") + bpfNf.format(Math.round(Number(v || 0)));
+const bpfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const bpfSigned = (v) => (v > 0 ? "+" : "") + bpfNf.format(Number(v || 0));
 function bpfMonth(key) {
   const [y, m] = key.split("-");
   const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
@@ -969,6 +986,7 @@ function Planning({ projects, canMutate, fixedProjectId }) {
   const [phases, setPhases] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(null);
+  const [detail, setDetail] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [budget, setBudget] = React.useState(null);
@@ -1042,7 +1060,7 @@ function Planning({ projects, canMutate, fixedProjectId }) {
             const barColor = tone === "emerald" ? "var(--emerald-500)" : tone === "amber" ? "var(--amber-500)" : "var(--ink-300)";
             const hasRange = range && r.startDate && r.endDate;
             return (
-              <div className="phase-card" key={r.id} onClick={() => canMutate && setModal(r)} style={{ cursor: canMutate ? "pointer" : "default" }}>
+              <div className="phase-card" key={r.id} onClick={() => setDetail(r)} style={{ cursor: "pointer" }}>
                 <div className="phase-card-top">
                   <span className="phase-name">{r.label}</span>
                   <span className={`chip ${tone}`}>{r.status?.replace(/_/g, " ")}</span>
@@ -1060,6 +1078,14 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         </div>
       )}
 
+      {detail && !modal && (
+        <PhaseDetailModal
+          phase={detail} canMutate={canMutate}
+          onClose={() => setDetail(null)}
+          onEdit={() => { setError(""); setModal(detail); setDetail(null); }}
+        />
+      )}
+
       {modal && (
         <PhaseModal
           modal={modal} busy={busy} error={error}
@@ -1069,6 +1095,124 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         />
       )}
     </>
+  );
+}
+
+const PHASE_ALERT_LABELS = {
+  artisan_over_planned: "Le devis de l'artisan dépasse le prévu",
+  committed_over_planned: "Le montant engagé dépasse le prévu",
+  paid_over_planned: "Le montant payé dépasse le prévu",
+};
+
+// Détail d'une phase : prévu (devis clients acceptés) vs devis artisan vs dépensé (BC).
+// Lecture seule : visible sans droit de modification ; l'édition passe par PhaseModal.
+function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true); setErr("");
+    api.phaseDetail(phase.id)
+      .then((d) => { if (alive) setData(d); })
+      .catch((e) => { if (alive) setErr(e.message || "Impossible de charger le détail de la phase."); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [phase.id]);
+
+  const totals = data?.totals_by_currency || [];
+  const alerts = data?.alerts || [];
+  const artisan = data?.artisan_lines || [];
+  const expenses = data?.expense_lines || [];
+  const empty = data && !totals.length && !artisan.length && !expenses.length && !(data.planned_lines || []).length;
+  const lineStyle = { display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap" };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card" style={{ maxHeight: "92vh", overflowY: "auto" }}>
+        <div className="modal-head">
+          <div>
+            <h2 className="font-display">{data?.phase?.label || phase.label}</h2>
+            <p className="muted" style={{ margin: 0 }}>Prévu, devis de l'artisan et dépenses de la phase</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer"><Icon name="x" /></button>
+        </div>
+
+        {loading && <div className="card pad"><span className="muted">Chargement…</span></div>}
+        {err && <div className="card pad" style={{ color: "var(--rose-700)" }}>{err}</div>}
+        {empty && <div className="card pad"><span className="muted">Aucun devis ni dépense rattaché à cette phase.</span></div>}
+
+        {data && alerts.map((a, i) => (
+          <div key={i} className="chip rose" style={{ display: "flex", margin: "6px 0", borderRadius: 10, padding: "8px 10px", whiteSpace: "normal" }}>
+            {PHASE_ALERT_LABELS[a.code] || a.code} : {money(a.amount, a.currency_code)} pour {money(a.planned, a.currency_code)} prévu
+          </div>
+        ))}
+
+        {totals.map((t) => (
+          <div className="card pad" key={t.currency_id ?? "none"} style={{ margin: "8px 0" }}>
+            <div style={lineStyle}><span>Prévu HT (devis accepté)</span><strong>{money(t.planned, t.currency_code)}</strong></div>
+            <div style={lineStyle}><span>Devis de l'artisan HT</span><strong>{money(t.artisan_quote, t.currency_code)}</strong></div>
+            <div style={lineStyle}><span>Engagé HT (bons de commande)</span><strong>{money(t.committed, t.currency_code)}</strong></div>
+            <div style={lineStyle}><span>Payé HT</span><strong>{money(t.paid, t.currency_code)}</strong></div>
+            <div style={{ ...lineStyle, borderBottom: 0 }}><span>Reste à dépenser HT</span><strong style={{ color: n(t.remaining) < 0 ? "var(--rose-700)" : undefined }}>{money(t.remaining, t.currency_code)}</strong></div>
+          </div>
+        ))}
+
+        {(data?.planned_lines || []).length > 0 && (
+          <>
+            <h3 className="font-display" style={{ marginTop: 14 }}>Prévu (devis acceptés)</h3>
+            {data.planned_lines.map((l, i) => (
+              <div key={i} style={lineStyle}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  {l.designation}
+                  <br /><small className="muted">{l.document_number || `Doc. #${l.document_id}`} · {n(l.quantity)} × {money(l.unit_price, l.currency_code)}</small>
+                </span>
+                <strong>{money(l.total, l.currency_code)}</strong>
+              </div>
+            ))}
+          </>
+        )}
+
+        {artisan.length > 0 && (
+          <>
+            <h3 className="font-display" style={{ marginTop: 14 }}>Devis de l'artisan</h3>
+            {artisan.map((l, i) => (
+              <div key={i} style={lineStyle}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  {l.designation}
+                  <br /><small className="muted">{l.document_number || `Doc. #${l.document_id}`}{l.submitted_by ? ` · ${l.submitted_by}` : ""} · {n(l.quantity)} × {money(l.unit_price, l.currency_code)}</small>
+                </span>
+                <strong>{money(l.total, l.currency_code)}</strong>
+              </div>
+            ))}
+          </>
+        )}
+
+        {expenses.length > 0 && (
+          <>
+            <h3 className="font-display" style={{ marginTop: 14 }}>Dépenses (bons de commande)</h3>
+            {expenses.map((l, i) => (
+              <div key={i} style={lineStyle}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  {l.designation}
+                  <br /><small className="muted">{l.document_number || `BC #${l.document_id}`} · {l.date || "date inconnue"} · {String(l.status || "").replace(/_/g, " ")}</small>
+                </span>
+                <span style={{ textAlign: "right" }}>
+                  <strong>{money(l.total, l.currency_code)}</strong>
+                  <br /><small className="muted">payé {money(l.paid, l.currency_code)}</small>
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          {canMutate && <button type="button" className="btn btn-amber grad-amber" onClick={onEdit}><Icon name="edit" /> Modifier la phase</button>}
+        </div>
+      </div>
+    </div>
   );
 }
 function PhaseModal({ modal, busy, error, currencyId, currencyCode, remainingBudget, onClose, onSave }) {
@@ -1397,6 +1541,20 @@ function Devis({ projects, canMutate, fixedProjectId }) {
     try { await api.deleteDocument(id); load(); }
     catch (err) { setError(err.message || String(err)); }
   };
+  // Devis négocié hors ligne : décision saisie par l'utilisateur (aucun SMS envoyé).
+  const decide = async (d, decision) => {
+    const label = decision === "accepted" ? "accepté" : "refusé";
+    if (!window.confirm(`Marquer le devis ${d.number || `#${d.id}`} comme ${label} ?\n\nCe devis a été négocié/${label} hors ligne (hors du lien client). Aucun message ne sera envoyé au client.`)) return;
+    setError("");
+    try { await api.decideDocument(d.id, decision); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const attachPdf = async (id, file) => {
+    if (!file) return;
+    setError("");
+    try { await api.uploadDocumentAttachment(id, file); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
 
   return (
     <>
@@ -1431,6 +1589,16 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
+                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
+                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
+                      {canMutate && (
+                        <label className="link" style={{ cursor: "pointer" }}>
+                          <Icon name="filePlus" /> Joindre le PDF
+                          <input type="file" accept="application/pdf" style={{ display: "none" }}
+                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; attachPdf(d.id, f); }} />
+                        </label>
+                      )}
+                      {d.attachedFileKey && <button className="link" onClick={() => setModal({ kind: "attachment", id: d.id })}><Icon name="eye" /> Voir la pièce jointe</button>}
                       {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
@@ -1440,6 +1608,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
         </table>
       </div>
 
+      {modal?.kind === "attachment" && <DocumentAttachmentModal id={modal.id} title="Pièce jointe du devis" onClose={() => setModal(null)} />}
       {(modal?.kind === "new" || modal?.kind === "edit") && (
         <DevisEditorModal
           docId={modal.kind === "edit" ? modal.id : null}
@@ -1455,8 +1624,54 @@ function Devis({ projects, canMutate, fixedProjectId }) {
   );
 }
 
+// Avertissement non bloquant : postes deja chiffres dans un autre devis du chantier.
+const MATERIAL_KEYWORDS = { ciment: "Ciment", gravier: "Gravier", sable: "Sable", bloc: "Bloc", parpaing: "Bloc", fer: "Fer", barre: "Barre", bois: "Bois" };
+const normText = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const materialKeys = (s) => {
+  const out = new Set();
+  normText(s).split(/[^a-z0-9]+/).filter(Boolean).forEach((w) => {
+    const k = MATERIAL_KEYWORDS[w] ? w : w.replace(/s$/, "");
+    if (MATERIAL_KEYWORDS[k]) out.add(MATERIAL_KEYWORDS[k]);
+  });
+  return out;
+};
+function findDuplicateWarnings(lines, others, phases, currencies) {
+  const warnings = [];
+  const seen = new Set();
+  const phaseLabel = (id) => phases.find((p) => String(p.id) === String(id))?.label || `#${id}`;
+  const clean = lines.filter((l) => String(l.designation || "").trim() || l.phase_id);
+  others.forEach((o) => {
+    const oLines = o.lines || [];
+    const num = o.number || `#${o.id}`;
+    // Meme phase : une seule alerte par phase et par devis.
+    new Set(clean.filter((l) => l.phase_id).map((l) => String(l.phase_id))).forEach((pid) => {
+      const inPhase = oLines.filter((x) => String(x.phaseId || "") === pid);
+      if (!inPhase.length) return;
+      const tot = {};
+      inPhase.forEach((x) => {
+        const code = resolveCurrencyCode(currencies, x.currencyId ?? o.currencyId) || "";
+        tot[code] = (tot[code] || 0) + n(x.quantity) * n(x.unitPrice);
+      });
+      const amount = Object.entries(tot).map(([c, v]) => money(v, c)).join(" + ");
+      const key = `p:${pid}:${o.id}`;
+      if (!seen.has(key)) { seen.add(key); warnings.push(`La phase « ${phaseLabel(pid)} » est déjà chiffrée dans ${num} (${amount}).`); }
+    });
+    // Meme materiau (designation normalisee).
+    const oKeys = new Set();
+    oLines.forEach((x) => materialKeys(x.designation).forEach((k) => oKeys.add(k)));
+    const mine = new Set();
+    clean.forEach((l) => materialKeys(l.designation).forEach((k) => mine.add(k)));
+    mine.forEach((k) => {
+      const key = `m:${k}:${o.id}`;
+      if (oKeys.has(k) && !seen.has(key)) { seen.add(key); warnings.push(`${k} figure déjà dans ${num}.`); }
+    });
+  });
+  return warnings;
+}
+
 function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose, onSaved }) {
   const [lines, setLines] = React.useState([emptyDocLine()]);
+  const [otherDocs, setOtherDocs] = React.useState([]);
   const [dueDate, setDueDate] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [phases, setPhases] = React.useState([]);
@@ -1474,11 +1689,20 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
-    api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+    let cancelled = false;
+    api.phases(projectId).then((p) => { if (!cancelled) setPhases(p || []); }).catch(() => { if (!cancelled) setPhases([]); });
+    // Lignes des AUTRES devis actifs (hors refuse/annule) du chantier, pour l'avertissement doublon.
+    api.documents(projectId, "quote")
+      .then((list) => Promise.all((list || [])
+        .filter((d) => d.id !== docId && !["refused", "cancelled"].includes(d.status))
+        .slice(0, 20)
+        .map((d) => api.getDocument(d.id).then((full) => ({ ...d, lines: full?.lines || [] })).catch(() => null))))
+      .then((res) => { if (!cancelled) setOtherDocs(res.filter(Boolean)); })
+      .catch(() => {});
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
         })
@@ -1491,6 +1715,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         })
         .catch(() => {});
     }
+    return () => { cancelled = true; };
   }, [docId, projectId]);
 
   const setLine = (i, k, v) => setLines((c) => c.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
@@ -1498,6 +1723,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
 
   const totalsByCurrency = sumLinesByCurrency(lines, currencies, docCurrencyCode);
+  const dupWarnings = React.useMemo(() => findDuplicateWarnings(lines, otherDocs, phases, currencies), [lines, otherDocs, phases, currencies]);
 
   // Upload immediat + OCR best-effort. Pre-remplit les champs EXISTANTS du
   // formulaire (lignes/echeance/notes) qui restent 100% editables ensuite.
@@ -1540,6 +1766,9 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     setError("");
     const clean = lines.filter((l) => l.designation.trim());
     if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    if (clean.some((l) => n(l.unit_price) < 0 && !l.is_adjustment)) { setError("Un prix négatif n'est permis que pour une ligne cochée « Remise / ajustement »."); return; }
+    if (clean.some((l) => n(l.quantity) < 0)) { setError("La quantité ne peut pas être négative."); return; }
+    if (sumLinesByCurrency(clean, currencies, docCurrencyCode).some((t) => t.ht < 0 || t.ttc < 0)) { setError("Le total ne peut pas être négatif : les remises dépassent le montant des lignes."); return; }
     setBusy(true);
     try {
       const payload = {
@@ -1552,6 +1781,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
           designation: l.designation.trim(),
           quantity: n(l.quantity),
           unit_price: n(l.unit_price),
+          ...(l.is_adjustment ? { is_adjustment: true } : {}),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
           currency_id: l.currency_id ? Number(l.currency_id) : undefined,
@@ -1573,6 +1803,15 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         {loading ? <p className="muted">Chargement…</p> : (
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", minWidth: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 0 }}>
+            {dupWarnings.length > 0 && (
+              <div role="alert" style={{ background: "#fef3c7", border: "1px solid #f59e0b", color: "#78350f", borderRadius: 8, padding: "8px 12px", fontSize: 13, overflowWrap: "anywhere" }}>
+                <strong>Attention : possible doublon avec un autre devis de ce chantier</strong>
+                <ul style={{ margin: "4px 0 4px 18px", padding: 0 }}>
+                  {dupWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+                <span>Un achat de matériaux se saisit en bon de commande. Vous pouvez quand même enregistrer.</span>
+              </div>
+            )}
             {!docId && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <input
@@ -1614,7 +1853,11 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                     </label>
                     <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
                       <span>P.U.</span>
-                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                      <input type="number" min={l.is_adjustment ? undefined : "0"} step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 150px", minWidth: 150, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <input type="checkbox" checked={!!l.is_adjustment} onChange={(e) => setLine(i, "is_adjustment", e.target.checked)} />
+                      <span>Remise / ajustement</span>
                     </label>
                     <label className="field" style={{ flex: "1 1 130px", minWidth: 130 }}>
                       <span>Devise</span>
@@ -2100,7 +2343,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
 
 // Modale de consultation de la photo/scan attachee a une facture fournisseur
 // (bouton "Voir photo") — fetch blob authentifie (jamais <img src> direct).
-function DocumentAttachmentModal({ id, onClose }) {
+function DocumentAttachmentModal({ id, onClose, title = "Photo de la facture" }) {
   const [src, setSrc] = React.useState(null);
   const [type, setType] = React.useState(null);
   const [error, setError] = React.useState("");
@@ -2117,7 +2360,7 @@ function DocumentAttachmentModal({ id, onClose }) {
     <div className="modal-scrim" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="modal-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <div><h2 className="font-display">Photo de la facture</h2></div>
+          <div><h2 className="font-display">{title}</h2></div>
           <button className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div className="modal-body">
@@ -2224,7 +2467,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -2299,6 +2542,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     setError("");
     const clean = lines.filter((l) => l.designation.trim());
     if (!clean.length) { setError("Ajoutez au moins une ligne."); return; }
+    if (clean.some((l) => n(l.unit_price) < 0 && !l.is_adjustment)) { setError("Un prix négatif n'est permis que pour une ligne cochée « Remise / ajustement »."); return; }
+    if (clean.some((l) => n(l.quantity) < 0)) { setError("La quantité ne peut pas être négative."); return; }
+    if (sumLinesByCurrency(clean, currencies, docCurrencyCode).some((t) => t.ht < 0 || t.ttc < 0)) { setError("Le total ne peut pas être négatif : les remises dépassent le montant des lignes."); return; }
     // Un BC = une seule devise (règlement/comptabilisation mono-devise). Si toutes
     // les lignes sont dans une autre devise que le chantier (ex. FC), le BC prend
     // cette devise ; sinon son total ignorerait ces lignes (0 $).
@@ -2323,6 +2569,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           designation: l.designation.trim(),
           quantity: n(l.quantity),
           unit_price: n(l.unit_price),
+          ...(l.is_adjustment ? { is_adjustment: true } : {}),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
           material_id: l.material_id ? Number(l.material_id) : undefined,
@@ -2412,7 +2659,11 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                     </label>
                     <label className="field" style={{ flex: "1 1 110px", minWidth: 110 }}>
                       <span>P.U.</span>
-                      <input type="number" min="0" step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                      <input type="number" min={l.is_adjustment ? undefined : "0"} step="any" value={l.unit_price} onChange={(e) => setLine(i, "unit_price", e.target.value)} />
+                    </label>
+                    <label className="field" style={{ flex: "1 1 150px", minWidth: 150, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <input type="checkbox" checked={!!l.is_adjustment} onChange={(e) => setLine(i, "is_adjustment", e.target.checked)} />
+                      <span>Remise / ajustement</span>
                     </label>
                     <label className="field" style={{ flex: "1 1 90px", minWidth: 90 }}>
                       <span>TVA %</span>
@@ -3631,6 +3882,110 @@ function Situations({ projects, canMutate, fixedProjectId }) {
 }
 
 const SUBMISSION_STATUS_TONE = { submitted: "amber", validated: "emerald", returned: "rose" };
+
+const SHARE_STATUS = { active: ["Actif", "emerald"], revoked: ["Révoqué", "rose"], expired: ["Expiré", "ink"] };
+const fmtShareDate = (d) => (d ? new Date(d).toLocaleString("fr-CA", { dateStyle: "short", timeStyle: "short" }) : "—");
+
+// Liens publics de suivi financier pour le propriétaire (lecture seule, sans compte).
+// Le jeton n'est affiché qu'une fois, à la création (seul son hash est stocké).
+function ShareTrackingModal({ project, onClose }) {
+  const [links, setLinks] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [days, setDays] = React.useState("90");
+  const [sendSms, setSendSms] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [created, setCreated] = React.useState(null); // { url, sms_sent }
+  const [copied, setCopied] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    api.shareLinks(project.id).then(setLinks).catch((e) => setError(e.message || String(e))).finally(() => setLoading(false));
+  }, [project.id]);
+  React.useEffect(load, [load]);
+
+  const create = async () => {
+    setBusy(true); setError(""); setCopied(false);
+    try {
+      const res = await api.createShareLink(project.id, { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) });
+      setCreated({ url: res.url, sms_sent: res.sms_sent });
+      load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  const revoke = async (l) => {
+    if (!window.confirm("Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.")) return;
+    setError("");
+    try { await api.revokeShareLink(project.id, l.id); load(); }
+    catch (err) { setError(err.message || String(err)); }
+  };
+  const copy = () => { try { navigator.clipboard.writeText(created.url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card">
+        <div className="modal-head">
+          <div><h2 className="font-display">Partager le suivi</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien en lecture seule pour le propriétaire (sans compte).</p></div>
+          <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div className="form-grid">
+          <label className="field">
+            <span>Expiration</span>
+            <select value={days} onChange={(e) => setDays(e.target.value)}>
+              <option value="30">30 jours</option>
+              <option value="90">90 jours</option>
+              <option value="365">1 an (sans expiration)</option>
+            </select>
+          </label>
+          {project.ownerPhone && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
+              <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+              <span>Envoyer par SMS au propriétaire ({project.ownerPhone})</span>
+            </label>
+          )}
+          <button type="button" className="btn btn-amber grad-amber btn-touch" disabled={busy} onClick={create}>{busy ? "Création…" : "Créer un lien"}</button>
+        </div>
+
+        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+
+        {created && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <p style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
+              Lien créé. Copiez-le maintenant : il ne sera plus affichable ensuite.
+              {created.sms_sent === true && " SMS envoyé."}
+              {created.sms_sent === false && " L'envoi du SMS a échoué : partagez le lien manuellement."}
+            </p>
+            <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+            <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
+          </div>
+        )}
+
+        <div>
+          <p className="kv-title">Liens existants</p>
+          {loading ? <p className="muted">Chargement…</p> : !links.length ? <p className="muted">Aucun lien.</p> : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {links.map((l) => {
+                const [label, tone] = SHARE_STATUS[l.status] || [l.status, "ink"];
+                return (
+                  <div key={l.id} style={{ border: "1px solid var(--ink-100, #e2e8f0)", borderRadius: 10, padding: "8px 10px", fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <strong>{l.recipientName || "Propriétaire"}</strong>
+                      <span className={`chip ${tone}`}>{label}</span>
+                    </div>
+                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {fmtShareDate(l.expiresAt)}</div>
+                    <div style={{ color: "var(--ink-500)" }}>Dernière consultation : {fmtShareDate(l.lastViewedAt)}</div>
+                    {l.status === "active" && <div><button type="button" className="btn btn-ghost btn-touch" onClick={() => revoke(l)}>Révoquer</button></div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SubcontractorLinkModal({ projectId, subcontractors, onClose }) {
   const [subId, setSubId] = React.useState("");

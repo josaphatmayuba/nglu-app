@@ -2,12 +2,10 @@ import "jspdf-autotable";
 import moment from "moment";
 import { decodeHtmlEntity } from "./functions";
 import invoiceGenerator from "./invoiceGenerator";
-import numberToWords from "./numberToWords";
+import { amountToWords } from "./numberToWords";
 
 export default function purchasePDF(data, companyInfo, title, currencyName) {
-  const numberInText = numberToWords(
-    Math.round(data.totalAmount - data.discount)
-  );
+  const numberInText = amountToWords(data.totalAmount - data.discount, currencyName);
 
   const currencyLocal = currencyName;
 

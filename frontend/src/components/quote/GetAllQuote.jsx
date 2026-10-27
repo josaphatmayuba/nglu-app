@@ -42,7 +42,7 @@ const GetAllQuote = () => {
   }, [safeList, searchTerm]);
 
   const fmtMoney = (n) =>
-    `${currencySymbol || "CDF"} ${Math.round(Number(n || 0)).toLocaleString("fr-FR")}`;
+    `${currencySymbol || "CDF"} ${Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}`;
 
   return (
     <div className="min-h-[calc(100vh-80px)] bg-[#f7f8fa] px-3 sm:px-5 py-4">

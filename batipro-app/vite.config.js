@@ -48,7 +48,8 @@ export default defineConfig(({ mode }) => {
           {
             urlPattern: ({ url, request }) => request.method === "GET"
               && url.pathname.startsWith("/api/")
-              && !url.pathname.startsWith("/api/events") && !/\/(auth|events)(\/|$)/.test(url.pathname),
+              && !url.pathname.startsWith("/api/events") && !/\/(auth|events)(\/|$)/.test(url.pathname)
+              && !url.pathname.startsWith("/api/batipro/public/"),
             handler: "NetworkFirst",
             options: {
               cacheName: "batipro-api-cache",

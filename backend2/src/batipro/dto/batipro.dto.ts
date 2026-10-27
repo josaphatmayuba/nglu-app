@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, MinLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
@@ -221,11 +221,19 @@ export class ReviewSubmissionDto {
 export class DocumentLineDto {
   @IsString() @MaxLength(500) designation!: string;
   @IsOptional() @IsNumber() @Min(0) quantity?: number;
-  @IsOptional() @IsNumber() @Min(0) unit_price?: number;
+  // Prix negatif admis UNIQUEMENT si is_adjustment=true (ligne de remise/ajustement) ;
+  // controle applique par le service (computeDocumentTotals), avec total >= 0.
+  @IsOptional() @IsNumber() unit_price?: number;
+  @IsOptional() @IsBoolean() is_adjustment?: boolean;
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
   @IsOptional() @IsInt() material_id?: number;
   @IsOptional() @IsInt() currency_id?: number;
+}
+
+// Decision prise hors ligne sur un devis (negocie/accepte ou refuse hors du lien client).
+export class DecideBatiproQuoteDto {
+  @IsIn(["accepted", "refused"]) decision!: "accepted" | "refused";
 }
 
 // Creation d'un devis ou d'un bon de commande (direction=outbound impose cote
@@ -287,6 +295,30 @@ export class CreateBatiproSituationDocumentDto {
 // Enregistrement d'un reglement (partiel/total) sur une facture (Phase 4).
 export class RecordPaymentDto {
   @IsNumber() @Min(0) amount!: number;
+}
+
+// Fonds du chantier : apport recu (proprietaire, associe, autre). Montant exact
+// au centime, devise obligatoire (jamais de devise par defaut en dur).
+export const FUND_CONTRIBUTOR_KINDS = ["owner", "partner", "other"] as const;
+export const FUND_NATURES = ["client_advance", "partner_account", "equity"] as const;
+export const FUND_PAYMENT_METHODS = ["cash", "bank", "mobile_money"] as const;
+
+export class CreateBatiproFundDto {
+  @IsDateString() received_at!: string;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(999999999999.99) amount!: number;
+  @Type(() => Number) @IsInt() @Min(1) currency_id!: number;
+  @IsIn(FUND_CONTRIBUTOR_KINDS as unknown as string[]) contributor_kind!: (typeof FUND_CONTRIBUTOR_KINDS)[number];
+  @IsOptional() @IsIn(FUND_NATURES as unknown as string[]) funding_nature?: (typeof FUND_NATURES)[number];
+  @IsIn(FUND_PAYMENT_METHODS as unknown as string[]) payment_method!: (typeof FUND_PAYMENT_METHODS)[number];
+  @IsOptional() @IsString() @MaxLength(255) contributor_name?: string;
+  @IsOptional() @IsString() @MaxLength(32) @Matches(/^\+\d{6,15}$/, { message: "contributor_phone doit etre au format international (+243...)." })
+  contributor_phone?: string;
+  @IsOptional() @IsString() @MaxLength(120) reference?: string;
+  @IsOptional() @IsString() @MaxLength(5000) notes?: string;
+}
+
+export class CancelBatiproFundDto {
+  @IsString() @MinLength(3) @MaxLength(255) reason!: string;
 }
 
 // Creation d'une facture FOURNISSEUR (type=invoice, direction=inbound) depuis
@@ -426,4 +458,12 @@ export class CreateStockMovementDto {
   @IsOptional() @IsInt() phase_id?: number;
   @IsNumber() @Min(0.001) quantity!: number;
   @IsOptional() @IsString() @MaxLength(2000) note?: string;
+}
+
+// Lien public de suivi financier (Lot 1 : proprietaire). expires_in_days : 30, 90 (defaut) ou 365 ("sans expiration", 1 an max).
+export class CreateBatiproShareLinkDto {
+  @IsOptional() @IsString() @MaxLength(255) recipient_name?: string;
+  @IsOptional() @IsString() @MaxLength(32) recipient_phone?: string;
+  @IsOptional() @IsIn([30, 90, 365]) expires_in_days?: number;
+  @IsOptional() @IsBoolean() send_sms?: boolean;
 }

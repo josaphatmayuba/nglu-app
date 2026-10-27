@@ -1,5 +1,5 @@
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import "jspdf-autotable";
 import moment from "moment";
@@ -20,12 +20,12 @@ export default function PrintInvoice({ id }) {
           const sale = resp?.payload?.data;
           const { singleSaleInvoice: data } = sale || {};
 
-          const numberInText = numberToWords(Math.round(data?.totalAmount));
+          const numberInText = amountToWords(data?.totalAmount, currencyName);
 
           const bottomLeftContent = [
             {
               label: "IN WORDS: ",
-              value: `${numberInText.toUpperCase()} ${currencyName}` || "",
+              value: `${numberInText.toUpperCase()}` || "",
             },
 
             { label: "Notes: ", value: data?.note ? data?.note : "" },

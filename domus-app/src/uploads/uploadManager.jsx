@@ -96,7 +96,7 @@ export function UploadsProvider({ children }) {
     if (!aliveRef.current || !rec || runningRef.current.has(id)) return;
     clearTimeout(timersRef.current.get(id));
     if (isOffline()) {
-      patch(id, { status: "waiting_network" }, true);
+      patch(id, { status: "waiting_network", serverError: false }, true);
       return;
     }
     runningRef.current.add(id);
@@ -137,7 +137,8 @@ export function UploadsProvider({ children }) {
       const retriable = err?.retriable === true;
       const attempts = (current.attempts || 0) + 1;
       if (retriable && attempts < MAX_ATTEMPTS) {
-        patch(id, { status: "waiting_network", attempts, error: err?.message || "" }, true);
+        // En ligne = le serveur a echoue (5xx, reponse vide), pas le reseau du navigateur.
+        patch(id, { status: "waiting_network", serverError: !isOffline(), attempts, error: err?.message || "" }, true);
         if (!isOffline()) {
           timersRef.current.set(id, setTimeout(() => start(id), BACKOFF_MS[attempts - 1]));
         }
@@ -260,7 +261,7 @@ export function UploadsProvider({ children }) {
 export function uploadStatusText(item) {
   switch (item.status) {
     case "uploading": return item.progress >= 100 ? t("Traitement…") : tf("Envoi {pct} %", { pct: item.progress });
-    case "waiting_network": return t("En attente de connexion…");
+    case "waiting_network": return item.serverError ? t("Serveur indisponible, nouvel essai bientôt…") : t("En attente de connexion…");
     case "done": return t("✓ Signé");
     case "failed": return t("Échec");
     default: return t("En file d'attente…");

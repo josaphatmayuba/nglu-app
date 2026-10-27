@@ -133,11 +133,11 @@ const MOB_LABEL = { dashboard: "Accueil", employes: "Équipe", presences: "Point
 let CUR = "CDF";
 let DEFAULT_CURRENCY_ID = "";
 let CURRENCIES = []; // liste pour résoudre la devise propre à chaque employé
-const nf = new Intl.NumberFormat("fr-FR");
-const fc = (v, sym) => `${nf.format(Math.round(Number(v || 0)))} ${sym || CUR}`;
+const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const fc = (v, sym) => `${nf.format(Number(v || 0))} ${sym || CUR}`;
 const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const salarySym = (u) => symbolFor(u?.currentSalaryCurrencyId, CURRENCIES, CUR);
-const moneyLineText = (amount, sym) => `${nf.format(Math.round(Number(amount || 0)))} ${sym || CUR}`;
+const moneyLineText = (amount, sym) => `${nf.format(Number(amount || 0))} ${sym || CUR}`;
 function moneyLinesFrom(rows, amountOf, symbolOf = () => CUR) {
   const totals = new Map();
   for (const row of rows || []) {
@@ -1449,8 +1449,8 @@ const HRF_MODES = [
   { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
-const hrfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-const hrfSigned = (v) => (v > 0 ? "+" : "") + hrfNf.format(Math.round(Number(v || 0)));
+const hrfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const hrfSigned = (v) => (v > 0 ? "+" : "") + hrfNf.format(Number(v || 0));
 function hrfMonth(key) {
   const [y, m] = key.split("-");
   const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
@@ -1600,13 +1600,13 @@ function Forecast() {
           <div className="card" style={{ padding: 18, marginBottom: 14 }}>
             <div style={{ fontSize: 15, lineHeight: 1.5 }}>
               À ce rythme, la masse salariale projetée à <strong>{horizonLabel}</strong> représente{" "}
-              {summary.map((s, i) => (<strong key={s.code} style={{ color: "#dc2626" }}>{i > 0 ? " et " : ""}{hrfNf.format(Math.round(s.total))} {s.code}</strong>))}.
+              {summary.map((s, i) => (<strong key={s.code} style={{ color: "#dc2626" }}>{i > 0 ? " et " : ""}{hrfNf.format(Number(s.total))} {s.code}</strong>))}.
             </div>
             <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
               {summary.map((s) => (
                 <div key={s.code} className="card" style={{ padding: 16, borderRadius: 14, background: "#f8fafc" }}>
                   <div className="kpi-label">Masse salariale · {s.code}</div>
-                  <div className="kpi-value" style={{ color: "#dc2626" }}>{hrfNf.format(Math.round(s.total))} {s.code}</div>
+                  <div className="kpi-value" style={{ color: "#dc2626" }}>{hrfNf.format(Number(s.total))} {s.code}</div>
                   <div className="kpi-sub">sur {horizonLabel}</div>
                 </div>
               ))}
@@ -1729,7 +1729,7 @@ function Employes({ data, staff, setModal }) {
   const exportEmployes = () => exportCsv(
     "employes.csv",
     ["Matricule", "Nom", "Poste", "Département", "Statut", `Salaire (${CUR})`],
-    filtered.map((u) => [matricule(u), fullName(u), u.designation?.name || "", u.department?.name || "", u.status === "false" ? "Inactif" : "Actif", Math.round(Number(u.currentSalary || 0))])
+    filtered.map((u) => [matricule(u), fullName(u), u.designation?.name || "", u.department?.name || "", u.status === "false" ? "Inactif" : "Actif", Number(u.currentSalary || 0)])
   );
   return (
     <>
@@ -2414,17 +2414,17 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const exportPayrolls = () => exportCsv(
     "bulletins-paie.csv",
     ["Employe", "Periode", "Brut", "Net", "Devise", "Jours travailles", "Absences", "Impots", "CNSS", "Statut", "Notes"],
-    filteredPayrolls.map((p) => [personName(staff, p.userId), p.period || "", Math.round(Number(p.grossSalary ?? payrollGross(p))), Math.round(Number(p.netSalary ?? payrollNet(p))), symbolFor(p.currencyId, CURRENCIES, CUR), p.workedDays ?? 0, p.absenceDays ?? 0, p.taxAmount ?? 0, p.cnssAmount ?? 0, statusLabel(p.status), p.notes || ""])
+    filteredPayrolls.map((p) => [personName(staff, p.userId), p.period || "", Number(p.grossSalary ?? payrollGross(p)), Number(p.netSalary ?? payrollNet(p)), symbolFor(p.currencyId, CURRENCIES, CUR), p.workedDays ?? 0, p.absenceDays ?? 0, p.taxAmount ?? 0, p.cnssAmount ?? 0, statusLabel(p.status), p.notes || ""])
   );
   const exportHistory = () => exportCsv(
     "historique-salaires.csv",
     ["Employe", "Salaire", "Devise", "Debut", "Fin", "Commentaire", "Enregistre le"],
-    filteredRows.map((s) => [personName(staff, s.userId), Math.round(Number(s.salary || 0)), symbolFor(s.currencyId, CURRENCIES, CUR), dateStart(s), dateEnd(s), comment(s), dateOnly(s.createdAt)])
+    filteredRows.map((s) => [personName(staff, s.userId), Number(s.salary || 0), symbolFor(s.currencyId, CURRENCIES, CUR), dateStart(s), dateEnd(s), comment(s), dateOnly(s.createdAt)])
   );
   const exportCurrent = () => exportCsv(
     "salaires-actuels.csv",
     ["Employe", "Poste", "Salaire", "Devise", "Statut"],
-    currentFiltered.map((u) => [fullName(u), u.designation?.name || "", Math.round(Number(u.currentSalary || 0)), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
+    currentFiltered.map((u) => [fullName(u), u.designation?.name || "", Number(u.currentSalary || 0), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
   );
   return (
     <>

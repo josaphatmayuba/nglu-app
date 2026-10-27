@@ -39,7 +39,7 @@ async function openAttachment(attachmentId) {
   }
 }
 
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
 
 // Comptes de trésorerie pour le sélecteur "Payé via" (caisse / banque / mobile money).

@@ -68,20 +68,10 @@ export const buildCurrencyOptions = (currencies) =>
 
 export const compactMoney = (value, symbol) =>
   `${decodeCurrencyText(symbol || "CDF")} ${Number(value || 0).toLocaleString(undefined, {
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   })}`;
 
-export const shortMoney = (value, symbol) => {
-  const amount = Number(value || 0);
-  const sym = decodeCurrencyText(symbol || "CDF").trim() || "CDF";
-  if (Math.abs(amount) >= 1000000) {
-    const millions = amount / 1000000;
-    const formatted = Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1);
-    return `${sym} ${formatted}M`;
-  }
-  if (Math.abs(amount) >= 1000) return `${sym} ${Math.round(amount / 1000)}K`;
-  return compactMoney(amount, sym);
-};
+export const shortMoney = (value, symbol) => compactMoney(value, symbol);
 
 export const normalize = (value) =>
   String(value || "")

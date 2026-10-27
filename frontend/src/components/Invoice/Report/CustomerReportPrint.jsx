@@ -1,7 +1,7 @@
 import Button from "@/UI/Button";
 import { decodeHtmlEntity } from "@/utils/functions";
 import invoiceGenerator from "@/utils/invoiceGenerator";
-import numberToWords from "@/utils/numberToWords";
+import { amountToWords } from "@/utils/numberToWords";
 import useCurrency from "@/utils/useCurrency";
 import moment from "moment";
 import { useDispatch, useSelector } from "react-redux";
@@ -11,9 +11,7 @@ export default function CustomerReportPrint({ data, info, title, type, btnName }
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
   const dispatch = useDispatch();
 
-  const numberInText = numberToWords(
-    Math.round(data?.totalAmount - data?.discount)
-  );
+  const numberInText = amountToWords(data?.totalAmount - data?.discount, currencyName);
   const currencyLocal = currencyName;
 
   const bottomLeftContent = [];

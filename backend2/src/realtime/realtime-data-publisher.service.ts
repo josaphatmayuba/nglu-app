@@ -7,6 +7,7 @@ import {
   type BuildDataUpdatedEventInput,
 } from "./data-update-event";
 import { EventBusService } from "./event-bus.service";
+import { attachThrottledRedisErrorLog, redisRetryStrategy } from "./redis-error-throttle";
 
 @Injectable()
 export class RealtimeDataPublisher implements OnModuleDestroy {
@@ -64,9 +65,7 @@ export class RealtimeDataPublisher implements OnModuleDestroy {
           password: env.redis.password || undefined,
         });
 
-    this.redis.on("error", (error) => {
-      this.logger.warn(`Redis connection error: ${this.errorMessage(error)}`);
-    });
+    attachThrottledRedisErrorLog(this.redis, this.logger, (e) => this.errorMessage(e));
 
     return this.redis;
   }
@@ -76,6 +75,7 @@ export class RealtimeDataPublisher implements OnModuleDestroy {
       enableOfflineQueue: false,
       lazyConnect: true,
       maxRetriesPerRequest: 1,
+      retryStrategy: redisRetryStrategy,
     };
   }
 

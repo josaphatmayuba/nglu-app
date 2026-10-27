@@ -4,7 +4,7 @@ import React, { forwardRef, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useReactToPrint } from "react-to-print";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
-import numberToWords from "../../utils/numberToWords";
+import { amountToWords } from "../../utils/numberToWords";
 import { sanitizeHtml } from "../../utils/sanitizeHtml";
 
 const PrintToPdf = forwardRef(({ data, invoiceData }, ref) => {
@@ -123,7 +123,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData }, ref) => {
           <div className=' col-start-1 col-end-3 row-span-5'>
             <p>
               <b>In Words: </b>
-              {numberToWords(Math.round(data.totalAmount))}
+              {amountToWords(data.totalAmount)}
             </p>
           </div>
           <div className=''>

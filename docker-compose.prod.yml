@@ -35,6 +35,7 @@ services:
     build:
       context: ./backend2
       dockerfile: Dockerfile.prod
+    image: nglu_prod-backend2:latest
     container_name: nglu_prod_backend2
     restart: unless-stopped
     environment:
@@ -123,6 +124,7 @@ services:
     build:
       context: ./middleware
       dockerfile: Dockerfile
+    image: nglu_prod-middleware:latest
     container_name: nglu_prod_middleware
     restart: unless-stopped
     environment:

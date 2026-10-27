@@ -141,7 +141,8 @@ export class CompatService {
       organizationId,
       smsType,
       recipient: body.phone,
-      messageText,
+      // logMessage : version expurgee (ex. jeton masque) a journaliser a la place du texte envoye.
+      messageText: body.logMessage ?? messageText,
       relatedType,
       relatedId,
     });

@@ -1,4 +1,5 @@
 import { clearAuth, getToken, restoreSession } from "./auth.jsx";
+import { compressImage } from "./imageCompress.js";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -52,8 +53,41 @@ async function jsonFetch(path, init = {}, retried = false) {
 }
 
 // Upload multipart authentifié (le token JWT n'est jamais dans l'URL).
+const UPLOAD_TIMEOUT_MS = 90000;
+
+// Compresse les champs File image (les autres valeurs sont conservées telles quelles).
+async function compressFormImages(formData) {
+  if (typeof FormData === "undefined" || !(formData instanceof FormData)) return formData;
+  const entries = Array.from(formData.entries());
+  if (!entries.some(([, v]) => typeof File !== "undefined" && v instanceof File && /^image\/(jpeg|png|webp)$/.test(v.type))) {
+    return formData;
+  }
+  const out = new FormData();
+  for (const [k, v] of entries) {
+    if (typeof File !== "undefined" && v instanceof File) {
+      const f = await compressImage(v);
+      out.append(k, f, f.name);
+    } else out.append(k, v);
+  }
+  return out;
+}
+
 async function uploadForm(path, formData, retried = false) {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { ...authHeaders() }, body: formData });
+  const body0 = retried ? formData : await compressFormImages(formData);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { method: "POST", headers: { ...authHeaders() }, body: body0, signal: ctrl.signal });
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      throw new Error("L'envoi a pris trop de temps (90 s). Vérifiez votre connexion ou réduisez la taille du fichier, puis réessayez.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  formData = body0;
   if (!res.ok) {
     if (res.status === 401 && !retried && (await restoreSession())) return uploadForm(path, formData, true);
     const body = await res.text().catch(() => "");
@@ -156,6 +190,7 @@ export const api = {
   createPhase: (b) => jsonFetch("/phases", { method: "POST", body: JSON.stringify(b || {}) }),
   updatePhase: (id, b) => jsonFetch(`/phases/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deletePhase: (id) => jsonFetch(`/phases/${id}`, { method: "DELETE" }),
+  phaseDetail: (id) => jsonFetch(`/phases/${id}/detail`),
   situations: (projectId) => jsonFetch(`/situations${projectId ? `?project_id=${projectId}` : ""}`),
   createSituation: (b) => jsonFetch("/situations", { method: "POST", body: JSON.stringify(b || {}) }),
   updateSituation: (id, b) => jsonFetch(`/situations/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
@@ -184,6 +219,10 @@ export const api = {
   uploadLevelPlan: (levelId, file) => { const fd = new FormData(); fd.append("plan", file); return uploadForm(`/building-levels/${levelId}/plan`, fd); },
   levelPlanUrl: (levelId) => blobUrl(`/building-levels/${levelId}/plan`),
   deleteLevelPlan: (levelId) => jsonFetch(`/building-levels/${levelId}/plan`, { method: "DELETE" }),
+  // Liens publics de suivi financier du chantier (proprietaire)
+  shareLinks: (projectId) => jsonFetch(`/projects/${projectId}/share-links`),
+  createShareLink: (projectId, b) => jsonFetch(`/projects/${projectId}/share-links`, { method: "POST", body: JSON.stringify(b || {}) }),
+  revokeShareLink: (projectId, linkId) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/revoke`, { method: "POST" }),
   // Portail sous-traitant (Phase 0) — cote gestionnaire
   createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),
   submissions: (projectId) => jsonFetch(`/documents/submissions${projectId ? `?project_id=${projectId}` : ""}`),
@@ -196,7 +235,8 @@ export const api = {
   createDocument: (b) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(b || {}) }),
   updateDocument: (id, b) => jsonFetch(`/documents/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
-  documentHtmlUrl: (id) => blobUrl(`/documents/${id}/html`),
+  decideDocument: (id, decision) => jsonFetch(`/documents/${id}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
+  documentHtmlUrl:(id) => blobUrl(`/documents/${id}/html`),
   shareDocument: (id) => jsonFetch(`/documents/${id}/share`, { method: "POST", body: "{}" }),
   // Photo/scan de la facture papier attachee a un document (ex. facture fournisseur, BC).
   uploadDocumentAttachment: (id, file) => { const fd = new FormData(); fd.append("file", file); return uploadForm(`/documents/${id}/attachment`, fd); },
@@ -205,6 +245,12 @@ export const api = {
   // ne cree aucun document — retourne { photoId, rawText, parsed } pour pre-remplir le formulaire.
   ocrScanDocument: (projectId, file) => { const fd = new FormData(); fd.append("scan", file); return uploadForm(`/projects/${projectId}/documents/ocr-scan`, fd); },
   // Bons de commande (Phase 2) : reutilise les endpoints /documents generiques (type=purchase_order)
+  // Fonds du chantier (versements recus)
+  projectFunds: (projectId) => jsonFetch(`/projects/${projectId}/funds`),
+  createProjectFund: (projectId, body) => jsonFetch(`/projects/${projectId}/funds`, { method: "POST", body: JSON.stringify(body) }),
+  cancelProjectFund: (fundId, reason) => jsonFetch(`/funds/${fundId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  uploadFundAttachment: (fundId, file) => { const fd = new FormData(); fd.append("file", file); return uploadForm(`/funds/${fundId}/attachment`, fd); },
+  fundAttachmentUrl: (fundId) => blobUrl(`/funds/${fundId}/attachment`),
   budgetSummary: (projectId) => jsonFetch(`/documents/budget-summary?project_id=${projectId}`),
   // Situations de travaux (Phase 3, type=situation) : coexiste avec les situations legacy (/situations)
   situationsAdvancement: (projectId) => jsonFetch(`/documents/situations-advancement?project_id=${projectId}`),
@@ -268,15 +314,19 @@ export const api = {
 };
 
 // Lien public partageable a copier/envoyer au sous-traitant.
+// En natif (capacitor://localhost) on utilise l'origine web publique (API_HOST).
+function publicOrigin() {
+  if (NATIVE) return API_HOST;
+  return (typeof window !== "undefined" && window.location?.origin) || API_HOST;
+}
+
 export function subcontractorSubmitUrl(token) {
-  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
-  return `${origin}/batipro/public/submit/${token}`;
+  return `${publicOrigin()}/batipro/public/submit/${token}`;
 }
 
 // Lien public du devis a copier/envoyer au client (page /batipro/public/document/:token).
 export function clientDocumentUrl(token) {
-  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
-  return `${origin}/batipro/public/document/${token}`;
+  return `${publicOrigin()}/batipro/public/document/${token}`;
 }
 
 // Appels publics client (devis) : aucun JWT, autorisation = token opaque.
@@ -292,4 +342,21 @@ export const publicDocApi = {
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   },
+};
+
+// Suivi financier public (proprietaire) : aucun JWT, autorisation = token opaque.
+const PUBLIC_TRACKING_BASE = `${API_ROOT}/batipro/public/tracking`;
+export const trackingApi = {
+  get: async (token) => {
+    const res = await fetch(`${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const err = apiError(res, body);
+      err.invalid = res.status === 404 || res.status === 410;
+      throw err;
+    }
+    return res.json();
+  },
+  photoUrl: (token, photoId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
+  attachmentUrl: (token, documentId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
 };

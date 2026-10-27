@@ -2073,6 +2073,34 @@
       "when": 1782194400000,
       "tag": "0320_batipro_project_domus_visible",
       "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "5",
+      "when": 1782280800000,
+      "tag": "0321_batipro_share_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "5",
+      "when": 1782367200000,
+      "tag": "0322_domus_owner_expense_sms_optout",
+      "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "5",
+      "when": 1782453600000,
+      "tag": "0323_batipro_project_funds",
+      "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "5",
+      "when": 1782540000000,
+      "tag": "0324_hr_money_decimal",
+      "breakpoints": true
     }
   ]
 }

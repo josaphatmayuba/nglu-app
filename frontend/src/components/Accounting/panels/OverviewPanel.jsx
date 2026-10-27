@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { AlertTriangle, CheckCircle, Clock, Landmark, ArrowRight } from "lucide-react";
 import moment from "moment";
 
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
 const fmtShort = (v) => {
   const n = Number(v || 0);
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -210,7 +210,7 @@ export default function OverviewPanel({ transactions = [], trailBalance = null, 
                     <Landmark className="w-3.5 h-3.5 text-ink-400" />
                     <span className="text-ink-700">{a.subAccount}</span>
                   </span>
-                  <span className="font-medium text-ink-900">{currencySymbol} {fmtShort(a.balance)}</span>
+                  <span className="font-medium text-ink-900">{currencySymbol} {FMT.format(Number(a.balance || 0))}</span>
                 </div>
               ))}
               {assetAccounts.length === 0 && (
@@ -255,7 +255,7 @@ export default function OverviewPanel({ transactions = [], trailBalance = null, 
                     <span className="w-2 h-2 rounded-full inline-block" style={{ background: CHARGE_COLORS[i % CHARGE_COLORS.length] }} />
                     <span className="text-ink-700 font-medium">{c.name}</span>
                   </span>
-                  <span className="font-semibold text-ink-900">{currencySymbol} {fmtShort(c.amount)} · {pct}%</span>
+                  <span className="font-semibold text-ink-900">{currencySymbol} {FMT.format(Number(c.amount || 0))} · {pct}%</span>
                 </div>
                 <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHARGE_COLORS[i % CHARGE_COLORS.length] }} />

@@ -102,14 +102,14 @@ const MOB_LABEL = { dashboard: "Accueil", ecritures: "Saisie", tresorerie: "Tré
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 // Devise résolue depuis la BD (GET /setting + /currency), mise à jour au runtime.
 let CUR = "CDF";
-const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
-const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
+const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
+const m = (v) => `${nf.format(Number(v || 0))} ${CUR}`;
 const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 // Principe SIFA : chaque montant garde SA devise, jamais de conversion ni de melange.
 // La devise est portee par la ligne (currencyCode renvoye par l'API) ; CUR = repli.
 const curOf = (row) => (row && (row.currencyCode || row.currencyId != null)) ? (row.currencyCode || "") : CUR;
-const mc = (v, row) => `${nf.format(Math.round(Number(v || 0)))} ${curOf(row) || CUR}`.trim();
-const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
+const mc = (v, row) => `${nf.format(Number(v || 0))} ${curOf(row) || CUR}`.trim();
+const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Number(v)))}`;
 const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
 const EMPTY_INCOME = { totalRevenue: 0, totalExpense: 0, profit: 0, revenue: [], expense: [], expenses: [] };
 const EMPTY_BALANCE = { match: true, totalAsset: 0, totalLiability: 0, totalEquity: 0, assets: [], liabilities: [], equity: [] };
@@ -1421,7 +1421,7 @@ function ByCur({ list }) {
   if (arr.length === 0) return <>{nf.format(0)} {CUR}</>;
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
-      {arr.map((c) => <span key={c.currencyId ?? "x"}>{nf.format(Math.round(Number(c.total || 0)))} {c.currencyCode || CUR}</span>)}
+      {arr.map((c) => <span key={c.currencyId ?? "x"}>{nf.format(Number(c.total || 0))} {c.currencyCode || CUR}</span>)}
     </span>
   );
 }
@@ -1669,7 +1669,7 @@ function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, o
               ? <Field label={`Montant reçu (${toCode})`}><input type="number" step="0.01" min="0" style={inp} value={f.toAmount} onChange={(e) => set("toAmount", e.target.value)} /></Field>
               : <Field label={`Taux (1 ${fromCode} = ? ${toCode})`}><input type="number" step="0.000001" min="0" style={inp} value={f.rate} onChange={(e) => set("rate", e.target.value)} /></Field>}
             <div style={{ alignSelf: "end", fontSize: 12.5, color: "var(--ink-600)", padding: "7px 0" }}>
-              {from > 0 && (previewTo > 0) ? <>≈ <strong>{nf.format(Math.round(previewTo))} {toCode}</strong> · taux <strong>{previewRate.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</strong></> : "Aperçu après saisie"}
+              {from > 0 && (previewTo > 0) ? <>≈ <strong>{nf.format(previewTo)} {toCode}</strong> · taux <strong>{previewRate.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</strong></> : "Aperçu après saisie"}
             </div>
           </div>
 
@@ -2196,10 +2196,10 @@ function Capacite({ accounts = [] }) {
           <div key={c.currencyId ?? "x"} className="card pad">
             <h3 className="block-title font-display">Capacité — {c.currencyCode}</h3>
             <div className="stmt num">
-              <div className="ln"><span className="muted">Trésorerie disponible</span><span className={c.cash >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.cash))} {c.currencyCode}</span></div>
-              <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(Math.round(c.payables))} {c.currencyCode}</span></div>
-              <div className="ln bold"><span>= Disponible immédiat</span><span className={c.netNow >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.netNow))} {c.currencyCode}</span></div>
-              <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(Math.round(c.receivables))} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">Trésorerie disponible</span><span className={c.cash >= 0 ? "pos" : "neg"}>{nf.format(c.cash)} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(c.payables)} {c.currencyCode}</span></div>
+              <div className="ln bold"><span>= Disponible immédiat</span><span className={c.netNow >= 0 ? "pos" : "neg"}>{nf.format(c.netNow)} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(c.receivables)} {c.currencyCode}</span></div>
               <div className="ln total" style={{ background: c.netProjected >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
                 <span style={{ color: c.netProjected >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Disponible projeté</span>
                 <span className={c.netProjected >= 0 ? "pos" : "neg"}>{signed(c.netProjected)} {c.currencyCode}</span>
@@ -2218,7 +2218,7 @@ function Capacite({ accounts = [] }) {
             <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager (toutes lignes)</span></div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
               <span className="muted">Budget encore disponible</span>
-              <span className="pos">{nf.format(Math.round(remaining))} {CUR}</span>
+              <span className="pos">{nf.format(remaining)} {CUR}</span>
             </div>
           </div>
         );

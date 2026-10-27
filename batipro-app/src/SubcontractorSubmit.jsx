@@ -4,7 +4,8 @@ import { publicApi } from "./api.js";
 // Page publique de soumission sous-traitant (sans compte). Servie par token
 // d'URL : /batipro/public/submit/:token. Responsive mobile (Capacitor).
 function money(value, code) {
-  const c = code || "USD";
+  const c = code;
+  if (!c) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
   try {
     return new Intl.NumberFormat("fr-CA", { style: "currency", currency: c, maximumFractionDigits: 2 }).format(value || 0);
   } catch {
@@ -131,7 +132,7 @@ export default function SubcontractorSubmit({ token }) {
 
         {!showDetails ? (
           <>
-            <label style={lbl}>Montant total du {type === "invoice" ? "facture" : "devis"} ({cur || "USD"})
+            <label style={lbl}>Montant total du {type === "invoice" ? "facture" : "devis"} ({cur || "devise non renseignée"})
               <input type="number" min="0" step="any" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} style={inp} placeholder="0" required />
             </label>
             <button type="button" onClick={() => setShowDetails(true)} style={{ ...btnGhost, marginTop: 4 }}>+ Ajouter le détail des prestations</button>

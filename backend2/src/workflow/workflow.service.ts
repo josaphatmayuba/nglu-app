@@ -25,6 +25,15 @@ export class WorkflowService {
     private readonly ledger: LedgerService,
   ) {}
 
+  private readonly approvalHooks = new Map<string, Array<(entityId: string, orgId: number) => Promise<void>>>();
+
+  /** Enregistre un traitement execute apres approbation finale d'un type d'entite. */
+  registerApprovalHook(entityType: string, hook: (entityId: string, orgId: number) => Promise<void>) {
+    const list = this.approvalHooks.get(entityType) ?? [];
+    list.push(hook);
+    this.approvalHooks.set(entityType, list);
+  }
+
   // ─── Definitions ────────────────────────────────────────────────────────────
 
   async listWorkflows(orgId: number) {
@@ -166,6 +175,14 @@ export class WorkflowService {
     // (ledger_pending_entries -> journal). Hors transaction workflow ; no-op si rien en attente.
     if (result.status === "approved" && result.entityType && result.entityId) {
       await this.ledger.approveAndPost(result.entityType, String(result.entityId), orgId, userId);
+      // Hooks metier post-approbation (ex. SMS proprietaire). Best-effort : jamais bloquant.
+      for (const hook of this.approvalHooks.get(result.entityType) ?? []) {
+        try {
+          await hook(String(result.entityId), orgId);
+        } catch {
+          /* un hook ne doit jamais faire echouer l'approbation */
+        }
+      }
     }
     return {
       id: result.id,

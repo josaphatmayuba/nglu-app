@@ -32,6 +32,7 @@ import {
   realEstateLeases,
   realEstateOwners,
   realEstateProperties,
+  realEstatePropertyExpenses,
   realEstateUnits,
   tenantDetails,
 } from "../database/schema";
@@ -258,6 +259,12 @@ export class OwnerNotificationsService implements OnModuleInit {
       subject: "Paiement recu — bail {reference}",
       body:
         "Paiement recu : {tenantName} a regle {amount} pour {property}. {url}",
+    },
+    {
+      name: "Proprietaire — depense enregistree",
+      eventType: "expense_recorded_owner",
+      subject: "Depense enregistree sur votre bien",
+      body: "Depense {property}{unit}: {category} {amount} ({vendor}). {date}",
     },
   ];
 
@@ -1743,6 +1750,77 @@ export class OwnerNotificationsService implements OnModuleInit {
     } catch (error) {
       this.logger.warn(
         `notifyPaymentReceived failed (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private static readonly EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+    insurance: "Assurance",
+    property_tax: "Taxe fonciere",
+    hoa: "Copropriete",
+    maintenance_general: "Entretien",
+    management_fee: "Frais de gestion",
+    security: "Securite",
+    cleaning: "Nettoyage",
+    legal_fees: "Honoraires juridiques",
+    other: "Autre",
+  };
+
+  /**
+   * Prevenu le proprietaire qu'une depense a ete enregistree sur son bien.
+   * Systematique (aucun seuil), sauf opt-out du proprietaire
+   * (real_estate_owners.notify_expense_sms = 0). Pas de proprietaire, inactif
+   * ou sans telephone : aucun SMS. Best-effort : n'echoue jamais.
+   */
+  async notifyExpenseRecorded(expenseId: number, orgId: number) {
+    try {
+      const [exp] = await this.db
+        .select({
+          id: realEstatePropertyExpenses.id,
+          propertyId: realEstatePropertyExpenses.propertyId,
+          category: realEstatePropertyExpenses.category,
+          amount: realEstatePropertyExpenses.amount,
+          expenseDate: realEstatePropertyExpenses.expenseDate,
+          vendorName: realEstatePropertyExpenses.vendorName,
+          isActive: realEstatePropertyExpenses.isActive,
+          propertyName: realEstateProperties.name,
+          unitName: realEstateUnits.name,
+          currencySymbol: currencies.currencySymbol,
+        })
+        .from(realEstatePropertyExpenses)
+        .innerJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
+        .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstatePropertyExpenses.unitId))
+        .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+        .where(and(eq(realEstatePropertyExpenses.id, expenseId), eq(realEstatePropertyExpenses.organizationId, orgId)))
+        .limit(1);
+      // Depense supprimee entre-temps (ex. avant l'approbation) : rien a signaler.
+      if (!exp || !exp.isActive) return;
+
+      const owner = await this.resolveOwnerForProperty(Number(exp.propertyId), orgId);
+      if (!owner) return;
+
+      const [pref] = await this.db
+        .select({ notify: realEstateOwners.notifyExpenseSms })
+        .from(realEstateOwners)
+        .where(and(eq(realEstateOwners.id, owner.id), eq(realEstateOwners.organizationId, orgId)))
+        .limit(1);
+      if (pref && Number(pref.notify) === 0) return;
+
+      const symbol = await resolveCurrencySymbol(this.db, orgId, exp.currencySymbol);
+      const vars = {
+        property: exp.propertyName || "",
+        unit: exp.unitName ? ` ${exp.unitName}` : "",
+        category: OwnerNotificationsService.EXPENSE_CATEGORY_LABELS[exp.category] ?? exp.category,
+        amount: this.money(exp.amount, symbol),
+        vendor: exp.vendorName || "",
+        date: this.shortDate(String(exp.expenseDate)),
+      };
+      const fallback = "Depense {property}{unit}: {category} {amount} ({vendor}). {date}";
+      const message = await this.renderMessage("expense_recorded_owner", fallback, vars);
+      await this.send(owner, message, "expense_recorded_owner", "real-estate-property-expense", expenseId, orgId);
+    } catch (error) {
+      this.logger.warn(
+        `notifyExpenseRecorded failed (expense ${expenseId}): ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
