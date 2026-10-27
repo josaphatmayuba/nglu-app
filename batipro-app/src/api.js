@@ -1,4 +1,5 @@
 import { clearAuth, getToken, restoreSession } from "./auth.jsx";
+import { compressImage } from "./imageCompress.js";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -52,8 +53,41 @@ async function jsonFetch(path, init = {}, retried = false) {
 }
 
 // Upload multipart authentifié (le token JWT n'est jamais dans l'URL).
+const UPLOAD_TIMEOUT_MS = 90000;
+
+// Compresse les champs File image (les autres valeurs sont conservées telles quelles).
+async function compressFormImages(formData) {
+  if (typeof FormData === "undefined" || !(formData instanceof FormData)) return formData;
+  const entries = Array.from(formData.entries());
+  if (!entries.some(([, v]) => typeof File !== "undefined" && v instanceof File && /^image\/(jpeg|png|webp)$/.test(v.type))) {
+    return formData;
+  }
+  const out = new FormData();
+  for (const [k, v] of entries) {
+    if (typeof File !== "undefined" && v instanceof File) {
+      const f = await compressImage(v);
+      out.append(k, f, f.name);
+    } else out.append(k, v);
+  }
+  return out;
+}
+
 async function uploadForm(path, formData, retried = false) {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: { ...authHeaders() }, body: formData });
+  const body0 = retried ? formData : await compressFormImages(formData);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, { method: "POST", headers: { ...authHeaders() }, body: body0, signal: ctrl.signal });
+  } catch (e) {
+    if (e?.name === "AbortError") {
+      throw new Error("L'envoi a pris trop de temps (90 s). Vérifiez votre connexion ou réduisez la taille du fichier, puis réessayez.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+  formData = body0;
   if (!res.ok) {
     if (res.status === 401 && !retried && (await restoreSession())) return uploadForm(path, formData, true);
     const body = await res.text().catch(() => "");
@@ -280,15 +314,19 @@ export const api = {
 };
 
 // Lien public partageable a copier/envoyer au sous-traitant.
+// En natif (capacitor://localhost) on utilise l'origine web publique (API_HOST).
+function publicOrigin() {
+  if (NATIVE) return API_HOST;
+  return (typeof window !== "undefined" && window.location?.origin) || API_HOST;
+}
+
 export function subcontractorSubmitUrl(token) {
-  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
-  return `${origin}/batipro/public/submit/${token}`;
+  return `${publicOrigin()}/batipro/public/submit/${token}`;
 }
 
 // Lien public du devis a copier/envoyer au client (page /batipro/public/document/:token).
 export function clientDocumentUrl(token) {
-  const origin = (typeof window !== "undefined" && window.location?.origin) || "https://dev.ongdngolu.org";
-  return `${origin}/batipro/public/document/${token}`;
+  return `${publicOrigin()}/batipro/public/document/${token}`;
 }
 
 // Appels publics client (devis) : aucun JWT, autorisation = token opaque.

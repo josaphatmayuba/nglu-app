@@ -131,4 +131,48 @@ describe("buildPhaseDetail", () => {
     expect(usd(d).planned).toBe(1000);
     expect(d.totals_by_currency.find((t) => t.currency_code === "CDF")!.planned).toBe(2000000);
   });
+
+  describe("part payee d'un BC avec remise", () => {
+    const po = { docType: "purchase_order", docDirection: "outbound", docStatus: "approved", documentId: 200 };
+    const pay = (totalTtc: number, paid: number): Map<number, PoPayInfo> =>
+      new Map([[200, { docTotalTtc: totalTtc, docPaidAmount: paid, totals: [{ currencyId: 1, totalTtc, paid }] }]]);
+    const lines = () => [
+      row({ ...po, lineHt: 1000, designation: "A" }),
+      row({ ...po, lineHt: 1000, designation: "B" }),
+      row({ ...po, lineHt: -500, designation: "Remise" }),
+    ];
+
+    it("sans remise : lineHt x paye / total TTC (inchange)", () => {
+      const d = buildPhaseDetail(phase, [
+        row({ ...po, lineHt: 1000 }), row({ ...po, lineHt: 500 }),
+      ], pay(1500, 750), codes);
+      expect(d.expense_lines.map((l: any) => l.paid)).toEqual([500, 250]);
+      expect(usd(d).paid).toBe(750);
+    });
+
+    it("BC solde avec remise : somme des parts = paye, au prorata du HT", () => {
+      const d = buildPhaseDetail(phase, lines(), pay(1500, 1500), codes);
+      expect(d.expense_lines.map((l: any) => l.paid)).toEqual([750, 750, 0]);
+      expect(usd(d).paid).toBe(1500);
+    });
+
+    it("BC partiellement paye avec remise", () => {
+      const d = buildPhaseDetail(phase, lines(), pay(1500, 600), codes);
+      expect(d.expense_lines.map((l: any) => l.paid)).toEqual([300, 300, 0]);
+      expect(usd(d).paid).toBe(600);
+    });
+
+    it("remise hors phase : somme des phases = paye du BC", () => {
+      const info: Map<number, PoPayInfo> = new Map([[200, {
+        docTotalTtc: 1500, docPaidAmount: 1500,
+        totals: [{ currencyId: 1, totalTtc: 1500, paid: 1500 }],
+        htSums: [{ currencyId: 1, pos: 2000, net: 1500 }],
+      }]]);
+      // Le service ne fournit a chaque phase que ses propres lignes (la remise n'y est pas).
+      const p1 = buildPhaseDetail(phase, [row({ ...po, lineHt: 1000 })], info, codes);
+      const p2 = buildPhaseDetail({ ...phase, id: 2 }, [row({ ...po, lineHt: 1000 })], info, codes);
+      expect(usd(p1).paid).toBe(750);
+      expect(usd(p2).paid).toBe(750);
+    });
+  });
 });

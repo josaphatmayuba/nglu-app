@@ -39,7 +39,14 @@ export type PoPayInfo = {
   docTotalTtc: number;
   docPaidAmount: number;
   totals: { currencyId: number; totalTtc: number; paid: number }[];
+  // HT positif / net (remises incluses) par devise effective, sur TOUTES les lignes
+  // actives du BC (toutes phases). Absent = repli sur les lignes de la phase.
+  htSums?: { currencyId: number | null; pos: number; net: number }[];
 };
+
+// BC sortant non annule : seul cas ou une ligne compte en depense.
+const isActivePo = (r: Pick<PhaseDetailRow, "docType" | "docDirection" | "docStatus">) =>
+  r.docType === "purchase_order" && r.docDirection === "outbound" && r.docStatus !== "cancelled";
 
 // Statuts d'un document inbound (artisan) qui ne comptent plus.
 const ARTISAN_EXCLUDED_STATUSES = new Set(["refused", "rejected", "cancelled", "draft"]);
@@ -68,6 +75,18 @@ export function buildPhaseDetail(
 
   // Cumul de paye attribue par (BC, devise), plafonne au paye reel du BC.
   const paidGiven = new Map<string, number>();
+  // Repli (si PoPayInfo.htSums absent) : HT par (BC, devise) sur les lignes de la phase.
+  const poHtSums = new Map<string, { pos: number; net: number }>();
+  for (const r of rows) {
+    if (r.lineActive !== 1 || r.docActive !== 1) continue;
+    if (!isActivePo(r)) continue;
+    const key = `${r.documentId}:${(r.lineCurrencyId ?? r.docCurrencyId ?? null) ?? 0}`;
+    const s = poHtSums.get(key) ?? { pos: 0, net: 0 };
+    const v = Number(r.lineHt ?? 0);
+    if (v > 0) s.pos += v;
+    s.net += v;
+    poHtSums.set(key, s);
+  }
   const plannedLines: any[] = [];
   const artisanLines: any[] = [];
   const expenseLines: any[] = [];
@@ -100,7 +119,7 @@ export function buildPhaseDetail(
         total: round2(total),
         submitted_by: r.submittedBy,
       });
-    } else if (r.docType === "purchase_order" && r.docDirection === "outbound" && r.docStatus !== "cancelled") {
+    } else if (isActivePo(r)) {
       // Part payee = montant HT : lineHt x (paye / total TTC du document, dans la
       // devise de la ligne). Jamais de melange de devises au denominateur.
       const ownCur = r.lineCurrencyId ?? r.docCurrencyId ?? null;
@@ -114,11 +133,18 @@ export function buildPhaseDetail(
         } else if (ownCur === r.docCurrencyId) {
           totalTtc = info.docTotalTtc; paid = info.docPaidAmount; matched = true;
         }
-        if (matched && totalTtc > 0 && paid > 0) {
-          const key = `${r.documentId}:${ownCur ?? 0}`;
+        const key = `${r.documentId}:${ownCur ?? 0}`;
+        const sums = info.htSums?.length
+          ? info.htSums.find((x) => (x.currencyId ?? 0) === (ownCur ?? 0))
+          : poHtSums.get(key);
+        if (matched && totalTtc > 0 && paid > 0 && sums && sums.pos > 0 && sums.net > 0) {
           const given = paidGiven.get(key) ?? 0;
-          // Plafond : jamais plus que le paye du BC (lignes d'ajustement negatives).
-          paidShare = Math.min((total * paid) / totalTtc, Math.max(0, paid - given));
+          // Formule : lineHt x min(1, paye/totalTTC) x (HT net / HT lignes positives).
+          // Le ratio net/positif annule l'effet des lignes negatives (remises) sur le
+          // denominateur ; sans remise il vaut 1 (= lineHt x paye / totalTTC).
+          // Plafond : jamais plus que le paye du BC.
+          const fraction = Math.min(1, paid / totalTtc);
+          paidShare = Math.min(total * fraction * (sums.net / sums.pos), Math.max(0, paid - given));
           paidGiven.set(key, given + paidShare);
         }
       }

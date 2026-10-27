@@ -11,11 +11,11 @@ import "./styles.css";
 // Portail sous-traitant public (sans compte) : /batipro/public/submit/:token.
 // Detecte avant tout bootstrap auth (aucun JWT requis sur cette page).
 const publicMatch = typeof window !== "undefined"
-  ? window.location.pathname.match(/\/batipro\/public\/submit\/([^/?#]+)/)
+  ? window.location.pathname.match(/(?:\/batipro)?\/public\/submit\/([^/?#]+)/)
   : null;
 // Page publique client (devis) : /batipro/public/document/:token.
 const clientDocMatch = typeof window !== "undefined"
-  ? window.location.pathname.match(/\/batipro\/public\/document\/([^/?#]+)/)
+  ? window.location.pathname.match(/(?:\/batipro)?\/public\/document\/([^/?#]+)/)
   : null;
 
 // Suivi financier public du proprietaire : /batipro/suivi/:token (sans compte).

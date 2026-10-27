@@ -6896,48 +6896,96 @@ export class PropertyManagementService implements OnModuleInit {
     // Contre-passe l'ecriture comptable (aucun DELETE) avant le soft delete. Si la
     // contre-passation echoue (ex. periode cloturee), la suppression est refusee
     // plutot que de laisser une charge fantome dans les livres.
-    const [exp] = await this.db
-      .select({ journalEntryId: realEstatePropertyExpenses.journalEntryId })
-      .from(realEstatePropertyExpenses)
-      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)))
-      .limit(1);
-    let entryId = exp?.journalEntryId ? Number(exp.journalEntryId) : null;
-    if (!entryId) {
-      // Ecriture comptabilisee apres approbation : journalEntryId n'a pas ete reporte sur la depense.
-      const [posted] = await this.db
-        .select({ id: journalEntries.id })
-        .from(journalEntries)
-        .where(and(
-          eq(journalEntries.organizationId, orgId),
-          eq(journalEntries.idempotencyKey, `property-expense:${id}`),
-        ))
-        .limit(1);
-      entryId = posted?.id ? Number(posted.id) : null;
-    }
-    if (entryId) {
-      try {
-        await this.ledger.reverse(entryId, `Suppression de la depense #${id}`, orgId, userId);
-      } catch (err) {
-        // Deja contre-passee : rien a refaire.
-        if (!(err instanceof ConflictException)) throw err;
-      }
-    } else {
-      // Ecriture encore en attente d'approbation : on l'annule pour qu'elle ne soit jamais comptabilisee.
-      await this.db
-        .update(ledgerPendingEntries)
-        .set({ status: "cancelled" })
-        .where(and(
-          eq(ledgerPendingEntries.organizationId, orgId),
-          eq(ledgerPendingEntries.sourceModule, "property_expense"),
-          eq(ledgerPendingEntries.relatedId, String(id)),
-          eq(ledgerPendingEntries.status, "pending"),
-        ));
-    }
-
-    await this.db
+    //
+    // Reserve la ligne (isActive 1 -> 0) AVANT de lire l'ecriture liee : deux
+    // suppressions simultanees ne produisent jamais deux contre-passations (reverse
+    // n'est pas atomique), et une approbation survenue avant la reservation est vue
+    // par la lecture qui suit. Liberee (isActive=1) si la contre-passation echoue.
+    const claim = await this.db
       .update(realEstatePropertyExpenses)
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+      .where(and(
+        eq(realEstatePropertyExpenses.id, id),
+        eq(realEstatePropertyExpenses.organizationId, orgId),
+        eq(realEstatePropertyExpenses.isActive, 1),
+      ));
+    const claimHeader = (Array.isArray(claim) ? claim[0] : claim) as { affectedRows?: number } | undefined;
+    if (Number(claimHeader?.affectedRows ?? 0) === 0) {
+      throw new ConflictException("Cette depense est deja supprimee ou en cours de suppression.");
+    }
+
+    try {
+      const [exp] = await this.db
+        .select({ journalEntryId: realEstatePropertyExpenses.journalEntryId })
+        .from(realEstatePropertyExpenses)
+        .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)))
+        .limit(1);
+      let entryId = exp?.journalEntryId ? Number(exp.journalEntryId) : null;
+      if (!entryId) {
+        // Ecriture comptabilisee apres approbation : journalEntryId n'a pas ete reporte sur la depense.
+        const [posted] = await this.db
+          .select({ id: journalEntries.id })
+          .from(journalEntries)
+          .where(and(
+            eq(journalEntries.organizationId, orgId),
+            eq(journalEntries.idempotencyKey, `property-expense:${id}`),
+          ))
+          .limit(1);
+        entryId = posted?.id ? Number(posted.id) : null;
+      }
+
+      if (entryId) {
+        // Deja contre-passee (verification explicite) : rien a refaire.
+        const [entry] = await this.db
+          .select({ status: journalEntries.status, reversedById: journalEntries.reversedById })
+          .from(journalEntries)
+          .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId)))
+          .limit(1);
+        const alreadyReversedRow = !!entry && (!!entry.reversedById || entry.status === "reversed");
+        if (!alreadyReversedRow) {
+          try {
+            await this.ledger.reverse(entryId, `Suppression de la depense #${id}`, orgId, userId);
+          } catch (err) {
+            // Seul "deja contre-passee" est tolere. Une periode cloturee leve AUSSI une
+            // ConflictException : elle doit bloquer la suppression (pas de charge fantome).
+            const alreadyReversed = err instanceof ConflictException && /contre-pass/i.test(err.message);
+            if (!alreadyReversed) {
+              if (err instanceof ConflictException) {
+                throw new ConflictException(
+                  `Suppression de la depense impossible : la contre-passation comptable a echoue (${err.message}). La depense reste active.`,
+                );
+              }
+              throw err;
+            }
+          }
+        }
+      } else {
+        // Ecriture encore en attente d'approbation : on l'annule pour qu'elle ne soit jamais comptabilisee.
+        await this.db
+          .update(ledgerPendingEntries)
+          .set({ status: "cancelled" })
+          .where(and(
+            eq(ledgerPendingEntries.organizationId, orgId),
+            eq(ledgerPendingEntries.sourceModule, "property_expense"),
+            eq(ledgerPendingEntries.relatedId, String(id)),
+            eq(ledgerPendingEntries.status, "pending"),
+          ));
+      }
+    } catch (err) {
+      // La liberation ne doit jamais masquer l'erreur d'origine.
+      try {
+        await this.db
+          .update(realEstatePropertyExpenses)
+          .set({ isActive: 1 })
+          .where(and(eq(realEstatePropertyExpenses.id, id), eq(realEstatePropertyExpenses.organizationId, orgId)));
+      } catch (releaseErr) {
+        this.logger?.error(
+          `deletePropertyExpense: liberation de la depense #${id} impossible (reste isActive=0 sans suppression effective) : ${(releaseErr as Error)?.message}`,
+        );
+      }
+      throw err;
+    }
+
     return { message: "Deleted successfully." };
   }
 

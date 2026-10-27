@@ -1,6 +1,6 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { PropertyManagementService } from "./property-management.service";
-import { realEstateProperties, realEstatePropertyExpenses, subAccounts } from "../database/schema";
+import { journalEntries, realEstateProperties, realEstatePropertyExpenses, subAccounts } from "../database/schema";
 import { PROPERTY_EXPENSE_CATEGORIES } from "./dto/property-management.dto";
 import { IMAGE_OR_PDF_MIME_TYPES, validateUploadedFile } from "../common/upload-security";
 
@@ -19,6 +19,8 @@ function makeService(opts: {
   expenseRow?: any;
   subAccountRow?: any;
   projectExisting?: any;
+  journalEntryRow?: any;
+  claimAffectedRows?: number;
 } = {}) {
   const inserts: Record<string, any[]> = {};
   const updates: { table: any; vals: any }[] = [];
@@ -34,6 +36,7 @@ function makeService(opts: {
     if (table === realEstateProperties) return "properties";
     if (table === realEstatePropertyExpenses) return "expenses";
     if (table === subAccounts) return "subAccounts";
+    if (table === journalEntries) return "journalEntries";
     return "other";
   };
 
@@ -50,7 +53,8 @@ function makeService(opts: {
       set: (vals: any) => ({
         where: () => {
           updates.push({ table, vals });
-          return Promise.resolve();
+          // Reservation (UPDATE ... WHERE isActive=1) : affectedRows configurable.
+          return Promise.resolve([{ affectedRows: opts.claimAffectedRows ?? 1 }]);
         },
       }),
     }),
@@ -67,6 +71,7 @@ function makeService(opts: {
               if (name === "properties") return Promise.resolve(propertyRow ? [propertyRow] : []);
               if (name === "expenses") return Promise.resolve(expenseRow ? [expenseRow] : []);
               if (name === "subAccounts") return Promise.resolve(subAccountRow ? [subAccountRow] : []);
+              if (name === "journalEntries") return Promise.resolve(opts.journalEntryRow ? [opts.journalEntryRow] : []);
               return Promise.resolve([]);
             },
             orderBy: () => Promise.resolve(expenseRow ? [expenseRow] : []),
@@ -289,7 +294,51 @@ describe("PropertyManagementService — suppression : contre-passation comptable
     const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 } });
     (service as any).ledger = { reverse: jest.fn().mockRejectedValue(new BadRequestException("periode cloturee")) };
     await expect(service.deletePropertyExpense(5, ORG, 7)).rejects.toThrow(BadRequestException);
-    expect(updates.find((u) => u.table === realEstatePropertyExpenses)).toBeUndefined();
+    // Reservation liberee : la depense reste active.
+    const expUpdates = updates.filter((u) => u.table === realEstatePropertyExpenses);
+    expect(expUpdates[expUpdates.length - 1]?.vals.isActive).toBe(1);
+  });
+
+  it("refuse la suppression si la periode comptable est cloturee (ConflictException) : depense non supprimee", async () => {
+    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 } });
+    (service as any).ledger = {
+      reverse: jest.fn().mockRejectedValue(
+        new ConflictException('Periode comptable "Octobre 2026" cloturee : aucune ecriture possible au 2026-10-27.'),
+      ),
+    };
+    await expect(service.deletePropertyExpense(5, ORG, 7)).rejects.toThrow(/cloturee.*reste active/i);
+    const expUpdates = updates.filter((u) => u.table === realEstatePropertyExpenses);
+    expect(expUpdates[expUpdates.length - 1]?.vals.isActive).toBe(1);
+  });
+
+  it("supprime si l'ecriture est deja contre-passee (Conflict 'deja contre-passee' tolere)", async () => {
+    const { service, updates } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 } });
+    (service as any).ledger = { reverse: jest.fn().mockRejectedValue(new ConflictException("Cette ecriture a deja ete contre-passee.")) };
+    await expect(service.deletePropertyExpense(5, ORG, 7)).resolves.toEqual({ message: "Deleted successfully." });
+    const expUpdates = updates.filter((u) => u.table === realEstatePropertyExpenses);
+    expect(expUpdates[expUpdates.length - 1]?.vals.isActive).toBe(0);
+    expect(expUpdates.some((u) => u.vals.isActive === 1)).toBe(false);
+  });
+
+  it("ne rappelle pas reverse si l'ecriture est deja marquee contre-passee en base", async () => {
+    const { service, updates } = makeService({
+      expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 },
+      journalEntryRow: { status: "reversed", reversedById: 400 },
+    });
+    const reverse = jest.fn();
+    (service as any).ledger = { reverse };
+    await service.deletePropertyExpense(5, ORG, 7);
+    expect(reverse).not.toHaveBeenCalled();
+    const expUpdates = updates.filter((u) => u.table === realEstatePropertyExpenses);
+    expect(expUpdates[expUpdates.length - 1]?.vals.isActive).toBe(0);
+  });
+
+  it("refuse une double suppression simultanee (reservation deja prise) sans contre-passer", async () => {
+    const { service } = makeService({ expenseRow: { id: 5, organizationId: ORG, journalEntryId: 321 }, claimAffectedRows: 0 });
+    const reverse = jest.fn();
+    (service as any).ledger = { reverse };
+    await expect(service.deletePropertyExpense(5, ORG, 7)).rejects.toThrow(ConflictException);
+    expect(reverse).not.toHaveBeenCalled();
   });
 });
 

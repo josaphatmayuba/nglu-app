@@ -1624,8 +1624,54 @@ function Devis({ projects, canMutate, fixedProjectId }) {
   );
 }
 
+// Avertissement non bloquant : postes deja chiffres dans un autre devis du chantier.
+const MATERIAL_KEYWORDS = { ciment: "Ciment", gravier: "Gravier", sable: "Sable", bloc: "Bloc", parpaing: "Bloc", fer: "Fer", barre: "Barre", bois: "Bois" };
+const normText = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const materialKeys = (s) => {
+  const out = new Set();
+  normText(s).split(/[^a-z0-9]+/).filter(Boolean).forEach((w) => {
+    const k = MATERIAL_KEYWORDS[w] ? w : w.replace(/s$/, "");
+    if (MATERIAL_KEYWORDS[k]) out.add(MATERIAL_KEYWORDS[k]);
+  });
+  return out;
+};
+function findDuplicateWarnings(lines, others, phases, currencies) {
+  const warnings = [];
+  const seen = new Set();
+  const phaseLabel = (id) => phases.find((p) => String(p.id) === String(id))?.label || `#${id}`;
+  const clean = lines.filter((l) => String(l.designation || "").trim() || l.phase_id);
+  others.forEach((o) => {
+    const oLines = o.lines || [];
+    const num = o.number || `#${o.id}`;
+    // Meme phase : une seule alerte par phase et par devis.
+    new Set(clean.filter((l) => l.phase_id).map((l) => String(l.phase_id))).forEach((pid) => {
+      const inPhase = oLines.filter((x) => String(x.phaseId || "") === pid);
+      if (!inPhase.length) return;
+      const tot = {};
+      inPhase.forEach((x) => {
+        const code = resolveCurrencyCode(currencies, x.currencyId ?? o.currencyId) || "";
+        tot[code] = (tot[code] || 0) + n(x.quantity) * n(x.unitPrice);
+      });
+      const amount = Object.entries(tot).map(([c, v]) => money(v, c)).join(" + ");
+      const key = `p:${pid}:${o.id}`;
+      if (!seen.has(key)) { seen.add(key); warnings.push(`La phase « ${phaseLabel(pid)} » est déjà chiffrée dans ${num} (${amount}).`); }
+    });
+    // Meme materiau (designation normalisee).
+    const oKeys = new Set();
+    oLines.forEach((x) => materialKeys(x.designation).forEach((k) => oKeys.add(k)));
+    const mine = new Set();
+    clean.forEach((l) => materialKeys(l.designation).forEach((k) => mine.add(k)));
+    mine.forEach((k) => {
+      const key = `m:${k}:${o.id}`;
+      if (oKeys.has(k) && !seen.has(key)) { seen.add(key); warnings.push(`${k} figure déjà dans ${num}.`); }
+    });
+  });
+  return warnings;
+}
+
 function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose, onSaved }) {
   const [lines, setLines] = React.useState([emptyDocLine()]);
+  const [otherDocs, setOtherDocs] = React.useState([]);
   const [dueDate, setDueDate] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [phases, setPhases] = React.useState([]);
@@ -1643,7 +1689,16 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
 
   React.useEffect(() => {
-    api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+    let cancelled = false;
+    api.phases(projectId).then((p) => { if (!cancelled) setPhases(p || []); }).catch(() => { if (!cancelled) setPhases([]); });
+    // Lignes des AUTRES devis actifs (hors refuse/annule) du chantier, pour l'avertissement doublon.
+    api.documents(projectId, "quote")
+      .then((list) => Promise.all((list || [])
+        .filter((d) => d.id !== docId && !["refused", "cancelled"].includes(d.status))
+        .slice(0, 20)
+        .map((d) => api.getDocument(d.id).then((full) => ({ ...d, lines: full?.lines || [] })).catch(() => null))))
+      .then((res) => { if (!cancelled) setOtherDocs(res.filter(Boolean)); })
+      .catch(() => {});
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
@@ -1660,6 +1715,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         })
         .catch(() => {});
     }
+    return () => { cancelled = true; };
   }, [docId, projectId]);
 
   const setLine = (i, k, v) => setLines((c) => c.map((l, idx) => (idx === i ? { ...l, [k]: v } : l)));
@@ -1667,6 +1723,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
   const removeLine = (i) => setLines((c) => (c.length > 1 ? c.filter((_, idx) => idx !== i) : c));
 
   const totalsByCurrency = sumLinesByCurrency(lines, currencies, docCurrencyCode);
+  const dupWarnings = React.useMemo(() => findDuplicateWarnings(lines, otherDocs, phases, currencies), [lines, otherDocs, phases, currencies]);
 
   // Upload immediat + OCR best-effort. Pre-remplit les champs EXISTANTS du
   // formulaire (lignes/echeance/notes) qui restent 100% editables ensuite.
@@ -1746,6 +1803,15 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
         {loading ? <p className="muted">Chargement…</p> : (
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start", minWidth: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: "1 1 480px", minWidth: 0 }}>
+            {dupWarnings.length > 0 && (
+              <div role="alert" style={{ background: "#fef3c7", border: "1px solid #f59e0b", color: "#78350f", borderRadius: 8, padding: "8px 12px", fontSize: 13, overflowWrap: "anywhere" }}>
+                <strong>Attention : possible doublon avec un autre devis de ce chantier</strong>
+                <ul style={{ margin: "4px 0 4px 18px", padding: 0 }}>
+                  {dupWarnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+                <span>Un achat de matériaux se saisit en bon de commande. Vous pouvez quand même enregistrer.</span>
+              </div>
+            )}
             {!docId && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <input

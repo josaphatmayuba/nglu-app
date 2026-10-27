@@ -960,7 +960,29 @@ export class BatiproService {
         .select({ id: batiproDocuments.id, totalTtc: batiproDocuments.totalTtc, paid: batiproDocuments.paidAmount })
         .from(batiproDocuments)
         .where(and(inArray(batiproDocuments.id, poIds), eq(batiproDocuments.organizationId, orgId)));
-      for (const d of docs) poPayByDoc.set(d.id, { docTotalTtc: Number(d.totalTtc), docPaidAmount: Number(d.paid), totals: [] });
+      for (const d of docs) poPayByDoc.set(d.id, { docTotalTtc: Number(d.totalTtc), docPaidAmount: Number(d.paid), totals: [], htSums: [] });
+      // Sommes HT sur TOUTES les lignes actives du BC (sans filtre de phase) : une
+      // remise hors phase doit rester dans le net. Devise effective = ligne ?? document.
+      const effCur = sql<number | null>`COALESCE(${batiproDocumentLines.currencyId}, ${batiproDocuments.currencyId})`;
+      const htSums = await this.db
+        .select({
+          documentId: batiproDocumentLines.documentId,
+          currencyId: effCur,
+          pos: sql<string>`COALESCE(SUM(CASE WHEN ${batiproDocumentLines.lineHt} > 0 THEN ${batiproDocumentLines.lineHt} ELSE 0 END), 0)`,
+          net: sql<string>`COALESCE(SUM(${batiproDocumentLines.lineHt}), 0)`,
+        })
+        .from(batiproDocumentLines)
+        .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+        .where(and(
+          inArray(batiproDocumentLines.documentId, poIds),
+          eq(batiproDocumentLines.isActive, 1),
+          eq(batiproDocuments.organizationId, orgId),
+          eq(batiproDocuments.isActive, 1),
+        ))
+        .groupBy(batiproDocumentLines.documentId, effCur);
+      for (const s of htSums) {
+        poPayByDoc.get(s.documentId)?.htSums?.push({ currencyId: s.currencyId != null ? Number(s.currencyId) : null, pos: Number(s.pos), net: Number(s.net) });
+      }
       const totals = await this.db
         .select({
           documentId: batiproDocumentTotals.documentId,

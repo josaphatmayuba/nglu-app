@@ -240,6 +240,7 @@ describe("lecteurs sur bail flagge (etat impute)", () => {
 
   it("rent-book : lease.allocationLedger + lease.dues pour un bail flagge, legacy sinon", async () => {
     const mk = (l: any) => ({
+      logger: { warn() {}, log() {}, error() {}, debug() {} },
       db: fakeDb({ ...l, propertyId: 3, unitId: 1, tenantId: null }),
       ensurePropertyInScope: () => undefined,
       generateMissingPayments: async () => undefined,

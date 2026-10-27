@@ -455,7 +455,13 @@ const SalesVsPurchasesLine = ({ data, currencySymbol }) => (
                 <BarChart data={data} barGap={4}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
                     <XAxis dataKey="month" stroke="#71717a" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}M` : v} />
+                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                        const n = Number(v) || 0;
+                        const a = Math.abs(n);
+                        if (a >= 1e6) return `${+(n / 1e6).toFixed(2)}M`;
+                        if (a >= 1e3) return `${+(n / 1e3).toFixed(2)}k`;
+                        return `${+n.toFixed(2)}`;
+                    }} />
                     <Tooltip
                         formatter={(value, name) => [formatCurrency(value, currencySymbol), name === 'current' ? '2026' : '2025']}
                         contentStyle={{
