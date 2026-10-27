@@ -937,9 +937,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     const transportAllowance = Number(contract?.transportAllowance || 0);
     const housingAllowance = Number(contract?.housingAllowance || 0);
     const overtimeRate = baseSalary > 0 ? (baseSalary / 22 / 8) * 1.5 : 0;
-    const overtimeAmount = this.roundNumber(overtimeHours * overtimeRate);
+    const overtimeAmount = this.roundMoney(overtimeHours * overtimeRate);
     const dailyRate = baseSalary > 0 ? baseSalary / 22 : 0;
-    const unpaidAbsenceDeduction = this.roundNumber(unpaidLeaveDays * dailyRate);
+    const unpaidAbsenceDeduction = this.roundMoney(unpaidLeaveDays * dailyRate);
 
     const currencyId = contract?.currencyId ?? (await this.resolveDefaultCurrency());
 
@@ -954,9 +954,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       taxRule = rules[0] ?? null;
     }
 
-    const grossBeforeCnss = baseSalary + transportAllowance + housingAllowance + overtimeAmount;
-    const cnssAmount = taxRule ? this.roundNumber(grossBeforeCnss * Number(taxRule.cnssEmployeeRate || 0)) : 0;
-    const taxableBase = Math.max(0, grossBeforeCnss - cnssAmount - unpaidAbsenceDeduction);
+    const grossBeforeCnss = this.sumMoney(baseSalary, transportAllowance, housingAllowance, overtimeAmount);
+    const cnssAmount = taxRule ? this.roundMoney(grossBeforeCnss * Number(taxRule.cnssEmployeeRate || 0)) : 0;
+    const taxableBase = Math.max(0, this.fromCents(this.toCents(grossBeforeCnss) - this.toCents(cnssAmount) - this.toCents(unpaidAbsenceDeduction)));
     const taxAmount = taxRule ? this.computeIpr(taxableBase, taxRule) : 0;
 
     return {
@@ -1030,9 +1030,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
         prev = ceil;
         if (taxableBase <= ceil) break;
       }
-      return this.roundNumber(tax);
+      return this.roundMoney(tax);
     }
-    return this.roundNumber(taxableBase * Number(taxRule.iprRate || 0));
+    return this.roundMoney(taxableBase * Number(taxRule.iprRate || 0));
   }
 
   async payrollSummary(q: Record<string, string>) {
@@ -1040,20 +1040,20 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     const rows = await this.db.select().from(hrPayrolls).where(ne(hrPayrolls.status, "false")).orderBy(desc(hrPayrolls.id));
     const filtered = period ? rows.filter((r) => r.period === period) : rows;
     const n = (v: any) => Number(v || 0);
-    const grossTotal = filtered.reduce((sum, r) => sum + n(r.grossSalary), 0);
-    const netTotal = filtered.reduce((sum, r) => sum + n(r.netSalary), 0);
-    const taxTotal = filtered.reduce((sum, r) => sum + n(r.taxAmount), 0);
-    const cnssTotal = filtered.reduce((sum, r) => sum + n(r.cnssAmount), 0);
+    const grossTotal = this.sumMoney(...filtered.map((r) => n(r.grossSalary)));
+    const netTotal = this.sumMoney(...filtered.map((r) => n(r.netSalary)));
+    const taxTotal = this.sumMoney(...filtered.map((r) => n(r.taxAmount)));
+    const cnssTotal = this.sumMoney(...filtered.map((r) => n(r.cnssAmount)));
     const employeeCount = new Set(filtered.map((r) => r.userId)).size;
     const periods = [...new Set(rows.map((r) => r.period).filter(Boolean))].sort().reverse().slice(0, 24);
     return {
       period: period || "all",
       bulletins: filtered.length,
       employees: employeeCount,
-      grossTotal: this.roundNumber(grossTotal),
-      netTotal: this.roundNumber(netTotal),
-      taxTotal: this.roundNumber(taxTotal),
-      cnssTotal: this.roundNumber(cnssTotal),
+      grossTotal: this.roundMoney(grossTotal),
+      netTotal: this.roundMoney(netTotal),
+      taxTotal: this.roundMoney(taxTotal),
+      cnssTotal: this.roundMoney(cnssTotal),
       workflow: {
         draft: filtered.filter((r) => String(r.status || "draft") === "draft").length,
         validated: filtered.filter((r) => String(r.status || "") === "validated").length,
@@ -2235,13 +2235,13 @@ ${footer}`;
       const pid = Number(a.projectId);
       if (!assignmentsByProject.has(pid)) assignmentsByProject.set(pid, { monthlyCost: 0, people: new Set() });
       const agg = assignmentsByProject.get(pid)!;
-      agg.monthlyCost += Number(a.monthlyCost || 0);
+      agg.monthlyCost = this.sumMoney(agg.monthlyCost, Number(a.monthlyCost || 0));
       agg.people.add(Number(a.userId));
     }
     const projectCosts = allProjects.map((p) => {
       const agg = assignmentsByProject.get(Number(p.id));
-      const monthlyCost = this.roundNumber(agg?.monthlyCost ?? 0);
-      const hrBudget = this.roundNumber(Number(p.hrBudget || 0));
+      const monthlyCost = this.roundMoney(agg?.monthlyCost ?? 0);
+      const hrBudget = this.roundMoney(Number(p.hrBudget || 0));
       return {
         projectId: Number(p.id),
         name: p.name,
@@ -2915,10 +2915,12 @@ ${footer}`;
 
   private payrollPayload(input: Partial<CreateHrPayrollDto> & Record<string, any>) {
     const n = (value: any) => Number(value || 0);
-    const grossSalary = n(input.baseSalary) + n(input.transportAllowance) + n(input.housingAllowance)
-      + n(input.riskAllowance) + n(input.otherAllowances) + n(input.overtimeAmount);
-    const netSalary = Math.max(0, grossSalary - n(input.unpaidAbsenceDeduction) - n(input.advanceDeduction)
-      - n(input.taxAmount) - n(input.cnssAmount) - n(input.otherDeductions));
+    const m = (value: any) => this.roundMoney(value);
+    const grossSalary = this.sumMoney(input.baseSalary, input.transportAllowance, input.housingAllowance,
+      input.riskAllowance, input.otherAllowances, input.overtimeAmount);
+    const deductionsCents = this.toCents(input.unpaidAbsenceDeduction) + this.toCents(input.advanceDeduction)
+      + this.toCents(input.taxAmount) + this.toCents(input.cnssAmount) + this.toCents(input.otherDeductions);
+    const netSalary = this.fromCents(Math.max(0, this.toCents(grossSalary) - deductionsCents));
     const derived = this.periodToRange(input.period);
     return {
       userId: input.userId,
@@ -2927,18 +2929,18 @@ ${footer}`;
       periodStart: input.periodStart ?? derived?.start ?? null,
       periodEnd: input.periodEnd ?? derived?.end ?? null,
       currencyId: input.currencyId ?? null,
-      baseSalary: n(input.baseSalary),
-      transportAllowance: n(input.transportAllowance),
-      housingAllowance: n(input.housingAllowance),
-      riskAllowance: n(input.riskAllowance),
-      otherAllowances: n(input.otherAllowances),
+      baseSalary: m(input.baseSalary),
+      transportAllowance: m(input.transportAllowance),
+      housingAllowance: m(input.housingAllowance),
+      riskAllowance: m(input.riskAllowance),
+      otherAllowances: m(input.otherAllowances),
       overtimeHours: n(input.overtimeHours),
-      overtimeAmount: n(input.overtimeAmount),
-      unpaidAbsenceDeduction: n(input.unpaidAbsenceDeduction),
-      advanceDeduction: n(input.advanceDeduction),
-      taxAmount: n(input.taxAmount),
-      cnssAmount: n(input.cnssAmount),
-      otherDeductions: n(input.otherDeductions),
+      overtimeAmount: m(input.overtimeAmount),
+      unpaidAbsenceDeduction: m(input.unpaidAbsenceDeduction),
+      advanceDeduction: m(input.advanceDeduction),
+      taxAmount: m(input.taxAmount),
+      cnssAmount: m(input.cnssAmount),
+      otherDeductions: m(input.otherDeductions),
       grossSalary,
       netSalary,
       workedDays: n(input.workedDays),
@@ -3066,8 +3068,32 @@ ${footer}`;
     return Math.round((minutesOrHours / 60) * 100) / 100;
   }
 
+  // Arrondi 2 decimales pour heures, jours, scores et pourcentages (pas l argent).
   private roundNumber(value: number) {
     return Math.round(value * 100) / 100;
+  }
+
+  // Argent (bug #20) : arrondi au centime exact en entiers, demi-centime
+  // eloigne de zero. toPrecision(15) neutralise l artefact flottant
+  // (1.005 * 100 = 100.49999...) que Math.round(x*100)/100 tronquait a 1.00.
+  private toCents(value: unknown): number {
+    const num = Number(value ?? 0);
+    if (!Number.isFinite(num)) return 0;
+    const scaled = Number((Math.abs(num) * 100).toPrecision(15));
+    return Math.sign(num) * Math.round(scaled);
+  }
+
+  private fromCents(cents: number): number {
+    return cents / 100;
+  }
+
+  private roundMoney(value: unknown): number {
+    return this.fromCents(this.toCents(value));
+  }
+
+  // Somme de montants en centimes entiers (aucune derive flottante cumulee).
+  private sumMoney(...values: unknown[]): number {
+    return this.fromCents(values.reduce<number>((sum, v) => sum + this.toCents(v), 0));
   }
 
   private normalizeTime(value: string) {

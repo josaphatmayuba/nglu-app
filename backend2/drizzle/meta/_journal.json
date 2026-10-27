@@ -2094,6 +2094,13 @@
       "when": 1782453600000,
       "tag": "0323_batipro_project_funds",
       "breakpoints": true
+    },
+    {
+      "idx": 299,
+      "version": "5",
+      "when": 1782540000000,
+      "tag": "0324_hr_money_decimal",
+      "breakpoints": true
     }
   ]
 }
