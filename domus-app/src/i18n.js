@@ -795,6 +795,7 @@ const EN = {
   "Envoi {pct} %": "Uploading {pct} %",
   "En attente de connexion…": "Waiting for connection…",
   "Serveur indisponible, nouvel essai bientôt…": "Server unavailable, retrying soon…",
+  "Serveur indisponible. Réessayez plus tard.": "Server unavailable. Please try again later.",
   "En file d'attente…": "Queued…",
   "✓ Signé": "✓ Signed",
   "Contrat {id}": "Contract {id}",

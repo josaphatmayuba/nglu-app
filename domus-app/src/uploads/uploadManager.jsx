@@ -50,6 +50,7 @@ const toView = (r) => ({
   progress: r.progress || 0,
   attempts: r.attempts || 0,
   error: r.error || "",
+  serverError: !!r.serverError,
 });
 
 export function UploadsProvider({ children }) {
@@ -143,14 +144,19 @@ export function UploadsProvider({ children }) {
           timersRef.current.set(id, setTimeout(() => start(id), BACKOFF_MS[attempts - 1]));
         }
       } else {
-        patch(id, { status: "failed", attempts, retriable, error: err?.message || t("Import de la signature impossible.") }, true);
+        // Echec serveur repete : message clair plutot que le texte brut du serveur (« Service Unavailable »).
+        const message = retriable && !isOffline() ? t("Serveur indisponible. Réessayez plus tard.") : (err?.message || t("Import de la signature impossible."));
+        patch(id, { status: "failed", attempts, retriable, error: message }, true);
       }
     }
   }, [patch, remove]);
 
   const enqueueSignedContract = useCallback((file, { contractId, leaseId, ref, replace = false }) => {
-    for (const r of recordsRef.current.values()) {
-      if (r.contractId === contractId && r.status !== "done") return false;
+    for (const r of [...recordsRef.current.values()]) {
+      if (r.contractId !== contractId || r.status === "done") continue;
+      // Un envoi en echec ne bloque pas un nouveau fichier : il est remplace.
+      if (r.status === "failed") { recordsRef.current.delete(r.id); storeDelete(r.id).catch(() => {}); continue; }
+      return false;
     }
     const id = `signed-${contractId}-${Date.now()}`;
     const owner = identityRef.current;

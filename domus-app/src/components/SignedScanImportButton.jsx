@@ -10,7 +10,7 @@ export function SignedScanImportButton({ contract, leaseRef, replace = false, la
   const confirm = useConfirm();
   const { enqueueSignedContract, itemForContract } = useUploads();
   const upload = itemForContract(contract.id);
-  const busy = Boolean(upload);
+  const busy = Boolean(upload) && upload.status !== "failed";
   const [error, setError] = useState("");
 
   async function onPick(e) {
