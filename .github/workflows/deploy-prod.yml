@@ -32,6 +32,7 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       backend2: ${{ steps.decide.outputs.backend2 }}
       middleware: ${{ steps.decide.outputs.middleware }}
@@ -228,6 +229,7 @@ jobs:
     needs: changes
     if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -241,7 +243,6 @@ jobs:
           SERVER: ${{ env.ONGD_SERVER }}
         run: |
           set -euo pipefail
-          $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
           $SCP -r backend2/dist $SERVER:$APP/backend2/
           # Sync package.json AVANT le --build (COPY package*.json + npm ci dans le
           # Dockerfile) : sinon toute nouvelle dep manque -> MODULE_NOT_FOUND.
@@ -249,7 +250,23 @@ jobs:
           $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
           $SCP -r backend2/drizzle $SERVER:$APP/backend2/
           $SCP docker-compose.prod.yml $SERVER:$APP/
-          $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+      - name: Build image (CI) + ship + restart backend2
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.ONGD_SERVER }}
+          app: ${{ env.APP }}
+          context: backend2
+          dockerfile: Dockerfile.prod
+          image: nglu_prod-backend2:latest
+          service: backend2
+          project: nglu_prod
+          compose: docker-compose.prod.yml
+          env-file: .env.prod
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
           $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
           $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
           $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
@@ -258,6 +275,7 @@ jobs:
     needs: [changes, backend2-prod]
     if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -268,15 +286,31 @@ jobs:
           SERVER: ${{ env.ONGD_SERVER }}
         run: |
           set -euo pipefail
-          $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
           $SCP -r middleware $SERVER:$APP/
-          $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+      - name: Build image (CI) + ship + restart middleware
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.ONGD_SERVER }}
+          app: ${{ env.APP }}
+          context: middleware
+          dockerfile: Dockerfile
+          image: nglu_prod-middleware:latest
+          service: middleware
+          project: nglu_prod
+          compose: docker-compose.prod.yml
+          env-file: .env.prod
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
           $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
   # ────────── Apps statiques → prod : build UNE fois, 2 serveurs ──────────
   static-prod:
     needs: [changes, middleware-prod]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     # Matrice calculee par le job `changes` : elle ne contient QUE les apps
     # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
@@ -320,6 +354,7 @@ jobs:
     needs: [changes, static-prod]
     if: always() && needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -339,6 +374,7 @@ jobs:
     needs: [changes, frontend-prod]
     if: always() && needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -361,6 +397,7 @@ jobs:
     needs: changes
     if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -370,6 +407,7 @@ jobs:
         with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
       - run: cd backend2 && npm ci && npm audit --audit-level=critical && npm run build
       - name: Deploy
+        id: deploy
         env:
           SERVER: ${{ env.AVELOMI_SERVER }}
           AVELOMI_DB_PASSWORD: ${{ secrets.AVELOMI_DB_PASSWORD }}
@@ -397,6 +435,7 @@ jobs:
           # Garde : skip propre tant que .env.prod n'est pas rempli (sans lui, pas de config DB).
           if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod'; then
             echo "[deploy] Avelomi prod pas pret : .env.prod absent/vide. Job ignore."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # Pas de clone git sur Avelomi : on scp tout l'artefact necessaire.
@@ -406,7 +445,25 @@ jobs:
           $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
           $SCP -r backend2/drizzle $SERVER:$APP/backend2/
           $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+      - name: Build image (CI) + ship + restart backend2
+        if: steps.deploy.outputs.skip != 'true'
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.AVELOMI_SERVER }}
+          app: ${{ env.APP }}
+          context: backend2
+          dockerfile: Dockerfile.prod
+          image: nglu_prod-backend2:latest
+          service: backend2
+          project: nglu_prod
+          compose: docker-compose.prod.yml
+          env-file: .env.prod
+      - name: Post-deploy
+        if: steps.deploy.outputs.skip != 'true'
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
           $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
           $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
@@ -415,24 +472,45 @@ jobs:
     needs: [changes, backend2-avelomi-prod]
     if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/ssh-setup
         with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
       - name: Deploy
+        id: deploy
         env:
           SERVER: ${{ env.AVELOMI_SERVER }}
         run: |
           set -euo pipefail
           if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod'; then
             echo "[deploy] Avelomi prod pas pret : .env.prod absent/vide. Job ignore."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
           $SCP -r middleware $SERVER:$APP/
           $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+      - name: Build image (CI) + ship + restart middleware
+        if: steps.deploy.outputs.skip != 'true'
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.AVELOMI_SERVER }}
+          app: ${{ env.APP }}
+          context: middleware
+          dockerfile: Dockerfile
+          image: nglu_prod-middleware:latest
+          service: middleware
+          project: nglu_prod
+          compose: docker-compose.prod.yml
+          env-file: .env.prod
+      - name: Post-deploy
+        if: steps.deploy.outputs.skip != 'true'
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
   # Frontend Avelomi : build separe (VITE_* pointent avelomi.com + signup active).
@@ -440,6 +518,7 @@ jobs:
     needs: [changes, middleware-avelomi-prod]
     if: always() && needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -467,6 +546,7 @@ jobs:
     needs: [changes, frontend-avelomi-prod]
     if: always() && needs.changes.outputs.avelomi_site == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: production
     steps:
       - uses: actions/checkout@v4

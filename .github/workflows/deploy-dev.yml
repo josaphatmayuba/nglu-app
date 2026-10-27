@@ -32,6 +32,7 @@ jobs:
   # Calcule quels projets ont change. `deploy_all` force tout a true.
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       backend2: ${{ steps.decide.outputs.backend2 }}
       middleware: ${{ steps.decide.outputs.middleware }}
@@ -174,6 +175,7 @@ jobs:
     needs: changes
     if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -187,7 +189,6 @@ jobs:
           SERVER: ${{ env.ONGD_SERVER }}
         run: |
           set -euo pipefail
-          $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
           $SCP -r backend2/dist $SERVER:$APP/backend2/
           # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
           # Sans ce scp, toute nouvelle dependance manque dans le conteneur -> MODULE_NOT_FOUND.
@@ -197,7 +198,23 @@ jobs:
           # serveur qui peut echouer en silence (drift local).
           $SCP -r backend2/drizzle $SERVER:$APP/backend2/
           $SCP docker-compose.dev.yml $SERVER:$APP/
-          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+      - name: Build image (CI) + ship + restart backend2
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.ONGD_SERVER }}
+          app: ${{ env.APP }}
+          context: backend2
+          dockerfile: Dockerfile.prod
+          image: nglu_dev-backend2:latest
+          service: backend2
+          project: nglu_dev
+          compose: docker-compose.dev.yml
+          env-file: .env.dev
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
           # MinIO partage : backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
           $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
           $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
@@ -212,6 +229,7 @@ jobs:
     needs: [changes, backend2-dev]
     if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/ssh-setup
@@ -221,9 +239,24 @@ jobs:
           SERVER: ${{ env.ONGD_SERVER }}
         run: |
           set -euo pipefail
-          $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
           $SCP -r middleware $SERVER:$APP/
-          $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+      - name: Build image (CI) + ship + restart middleware
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.ONGD_SERVER }}
+          app: ${{ env.APP }}
+          context: middleware
+          dockerfile: Dockerfile
+          image: nglu_dev-middleware:latest
+          service: middleware
+          project: nglu_dev
+          compose: docker-compose.dev.yml
+          env-file: .env.dev
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
           $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
   # ─────────────── Apps statiques → dev (bind-mount dist sur l'hote) ───────────────
@@ -233,6 +266,7 @@ jobs:
   static-dev:
     needs: [changes, middleware-dev]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Matrice calculee par le job `changes` : elle ne contient QUE les apps
     # modifiees, donc plus aucun job vide n'apparait dans le workflow. Le garde
     # par etape (`steps.gate`) devient inutile : un job present est un job a faire.
@@ -269,11 +303,12 @@ jobs:
           fi
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
-  # Tickets : pas de bind-mount hote, on copie dans le conteneur nginx.
+  # Tickets : dist HOTE bind-monte :ro dans nglu_prod_frontend (docker cp impossible) -> copie dans le dossier hote.
   tickets-dev:
     needs: [changes, static-dev]
     if: always() && needs.changes.outputs.tickets == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -288,7 +323,7 @@ jobs:
           set -euo pipefail
           $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
           $SCP -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
-          $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-dev && find /usr/share/nginx/html-tickets-dev -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-dev/ && rm -rf /tmp/tickets-app-dist"
+          $SSH $SERVER "mkdir -p $APP/tickets-app/dist && find $APP/tickets-app/dist -mindepth 1 -delete && cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && rm -rf /tmp/tickets-app-dist"
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
   # Migration Cockpit : nouveau volume html-migration-dev -> il faut RECREER le
@@ -297,6 +332,7 @@ jobs:
     needs: [changes, tickets-dev]
     if: always() && needs.changes.outputs.migration == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -324,6 +360,7 @@ jobs:
     needs: [changes, migration-dev]
     if: always() && needs.changes.outputs.marketing == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -348,6 +385,7 @@ jobs:
     needs: changes
     if: always() && needs.changes.outputs.avelomi_site == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -374,6 +412,7 @@ jobs:
     needs: [changes, avelomi-site-dev]
     if: always() && needs.changes.outputs.backend2 == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -399,7 +438,23 @@ jobs:
           $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
           $SCP -r backend2/drizzle $SERVER:$APP/backend2/
           $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+      - name: Build image (CI) + ship + restart backend2
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.AVELOMI_SERVER }}
+          app: ${{ env.APP }}
+          context: backend2
+          dockerfile: Dockerfile.prod
+          image: nglu_dev-backend2:latest
+          service: backend2
+          project: nglu_dev
+          compose: docker-compose.dev.yml
+          env-file: .env.dev
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
           $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
           $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
@@ -408,6 +463,7 @@ jobs:
     needs: [changes, backend2-avelomi-dev]
     if: always() && needs.changes.outputs.middleware == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/ssh-setup
@@ -420,5 +476,21 @@ jobs:
           $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
           $SCP -r middleware $SERVER:$APP/
           $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-          $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+      - name: Build image (CI) + ship + restart middleware
+        uses: ./.github/actions/docker-ship
+        with:
+          server: ${{ env.AVELOMI_SERVER }}
+          app: ${{ env.APP }}
+          context: middleware
+          dockerfile: Dockerfile
+          image: nglu_dev-middleware:latest
+          service: middleware
+          project: nglu_dev
+          compose: docker-compose.dev.yml
+          env-file: .env.dev
+      - name: Post-deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+        run: |
+          set -euo pipefail
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"

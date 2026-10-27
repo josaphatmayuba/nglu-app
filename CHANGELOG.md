@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **CI / déploiement (v3.250.3).** #13 : les images backend2 et middleware sont construites sur le runner GitHub puis envoyées en flux au serveur (`docker save | gzip | ssh docker load`, puis `compose up --no-build --force-recreate`), plus de `npm ci` sur la machine prod de 442 Mo pendant un déploiement (action `.github/actions/docker-ship`, `image:` explicite dans les compose). #23 : suppression des `git pull` serveur inutiles et `timeout-minutes` par job. #34 : tickets-dev copié dans le dossier hôte monté au lieu d un `docker cp` vers un volume en lecture seule.
+
 - **Correctifs (v3.250.2).** Domus #37 : suppression d une dépense refusée si la contre-passation échoue (période clôturée), dépense réservée avant lecture de l écriture, double suppression = 409. BâtiPro : avertissement non bloquant quand un devis reprend une phase ou un matériau déjà chiffré dans un autre devis du chantier ; détail de phase : payé réparti au prorata des lignes positives, remise hors phase prise en compte ; #12 portails publics (dépôt sous-traitant, devis client) fonctionnels sur les sous-domaines Avelomi et liens corrects depuis l app mobile ; #6 envoi de fichier : délai max 90 s et photos compressées (2000 px, JPEG). Temps réel #14 : log Redis limité à 1/min et reconnexion avec backoff. CRM #5 : axe du graphique en k/M exacts. Tests : #38 rent-book (logger simulé).
 
 - **BâtiPro : fonds du chantier, finitions (v3.250.1).** Statut « En attente compta » mis à jour dès que l écriture est approuvée ; annulation d un versement déjà contre-passé : numéro de contre-passation conservé ; date de réception future refusée (serveur + champ date) ; nom de l apporteur jusqu à 255 caractères.

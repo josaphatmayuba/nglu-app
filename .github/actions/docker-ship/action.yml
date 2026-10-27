@@ -1,0 +1,44 @@
+name: Docker ship
+description: >
+  Construit l'image Docker sur le runner CI (pas sur le serveur 442 Mo), la
+  transfere (docker save | gzip -> scp), la charge sur le serveur puis relance le
+  service avec `up -d --no-build --no-deps`. Requiert ssh-setup (SSH/SCP en env).
+
+inputs:
+  server:     { description: 'user@host', required: true }
+  app:        { description: 'Dossier du compose sur le serveur', required: true }
+  context:    { description: 'Contexte de build (ex. backend2)', required: true }
+  dockerfile: { description: 'Dockerfile relatif au contexte', required: true }
+  image:      { description: 'Tag attendu par le compose (ex. nglu_prod-backend2:latest)', required: true }
+  service:    { description: 'Service compose', required: true }
+  project:    { description: 'Projet compose (nglu_dev | nglu_prod)', required: true }
+  compose:    { description: 'Fichier compose', required: true }
+  env-file:   { description: 'Fichier env sur le serveur', required: true }
+
+runs:
+  using: composite
+  steps:
+    - name: Build image (runner) + ship + restart
+      shell: bash
+      env:
+        SERVER: ${{ inputs.server }}
+        APP: ${{ inputs.app }}
+        CTX: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        IMAGE: ${{ inputs.image }}
+        SERVICE: ${{ inputs.service }}
+        PROJECT: ${{ inputs.project }}
+        COMPOSE: ${{ inputs.compose }}
+        ENVFILE: ${{ inputs.env-file }}
+      run: |
+        set -euo pipefail
+        # Serveurs ongdngolu et avelomi : x86_64 (verifie via uname -m).
+        docker build --platform linux/amd64 -f "$CTX/$DOCKERFILE" -t "$IMAGE" "$CTX"
+        # Flux direct runner -> serveur (aucune archive sur le disque serveur, 2,9 Go libres).
+        # Un flux tronque fait echouer docker load ; on exige en plus « Loaded image: <tag> ».
+        docker save "$IMAGE" | gzip -1 | $SSH "$SERVER" "D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; gunzip | \$D load" | tee /tmp/ship-load.log
+        grep -q "Loaded image: $IMAGE" /tmp/ship-load.log
+        # --force-recreate garantit le redemarrage sur la nouvelle image (donc les migrations au boot).
+        $SSH "$SERVER" "set -e; D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \
+          cd $APP && \$D compose -p $PROJECT -f $COMPOSE --env-file $ENVFILE up -d --no-build --no-deps --force-recreate $SERVICE; \
+          \$D image prune -f"
