@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : renouvellement refusé tant que le locataire doit des loyers sur le bail (v3.256.0).** `renewLease` calcule le reste dû (`loadLeaseTotalDue`, même calcul que les relances) et renvoie 400 « Renouvellement impossible : le locataire doit encore … » ; le message s’affiche sur la page Baux.
+
 - **Domus : le renouvellement garde le lien vers l'ancien bail, sa caution et ses arriérés - bugs #51/#52 (v3.255.0).** Colonne `real_estate_leases.renewed_from_lease_id` (migration `0327_real_estate_lease_renewed_from`, idempotente) ; `renewLease` la renseigne et reporte la caution détenue sur le nouveau bail (aucune écriture comptable, le passif « Tenant Deposits » ne change pas). Rattrapage des renouvellements existants par la référence `<réf>-Rxxxx`. Baux : « Renouvellement de … » / « Renouvelé → … », caution « Reportée sur … » au lieu de « Due ». Loyers : un bail terminé par renouvellement reste suivi tant qu'il a des impayés (« Ancien bail … · arriérés à recouvrer »).
 
 - **Domus : KPI « Arriérés échus » de Loyers & paiements sans les mois encore en délai de grâce - bug #50 (v3.254.1).** Même règle que « Impayé échu » du tableau de bord : somme de `cardFriseLateDue(c).lateDue.late` au lieu du solde total du bail.
