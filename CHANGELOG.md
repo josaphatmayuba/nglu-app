@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : frise des baux au prorata, mois facturables comptés en mois civils (v3.253.5).** Complément du bug #48 : `leaseTotalMonths` utilise le 1er du mois pour un bail au prorata (comme `lease-schedule.ts`) ; début 15/06/2026, fin 05/07/2027 = 14 mois au lieu de 13. Solde inchangé.
+
 - **Domus : plus de loyer compté après la fin du bail - bug #48 (v3.253.4).** Baux sans prorata : le solde, le statut et la frise s arrêtent au dernier mois facturable, avec la règle du backend (`lease-schedule.ts` : une échéance tombant le jour de fin ou après n est pas due). Bail #8 (fin 01/10/2026) : octobre 2026 n est plus dû, solde 6 000 $ -> 4 500 $. `leaseTotalMonths` compte désormais les mois facturables (début 15/01, fin 14/01 = 12 mois au lieu de 13).
 
 - **Domus : « Impayé échu » du tableau de bord sans les loyers encore en délai de grâce - bug #47 (v3.253.3).** Le KPI additionnait tout le solde de chaque bail, mois en cours compris ; il reprend maintenant le « Retard » des cartes Loyers (échéance + délai de grâce dépassés). Calcul frise / Retard / Dû extrait dans `cardFriseLateDue` (loyers.jsx), partagé par la carte et le tableau de bord. Prod au 28/10/2026 : 46 057,41 $ -> environ 30 027 $.

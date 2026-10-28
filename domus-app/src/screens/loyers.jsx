@@ -103,6 +103,7 @@ const leaseStartMonth = (startDate) => {
 
 // Mois facturables du bail (règle backend lease-schedule.ts) : une échéance tombant le jour
 // de fin ou après n'est pas due (début 01/10/2025, fin 01/10/2026 = 12 mois) ; au moins 1.
+// Échéances au jour anniversaire, ou le 1er du mois pour un bail au prorata (mois civils).
 // null si pas de date de fin (bail indéterminé).
 export const leaseTotalMonths = (lease) => {
   const s = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.startDate || ""));
@@ -112,7 +113,7 @@ export const leaseTotalMonths = (lease) => {
   const pad2 = (n) => String(n).padStart(2, "0");
   let n = 0;
   for (; n < 1200; n += 1) {
-    const d = dueDateForMonth(lease.startDate, n);
+    const d = dueDateForMonth(lease.startDate, n, isProrationLease(lease));
     if (!d || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` >= end) break;
   }
   return Math.max(1, n);

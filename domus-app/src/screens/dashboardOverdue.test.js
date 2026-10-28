@@ -38,6 +38,12 @@ describe("fin de bail (règle backend : échéance >= date de fin non due)", () 
     expect(leaseTotalMonths({ startDate: "2026-01-15", endDate: "2027-01-14" })).toBe(12);
     expect(leaseTotalMonths({ startDate: "2026-01-15", endDate: "2026-01-15" })).toBe(1);
     expect(leaseTotalMonths({ startDate: "2026-01-15", endDate: null })).toBeNull();
+    // 15/06/2026 -> 01/07/2027 : 13 échéances (le 15, ou juin prorata + juil-juin au 1er).
+    expect(leaseTotalMonths({ startDate: "2026-06-15", endDate: "2027-07-01" })).toBe(13);
+    expect(leaseTotalMonths({ startDate: "2026-06-15", endDate: "2027-07-01", rentProrationEnabled: true })).toBe(13);
+    // Fin 05/07/2027 : le 1er juillet est dû au prorata (mois civil), pas le 15 juillet sans prorata.
+    expect(leaseTotalMonths({ startDate: "2026-06-15", endDate: "2027-07-05" })).toBe(13);
+    expect(leaseTotalMonths({ startDate: "2026-06-15", endDate: "2027-07-05", rentProrationEnabled: true })).toBe(14);
   });
 
   it("bail #8 fini le 01/10/2026 : octobre 2026 n'est pas dû", () => {
