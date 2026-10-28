@@ -214,7 +214,7 @@ function App() {
   const views = {
     dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} onOpen={setOpenProjectId} />,
     chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} onOpen={setOpenProjectId} />,
-    pointage: <Pointage projects={projectRows} canMutate={canMutate} />,
+    pointage: <Pointage projects={projectRows} canMutate={canMutate && can("create-batipro") && can("update-batipro")} />,
     equipes: <Equipes canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
