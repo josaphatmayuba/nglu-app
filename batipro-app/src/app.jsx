@@ -94,8 +94,10 @@ function moneyByCurrency(projects, field) {
     const code = p.currencyCode || null;
     byCurrency.set(code, (byCurrency.get(code) || 0) + n(p[field]));
   }
-  const entries = [...byCurrency.entries()];
-  if (!entries.length) return money(0);
+  // Une devise à 0 ne s'affiche pas à côté d'une autre (« 15 964 $ + 0 »).
+  const all = [...byCurrency.entries()];
+  const entries = all.filter(([, total]) => total !== 0);
+  if (!entries.length) return money(0, all[0]?.[0] || undefined);
   return entries.map(([code, total]) => money(total, code)).join(" + ");
 }
 const n = (v) => Number(v || 0);
@@ -120,7 +122,9 @@ function sumLinesByCurrency(lines, currencies, defaultCurrencyCode) {
 // de jointure " + " que moneyByCurrency (ex: "500 000 USD + 200 000 CDF").
 function moneyByCurrencyList(totals, field) {
   if (!totals || !totals.length) return money(0);
-  return totals.map((t) => money(t[field], t.code)).join(" + ");
+  const nonZero = totals.filter((t) => n(t[field]) !== 0);
+  if (!nonZero.length) return money(0, totals[0].code);
+  return nonZero.map((t) => money(t[field], t.code)).join(" + ");
 }
 
 // Charge la liste des devises actives (pour CurrencyPicker) — même pattern que
