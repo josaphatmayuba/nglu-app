@@ -2101,6 +2101,13 @@
       "when": 1782540000000,
       "tag": "0324_hr_money_decimal",
       "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "5",
+      "when": 1782626400000,
+      "tag": "0325_sales_purchase_money_decimal",
+      "breakpoints": true
     }
   ]
 }
