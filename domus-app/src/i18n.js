@@ -160,7 +160,7 @@ const EN = {
   "Impayé échu": "Overdue unpaid",
   "À venir": "Upcoming",
   "Loyers réellement reçus (paiements confirmés)": "Rent actually received (confirmed payments)",
-  "Loyers échus non payés (détail dans Loyers)": "Overdue unpaid rent (details in Rent)",
+  "Loyers en retard, sans les mois encore en délai de grâce": "Overdue rent, excluding months still in the grace period",
   "Échéances futures prévues aux baux": "Future installments scheduled on leases",
   "Parc": "Portfolio",
   "{n} unité(s) vacante(s)": "{n} vacant unit(s)",

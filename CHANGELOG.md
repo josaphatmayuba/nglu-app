@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : « Impayé échu » du tableau de bord sans les loyers encore en délai de grâce - bug #47 (v3.253.3).** Le KPI additionnait tout le solde de chaque bail, mois en cours compris ; il reprend maintenant le « Retard » des cartes Loyers (échéance + délai de grâce dépassés). Calcul frise / Retard / Dû extrait dans `cardFriseLateDue` (loyers.jsx), partagé par la carte et le tableau de bord. Prod au 28/10/2026 : 46 057,41 $ -> environ 30 027 $.
+
 - fix(batipro): tableau de bord - une devise a 0 ne s affiche plus a cote d une autre (« 15 964 $ US + 0 (devise non renseignee) »), BUGS 44 ; registre BUGS 44-46 (v3.253.2)
 
 - **CRM : messages de refus de paiement et de remise accentués (v3.253.1).** « dépasse le reste dû », « ne peut pas être négative ». QA dev 3.252.2 : paiement de 3 001 sur un reste dû de 3 000 refusé (400), paiement sur une facture soldée refusé, aucun paiement enregistré.
