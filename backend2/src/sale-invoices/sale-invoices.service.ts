@@ -15,7 +15,7 @@ import {
 import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
-import { computeSaleTotals, money } from "../common/invoice-money.util";
+import { assertPaidWithinTotal, assertPaymentWithinDue, computeSaleTotals, money } from "../common/invoice-money.util";
 import {
   CreatePaymentSaleInvoiceDto,
   CreateSaleInvoiceDto,
@@ -89,6 +89,7 @@ export class SaleInvoicesService {
     const { totalAmount, totalTaxAmount, totalDiscountAmount, totalPurchasePrice, dueAmount, profit } = totals;
     const totalPaidAmount = totals.paidAmount;
     const receivable = totals.receivable;
+    assertPaidWithinTotal(totalPaidAmount, receivable);
 
     // 3. Create invoice
     const invoiceId = generateInvoiceId("S");
@@ -526,6 +527,9 @@ export class SaleInvoicesService {
       throw new NotFoundException("Sale invoice not found.");
     }
 
+    // Bug #20 : refuser un paiement > reste du (le du ne devient jamais negatif).
+    assertPaymentWithinDue(input.amount, invoice.dueAmount ?? 0);
+
     // Create payment record
     await this.db.insert(paymentSaleInvoices).values({
       organizationId: orgId,
@@ -553,9 +557,7 @@ export class SaleInvoicesService {
     });
 
     // Update invoice paid/due amounts
-    const newPaidAmount = money((invoice.dueAmount ?? 0) > 0
-      ? Math.min(input.amount, invoice.dueAmount ?? 0)
-      : input.amount);
+    const newPaidAmount = money(input.amount);
 
     await this.db
       .update(saleInvoices)

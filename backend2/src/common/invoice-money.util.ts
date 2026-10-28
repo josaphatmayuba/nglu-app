@@ -1,9 +1,16 @@
+import { BadRequestException } from '@nestjs/common';
+
 // Argent des factures de vente/achat CRM legacy (bug #20 lot 2) : logique PURE.
 // Tous les montants sont calcules en CENTIMES entiers (pas de flottant cumule,
 // jamais d'arrondi a l'unite) : chaque ligne est arrondie au centime exact, les
 // totaux sont la somme exacte des lignes. Les colonnes cibles sont en
 // DECIMAL(18,2) : ce qui est stocke = ce qui est calcule ici, au centime pres.
-// `tax` et `productDiscount` sont des TAUX en % (comportement existant inchange).
+// Conventions : `tax` = TAUX en % applique sur (sous-total - remise).
+// `productDiscount` = MONTANT de remise de la LIGNE (total de la ligne, pas par
+// unite, meme devise que le prix), bug #43. C'est ce que le POS envoie : l'UI
+// (PaymentForm/PaymentSidebar) convertit deja une remise saisie en % en montant
+// = prix * quantite * % / 100 avant l'envoi, et les ecrans/PDF de facture
+// affichent productDiscount tel quel. Remise > sous-total de la ligne = erreur.
 
 // Arrondi au centime exact, demi-centime eloigne de zero. toPrecision(15)
 // neutralise l'artefact flottant (1.005 * 100 = 100.49999...).
@@ -23,6 +30,29 @@ export function money(value: unknown): number {
   return fromCents(toCents(value));
 }
 
+/** Garde paiement (comparaison en centimes) : refuse un paiement > reste du. */
+export function assertPaymentWithinDue(amount: unknown, due: unknown): void {
+  const amountC = toCents(amount);
+  const dueC = Math.max(0, toCents(due));
+  if (amountC <= 0) throw new BadRequestException("Le montant du paiement doit etre superieur a 0.");
+  if (amountC > dueC) {
+    throw new BadRequestException(
+      `Le paiement (${fromCents(amountC).toFixed(2)}) depasse le reste du (${fromCents(dueC).toFixed(2)}).`,
+    );
+  }
+}
+
+/** Garde creation : les paiements initiaux ne peuvent pas depasser le TTC. */
+export function assertPaidWithinTotal(paid: unknown, total: unknown): void {
+  const paidC = toCents(paid);
+  const totalC = toCents(total);
+  if (paidC > totalC) {
+    throw new BadRequestException(
+      `Le paiement (${fromCents(paidC).toFixed(2)}) depasse le reste du (${fromCents(totalC).toFixed(2)}).`,
+    );
+  }
+}
+
 export type SaleLineInput = {
   productQuantity: number;
   productUnitSalePrice: number;
@@ -31,7 +61,7 @@ export type SaleLineInput = {
 };
 
 export type SaleLineAmounts = {
-  discount: number; // taux %
+  discount: number; // montant de remise de la ligne (centime exact)
   tax: number; // taux %
   discountAmount: number;
   taxableAmount: number;
@@ -40,10 +70,18 @@ export type SaleLineAmounts = {
 };
 
 export function computeSaleLine(item: SaleLineInput): SaleLineAmounts & { cents: { discount: number; taxable: number; tax: number; final: number } } {
-  const discount = item.productDiscount ?? 0;
   const tax = item.tax ?? 0;
   const subtotalC = toCents(item.productQuantity * item.productUnitSalePrice);
-  const discountC = toCents(fromCents(subtotalC) * (discount / 100));
+  const discountC = toCents(item.productDiscount ?? 0);
+  if (discountC < 0) {
+    throw new BadRequestException("La remise d'une ligne ne peut pas etre negative.");
+  }
+  if (discountC > subtotalC) {
+    throw new BadRequestException(
+      `La remise (${fromCents(discountC).toFixed(2)}) depasse le sous-total de la ligne (${fromCents(subtotalC).toFixed(2)}).`,
+    );
+  }
+  const discount = fromCents(discountC);
   const taxableC = subtotalC - discountC;
   const taxC = toCents(fromCents(taxableC) * (tax / 100));
   const finalC = taxableC + taxC;

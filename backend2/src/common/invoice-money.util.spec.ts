@@ -1,4 +1,5 @@
-import { computePurchaseTotals, computeSaleTotals, money, toCents } from "./invoice-money.util";
+import { BadRequestException } from "@nestjs/common";
+import { computePurchaseTotals, computeSaleLine, computeSaleTotals, money, toCents } from "./invoice-money.util";
 
 describe("invoice-money.util (bug #20 lot 2)", () => {
   it("toCents arrondit au centime exact sans artefact flottant", () => {
@@ -17,14 +18,14 @@ describe("invoice-money.util (bug #20 lot 2)", () => {
     const t = computeSaleTotals(
       [
         { productQuantity: 3, productUnitSalePrice: 0.1, tax: 16 },
-        { productQuantity: 1, productUnitSalePrice: 10.005, productDiscount: 10 },
+        { productQuantity: 1, productUnitSalePrice: 10.005, productDiscount: 1 },
       ],
       [0.05, 7],
       [{ amount: 5 }],
     );
     // ligne 1 : 0.30 HT, taxe 0.048 -> 0.05, final 0.35
     expect(t.lines[0]).toMatchObject({ taxableAmount: 0.3, taxAmount: 0.05, finalAmount: 0.35 });
-    // ligne 2 : 10.01 brut, remise 10 % = 1.00, HT 9.01
+    // ligne 2 : 10.01 brut, remise montant 1.00, HT 9.01
     expect(t.lines[1]).toMatchObject({ discountAmount: 1, taxableAmount: 9.01, taxAmount: 0, finalAmount: 9.01 });
     expect(t.totalAmount).toBe(9.31);
     expect(t.totalTaxAmount).toBe(0.05);
@@ -34,6 +35,14 @@ describe("invoice-money.util (bug #20 lot 2)", () => {
     expect(t.dueAmount).toBe(4.36);
     expect(t.totalPurchasePrice).toBe(7.15);
     expect(t.profit).toBe(2.16);
+  });
+
+  it("remise = montant de ligne, plafonnee au sous-total (bug #43)", () => {
+    const l = computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 10, tax: 16 });
+    expect(l).toMatchObject({ discountAmount: 10, taxableAmount: 90, taxAmount: 14.4, finalAmount: 104.4 });
+    expect(computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 100 }).finalAmount).toBe(0);
+    expect(() => computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 100.01 })).toThrow(/depasse le sous-total/);
+    expect(() => computeSaleLine({ productQuantity: 1, productUnitSalePrice: 5, productDiscount: -1 })).toThrow(BadRequestException);
   });
 
   it("vente payee en entier : du exactement 0", () => {

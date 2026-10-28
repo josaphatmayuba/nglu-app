@@ -37,7 +37,7 @@ export default function ProductsForSale({ form: MainForm, totalCalculator, setSe
             productQuantity: item.productQuantity ? 1 : 0,
             productName: item.name,
             productVat: item.productVat ? item.productVat?.percentage : 0,
-            productDiscount: item.discount?.value ? parseInt(item.discount?.value) : 0,
+            productDiscount: item.discount?.value ? Number(item.discount?.value) || 0 : 0,
             discountType: item.discount?.type || "flat",
           },
         ],

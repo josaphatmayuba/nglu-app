@@ -15,7 +15,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
-import { computePurchaseTotals, money } from "../common/invoice-money.util";
+import { assertPaidWithinTotal, assertPaymentWithinDue, computePurchaseTotals, money } from "../common/invoice-money.util";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -84,6 +84,7 @@ export class PurchaseInvoicesService {
     const totals = computePurchaseTotals(invoiceProducts, input.paidAmount ?? []);
     const { totalPurchasePrice, totalTax, dueAmount } = totals;
     const totalPaidAmount = totals.paidAmount;
+    assertPaidWithinTotal(totalPaidAmount, money(totalPurchasePrice + totalTax));
 
     // 3. Create invoice
     const invoiceId = generateInvoiceId("P");
@@ -399,6 +400,8 @@ export class PurchaseInvoicesService {
       throw new NotFoundException("Purchase invoice not found.");
     }
 
+    assertPaymentWithinDue(input.amount, invoice.dueAmount ?? 0);
+
     await this.db.insert(paymentPurchaseInvoices).values({
       organizationId: orgId,
       date: new Date(input.date),
@@ -423,7 +426,7 @@ export class PurchaseInvoicesService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    const newPaidAmount = money(Math.min(input.amount, invoice.dueAmount ?? 0));
+    const newPaidAmount = money(input.amount);
 
     await this.db
       .update(purchaseInvoices)
