@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : KPI « Arriérés échus » de Loyers & paiements sans les mois encore en délai de grâce - bug #50 (v3.254.1).** Même règle que « Impayé échu » du tableau de bord : somme de `cardFriseLateDue(c).lateDue.late` au lieu du solde total du bail.
 - **CRM : retours, devis et prix produits en DECIMAL exact - bug #20 lot 3 (v3.254.0).** Migration `0326_returns_quotes_products_money_decimal` (idempotente) : 15 colonnes de `returnSaleInvoice(Product)`, `returnPurchaseInvoice(Product)`, `quote`, `quoteProduct`, `product` passent en `DECIMAL(18,2)` (totaux, `tax` des retours = montant) ou `DECIMAL(18,4)` (prix unitaires et prix produits) ; quantités en `double`. Prix d'achat moyen pondéré arrondi au 1/10000 exact (`weightedAvgUnitPrice`), rapports produits et stock au centime. Mesure préalable dev et prod : aucune valeur à plus de 2/4 décimales.
 - **Domus : frise des baux au prorata, mois facturables comptés en mois civils (v3.253.5).** Complément du bug #48 : `leaseTotalMonths` utilise le 1er du mois pour un bail au prorata (comme `lease-schedule.ts`) ; début 15/06/2026, fin 05/07/2027 = 14 mois au lieu de 13. Solde inchangé.
 

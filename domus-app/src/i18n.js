@@ -158,6 +158,7 @@ const EN = {
   "interventions": "issues",
   "Encaissé": "Collected",
   "Impayé échu": "Overdue unpaid",
+  "Arriérés échus": "Overdue arrears",
   "À venir": "Upcoming",
   "Loyers réellement reçus (paiements confirmés)": "Rent actually received (confirmed payments)",
   "Loyers en retard, sans les mois encore en délai de grâce": "Overdue rent, excluding months still in the grace period",

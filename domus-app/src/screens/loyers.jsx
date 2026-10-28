@@ -1231,11 +1231,12 @@ export function Loyers({ go }) {
   }, [leases, rows, leasePayments]);
   const lateCount = cards.filter((c) => c.status === "late").length;
   const pendingCount = cards.filter((c) => c.status === "pending").length;
-  // Total des arriérés (reste à payer cumulé), groupé par devise.
+  // Arriérés = loyers en retard (délai de grâce dépassé), groupés par devise :
+  // même règle que le KPI « Impayé échu » du tableau de bord.
   const arrearsByCurrency = useMemo(() => {
     const map = new Map();
     cards.forEach((c) => {
-      const bal = Number(c.balance) || 0;
+      const bal = Number(cardFriseLateDue(c).lateDue.late) || 0;
       if (bal <= 0) return;
       const sym = c.symbol || currency.defaultCurrencySymbol || "$";
       map.set(sym, (map.get(sym) || 0) + bal);
@@ -1418,10 +1419,11 @@ export function Loyers({ go }) {
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-red"><BellRing size={20} /></div></div>
-          <div className="immo-metric-label">Arriérés (reste dû)</div>
+          <div className="immo-metric-label">{t("Arriérés échus")}</div>
           <div className="immo-metric-value" style={{ color: hasArrears ? "#dc2626" : undefined }}>
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
+          <div className="immo-metric-helper">{t("Loyers en retard, sans les mois encore en délai de grâce")}</div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
             onClick={() => smsSend((extra) => api.runOverdueReminders(extra), { title: t("Relancer les impayés : vérifier les messages") })
               .then((res) => { if (res) toast.success(t("Rappels lancés")); })
