@@ -2106,8 +2106,10 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
     @CurrentUserId() userId: number,
     @Body("replace") replace?: string,
+    @Body("expectedDocumentId") expectedDocumentId?: string,
   ) {
-    return this.contractsService.markSignedManually(id, document, orgId, userId, replace === "true" || replace === "1");
+    const expected = expectedDocumentId != null && /^\d+$/.test(String(expectedDocumentId)) ? Number(expectedDocumentId) : null;
+    return this.contractsService.markSignedManually(id, document, orgId, userId, replace === "true" || replace === "1", expected);
   }
 
   @ApiOperation({ summary: "Change the template of a draft contract (re-renders the text)" })

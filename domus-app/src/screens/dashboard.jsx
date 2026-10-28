@@ -8,7 +8,7 @@ import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
-import { buildLeaseCards } from "./loyers.jsx";
+import { buildLeaseCards, cardFriseLateDue } from "./loyers.jsx";
 import { splitRentPayments } from "../rentBreakdown.js";
 import { t, tf } from "../i18n.js";
 
@@ -39,11 +39,12 @@ export function Dashboard({ go }) {
   const fallbackSym = currency.defaultCurrencySymbol;
   // Encaissé = paiements confirmes (status paid) sur la periode filtree.
   const collectedRows = groupAmountsByCurrency(splitRentPayments(payments).paid, (payment) => payment.amount, fallbackSym);
-  // Impaye echu = memes cartes/soldes que l'ecran Loyers (solde cumule du bail, tous paiements).
+  // Impaye echu = « Retard » des cartes Loyers : echeances dont le delai de grace est
+  // depasse (les mois encore dans la grace ne comptent pas).
   const allLeasePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => leaseIds.has(p.leaseId));
   const overdueCards = buildLeaseCards(leases, allLeasePayments)
-    .filter((c) => Number(c.balance) > 0)
-    .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, balance: c.balance }));
+    .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, balance: cardFriseLateDue(c).lateDue.late }))
+    .filter((c) => Number(c.balance) > 0.005);
   const overdueRows = groupAmountsByCurrency(overdueCards, (c) => c.balance, fallbackSym);
   const activeIds = new Set(activeLeases.map((l) => l.id));
   const upcomingRows = groupAmountsByCurrency(
@@ -118,7 +119,7 @@ export function Dashboard({ go }) {
           <Metric tone="red" icon={<AlertTriangle size={20} />} label={t("Impayé échu")}
             value={<MoneyStack rows={overdueRows} fallbackSymbol={fallbackSym} />}
             valueColor={overdueRows.some((r) => r.amount > 0) ? "#dc2626" : undefined}
-            helper={t("Loyers échus non payés (détail dans Loyers)")} />
+            helper={t("Loyers en retard, sans les mois encore en délai de grâce")} />
           <Metric tone="brand" icon={<RefreshCw size={20} />} label={t("À venir")}
             value={<MoneyStack rows={upcomingRows} fallbackSymbol={fallbackSym} />}
             helper={t("Échéances futures prévues aux baux")} />

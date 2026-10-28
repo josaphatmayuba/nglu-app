@@ -140,7 +140,7 @@ jobs:
             {"app":"domus-app",        "flag":"domus",        "build":"build"},
             {"app":"journal-app",      "flag":"journal",      "build":"build"},
             {"app":"farmos-app",       "flag":"farmos",       "build":"build"},
-            {"app":"batipro-app",      "flag":"batipro",      "build":"build",     "conf":true},
+            {"app":"batipro-app",      "flag":"batipro",      "build":"build:dev", "conf":true},
             {"app":"hr-app",           "flag":"hr",           "build":"build",     "conf":true},
             {"app":"comptabilite-app", "flag":"comptabilite", "build":"build:dev", "conf":true},
             {"app":"chat-app",         "flag":"chat",         "build":"build:dev", "conf":true},

@@ -47,7 +47,7 @@ export default function SearchForm({
             productQuantity: 1, // Set quantity to 1 here
             productSalePrice: product.productSalePrice,
             productVat: product.productVat ? product.productVat?.percentage : 0,
-            productDiscount: product.discount?.value ? parseInt(product.discount?.value) : 0,
+            productDiscount: product.discount?.value ? Number(product.discount?.value) || 0 : 0,
             discountType: product.discount?.type || "flat",
           },
         ],

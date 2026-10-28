@@ -1,5 +1,6 @@
 import React from "react";
 import { api, subcontractorSubmitUrl, clientDocumentUrl } from "./api.js";
+import { usePermissions, can } from "./perms.js";
 import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
@@ -93,8 +94,10 @@ function moneyByCurrency(projects, field) {
     const code = p.currencyCode || null;
     byCurrency.set(code, (byCurrency.get(code) || 0) + n(p[field]));
   }
-  const entries = [...byCurrency.entries()];
-  if (!entries.length) return money(0);
+  // Une devise à 0 ne s'affiche pas à côté d'une autre (« 15 964 $ + 0 »).
+  const all = [...byCurrency.entries()];
+  const entries = all.filter(([, total]) => total !== 0);
+  if (!entries.length) return money(0, all[0]?.[0] || undefined);
   return entries.map(([code, total]) => money(total, code)).join(" + ");
 }
 const n = (v) => Number(v || 0);
@@ -119,7 +122,9 @@ function sumLinesByCurrency(lines, currencies, defaultCurrencyCode) {
 // de jointure " + " que moneyByCurrency (ex: "500 000 USD + 200 000 CDF").
 function moneyByCurrencyList(totals, field) {
   if (!totals || !totals.length) return money(0);
-  return totals.map((t) => money(t[field], t.code)).join(" + ");
+  const nonZero = totals.filter((t) => n(t[field]) !== 0);
+  if (!nonZero.length) return money(0, totals[0].code);
+  return nonZero.map((t) => money(t[field], t.code)).join(" + ");
 }
 
 // Charge la liste des devises actives (pour CurrencyPicker) — même pattern que
@@ -189,6 +194,7 @@ function App() {
   const projectRows = snapshot?.projects || [];
   const taskRows = snapshot?.tasks || [];
   const materialRows = snapshot?.materials || [];
+  const can = usePermissions(); // bug #11 : re-rend App quand les permissions arrivent
   const canMutate = apiStatus === "api";
 
   const go = (id) => { setRoute(id); setOpenProjectId(null); setMoreOpen(false); window.scrollTo(0, 0); };
@@ -212,7 +218,7 @@ function App() {
   const views = {
     dashboard: <Dashboard projects={projectRows} tasks={taskRows} go={go} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} isMobile={isMobile} onOpen={setOpenProjectId} />,
     chantiers: <Chantiers projects={projectRows} onNew={() => setModal({ kind: "project" })} canMutate={canMutate} onOpen={setOpenProjectId} />,
-    pointage: <Pointage projects={projectRows} canMutate={canMutate} />,
+    pointage: <Pointage projects={projectRows} canMutate={canMutate && can("create-batipro") && can("update-batipro")} />,
     equipes: <Equipes canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
@@ -324,7 +330,7 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
           <p className="eyebrow">Vue d'ensemble · {new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p>
           <h2 className="title font-display">Vos chantiers</h2>
         </div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
       </div>
 
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
@@ -507,7 +513,7 @@ function Chantiers({ projects, onNew, canMutate, onOpen }) {
     <>
       <div className="topbar">
         <div><p className="eyebrow">Projets</p><h2 className="title font-display">Projets / chantiers</h2></div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
       </div>
 
       <div className="g3" style={{ marginBottom: 18 }}>
@@ -604,8 +610,8 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
-          {canMutate && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
-          {canMutate && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
+          {canMutate && can("update-batipro") && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
+          {canMutate && can("update-batipro") && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
       </div>
       {shareOpen && <ShareTrackingModal project={p} onClose={() => setShareOpen(false)} />}
@@ -1045,7 +1051,7 @@ function Planning({ projects, canMutate, fixedProjectId }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({})}><Icon name="plus" /> Phase</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal({})}><Icon name="plus" /> Phase</button>
         </div>
       </div>
 
@@ -1209,7 +1215,7 @@ function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
-          {canMutate && <button type="button" className="btn btn-amber grad-amber" onClick={onEdit}><Icon name="edit" /> Modifier la phase</button>}
+          {canMutate && can("update-batipro") && <button type="button" className="btn btn-amber grad-amber" onClick={onEdit}><Icon name="edit" /> Modifier la phase</button>}
         </div>
       </div>
     </div>
@@ -1409,7 +1415,7 @@ function Plan3D({ projects, materials, canMutate, fixedProjectId }) {
       ) : model === null ? (
         <div className="card pad" style={{ textAlign: "center", padding: 32 }}>
           <p className="muted" style={{ marginBottom: 14 }}>Aucun plan 3D pour ce chantier.</p>
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={createModel}><Icon name="plus" /> Créer le plan</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={createModel}><Icon name="plus" /> Créer le plan</button>
         </div>
       ) : (
         <>
@@ -1566,7 +1572,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau devis</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau devis</button>
         </div>
       </div>
 
@@ -1587,11 +1593,11 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
-                      {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
-                      {canMutate && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
-                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
-                      {canMutate && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
-                      {canMutate && (
+                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
+                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
+                      {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
+                      {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
+                      {canMutate && can("update-batipro") && (
                         <label className="link" style={{ cursor: "pointer" }}>
                           <Icon name="filePlus" /> Joindre le PDF
                           <input type="file" accept="application/pdf" style={{ display: "none" }}
@@ -1599,7 +1605,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                         </label>
                       )}
                       {d.attachedFileKey && <button className="link" onClick={() => setModal({ kind: "attachment", id: d.id })}><Icon name="eye" /> Voir la pièce jointe</button>}
-                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -2082,15 +2088,27 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     setError(""); setNotice(""); setBusy(d.id); setInvoiceModal(null);
     try {
       const created = await api.createInvoiceFromPurchaseOrder(d.id, body);
-      if (photo && created?.id) {
-        try { await api.uploadDocumentAttachment(created.id, photo); }
-        catch { /* facture créée, photo à réessayer depuis la ligne */ }
-      }
+      // Bug #6 : confirmation + liste rafraîchie dès la création ; la photo part en arrière-plan.
       setNotice("Facture fournisseur créée.");
       loadPoInvoices(d.id);
       load();
+      setBusy(0);
+      if (photo && created?.id) sendInvoicePhoto(created.id, d.id, photo);
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(0); }
+  };
+  // Envoi (ou renvoi) de la photo d'une facture déjà créée — ne recrée jamais la facture.
+  const [photoUploads, setPhotoUploads] = React.useState({}); // { [invoiceId]: { poId, file, status, message } }
+  const sendInvoicePhoto = async (invoiceId, poId, file) => {
+    setPhotoUploads((c) => ({ ...c, [invoiceId]: { poId, file, status: "sending" } }));
+    try {
+      await api.uploadDocumentAttachment(invoiceId, file);
+      setPhotoUploads((c) => { const n = { ...c }; delete n[invoiceId]; return n; });
+      setNotice("Photo de la facture envoyée.");
+      loadPoInvoices(poId);
+    } catch (err) {
+      setPhotoUploads((c) => ({ ...c, [invoiceId]: { poId, file, status: "error", message: err.message || String(err) } }));
+    }
   };
   const confirmPayInvoice = async (amount) => {
     const { invoice, po } = invoicePayModal;
@@ -2133,12 +2151,22 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau BC</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal({ kind: "new" })}><Icon name="filePlus" /> Nouveau BC</button>
         </div>
       </div>
 
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {notice && <div style={{ color: "var(--emerald-600, #047857)", fontSize: 13, marginBottom: 8 }}>{notice}</div>}
+      {Object.entries(photoUploads).map(([invId, u]) => (
+        <div key={invId} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", fontSize: 13, marginBottom: 8, color: u.status === "error" ? "var(--rose-600, #b91c1c)" : "var(--ink-500)" }}>
+          {u.status === "sending"
+            ? <span>Photo de la facture en cours d'envoi…</span>
+            : <>
+                <span>Facture créée, mais la photo n'a pas pu être envoyée : {u.message}</span>
+                <button type="button" className="link" onClick={() => sendInvoicePhoto(Number(invId), u.poId, u.file)}>Réessayer l'envoi de la photo</button>
+              </>}
+        </div>
+      ))}
 
       <input
         ref={attachInputRef}
@@ -2173,15 +2201,15 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
               !docs.length ? <tr><td colSpan={8} className="muted">Aucun bon de commande pour ce chantier.</td></tr> :
               docs.map((d) => {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
-                const canPay = canMutate && d.status !== "cancelled" && balance > 0.001;
-                const canPost = canMutate && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
-                const canConfirm = canMutate && d.status === "sent";
-                const canReceive = canMutate && ["sent", "confirmed", "partially_received"].includes(d.status);
+                const canPay = canMutate && can("update-batipro") && d.status !== "cancelled" && balance > 0.001;
+                const canPost = canMutate && can("update-batipro") && d.status !== "draft" && d.status !== "cancelled" && !d.ledgerEntryId;
+                const canConfirm = canMutate && can("update-batipro") && d.status === "sent";
+                const canReceive = canMutate && can("update-batipro") && ["sent", "confirmed", "partially_received"].includes(d.status);
                 const trackedLines = (linesById[d.id] || []).filter((l) => l.materialId);
                 const orderedQty = trackedLines.reduce((s, l) => s + n(l.quantity), 0);
                 const receivedQty = trackedLines.reduce((s, l) => s + n(l.receivedQuantity), 0);
                 const showProgress = d.status !== "draft" && trackedLines.length > 0;
-                const canInvoice = canMutate && d.status !== "draft" && d.status !== "cancelled";
+                const canInvoice = canMutate && can("create-batipro") && d.status !== "draft" && d.status !== "cancelled";
                 const invData = poInvoices[d.id];
                 return (
                 <React.Fragment key={d.id}>
@@ -2212,8 +2240,8 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       {canPost && <button className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
                       {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
-                      {canMutate && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
-                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
+                      {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -2242,7 +2270,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                               <tbody>
                                 {invData.invoices.map((inv) => {
                                   const invBalance = Math.max(0, n(inv.totalTtc) - n(inv.paidAmount));
-                                  const canPayInv = canMutate && inv.status !== "cancelled" && invBalance > 0.001;
+                                  const canPayInv = canMutate && can("update-batipro") && inv.status !== "cancelled" && invBalance > 0.001;
                                   return (
                                     <tr key={inv.id}>
                                       <td>{inv.number || `#${inv.id}`}</td>
@@ -2258,7 +2286,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                               <Icon name="eye" /> Voir photo
                                             </button>
                                           )}
-                                          {canMutate && (
+                                          {canMutate && can("update-batipro") && (
                                             <button className="link" disabled={busy === inv.id} onClick={() => triggerAttach(inv, d)}>
                                               <Icon name="camera" /> {inv.attachedFileKey ? "Reprendre photo" : "Photo"}
                                             </button>
@@ -3074,7 +3102,7 @@ function SituationsTravaux({ projects, canMutate, fixedProjectId }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal(true)}><Icon name="filePlus" /> Nouvelle situation</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal(true)}><Icon name="filePlus" /> Nouvelle situation</button>
         </div>
       </div>
 
@@ -3096,7 +3124,7 @@ function SituationsTravaux({ projects, canMutate, fixedProjectId }) {
                   <td>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
-                      {canMutate && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
                     </div>
                   </td>
                 </tr>
@@ -3206,7 +3234,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
       {notice && <div style={{ color: "var(--emerald-600, #047857)", fontSize: 13, marginBottom: 8 }}>{notice}</div>}
 
-      {canMutate && situations.length > 0 && (
+      {canMutate && can("create-batipro") && situations.length > 0 && (
         <div className="card pad" style={{ marginBottom: 12 }}>
           <div className="kpi-label" style={{ marginBottom: 6 }}>Situations validées à facturer</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -3238,10 +3266,10 @@ function Factures({ projects, canMutate, fixedProjectId }) {
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
-                        {canMutate && d.status === "draft" && (
+                        {canMutate && can("update-batipro") && d.status === "draft" && (
                           <button className="link link-accent" disabled={busy === d.id} onClick={() => issue(d.id)}>Émettre / Comptabiliser</button>
                         )}
-                        {canMutate && (d.status === "issued") && (
+                        {canMutate && can("update-batipro") && (d.status === "issued") && (
                           <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
                         )}
                       </div>
@@ -3463,7 +3491,7 @@ function SitePhotos({ projects, tasks, canMutate, fixedProjectId }) {
             </select>
           )}
           <button className="btn btn-ghost" disabled={!projectId} onClick={() => setModal({ kind: "report" })}><Icon name="fileDown" /> Générer un rapport</button>
-          <button className="btn btn-amber grad-amber" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "upload" })}><Icon name="camera" /> Ajouter une photo</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal({ kind: "upload" })}><Icon name="camera" /> Ajouter une photo</button>
         </div>
       </div>
 
@@ -3638,10 +3666,10 @@ function PhotoLightbox({ photo, tasks, canMutate, onClose, removePhoto }) {
               <button type="button" className="btn btn-amber grad-amber" disabled={busy} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
             </div>
           </div>
-        ) : canMutate && (
+        ) : canMutate && (can("update-batipro") || can("delete-batipro")) && (
           <div className="modal-actions">
-            <button type="button" className="link link-danger" onClick={() => removePhoto(current.id)}>Retirer de la galerie</button>
-            <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)}>Modifier</button>
+            {can("delete-batipro") && <button type="button" className="link link-danger" onClick={() => removePhoto(current.id)}>Retirer de la galerie</button>}
+            {can("update-batipro") && <button type="button" className="btn btn-ghost" onClick={() => setEditing(true)}>Modifier</button>}
           </div>
         )}
       </div>
@@ -3790,7 +3818,7 @@ function Situations({ projects, canMutate, fixedProjectId }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
-          <button className="btn" disabled={!canMutate || !projectId} onClick={() => setModal({ kind: "subLink" })}><Icon name="userPlus" /> Lien sous-traitant</button>
+          <button className="btn" disabled={!canMutate || !can("create-batipro") || !projectId} onClick={() => setModal({ kind: "subLink" })}><Icon name="userPlus" /> Lien sous-traitant</button>
         </div>
       </div>
 
@@ -4169,7 +4197,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
       <>
         <div className="topbar">
           <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux du chantier</h2></div>
-          <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="box" /> Déclarer une sortie</button>
+          <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({})}><Icon name="box" /> Déclarer une sortie</button>
         </div>
         {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="g3 kpis" style={{ marginBottom: 16 }}>
@@ -4248,7 +4276,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
     <>
       <div className="topbar">
         <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux & achats</h2></div>
-        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
+        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Références suivies</div><div className="font-display kpi-value">{materials.length}</div></div>
@@ -4470,7 +4498,7 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
     <>
       <div className="topbar">
         <div><p className="eyebrow">Partenaires</p><h2 className="title font-display">Sous-traitants</h2></div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({ projectId: fixedProjectId ?? undefined })}><Icon name="userPlus" /> Ajouter</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({ projectId: fixedProjectId ?? undefined })}><Icon name="userPlus" /> Ajouter</button>
       </div>
       {loading ? (
         <div className="card pad"><span className="muted">Chargement…</span></div>
@@ -4587,7 +4615,7 @@ function Equipes({ canMutate }) {
             <button type="button" className={`btn ${sub === "equipes" ? "btn-dark" : "btn-ghost"}`} style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setSub("equipes")}>Équipes</button>
             <button type="button" className={`btn ${sub === "ouvriers" ? "btn-dark" : "btn-ghost"}`} style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setSub("ouvriers")}>Ouvriers</button>
           </div>
-          {sub === "equipes" && <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvelle équipe</button>}
+          {sub === "equipes" && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvelle équipe</button>}
         </div>
       </div>
 
@@ -4610,8 +4638,8 @@ function Equipes({ canMutate }) {
                       <td><span className={`chip ${CREW_STATUS_TONE[c.status] || "ink"}`}>{c.status ? c.status.replace(/_/g, " ") : "—"}</span></td>
                       <td>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {canMutate && <button className="link" onClick={() => setModal(c)}>Modifier</button>}
-                          {canMutate && <button className="link link-danger" onClick={() => remove(c.id)}>Suppr.</button>}
+                          {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal(c)}>Modifier</button>}
+                          {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => remove(c.id)}>Suppr.</button>}
                         </div>
                       </td>
                     </tr>
@@ -4680,7 +4708,7 @@ function Ouvriers({ crews, canMutate }) {
     <>
       <div className="topbar" style={{ marginTop: 12 }}>
         <div><p className="eyebrow">Ressources humaines</p><h2 className="title font-display">Ouvriers</h2></div>
-        <button className="btn btn-amber grad-amber" disabled={!canMutate} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvel ouvrier</button>
+        <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({})}><Icon name="userPlus" /> Nouvel ouvrier</button>
       </div>
 
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
@@ -4702,8 +4730,8 @@ function Ouvriers({ crews, canMutate }) {
                     <td style={{ color: "var(--ink-500)" }}>{crew?.name || "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {canMutate && <button className="link" onClick={() => setModal(w)}>Modifier</button>}
-                        {canMutate && <button className="link link-danger" onClick={() => remove(w.id)}>Suppr.</button>}
+                        {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal(w)}>Modifier</button>}
+                        {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => remove(w.id)}>Suppr.</button>}
                       </div>
                     </td>
                   </tr>

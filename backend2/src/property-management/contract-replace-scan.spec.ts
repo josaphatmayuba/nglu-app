@@ -88,6 +88,21 @@ describe("ContractsService.markSignedManually - remplacement du scan", () => {
     expect(svc.log).not.toHaveBeenCalled();
   });
 
+  it("envoi rejoue alors qu'un scan plus recent est en place : ConflictException, rien n'est stocke", async () => {
+    const fake = makeFakeDb([[row()], [existingDoc]]);
+    const svc = makeService(fake);
+    await expect(svc.markSignedManually(1, newFile, 5, 3, true, 4)).rejects.toBeInstanceOf(ConflictException);
+    expect(svc.objectStorage.putDocument).not.toHaveBeenCalled();
+    expect(svc.log).not.toHaveBeenCalled();
+  });
+
+  it("scan attendu toujours en place : remplacement accepte", async () => {
+    const fake = makeFakeDb([[row()], [existingDoc]]);
+    const svc = makeService(fake);
+    const res = await svc.markSignedManually(1, newFile, 5, 3, true, 5);
+    expect(res.replaced).toBe(true);
+  });
+
   it("replace sans scan : BadRequestException", async () => {
     const fake = makeFakeDb([[row({ signedDocumentId: null })]]);
     const svc = makeService(fake);

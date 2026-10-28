@@ -10,7 +10,7 @@ export function SignedScanImportButton({ contract, leaseRef, replace = false, la
   const confirm = useConfirm();
   const { enqueueSignedContract, itemForContract } = useUploads();
   const upload = itemForContract(contract.id);
-  const busy = Boolean(upload);
+  const busy = Boolean(upload) && upload.status !== "failed";
   const [error, setError] = useState("");
 
   async function onPick(e) {
@@ -31,6 +31,7 @@ export function SignedScanImportButton({ contract, leaseRef, replace = false, la
       leaseId: contract.leaseId,
       ref: leaseRef ? (String(leaseRef).startsWith("#") ? String(leaseRef) : `#${leaseRef}`) : `#LEASE-${contract.leaseId}`,
       replace,
+      expectedDocumentId: replace ? (contract.signedDocumentId ?? contract.signedDocument?.id ?? null) : null,
     });
     if (!queued) setError(t("Un envoi est déjà en cours pour ce contrat."));
   }

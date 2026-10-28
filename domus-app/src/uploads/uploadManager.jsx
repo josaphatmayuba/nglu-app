@@ -13,6 +13,8 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // nginx client_max_body_size 
 const BACKOFF_MS = [5000, 15000, 30000, 60000, 60000, 60000];
 const MAX_ATTEMPTS = BACKOFF_MS.length;
 const DONE_VISIBLE_MS = 5000;
+// Au-delà, un envoi resté en file n'est plus rejoué tout seul au démarrage (il pourrait écraser un scan plus récent).
+const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const UploadsContext = createContext(null);
 const FALLBACK = { items: [], enqueueSignedContract: () => false, retry() {}, cancel() {}, itemForContract: () => null, subscribe: () => () => {} };
@@ -50,6 +52,7 @@ const toView = (r) => ({
   progress: r.progress || 0,
   attempts: r.attempts || 0,
   error: r.error || "",
+  serverError: !!r.serverError,
 });
 
 export function UploadsProvider({ children }) {
@@ -104,7 +107,7 @@ export function UploadsProvider({ children }) {
     abortersRef.current.set(id, controller);
     patch(id, { status: "uploading", progress: 0, error: "" }, true);
     try {
-      let updated = await api.markContractSignedManually(rec.contractId, rec.file, (p) => patch(id, { progress: p }), controller.signal, { replace: rec.replace === true });
+      let updated = await api.markContractSignedManually(rec.contractId, rec.file, (p) => patch(id, { progress: p }), controller.signal, { replace: rec.replace === true, expectedDocumentId: rec.expectedDocumentId ?? null });
       abortersRef.current.delete(id);
       runningRef.current.delete(id);
       if (!aliveRef.current) return;
@@ -143,19 +146,24 @@ export function UploadsProvider({ children }) {
           timersRef.current.set(id, setTimeout(() => start(id), BACKOFF_MS[attempts - 1]));
         }
       } else {
-        patch(id, { status: "failed", attempts, retriable, error: err?.message || t("Import de la signature impossible.") }, true);
+        // Echec serveur repete : message clair plutot que le texte brut du serveur (« Service Unavailable »).
+        const message = retriable && !isOffline() ? t("Serveur indisponible. Réessayez plus tard.") : (err?.message || t("Import de la signature impossible."));
+        patch(id, { status: "failed", attempts, retriable, error: message }, true);
       }
     }
   }, [patch, remove]);
 
-  const enqueueSignedContract = useCallback((file, { contractId, leaseId, ref, replace = false }) => {
-    for (const r of recordsRef.current.values()) {
-      if (r.contractId === contractId && r.status !== "done") return false;
+  const enqueueSignedContract = useCallback((file, { contractId, leaseId, ref, replace = false, expectedDocumentId = null }) => {
+    for (const r of [...recordsRef.current.values()]) {
+      if (r.contractId !== contractId || r.status === "done") continue;
+      // Un envoi en echec ne bloque pas un nouveau fichier : il est remplace.
+      if (r.status === "failed") { recordsRef.current.delete(r.id); storeDelete(r.id).catch(() => {}); continue; }
+      return false;
     }
     const id = `signed-${contractId}-${Date.now()}`;
     const owner = identityRef.current;
     if (!owner) return false;
-    const rec = { id, kind: "signed-contract", replace: replace === true, userId: owner.userId, orgId: owner.orgId, retriable: false, contractId, leaseId: leaseId ?? null, ref: ref || "", file, status: "queued", progress: 0, attempts: 0, error: "" };
+    const rec = { id, kind: "signed-contract", replace: replace === true, expectedDocumentId: replace ? (expectedDocumentId ?? null) : null, createdAt: Date.now(), userId: owner.userId, orgId: owner.orgId, retriable: false, contractId, leaseId: leaseId ?? null, ref: ref || "", file, status: "queued", progress: 0, attempts: 0, error: "" };
     recordsRef.current.set(id, rec);
     storePut({ ...rec }).catch(() => {});
     sync();
@@ -189,7 +197,12 @@ export function UploadsProvider({ children }) {
         if (recordsRef.current.has(r.id)) continue;
         // Un contrat deja en file (meme contractId) n'est pas duplique.
         if ([...recordsRef.current.values()].some((x) => x.contractId === r.contractId)) continue;
-        recordsRef.current.set(r.id, { ...r, progress: 0, status: r.status === "failed" ? "failed" : "queued" });
+        // Envoi trop ancien (ou d'avant la date d'enregistrement) : pas de reprise auto, l'utilisateur décide.
+        const stale = r.status !== "failed" && !(Number(r.createdAt) > Date.now() - STALE_AFTER_MS);
+        recordsRef.current.set(r.id, stale
+          ? { ...r, progress: 0, status: "failed", retriable: false, error: t("Envoi interrompu depuis plus de 24 h. Vérifiez le scan actuel avant de relancer.") }
+          : { ...r, progress: 0, status: r.status === "failed" ? "failed" : "queued" });
+        if (stale) storePut({ ...recordsRef.current.get(r.id) }).catch(() => {});
       }
       sync();
       for (const r of [...recordsRef.current.values()]) if (r.status === "queued") start(r.id);

@@ -101,13 +101,22 @@ const leaseStartMonth = (startDate) => {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 };
 
-// Durée du bail en mois (début et fin inclus) ; null si pas de date de fin (bail indéterminé).
-const leaseTotalMonths = (lease) => {
-  const s = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
-  const e = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+// Mois facturables du bail (règle backend lease-schedule.ts) : une échéance tombant le jour
+// de fin ou après n'est pas due (début 01/10/2025, fin 01/10/2026 = 12 mois) ; au moins 1.
+// Échéances au jour anniversaire, ou le 1er du mois pour un bail au prorata (mois civils).
+// null si pas de date de fin (bail indéterminé).
+export const leaseTotalMonths = (lease) => {
+  const s = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const e = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.endDate || ""));
   if (!s || !e) return null;
-  const n = (Number(e[1]) - Number(s[1])) * 12 + (Number(e[2]) - Number(s[2])) + 1;
-  return n > 0 ? n : null;
+  const end = `${e[1]}-${e[2]}-${e[3]}`;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  let n = 0;
+  for (; n < 1200; n += 1) {
+    const d = dueDateForMonth(lease.startDate, n, isProrationLease(lease));
+    if (!d || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` >= end) break;
+  }
+  return Math.max(1, n);
 };
 
 // N mois à partir d'une date de début (le plus ancien à gauche → la frise se
@@ -204,12 +213,17 @@ export function buildLeaseCards(leases, payments) {
         const sM = leaseStartMonth(l.startDate);
         elapsedPast = Math.max(0, (thisM.getFullYear() - sM.getFullYear()) * 12 + (thisM.getMonth() - sM.getMonth()));
       }
+      // Bail terminé : rien n'est dû après le dernier mois facturable (fin du bail).
+      const billable = leaseTotalMonths(l);
+      const ended = billable != null && elapsedPast + 1 > billable;
       // late = un mois passé encore non couvert · pending = passés couverts mais pas le mois courant · ok = tout couvert.
-      let status = monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
+      let status = ended
+        ? (monthsCovered >= billable ? "ok" : "late")
+        : monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
 
       // Solde réel : total exigible (mois courant inclus) − total déjà versé.
       // Gère les paiements partiels : 2 mois dus à 100, 50 versé → reste 150.
-      let monthsDue = elapsedPast + 1;
+      let monthsDue = ended ? billable : elapsedPast + 1;
       let totalDue = monthsDue * rent;
       let balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
       let credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100); // avance éventuelle
@@ -318,6 +332,53 @@ const STATUS_META = {
 
 const fmtNum = (n) => (Number(n) || 0).toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 
+// Frise + Retard/Du d'une carte de bail (buildLeaseCards) : partage par la carte Loyers
+// et le KPI « Impayé échu » du tableau de bord (late = délai de grâce dépassé).
+export function cardFriseLateDue(card) {
+  const { lease, monthsCoveredFloat, status = "ok", rent, balance = 0, monthsDue = 1, totalPaid = 0, list = [], periodAmounts = null, dueFrise = null } = card;
+  // Frise proportionnelle à la durée du bail : un bloc par état (payé / partiel / retard / courant / à venir).
+  // Bail sans date de fin : mois écoulés + 6 mois à venir (12 au minimum).
+  // Bail flagge (dueFrise) : une case par echeance du backend ; bail a duree indeterminee = pas de total.
+  const fixedTotal = dueFrise ? (lease?.endDate ? dueFrise.kinds.length : null) : lease?.startDate ? leaseTotalMonths(lease) : null;
+  const totalMonths = dueFrise ? dueFrise.kinds.length : lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
+  // Etat de chaque mois + nombre de mois en retard : meme regle (echeance + grace),
+  // echeance au prorata = periodStart des lignes, sinon 1er du mois (cf. backend).
+  const prorata = isProrationLease(lease);
+  const periodStarts = prorata
+    ? list.filter((p) => p.periodStart && p.status !== "voided").map((p) => String(p.periodStart).slice(0, 10)).sort()
+    : null;
+  const frise = dueFrise
+    ? { kinds: dueFrise.kinds, lateCount: dueFrise.lateCount }
+    : totalMonths
+    ? friseKinds({ startDate: lease.startDate, graceDays: lease.graceDays, prorata, periodStarts, totalMonths, monthsDue, monthsCoveredFloat })
+    : { kinds: [], lateCount: 0 };
+  const monthKinds = frise.kinds;
+  // Cumul exigible jusqu'au mois i inclus : (i+1) loyers, ou, au prorata, la
+  // somme des montants de période (loyer plein au-delà des périodes connues).
+  const cumDue = (i) => {
+    const r = Number(rent) || 0;
+    if (!periodAmounts) return (i + 1) * r;
+    let s = 0;
+    for (let k = 0; k <= i; k += 1) s += periodAmounts[k] ?? r;
+    return s;
+  };
+  // Retard / Du : bail flagge = depuis les echeances ; historique = derive de la frise.
+  const lateDue = (() => {
+    // Historique sans frise (bail sans date de debut) en retard : tout le solde est en retard.
+    if (!dueFrise && !monthKinds.length && status === "late") return { late: balance, due: 0, graceUntil: null };
+    if (dueFrise) return { late: dueFrise.lateAmount, due: dueFrise.dueAmount, graceUntil: dueFrise.graceUntil };
+    const s = legacyLateDue({ kinds: monthKinds, balance, totalPaid, cumDue });
+    let graceUntil = null;
+    if (s.due > 0.005 && lease?.startDate) {
+      const lastLate = monthKinds.lastIndexOf("late");
+      const j = monthKinds.findIndex((k, i) => i > lastLate && (k === "due" || k === "cur" || k === "partial") && i < monthsDue);
+      if (j >= 0) graceUntil = graceUntilOf(dueDateForMonth(lease.startDate, j, prorata), lease.graceDays);
+    }
+    return { ...s, graceUntil };
+  })();
+  return { fixedTotal, totalMonths, prorata, frise, cumDue, lateDue };
+}
+
 function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMissing, generating = false, onDefaultNotice, noticing = false, onRemind, reminding = false, onChanged }) {
   const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, monthsDue = 1, coveredUntil = null, totalPaid = 0, list = [], periodAmounts = null, dueFrise = null } = card;
   const [showMonths, setShowMonths] = useState(false);
@@ -362,22 +423,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   };
   const segTitle = { paid: "payé", pending: "en attente", late: "en retard", "": "à venir" };
 
-  // Frise proportionnelle à la durée du bail : un bloc par état (payé / partiel / retard / courant / à venir).
-  // Bail sans date de fin : mois écoulés + 6 mois à venir (12 au minimum).
-  // Bail flagge (dueFrise) : une case par echeance du backend ; bail a duree indeterminee = pas de total.
-  const fixedTotal = dueFrise ? (lease?.endDate ? dueFrise.kinds.length : null) : lease?.startDate ? leaseTotalMonths(lease) : null;
-  const totalMonths = dueFrise ? dueFrise.kinds.length : lease?.startDate ? (fixedTotal || Math.max(monthsDue + 6, 12)) : 0;
-  // Etat de chaque mois + nombre de mois en retard : meme regle (echeance + grace),
-  // echeance au prorata = periodStart des lignes, sinon 1er du mois (cf. backend).
-  const prorata = isProrationLease(lease);
-  const periodStarts = prorata
-    ? list.filter((p) => p.periodStart && p.status !== "voided").map((p) => String(p.periodStart).slice(0, 10)).sort()
-    : null;
-  const frise = dueFrise
-    ? { kinds: dueFrise.kinds, lateCount: dueFrise.lateCount }
-    : totalMonths
-    ? friseKinds({ startDate: lease.startDate, graceDays: lease.graceDays, prorata, periodStarts, totalMonths, monthsDue, monthsCoveredFloat })
-    : { kinds: [], lateCount: 0 };
+  const { fixedTotal, totalMonths, prorata, frise, cumDue, lateDue } = cardFriseLateDue(card);
   const monthKinds = frise.kinds;
   const runs = [];
   monthKinds.forEach((k, i) => {
@@ -392,15 +438,6 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   const fmtMonthYear = (d) => `${MONTHS_FR[d.getMonth()]} ${d.getFullYear()}`;
   // Paiement ayant couvert le mois i : les paiements réglés se cumulent par date jusqu'à (i+1) loyers.
   const paidSorted = list.filter((p) => p.status !== "pending" && p.status !== "settled").sort((a, b) => new Date(a.paymentDate || 0) - new Date(b.paymentDate || 0));
-  // Cumul exigible jusqu'au mois i inclus : (i+1) loyers, ou, au prorata, la
-  // somme des montants de période (loyer plein au-delà des périodes connues).
-  const cumDue = (i) => {
-    const r = Number(rent) || 0;
-    if (!periodAmounts) return (i + 1) * r;
-    let s = 0;
-    for (let k = 0; k <= i; k += 1) s += periodAmounts[k] ?? r;
-    return s;
-  };
   const payForMonth = (i) => {
     const r = Number(rent) || 0;
     if (!(r > 0)) return null;
@@ -411,20 +448,6 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     }
     return null;
   };
-  // Retard / Du : bail flagge = depuis les echeances ; historique = derive de la frise.
-  const lateDue = (() => {
-    // Historique sans frise (bail sans date de debut) en retard : tout le solde est en retard.
-    if (!dueFrise && !monthKinds.length && status === "late") return { late: balance, due: 0, graceUntil: null };
-    if (dueFrise) return { late: dueFrise.lateAmount, due: dueFrise.dueAmount, graceUntil: dueFrise.graceUntil };
-    const s = legacyLateDue({ kinds: monthKinds, balance, totalPaid, cumDue });
-    let graceUntil = null;
-    if (s.due > 0.005 && lease?.startDate) {
-      const lastLate = monthKinds.lastIndexOf("late");
-      const j = monthKinds.findIndex((k, i) => i > lastLate && (k === "due" || k === "cur" || k === "partial") && i < monthsDue);
-      if (j >= 0) graceUntil = graceUntilOf(dueDateForMonth(lease.startDate, j, prorata), lease.graceDays);
-    }
-    return { ...s, graceUntil };
-  })();
   const pendingForMonth = (d) => list.find((p) => p.status === "pending" && p.rowKind !== "due" && p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
   // Mois en retard = échéances non couvertes dont date d'échéance + délai de
   // grâce (réglage org rentOverdueGraceDays) < aujourd'hui, soit exactement les

@@ -10,6 +10,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { CreateProductDto, UpdateProductDto } from "./dto/product.dto";
+import { fromCents, money, toCents, weightedAvgUnitPrice } from "../common/invoice-money.util";
 
 @Injectable()
 export class ProductsService {
@@ -112,9 +113,10 @@ export class ProductsService {
 
       const getAllProduct = rows.map((product) => ({
         ...product,
-        totalSalePrice: Number(product.productQuantity ?? 0) * Number(product.productSalePrice ?? 0),
-        totalPurchasePrice:
+        totalSalePrice: money(Number(product.productQuantity ?? 0) * Number(product.productSalePrice ?? 0)),
+        totalPurchasePrice: money(
           Number(product.productQuantity ?? 0) * Number(product.productPurchasePrice ?? 0),
+        ),
       }));
 
       return {
@@ -125,13 +127,11 @@ export class ProductsService {
               (sum, product) => sum + Number(product.productQuantity ?? 0),
               0,
             ),
-            totalSalePrice: getAllProduct.reduce(
-              (sum, product) => sum + product.totalSalePrice,
-              0,
+            totalSalePrice: fromCents(
+              getAllProduct.reduce((sum, product) => sum + toCents(product.totalSalePrice), 0),
             ),
-            totalPurchasePrice: getAllProduct.reduce(
-              (sum, product) => sum + product.totalPurchasePrice,
-              0,
+            totalPurchasePrice: fromCents(
+              getAllProduct.reduce((sum, product) => sum + toCents(product.totalPurchasePrice), 0),
             ),
           },
         },
@@ -305,10 +305,7 @@ export class ProductsService {
     const currentPrice = product.productPurchasePrice ?? 0;
 
     const totalQty = currentQty + quantity;
-    const newAvgPrice =
-      totalQty > 0
-        ? (currentQty * currentPrice + quantity * newPurchasePrice) / totalQty
-        : newPurchasePrice;
+    const newAvgPrice = weightedAvgUnitPrice(currentQty, currentPrice, quantity, newPurchasePrice);
 
     await this.db
       .update(products)

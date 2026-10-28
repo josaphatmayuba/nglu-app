@@ -628,7 +628,9 @@ export class ContractsService {
 
   // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
   // et on marque le contrat "signed" comme pour une signature électronique.
-  async markSignedManually(id: number, file: unknown, orgId: number, userId?: number | null, replace = false) {
+  // expectedDocumentId (remplacement) : scan en place quand l'envoi a été lancé ; s'il a changé
+  // entre-temps (envoi rejoué depuis la file hors ligne), on refuse plutôt que d'écraser un scan plus récent.
+  async markSignedManually(id: number, file: unknown, orgId: number, userId?: number | null, replace = false, expectedDocumentId?: number | null) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
@@ -658,6 +660,9 @@ export class ContractsService {
         return replace ? { ...current, replaced: false } : current;
       }
       if (!replace) throw new GoneException("This contract has already been signed.");
+      if (expectedDocumentId != null && Number(contract.signedDocumentId) !== Number(expectedDocumentId)) {
+        throw new ConflictException("Un scan plus récent a déjà été importé pour ce contrat. Vérifiez-le avant de le remplacer.");
+      }
     } else if (replace) {
       // Remplacement : uniquement pour un contrat signé qui a encore un scan actif.
       throw new BadRequestException("Remplacement impossible : le contrat n'a pas de scan signé.");

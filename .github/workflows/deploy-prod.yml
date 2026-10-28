@@ -193,7 +193,7 @@ jobs:
             {"app":"journal-app",      "flag":"journal",      "base":"/journal/",      "build":"build"},
             {"app":"tickets-app",      "flag":"tickets",      "base":"/tickets/",      "build":"build"},
             {"app":"farmos-app",       "flag":"farmos",       "base":"/farmos/",       "build":"build"},
-            {"app":"batipro-app",      "flag":"batipro",      "base":"/batipro/",      "build":"build"},
+            {"app":"batipro-app",      "flag":"batipro",      "base":"/batipro/",      "build":"build:prod"},
             {"app":"hr-app",           "flag":"hr",           "base":"/hr/",           "build":"build"},
             {"app":"comptabilite-app", "flag":"comptabilite", "base":"/comptabilite/", "build":"build:prod"},
             {"app":"migration-app",    "flag":"migration",    "base":"/migration/",    "build":"build"},

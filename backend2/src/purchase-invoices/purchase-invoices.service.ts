@@ -15,6 +15,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
+import { assertPaidWithinTotal, assertPaymentWithinDue, computePurchaseTotals, money, weightedAvgUnitPrice } from "../common/invoice-money.util";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -78,19 +79,12 @@ export class PurchaseInvoicesService {
 
     const invoiceProducts = input.purchaseInvoiceProduct ?? [];
 
-    // 2. Calculate totals
-    let totalPurchasePrice = 0;
-    let totalTax = 0;
-
-    for (const item of invoiceProducts) {
-      const lineTotal = item.productQuantity * item.productUnitPurchasePrice;
-      const taxAmount = lineTotal * ((item.tax ?? 0) / 100);
-      totalPurchasePrice += lineTotal;
-      totalTax += taxAmount;
-    }
-
-    const totalPaidAmount = (input.paidAmount ?? []).reduce((s, p) => s + p.amount, 0);
-    const dueAmount = totalPurchasePrice + totalTax - totalPaidAmount;
+    // 2. Calculate totals (bug #20 : en centimes entiers, chaque ligne arrondie
+    // au centime exact, totaux = somme exacte des lignes ; colonnes DECIMAL(18,2)).
+    const totals = computePurchaseTotals(invoiceProducts, input.paidAmount ?? []);
+    const { totalPurchasePrice, totalTax, dueAmount } = totals;
+    const totalPaidAmount = totals.paidAmount;
+    assertPaidWithinTotal(totalPaidAmount, money(totalPurchasePrice + totalTax));
 
     // 3. Create invoice
     const invoiceId = generateInvoiceId("P");
@@ -120,10 +114,9 @@ export class PurchaseInvoicesService {
     });
 
     // 4. Create invoice products
-    for (const item of invoiceProducts) {
-      const lineTotal = item.productQuantity * item.productUnitPurchasePrice;
-      const taxAmount = lineTotal * ((item.tax ?? 0) / 100);
-      const finalAmount = lineTotal + taxAmount;
+    for (let i = 0; i < invoiceProducts.length; i++) {
+      const item = invoiceProducts[i];
+      const { taxAmount, finalAmount } = totals.lines[i];
 
       await this.db.insert(purchaseInvoiceProducts).values({
         invoiceId,
@@ -244,11 +237,12 @@ export class PurchaseInvoicesService {
         const currentQty = product.productQuantity ?? 0;
         const currentPrice = product.productPurchasePrice ?? 0;
         const totalQty = currentQty + item.productQuantity;
-        const newAvgPrice =
-          totalQty > 0
-            ? (currentQty * currentPrice + item.productQuantity * item.productUnitPurchasePrice) /
-              totalQty
-            : item.productUnitPurchasePrice;
+        const newAvgPrice = weightedAvgUnitPrice(
+          currentQty,
+          currentPrice,
+          item.productQuantity,
+          item.productUnitPurchasePrice,
+        );
 
         await this.db
           .update(products)
@@ -407,6 +401,8 @@ export class PurchaseInvoicesService {
       throw new NotFoundException("Purchase invoice not found.");
     }
 
+    assertPaymentWithinDue(input.amount, invoice.dueAmount ?? 0);
+
     await this.db.insert(paymentPurchaseInvoices).values({
       organizationId: orgId,
       date: new Date(input.date),
@@ -431,7 +427,7 @@ export class PurchaseInvoicesService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    const newPaidAmount = Math.min(input.amount, invoice.dueAmount ?? 0);
+    const newPaidAmount = money(input.amount);
 
     await this.db
       .update(purchaseInvoices)

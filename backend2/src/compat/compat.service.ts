@@ -22,6 +22,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { captureSms } from "./sms-preview";
+import { fromCents, money, toCents } from "../common/invoice-money.util";
 
 @Injectable()
 export class CompatService {
@@ -317,14 +318,15 @@ export class CompatService {
 
     return rows.map((row) => {
       const currentStock = Number(row.currentStock ?? 0);
-      const stockPurchasePrice = Number(row.unitPurchasePrice ?? 0) * currentStock;
-      const stockSalePrice = Number(row.unitSellingPrice ?? 0) * currentStock;
+      // Bug #20 lot 3 : valeurs de stock au centime exact, marge calculee en centimes.
+      const stockPurchasePrice = money(Number(row.unitPurchasePrice ?? 0) * currentStock);
+      const stockSalePrice = money(Number(row.unitSellingPrice ?? 0) * currentStock);
       return {
         ...row,
         variation: [row.uomId, row.uomValue].filter(Boolean).join(" "),
         stockPurchasePrice,
         stockSalePrice,
-        potentialProfit: stockSalePrice - stockPurchasePrice,
+        potentialProfit: fromCents(toCents(stockSalePrice) - toCents(stockPurchasePrice)),
       };
     });
   }

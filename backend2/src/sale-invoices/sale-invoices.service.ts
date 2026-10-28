@@ -15,6 +15,7 @@ import {
 import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
+import { assertPaidWithinTotal, assertPaymentWithinDue, computeSaleTotals, money } from "../common/invoice-money.util";
 import {
   CreatePaymentSaleInvoiceDto,
   CreateSaleInvoiceDto,
@@ -78,31 +79,17 @@ export class SaleInvoicesService {
       });
     }
 
-    // 2. Calculate totals
-    let totalAmount = 0;
-    let totalTaxAmount = 0;
-    let totalDiscountAmount = 0;
-    let totalPurchasePrice = 0;
-
-    for (let i = 0; i < input.saleInvoiceProduct.length; i++) {
-      const item = input.saleInvoiceProduct[i];
-      const discount = item.productDiscount ?? 0;
-      const tax = item.tax ?? 0;
-      const subtotal = item.productQuantity * item.productUnitSalePrice;
-      const discountAmount = subtotal * (discount / 100);
-      const taxableAmount = subtotal - discountAmount;
-      const taxAmount = taxableAmount * (tax / 100);
-      const finalAmount = taxableAmount + taxAmount;
-
-      totalAmount += taxableAmount;
-      totalTaxAmount += taxAmount;
-      totalDiscountAmount += discountAmount;
-      totalPurchasePrice += item.productQuantity * (productData[i]?.productPurchasePrice ?? 0);
-    }
-
-    const totalPaidAmount = (input.paidAmount ?? []).reduce((sum, p) => sum + p.amount, 0);
-    const dueAmount = totalAmount + totalTaxAmount - totalPaidAmount;
-    const profit = totalAmount - totalPurchasePrice;
+    // 2. Calculate totals (bug #20 : en centimes entiers, chaque ligne arrondie
+    // au centime exact, totaux = somme exacte des lignes ; colonnes DECIMAL(18,2)).
+    const totals = computeSaleTotals(
+      input.saleInvoiceProduct,
+      input.saleInvoiceProduct.map((_, i) => productData[i]?.productPurchasePrice ?? 0),
+      input.paidAmount ?? [],
+    );
+    const { totalAmount, totalTaxAmount, totalDiscountAmount, totalPurchasePrice, dueAmount, profit } = totals;
+    const totalPaidAmount = totals.paidAmount;
+    const receivable = totals.receivable;
+    assertPaidWithinTotal(totalPaidAmount, receivable);
 
     // 3. Create invoice
     const invoiceId = generateInvoiceId("S");
@@ -138,13 +125,7 @@ export class SaleInvoicesService {
     // 4. Create sale invoice products
     for (let i = 0; i < input.saleInvoiceProduct.length; i++) {
       const item = input.saleInvoiceProduct[i];
-      const discount = item.productDiscount ?? 0;
-      const tax = item.tax ?? 0;
-      const subtotal = item.productQuantity * item.productUnitSalePrice;
-      const discountAmount = subtotal * (discount / 100);
-      const taxableAmount = subtotal - discountAmount;
-      const taxAmount = taxableAmount * (tax / 100);
-      const finalAmount = taxableAmount + taxAmount;
+      const { discount, tax, taxAmount, finalAmount } = totals.lines[i];
 
       await this.db.insert(saleInvoiceProducts).values({
         invoiceId,
@@ -182,7 +163,7 @@ export class SaleInvoicesService {
       debitId: 4,
       creditId: 8,
       particulars: `Sale invoice ${invoiceId}`,
-      amount: totalAmount + totalTaxAmount,
+      amount: receivable,
       type: "sale",
       relatedId: invoiceId,
       organizationId: orgId,
@@ -235,8 +216,8 @@ export class SaleInvoicesService {
       { accountId: 9, side: "DEBIT", amount: totalPurchasePrice, description: `Cost of sales ${invoiceId}` },
       { accountId: 3, side: "CREDIT", amount: totalPurchasePrice, description: `Inventory ${invoiceId}` },
       // Account receivable (TTC): debit 4 / credit 8
-      { accountId: 4, side: "DEBIT", amount: totalAmount + totalTaxAmount, description: `Account receivable ${invoiceId}` },
-      { accountId: 8, side: "CREDIT", amount: totalAmount + totalTaxAmount, description: `Sale invoice ${invoiceId}` },
+      { accountId: 4, side: "DEBIT", amount: receivable, description: `Account receivable ${invoiceId}` },
+      { accountId: 8, side: "CREDIT", amount: receivable, description: `Sale invoice ${invoiceId}` },
     ];
     if (totalTaxAmount > 0) {
       // VAT: debit 16 / credit 8
@@ -546,6 +527,9 @@ export class SaleInvoicesService {
       throw new NotFoundException("Sale invoice not found.");
     }
 
+    // Bug #20 : refuser un paiement > reste du (le du ne devient jamais negatif).
+    assertPaymentWithinDue(input.amount, invoice.dueAmount ?? 0);
+
     // Create payment record
     await this.db.insert(paymentSaleInvoices).values({
       organizationId: orgId,
@@ -573,9 +557,7 @@ export class SaleInvoicesService {
     });
 
     // Update invoice paid/due amounts
-    const newPaidAmount = (invoice.dueAmount ?? 0) > 0
-      ? Math.min(input.amount, invoice.dueAmount ?? 0)
-      : input.amount;
+    const newPaidAmount = money(input.amount);
 
     await this.db
       .update(saleInvoices)

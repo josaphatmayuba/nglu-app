@@ -1,3 +1,4 @@
+import { money } from "../common/invoice-money.util";
 import { Inject, Injectable } from "@nestjs/common";
 import { loadOverdueByLease, readOverdueGraceDays } from "../property-management/lease-overdue";
 import { and, between, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
@@ -45,23 +46,23 @@ export class DashboardService {
     return {
       kpis,
       revenue: {
-        total: Math.round(salesAgg.total),
+        total: money(salesAgg.total),
         byCurrency: revenueByCurrency,
       },
       sales: {
-        totalSale: Math.round(salesAgg.total),
+        totalSale: money(salesAgg.total),
         breakdown: [
-          { label: "Paid", value: Math.round(salesAgg.paid), color: "#3b82f6" },
-          { label: "Due", value: Math.round(salesAgg.due), color: "#f59e0b" },
-          { label: "Return", value: Math.round(salesReturn), color: "#ef4444" },
+          { label: "Paid", value: money(salesAgg.paid), color: "#3b82f6" },
+          { label: "Due", value: money(salesAgg.due), color: "#f59e0b" },
+          { label: "Return", value: money(salesReturn), color: "#ef4444" },
         ],
       },
       purchases: {
-        totalPurchase: Math.round(purchaseAgg.total),
+        totalPurchase: money(purchaseAgg.total),
         breakdown: [
-          { label: "Paid", value: Math.round(purchaseAgg.paid), color: "#10b981" },
-          { label: "Due", value: Math.round(purchaseAgg.due), color: "#f59e0b" },
-          { label: "Return", value: Math.round(purchaseReturn), color: "#ef4444" },
+          { label: "Paid", value: money(purchaseAgg.paid), color: "#10b981" },
+          { label: "Due", value: money(purchaseAgg.due), color: "#f59e0b" },
+          { label: "Return", value: money(purchaseReturn), color: "#ef4444" },
         ],
       },
       monthly,
@@ -140,8 +141,8 @@ export class DashboardService {
 
     return salesRows.map((r) => ({
       month: r.month,
-      sales: Math.round(Number(r.sales)),
-      purchases: Math.round(purchaseMap.get(r.month) ?? 0),
+      sales: money(Number(r.sales)),
+      purchases: money(purchaseMap.get(r.month) ?? 0),
     }));
   }
 
@@ -241,7 +242,7 @@ export class DashboardService {
       return {
         customer: name,
         username: c?.username ?? "Unknown",
-        totalSales: Math.round(Number(r.totalSales)),
+        totalSales: money(Number(r.totalSales)),
         phone: c?.phone ?? "N/A",
       };
     });
@@ -278,7 +279,7 @@ export class DashboardService {
     return rows.map((r) => ({
       product: productMap.get(r.productId) ?? `Product #${r.productId}`,
       quantity: Math.round(Number(r.totalQuantity)),
-      amount: Math.round(Number(r.totalSales)),
+      amount: money(Number(r.totalSales)),
     }));
   }
 
@@ -318,7 +319,7 @@ export class DashboardService {
       .where(where)
       .groupBy(sql`DATE(${dateCol})`);
 
-    const map = new Map(rows.map((r) => [r.day, Math.round(Number(r.total))]));
+    const map = new Map(rows.map((r) => [r.day, money(Number(r.total))]));
     const result: number[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
@@ -375,7 +376,7 @@ export class DashboardService {
       currencyCode: r.currencyCode ?? def?.currencyCode ?? null,
       currencyName: r.currencyName ?? def?.currencyName ?? null,
       currencySymbol: r.currencySymbol ?? def?.currencySymbol ?? null,
-      amount: Math.round(Number(r.total)),
+      amount: money(Number(r.total)),
     }));
   }
 

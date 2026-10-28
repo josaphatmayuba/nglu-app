@@ -80,6 +80,19 @@ export function mountAiWidget(config = {}) {
 .${PREFIX}-rc-act{margin-top:9px;display:flex;gap:7px;}
 .${PREFIX}-rc-btn{font-size:12px;font-weight:600;border:none;border-radius:9px;padding:6px 11px;cursor:pointer;background:linear-gradient(135deg,var(--ai),var(--ai2));color:#fff;}
 .${PREFIX}-rc-btn.ghost{background:#fff;border:1px solid #d8e0ea;color:#475569;}
+.${PREFIX}-fab{-webkit-touch-callout:none;}
+.${PREFIX}-fab.mini{width:36px;height:36px;opacity:.65;}
+.${PREFIX}-fab.mini:hover{opacity:1;}
+.${PREFIX}-fab.mini svg{width:16px;height:16px;}
+.${PREFIX}-fab.mini .${PREFIX}-badge{top:0;right:0;min-width:8px;width:8px;height:8px;padding:0;font-size:0;border-width:1px;}
+.${PREFIX}-fab.mini.tuck-l{border-radius:0 18px 18px 0;}
+.${PREFIX}-fab.mini.tuck-r{border-radius:18px 0 0 18px;}
+.${PREFIX}-fab{touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .18s,left .22s,top .22s,border-radius .22s,width .22s,height .22s,opacity .22s;}
+.${PREFIX}-fab.drag{transition:none;cursor:grabbing;}
+.${PREFIX}-fab.tuck-l{border-radius:0 29px 29px 0;}
+.${PREFIX}-fab.tuck-r{border-radius:29px 0 0 29px;}
+.${PREFIX}-fab.tuck-l .${PREFIX}-ping,.${PREFIX}-fab.tuck-r .${PREFIX}-ping{display:none;}
+@media(prefers-reduced-motion:reduce){.${PREFIX}-fab{transition:none;}.${PREFIX}-ping{animation:none;}}
 @media(max-width:480px){.${PREFIX}-panel{width:100vw;}.${PREFIX}-fab{right:16px;bottom:80px;}}`;
 
   const st = document.createElement("style");
@@ -159,8 +172,88 @@ export function mountAiWidget(config = {}) {
     })();
   }
 
+  /* ---------- Bulle déplaçable / languette ---------- */
+  const fab = root.querySelector("[data-fab]");
+  let FAB = 58, VIS = 28; const MARGIN = 16, TH = 6, EDGE = 4;
+  const KEY = PREFIX + ":" + APP + ":fab";
+  let fs = null, suppress = false, tapT = 0, lastTap = 0;
+  try { const v = JSON.parse(localStorage.getItem(KEY) || "null"); if (v && (v.side === "l" || v.side === "r") && isFinite(v.yr)) fs = { side: v.side, yr: +v.yr, tuck: !!v.tuck, mini: !!v.mini }; } catch (e) { fs = null; }
+  function saveFab() { try { localStorage.setItem(KEY, JSON.stringify(fs)); } catch (e) {} }
+  function applyMini(m) { fab.classList.toggle("mini", m); FAB = m ? 36 : 58; VIS = m ? 18 : 28; }
+  function toggleMini() {
+    if (!fs) { const r = fab.getBoundingClientRect(); fs = { side: r.left + FAB / 2 < window.innerWidth / 2 ? "l" : "r", yr: r.top / window.innerHeight, tuck: false, mini: false }; }
+    fs.mini = !fs.mini; applyMini(fs.mini); placeFab(); saveFab();
+  }
+  fab.addEventListener("contextmenu", (e) => e.preventDefault());
+  function insets() {
+    const p = document.createElement("div");
+    p.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
+    root.appendChild(p); const c = getComputedStyle(p);
+    const r = { t: parseFloat(c.paddingTop) || 0, r: parseFloat(c.paddingRight) || 0, b: parseFloat(c.paddingBottom) || 0, l: parseFloat(c.paddingLeft) || 0 };
+    p.remove(); return r;
+  }
+  function yBounds() {
+    const i = insets(), bm = (window.innerWidth <= 480 ? 80 : 22) + i.b;
+    const min = MARGIN + i.t, max = Math.max(min, window.innerHeight - FAB - bm);
+    return { min, max, i };
+  }
+  function setPos(x, y) { fab.style.right = "auto"; fab.style.bottom = "auto"; fab.style.left = x + "px"; fab.style.top = y + "px"; }
+  function placeFab() {
+    if (!fs) return;
+    const b = yBounds(), vw = window.innerWidth;
+    const y = Math.min(b.max, Math.max(b.min, fs.yr * window.innerHeight));
+    const x = fs.tuck ? (fs.side === "l" ? -(FAB - VIS) : vw - VIS) : (fs.side === "l" ? MARGIN + b.i.l : vw - FAB - MARGIN - b.i.r);
+    fab.classList.toggle("tuck-l", fs.tuck && fs.side === "l");
+    fab.classList.toggle("tuck-r", fs.tuck && fs.side === "r");
+    setPos(x, y);
+  }
+  let drag = null;
+  fab.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const r = fab.getBoundingClientRect();
+    drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, moved: false, lt: 0, longDone: false };
+    drag.lt = setTimeout(() => { if (drag && !drag.moved) { drag.longDone = true; toggleMini(); } }, 500);
+    try { fab.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  fab.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved) { if (Math.hypot(dx, dy) < TH) return; drag.moved = true; clearTimeout(drag.lt); fab.classList.add("drag"); fab.classList.remove("tuck-l", "tuck-r"); }
+    const b = yBounds();
+    setPos(Math.min(window.innerWidth - VIS, Math.max(-(FAB - VIS), drag.ox + dx)), Math.min(b.max, Math.max(b.min, drag.oy + dy)));
+  });
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null; clearTimeout(d.lt);
+    try { fab.releasePointerCapture(e.pointerId); } catch (err) {}
+    if (!d.moved) { if (d.longDone) { suppress = true; setTimeout(() => { suppress = false; }, 80); } return; }
+    suppress = true; setTimeout(() => { suppress = false; }, 80);
+    fab.classList.remove("drag");
+    const r = fab.getBoundingClientRect(), vw = window.innerWidth;
+    const side = r.left + FAB / 2 < vw / 2 ? "l" : "r";
+    const tuck = r.left < EDGE || r.right > vw - EDGE;
+    fs = { side, yr: r.top / window.innerHeight, tuck, mini: !!(fs && fs.mini) };
+    placeFab(); saveFab();
+  }
+  fab.addEventListener("pointerup", endDrag);
+  fab.addEventListener("pointercancel", endDrag);
+  function onFabClick(e) {
+    if (suppress) { suppress = false; return; }
+    if (e.detail === 0) { clearTimeout(tapT); lastTap = 0; if (fs && fs.tuck) { fs.tuck = false; placeFab(); saveFab(); } open(); return; }
+    const now = Date.now();
+    if (lastTap && now - lastTap < 350) { clearTimeout(tapT); lastTap = 0; toggleMini(); return; }
+    if (fs && fs.tuck) { fs.tuck = false; lastTap = 0; placeFab(); saveFab(); return; }
+    lastTap = now;
+    clearTimeout(tapT); tapT = setTimeout(() => { lastTap = 0; open(); }, 350);
+  }
+  const onResize = () => placeFab();
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+  if (fs && fs.mini) applyMini(true);
+  placeFab();
+
   /* ---------- Évènements ---------- */
-  root.querySelector("[data-fab]").addEventListener("click", () => open());
+  fab.addEventListener("click", onFabClick);
   root.querySelector("[data-ov]").addEventListener("click", close);
   root.querySelector("[data-x]").addEventListener("click", close);
   root.querySelectorAll(`.${PREFIX}-tab`).forEach((t) => t.addEventListener("click", () => setTab(t.dataset.tab)));
@@ -181,6 +274,9 @@ export function mountAiWidget(config = {}) {
 
   return function unmount() {
     document.removeEventListener("keydown", onKey);
+    clearTimeout(tapT);
+    window.removeEventListener("resize", onResize);
+    window.removeEventListener("orientationchange", onResize);
     root.remove(); st.remove();
     if (window.AIW) delete window.AIW;
   };

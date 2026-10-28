@@ -1400,7 +1400,7 @@ function ContractPreviewModal({ contract, leaseRef, onClose }) {
   const toast = useToast();
   const { enqueueSignedContract, itemForContract } = useUploads();
   const upload = itemForContract(contract.id);
-  const signBusy = Boolean(upload);
+  const signBusy = Boolean(upload) && upload.status !== "failed";
   const [signError, setSignError] = useState("");
   const raw = contract.contractContent || "";
   // Texte brut (sans balises) → on préserve les sauts de ligne (articles séparés)
