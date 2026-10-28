@@ -1233,16 +1233,12 @@ export function Loyers({ go }) {
   const pendingCount = cards.filter((c) => c.status === "pending").length;
   // Arriérés = loyers en retard (délai de grâce dépassé), groupés par devise :
   // même règle que le KPI « Impayé échu » du tableau de bord.
-  const arrearsByCurrency = useMemo(() => {
-    const map = new Map();
-    cards.forEach((c) => {
-      const bal = Number(cardFriseLateDue(c).lateDue.late) || 0;
-      if (bal <= 0) return;
-      const sym = c.symbol || currency.defaultCurrencySymbol || "$";
-      map.set(sym, (map.get(sym) || 0) + bal);
-    });
-    return [...map.entries()].map(([symbol, amount]) => ({ symbol, amount }));
-  }, [cards, currency.defaultCurrencySymbol]);
+  const arrearsByCurrency = useMemo(() => groupAmountsByCurrency(
+    cards
+      .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, late: Number(cardFriseLateDue(c).lateDue.late) || 0 }))
+      .filter((c) => c.late > 0.005),
+    (c) => c.late, currency.defaultCurrencySymbol,
+  ), [cards, currency.defaultCurrencySymbol]);
   const hasArrears = arrearsByCurrency.length > 0;
 
   // Recherche : filtre cartes (locataire/unité) et lignes (locataire/logement/méthode).
