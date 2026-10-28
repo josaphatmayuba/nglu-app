@@ -41,7 +41,7 @@ describe("invoice-money.util (bug #20 lot 2)", () => {
     const l = computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 10, tax: 16 });
     expect(l).toMatchObject({ discountAmount: 10, taxableAmount: 90, taxAmount: 14.4, finalAmount: 104.4 });
     expect(computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 100 }).finalAmount).toBe(0);
-    expect(() => computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 100.01 })).toThrow(/depasse le sous-total/);
+    expect(() => computeSaleLine({ productQuantity: 2, productUnitSalePrice: 50, productDiscount: 100.01 })).toThrow(/dépasse le sous-total/);
     expect(() => computeSaleLine({ productQuantity: 1, productUnitSalePrice: 5, productDiscount: -1 })).toThrow(BadRequestException);
   });
 

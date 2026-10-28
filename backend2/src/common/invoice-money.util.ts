@@ -37,7 +37,7 @@ export function assertPaymentWithinDue(amount: unknown, due: unknown): void {
   if (amountC <= 0) throw new BadRequestException("Le montant du paiement doit etre superieur a 0.");
   if (amountC > dueC) {
     throw new BadRequestException(
-      `Le paiement (${fromCents(amountC).toFixed(2)}) depasse le reste du (${fromCents(dueC).toFixed(2)}).`,
+      `Le paiement (${fromCents(amountC).toFixed(2)}) dépasse le reste dû (${fromCents(dueC).toFixed(2)}).`,
     );
   }
 }
@@ -48,7 +48,7 @@ export function assertPaidWithinTotal(paid: unknown, total: unknown): void {
   const totalC = toCents(total);
   if (paidC > totalC) {
     throw new BadRequestException(
-      `Le paiement (${fromCents(paidC).toFixed(2)}) depasse le reste du (${fromCents(totalC).toFixed(2)}).`,
+      `Le paiement (${fromCents(paidC).toFixed(2)}) dépasse le reste dû (${fromCents(totalC).toFixed(2)}).`,
     );
   }
 }
@@ -74,11 +74,11 @@ export function computeSaleLine(item: SaleLineInput): SaleLineAmounts & { cents:
   const subtotalC = toCents(item.productQuantity * item.productUnitSalePrice);
   const discountC = toCents(item.productDiscount ?? 0);
   if (discountC < 0) {
-    throw new BadRequestException("La remise d'une ligne ne peut pas etre negative.");
+    throw new BadRequestException("La remise d'une ligne ne peut pas être négative.");
   }
   if (discountC > subtotalC) {
     throw new BadRequestException(
-      `La remise (${fromCents(discountC).toFixed(2)}) depasse le sous-total de la ligne (${fromCents(subtotalC).toFixed(2)}).`,
+      `La remise (${fromCents(discountC).toFixed(2)}) dépasse le sous-total de la ligne (${fromCents(subtotalC).toFixed(2)}).`,
     );
   }
   const discount = fromCents(discountC);
