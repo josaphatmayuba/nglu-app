@@ -101,13 +101,21 @@ const leaseStartMonth = (startDate) => {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 };
 
-// Durée du bail en mois (début et fin inclus) ; null si pas de date de fin (bail indéterminé).
-const leaseTotalMonths = (lease) => {
-  const s = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
-  const e = /^(\d{4})-(\d{2})/.exec(String(lease?.endDate || ""));
+// Mois facturables du bail (règle backend lease-schedule.ts) : une échéance tombant le jour
+// de fin ou après n'est pas due (début 01/10/2025, fin 01/10/2026 = 12 mois) ; au moins 1.
+// null si pas de date de fin (bail indéterminé).
+export const leaseTotalMonths = (lease) => {
+  const s = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.startDate || ""));
+  const e = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(lease?.endDate || ""));
   if (!s || !e) return null;
-  const n = (Number(e[1]) - Number(s[1])) * 12 + (Number(e[2]) - Number(s[2])) + 1;
-  return n > 0 ? n : null;
+  const end = `${e[1]}-${e[2]}-${e[3]}`;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  let n = 0;
+  for (; n < 1200; n += 1) {
+    const d = dueDateForMonth(lease.startDate, n);
+    if (!d || `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` >= end) break;
+  }
+  return Math.max(1, n);
 };
 
 // N mois à partir d'une date de début (le plus ancien à gauche → la frise se
@@ -204,12 +212,17 @@ export function buildLeaseCards(leases, payments) {
         const sM = leaseStartMonth(l.startDate);
         elapsedPast = Math.max(0, (thisM.getFullYear() - sM.getFullYear()) * 12 + (thisM.getMonth() - sM.getMonth()));
       }
+      // Bail terminé : rien n'est dû après le dernier mois facturable (fin du bail).
+      const billable = leaseTotalMonths(l);
+      const ended = billable != null && elapsedPast + 1 > billable;
       // late = un mois passé encore non couvert · pending = passés couverts mais pas le mois courant · ok = tout couvert.
-      let status = monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
+      let status = ended
+        ? (monthsCovered >= billable ? "ok" : "late")
+        : monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
 
       // Solde réel : total exigible (mois courant inclus) − total déjà versé.
       // Gère les paiements partiels : 2 mois dus à 100, 50 versé → reste 150.
-      let monthsDue = elapsedPast + 1;
+      let monthsDue = ended ? billable : elapsedPast + 1;
       let totalDue = monthsDue * rent;
       let balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
       let credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100); // avance éventuelle
