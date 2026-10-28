@@ -796,6 +796,7 @@ const EN = {
   "En attente de connexion…": "Waiting for connection…",
   "Serveur indisponible, nouvel essai bientôt…": "Server unavailable, retrying soon…",
   "Serveur indisponible. Réessayez plus tard.": "Server unavailable. Please try again later.",
+  "Envoi interrompu depuis plus de 24 h. Vérifiez le scan actuel avant de relancer.": "Upload interrupted for more than 24 h. Check the current scan before retrying.",
   "En file d'attente…": "Queued…",
   "✓ Signé": "✓ Signed",
   "Contrat {id}": "Contract {id}",

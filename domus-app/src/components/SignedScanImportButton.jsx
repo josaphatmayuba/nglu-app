@@ -31,6 +31,7 @@ export function SignedScanImportButton({ contract, leaseRef, replace = false, la
       leaseId: contract.leaseId,
       ref: leaseRef ? (String(leaseRef).startsWith("#") ? String(leaseRef) : `#${leaseRef}`) : `#LEASE-${contract.leaseId}`,
       replace,
+      expectedDocumentId: replace ? (contract.signedDocumentId ?? contract.signedDocument?.id ?? null) : null,
     });
     if (!queued) setError(t("Un envoi est déjà en cours pour ce contrat."));
   }
