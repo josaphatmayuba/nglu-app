@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { computePurchaseTotals, computeSaleLine, computeSaleTotals, money, toCents } from "./invoice-money.util";
+import { computePurchaseTotals, computeSaleLine, computeSaleTotals, money, toCents, unitPrice, weightedAvgUnitPrice } from "./invoice-money.util";
 
 describe("invoice-money.util (bug #20 lot 2)", () => {
   it("toCents arrondit au centime exact sans artefact flottant", () => {
@@ -63,5 +63,23 @@ describe("invoice-money.util (bug #20 lot 2)", () => {
     expect(t.totalPurchasePrice).toBe(320.13);
     expect(t.totalTax).toBe(51.2);
     expect(t.dueAmount).toBe(271.33);
+  });
+});
+
+describe("invoice-money.util (bug #20 lot 3 : prix unitaires produit)", () => {
+  it("unitPrice arrondit au 1/10000 exact, sans perdre les centimes", () => {
+    expect(unitPrice(12.5)).toBe(12.5);
+    expect(unitPrice(1.00005)).toBe(1.0001);
+    expect(unitPrice(10 / 3)).toBe(3.3333);
+    expect(unitPrice(-1)).toBe(-1);
+    expect(unitPrice(null)).toBe(0);
+  });
+
+  it("weightedAvgUnitPrice garde la regle historique et tient dans DECIMAL(18,4)", () => {
+    expect(weightedAvgUnitPrice(10, 2, 20, 3)).toBe(2.6667);
+    expect(weightedAvgUnitPrice(0, 0, 5, 1.25)).toBe(1.25);
+    // stock negatif ou nul : prix de la nouvelle entree
+    expect(weightedAvgUnitPrice(-5, 10, 5, 7)).toBe(7);
+    expect(weightedAvgUnitPrice(100, 35000, 0, 0)).toBe(35000);
   });
 });

@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **CRM : retours, devis et prix produits en DECIMAL exact - bug #20 lot 3 (v3.254.0).** Migration `0326_returns_quotes_products_money_decimal` (idempotente) : 15 colonnes de `returnSaleInvoice(Product)`, `returnPurchaseInvoice(Product)`, `quote`, `quoteProduct`, `product` passent en `DECIMAL(18,2)` (totaux, `tax` des retours = montant) ou `DECIMAL(18,4)` (prix unitaires et prix produits) ; quantités en `double`. Prix d'achat moyen pondéré arrondi au 1/10000 exact (`weightedAvgUnitPrice`), rapports produits et stock au centime. Mesure préalable dev et prod : aucune valeur à plus de 2/4 décimales.
 - **Domus : frise des baux au prorata, mois facturables comptés en mois civils (v3.253.5).** Complément du bug #48 : `leaseTotalMonths` utilise le 1er du mois pour un bail au prorata (comme `lease-schedule.ts`) ; début 15/06/2026, fin 05/07/2027 = 14 mois au lieu de 13. Solde inchangé.
 
 - **Domus : plus de loyer compté après la fin du bail - bug #48 (v3.253.4).** Baux sans prorata : le solde, le statut et la frise s arrêtent au dernier mois facturable, avec la règle du backend (`lease-schedule.ts` : une échéance tombant le jour de fin ou après n est pas due). Bail #8 (fin 01/10/2026) : octobre 2026 n est plus dû, solde 6 000 $ -> 4 500 $. `leaseTotalMonths` compte désormais les mois facturables (début 15/01, fin 14/01 = 12 mois au lieu de 13).

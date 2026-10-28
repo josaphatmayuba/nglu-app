@@ -156,3 +156,28 @@ export function computePurchaseTotals(lines: PurchaseLineInput[], payments: Arra
     dueAmount: fromCents(totalC + taxTotalC - paidC),
   };
 }
+
+// Bug #20 lot 3 : prix unitaires produit en DECIMAL(18,4). Le prix d'achat moyen
+// pondere est arrondi au 1/10000 exact ici (meme convention demi-unite eloignee
+// de zero que toCents), pour que ce qui est stocke = ce qui est calcule.
+export function unitPrice(value: unknown): number {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return 0;
+  const scaled = Number((Math.abs(num) * 10000).toPrecision(15));
+  return (Math.sign(num) * Math.round(scaled)) / 10000;
+}
+
+/** Prix d'achat moyen pondere apres une entree en stock (meme regle qu'avant, arrondi au 1/10000). */
+export function weightedAvgUnitPrice(
+  currentQty: unknown,
+  currentPrice: unknown,
+  addedQty: unknown,
+  addedPrice: unknown,
+): number {
+  const q0 = Number(currentQty ?? 0);
+  const p0 = Number(currentPrice ?? 0);
+  const q1 = Number(addedQty ?? 0);
+  const p1 = Number(addedPrice ?? 0);
+  const totalQty = q0 + q1;
+  return unitPrice(totalQty > 0 ? (q0 * p0 + q1 * p1) / totalQty : p1);
+}

@@ -15,7 +15,7 @@ import type { Database } from "../database/types";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
-import { assertPaidWithinTotal, assertPaymentWithinDue, computePurchaseTotals, money } from "../common/invoice-money.util";
+import { assertPaidWithinTotal, assertPaymentWithinDue, computePurchaseTotals, money, weightedAvgUnitPrice } from "../common/invoice-money.util";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -237,11 +237,12 @@ export class PurchaseInvoicesService {
         const currentQty = product.productQuantity ?? 0;
         const currentPrice = product.productPurchasePrice ?? 0;
         const totalQty = currentQty + item.productQuantity;
-        const newAvgPrice =
-          totalQty > 0
-            ? (currentQty * currentPrice + item.productQuantity * item.productUnitPurchasePrice) /
-              totalQty
-            : item.productUnitPurchasePrice;
+        const newAvgPrice = weightedAvgUnitPrice(
+          currentQty,
+          currentPrice,
+          item.productQuantity,
+          item.productUnitPurchasePrice,
+        );
 
         await this.db
           .update(products)
