@@ -265,6 +265,7 @@ export const api = {
   // recevoir plusieurs factures (livraisons/facturation partielles), chacune avec son propre reglement.
   createInvoiceFromPurchaseOrder: (poId, b) => jsonFetch(`/documents/purchase-orders/${poId}/invoice`, { method: "POST", body: JSON.stringify(b || {}) }),
   purchaseOrderInvoices: (poId) => jsonFetch(`/documents/purchase-orders/${poId}/invoices`),
+  rolePermissions: (roleId) => jsonFetch(`/role-permission/permission?roleId=${encodeURIComponent(roleId)}`, { base: API_ROOT }),
   // Cycle de vie Bon de commande (SCRUM) : confirmation fournisseur puis réception par ligne.
   confirmDocument: (id, b) => jsonFetch(`/documents/${id}/confirm`, { method: "POST", body: JSON.stringify(b || {}) }),
   receiveDocument: (id, b) => jsonFetch(`/documents/${id}/receive`, { method: "POST", body: JSON.stringify(b || {}) }),
