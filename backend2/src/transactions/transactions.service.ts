@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { money } from "../common/invoice-money.util";
 import { DRIZZLE } from "../database/database.constants";
 import { LedgerService } from "../ledger/ledger.service";
 import { currencies, subAccounts, transactionAttachments, transactions } from "../database/schema";
@@ -39,7 +40,7 @@ export class TransactionsService {
       debitId: input.debitId,
       creditId: input.creditId,
       particulars: input.particulars,
-      amount: input.amount,
+      amount: money(input.amount),
       currencyId: input.currencyId ?? null,
       type: input.type ?? "transaction",
       relatedId: input.relatedId ?? "0",
@@ -126,8 +127,8 @@ export class TransactionsService {
         idempotencyKey: `manual_transaction:${transactionId}`,
         skipApprovalGate: true,
         lines: [
-          { accountId: input.debitId, side: "DEBIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
-          { accountId: input.creditId, side: "CREDIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
+          { accountId: input.debitId, side: "DEBIT", amount: money(input.amount), projectId: input.projectId ?? undefined, description: input.particulars },
+          { accountId: input.creditId, side: "CREDIT", amount: money(input.amount), projectId: input.projectId ?? undefined, description: input.particulars },
         ],
       },
       orgId,
@@ -191,7 +192,7 @@ export class TransactionsService {
         ...(input.debitId !== undefined ? { debitId: input.debitId } : {}),
         ...(input.creditId !== undefined ? { creditId: input.creditId } : {}),
         ...(input.particulars !== undefined ? { particulars: input.particulars } : {}),
-        ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.amount !== undefined ? { amount: money(input.amount) } : {}),
         ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
         ...(input.relatedId !== undefined ? { relatedId: input.relatedId } : {}),

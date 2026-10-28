@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, inArray, like, or, sql, sum } from "drizzle-orm";
+import { money } from "../common/invoice-money.util";
 import { DRIZZLE } from "../database/database.constants";
 import { supplierTags, suppliers, transactions } from "../database/schema";
 import type { Database } from "../database/types";
@@ -440,7 +441,8 @@ export class SuppliersService {
       : [];
   }
 
+  // Montant au centime exact (bug 20 lot 4) : plus de toFixed(3) sur des soldes en DECIMAL(18,2).
   private round(value: number) {
-    return Number(value.toFixed(3));
+    return money(value);
   }
 }

@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Comptes : transactions et paiements manuels en DECIMAL exact - bug #20 lot 4, dernier lot (v3.257.0).** Migration `0328_transaction_manual_payment_money_decimal` (idempotente) : `transaction.amount` et `manualPayment.amount` passent en `DECIMAL(18,2)` (même échelle que le grand livre), nullabilité et défauts conservés. `round()` des comptes, clients et fournisseurs au centime exact au lieu de `toFixed(3)` ; montant de transaction arrondi au centime avant stockage et grand livre. Mesure préalable dev et prod : aucune valeur à plus de 2 décimales. Plus aucune colonne d argent en `double` dans le schéma.
 - **Domus : KPI « Arriérés échus » de Loyers, devise de chaque ligne - bug #50 (v3.256.1).** Regroupement via `groupAmountsByCurrency` (comme le tableau de bord) : $, FC, RM affichés au lieu de « USD » partout.
 - **Domus : renouvellement refusé tant que le locataire doit des loyers sur le bail (v3.256.0).** `renewLease` calcule le reste dû (`loadLeaseTotalDue`, même calcul que les relances) et renvoie 400 « Renouvellement impossible : le locataire doit encore … » ; le message s’affiche sur la page Baux.
 
