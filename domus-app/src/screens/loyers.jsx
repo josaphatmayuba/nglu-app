@@ -144,12 +144,11 @@ function groupByTenant(rows) {
 // Construit une carte par bail actif, enrichie des paiements de ce bail.
 // status : "late" (un mois PASSÉ impayé) · "pending" (mois courant impayé,
 // en attente) · "ok" (à jour).
-// Bail suivi dans Loyers : actif, ou RÉSILIÉ (ended + motif) tant qu'il reste des impayés à recouvrer.
-// Les baux « cancelled » et les fins de bail normales (renouvellement) restent exclus.
+// Bail suivi dans Loyers : actif, ou TERMINÉ (résilié OU renouvelé) tant qu'il reste des impayés
+// à recouvrer — un renouvellement n'efface pas les arriérés de l'ancien bail. « cancelled » exclu.
 const isRentTracked = (l) =>
   (l.status || "active") === "active" ||
-  (l.status === "ended" && Boolean(l.terminationReason) &&
-    Number(l.openDueCount ?? l.unpaidCount) > 0);
+  (l.status === "ended" && Number(l.openDueCount ?? l.unpaidCount) > 0);
 
 export function buildLeaseCards(leases, payments) {
   const now = new Date();
@@ -471,6 +470,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           <div style={{ minWidth: 0 }}>
             <div className="name">{name}</div>
             <div className="unit">{[unit, `${money(rent ?? latest?.amount, symbol)} / ${t("mois")}`].filter(Boolean).join(" · ")}</div>
+            {lease?.status === "ended" && <div className="unit">{tf(t("Ancien bail {ref} · arriérés à recouvrer"), { ref: lease.reference || lease.id })}</div>}
           </div>
         </div>
         <span className={`immo-pill ${meta.pill}`}>{meta.label}</span>

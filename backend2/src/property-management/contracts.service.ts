@@ -13,6 +13,7 @@ import {
   realEstateContractSigners,
   realEstateContracts,
   realEstateLeaseCotenants,
+  realEstateSecurityDeposits,
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateOwners,
@@ -1415,6 +1416,8 @@ export class ContractsService {
       moveInNotes: current.moveInNotes,
       terms: current.terms,
       signingCity: current.signingCity,
+      // Renouvellement = suite de l'ancien bail (meme locataire, meme caution).
+      renewedFromLeaseId: current.id,
       status: "active",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1428,6 +1431,20 @@ export class ContractsService {
         .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
     }
+
+    // La caution deja encaissee suit le renouvellement : le passif « Tenant
+    // Deposits » ne bouge pas (aucune ecriture), seul le rattachement change.
+    await this.db
+      .update(realEstateSecurityDeposits)
+      .set({ leaseId: newLeaseId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(realEstateSecurityDeposits.leaseId, leaseId),
+          eq(realEstateSecurityDeposits.organizationId, orgId),
+          eq(realEstateSecurityDeposits.status, "held"),
+          eq(realEstateSecurityDeposits.isActive, 1),
+        ),
+      );
 
     // Les colocataires actifs suivent le renouvellement (avant le contrat, pour
     // qu'il liste tous les preneurs et que chacun puisse le signer).

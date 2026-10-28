@@ -244,6 +244,16 @@ export function Baux({ go } = {}) {
       });
     return map;
   }, [deposits]);
+  // Chaîne de renouvellement : bail précédent / bail suivant (renewedFromLeaseId).
+  const leaseLinks = useMemo(() => {
+    const all = Array.isArray(data?.leases) ? data.leases : [];
+    const byId = new Map(all.map((l) => [String(l.id), l]));
+    const next = new Map();
+    all.forEach((l) => {
+      if (l.renewedFromLeaseId != null && l.status !== "cancelled") next.set(String(l.renewedFromLeaseId), l);
+    });
+    return { byId, next };
+  }, [data?.leases]);
   const contractsByLease = useMemo(() => {
     const map = new Map();
     const priority = { signed: 5, viewed: 4, sent: 3, draft: 2 };
@@ -348,7 +358,11 @@ export function Baux({ go } = {}) {
               : { tone: info.tone, text: info.statusText };
             const openContract = () => handleContractPreview(lease, contractsByLease, setContractPreview, setBusyAction, setActionError, reload);
             const deposit = depositByLease.get(String(lease.id)) || null;
-            const depositDue = toNumber(lease.securityDeposit);
+            const prevLease = lease.renewedFromLeaseId != null ? leaseLinks.byId.get(String(lease.renewedFromLeaseId)) : null;
+            const nextLease = leaseLinks.next.get(String(lease.id)) || null;
+            // Caution reportée sur le renouvellement : plus due sur l'ancien bail.
+            const depositMoved = !deposit && nextLease && depositByLease.get(String(nextLease.id));
+            const depositDue = depositMoved ? 0 : toNumber(lease.securityDeposit);
             return (
             <article key={lease.id} className={`immo-lease-card ${cardVariant}`}>
               <div className="immo-lease-card-head">
@@ -382,6 +396,8 @@ export function Baux({ go } = {}) {
                     return <span className={`domus-upload-badge ${up.status}`}>{up.status === "failed" ? t("Échec") : up.status === "waiting_network" ? t("En attente de réseau") : t("Envoi…")}</span>;
                   })()}
                   <span>{info.years} an{info.years > 1 ? "s" : ""} · {info.elapsedMonths} mois écoulés</span>
+                  {prevLease && <span>{tf(t("Renouvellement de {ref}"), { ref: prevLease.reference || prevLease.id })}</span>}
+                  {nextLease && <span>{tf(t("Renouvelé → {ref}"), { ref: nextLease.reference || nextLease.id })}</span>}
                 </div>
                 <span className="immo-progress"><span className={info.tone} style={{ width: `${info.progress}%` }} /></span>
                 <div>
@@ -391,10 +407,12 @@ export function Baux({ go } = {}) {
                 </div>
               </div>
 
-              {(depositDue > 0 || deposit) && (
+              {(depositDue > 0 || deposit || depositMoved) && (
                 <div className="immo-lease-deposit">
                   <span className="immo-lease-deposit-label"><Shield size={13} /> Caution</span>
-                  {deposit?.status === "held" ? (
+                  {depositMoved ? (
+                    <span className="immo-pill muted">{tf(t("Reportée sur {ref}"), { ref: nextLease.reference || nextLease.id })}</span>
+                  ) : deposit?.status === "held" ? (
                     <>
                       <span className="immo-pill success">Reçue · {money(deposit.amount, lease.currencySymbol || "$")}</span>
                       <button className="immo-deposit-link" onClick={() => setDepositModal({ mode: "return", lease, deposit })}>Restituer</button>

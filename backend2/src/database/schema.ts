@@ -1174,6 +1174,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   // Registre des affectations (migration 0317) : date de bascule du bail sur le
   // modele 1 mois = 1 echeance = ses paiements. NULL = comportement historique.
   allocationLedgerAt: datetime("allocation_ledger_at"),
+  // Bail d'origine quand ce bail est un renouvellement (migration 0327).
+  renewedFromLeaseId: bigint("renewed_from_lease_id", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
