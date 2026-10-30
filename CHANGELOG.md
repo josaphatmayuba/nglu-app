@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Node 24 partout (v3.258.2).** Node 20 n’est plus maintenu : workflows deploy-dev/prod en `node-version: 24` avec `actions/checkout@v7`, `actions/setup-node@v7`, `dorny/paths-filter@v4` (fin de l’avertissement « Node.js 20 is deprecated ») ; images `node:24-alpine` pour backend2 (dev + prod), middleware, whatsapp-service, frontend et marketing-site.
+
 - **CI et correctifs mineurs - bugs #53/#57/#59 (v3.258.1).** Test `fit-one-sms` aligné sur le format SMS actuel ; `@ApiSchema` sur 6 DTO Kodatill (fin des doublons Swagger) ; symbole de devise refusé s il commence par un espace ; CRM : la modale de modification de devise reste ouverte en cas d erreur ; deploy-dev : `tickets-dev` copie le dist avec `sudo -n` (dossier root), `avelomi-site-dev` n échoue plus quand la stack Avelomi est arrêtée (avertissement).
 
 - **Sécurité : XSS stockée via le symbole de devise - bug #55 (v3.258.0).** CRM : les 67 `dangerouslySetInnerHTML` de `currencySymbol` (dashboards, POS, eCommerce public, 20 fichiers) passent par `sanitizeHtml`. API `/currency` : écritures protégées par les permissions `create/update/delete-currency` (`PermissionsGuard`), symbole limité à 8 caractères sans `<>"'&`.
