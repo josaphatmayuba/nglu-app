@@ -28,20 +28,23 @@ BASE_URL="${BASE_URL:-https://ongdngolu.org}"
 # Tolerant : absent ou sans index.html => ignore (placeholder garde cote serveur).
 EXTRA_DIST="${EXTRA_DIST:-}"
 
-# Garde provisionnement : on SKIP proprement (exit 0) tant que le serveur cible
-# n'est pas reellement pret, au lieu de planter (tar/scp/cd sur des fichiers
-# absents). Trois conditions, car un .env.prod VIDE existe deja sur Avelomi
-# (provision a cree le fichier sans le remplir) et faisait passer un simple
-# `test -f` a tort :
+# Garde provisionnement : verifie que le serveur cible est reellement pret avant
+# tar/scp/cd. Trois conditions (un .env.prod VIDE a deja existe sur Avelomi) :
 #   1. $ENV_FILE present ET NON vide (test -s) ;
 #   2. docker-compose.prod.yml present cote serveur (repo clone) ;
 #   3. frontend/Dockerfile.prod present cote serveur (rebuild image possible).
-# Sinon : message explicite + exit 0. Evite l'echec rouge trompeur sur master
-# tant que provision-avelomi.sh (clone repo + .env.prod rempli) n'a pas tourne.
-if ! $SSH_CMD "$SERVER" "test -s '$REMOTE_ROOT/$ENV_FILE' && test -f '$REMOTE_ROOT/docker-compose.prod.yml' && test -f '$REMOTE_ROOT/frontend/Dockerfile.prod'"; then
-  echo "[deploy] $SERVER pas pret : $ENV_FILE vide/absent ou repo ($REMOTE_ROOT) non clone." >&2
-  echo "[deploy] Lance scripts/provision-avelomi.sh sur ce serveur (clone repo + .env.prod rempli)," >&2
-  echo "[deploy] puis re-merge master. Step ignore." >&2
+# Le dossier peut n'etre lisible que par root : on essaie `test` puis `sudo -n test`.
+# REQUIRE_READY=1 (CI prod) : serveur pas pret = ECHEC (exit 1), plus de skip vert.
+# REQUIRE_READY=0 (defaut) : ::warning:: + exit 0.
+REQUIRE_READY="${REQUIRE_READY:-0}"
+READY_CHECK="test -s '$REMOTE_ROOT/$ENV_FILE' && test -f '$REMOTE_ROOT/docker-compose.prod.yml' && test -f '$REMOTE_ROOT/frontend/Dockerfile.prod'"
+READY_CHECK_SUDO="sudo -n test -s '$REMOTE_ROOT/$ENV_FILE' && sudo -n test -f '$REMOTE_ROOT/docker-compose.prod.yml' && sudo -n test -f '$REMOTE_ROOT/frontend/Dockerfile.prod'"
+if ! $SSH_CMD "$SERVER" "($READY_CHECK) || ($READY_CHECK_SUDO)"; then
+  if [ "$REQUIRE_READY" = "1" ]; then
+    echo "::error title=Deploy saute::$SERVER pas pret : $ENV_FILE vide/absent ou repo ($REMOTE_ROOT) non clone/inaccessible. Lance scripts/provision-avelomi.sh puis relance." >&2
+    exit 1
+  fi
+  echo "::warning title=Deploy saute::$SERVER pas pret : $ENV_FILE vide/absent ou repo ($REMOTE_ROOT) non clone. Step ignore." >&2
   exit 0
 fi
 
@@ -99,6 +102,9 @@ fi
 SUPPORT_CONF="${SUPPORT_CONF:-nginx/nginx.frontend.conf}"
 if [ "$SUPPORT_CONF" != "nginx/nginx.frontend.conf" ]; then
   CONF_STAGE="$(mktemp -d)"
+  # mktemp -d = mode 700 : l'entree "./" de l'archive porterait uid runner/700 et
+  # root l'appliquerait a $REMOTE_ROOT a l'extraction (cause du /opt/nglu-app 700).
+  chmod 755 "$CONF_STAGE"
   mkdir -p "$CONF_STAGE/frontend" "$CONF_STAGE/nginx"
   cp docker-compose.prod.yml "$CONF_STAGE/docker-compose.prod.yml"
   cp frontend/Dockerfile.prod "$CONF_STAGE/frontend/Dockerfile.prod"
@@ -193,7 +199,10 @@ HTML
 
 echo "[remote] syncing prod frontend support files"
 sudo -n mkdir -p "$REMOTE_ROOT/frontend" "$REMOTE_ROOT/nginx"
-sudo -n tar -xzf "$REMOTE_SUPPORT_ARCHIVE" -C "$REMOTE_ROOT"
+sudo -n tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$REMOTE_SUPPORT_ARCHIVE" -C "$REMOTE_ROOT"
+# Garde-fou idempotent (racine seulement, pas -R) : jamais un /opt/nglu-app 700/autre uid.
+sudo -n chown "$REMOTE_USER:$(id -gn)" "$REMOTE_ROOT" 2>/dev/null || true
+sudo -n chmod 755 "$REMOTE_ROOT"
 sudo -n chown "$REMOTE_USER:$REMOTE_USER" \
   "$REMOTE_ROOT/docker-compose.prod.yml" \
   "$REMOTE_ROOT/frontend/Dockerfile.prod" \
@@ -211,7 +220,7 @@ done
 echo "[remote] replacing $TARGET_DIST contents"
 sudo -n mkdir -p "$TARGET_DIST"
 sudo -n find "$TARGET_DIST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-sudo -n tar -xzf "$REMOTE_DIST_ARCHIVE" -C "$TARGET_DIST"
+sudo -n tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$REMOTE_DIST_ARCHIVE" -C "$TARGET_DIST"
 # tar tourne en sudo => index.html appartient a root, et le dossier peut ne pas
 # etre traversable par l'utilisateur SSH tant que le chown ci-dessous n'a pas eu
 # lieu. On chown D'ABORD, puis on verifie (sinon faux negatif "did not produce").
@@ -225,7 +234,7 @@ if [ -n "${EXTRA_DIST:-}" ] && [ -n "${REMOTE_EXTRA_ARCHIVE:-}" ]; then
   echo "[remote] replacing $TARGET_EXTRA contents"
   sudo -n mkdir -p "$TARGET_EXTRA"
   sudo -n find "$TARGET_EXTRA" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-  sudo -n tar -xzf "$REMOTE_EXTRA_ARCHIVE" -C "$TARGET_EXTRA"
+  sudo -n tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$REMOTE_EXTRA_ARCHIVE" -C "$TARGET_EXTRA"
   sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_EXTRA"
   rm -f "$REMOTE_EXTRA_ARCHIVE"
 fi
@@ -326,3 +335,66 @@ else
   exit 1
 fi
 REMOTE_SCRIPT
+
+# ---------- Controle de version (cote runner) ----------
+# Le smoke ci-dessus ne prouve pas que le NOUVEAU build est servi (un ancien
+# build passerait). On verifie que le bundle hache de l'index.html deploye
+# apparait dans la page publique (3 essais espaces de 10 s).
+bundle_of() {
+  grep -o 'index-[A-Za-z0-9_-]*.js' "$1/index.html" 2>/dev/null | head -n 1 || true
+}
+
+verify_bundle() {
+  label="$1"; url="$2"; bundle="$3"
+  n=1
+  while [ "$n" -le 3 ]; do
+    if curl -fsSL --connect-timeout 5 --max-time 20 -H 'Cache-Control: no-cache' "$url" 2>/dev/null | grep -q "$bundle"; then
+      echo "[deploy] version ok: $label ($url sert $bundle)"
+      return 0
+    fi
+    [ "$n" -lt 3 ] && sleep 10
+    n=$((n + 1))
+  done
+  echo "::error title=Version non servie::$label : $url ne sert pas $bundle apres deploy" >&2
+  return 1
+}
+
+VERSION_FAILED=0
+MAIN_BUNDLE="$(bundle_of "$DIST_DIR")"
+if [ -n "$MAIN_BUNDLE" ]; then
+  verify_bundle "$APP_DIR" "$BASE_URL$SMOKE_ROUTE" "$MAIN_BUNDLE" || VERSION_FAILED=1
+else
+  echo "::warning::$DIST_DIR/index.html sans index-*.js reconnaissable : controle de version ignore"
+fi
+
+if [ -n "$EXTRA_DIST" ]; then
+  SUB=""
+  MAP_FILE="scripts/ci/avelomi-domains.json"
+  if [ -f "$MAP_FILE" ] && command -v node >/dev/null 2>&1; then
+    SUB="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const a=(j.apps||j).find(x=>x.dir===process.argv[2]);if(a&&a.sub)process.stdout.write(a.sub)' "$MAP_FILE" "$APP_DIR" 2>/dev/null || true)"
+  fi
+  if [ -z "$SUB" ]; then
+    case "$APP_DIR" in
+      farmos-app) SUB=farmos ;;
+      domus-app) SUB=domus ;;
+      batipro-app) SUB=batipro ;;
+      comptabilite-app) SUB=compta ;;
+      hr-app) SUB=rh ;;
+      journal-app) SUB=journal ;;
+      kodatill-app) SUB=kodatill ;;
+      tickets-app) SUB=tickets ;;
+      chat-app) SUB=chat ;;
+      migration-app) SUB=migration ;;
+    esac
+  fi
+  EXTRA_BUNDLE="$(bundle_of "$APP_DIR/$EXTRA_DIST")"
+  if [ -z "$SUB" ]; then
+    echo "::warning::sous-domaine Avelomi inconnu pour $APP_DIR : controle $EXTRA_DIST ignore"
+  elif [ -z "$EXTRA_BUNDLE" ]; then
+    echo "::warning::$APP_DIR/$EXTRA_DIST/index.html sans index-*.js reconnaissable : controle ignore"
+  else
+    verify_bundle "$APP_DIR ($EXTRA_DIST)" "https://$SUB.${AVELOMI_DOMAIN:-avelomi.com}/" "$EXTRA_BUNDLE" || VERSION_FAILED=1
+  fi
+fi
+
+[ "$VERSION_FAILED" = "0" ] || exit 1
