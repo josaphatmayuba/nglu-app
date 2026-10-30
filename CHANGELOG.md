@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **CRM : react-router v7, plus aucune exception d’audit npm (v3.258.3).** `react-router-dom` ^6.3 → ^7.18.5 (corrige GHSA-337j-9hxr-rhxg et GHSA-wrjc-x8rr-h8h6) ; 3 imports `react-router` → `react-router-dom` (CommonDelete, SinglePurchaseInvoice, SingleSaleInvoice) ; allowlist `frontend/audit-ci.jsonc` vidée (quill GHSA-v3m3, low, reste sous le seuil moderate).
+
 - **Node 24 partout (v3.258.2).** Node 20 n’est plus maintenu : workflows deploy-dev/prod en `node-version: 24` avec `actions/checkout@v7`, `actions/setup-node@v7`, `dorny/paths-filter@v4` (fin de l’avertissement « Node.js 20 is deprecated ») ; images `node:24-alpine` pour backend2 (dev + prod), middleware, whatsapp-service, frontend et marketing-site.
 
 - **CI et correctifs mineurs - bugs #53/#57/#59 (v3.258.1).** Test `fit-one-sms` aligné sur le format SMS actuel ; `@ApiSchema` sur 6 DTO Kodatill (fin des doublons Swagger) ; symbole de devise refusé s il commence par un espace ; CRM : la modale de modification de devise reste ouverte en cas d erreur ; deploy-dev : `tickets-dev` copie le dist avec `sudo -n` (dossier root), `avelomi-site-dev` n échoue plus quand la stack Avelomi est arrêtée (avertissement).

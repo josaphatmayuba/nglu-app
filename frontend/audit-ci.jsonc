@@ -1,12 +1,6 @@
 {
   "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
   "moderate": true,
-  "allowlist": [
-    // react-router v6 : aucun correctif en v6 (corrige en v7, montee majeure a faire avec QA navigation).
-    // GHSA-337j : hydration SSR, non utilisee (BrowserRouter). GHSA-wrjc : open redirect, aucune navigation construite depuis une valeur utilisateur.
-    "GHSA-337j-9hxr-rhxg",
-    "GHSA-wrjc-x8rr-h8h6",
-    // quill 2.0.3 = derniere version. Formats formula/video/code-block non actives (prop formats=), HTML affiche via sanitizeHtml.
-    "GHSA-v3m3-f69x-jf25"
-  ]
+  // react-router v7 corrige GHSA-337j / GHSA-wrjc ; quill GHSA-v3m3 (low) reste sous le seuil moderate.
+  "allowlist": []
 }

@@ -4,7 +4,7 @@ import { SolutionOutlined } from "@ant-design/icons";
 import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useParams } from "react-router";
+import { useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { loadSingleSaleReturn } from "../../redux/rtk/features/SaleReturnList/SaleReturnListSlice";
 import NewSaleReturnInvoice from "../Invoice/NewSaleReturnInvoice";

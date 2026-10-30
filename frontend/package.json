@@ -68,7 +68,7 @@
 		"react-quill-new": "^3.8.3",
 		"react-rating-star-with-type": "1.2.2",
 		"react-redux": "^8.0.2",
-		"react-router-dom": "^6.3.0",
+		"react-router-dom": "^7.18.5",
 		"react-script": "^2.0.5",
 		"react-spinners": "^0.13.8",
 		"react-to-print": "^2.14.7",
