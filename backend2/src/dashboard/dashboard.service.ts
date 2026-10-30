@@ -208,7 +208,7 @@ export class DashboardService {
         currencyId: n.currencyId,
         currencyCode: n.currencyCode,
         currencySymbol: n.currencySymbol,
-        amount: Math.round(Math.abs(n.value) * 100) / 100,
+        amount: money(Math.abs(n.value)),
       }))
       .filter((i) => i.amount > 0)
       .sort((a, b) => b.amount - a.amount);

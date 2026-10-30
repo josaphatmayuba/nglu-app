@@ -14,6 +14,7 @@ import useCurrency from "../../utils/useCurrency";
 import UpdateProfile from "./UpdateProfile";
 import { loadAllOrderPaginated } from "@/redux/rtk/features/sale/saleSlice";
 import PrintInvoice from "@/eCommerce/UserAccount/PrintInvoice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function MyAccount() {
   const dispatch = useDispatch();
@@ -61,7 +62,7 @@ export default function MyAccount() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${totalAmount + totalDiscountAmount}`}
@@ -76,7 +77,7 @@ export default function MyAccount() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${totalDiscountAmount}`}
@@ -91,7 +92,7 @@ export default function MyAccount() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${totalTaxAmount}`}
@@ -107,7 +108,7 @@ export default function MyAccount() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${paidAmount}`}
@@ -122,7 +123,7 @@ export default function MyAccount() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${dueAmount}`}

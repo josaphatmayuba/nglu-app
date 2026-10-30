@@ -12,6 +12,7 @@ import {
 import { priceCalculator } from "../../utils/functions";
 import useCurrency from "../../utils/useCurrency";
 import WishlistAttributePopUp from "./WishlistAttributePopUp";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function WishlistCard({ product, pageConfig }) {
   const id = localStorage.getItem("id");
@@ -94,7 +95,7 @@ export default function WishlistCard({ product, pageConfig }) {
           <span className="text-gray-700 font-medium">
             <span
               dangerouslySetInnerHTML={{
-                __html: currency?.currencySymbol,
+                __html: sanitizeHtml(currency?.currencySymbol),
               }}
             />{" "}
             {priceCalculator(productSalePriceWithVat, discount)}

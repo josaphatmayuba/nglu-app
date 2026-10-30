@@ -1,0 +1,10 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "moderate": true,
+  "allowlist": [
+    // deepmerge 4.3.1 = derniere version publiee, aucun correctif amont.
+    // Build seulement (vite-plugin-pwa > workbox-build > @rollup/plugin-node-resolve) : deepMerge({}, defaults statiques).
+    // Absent du bundle. A retirer des qu'une version > 4.3.1 sort.
+    "GHSA-gcqx-w48m-w2h4"
+  ]
+}

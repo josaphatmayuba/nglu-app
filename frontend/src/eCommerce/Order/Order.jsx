@@ -14,6 +14,7 @@ import useCurrency from "../../utils/useCurrency";
 import OrderCard from "../Card/OrderCard";
 import OrderLoading from "./OrderLoading";
 import ReturnRefund from "./ReturnRefund";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 export default function Order() {
   const { id } = useParams("id");
   const dispatch = useDispatch();
@@ -245,7 +246,7 @@ export default function Order() {
                   <span className=''>
                     <span
                       dangerouslySetInnerHTML={{
-                        __html: currency?.currencySymbol,
+                        __html: sanitizeHtml(currency?.currencySymbol),
                       }}
                     />{" "}
                     {(sale.totalAmount - (sale.deliveryFee || 0)).toFixed(2)}
@@ -267,7 +268,7 @@ export default function Order() {
                       {" "}
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
+                          __html: sanitizeHtml(currency?.currencySymbol),
                         }}
                       />{" "}
                       {sale.deliveryFee?.toFixed(2)}
@@ -280,7 +281,7 @@ export default function Order() {
                     {" "}
                     <span
                       dangerouslySetInnerHTML={{
-                        __html: currency?.currencySymbol,
+                        __html: sanitizeHtml(currency?.currencySymbol),
                       }}
                     />{" "}
                     {sale.totalAmount?.toFixed(2)}
@@ -307,7 +308,7 @@ export default function Order() {
                     <span className=''>
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
+                          __html: sanitizeHtml(currency?.currencySymbol),
                         }}
                       />
                       {sale.dueAmount?.toFixed(2)}

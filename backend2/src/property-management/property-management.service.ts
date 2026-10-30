@@ -8217,6 +8217,8 @@ export class PropertyManagementService implements OnModuleInit {
         // Resiliation avec motif (statut "ended" + ces 4 champs ; null pour une fin normale/renouvellement).
         // Registre d'imputations actif (bail flagge) : lecteurs bascules sur l'etat impute.
         allocationLedgerAt: realEstateLeases.allocationLedgerAt,
+        // Bail precedent quand ce bail est un renouvellement.
+        renewedFromLeaseId: realEstateLeases.renewedFromLeaseId,
         terminationDate: realEstateLeases.terminationDate,
         terminationReason: realEstateLeases.terminationReason,
         terminatedAt: realEstateLeases.terminatedAt,

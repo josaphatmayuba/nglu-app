@@ -935,7 +935,7 @@ export const transactions = mysqlTable("transaction", {
   debitId: bigint("debitId", { mode: "number" }).notNull(),
   creditId: bigint("creditId", { mode: "number" }).notNull(),
   particulars: varchar("particulars", { length: 255 }).notNull(),
-  amount: double("amount").notNull(),
+  amount: decimal("amount", { precision: 18, scale: 2, mode: "number" }).notNull(),
   currencyId: bigint("currencyId", { mode: "number" }),
   type: varchar("type", { length: 255 }),
   relatedId: varchar("relatedId", { length: 255 }),
@@ -1174,6 +1174,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   // Registre des affectations (migration 0317) : date de bascule du bail sur le
   // modele 1 mois = 1 echeance = ses paiements. NULL = comportement historique.
   allocationLedgerAt: datetime("allocation_ledger_at"),
+  // Bail d'origine quand ce bail est un renouvellement (migration 0327).
+  renewedFromLeaseId: bigint("renewed_from_lease_id", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -2437,7 +2439,7 @@ export const emails = mysqlTable("email", {
 export const manualPayments = mysqlTable("manualPayment", {
   id: serial("id").primaryKey(),
   date: datetime("date"),
-  amount: double("amount").default(0).notNull(),
+  amount: decimal("amount", { precision: 18, scale: 2, mode: "number" }).default(0).notNull(),
   paymentMethodId: bigint("paymentMethodId", { mode: "number" }),
   customerId: bigint("customerId", { mode: "number" }),
   transactionId: bigint("transactionId", { mode: "number" }),

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "moderate": true,
+  // react-router v7 corrige GHSA-337j / GHSA-wrjc ; quill GHSA-v3m3 (low) reste sous le seuil moderate.
+  "allowlist": []
+}

@@ -1,0 +1,44 @@
+# Mises a jour de dependances : PR hebdomadaires vers develop (jamais master).
+# Les majeures ne sont proposees que pour les correctifs de securite (groupe security).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /backend2
+      - /middleware
+      - /whatsapp-service
+      - /frontend
+      - /marketing-site
+      - /avelomi-site
+      - /domus-app
+      - /farmos-app
+      - /hr-app
+      - /batipro-app
+      - /comptabilite-app
+      - /chat-app
+      - /tickets-app
+      - /journal-app
+      - /kodatill-app
+      - /migration-app
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Kinshasa
+    open-pull-requests-limit: 10
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly

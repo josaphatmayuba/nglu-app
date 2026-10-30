@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, ApiSchema } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -184,6 +184,7 @@ export class UpdateOrderLinesDto {
   lines!: OrderLineInputDto[];
 }
 
+@ApiSchema({ name: "KodatillUpdateOrderStatus" })
 export class UpdateOrderStatusDto {
   @ApiProperty({ enum: ORDER_STATUSES })
   @IsIn(ORDER_STATUSES)

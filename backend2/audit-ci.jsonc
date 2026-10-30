@@ -1,0 +1,10 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "moderate": true,
+  "allowlist": [
+    // deepmerge 4.3.1 = derniere version publiee, aucun correctif amont.
+    // Dev seulement (jest-config, fork-ts-checker via @nestjs/cli), entrees = notre config, absent de l'image prod (npm ci --omit=dev).
+    // Aucun appel a deepmerge dans src/. A retirer des qu'une version > 4.3.1 sort.
+    "GHSA-gcqx-w48m-w2h4"
+  ]
+}

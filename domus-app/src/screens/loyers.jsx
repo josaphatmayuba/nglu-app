@@ -144,12 +144,11 @@ function groupByTenant(rows) {
 // Construit une carte par bail actif, enrichie des paiements de ce bail.
 // status : "late" (un mois PASSÉ impayé) · "pending" (mois courant impayé,
 // en attente) · "ok" (à jour).
-// Bail suivi dans Loyers : actif, ou RÉSILIÉ (ended + motif) tant qu'il reste des impayés à recouvrer.
-// Les baux « cancelled » et les fins de bail normales (renouvellement) restent exclus.
+// Bail suivi dans Loyers : actif, ou TERMINÉ (résilié OU renouvelé) tant qu'il reste des impayés
+// à recouvrer — un renouvellement n'efface pas les arriérés de l'ancien bail. « cancelled » exclu.
 const isRentTracked = (l) =>
   (l.status || "active") === "active" ||
-  (l.status === "ended" && Boolean(l.terminationReason) &&
-    Number(l.openDueCount ?? l.unpaidCount) > 0);
+  (l.status === "ended" && Number(l.openDueCount ?? l.unpaidCount) > 0);
 
 export function buildLeaseCards(leases, payments) {
   const now = new Date();
@@ -471,6 +470,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           <div style={{ minWidth: 0 }}>
             <div className="name">{name}</div>
             <div className="unit">{[unit, `${money(rent ?? latest?.amount, symbol)} / ${t("mois")}`].filter(Boolean).join(" · ")}</div>
+            {lease?.status === "ended" && <div className="unit">{tf(t("Ancien bail {ref} · arriérés à recouvrer"), { ref: lease.reference || lease.id })}</div>}
           </div>
         </div>
         <span className={`immo-pill ${meta.pill}`}>{meta.label}</span>
@@ -1231,17 +1231,14 @@ export function Loyers({ go }) {
   }, [leases, rows, leasePayments]);
   const lateCount = cards.filter((c) => c.status === "late").length;
   const pendingCount = cards.filter((c) => c.status === "pending").length;
-  // Total des arriérés (reste à payer cumulé), groupé par devise.
-  const arrearsByCurrency = useMemo(() => {
-    const map = new Map();
-    cards.forEach((c) => {
-      const bal = Number(c.balance) || 0;
-      if (bal <= 0) return;
-      const sym = c.symbol || currency.defaultCurrencySymbol || "$";
-      map.set(sym, (map.get(sym) || 0) + bal);
-    });
-    return [...map.entries()].map(([symbol, amount]) => ({ symbol, amount }));
-  }, [cards, currency.defaultCurrencySymbol]);
+  // Arriérés = loyers en retard (délai de grâce dépassé), groupés par devise :
+  // même règle que le KPI « Impayé échu » du tableau de bord.
+  const arrearsByCurrency = useMemo(() => groupAmountsByCurrency(
+    cards
+      .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, late: Number(cardFriseLateDue(c).lateDue.late) || 0 }))
+      .filter((c) => c.late > 0.005),
+    (c) => c.late, currency.defaultCurrencySymbol,
+  ), [cards, currency.defaultCurrencySymbol]);
   const hasArrears = arrearsByCurrency.length > 0;
 
   // Recherche : filtre cartes (locataire/unité) et lignes (locataire/logement/méthode).
@@ -1418,10 +1415,11 @@ export function Loyers({ go }) {
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-red"><BellRing size={20} /></div></div>
-          <div className="immo-metric-label">Arriérés (reste dû)</div>
+          <div className="immo-metric-label">{t("Arriérés échus")}</div>
           <div className="immo-metric-value" style={{ color: hasArrears ? "#dc2626" : undefined }}>
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
+          <div className="immo-metric-helper">{t("Loyers en retard, sans les mois encore en délai de grâce")}</div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
             onClick={() => smsSend((extra) => api.runOverdueReminders(extra), { title: t("Relancer les impayés : vérifier les messages") })
               .then((res) => { if (res) toast.success(t("Rappels lancés")); })

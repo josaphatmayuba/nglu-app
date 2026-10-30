@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import { BadRequestException, ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { normalizePhoneKey } from "./notification-utils";
+import { loadLeaseTotalDue, resolveCurrencySymbol } from "./lease-overdue";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -13,6 +14,7 @@ import {
   realEstateContractSigners,
   realEstateContracts,
   realEstateLeaseCotenants,
+  realEstateSecurityDeposits,
   realEstateLeaseDocuments,
   realEstateLeases,
   realEstateOwners,
@@ -1375,6 +1377,22 @@ export class ContractsService {
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
     const current = rows[0];
 
+    // Pas de renouvellement tant que le locataire doit encore des loyers sur ce bail.
+    const [cur] = current.currencyId
+      ? await this.db
+          .select({ symbol: currencies.currencySymbol, code: currencies.currencyCode })
+          .from(currencies)
+          .where(eq(currencies.id, Number(current.currencyId)))
+          .limit(1)
+      : [];
+    const symbol = await resolveCurrencySymbol(this.db, orgId, cur?.symbol || cur?.code || null);
+    const due = await loadLeaseTotalDue(this.db, orgId, current as any, symbol);
+    if (due.value > 0.005) {
+      throw new BadRequestException(
+        `Renouvellement impossible : le locataire doit encore ${due.text} sur ce bail. Encaissez la totalité des arriérés avant de renouveler.`,
+      );
+    }
+
     const baseStart = current.endDate ? new Date(current.endDate as unknown as string) : new Date();
     if (current.endDate) {
       // start = day after current lease end
@@ -1415,6 +1433,8 @@ export class ContractsService {
       moveInNotes: current.moveInNotes,
       terms: current.terms,
       signingCity: current.signingCity,
+      // Renouvellement = suite de l'ancien bail (meme locataire, meme caution).
+      renewedFromLeaseId: current.id,
       status: "active",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1428,6 +1448,20 @@ export class ContractsService {
         .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
         .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
     }
+
+    // La caution deja encaissee suit le renouvellement : le passif « Tenant
+    // Deposits » ne bouge pas (aucune ecriture), seul le rattachement change.
+    await this.db
+      .update(realEstateSecurityDeposits)
+      .set({ leaseId: newLeaseId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(realEstateSecurityDeposits.leaseId, leaseId),
+          eq(realEstateSecurityDeposits.organizationId, orgId),
+          eq(realEstateSecurityDeposits.status, "held"),
+          eq(realEstateSecurityDeposits.isActive, 1),
+        ),
+      );
 
     // Les colocataires actifs suivent le renouvellement (avant le contrat, pour
     // qu'il liste tous les preneurs et que chacun puisse le signer).

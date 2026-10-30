@@ -13,9 +13,10 @@ export default function UpdateCurrency({ handleCancel }) {
   const [loader, setLoader] = useState();
 
   const onFinish = async (values) => {
-    await dispatch(updateCurrency({ id: edit.id, values }));
-    handleCancel();
+    const resp = await dispatch(updateCurrency({ id: edit.id, values }));
     setLoader(false);
+    if (resp.payload?.message !== "success") return;
+    handleCancel();
     dispatch(loadAllCurrency());
   };
 

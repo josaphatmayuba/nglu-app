@@ -9,8 +9,7 @@ describe("fitOneSms", () => {
       "Merci de régulariser rapidement. Bailleur : ANICET NGOMA NDELE, +243 812 345 678.";
     const out = fit(raw);
     expect(out.length).toBeLessThanOrEqual(160);
-    expect(out.endsWith("+243 812 345 678.")).toBe(true);
-    expect(out).toContain("...");
+    expect(out).toContain("Bailleur : ANICET, +243 812 345 678.");
   });
 
   it("message court : inchange", () => {

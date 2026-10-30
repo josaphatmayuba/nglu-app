@@ -3,6 +3,7 @@ import ReactStars from "react-rating-star-with-type";
 import { Link } from "react-router-dom";
 import { priceCalculator } from "../../utils/functions";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function ProductCard({ product, isRating }) {
   const currency = useCurrency();
@@ -39,7 +40,7 @@ export default function ProductCard({ product, isRating }) {
           <span className='font-semibold'>
             <span
               dangerouslySetInnerHTML={{
-                __html: currency?.currencySymbol,
+                __html: sanitizeHtml(currency?.currencySymbol),
               }}
             />{" "}
             {priceCalculator(product?.productSalePriceWithVat, product?.discount)}
@@ -49,7 +50,7 @@ export default function ProductCard({ product, isRating }) {
               <span className='line-through opacity-50'>
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />{" "}
                 {product.productSalePriceWithVat}

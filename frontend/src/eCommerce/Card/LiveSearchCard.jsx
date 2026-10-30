@@ -2,6 +2,7 @@ import { useDispatch } from "react-redux";
 import { Link } from "react-router-dom";
 import { priceCalculator } from "../../utils/functions";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function LiveSearchCard({ product, handleClear }) {
  
@@ -47,7 +48,7 @@ export default function LiveSearchCard({ product, handleClear }) {
                 <span className='text-gray-700 font-medium'>
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />{" "}
                   {priceCalculator(productSalePriceWithVat, discount)}

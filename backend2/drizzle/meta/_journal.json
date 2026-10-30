@@ -2115,6 +2115,20 @@
       "when": 1782712800000,
       "tag": "0326_returns_quotes_products_money_decimal",
       "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "5",
+      "when": 1782799200000,
+      "tag": "0327_real_estate_lease_renewed_from",
+      "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "5",
+      "when": 1782885600000,
+      "tag": "0328_transaction_manual_payment_money_decimal",
+      "breakpoints": true
     }
   ]
 }

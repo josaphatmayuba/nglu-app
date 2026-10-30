@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { loadAlleCommerceSalePaginated } from "../../redux/rtk/features/eCommerce/cartOrder/cartOrderSlice";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function MyOrder() {
   const dispatch = useDispatch();
@@ -58,7 +59,7 @@ export default function MyOrder() {
         <span>
           <span
             dangerouslySetInnerHTML={{
-              __html: currency?.currencySymbol,
+              __html: sanitizeHtml(currency?.currencySymbol),
             }}
           />
           {` ${totalAmount}`}

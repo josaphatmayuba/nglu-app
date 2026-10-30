@@ -1,9 +1,10 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, ApiSchema } from "@nestjs/swagger";
 import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 const PAYMENT_METHOD_KINDS = ["cash", "card", "mobile", "voucher", "credit"] as const;
 type PaymentMethodKind = (typeof PAYMENT_METHOD_KINDS)[number];
 
+@ApiSchema({ name: "KodatillCreatePaymentMethod" })
 export class CreatePaymentMethodDto {
   @ApiProperty()
   @IsString()
@@ -31,6 +32,7 @@ export class CreatePaymentMethodDto {
   sortOrder?: number;
 }
 
+@ApiSchema({ name: "KodatillUpdatePaymentMethod" })
 export class UpdatePaymentMethodDto {
   @ApiPropertyOptional()
   @IsOptional()

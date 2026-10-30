@@ -135,7 +135,7 @@ export default function Payment() {
                     <span className=''>
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
+                          __html: sanitizeHtml(currency?.currencySymbol),
                         }}
                       />{" "}
                       {couponCalculate(cart.totalAmount, state?.coupon)

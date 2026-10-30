@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, ApiSchema } from "@nestjs/swagger";
 import {
   IsBoolean,
   IsIn,
@@ -65,6 +65,7 @@ export class UpdateCategoryDto {
   parentId?: number;
 }
 
+@ApiSchema({ name: "KodatillCreateProduct" })
 export class CreateProductDto {
   @ApiProperty()
   @IsString()
@@ -133,6 +134,7 @@ export class CreateProductDto {
   trackStock?: boolean;
 }
 
+@ApiSchema({ name: "KodatillUpdateProduct" })
 export class UpdateProductDto {
   @ApiPropertyOptional()
   @IsOptional()

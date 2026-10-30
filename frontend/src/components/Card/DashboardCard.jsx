@@ -3,6 +3,7 @@ import { Tooltip } from "antd";
 import { Coins, CreditCard, DollarSign, TrendingUp } from "lucide-react";
 import { abbreviateNumber } from "../../utils/nFormetter";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 // Utility function to generate card data
 const getCardData = (information, count) => [
@@ -76,7 +77,7 @@ const KpiCard = ({ item, currency }) => {
                 {isCurrency && (
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                 )}
@@ -89,7 +90,7 @@ const KpiCard = ({ item, currency }) => {
                 <span
                   className="text-sm mr-1 text-ink-500"
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
               )}

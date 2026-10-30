@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { and, count, desc, eq, inArray, like, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { money } from "../common/invoice-money.util";
 import { DRIZZLE } from "../database/database.constants";
 import { customers, returnSaleInvoices, saleInvoices, subAccounts, transactions, users } from "../database/schema";
 import type { Database } from "../database/types";
@@ -445,7 +446,8 @@ export class CustomersService {
       : [];
   }
 
+  // Montant au centime exact (bug 20 lot 4) : plus de toFixed(3) sur des soldes en DECIMAL(18,2).
   private round(value: number) {
-    return Number(value.toFixed(3));
+    return money(value);
   }
 }

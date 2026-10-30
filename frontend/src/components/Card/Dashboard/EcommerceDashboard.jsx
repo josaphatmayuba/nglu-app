@@ -4,6 +4,7 @@ import { BiCartAdd, BiCartDownload } from "react-icons/bi";
 import { FaMoneyBills } from "react-icons/fa6";
 import { abbreviateNumber } from "../../../utils/nFormetter";
 import useCurrency from "../../../utils/useCurrency";
+import { sanitizeHtml } from "../../../utils/sanitizeHtml.js";
 
 export default function ECommerceDashboard({ information }) {
   const currency = useCurrency();
@@ -19,7 +20,7 @@ export default function ECommerceDashboard({ information }) {
               <span className='text-lg'>
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalSaleAmount.toFixed(3)}
@@ -29,7 +30,7 @@ export default function ECommerceDashboard({ information }) {
             <span className='block text-blue-600 text-2xl sm:text-3xl font-bold sm:text-center'>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: currency?.currencySymbol,
+                  __html: sanitizeHtml(currency?.currencySymbol),
                 }}
               />
               {information?.totalSaleAmount

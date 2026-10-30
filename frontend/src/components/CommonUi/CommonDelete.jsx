@@ -3,7 +3,7 @@ import { DeleteOutlined } from "@ant-design/icons";
 import toast from "react-hot-toast";
 import { BiShow } from "react-icons/bi";
 import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 
 export default function CommonDelete({
