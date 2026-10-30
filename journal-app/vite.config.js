@@ -3,22 +3,27 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { versionDefine } from "../scripts/app-version.mjs";
 
-export default defineConfig({
+// Deux cibles de build pour la MEME app :
+//  - defaut        : base "/journal/" (ongdngolu.org/journal, INCHANGE)
+//  - --mode avelomi: base "/" pour le sous-domaine journal.avelomi.com
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/journal/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      base: "/journal/",
-      scope: "/journal/",
+      base: BASE,
+      scope: BASE,
       includeAssets: ["journal-icon.svg", "apple-touch-icon.png"],
       manifest: {
-        id: "/journal/",
+        id: BASE,
         name: "Journal Entreprise",
         short_name: "Journal",
         description: "Fil d'activité, tâches, calendrier et audit de l'entreprise.",
-        start_url: "/journal/",
-        scope: "/journal/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#f0f4ff",
@@ -37,7 +42,7 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/journal/index.html",
+        navigateFallback: BASE + "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
@@ -58,7 +63,7 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  base: "/journal/",
+  base: BASE,
   define: { __BUILD_TS__: JSON.stringify(Date.now()), ...versionDefine() },
   server: {
     proxy: {
@@ -70,4 +75,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "journal-assets",
   },
+};
 });

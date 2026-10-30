@@ -332,6 +332,10 @@ jobs:
         with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
       - name: Build (une fois pour les 2 prods)
         run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && npx --yes audit-ci@7 --config audit-ci.jsonc && npm run ${{ matrix.build }}
+      # Build sous-domaine <app>.avelomi.com (base "/", dist-avelomi). Tolerant :
+      # en cas d'echec, Avelomi garde le dist-avelomi deja present sur le serveur.
+      - name: Build Avelomi sous-domaine (tolerant)
+        run: cd ${{ matrix.app }} && npm run build:avelomi || echo "::warning::build:avelomi echoue pour ${{ matrix.app }}"
       - name: Deploy ongdngolu (bloquant)
         env:
           SERVER: ${{ env.ONGD_SERVER }}
@@ -345,6 +349,8 @@ jobs:
           SERVER: ${{ env.AVELOMI_SERVER }}
           BASE_URL: https://avelomi.com
           SUPPORT_CONF: nginx/nginx.avelomi.conf
+          # Ship aussi dist-avelomi -> html-<app>-avelomi-prod (cuit dans l'image).
+          EXTRA_DIST: dist-avelomi
           SSH: ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2
           SCP: scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
         run: sh scripts/ci/deploy-prod-static-app.sh ${{ matrix.app }} ${{ matrix.base }} || echo "[deploy] Avelomi skip/echec tolere"

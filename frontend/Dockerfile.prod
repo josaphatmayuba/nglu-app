@@ -21,5 +21,19 @@ COPY migration-app/dist/ /usr/share/nginx/html-migration-prod
 COPY chat-app/dist/ /usr/share/nginx/html-chat-prod
 # KodaTill SPA (caisse/POS) at /kodatill/
 COPY kodatill-app/dist/ /usr/share/nginx/html-kodatill-prod
+# Builds sous-domaines Avelomi (npm run build:avelomi, base "/") servis par
+# nginx.avelomi.conf sur <app>.avelomi.com. Inertes sur ongdngolu. Le script
+# scripts/ci/deploy-prod-static-app.sh garantit un placeholder pour chaque
+# dist-avelomi absent (sinon COPY echoue).
+COPY farmos-app/dist-avelomi/ /usr/share/nginx/html-farmos-avelomi-prod
+COPY domus-app/dist-avelomi/ /usr/share/nginx/html-domus-avelomi-prod
+COPY batipro-app/dist-avelomi/ /usr/share/nginx/html-batipro-avelomi-prod
+COPY hr-app/dist-avelomi/ /usr/share/nginx/html-hr-avelomi-prod
+COPY comptabilite-app/dist-avelomi/ /usr/share/nginx/html-comptabilite-avelomi-prod
+COPY journal-app/dist-avelomi/ /usr/share/nginx/html-journal-avelomi-prod
+COPY kodatill-app/dist-avelomi/ /usr/share/nginx/html-kodatill-avelomi-prod
+COPY tickets-app/dist-avelomi/ /usr/share/nginx/html-tickets-avelomi-prod
+COPY chat-app/dist-avelomi/ /usr/share/nginx/html-chat-avelomi-prod
+COPY migration-app/dist-avelomi/ /usr/share/nginx/html-migration-avelomi-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)
 EXPOSE 80

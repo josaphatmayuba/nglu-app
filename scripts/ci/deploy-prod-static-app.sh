@@ -22,6 +22,11 @@ LOCK_WAIT_SECONDS="${LOCK_WAIT_SECONDS:-900}"
 # Public base URL used by the remote smoke test. Override for other targets
 # (e.g. BASE_URL=https://avelomi.com) so the deploy verifies the right domain.
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
+# Build secondaire optionnel (ex. EXTRA_DIST=dist-avelomi : build:avelomi base "/"
+# des sous-domaines <app>.avelomi.com). Copie dans $REMOTE_ROOT/$APP_DIR/$EXTRA_DIST
+# et cuit dans l'image par frontend/Dockerfile.prod, dans le MEME rebuild que dist.
+# Tolerant : absent ou sans index.html => ignore (placeholder garde cote serveur).
+EXTRA_DIST="${EXTRA_DIST:-}"
 
 # Garde provisionnement : on SKIP proprement (exit 0) tant que le serveur cible
 # n'est pas reellement pret, au lieu de planter (tar/scp/cd sur des fichiers
@@ -60,12 +65,14 @@ APP_SAFE="$(printf "%s" "$APP_DIR" | tr -c 'A-Za-z0-9._-' '-')"
 STAMP="${BITBUCKET_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-manual}}-$(date +%s)"
 LOCAL_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"
 LOCAL_SUPPORT_ARCHIVE="/tmp/nglu-prod-support-${APP_SAFE}-${STAMP}.tgz"
+LOCAL_EXTRA_ARCHIVE="/tmp/nglu-prod-extra-${APP_SAFE}-${STAMP}.tgz"
 REMOTE_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"
 REMOTE_SUPPORT_ARCHIVE="/tmp/nglu-prod-support-${APP_SAFE}-${STAMP}.tgz"
+REMOTE_EXTRA_ARCHIVE=""
 CONF_STAGE=""
 
 cleanup_local() {
-  rm -f "$LOCAL_DIST_ARCHIVE" "$LOCAL_SUPPORT_ARCHIVE"
+  rm -f "$LOCAL_DIST_ARCHIVE" "$LOCAL_SUPPORT_ARCHIVE" "$LOCAL_EXTRA_ARCHIVE"
   if [ -n "$CONF_STAGE" ]; then
     rm -rf "$CONF_STAGE"
   fi
@@ -73,6 +80,15 @@ cleanup_local() {
 trap cleanup_local EXIT INT TERM
 
 tar -czf "$LOCAL_DIST_ARCHIVE" -C "$DIST_DIR" .
+if [ -n "$EXTRA_DIST" ]; then
+  if [ -f "$APP_DIR/$EXTRA_DIST/index.html" ]; then
+    tar -czf "$LOCAL_EXTRA_ARCHIVE" -C "$APP_DIR/$EXTRA_DIST" .
+    REMOTE_EXTRA_ARCHIVE="/tmp/nglu-prod-extra-${APP_SAFE}-${STAMP}.tgz"
+  else
+    echo "[deploy] $APP_DIR/$EXTRA_DIST/index.html absent : build secondaire ignore." >&2
+    EXTRA_DIST=""
+  fi
+fi
 # Per-target nginx config. The server always mounts nginx/nginx.frontend.conf,
 # so whichever source file SUPPORT_CONF names is shipped UNDER that path.
 # ongdngolu keeps the default (dual-domain); Avelomi passes SUPPORT_CONF=
@@ -99,9 +115,12 @@ fi
 
 $SCP_CMD "$LOCAL_DIST_ARCHIVE" "$SERVER:$REMOTE_DIST_ARCHIVE"
 $SCP_CMD "$LOCAL_SUPPORT_ARCHIVE" "$SERVER:$REMOTE_SUPPORT_ARCHIVE"
+if [ -n "$REMOTE_EXTRA_ARCHIVE" ]; then
+  $SCP_CMD "$LOCAL_EXTRA_ARCHIVE" "$SERVER:$REMOTE_EXTRA_ARCHIVE"
+fi
 
 $SSH_CMD "$SERVER" \
-  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' BASE_URL='$BASE_URL' DOCKER='${DOCKER:-docker}' bash -s" <<'REMOTE_SCRIPT'
+  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' EXTRA_DIST='$EXTRA_DIST' REMOTE_EXTRA_ARCHIVE='$REMOTE_EXTRA_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' BASE_URL='$BASE_URL' DOCKER='${DOCKER:-docker}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
@@ -184,6 +203,10 @@ echo "[remote] ensuring first-deploy dist directories exist"
 for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app kodatill-app; do
   write_placeholder "$REMOTE_ROOT/$static_app/dist" "$static_app"
 done
+# dist-avelomi : requis par les COPY de frontend/Dockerfile.prod (sous-domaines Avelomi).
+for static_app in farmos-app domus-app batipro-app hr-app comptabilite-app journal-app kodatill-app tickets-app chat-app migration-app; do
+  write_placeholder "$REMOTE_ROOT/$static_app/dist-avelomi" "$static_app (avelomi)"
+done
 
 echo "[remote] replacing $TARGET_DIST contents"
 sudo -n mkdir -p "$TARGET_DIST"
@@ -196,6 +219,15 @@ sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
 if [ ! -f "$TARGET_DIST/index.html" ]; then
   echo "[remote] deployed artifact did not produce $TARGET_DIST/index.html" >&2
   exit 1
+fi
+if [ -n "${EXTRA_DIST:-}" ] && [ -n "${REMOTE_EXTRA_ARCHIVE:-}" ]; then
+  TARGET_EXTRA="$REMOTE_ROOT/$APP_DIR/$EXTRA_DIST"
+  echo "[remote] replacing $TARGET_EXTRA contents"
+  sudo -n mkdir -p "$TARGET_EXTRA"
+  sudo -n find "$TARGET_EXTRA" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  sudo -n tar -xzf "$REMOTE_EXTRA_ARCHIVE" -C "$TARGET_EXTRA"
+  sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_EXTRA"
+  rm -f "$REMOTE_EXTRA_ARCHIVE"
 fi
 rm -f "$REMOTE_DIST_ARCHIVE" "$REMOTE_SUPPORT_ARCHIVE"
 

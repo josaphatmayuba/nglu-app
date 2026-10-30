@@ -9,22 +9,25 @@ const appVersion = readFileSync(
   "utf8",
 ).trim();
 
-export default defineConfig({
+// Defaut : base "/chat/" (INCHANGE, partage avec ongdngolu.org). --mode avelomi : base "/" (sous-domaine dedie).
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/chat/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      base: "/chat/",
-      scope: "/chat/",
+      base: BASE,
+      scope: BASE,
       includeAssets: ["chat-icon.svg", "chat-icon-192.png", "chat-icon-512.png"],
       manifest: {
-        id: "/chat/",
+        id: BASE,
         name: "Chat SIFA",
         short_name: "Chat",
         description: "Messagerie d'entreprise SIFA.",
-        start_url: "/chat/",
-        scope: "/chat/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#0f172a",
@@ -42,13 +45,13 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,mjs,wasm,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/chat/index.html",
+        navigateFallback: BASE + "index.html",
         navigateFallbackDenylist: [/^\/api\//],
       },
       devOptions: { enabled: false },
     }),
   ],
-  base: "/chat/",
+  base: BASE,
   define: { __BUILD_TS__: JSON.stringify(Date.now()), __APP_VERSION__: JSON.stringify(appVersion) },
   server: {
     proxy: { "/api": "http://localhost:8001" },
@@ -58,4 +61,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "chat-assets",
   },
+};
 });

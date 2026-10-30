@@ -5,9 +5,12 @@ import { versionDefine } from "../scripts/app-version.mjs";
 // Migration Cockpit — outil interne (lecture seule) pour piloter la migration
 // legacy PostgreSQL -> Drizzle/MySQL. Servi sous /migration/ par nginx, comme
 // Domus l'est sous /domus/. Pas de PWA/offline : outil d'admin, pas mobile.
-export default defineConfig({
+// Defaut : base "/migration/" (INCHANGE, partage avec ongdngolu.org). --mode avelomi : base "/" (sous-domaine dedie).
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/migration/";
+  return {
   plugins: [react()],
-  base: "/migration/",
+  base: BASE,
   define: { __BUILD_TS__: JSON.stringify(Date.now()), ...versionDefine() },
   server: {
     proxy: {
@@ -19,4 +22,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "migration-assets",
   },
+};
 });
