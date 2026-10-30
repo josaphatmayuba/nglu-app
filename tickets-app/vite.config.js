@@ -2,22 +2,25 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+// Defaut : base "/tickets/" (INCHANGE, partage avec ongdngolu.org). --mode avelomi : base "/" (sous-domaine dedie).
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/tickets/";
+  return {
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      base: "/tickets/",
-      scope: "/tickets/",
+      base: BASE,
+      scope: BASE,
       includeAssets: ["tickets-icon.svg"],
       manifest: {
-        id: "/tickets/",
+        id: BASE,
         name: "Tickets · SIFA",
         short_name: "Tickets",
         description: "Demandes internes et circuits d'approbation.",
-        start_url: "/tickets/",
-        scope: "/tickets/",
+        start_url: BASE,
+        scope: BASE,
         display: "standalone",
         orientation: "any",
         background_color: "#e8ecf5",
@@ -35,7 +38,7 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-        navigateFallback: "/tickets/index.html",
+        navigateFallback: BASE + "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
@@ -56,7 +59,7 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
-  base: "/tickets/",
+  base: BASE,
   define: { __BUILD_TS__: JSON.stringify(Date.now()) },
   server: {
     proxy: {
@@ -68,4 +71,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "tickets-assets",
   },
+};
 });

@@ -55,6 +55,8 @@ jobs:
       # n'existe tout simplement pas).
       static_matrix: ${{ steps.decide.outputs.static_matrix }}
       static_any: ${{ steps.decide.outputs.static_any }}
+      avelomi_matrix: ${{ steps.decide.outputs.avelomi_matrix }}
+      avelomi_any: ${{ steps.decide.outputs.avelomi_any }}
     steps:
       # fetch-depth: 0 obligatoire ici : paths-filter compare deux commits et
       # echoue sur un clone shallow ("fatal: shallow file has changed since we
@@ -163,6 +165,29 @@ jobs:
             echo "static_any=true" >> "$GITHUB_OUTPUT"
           else
             echo "static_any=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Sous-domaines <app>.dev.avelomi.com : build:avelomi (base "/") des 10 apps.
+          all_avelomi='[
+            {"app":"farmos-app","flag":"farmos"},{"app":"domus-app","flag":"domus"},
+            {"app":"batipro-app","flag":"batipro"},{"app":"hr-app","flag":"hr"},
+            {"app":"comptabilite-app","flag":"comptabilite"},{"app":"journal-app","flag":"journal"},
+            {"app":"kodatill-app","flag":"kodatill"},{"app":"tickets-app","flag":"tickets"},
+            {"app":"chat-app","flag":"chat"},{"app":"migration-app","flag":"migration"}
+          ]'
+          av='[]'
+          for row in $(printf '%s' "$all_avelomi" | jq -c '.[]'); do
+            f=$(printf '%s' "$row" | jq -r '.flag')
+            eval "v=\${flag_$f}"
+            if [ "$v" = "true" ]; then
+              av=$(printf '%s' "$av" | jq -c --argjson r "$row" '. + [$r]')
+            fi
+          done
+          echo "avelomi_matrix=$(printf '%s' "$av" | jq -c '{include: .}')" >> "$GITHUB_OUTPUT"
+          if [ "$(printf '%s' "$av" | jq 'length')" -gt 0 ]; then
+            echo "avelomi_any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "avelomi_any=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ─────────── Deploiement SEQUENTIEL (un projet a la fois) sur ongdngolu ───────────
@@ -510,3 +535,37 @@ jobs:
         run: |
           set -euo pipefail
           $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+  # Sous-domaines <app>.dev.avelomi.com : dist-avelomi copie dans
+  # /opt/nglu-app-dev/<app>/dist-avelomi (bind-monte :ro sur html-<app>-avelomi-dev
+  # par docker-compose.prod.yml). Ne recree PAS nglu_prod_frontend (voir avelomi-site-dev).
+  # Tolerant : stack Avelomi parfois arretee (bug #58).
+  avelomi-apps-dev:
+    needs: [changes, middleware-avelomi-dev]
+    if: always() && needs.changes.outputs.avelomi_any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.changes.outputs.avelomi_matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: '24' }
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
+      - run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && npm run build:avelomi
+      - name: Deploy
+        env:
+          SERVER: ${{ env.AVELOMI_SERVER }}
+          A: ${{ matrix.app }}
+        run: |
+          set -euo pipefail
+          test -f "$A/dist-avelomi/index.html"
+          $SSH $SERVER "sudo -n mkdir -p $APP/$A/dist-avelomi"
+          $SSH $SERVER "rm -rf /tmp/$A-dist-avelomi && mkdir -p /tmp/$A-dist-avelomi"
+          $SCP -r "$A"/dist-avelomi/* $SERVER:/tmp/$A-dist-avelomi/
+          $SSH $SERVER "sudo -n find $APP/$A/dist-avelomi -mindepth 1 -delete && sudo -n cp -r /tmp/$A-dist-avelomi/. $APP/$A/dist-avelomi/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/$A/dist-avelomi && rm -rf /tmp/$A-dist-avelomi"
+          $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; if [ \"\$(\$DOCKER inspect -f '{{.State.Running}}' nglu_prod_frontend 2>/dev/null)\" != true ]; then echo '::warning::nglu_prod_frontend arrete sur Avelomi : dist-avelomi copie, reload ignore'; exit 0; fi; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"

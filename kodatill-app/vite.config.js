@@ -4,11 +4,12 @@ import { VitePWA } from "vite-plugin-pwa";
 import { versionDefine } from "../scripts/app-version.mjs";
 
 // KodaTill — app de caisse/POS multi-activite, servie sous /kodatill/ par
-// nginx (meme pattern que farmos-app : SPA + PWA installable). Base fixe
-// pour l'instant (pas de mode avelomi comme farmos, pas demande sur ce ticket).
-const BASE = "/kodatill/";
-
-export default defineConfig({
+// nginx (meme pattern que farmos-app : SPA + PWA installable).
+//  - defaut        : base "/kodatill/" (ongdngolu.org/kodatill, INCHANGE)
+//  - --mode avelomi: base "/" pour le sous-domaine kodatill.avelomi.com
+export default defineConfig(({ mode }) => {
+  const BASE = mode === "avelomi" ? "/" : "/kodatill/";
+  return {
   plugins: [
     react(),
     VitePWA({
@@ -80,4 +81,5 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "kodatill-assets",
   },
+};
 });
