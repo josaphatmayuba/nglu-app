@@ -5,8 +5,8 @@
   "description": "Microservice HTTP autonome pour le bot WhatsApp (Baileys) — isole de backend2 pour proteger la session longue-duree des redemarrages frequents de l'API principale.",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit"
@@ -24,10 +24,12 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.21",
     "@types/express": "^5.0.6",
     "@types/node": "^22.19.19",
     "@types/qrcode": "^1.5.6",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "multer": "^2.5.0"
   }
 }

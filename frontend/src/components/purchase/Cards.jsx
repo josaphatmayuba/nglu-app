@@ -3,6 +3,7 @@ import React, { Fragment } from "react";
 import { Coins, CreditCard, DollarSign, TrendingUp } from "lucide-react";
 import { abbreviateNumber } from "../../utils/nFormetter";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 const DashboardCard = ({ information, count }) => {
   const currency = useCurrency();
@@ -71,7 +72,7 @@ const DashboardCard = ({ information, count }) => {
                     {isCurrency && (
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
+                          __html: sanitizeHtml(currency?.currencySymbol),
                         }}
                       />
                     )}
@@ -84,7 +85,7 @@ const DashboardCard = ({ information, count }) => {
                     <span
                       className="text-base mr-1"
                       dangerouslySetInnerHTML={{
-                        __html: currency?.currencySymbol,
+                        __html: sanitizeHtml(currency?.currencySymbol),
                       }}
                     />
                   )}

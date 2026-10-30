@@ -8,6 +8,7 @@ import {
 } from "react-icons/fa6";
 import { abbreviateNumber } from "../../../utils/nFormetter";
 import useCurrency from "../../../utils/useCurrency";
+import { sanitizeHtml } from "../../../utils/sanitizeHtml.js";
 
 const DashboardCard = ({ information, count}) => {
   const currency = useCurrency();
@@ -24,7 +25,7 @@ const DashboardCard = ({ information, count}) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.totalAmount.toFixed(3)}
@@ -35,7 +36,7 @@ const DashboardCard = ({ information, count}) => {
                 {" "}
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalAmount
@@ -62,7 +63,7 @@ const DashboardCard = ({ information, count}) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.paidAmount.toFixed(3)}
@@ -72,7 +73,7 @@ const DashboardCard = ({ information, count}) => {
               <span className="block text-violet-500 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.paidAmount
@@ -96,7 +97,7 @@ const DashboardCard = ({ information, count}) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.dueAmount.toFixed(3)}
@@ -106,7 +107,7 @@ const DashboardCard = ({ information, count}) => {
               <span className="block text-blue-600 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.dueAmount
@@ -131,7 +132,7 @@ const DashboardCard = ({ information, count}) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.returnPaidAmount.toFixed(3)}
@@ -141,7 +142,7 @@ const DashboardCard = ({ information, count}) => {
               <span className="block text-blue-600 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.returnPaidAmount

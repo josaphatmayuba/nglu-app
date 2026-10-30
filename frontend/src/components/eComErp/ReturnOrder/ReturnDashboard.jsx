@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa6";
 import { abbreviateNumber } from "../../../utils/nFormetter";
 import useCurrency from "../../../utils/useCurrency";
+import { sanitizeHtml } from "../../../utils/sanitizeHtml.js";
 
 const ReturnDashboard = ({ information, count }) => {
   const currency = useCurrency();
@@ -25,7 +26,7 @@ const ReturnDashboard = ({ information, count }) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.totalAmount.toFixed(3)}
@@ -36,7 +37,7 @@ const ReturnDashboard = ({ information, count }) => {
                 {" "}
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalAmount
@@ -63,7 +64,7 @@ const ReturnDashboard = ({ information, count }) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.totalReturnPaidAmount.toFixed(3)}
@@ -73,7 +74,7 @@ const ReturnDashboard = ({ information, count }) => {
               <span className="block text-violet-500 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalReturnPaidAmount
@@ -98,7 +99,7 @@ const ReturnDashboard = ({ information, count }) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.totalReturnDiscountAmount.toFixed(3)}
@@ -108,7 +109,7 @@ const ReturnDashboard = ({ information, count }) => {
               <span className="block text-blue-600 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalReturnDiscountAmount
@@ -133,7 +134,7 @@ const ReturnDashboard = ({ information, count }) => {
                 <span className="text-lg">
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                   {information?.totalReturnVatAmount.toFixed(3)}
@@ -143,7 +144,7 @@ const ReturnDashboard = ({ information, count }) => {
               <span className="block text-blue-600 text-2xl sm:text-3xl font-bold sm:text-center">
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
                 {information?.totalReturnVatAmount

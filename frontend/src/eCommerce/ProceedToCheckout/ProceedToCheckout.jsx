@@ -8,6 +8,7 @@ import { loadAllDeliveryFee } from "../../redux/rtk/features/eCommerce/deliveryF
 import useCurrency from "../../utils/useCurrency";
 import PricingTable from "./PricingTable";
 import ProductTable from "./ProductTable";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function ProceedToCheckout() {
   const customerId = localStorage.getItem("id");
@@ -119,7 +120,7 @@ export default function ProceedToCheckout() {
                             {fee.deliveryArea} -{" "}
                             <span
                               dangerouslySetInnerHTML={{
-                                __html: currency?.currencySymbol,
+                                __html: sanitizeHtml(currency?.currencySymbol),
                               }}
                             />
                             {`${fee.deliveryFee}`}

@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ArrayNotEmpty, IsArray, IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { ArrayNotEmpty, IsArray, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from "class-validator";
+
+// Le symbole est affiche tel quel dans le CRM : pas de balise ni d entite HTML.
+const SAFE_SYMBOL = /^[^<>"'&]+$/;
 
 export class CreateCurrencyDto {
   @ApiPropertyOptional({ example: "USD" })
@@ -15,6 +18,8 @@ export class CreateCurrencyDto {
   @ApiProperty({ example: "$" })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(8)
+  @Matches(SAFE_SYMBOL)
   currencySymbol: string;
 }
 
@@ -32,6 +37,8 @@ export class UpdateCurrencyDto {
   @ApiPropertyOptional({ example: "$" })
   @IsOptional()
   @IsString()
+  @MaxLength(8)
+  @Matches(SAFE_SYMBOL)
   currencySymbol?: string;
 
   @ApiPropertyOptional({ example: "true" })

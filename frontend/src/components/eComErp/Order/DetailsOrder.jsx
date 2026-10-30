@@ -22,6 +22,7 @@ import OrderProductList from "./OrderProductList";
 import OrderStatus from "./OrderStatus";
 import OrderTransactionsList from "./OrderTransactionsList";
 import ReturnProductList from "./ReturnProductList";
+import { sanitizeHtml } from "../../../utils/sanitizeHtml.js";
 //PopUp
 
 export default function DetailsOrder() {
@@ -99,7 +100,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -119,7 +120,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -137,7 +138,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -155,7 +156,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -174,7 +175,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -190,7 +191,7 @@ export default function DetailsOrder() {
                               {
                                 <span
                                   dangerouslySetInnerHTML={{
-                                    __html: currency?.currencySymbol,
+                                    __html: sanitizeHtml(currency?.currencySymbol),
                                   }}
                                 />
                               }
@@ -246,7 +247,7 @@ export default function DetailsOrder() {
                           {sale.singleCartOrder?.deliveryFee?.deliveryArea} (
                           <span
                             dangerouslySetInnerHTML={{
-                              __html: currency?.currencySymbol,
+                              __html: sanitizeHtml(currency?.currencySymbol),
                             }}
                           />{" "}
                           {sale.singleCartOrder?.deliveryFee?.deliveryFee})
@@ -332,7 +333,7 @@ export default function DetailsOrder() {
                             {
                               <span
                                 dangerouslySetInnerHTML={{
-                                  __html: currency?.currencySymbol,
+                                  __html: sanitizeHtml(currency?.currencySymbol),
                                 }}
                               />
                             }

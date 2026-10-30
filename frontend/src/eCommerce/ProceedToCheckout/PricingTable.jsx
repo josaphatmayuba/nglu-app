@@ -1,6 +1,7 @@
 import { Button, Card } from "antd";
 import { useSelector } from "react-redux";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function PricingTable({ list, form, loader, deliveryFeeId }) {
   const currency = useCurrency();
@@ -27,7 +28,7 @@ export default function PricingTable({ list, form, loader, deliveryFeeId }) {
             <span className=''>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: currency?.currencySymbol,
+                  __html: sanitizeHtml(currency?.currencySymbol),
                 }}
               />{" "}
               {list?.totalAmount}
@@ -40,7 +41,7 @@ export default function PricingTable({ list, form, loader, deliveryFeeId }) {
               <span className=''>
                 <span
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />{" "}
                 {deliveryFeeCalculate()}
@@ -53,7 +54,7 @@ export default function PricingTable({ list, form, loader, deliveryFeeId }) {
             <span className=''>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: currency?.currencySymbol,
+                  __html: sanitizeHtml(currency?.currencySymbol),
                 }}
               />{" "}
               {list?.totalAmount + (deliveryFeeCalculate() || 0)}

@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import useCurrency from "../../utils/useCurrency";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function OrderCard({ item, invoice }) {
   const {
@@ -100,7 +101,7 @@ export default function OrderCard({ item, invoice }) {
             <span className='md:font-medium text-sm md:text-base'>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: currency?.currencySymbol,
+                  __html: sanitizeHtml(currency?.currencySymbol),
                 }}
               />{" "}
               {product.productSalePrice.toFixed(2)}

@@ -1,6 +1,7 @@
 import useCurrency from "@/utils/useCurrency";
 import { Form, Input, InputNumber, Select } from "antd";
 import { CiCircleRemove } from "react-icons/ci";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function Products({
   totalCalculator,
@@ -188,7 +189,7 @@ export default function Products({
                                       <Select.Option key="flat">
                                         <span
                                           dangerouslySetInnerHTML={{
-                                            __html: currency?.currencySymbol,
+                                            __html: sanitizeHtml(currency?.currencySymbol),
                                           }}
                                         />
                                       </Select.Option>

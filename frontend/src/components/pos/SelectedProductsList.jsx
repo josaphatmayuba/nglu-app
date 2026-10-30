@@ -3,6 +3,7 @@ import { Form, InputNumber, Select } from "antd";
 import { CloseOutlined, InboxOutlined } from "@ant-design/icons";
 import { useSelector } from "react-redux";
 import { CiCircleRemove } from "react-icons/ci";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function SelectedProductsList({
     form,
@@ -131,7 +132,7 @@ export default function SelectedProductsList({
                                                                                 onChange={() => totalCalculator(index)}
                                                                             >
                                                                                 <Select.Option value="flat">
-                                                                                    <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />
+                                                                                    <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />
                                                                                 </Select.Option>
                                                                                 <Select.Option value="percentage">%</Select.Option>
                                                                             </Select>
@@ -143,7 +144,7 @@ export default function SelectedProductsList({
                                                         ) : (
                                                             <span className="font-medium">
                                                                 {discount || 0}
-                                                                {discountType === "percentage" ? "%" : <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />}
+                                                                {discountType === "percentage" ? "%" : <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />}
                                                             </span>
                                                         )}
                                                     </div>
@@ -159,7 +160,7 @@ export default function SelectedProductsList({
                                                     </div>
                                                 </div>
                                                 <div className="text-right font-semibold text-lg border-t pt-2">
-                                                    Total: <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />
+                                                    Total: <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />
                                                     {lineTotal.toFixed(2)}
                                                 </div>
                                             </div>
@@ -182,7 +183,7 @@ export default function SelectedProductsList({
 
                                                 {/* Unit Price */}
                                                 <div className="col-span-2 flex items-center">
-                                                    <span className="mr-2" dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />
+                                                    <span className="mr-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />
                                                     <Form.Item {...restField} name={[name, "productSalePrice"]} className="mb-0 w-full">
                                                         <InputNumber
                                                             min={0}
@@ -239,7 +240,7 @@ export default function SelectedProductsList({
                                                                             onChange={() => totalCalculator(index)}
                                                                         >
                                                                             <Select.Option value="flat">
-                                                                                <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />
+                                                                                <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />
                                                                             </Select.Option>
                                                                             <Select.Option value="percentage">%</Select.Option>
                                                                         </Select>
@@ -251,7 +252,7 @@ export default function SelectedProductsList({
                                                     ) : (
                                                         <span className="text-sm">
                                                             {discount || 0}
-                                                            {discountType === "percentage" ? "%" : <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />}
+                                                            {discountType === "percentage" ? "%" : <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />}
                                                         </span>
                                                     )}
                                                 </div>
@@ -274,7 +275,7 @@ export default function SelectedProductsList({
 
                                                 {/* Line Total */}
                                                 <div className="col-span-1 flex items-center text-sm">
-                                                    <span dangerouslySetInnerHTML={{ __html: currency?.currencySymbol }} />
+                                                    <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(currency?.currencySymbol) }} />
                                                     {lineTotal.toFixed(2)}
                                                 </div>
 

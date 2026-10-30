@@ -10,6 +10,7 @@ import {
 import { priceCalculator } from "../../utils/functions";
 import useCurrency from "../../utils/useCurrency";
 import QuantityHandle from "../SingleProduct/QuantityHandle";
+import { sanitizeHtml } from "../../utils/sanitizeHtml.js";
 
 export default function CartCard({ isQuantity, isStock, data, cartId }) {
   const { productQuantity, product, cartAttributeValue, colors } = data;
@@ -93,7 +94,7 @@ export default function CartCard({ isQuantity, isStock, data, cartId }) {
             <span>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: currency?.currencySymbol,
+                  __html: sanitizeHtml(currency?.currencySymbol),
                 }}
               />{" "}
               {priceCalculator(
