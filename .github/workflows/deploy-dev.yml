@@ -337,7 +337,8 @@ jobs:
           set -euo pipefail
           $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
           $SCP -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
-          $SSH $SERVER "mkdir -p $APP/tickets-app/dist && find $APP/tickets-app/dist -mindepth 1 -delete && cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && rm -rf /tmp/tickets-app-dist"
+          # dist appartient a root (bug #59) : meme schema sudo -n que avelomi-site, puis on rend le dossier a l utilisateur ssh
+          $SSH $SERVER "sudo -n mkdir -p $APP/tickets-app/dist && sudo -n find $APP/tickets-app/dist -mindepth 1 -delete && sudo -n cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/tickets-app/dist && rm -rf /tmp/tickets-app-dist"
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
   # Migration Cockpit : nouveau volume html-migration-dev -> il faut RECREER le
@@ -420,7 +421,8 @@ jobs:
           $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
           $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
           $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
-          $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
+          # Stack web Avelomi arretee depuis 2026-09-03 (bug #58) : dist copie, reload seulement si le conteneur tourne
+          $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; if [ \"\$(\$DOCKER inspect -f '{{.State.Running}}' nglu_prod_frontend 2>/dev/null)\" != true ]; then echo '::warning::nglu_prod_frontend arrete sur Avelomi : dist copie, reload nginx ignore'; exit 0; fi; \$DOCKER exec nglu_prod_frontend nginx -t && \$DOCKER exec nglu_prod_frontend nginx -s reload"
 
   backend2-avelomi-dev:
     needs: [changes, avelomi-site-dev]

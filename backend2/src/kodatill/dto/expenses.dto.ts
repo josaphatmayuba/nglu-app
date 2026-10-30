@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, ApiSchema } from "@nestjs/swagger";
 import {
   IsDateString,
   IsInt,
@@ -46,6 +46,7 @@ export class UpdateExpenseCategoryDto {
 
 // ─── Expenses ──────────────────────────────────────────────────────────────
 
+@ApiSchema({ name: "KodatillCreateExpense" })
 export class CreateExpenseDto {
   @ApiPropertyOptional()
   @IsOptional()
