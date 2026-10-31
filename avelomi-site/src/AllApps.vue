@@ -160,8 +160,8 @@ function goHome(){ location.hash = ''; }
             <span class="mark"><svg viewBox="0 0 64 64" aria-label="Avelomi"><g transform="translate(32 32)"><rect x="-17.5" y="-17.5" width="14" height="14" rx="4.5" fill="#34d27e"/><rect x="3.5" y="-17.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="-17.5" y="3.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="3.5" y="3.5" width="14" height="14" rx="4.5" fill="#0e7a48"/><rect x="-6.5" y="-6.5" width="13" height="13" rx="3.5" transform="rotate(45)" fill="#0e7a48"/><rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="1.6" transform="rotate(45)" fill="#ffffff"/></g></svg></span> Avelomi
           </a>
           <div class="nav-right">
-            <a class="btn btn-ghost btn-connexion" href="/crm"><span data-fr>Connexion</span><span data-en>Sign in</span></a>
-            <a class="btn btn-primary" href="/crm"><span data-fr>Commencer</span><span data-en>Start now</span></a>
+            <a class="btn btn-ghost btn-connexion" href="#/login"><span data-fr>Connexion</span><span data-en>Sign in</span></a>
+            <a class="btn btn-primary" href="#/signup"><span data-fr>Commencer</span><span data-en>Start now</span></a>
           </div>
         </nav>
       </div>
@@ -209,7 +209,7 @@ function goHome(){ location.hash = ''; }
       <div class="apps-cta">
         <h2>{{ t('Toutes ces apps. Gratuitement.','All these apps. For free.') }}</h2>
         <p>{{ t('Créez votre espace en 5 minutes, sans carte bancaire.','Set up your workspace in 5 minutes, no credit card.') }}</p>
-        <a class="btn btn-primary" style="padding:15px 28px;font-size:16.5px" href="/crm">{{ t("Commencer — c'est gratuit","Start now — it's free") }}</a>
+        <a class="btn btn-primary" style="padding:15px 28px;font-size:16.5px" href="#/signup">{{ t("Commencer — c'est gratuit","Start now — it's free") }}</a>
       </div>
     </div>
 
@@ -237,7 +237,7 @@ function goHome(){ location.hash = ''; }
           <div class="m-prev"><span class="mp-dot"></span><span>{{ t(selDet.fr_p, selDet.en_p) }}</span></div>
         </div>
         <div class="m-foot">
-          <a class="btn btn-primary" href="/crm" v-if="!selected.soon">{{ t('Activer cette app','Enable this app') }}</a>
+          <a class="btn btn-primary" href="#/signup" v-if="!selected.soon">{{ t('Activer cette app','Enable this app') }}</a>
           <a class="btn btn-ghost" href="#" @click.prevent v-else>{{ t('Être prévenu au lancement','Notify me at launch') }}</a>
           <a class="btn btn-ghost" href="#" @click.prevent="goHome">{{ t('En savoir plus','Learn more') }}</a>
         </div>

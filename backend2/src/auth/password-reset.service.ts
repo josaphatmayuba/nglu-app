@@ -5,7 +5,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { AuditService } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { passwordResetTokens, users } from "../database/schema";
+import { passwordResetTokens, refreshTokens, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { SystemEmailService } from "../system-email/system-email.service";
 
@@ -89,6 +89,17 @@ export class PasswordResetService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(users.id, record.identityId));
+
+    // Coupe toutes les sessions et familles refresh (comme logout) : un voleur
+    // de session ne garde pas l acces apres le reset.
+    await this.db
+      .update(sessions)
+      .set({ revoked: 1 })
+      .where(and(eq(sessions.userId, record.identityId), eq(sessions.revoked, 0)));
+    await this.db
+      .update(refreshTokens)
+      .set({ revokedAt: sql`CURRENT_TIMESTAMP`, revokedReason: "password_reset" })
+      .where(and(eq(refreshTokens.userId, record.identityId), isNull(refreshTokens.revokedAt)));
 
     await this.audit.log("auth.reset_password.ok", `user:${record.identityId}`, { ...ctx, userId: record.identityId });
   }

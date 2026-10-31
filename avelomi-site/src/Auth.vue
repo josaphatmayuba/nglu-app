@@ -151,12 +151,20 @@ async function submitLogin() {
       body: JSON.stringify({ username: login.email.trim().toLowerCase(), password: login.password }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || t('Identifiants invalides.', 'Invalid credentials.'));
+    if (!res.ok) {
+      if (res.status === 429) throw new Error(t('Trop de tentatives. Patientez une minute puis réessayez.', 'Too many attempts. Wait a minute and try again.'));
+      if (res.status >= 500) throw new Error(t('Service momentanément indisponible. Réessayez dans un instant.', 'Service temporarily unavailable. Try again shortly.'));
+      if (res.status === 401 || res.status === 400) throw new Error(t('Email ou mot de passe incorrect.', 'Incorrect email or password.'));
+      throw new Error(data?.message || t('Identifiants invalides.', 'Invalid credentials.'));
+    }
     if (data.requireMfa) { error.value = t('Authentification a deux facteurs requise — connectez-vous depuis l’application.', 'Two-factor authentication required — sign in from the app.'); return; }
     accessToken = data.token || null;
     me.value = { firstName: data.firstName || data.name || login.email, email: login.email, org: data.organization?.name };
     enterWorkspace();
-  } catch (e) { error.value = Array.isArray(e.message) ? e.message[0] : e.message; }
+  } catch (e) {
+    // fetch rejette en TypeError quand le réseau est coupé.
+    error.value = e instanceof TypeError ? t('Réseau indisponible. Vérifiez votre connexion et réessayez.', 'Network unavailable. Check your connection and try again.') : e.message;
+  }
   finally { loading.value = false; }
 }
 
@@ -167,7 +175,8 @@ const accountType = ref('org'); // 'org' | 'solo'
 // Plan pre-selectionne depuis la grille de prix de la landing (#/signup?plan=business).
 const PLAN_IDS = ['free', 'starter', 'business', 'enterprise'];
 const planFromUrl = (location.hash.split('?')[1] || '').split('&').map(p => p.split('=')).find(([k]) => k === 'plan')?.[1];
-const reg = reactive({ firstName: '', lastName: '', email: '', password: '', orgName: '', slug: '', sector: 'agri', phone: '', plan: PLAN_IDS.includes(planFromUrl) ? planFromUrl : 'free', acceptedTerms: false });
+const showPwd = ref(false);
+const reg = reactive({ firstName: '', lastName: '', email: '', password: '', orgName: '', slug: '', sector: 'agri', phone: '+243 ', plan: PLAN_IDS.includes(planFromUrl) ? planFromUrl : 'free', acceptedTerms: false });
 const fieldErr = reactive({});
 
 const stepLabel = computed(() => {
@@ -252,7 +261,8 @@ async function submitSignup() {
         orgName: accountType.value === 'org' ? reg.orgName.trim() : undefined,
         slug: effectiveSlug.value,
         sector: reg.sector,
-        phone: reg.phone.trim() || undefined,
+        // « +243 » seul = pas de numéro saisi.
+        phone: reg.phone.replace(/\s/g, '').length > 4 ? reg.phone.trim() : undefined,
         plan: reg.plan,
         acceptedTerms: true,
       }),
@@ -303,7 +313,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
     </aside>
     <main class="ws-main">
       <div class="ws-banner">
-        <span>⏳ <strong>{{ t('Période d’essai', 'Trial') }}</strong> — {{ t('14 jours restants.', '14 days left.') }}</span>
+        <span>⏳ <strong>{{ t('Période d’essai', 'Trial') }}</strong> — {{ t('toutes les apps sont ouvertes.', 'all apps are open.') }}</span>
         <a class="btn-mini" href="#/signup" @click.prevent="go('#/signup')">{{ t('Voir les offres', 'See plans') }}</a>
       </div>
       <h1 class="ws-title">{{ t('Bonjour', 'Hello') }}, {{ me?.firstName }} 👋</h1>
@@ -335,8 +345,8 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       </div>
       <label>{{ t('Email', 'Email') }}<input v-model="login.email" type="email" autocomplete="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></label>
       <label>{{ t('Mot de passe', 'Password') }}<input v-model="login.password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
-      <p v-if="googleError" class="auth-err">{{ googleError }}</p>
-      <p v-if="error" class="auth-err">{{ error }}</p>
+      <p v-if="googleError" class="auth-err" role="alert">{{ googleError }}</p>
+      <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
       <button class="auth-btn" :disabled="loading">{{ loading ? t('Connexion…','Signing in…') : t('Se connecter','Sign in') }}</button>
       <p class="auth-alt">{{ t('Pas encore de compte ?', 'No account yet?') }} <a href="#/signup" @click.prevent="go('#/signup')">{{ t('Commencer', 'Get started') }}</a></p>
     </form>
@@ -369,13 +379,13 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
           </button>
           <div class="auth-divider"><span>{{ t('ou renseignez vos informations', 'or enter your details') }}</span></div>
         </div>
-        <p v-if="googleError" class="auth-err">{{ googleError }}</p>
+        <p v-if="googleError" class="auth-err" role="alert">{{ googleError }}</p>
         <div class="auth-row">
-          <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
-          <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
+          <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" autocomplete="given-name" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
+          <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" autocomplete="family-name" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
         </div>
-        <label>{{ t('Email professionnel','Work email') }}<span class="field" :class="{err:fieldErr.email}"><i class="fi">✉️</i><input v-model="reg.email" type="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></span><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
-        <label>{{ t('Mot de passe','Password') }}<span class="field" :class="{err:fieldErr.password}"><i class="fi">🔒</i><input v-model="reg.password" type="password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" /></span>
+        <label>{{ t('Email professionnel','Work email') }}<span class="field" :class="{err:fieldErr.email}"><i class="fi">✉️</i><input v-model="reg.email" type="email" autocomplete="email" inputmode="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></span><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
+        <label>{{ t('Mot de passe','Password') }}<span class="field" :class="{err:fieldErr.password}"><i class="fi">🔒</i><input v-model="reg.password" :type="showPwd ? 'text' : 'password'" autocomplete="new-password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" /><button type="button" class="pwd-eye" :aria-label="showPwd ? t('Masquer le mot de passe','Hide password') : t('Afficher le mot de passe','Show password')" @click="showPwd = !showPwd">{{ showPwd ? '🙈' : '👁' }}</button></span>
           <span v-if="reg.password" class="pwd-bar"><i :style="{ width: (pwdScore/4*100)+'%', background: pwdColor }"></i></span>
           <small v-if="fieldErr.password" class="fe">{{ fieldErr.password }}</small>
         </label>
@@ -391,7 +401,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
           <button type="button" class="type-btn" :class="{active:accountType==='org'}" @click="setType('org')"><div class="ico">🏢</div><div class="tit">{{ t('Une entreprise','A company') }}</div><div class="des">{{ t('Équipe, plusieurs utilisateurs','Team, multiple users') }}</div></button>
           <button type="button" class="type-btn" :class="{active:accountType==='solo'}" @click="setType('solo')"><div class="ico">👤</div><div class="tit">{{ t('Moi seul','Just me') }}</div><div class="des">{{ t('Usage individuel','Individual use') }}</div></button>
         </div>
-        <label v-if="accountType==='org'">{{ t('Nom de l’entreprise','Company name') }}<input v-model="reg.orgName" type="text" @input="syncSlug" :class="{err:fieldErr.orgName}" /><small v-if="fieldErr.orgName" class="fe">{{ fieldErr.orgName }}</small></label>
+        <label v-if="accountType==='org'">{{ t('Nom de l’entreprise','Company name') }}<input v-model="reg.orgName" type="text" autocomplete="organization" @input="syncSlug" :class="{err:fieldErr.orgName}" /><small v-if="fieldErr.orgName" class="fe">{{ fieldErr.orgName }}</small></label>
         <label>{{ t('Adresse de votre espace','Your workspace address') }}
           <span class="slug-row"><input v-model="reg.slug" type="text" :placeholder="slugAuto || 'mon-entreprise'" /><span class="slug-suffix">.avelomi.com</span></span>
           <small v-if="fieldErr.slug" class="fe">{{ fieldErr.slug }}</small>
@@ -419,18 +429,18 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 
       <!-- Etape 4 : confirmation -->
       <form v-else class="step-form" @submit.prevent="submitSignup">
-        <label>{{ t('Téléphone (RDC par défaut)','Phone (DRC default)') }}<input v-model="reg.phone" type="tel" placeholder="+243 …" /><small class="hint">{{ t('Pour sécuriser votre compte (optionnel).','To secure your account (optional).') }}</small></label>
+        <label>{{ t('Téléphone (RDC par défaut)','Phone (DRC default)') }}<input v-model="reg.phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+243 81 234 5678" /><small class="hint">{{ t('Pour sécuriser votre compte (optionnel).','To secure your account (optional).') }}</small></label>
         <div class="recap">
           <div class="recap-t">{{ t('Récapitulatif','Summary') }}</div>
           <div>👤 {{ reg.firstName }} {{ reg.lastName }} — {{ reg.email }}</div>
           <div>{{ accountType==='org' ? '🏢' : '👤' }} {{ accountType==='org' ? reg.orgName : (reg.firstName+' '+reg.lastName) }}</div>
           <div>🔗 {{ effectiveSlug }}.avelomi.com</div>
           <div>💳 {{ plans.find(p=>p.v===reg.plan)?.name }} — {{ plans.find(p=>p.v===reg.plan)?.price }}{{ plans.find(p=>p.v===reg.plan)?.per ? ' '+plans.find(p=>p.v===reg.plan).per : '' }}</div>
-          <div class="recap-ok">✓ {{ t('Toutes les apps · Essai gratuit 14 jours','All apps · 14-day free trial') }}</div>
+          <div class="recap-ok">✓ {{ t('Toutes les apps incluses · Sans carte bancaire','All apps included · No credit card') }}</div>
         </div>
         <label class="auth-check"><input v-model="reg.acceptedTerms" type="checkbox" /><span>{{ t('J’accepte les conditions d’utilisation et la politique de confidentialité.','I accept the terms of service and privacy policy.') }}</span></label>
         <small v-if="fieldErr.terms" class="fe">{{ fieldErr.terms }}</small>
-        <p v-if="error" class="auth-err">{{ error }}</p>
+        <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
         <div class="btn-row"><button type="button" class="auth-btn ghost" @click="prev">← {{ t('Retour','Back') }}</button><button class="auth-btn" :disabled="loading">{{ loading ? t('Création…','Creating…') : t('Créer mon espace 🚀','Create my workspace 🚀') }}</button></div>
       </form>
     </div>
@@ -468,6 +478,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 .field:focus-within{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
 .field.err{border-color:#dc2626;background:#fff}
 .field .fi{font-size:15px;opacity:.6;flex-shrink:0;line-height:1}
+.pwd-eye{border:none;background:transparent;cursor:pointer;font-size:16px;padding:8px;min-width:40px;min-height:40px;line-height:1}
 .field input{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:15px 0;font-size:15.5px;font-family:inherit;color:#0f1729}
 /* champs hors wrapper (select, slug, tel des autres etapes) */
 .auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:14px;padding:15px 14px;font-size:15.5px;font-family:inherit;color:#0f1729;outline:none;transition:.16s;background:#fbfcfd}

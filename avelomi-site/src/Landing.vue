@@ -67,11 +67,10 @@ const clientLogos = [];
     </p>
     <div class="hero-cta">
       <a class="btn btn-primary btn-lg" :href="SIGNUP_URL"><span data-fr>Commencer — c'est gratuit</span><span data-en>Start now — it's free</span></a>
-      <a class="btn btn-ghost btn-lg" href="#"><span data-fr>▶ Voir la démo</span><span data-en>▶ Watch demo</span></a>
     </div>
     <p class="hero-note">
-      <span data-fr>À partir de <span class="price-strong">19&nbsp;$/mois</span> · Sans carte bancaire · Tout illimité</span>
-      <span data-en>From <span class="price-strong">$19/month</span> · No credit card · Unlimited everything</span>
+      <span data-fr><span class="price-strong">Gratuit</span> jusqu’à 3 utilisateurs · Sans carte bancaire · Toutes les apps</span>
+      <span data-en><span class="price-strong">Free</span> up to 3 users · No credit card · All apps</span>
     </p>
     <div class="stores" style="justify-content:center;margin-top:16px">
       <a class="store" href="#">
