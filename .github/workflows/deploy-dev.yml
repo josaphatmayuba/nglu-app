@@ -47,6 +47,11 @@ jobs:
           node scripts/check-realtime-deploy-contract.mjs
           node scripts/check-realtime-observability.mjs
           node scripts/check-routing-contract.mjs
+      # nginx -t de chaque conf deployee (frontend, avelomi, avelomi-dev), une par
+      # conteneur nginx:1.31-alpine (= prod 1.31.x), certs factices + --add-host.
+      # Bloque `changes` donc tout job qui copie une conf nginx sur un serveur.
+      - name: Confs nginx (nginx -t)
+        run: sh scripts/ci/check-nginx-confs.sh
 
   # Calcule quels projets ont change. `deploy_all` force tout a true.
   changes:
