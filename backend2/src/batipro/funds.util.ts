@@ -206,7 +206,7 @@ export type ConvertedCurrencyRow = {
   currency_id: number;
   origin_amount: number; // engage (BC avec taux) en devise d'origine
   converted_amount: number; // contre-valeur engagee en devise chantier
-  paid_origin_amount: number; // paye en devise d'origine (tous docs de cette devise)
+  paid_origin_amount: number; // paye en devise d'origine (docs dont le paye est converti)
   paid_converted_amount: number; // contre-valeur payee (taux de reglement)
 };
 
@@ -266,8 +266,11 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
     if (!isOtherCurrency(d, projectCurrencyId)) continue;
     const cur = d.currencyId as number;
     const r = row(cur);
-    r._po += toCents(d.paidAmount);
-    r._pc += toCents(d.paidAmountProjectCcy);
+    // Seul le paye deja converti compte (sinon paid_origin incoherent avec paid_converted).
+    if (toCents(d.paidAmountProjectCcy) > 0) {
+      r._po += toCents(d.paidAmount);
+      r._pc += toCents(d.paidAmountProjectCcy);
+    }
 
     if (!isPurchaseOrder(d)) continue;
     const rate = parseFxRate(d.fxRate);

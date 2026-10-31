@@ -48,6 +48,9 @@ describe("summarizeFx / convertedPaidCents (chantier USD)", () => {
     expect(f.poWithoutRateCount).toBe(1);
     expect(f.convertedPoIds).toEqual([]);
     expect(convertedPaidCents([po()], USD)).toBe(0);
+    // paye non converti : absent du paye d'origine (coherent avec paid_converted = 0)
+    const g = summarizeFx([po({ paidAmount: "580000.00" })], USD);
+    expect(g.rows[0]).toMatchObject({ paid_origin_amount: 0, paid_converted_amount: 0 });
   });
 
   it("BC CDF avec taux : engage = contre-valeur figee", () => {
