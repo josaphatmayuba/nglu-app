@@ -208,14 +208,76 @@ sudo -n chown "$REMOTE_USER:$REMOTE_USER" \
   "$REMOTE_ROOT/frontend/Dockerfile.prod" \
   "$REMOTE_ROOT/nginx/nginx.frontend.conf"
 
-echo "[remote] ensuring first-deploy dist directories exist"
-for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app kodatill-app; do
-  write_placeholder "$REMOTE_ROOT/$static_app/dist" "$static_app"
-done
-# dist-avelomi : requis par les COPY de frontend/Dockerfile.prod (sous-domaines Avelomi).
-for static_app in farmos-app domus-app batipro-app hr-app comptabilite-app journal-app kodatill-app tickets-app chat-app migration-app; do
-  write_placeholder "$REMOTE_ROOT/$static_app/dist-avelomi" "$static_app (avelomi)"
-done
+# Un dist absent / reduit au placeholder sur le disque serait cuit tel quel par le
+# rebuild et ECRASERAIT une app qui tourne (bug #63). On le recupere d'abord depuis
+# le conteneur en cours (docker cp) ; placeholder seulement si rien de recuperable.
+# Convention placeholder = texte "non deploye" (cf. write_placeholder).
+is_placeholder() {
+  [ ! -f "$1/index.html" ] || sudo -n grep -q 'non deploye' "$1/index.html"
+}
+
+# $1=dossier source (relatif a $REMOTE_ROOT) $2=chemin dans le conteneur. 0 = recupere.
+recover_from_container() {
+  rc_src="$REMOTE_ROOT/$1"
+  rc_dest="$2"
+  rc_tmp="$(mktemp -d)"
+  if $DOCKER cp "nglu_prod_frontend:$rc_dest/." "$rc_tmp" >/dev/null 2>&1 \
+     && [ -f "$rc_tmp/index.html" ] && ! grep -q 'non deploye' "$rc_tmp/index.html"; then
+    sudo -n mkdir -p "$rc_src"
+    sudo -n find "$rc_src" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    sudo -n cp -a "$rc_tmp/." "$rc_src/"
+    sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$rc_src"
+    sudo -n rm -rf "$rc_tmp"
+    return 0
+  fi
+  sudo -n rm -rf "$rc_tmp"
+  return 1
+}
+
+# Liste source|destination = COPY de frontend/Dockerfile.prod (garder synchronise).
+DIST_MAP="frontend/dist|/usr/share/nginx/html
+marketing-site/dist|/usr/share/nginx/html-marketing-prod
+avelomi-site/dist|/usr/share/nginx/html-avelomi-prod
+farmos-app/dist|/usr/share/nginx/html-farmos-prod
+domus-app/dist|/usr/share/nginx/html-domus-prod
+journal-app/dist|/usr/share/nginx/html-journal-prod
+tickets-app/dist|/usr/share/nginx/html-tickets-prod
+batipro-app/dist|/usr/share/nginx/html-batipro-prod
+hr-app/dist|/usr/share/nginx/html-hr-prod
+comptabilite-app/dist|/usr/share/nginx/html-comptabilite-prod
+migration-app/dist|/usr/share/nginx/html-migration-prod
+chat-app/dist|/usr/share/nginx/html-chat-prod
+kodatill-app/dist|/usr/share/nginx/html-kodatill-prod
+farmos-app/dist-avelomi|/usr/share/nginx/html-farmos-avelomi-prod
+domus-app/dist-avelomi|/usr/share/nginx/html-domus-avelomi-prod
+batipro-app/dist-avelomi|/usr/share/nginx/html-batipro-avelomi-prod
+hr-app/dist-avelomi|/usr/share/nginx/html-hr-avelomi-prod
+comptabilite-app/dist-avelomi|/usr/share/nginx/html-comptabilite-avelomi-prod
+journal-app/dist-avelomi|/usr/share/nginx/html-journal-avelomi-prod
+kodatill-app/dist-avelomi|/usr/share/nginx/html-kodatill-avelomi-prod
+tickets-app/dist-avelomi|/usr/share/nginx/html-tickets-avelomi-prod
+chat-app/dist-avelomi|/usr/share/nginx/html-chat-avelomi-prod
+migration-app/dist-avelomi|/usr/share/nginx/html-migration-avelomi-prod"
+
+echo "[remote] recovering missing dist directories from running container, then placeholders"
+while IFS='|' read -r dm_src dm_dest; do
+  # Le dist deploye par ce run est remplace plus bas : rien a recuperer.
+  [ "$dm_src" = "$APP_DIR/dist" ] && continue
+  if [ -n "${EXTRA_DIST:-}" ] && [ -n "${REMOTE_EXTRA_ARCHIVE:-}" ] && [ "$dm_src" = "$APP_DIR/$EXTRA_DIST" ]; then continue; fi
+  if is_placeholder "$REMOTE_ROOT/$dm_src"; then
+    if recover_from_container "$dm_src" "$dm_dest"; then
+      echo "[remote] recovered $dm_src from nglu_prod_frontend:$dm_dest"
+    else
+      dm_label="${dm_src%%/*}"
+      case "$dm_src" in */dist-avelomi) dm_label="$dm_label (avelomi)" ;; esac
+      sudo -n rm -f "$REMOTE_ROOT/$dm_src/index.html"
+      write_placeholder "$REMOTE_ROOT/$dm_src" "$dm_label"
+      echo "::warning title=Placeholder cuit::$dm_src absent du disque et non recuperable depuis nglu_prod_frontend : placeholder dans la nouvelle image"
+    fi
+  fi
+done <<EOF_MAP
+$DIST_MAP
+EOF_MAP
 
 echo "[remote] replacing $TARGET_DIST contents"
 sudo -n mkdir -p "$TARGET_DIST"

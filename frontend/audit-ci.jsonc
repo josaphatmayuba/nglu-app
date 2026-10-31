@@ -5,9 +5,6 @@
   "allowlist": [
     // minimatch < 11.0.1 (GHSA-g3hv-75wg-m249, DoS sur motifs glob) : correctif seulement en v11 (API cassante pour eslint/glob v3-9).
     // Outillage de build/lint ; motifs glob ecrits par nous, jamais fournis par un utilisateur. A retirer quand les parents passent a v11.
-    "GHSA-g3hv-75wg-m249",
-    // glob 9-14.0.1 (GHSA-3g3m-2fjr-6pw4, contournement AbortSignal) : correctif en 14.0.2 seulement, tire par workbox/rimraf/jest.
-    // Outillage de build/test sur nos propres dossiers, aucun motif ni signal venant d un utilisateur. A retirer apres montee des parents.
-    "GHSA-3g3m-2fjr-6pw4"
+    "GHSA-g3hv-75wg-m249"
   ]
 }
