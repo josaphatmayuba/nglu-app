@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Sécurité : JWT masqué dans les logs nginx (ongdngolu) - bug #35 (v3.266.3).** `nginx/nginx.frontend.conf` : `log_format nglu_safe` sans `$request` ; query retirée sous `/events/`, `token=`/`access_token=`/`qc=` remplacés par `REDACTED` ailleurs. Testé avec `nginx -t` sur une copie de la conf du serveur (identique au dépôt). Confs Avelomi préparées, non testées, non incluses.
 - **Sécurité : passage du CRM par le fragment `#qc=` dans Domus, FarmOS, KodaTill, RH et Comptabilité - bug #39 (v3.266.2).** Même correctif que BâtiPro (v3.265.0) : le JWT est lu dans `#qc=` (jamais envoyé au serveur ni journalisé), `?qc=` reste accepté pour les anciens liens, puis l URL est nettoyée.
 - **BâtiPro multi-devise : payé d'origine cohérent (v3.266.1).** `converted_amounts[].paid_origin_amount` ne compte plus que le payé déjà converti (bug #71 : 613 000 CDF affichés pour 23 000 CDF convertis en QA dev). Totaux inchangés.
 
