@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -33,6 +33,7 @@ import {
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
   RecordPaymentDto,
+  UpdateBatiproDocumentFxRateDto,
   CreateInvoiceFromPurchaseOrderDto,
   ReviewSubmissionDto,
   UpdateBatiproAttendanceDto,
@@ -781,7 +782,22 @@ export class BatiproController {
   @Permissions("update-batipro")
   @Post("documents/:id/payment")
   recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
-    return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined);
+    return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined, body.fx_rate);
+  }
+
+  // ── Multi-devise : taux fige par document (migration 0329) ──
+  @ApiOperation({ summary: "Fixe/corrige le taux de change fige d'un document en autre devise que son chantier" })
+  @Permissions("update-batipro")
+  @Patch("documents/:id/fx-rate")
+  setDocumentFxRate(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproDocumentFxRateDto, @CurrentOrg() orgId: number) {
+    return this.batipro.setDocumentFxRate(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Taux suggere (1 from = rate to) : dernier echange de devise de l'org, sinon dernier taux fige d'un document" })
+  @Permissions("readAll-batipro")
+  @Get("fx-rate-suggestion")
+  fxRateSuggestion(@Query("from", ParseIntPipe) from: number, @Query("to", ParseIntPipe) to: number, @CurrentOrg() orgId: number) {
+    return this.batipro.fxRateSuggestion(from, to, orgId);
   }
 
   // ── Bon de commande : confirmation fournisseur + reception physique (migration 0231) ──

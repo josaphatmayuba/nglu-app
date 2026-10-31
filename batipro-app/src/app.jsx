@@ -643,15 +643,8 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
             <div className="card pad">
               <p className="kv-title">
                 <Icon name="pieChart" /> Budget
-                {budget?.has_other_currency && (
-                  <span title="Documents dans une autre devise que celle du chantier : montant affiche a part, sans conversion" style={{ marginLeft: 6, fontSize: 11, color: "var(--ink-400)", display: "inline-flex", alignItems: "center", gap: 2 }}>
-                    <Icon name="alert" />
-                    {(budget.other_currency_amounts || []).map((o, i) => (
-                      <span key={o.currency_code || i}>+ {money(o.amount, o.currency_code)} non comptés{i < budget.other_currency_amounts.length - 1 ? " ·" : ""}</span>
-                    ))}
-                  </span>
-                )}
               </p>
+              <BudgetFxLines budget={budget} budgetCur={budgetCur} />
               <div onClick={() => setTab("bonscommande")} style={{ cursor: "pointer" }}>
                 <BudgetBar
                   label="Coût"
@@ -1988,6 +1981,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [poInvoices, setPoInvoices] = React.useState({});
   const [invoiceModal, setInvoiceModal] = React.useState(null); // { po }
   const [invoicePayModal, setInvoicePayModal] = React.useState(null); // { invoice, po }
+  const [fxModal, setFxModal] = React.useState(null); // BC dont on fixe le taux
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -2024,12 +2018,12 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
     catch (err) { setError(err.message || String(err)); }
   };
   const pay = (d) => setPayModal(d);
-  const confirmPay = async (amount) => {
+  const confirmPay = async (amount, fxRate) => {
     const d = payModal;
     setError(""); setNotice(""); setBusy(d.id); setPayModal(null);
     try {
       if (d.status === "draft") await api.shareDocument(d.id);
-      const r = await api.recordPayment(d.id, amount);
+      const r = await api.recordPayment(d.id, amount, fxRate);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
       load();
     } catch (err) { setError(err.message || String(err)); }
@@ -2110,11 +2104,11 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
       setPhotoUploads((c) => ({ ...c, [invoiceId]: { poId, file, status: "error", message: err.message || String(err) } }));
     }
   };
-  const confirmPayInvoice = async (amount) => {
+  const confirmPayInvoice = async (amount, fxRate) => {
     const { invoice, po } = invoicePayModal;
     setError(""); setNotice(""); setBusy(invoice.id); setInvoicePayModal(null);
     try {
-      const r = await api.recordPayment(invoice.id, amount);
+      const r = await api.recordPayment(invoice.id, amount, fxRate);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, invoice.currencyCode || cur)}.`);
       loadPoInvoices(po.id);
     } catch (err) { setError(err.message || String(err)); }
@@ -2190,6 +2184,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
             <span>Déjà dépensé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.spent, budgetCur)}</strong></span>
             <span>Reste vs budget : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.remaining_vs_budget, budgetCur)}</strong></span>
           </div>
+          <div style={{ marginTop: 8 }}><BudgetFxLines budget={budget} budgetCur={budgetCur} /></div>
         </div>
       )}
 
@@ -2217,9 +2212,28 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                   <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
                   <td>{d.supplierName || d.subcontractorName || "—"}</td>
                   <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td>
+                    {money(d.totalTtc, d.currencyCode || cur)}
+                    {isForeignCurrency(d.currencyId, d.currencyCode, selected?.currencyId, cur) && (
+                      <div style={{ fontSize: 11, color: "var(--ink-500)" }}>
+                        {d.fxRate != null && d.totalTtcProjectCcy != null ? (
+                          <>(≈ {money(d.totalTtcProjectCcy, cur)} @ {fmtRate(d.fxRate)})
+                            {canMutate && can("update-batipro") && <> <button className="link" onClick={() => setFxModal(d)}>Modifier le taux</button></>}
+                          </>
+                        ) : (
+                          <>
+                            <span className="chip amber" style={{ fontSize: 11 }}>Taux à fixer</span>
+                            {canMutate && can("update-batipro") && <> <button className="link" onClick={() => setFxModal(d)}>Fixer le taux</button></>}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ color: "var(--ink-500)", fontSize: 12 }}>
                     {money(n(d.paidAmount), d.currencyCode || cur)} / solde {money(balance, d.currencyCode || cur)}
+                    {d.fxRate != null && n(d.paidAmountProjectCcy) > 0 && (
+                      <div style={{ fontSize: 11 }}>(≈ {money(d.paidAmountProjectCcy, cur)} payés)</div>
+                    )}
                   </td>
                   <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
                   <td style={{ fontSize: 12, color: "var(--ink-500)" }}>
@@ -2326,13 +2340,31 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
         <PaymentModal
           balance={Math.max(0, n(payModal.totalTtc) - n(payModal.paidAmount))}
           currencyCode={payModal.currencyCode || cur}
+          currencyId={payModal.currencyId}
+          projectCurrencyId={selected?.currencyId}
+          projectCurrencyCode={cur}
           onClose={() => setPayModal(null)}
           onConfirm={confirmPay}
+        />
+      )}
+      {fxModal && (
+        <FxRateModal
+          doc={fxModal}
+          projectCurrencyId={selected?.currencyId}
+          projectCurrencyCode={cur}
+          onClose={() => setFxModal(null)}
+          onSaved={(r) => {
+            setFxModal(null);
+            setNotice(r?.paid_fx_rate_missing ? "Taux enregistré. Les règlements déjà faits n'ont pas de contre-valeur : indiquez leur taux pour calculer l'écart de change." : "Taux enregistré.");
+            load();
+          }}
         />
       )}
       {confirmModal && (
         <ConfirmPoModal
           doc={confirmModal}
+          projectCurrencyId={selected?.currencyId}
+          projectCurrencyCode={cur}
           onClose={() => setConfirmModal(null)}
           onConfirm={confirmDoc}
         />
@@ -2358,6 +2390,9 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
         <PaymentModal
           balance={Math.max(0, n(invoicePayModal.invoice.totalTtc) - n(invoicePayModal.invoice.paidAmount))}
           currencyCode={invoicePayModal.invoice.currencyCode || cur}
+          currencyId={invoicePayModal.invoice.currencyId}
+          projectCurrencyId={selected?.currencyId}
+          projectCurrencyCode={cur}
           onClose={() => setInvoicePayModal(null)}
           onConfirm={confirmPayInvoice}
         />
@@ -2487,6 +2522,13 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
   // Devise héritée du chantier par défaut — modifiable via le picker ci-dessous.
   const [docCurrencyId, setDocCurrencyId] = React.useState(currencyId || "");
   const docCurrencyCode = resolveCurrencyCode(currencies, docCurrencyId) || currencyCode;
+  // Taux figé (BC en autre devise que le chantier) — facultatif.
+  const [fxRate, setFxRate] = React.useState("");
+  const [fxSource, setFxSource] = React.useState("manual");
+  const poCurId = Number((lines.find((l) => l.designation.trim()) || lines[0])?.currency_id || docCurrencyId) || 0;
+  const poCurCode = resolveCurrencyCode(currencies, poCurId) || docCurrencyCode;
+  const poForeign = isForeignCurrency(poCurId, poCurCode, currencyId, currencyCode);
+  const poTotalTtc = sumLinesByCurrency(lines, currencies, poCurCode).find((t) => t.code === poCurCode)?.ttc;
 
   React.useEffect(() => {
     api.phases(projectId).then((p) => setPhases(p || [])).catch(() => setPhases([]));
@@ -2501,6 +2543,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           setSupplierId(d.supplierId || "");
           setSubcontractorId(d.subcontractorId || "");
           setStatus(d.status || "draft");
+          if (d.fxRate != null) { setFxRate(String(d.fxRate)); setFxSource(d.fxRateSource || "manual"); }
         })
         .catch((e) => setError(e.message || String(e)))
         .finally(() => setLoading(false));
@@ -2593,6 +2636,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
         ...(docId ? { status } : { sourcePhotoId: scanPhotoId || undefined }),
+        ...(poForeign && n(fxRate) > 0 ? { fx_rate: n(fxRate), fx_rate_source: fxSource } : {}),
         lines: clean.map((l) => ({
           designation: l.designation.trim(),
           quantity: n(l.quantity),
@@ -2735,6 +2779,17 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
               <div style={{ fontSize: 12, color: "var(--amber-700, #b45309)" }}>Ce document mélange plusieurs devises : la comptabilisation (règlement) ne sera pas possible tant qu'il n'y a pas une seule devise.</div>
             )}
 
+            {poForeign && totalsByCurrency.length <= 1 && (
+              <FxRateField
+                optional
+                projectCurrencyId={currencyId} projectCurrencyCode={currencyCode}
+                docCurrencyId={poCurId} docCurrencyCode={poCurCode}
+                value={fxRate}
+                onChange={(v, src) => { setFxRate(v); setFxSource(src || "manual"); }}
+                amount={poTotalTtc}
+              />
+            )}
+
             <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
             {docId && (
               <label className="field">
@@ -2763,11 +2818,14 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
 }
 
 // Confirmation fournisseur d'un BC envoyé (sent -> confirmed). Champs facultatifs.
-function ConfirmPoModal({ doc, onClose, onConfirm }) {
+function ConfirmPoModal({ doc, projectCurrencyId, projectCurrencyCode, onClose, onConfirm }) {
   const [supplierReference, setSupplierReference] = React.useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = React.useState("");
+  const [fxRate, setFxRate] = React.useState(doc.fxRate != null ? String(doc.fxRate) : "");
+  const [fxSource, setFxSource] = React.useState(doc.fxRateSource || "manual");
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const foreign = isForeignCurrency(doc.currencyId, doc.currencyCode, projectCurrencyId, projectCurrencyCode);
   const save = async (e) => {
     e.preventDefault();
     setError(""); setBusy(true);
@@ -2775,6 +2833,7 @@ function ConfirmPoModal({ doc, onClose, onConfirm }) {
       await onConfirm({
         supplier_reference: supplierReference.trim() || undefined,
         expected_delivery_date: expectedDeliveryDate || undefined,
+        ...(foreign && n(fxRate) > 0 ? { fx_rate: n(fxRate), fx_rate_source: fxSource } : {}),
       });
     } catch (err) { setError(err.message || String(err)); setBusy(false); }
   };
@@ -2794,6 +2853,16 @@ function ConfirmPoModal({ doc, onClose, onConfirm }) {
             <span>Livraison prévue (facultatif)</span>
             <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} />
           </label>
+          {foreign && (
+            <FxRateField
+              optional
+              projectCurrencyId={projectCurrencyId} projectCurrencyCode={projectCurrencyCode}
+              docCurrencyId={doc.currencyId} docCurrencyCode={doc.currencyCode}
+              value={fxRate}
+              onChange={(v, src) => { setFxRate(v); setFxSource(src || "manual"); }}
+              amount={n(doc.totalTtc)}
+            />
+          )}
         </div>
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">
@@ -3207,11 +3276,11 @@ function Factures({ projects, canMutate, fixedProjectId }) {
   };
 
   const pay = (d) => setPayModal(d);
-  const confirmPay = async (amount) => {
+  const confirmPay = async (amount, fxRate) => {
     const d = payModal;
     setError(""); setNotice(""); setBusy(d.id); setPayModal(null);
     try {
-      const r = await api.recordPayment(d.id, amount);
+      const r = await api.recordPayment(d.id, amount, fxRate);
       setNotice(`Règlement enregistré. Solde : ${money(r.balance, d.currencyCode || cur)}.`);
       load();
     } catch (err) { setError(err.message || String(err)); }
@@ -3284,6 +3353,9 @@ function Factures({ projects, canMutate, fixedProjectId }) {
         <PaymentModal
           balance={Math.max(0, n(payModal.totalTtc) - n(payModal.paidAmount))}
           currencyCode={payModal.currencyCode || cur}
+          currencyId={payModal.currencyId}
+          projectCurrencyId={selected?.currencyId}
+          projectCurrencyCode={cur}
           onClose={() => setPayModal(null)}
           onConfirm={confirmPay}
         />
@@ -4340,17 +4412,172 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
   );
 }
 
+// ── Multi-devise : taux figé par document ──
+// Sens : taux = unités de la devise du DOCUMENT pour 1 unité de la devise du CHANTIER ;
+// contre-valeur = montant / taux. Jamais d'arrondi à 0 décimale (taux jusqu'à 6 décimales).
+function isForeignCurrency(docId, docCode, projId, projCode) {
+  if (docId && projId) return Number(docId) !== Number(projId);
+  return !!(docCode && projCode && docCode !== projCode);
+}
+function fmtRate(r) {
+  return Number(r || 0).toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+const FX_SOURCE_LABEL = {
+  last_exchange: "dernier échange de devise",
+  last_document: "dernier taux utilisé sur un document",
+};
+
+// Champ « 1 <devise chantier> = ? <devise doc> » pré-rempli via /fx-rate-suggestion.
+// onChange(valeur, source) — source ∈ 'manual' | 'last_exchange'.
+function FxRateField({ projectCurrencyId, projectCurrencyCode, docCurrencyId, docCurrencyCode, value, onChange, required, optional, label = "Taux de change", amount }) {
+  const [sugg, setSugg] = React.useState(null);
+  const touched = React.useRef(false);
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+  React.useEffect(() => {
+    if (!projectCurrencyId || !docCurrencyId) return undefined;
+    let active = true;
+    api.fxRateSuggestion(projectCurrencyId, docCurrencyId)
+      .then((s) => {
+        if (!active) return;
+        setSugg(s || null);
+        if (s?.rate && !touched.current && !String(valueRef.current ?? "").trim()) {
+          onChange(String(s.rate), s.source === "last_exchange" ? "last_exchange" : "manual");
+        }
+      })
+      .catch(() => { if (active) setSugg(null); });
+    return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectCurrencyId, docCurrencyId]);
+  const rate = n(value);
+  const hasAmount = amount != null && Number.isFinite(Number(amount));
+  return (
+    <label className="field" style={{ minWidth: 0 }}>
+      <span>{label} (1 {projectCurrencyCode || "devise chantier"} = ? {docCurrencyCode || "devise du document"}){required ? "" : " — facultatif"}</span>
+      <input
+        type="number" step="any" min="0" inputMode="decimal"
+        value={value}
+        onChange={(e) => { touched.current = true; onChange(e.target.value, "manual"); }}
+        required={!!required}
+        placeholder="ex. 2850"
+      />
+      {sugg?.rate ? (
+        <small className="muted">
+          Suggestion : {fmtRate(sugg.rate)} ({FX_SOURCE_LABEL[sugg.source] || "taux précédent"}{sugg.date ? `, ${String(sugg.date).slice(0, 10)}` : ""}){sugg.inverted ? " — taux inversé" : ""}
+        </small>
+      ) : (
+        <small className="muted">Aucun taux connu entre ces deux devises : saisissez-le.</small>
+      )}
+      {rate > 0 && hasAmount && (
+        <small style={{ color: "var(--ink-700, #334155)" }}>≈ {money(Number(amount) / rate, projectCurrencyCode)}</small>
+      )}
+      {optional && <small className="muted">Sans taux, ce bon de commande ne sera pas compté dans le suivi budgétaire.</small>}
+    </label>
+  );
+}
+
+// Fixer / corriger le taux d'un document en autre devise (PATCH /documents/:id/fx-rate).
+function FxRateModal({ doc, projectCurrencyId, projectCurrencyCode, onClose, onSaved }) {
+  const [rate, setRate] = React.useState(doc.fxRate != null ? String(doc.fxRate) : "");
+  const [source, setSource] = React.useState(doc.fxRateSource || "manual");
+  const [paidRate, setPaidRate] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const needsPaidRate = n(doc.paidAmount) > 0 && !(n(doc.paidAmountProjectCcy) > 0);
+  const save = async (e) => {
+    e.preventDefault();
+    if (!(n(rate) > 0)) { setError("Taux invalide."); return; }
+    setError(""); setBusy(true);
+    try {
+      const r = await api.setDocumentFxRate(doc.id, {
+        fx_rate: n(rate),
+        fx_rate_source: source,
+        ...(needsPaidRate && n(paidRate) > 0 ? { paid_fx_rate: n(paidRate) } : {}),
+      });
+      onSaved(r);
+    } catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Fixer le taux — {doc.number || `#${doc.id}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <FxRateField
+            required
+            label="Taux du document"
+            projectCurrencyId={projectCurrencyId} projectCurrencyCode={projectCurrencyCode}
+            docCurrencyId={doc.currencyId} docCurrencyCode={doc.currencyCode}
+            value={rate}
+            onChange={(v, src) => { setRate(v); setSource(src || "manual"); }}
+            amount={n(doc.totalTtc)}
+          />
+          {needsPaidRate && (
+            <label className="field" style={{ minWidth: 0 }}>
+              <span>Taux appliqué aux règlements déjà faits (1 {projectCurrencyCode || "devise chantier"} = ? {doc.currencyCode || "devise du document"})</span>
+              <input type="number" step="any" min="0" inputMode="decimal" value={paidRate} onChange={(e) => setPaidRate(e.target.value)} placeholder="facultatif" />
+              <small className="muted">Ce bon de commande a déjà {money(doc.paidAmount, doc.currencyCode)} de règlements sans contre-valeur : indiquez le taux payé pour calculer l'écart de change.</small>
+            </label>
+          )}
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer le taux"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Lignes multi-devise du suivi budgétaire : convertis / non comptés / écart de change.
+function BudgetFxLines({ budget, budgetCur }) {
+  if (!budget) return null;
+  const converted = (budget.converted_amounts || []).filter((c) => n(c.converted_amount) > 0 || n(c.origin_amount) > 0);
+  const uncounted = budget.other_currency_amounts || [];
+  const pending = n(budget.po_without_fx_rate_count);
+  const gl = n(budget.fx_gain_loss);
+  const hasGl = budget.fx_gain_loss != null && (gl !== 0 || (budget.fx_gain_loss_by_currency || []).length > 0);
+  if (!converted.length && !uncounted.length && !pending && !hasGl) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11, color: "var(--ink-500)", marginBottom: 8 }}>
+      {converted.map((c, i) => (
+        <span key={c.currency_id ?? i}>
+          dont <strong>{money(c.converted_amount, budgetCur)}</strong> convertis ({money(c.origin_amount, c.currency_code)}, taux figé par document)
+        </span>
+      ))}
+      {(uncounted.length > 0 || pending > 0) && (
+        <span style={{ color: "var(--amber-700, #b45309)" }}>
+          <Icon name="alert" /> non comptés : {uncounted.length ? uncounted.map((o) => money(o.amount, o.currency_code)).join(" + ") : "—"}
+          {pending > 0 ? ` (taux à fixer, ${pending} BC)` : ""}
+        </span>
+      )}
+      {hasGl && (
+        <span style={{ color: gl > 0 ? "var(--emerald-600, #047857)" : gl < 0 ? "var(--rose-600, #b91c1c)" : undefined }}>
+          Écart de change : <strong>{gl > 0 ? "+" : gl < 0 ? "−" : "±"}{money(Math.abs(gl), budgetCur)}</strong> {gl > 0 ? "(gain)" : gl < 0 ? "(perte)" : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Règlement d'un document (bon de commande / facture) — montant toujours dans
 // la devise du document (le backend ne convertit pas), affichée en lecture seule.
-function PaymentModal({ balance, currencyCode, onClose, onConfirm }) {
+function PaymentModal({ balance, currencyCode, currencyId, projectCurrencyId, projectCurrencyCode, onClose, onConfirm }) {
   const [amount, setAmount] = React.useState(balance);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [fxRate, setFxRate] = React.useState("");
+  const [fxSource, setFxSource] = React.useState("manual");
+  const foreign = isForeignCurrency(currencyId, currencyCode, projectCurrencyId, projectCurrencyCode);
   const save = async (e) => {
     e.preventDefault();
     if (!(n(amount) > 0)) { setError("Montant invalide."); return; }
+    if (foreign && !(n(fxRate) > 0)) { setError("Le taux du jour est obligatoire : ce document est dans une autre devise que le chantier."); return; }
     setError(""); setBusy(true);
-    try { await onConfirm(n(amount)); }
+    try { await onConfirm(n(amount), foreign ? n(fxRate) : undefined, fxSource); }
     catch (err) { setError(err.message || String(err)); setBusy(false); }
   };
   return (
@@ -4369,6 +4596,17 @@ function PaymentModal({ balance, currencyCode, onClose, onConfirm }) {
             <span>Montant réglé ({currencyCode || "—"})</span>
             <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus required />
           </label>
+          {foreign && (
+            <FxRateField
+              required
+              label="Taux du jour"
+              projectCurrencyId={projectCurrencyId} projectCurrencyCode={projectCurrencyCode}
+              docCurrencyId={currencyId} docCurrencyCode={currencyCode}
+              value={fxRate}
+              onChange={(v, src) => { setFxRate(v); setFxSource(src || "manual"); }}
+              amount={n(amount)}
+            />
+          )}
         </div>
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">

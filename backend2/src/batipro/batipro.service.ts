@@ -28,6 +28,7 @@ import {
   batiproTasks,
   batiproWorkers,
   currencies,
+  currencyExchanges,
   journalEntries,
   journalEntryLines,
   ledgerPendingEntries,
@@ -46,13 +47,15 @@ import { ObjectStorageService } from "../property-management/object-storage.serv
 import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { OcrService } from "./ocr.service";
 import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
-import { buildFundsSummary, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, type SpendDoc } from "./funds.util";
+import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, summarizeFx, toCents, type SpendDoc } from "./funds.util";
+import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   BulkUpsertAttendanceDto,
   CreateBatiproFundDto,
   ConfirmBatiproDocumentDto,
+  UpdateBatiproDocumentFxRateDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -2175,7 +2178,7 @@ export class BatiproService {
   }
 
   async createDocument(input: CreateBatiproDocumentDto, orgId: number) {
-    await this.getProject(input.project_id, orgId);
+    const project = await this.getProject(input.project_id, orgId);
     if (!Array.isArray(input.lines) || !input.lines.length) throw new BadRequestException("Au moins une ligne est requise.");
     const type = input.type ?? "quote";
     if (type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
@@ -2183,6 +2186,8 @@ export class BatiproService {
     const defaultCurrencyId = input.currency_id ?? null;
     const { lines, totalHt, totalVat, totalTtc, totalsByCurrency } = this.computeDocumentTotals(input.lines, orgId, phaseIds, defaultCurrencyId);
     const year = input.issue_date ? new Date(input.issue_date).getFullYear() : new Date().getFullYear();
+    // Taux fige optionnel : un BC peut etre cree sans taux ("taux a fixer").
+    const fxPatch = this.buildFxPatch(defaultCurrencyId, project.currencyId ?? null, totalTtc, input);
 
     const documentId = await this.db.transaction(async (tx) => {
       const { number } = await this.nextDocumentNumber(tx, orgId, type, year);
@@ -2199,6 +2204,7 @@ export class BatiproService {
         totalHt: String(totalHt),
         totalVat: String(totalVat),
         totalTtc: String(totalTtc),
+        ...fxPatch,
         notes: input.notes ?? null,
         issueDate: input.issue_date ?? null,
         dueDate: input.due_date ?? null,
@@ -2258,6 +2264,8 @@ export class BatiproService {
     if (input.status !== undefined) patch.status = input.status;
     if (input.notes !== undefined) patch.notes = input.notes || null;
 
+    if (input.lines === undefined) await this.applyFxToUpdatePatch(patch, doc, input, undefined, orgId);
+
     if (input.lines !== undefined) {
       if (doc.type === "purchase_order") await this.resolveMaterialIdsForPurchaseOrder(input.lines, orgId);
       const phaseIds = await this.validPhaseIds(orgId, doc.projectId);
@@ -2267,6 +2275,7 @@ export class BatiproService {
       patch.totalHt = String(totalHt);
       patch.totalVat = String(totalVat);
       patch.totalTtc = String(totalTtc);
+      await this.applyFxToUpdatePatch(patch, doc, input, totalTtc, orgId);
       await this.db.transaction(async (tx) => {
         // Remplace l'ensemble des lignes (soft-delete des anciennes, insert des nouvelles).
         await tx.update(batiproDocumentLines).set({ isActive: 0 })
@@ -2299,7 +2308,13 @@ export class BatiproService {
     if (doc.status === "cancelled") throw new BadRequestException("Bon de commande annule : confirmation impossible.");
     if (doc.status !== "sent") throw new BadRequestException(`Ce bon de commande est deja au statut "${doc.status}".`);
 
+    // Taux fige optionnel a la confirmation (fixe la contre-valeur engagee).
+    const fxPatch = input.fx_rate != null
+      ? this.buildFxPatch(doc.currencyId ?? null, await this.projectCurrencyId(doc.projectId, orgId), Number(doc.totalTtc ?? 0), input)
+      : {};
+
     await this.db.update(batiproDocuments).set({
+      ...fxPatch,
       status: "confirmed",
       confirmedAt: sql`CURRENT_TIMESTAMP`,
       confirmedBy: userId ?? null,
@@ -2910,6 +2925,12 @@ export class BatiproService {
     //  (b) documents AVEC des lignes batipro_document_totals (migration 0232) :
     //      ventilation reelle par devise, y compris un document dont les LIGNES
     //      melangent plusieurs devises differentes de celle du chantier.
+    // Documents en autre devise AVEC taux fige : comptes dans l'engage (contre-valeur),
+    // donc exclus des montants "autre devise" (qui ne gardent que les docs SANS taux).
+    const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
+    const fx = summarizeFx(spendDocs, projectCurrencyId);
+    const convertedIds = fx.convertedPoIds;
+
     const docsWithTotalsRows = (await this.db
       .select({ documentId: batiproDocumentTotals.documentId })
       .from(batiproDocumentTotals)
@@ -2934,6 +2955,7 @@ export class BatiproService {
         eq(batiproDocuments.isActive, 1),
         sql`NOT ${sameCurrency}`,
         docsWithTotalsRows.length ? notInArray(batiproDocuments.id, docsWithTotalsRows) : undefined,
+        convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
       .groupBy(currencies.currencyCode);
 
@@ -2955,6 +2977,7 @@ export class BatiproService {
         eq(batiproDocumentTotals.organizationId, orgId),
         eq(batiproDocumentTotals.isActive, 1),
         sql`NOT (${sameCurrencyTotals})`,
+        convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
       .groupBy(currencies.currencyCode);
 
@@ -2968,11 +2991,12 @@ export class BatiproService {
     const otherCurrencyAgg = Array.from(otherCurrencyMerged.entries()).map(([currencyCode, total]) => ({ currencyCode, total }));
 
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
-    const purchaseOrdersEngaged = Number(poAgg?.total ?? 0);
+    // Engage = BC en devise chantier + contre-valeur figee des BC en autre devise AVEC taux (centimes).
+    const purchaseOrdersEngaged = fromCents(toCents(poAgg?.total) + fx.engagedConvertedCents);
     // Decaisse reel + fonds recus : definition UNIQUE (funds.util), partagee avec
     // la liste des chantiers et la synthese des fonds.
-    const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
-    const fundsSummary = buildFundsSummary(await this.loadFundRows(orgId, projectId), spendDocs, projectCurrencyId, await this.currencyCodeMap());
+    const codeById = await this.currencyCodeMap();
+    const fundsSummary = buildFundsSummary(await this.loadFundRows(orgId, projectId), spendDocs, projectCurrencyId, codeById);
     const fundsProjectCurrency = fundsSummary.find((r) => r.currency_id === projectCurrencyId);
     const costActual = this.projectCostActual(spendDocs, projectCurrencyId);
     const billedIssued = Number(invoiceAgg?.issued ?? 0);
@@ -3013,6 +3037,16 @@ export class BatiproService {
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
       contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,
+      // Multi-devise a taux fige : par devise, montant d'origine et contre-valeur
+      // (engage = BC avec taux ; paye = reglements, a leur taux de reglement).
+      converted_amounts: fx.rows.map((r) => ({ ...r, currency_code: codeById.get(r.currency_id) ?? null })),
+      // Ecart de change analytique (devise chantier, signe : > 0 gain, < 0 perte) =
+      // contre-valeur, au taux du BC, de ce qui a ete regle - contre-valeur
+      // reellement payee. Informatif, sans ecriture comptable.
+      fx_gain_loss: fromCents(fx.gainLossCents),
+      fx_gain_loss_by_currency: fx.gainLossByCurrency.map((g) => ({ ...g, currency_code: codeById.get(g.currency_id) ?? null })),
+      // BC en autre devise sans taux : exclus de l'engage ("taux a fixer").
+      po_without_fx_rate_count: fx.poWithoutRateCount,
       has_other_currency: otherCurrencyAmounts.length > 0,
       // Montants non comptes ci-dessus car dans une autre devise que le chantier
       // (pas de taux de change invente, affichage separe uniquement).
@@ -3274,6 +3308,173 @@ export class BatiproService {
     };
   }
 
+  // ── Taux de change fige par document (migration 0329) ──────────────────
+  // Sens : fxRate = nb d'unites de la devise du DOCUMENT pour 1 unite de la
+  // devise du CHANTIER. Contre-valeur = montant document / fxRate (centimes,
+  // half-up, cf. fx.util). Un document sans devise suit celle du chantier.
+
+  private async projectCurrencyId(projectId: number, orgId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ currencyId: batiproProjects.currencyId })
+      .from(batiproProjects)
+      .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId)))
+      .limit(1);
+    return row?.currencyId ?? null;
+  }
+
+  // true si le document est dans une AUTRE devise que le chantier (les deux connues).
+  private isForeignCurrency(docCurrencyId: number | null, projectCurrencyId: number | null) {
+    return docCurrencyId != null && projectCurrencyId != null && docCurrencyId !== projectCurrencyId;
+  }
+
+  // Champs fx a ecrire pour un taux fourni. Retourne {} si pas de taux fourni ou
+  // si le document est dans la devise du chantier (taux sans objet). 400 si taux invalide.
+  private buildFxPatch(
+    docCurrencyId: number | null,
+    projectCurrencyId: number | null,
+    totalTtc: number | string,
+    fx: { fx_rate?: number; fx_rate_date?: string; fx_rate_source?: string },
+  ): Partial<typeof batiproDocuments.$inferInsert> {
+    if (fx.fx_rate == null) return {};
+    if (!this.isForeignCurrency(docCurrencyId, projectCurrencyId)) return {};
+    const rate = parseFxRate(fx.fx_rate);
+    if (rate == null) throw new BadRequestException("Taux de change invalide : nombre strictement positif, 6 decimales maximum.");
+    return {
+      fxRate: fxRateToString(rate),
+      fxRateDate: fx.fx_rate_date ?? new Date().toISOString().slice(0, 10),
+      fxRateSource: fx.fx_rate_source ?? "manual",
+      totalTtcProjectCcy: fromCents(convertToProjectCents(toCents(totalTtc), rate)).toFixed(2),
+    };
+  }
+
+  // updateDocument : recalcule la contre-valeur quand le total change, purge le
+  // taux si la devise du document change ou rejoint celle du chantier.
+  private async applyFxToUpdatePatch(
+    patch: Partial<typeof batiproDocuments.$inferInsert>,
+    doc: { projectId: number; currencyId: number | null; totalTtc: string | null; fxRate: string | null },
+    input: UpdateBatiproDocumentDto,
+    newTotalTtc: number | undefined,
+    orgId: number,
+  ) {
+    const wantsFx = input.fx_rate != null;
+    const currencyChanged = input.currency_id !== undefined && (input.currency_id ?? null) !== (doc.currencyId ?? null);
+    if (!wantsFx && !currencyChanged && (doc.fxRate == null || newTotalTtc === undefined)) return;
+    const projectCcy = await this.projectCurrencyId(doc.projectId, orgId);
+    const newCurrency = input.currency_id !== undefined ? (input.currency_id ?? null) : (doc.currencyId ?? null);
+    const total = newTotalTtc ?? Number(doc.totalTtc ?? 0);
+    const foreign = this.isForeignCurrency(newCurrency, projectCcy);
+    if (wantsFx && foreign) {
+      Object.assign(patch, this.buildFxPatch(newCurrency, projectCcy, total, input));
+    } else if (doc.fxRate != null && (!foreign || currencyChanged)) {
+      Object.assign(patch, { fxRate: null, fxRateDate: null, fxRateSource: null, totalTtcProjectCcy: null });
+    } else if (doc.fxRate != null && newTotalTtc !== undefined) {
+      const rate = decimalRateToScaled(doc.fxRate);
+      if (rate != null) patch.totalTtcProjectCcy = fromCents(convertToProjectCents(toCents(total), rate)).toFixed(2);
+    }
+  }
+
+  // PATCH /batipro/documents/:id/fx-rate : fixe/corrige le taux d'un document en
+  // autre devise que son chantier. paid_fx_rate = reprise d'un document deja
+  // regle (renseigne paidAmountProjectCcy depuis paidAmount), refusee si une
+  // contre-valeur de reglement existe deja.
+  async setDocumentFxRate(id: number, input: UpdateBatiproDocumentFxRateDto, orgId: number) {
+    const doc = await this.getDocument(id, orgId);
+    const projectCcy = await this.projectCurrencyId(doc.projectId, orgId);
+    if (!this.isForeignCurrency(doc.currencyId ?? null, projectCcy)) {
+      throw new BadRequestException("Ce document est dans la devise du chantier : aucun taux de change n'est necessaire.");
+    }
+    if ((doc.totalsByCurrency?.length ?? 0) > 1) {
+      throw new BadRequestException("Ce document contient plusieurs devises : un taux unique n'est pas applicable.");
+    }
+    const rate = parseFxRate(input.fx_rate);
+    if (rate == null) throw new BadRequestException("Taux de change invalide : nombre strictement positif, 6 decimales maximum.");
+
+    const patch: Partial<typeof batiproDocuments.$inferInsert> = {
+      fxRate: fxRateToString(rate),
+      fxRateDate: input.fx_rate_date ?? new Date().toISOString().slice(0, 10),
+      fxRateSource: input.fx_rate_source ?? "manual",
+      totalTtcProjectCcy: fromCents(convertToProjectCents(toCents(doc.totalTtc), rate)).toFixed(2),
+    };
+    if (input.paid_fx_rate != null) {
+      const paidRate = parseFxRate(input.paid_fx_rate);
+      if (paidRate == null) throw new BadRequestException("Taux de reglement invalide : nombre strictement positif, 6 decimales maximum.");
+      if (!(toCents(doc.paidAmount) > 0)) throw new BadRequestException("Aucun reglement enregistre sur ce document : taux de reglement sans objet.");
+      if (toCents(doc.paidAmountProjectCcy) > 0) {
+        throw new BadRequestException("La contre-valeur des reglements est deja renseignee pour ce document.");
+      }
+      patch.paidAmountProjectCcy = fromCents(convertToProjectCents(toCents(doc.paidAmount), paidRate)).toFixed(2);
+    }
+    await this.db.update(batiproDocuments).set(patch)
+      .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    await this.publish("setDocumentFxRate", ["documents", "projects"], "updated", id, orgId);
+    const updated = await this.getDocument(id, orgId);
+    return {
+      ...updated,
+      paid_fx_rate_missing: toCents(updated.paidAmount) > 0 && toCents(updated.paidAmountProjectCcy) === 0,
+    };
+  }
+
+  // GET /batipro/fx-rate-suggestion : taux propose pour (from = devise chantier,
+  // to = devise document), sens "1 from = rate to". Source 1 : dernier echange
+  // de devise comptabilise de l'org (direct, ou inverse calcule sur la valeur
+  // exacte stockee). Source 2 : dernier taux fige d'un document BatiPro de l'org.
+  // Aucun taux en dur : rate = null si rien.
+  async fxRateSuggestion(from: number, to: number, orgId: number) {
+    if (from === to) throw new BadRequestException("Les devises source et cible doivent etre differentes.");
+    const [ex] = await this.db
+      .select({ from: currencyExchanges.fromCurrencyId, rate: currencyExchanges.rate, date: currencyExchanges.date })
+      .from(currencyExchanges)
+      .where(and(
+        eq(currencyExchanges.organizationId, orgId),
+        eq(currencyExchanges.status, "posted"),
+        or(
+          and(eq(currencyExchanges.fromCurrencyId, from), eq(currencyExchanges.toCurrencyId, to)),
+          and(eq(currencyExchanges.fromCurrencyId, to), eq(currencyExchanges.toCurrencyId, from)),
+        ),
+      ))
+      .orderBy(desc(currencyExchanges.date), desc(currencyExchanges.id))
+      .limit(1);
+    if (ex) {
+      const inverted = ex.from !== from;
+      const scaled = inverted ? invertDecimalRate(ex.rate) : decimalRateToScaled(ex.rate);
+      if (scaled != null) {
+        return {
+          from_currency_id: from,
+          to_currency_id: to,
+          rate: fxRateToNumber(scaled),
+          source: "last_exchange" as const,
+          inverted,
+          date: ex.date ? new Date(ex.date).toISOString().slice(0, 10) : null,
+        };
+      }
+    }
+    const [docRow] = await this.db
+      .select({ rate: batiproDocuments.fxRate, date: batiproDocuments.fxRateDate })
+      .from(batiproDocuments)
+      .innerJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.currencyId, to),
+        eq(batiproProjects.currencyId, from),
+        sql`${batiproDocuments.fxRate} IS NOT NULL`,
+      ))
+      .orderBy(desc(batiproDocuments.id))
+      .limit(1);
+    const docScaled = decimalRateToScaled(docRow?.rate);
+    if (docRow && docScaled != null) {
+      return {
+        from_currency_id: from,
+        to_currency_id: to,
+        rate: fxRateToNumber(docScaled),
+        source: "last_document" as const,
+        inverted: false,
+        date: docRow.date ?? null,
+      };
+    }
+    return { from_currency_id: from, to_currency_id: to, rate: null, source: null, inverted: false, date: null };
+  }
+
   // Comptabilise une facture via le ledger (postByRules, ROLES metier — JAMAIS de
   // compte en dur). Idempotent par idempotencyKey (re-appel ne double pas
   // l'ecriture). Respecte gate d'approbation + periodes cloturees (gere par le
@@ -3416,7 +3617,7 @@ export class BatiproService {
   // (deja fait une fois par postPurchaseToLedger sur le BC parent) — seul le
   // REGLEMENT (avance/paiement) passe par le ledger ici, exactement comme pour
   // un paiement direct sur BC.
-  async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number) {
+  async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number, fxRate?: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
     const isPurchaseOrder = invoice.type === "purchase_order";
     const isSupplierInvoice = invoice.type === "invoice" && invoice.direction === "inbound";
@@ -3447,6 +3648,23 @@ export class BatiproService {
     // doit jamais etre marque paye sans ecriture comptable en face.
     if (isSupplierSettlement) this.assertSingleCurrencyForLedger(invoice);
 
+    // Document dans une autre devise que le chantier : taux de reglement
+    // OBLIGATOIRE. La contre-valeur (centimes, half-up, a CE taux) est cumulee
+    // dans paidAmountProjectCcy ; le taux est transmis a l'ecriture ledger.
+    const projectForFx = await this.getProject(invoice.projectId, orgId);
+    let paymentRate: bigint | null = null;
+    let newPaidProjectCcy = invoice.paidAmountProjectCcy;
+    if (this.isForeignCurrency(invoice.currencyId ?? null, projectForFx.currencyId ?? null)) {
+      if (fxRate == null) {
+        throw new BadRequestException(
+          `Un taux de change est obligatoire : ce document est en ${invoice.currencyCode ?? "autre devise"} et le chantier en ${projectForFx.currencyCode ?? "une autre devise"}. Indiquez le taux du jour (1 ${projectForFx.currencyCode ?? "unite chantier"} = X ${invoice.currencyCode ?? "unites document"}).`,
+        );
+      }
+      paymentRate = parseFxRate(fxRate);
+      if (paymentRate == null) throw new BadRequestException("Taux de change invalide : nombre strictement positif, 6 decimales maximum.");
+      newPaidProjectCcy = fromCents(toCents(invoice.paidAmountProjectCcy) + convertToProjectCents(toCents(amount), paymentRate)).toFixed(2);
+    }
+
     // Pour une facture fournisseur, l'etat "receptionne" se lit sur le BC PARENT
     // (parent_document_id), pas sur la facture elle-meme (qui n'a pas de cycle
     // de reception propre).
@@ -3461,7 +3679,7 @@ export class BatiproService {
     }
 
     await this.db.update(batiproDocuments)
-      .set({ paidAmount: String(newPaid), status: nextStatus })
+      .set({ paidAmount: String(newPaid), status: nextStatus, ...(paymentRate != null ? { paidAmountProjectCcy: newPaidProjectCcy } : {}) })
       .where(and(eq(batiproDocuments.id, invoiceDocumentId), eq(batiproDocuments.organizationId, orgId)));
 
     let paymentLedgerEntryId: number | null = null;
@@ -3483,6 +3701,7 @@ export class BatiproService {
               relatedId: String(invoiceDocumentId),
               idempotencyKey: `batipro:supplier_advance:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
               currencyId: invoice.currencyId ?? undefined,
+              ...(paymentRate != null ? { exchangeRate: fxRateToNumber(paymentRate) } : {}),
               amountsByRole: {
                 supplier_advance: amount,
                 cash: amount,
@@ -3497,6 +3716,7 @@ export class BatiproService {
               relatedId: String(invoiceDocumentId),
               idempotencyKey: `batipro:supplier_payment:${invoiceDocumentId}:${Math.round(newPaid * 100)}`,
               currencyId: invoice.currencyId ?? undefined,
+              ...(paymentRate != null ? { exchangeRate: fxRateToNumber(paymentRate) } : {}),
               amountsByRole: {
                 payable: amount,
                 cash: amount,
@@ -3530,6 +3750,7 @@ export class BatiproService {
     return {
       id: invoiceDocumentId,
       paid_amount: newPaid,
+      ...(paymentRate != null ? { paid_amount_project_ccy: Number(newPaidProjectCcy) } : {}),
       balance: Math.round((totalTtc - newPaid) * 100) / 100,
       status: nextStatus,
       ...(isSupplierSettlement ? { payment_ledger_entry_id: paymentLedgerEntryId, payment_deferred: paymentDeferred } : {}),
@@ -4304,6 +4525,9 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
         parentDocumentId: batiproDocuments.parentDocumentId,
         totalTtc: batiproDocuments.totalTtc,
         paidAmount: batiproDocuments.paidAmount,
+        fxRate: batiproDocuments.fxRate,
+        totalTtcProjectCcy: batiproDocuments.totalTtcProjectCcy,
+        paidAmountProjectCcy: batiproDocuments.paidAmountProjectCcy,
       })
       .from(batiproDocuments)
       .where(and(
@@ -4342,7 +4566,9 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
   // funds.util disbursedCentsByCurrency), utilisee par projects(),
   // projectBudgetSummary() et la synthese des fonds.
   private projectCostActual(docs: SpendDoc[], projectCurrencyId: number | null) {
-    return fromCents(disbursedCentsByCurrency(docs, projectCurrencyId).get(projectCurrencyId) ?? 0);
+    // Decaisse en devise chantier + contre-valeur (taux de reglement) des
+    // reglements faits en autre devise.
+    return fromCents((disbursedCentsByCurrency(docs, projectCurrencyId).get(projectCurrencyId) ?? 0) + convertedPaidCents(docs, projectCurrencyId));
   }
 
   private async loadFundRows(orgId: number, projectId: number) {
