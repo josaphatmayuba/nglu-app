@@ -6709,6 +6709,7 @@ export class PropertyManagementService implements OnModuleInit {
       .select({
         ...getTableColumns(realEstatePropertyExpenses),
         propertyName: realEstateProperties.name,
+        unitName: realEstateUnits.name,
         currencyCode: currencies.currencyCode,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -6716,6 +6717,7 @@ export class PropertyManagementService implements OnModuleInit {
       .from(realEstatePropertyExpenses)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
       .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstatePropertyExpenses.unitId))
       .where(and(...conditions))
       .orderBy(desc(realEstatePropertyExpenses.expenseDate), desc(realEstatePropertyExpenses.id));
   }
@@ -6725,6 +6727,7 @@ export class PropertyManagementService implements OnModuleInit {
       .select({
         ...getTableColumns(realEstatePropertyExpenses),
         propertyName: realEstateProperties.name,
+        unitName: realEstateUnits.name,
         currencyCode: currencies.currencyCode,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -6732,6 +6735,7 @@ export class PropertyManagementService implements OnModuleInit {
       .from(realEstatePropertyExpenses)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyExpenses.propertyId))
       .leftJoin(currencies, eq(currencies.id, realEstatePropertyExpenses.currencyId))
+      .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstatePropertyExpenses.unitId))
       .where(and(
         eq(realEstatePropertyExpenses.id, id),
         eq(realEstatePropertyExpenses.isActive, 1),
