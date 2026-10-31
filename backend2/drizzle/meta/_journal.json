@@ -2143,6 +2143,13 @@
       "when": 1782975600000,
       "tag": "0330_organizations_sector_country",
       "breakpoints": true
+    },
+    {
+      "idx": 306,
+      "version": "5",
+      "when": 1782979200000,
+      "tag": "0331_real_estate_deposit_rent_application",
+      "breakpoints": true
     }
   ]
 }

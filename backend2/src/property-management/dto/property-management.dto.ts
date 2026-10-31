@@ -719,6 +719,46 @@ export class ReturnDepositDto {
   proofUrl?: string | null;
 }
 
+// Imputation de la caution detenue sur les loyers impayes (bail termine uniquement).
+export class ApplyDepositToRentDto {
+  @ApiPropertyOptional({ example: 500, description: "Montant impute (2 decimales max). Facultatif en apercu." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(1e12)
+  amount?: number;
+
+  @ApiPropertyOptional({ example: "2027-06-04", description: "Date d'imputation ; aujourd'hui par defaut." })
+  @IsOptional()
+  @IsDateString()
+  applicationDate?: string;
+
+  @ApiPropertyOptional({ enum: ["auto", "manual"], default: "auto" })
+  @IsOptional()
+  @IsIn(["auto", "manual"])
+  allocationMode?: "auto" | "manual";
+
+  @ApiPropertyOptional({ type: () => [AllocationItemDto], description: "Imputations explicites (mode manual, bail avec registre)." })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(60)
+  @ValidateNested({ each: true })
+  @Type(() => AllocationItemDto)
+  allocations?: AllocationItemDto[];
+
+  @ApiPropertyOptional({ default: true, description: "Prevenir le locataire par SMS." })
+  @IsOptional()
+  @IsBoolean()
+  notifyTenant?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string | null;
+}
+
 export class CreateMaintenanceDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)

@@ -10,7 +10,7 @@ export interface RentBookExtrasInput {
   /** Echeances imputees (bail flagge) ou echeancier prorata : seule la date d'echeance compte. */
   dueDates?: Array<string | null | undefined>;
   depositContract?: number | string | null;
-  depositReceived?: { amount: number | string; date: string | null; currencySymbol: string | null; status: string } | null;
+  depositReceived?: { amount: number | string; date: string | null; currencySymbol: string | null; status: string; rentApplied?: number | string | null } | null;
   tenant?: {
     occupantNumber?: number | null;
     originProvince?: string | null;
@@ -49,7 +49,7 @@ export function buildRentBookExtras(input: RentBookExtrasInput) {
 
   const dep = input.depositReceived;
   const depositReceived = dep && Number.isFinite(Number(dep.amount))
-    ? { amount: Number(dep.amount), date: dep.date || null, currencySymbol: dep.currencySymbol || null, status: dep.status }
+    ? { amount: Number(dep.amount), date: dep.date || null, currencySymbol: dep.currencySymbol || null, status: dep.status, rentApplied: Number(dep.rentApplied) || 0 }
     : null;
 
   const t = input.tenant || null;

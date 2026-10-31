@@ -76,6 +76,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  ApplyDepositToRentDto,
   TerminateLeaseDto,
   CreateTenantDto,
   UpdateTenantDto,
@@ -110,6 +111,7 @@ import { ObjectStorageService } from "./object-storage.service";
 import { LeaseAllocationService, type ExplicitAllocation } from "./lease-allocation.service";
 import { buildRentBookExtras } from "./rent-book-extras";
 import { isLeaseFlagged } from "./lease-allocation";
+import { planDepositApplication, monthsLabelFromLines, eligibleDues, type DepositDueInput } from "./deposit-rent-application";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
@@ -2647,6 +2649,7 @@ export class PropertyManagementService implements OnModuleInit {
       .select({
         id: realEstateSecurityDeposits.id,
         amount: realEstateSecurityDeposits.amount,
+        rentApplied: realEstateSecurityDeposits.rentAppliedAmount,
         symbol: currencies.currencySymbol,
         code: currencies.currencyCode,
       })
@@ -2660,6 +2663,8 @@ export class PropertyManagementService implements OnModuleInit {
       ))
       .orderBy(desc(realEstateSecurityDeposits.id))
       .limit(1);
+    const depRentApplied = dep ? roundMoney(Number(dep.rentApplied) || 0, decimals) : 0;
+    const depAvailable = dep ? roundMoney((Number(dep.amount) || 0) - depRentApplied, decimals) : 0;
 
     return {
       leaseId,
@@ -2672,7 +2677,15 @@ export class PropertyManagementService implements OnModuleInit {
       unpaidCount: late.length,
       unpaidTotal: lateTotal,
       deposit: dep
-        ? { id: Number(dep.id), amount: Number(dep.amount) || 0, currencySymbol: dep.symbol ?? cur?.symbol ?? null, currencyCode: dep.code ?? cur?.code ?? null }
+        ? {
+            id: Number(dep.id),
+            amount: Number(dep.amount) || 0,
+            rentApplied: depRentApplied,
+            available: depAvailable,
+            maxApplicable: roundMoney(Math.max(0, Math.min(depAvailable, lateTotal)), decimals),
+            currencySymbol: dep.symbol ?? cur?.symbol ?? null,
+            currencyCode: dep.code ?? cur?.code ?? null,
+          }
         : null,
       scheduled,
       sms: await this.terminationSmsPreview(leaseId, day, orgId, scheduled ? "scheduled" : "immediate"),
@@ -3110,6 +3123,7 @@ export class PropertyManagementService implements OnModuleInit {
         paymentDate: realEstateRentPayments.paymentDate,
         amount: realEstateRentPayments.amount,
         method: realEstateRentPayments.method,
+        securityDepositId: realEstateRentPayments.securityDepositId,
         status: realEstateRentPayments.status,
         reference: realEstateRentPayments.reference,
         receivedBy: realEstateRentPayments.receivedBy,
@@ -4078,9 +4092,10 @@ export class PropertyManagementService implements OnModuleInit {
     return /(banc|bank|carte|card|cheque|virement)/.test(m);
   }
 
-  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
+  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
 
     // Une seule caution active détenue par bail.
     const existing = await this.db
@@ -4161,9 +4176,10 @@ export class PropertyManagementService implements OnModuleInit {
     return this.findDeposit(depositId);
   }
 
-  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
+  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const rows = await this.db
       .select()
       .from(realEstateSecurityDeposits)
@@ -4177,9 +4193,10 @@ export class PropertyManagementService implements OnModuleInit {
     if (!rows.length) throw new BadRequestException("Aucune caution détenue à restituer pour ce bail.");
     const deposit = rows[0];
 
-    const held = Number(deposit.amount);
-    const deduction = Math.min(Math.max(0, Number(input.deductionAmount ?? 0)), held);
-    const returned = Math.round((held - deduction) * 100) / 100;
+    // Disponible = caution detenue - part deja imputee sur des loyers (le passif correspondant est deja solde).
+    const held = roundMoney(Number(deposit.amount) - Number((deposit as any).rentAppliedAmount ?? 0));
+    const deduction = roundMoney(Math.min(Math.max(0, Number(input.deductionAmount ?? 0)), held));
+    const returned = roundMoney(held - deduction);
 
     // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
@@ -4286,6 +4303,310 @@ export class PropertyManagementService implements OnModuleInit {
       .where(eq(realEstateSecurityDeposits.id, id))
       .limit(1);
     return rows[0];
+  }
+
+  // ─── Caution imputee sur les loyers impayes (a la sortie du locataire) ───────
+
+  /** Libere atomiquement une part de caution imputee (void) : jamais sous 0. */
+  private async releaseDepositReservation(depositId: number, orgId: number, amount: number) {
+    await this.db
+      .update(realEstateSecurityDeposits)
+      .set({
+        rentAppliedAmount: sql`GREATEST(${realEstateSecurityDeposits.rentAppliedAmount} - ${this.money(amount)}, 0)`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateSecurityDeposits.id, depositId), eq(realEstateSecurityDeposits.organizationId, orgId)));
+  }
+
+  /** Contexte commun apercu/imputation : bail termine, caution detenue, echeances eligibles. Lecture seule. */
+  private async depositApplyContext(leaseId: number, orgId: number, propertyScope: "all" | number[]) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    if (lease.status !== "ended") {
+      throw new BadRequestException({ code: "LEASE_NOT_ENDED", message: "La caution ne peut etre imputee sur les loyers qu'une fois le bail termine." });
+    }
+    const [dep] = await this.db
+      .select()
+      .from(realEstateSecurityDeposits)
+      .where(and(
+        eq(realEstateSecurityDeposits.leaseId, leaseId),
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .orderBy(desc(realEstateSecurityDeposits.id))
+      .limit(1);
+    if (!dep) {
+      throw new BadRequestException({ code: "NO_DEPOSIT", message: "Aucune caution detenue pour ce bail." });
+    }
+    const leaseCurrencyId = (lease as any).currencyId ?? null;
+    const depCurrencyId = (dep as any).currencyId ?? leaseCurrencyId;
+    if (leaseCurrencyId != null && depCurrencyId != null && Number(depCurrencyId) !== Number(leaseCurrencyId)) {
+      throw new BadRequestException({ code: "CURRENCY_MISMATCH", message: "La caution et le bail n'ont pas la meme devise." });
+    }
+    const decimals = await this.currencyDecimals(leaseCurrencyId);
+    const rentApplied = roundMoney(Number((dep as any).rentAppliedAmount) || 0, decimals);
+    const available = roundMoney(Number(dep.amount) - rentApplied, decimals);
+    const terminationDate = this.terminatedOn(lease as any)
+      ?? ((lease as any).endDate ? String((lease as any).endDate).slice(0, 10) : this.formatDateOnly(new Date()));
+
+    const flagged = isLeaseFlagged(lease);
+    let dues: DepositDueInput[];
+    if (flagged) {
+      const st = await this.leaseAllocations.getLeaseDueState(leaseId, orgId);
+      dues = st.dues.map((d) => ({ id: Number(d.id), periodStart: d.periodStart, periodEnd: d.periodEnd, dueDate: d.dueDate, remaining: Number(d.remaining) || 0 }));
+    } else {
+      const { lines } = await this.noticeDueLines(lease, leaseId, orgId);
+      dues = lines.map((l, i) => ({ id: i + 1, periodStart: l.periodStart, periodEnd: l.periodEnd, dueDate: l.dueDate, remaining: l.remaining }));
+    }
+    return { lease, dep, flagged, decimals, rentApplied, available, terminationDate, dues, currencyId: leaseCurrencyId ?? depCurrencyId };
+  }
+
+  private depositSummary(dep: any, rentApplied: number, decimals: number) {
+    const amount = roundMoney(Number(dep.amount), decimals);
+    return { amount, rentApplied, available: roundMoney(amount - rentApplied, decimals) };
+  }
+
+  /** Apercu SANS ecriture de l'imputation de la caution sur les loyers impayes. */
+  async previewDepositToRent(leaseId: number, input: ApplyDepositToRentDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const ctx = await this.depositApplyContext(leaseId, orgId, propertyScope);
+    const mode = input.allocationMode ?? "auto";
+    if (mode === "manual" && !ctx.flagged) {
+      throw new BadRequestException("Choix manuel indisponible : registre non active sur ce bail.");
+    }
+    const plan = planDepositApplication({
+      dues: ctx.dues,
+      available: ctx.available,
+      amount: input.amount ?? null,
+      mode,
+      explicit: input.allocations,
+      terminationDate: ctx.terminationDate,
+      decimals: ctx.decimals,
+    });
+    return {
+      leaseId,
+      depositId: Number(ctx.dep.id),
+      deposit: this.depositSummary(ctx.dep, ctx.rentApplied, ctx.decimals),
+      totalUnpaid: plan.totalUnpaid,
+      maxApplicable: plan.maxApplicable,
+      amount: plan.amount,
+      allocations: plan.allocations,
+      warnings: plan.warnings,
+      monthsLabel: plan.monthsLabel,
+      dues: eligibleDues(ctx.dues, ctx.terminationDate, ctx.decimals),
+    };
+  }
+
+  /**
+   * Impute la caution detenue sur les loyers impayes (bail termine). Ecriture :
+   * debit passif « Tenant Deposits » / credit revenu du loyer, AUCUNE ligne Caisse/Banque.
+   */
+  async applyDepositToRent(leaseId: number, input: ApplyDepositToRentDto, orgId: number, propertyScope: "all" | number[] = "all", userId?: number) {
+    const ctx = await this.depositApplyContext(leaseId, orgId, propertyScope);
+    const { lease, dep, decimals } = ctx;
+    const mode = input.allocationMode ?? "auto";
+    const applicationDate = input.applicationDate ? String(input.applicationDate).slice(0, 10) : this.formatDateOnly(new Date());
+    if (input.amount == null) throw new BadRequestException("Le montant a imputer est obligatoire.");
+
+    // Anti-rejeu : meme caution, meme montant, meme date, paiement tout recent -> renvoyer l'existant.
+    const [recent] = await this.db
+      .select({ id: realEstateRentPayments.id })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, leaseId),
+        eq(realEstateRentPayments.securityDepositId, Number(dep.id)),
+        eq(realEstateRentPayments.status, "paid"),
+        eq(realEstateRentPayments.paymentDate, applicationDate),
+        eq(realEstateRentPayments.amount, this.money(roundMoney(Number(input.amount), decimals))),
+        gte(realEstateRentPayments.createdAt, sql`(CURRENT_TIMESTAMP - INTERVAL 2 MINUTE)`),
+      ))
+      .limit(1);
+    if (recent) {
+      return {
+        payment: await this.findPayment(Number(recent.id)),
+        deposit: this.depositSummary(dep, ctx.rentApplied, decimals),
+        allocations: [],
+        warnings: [],
+        sms: { requested: false, sent: 0 },
+        replayed: true,
+      };
+    }
+
+    if (mode === "manual" && !ctx.flagged) {
+      throw new BadRequestException("Choix manuel indisponible : registre non active sur ce bail.");
+    }
+    const plan = planDepositApplication({
+      dues: ctx.dues,
+      available: ctx.available,
+      amount: input.amount,
+      mode,
+      explicit: input.allocations,
+      terminationDate: ctx.terminationDate,
+      decimals,
+    });
+    const amount = plan.amount;
+    if (ctx.flagged && mode === "manual") {
+      await this.leaseAllocations.validateExplicit(lease.id, orgId, input.allocations, amount);
+    }
+
+    const rentPaymentType = await this.getRentPaymentType(orgId);
+    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
+    const taxAmt = this.computeInclusiveTax(amount, lease as any);
+    const taxType = taxAmt != null && taxAmt > 0 ? await this.getRealEstateTaxTypeOptional(orgId) : null;
+
+    // Reservation atomique : echoue (409) si la caution n'a plus assez de disponible.
+    const reserved: any = await this.db
+      .update(realEstateSecurityDeposits)
+      .set({
+        rentAppliedAmount: sql`${realEstateSecurityDeposits.rentAppliedAmount} + ${this.money(amount)}`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(
+        eq(realEstateSecurityDeposits.id, Number(dep.id)),
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+        sql`${realEstateSecurityDeposits.amount} - ${realEstateSecurityDeposits.rentAppliedAmount} >= ${this.money(amount)}`,
+      ));
+    if (Number((Array.isArray(reserved) ? reserved[0] : reserved)?.affectedRows ?? 0) === 0) {
+      throw new ConflictException({ code: "DEPOSIT_CONFLICT", message: "La caution disponible a change : actualisez et recommencez." });
+    }
+
+    const note = input.notes ? `Payé par la caution — ${input.notes}` : "Payé par la caution";
+    const when = new Date(applicationDate);
+    let txId: number | null = null;
+    let taxTxId: number | null = null;
+    let paymentId: number | null = null;
+    try {
+      const [txRes] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: when,
+        debitId: tenantDeposits,
+        creditId: rentPaymentType.creditAccountId,
+        particulars: input.notes || `Caution imputee sur loyer — bail ${lease.reference || lease.id}`,
+        amount,
+        currencyId: ctx.currencyId ?? null,
+        type: "OD - Security Deposit Applied to Rent",
+        relatedId: String(lease.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      txId = Number(txRes.insertId);
+
+      const [payRes] = await this.db.insert(realEstateRentPayments).values({
+        organizationId: orgId,
+        leaseId: lease.id,
+        currencyId: ctx.currencyId ?? null,
+        transactionId: txId,
+        securityDepositId: Number(dep.id),
+        paymentDate: this.requiredDate(applicationDate),
+        amount: this.money(amount),
+        method: "deposit",
+        status: "paid",
+        notes: note,
+        taxAmount: taxAmt != null ? this.money(taxAmt) : null,
+        taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      paymentId = Number(payRes.insertId);
+
+      if (taxType && taxAmt != null) {
+        const [taxRes] = await this.db.insert(transactions).values({
+          organizationId: orgId,
+          date: when,
+          debitId: taxType.debitAccountId,
+          creditId: taxType.creditAccountId,
+          particulars: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})`,
+          amount: taxAmt,
+          currencyId: ctx.currencyId ?? null,
+          type: "Real Estate Tax",
+          relatedId: String(lease.id),
+          status: "true",
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+        taxTxId = Number(taxRes.insertId);
+      }
+
+      const lines: Array<{ accountId: number; side: "DEBIT" | "CREDIT"; amount: number; description?: string }> = [
+        { accountId: tenantDeposits, side: "DEBIT", amount, description: "Caution imputee sur loyer" },
+        { accountId: rentPaymentType.creditAccountId, side: "CREDIT", amount, description: note },
+      ];
+      if (taxType && taxAmt != null) {
+        lines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT", amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT", amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+      await this.ledger.post(
+        {
+          date: when,
+          reference: `RENT-${paymentId}`,
+          particulars: `Caution imputee sur loyer — bail ${lease.reference || lease.id}`,
+          sourceModule: "rent",
+          relatedId: String(lease.id),
+          currencyId: ctx.currencyId ?? undefined,
+          idempotencyKey: `rent-payment:${paymentId}`,
+          lines,
+        },
+        orgId,
+      );
+    } catch (err) {
+      // Compensation : rien n'est poste au ledger, on rend la reservation et on neutralise (soft) les lignes ecrites.
+      try {
+        await this.releaseDepositReservation(Number(dep.id), orgId, amount);
+        for (const id of [txId, taxTxId]) {
+          if (id) {
+            await this.db.update(transactions).set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+              .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)));
+          }
+        }
+        if (paymentId) {
+          await this.db.update(realEstateRentPayments).set({ status: "voided", updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+        }
+      } catch (compErr: any) {
+        this.logger.error(`applyDepositToRent bail ${leaseId}: compensation echouee : ${compErr?.message ?? compErr}`);
+      }
+      throw err;
+    }
+
+    const warnings = [...plan.warnings];
+    if (ctx.flagged) {
+      const w = await this.allocateAfterPayment(lease.id, orgId, paymentId!, mode, input.allocations, userId);
+      if (w) warnings.push(w);
+    }
+    try {
+      await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, applicationDate);
+    } catch (e: any) {
+      this.logger.warn(`applyDepositToRent bail ${leaseId}: nextInvoiceDate non avance : ${e?.message ?? e}`);
+    }
+    await this.publishPaymentUpdate("created", paymentId!, { propertyId: lease.propertyId, unitId: lease.unitId });
+
+    const deposit = this.depositSummary(dep, roundMoney(ctx.rentApplied + amount, decimals), decimals);
+    // SMS locataire optionnel (best-effort). Jamais le recu de paiement standard.
+    let sms: { requested: boolean; sent: number } = { requested: false, sent: 0 };
+    if (input.notifyTenant !== false) {
+      const res = await this.ownerNotifications.notifyDepositAppliedTenant({
+        paymentId: paymentId!,
+        leaseId: Number(lease.id),
+        orgId,
+        amount,
+        months: plan.monthsLabel,
+        remaining: roundMoney(plan.totalUnpaid - amount, decimals),
+      });
+      sms = { requested: true, sent: res?.sent ?? 0 };
+    }
+    return {
+      payment: await this.findPayment(paymentId!),
+      deposit,
+      allocations: plan.allocations,
+      warnings,
+      sms,
+    };
   }
 
   // ─── Réservation temporaire type hôtel (courte durée, tarif par jour) ────────
@@ -5909,13 +6230,14 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Champs complementaires du carnet papier / releve : lectures best-effort,
     // une erreur (table/colonne absente en prod) ne doit jamais casser la route.
-    let depositReceived: { amount: string; date: string | null; currencySymbol: string | null; status: string } | null = null;
+    let depositReceived: { amount: string; date: string | null; currencySymbol: string | null; status: string; rentApplied?: string } | null = null;
     try {
       const [dep] = await this.db
         .select({
           amount: realEstateSecurityDeposits.amount,
           paymentDate: realEstateSecurityDeposits.paymentDate,
           status: realEstateSecurityDeposits.status,
+          rentApplied: realEstateSecurityDeposits.rentAppliedAmount,
           currencySymbol: currencies.currencySymbol,
         })
         .from(realEstateSecurityDeposits)
@@ -5928,7 +6250,7 @@ export class PropertyManagementService implements OnModuleInit {
         ))
         .orderBy(desc(realEstateSecurityDeposits.id))
         .limit(1);
-      if (dep) depositReceived = { amount: dep.amount, date: dep.paymentDate || null, currencySymbol: dep.currencySymbol || null, status: dep.status };
+      if (dep) depositReceived = { amount: dep.amount, date: dep.paymentDate || null, currencySymbol: dep.currencySymbol || null, status: dep.status, rentApplied: dep.rentApplied };
     } catch (err) {
       this.logger.warn(`rentBook: garantie illisible (bail ${leaseId}): ${(err as Error)?.message}`);
     }
@@ -6374,6 +6696,20 @@ export class PropertyManagementService implements OnModuleInit {
     }
     const lease = await this.getLeaseOrThrow(payment.leaseId, orgId);
 
+    // Paiement par la caution : annulable seulement tant que la caution est encore detenue
+    // (sinon la restitution a deja solde le passif).
+    const depositId = (payment as any).securityDepositId ? Number((payment as any).securityDepositId) : null;
+    if (depositId) {
+      const [dep] = await this.db
+        .select({ status: realEstateSecurityDeposits.status })
+        .from(realEstateSecurityDeposits)
+        .where(and(eq(realEstateSecurityDeposits.id, depositId), eq(realEstateSecurityDeposits.organizationId, orgId)))
+        .limit(1);
+      if (!dep || dep.status !== "held") {
+        throw new BadRequestException("Caution deja restituee : annulation impossible.");
+      }
+    }
+
     // 1. Ledger : contre-passation (jamais de DELETE).
     let [entry] = await this.db
       .select({ id: journalEntries.id, status: journalEntries.status })
@@ -6429,6 +6765,11 @@ export class PropertyManagementService implements OnModuleInit {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    // 3a. Caution : la part imputee redevient disponible (decrement atomique, jamais sous 0).
+    if (depositId) {
+      await this.releaseDepositReservation(depositId, orgId, Number(payment.amount));
+    }
 
     // 3b. Registre d'imputations (bail flagge) : desimputation + recalcul (la compta ci-dessus est inchangee).
     if (isLeaseFlagged(lease)) {

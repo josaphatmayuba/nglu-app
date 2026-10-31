@@ -249,6 +249,7 @@ export class OwnerPortalService {
             paymentDate: realEstateRentPayments.paymentDate,
             amount: realEstateRentPayments.amount,
             status: realEstateRentPayments.status,
+            method: realEstateRentPayments.method,
             currencySymbol: currencies.currencySymbol,
             hasProof: sql<boolean>`${realEstateRentPayments.proofUrl} IS NOT NULL AND ${realEstateRentPayments.proofUrl} <> ''`,
           })
@@ -301,6 +302,7 @@ export class OwnerPortalService {
           amount: p.amount,
           currencySymbol: p.currencySymbol,
           status: p.status,
+          method: p.method,
           ...paymentOverdueFields(p.status, p.paymentDate, overdue.today, overdue.graceDays),
           hasProof: p.hasProof,
         })),
