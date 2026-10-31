@@ -20,7 +20,7 @@ const requirements = [
   ["permissionsHandler", 'localStorage.setItem("roleId", String(nextRoleId))'],
   ["permissionsHandler", "data?.permissions"],
   ["permissionsHandler", "lastHandledVersion"],
-  ["realtimeClient", 'new EventSource(`${SSE_PATH}?token=${encodeURIComponent(t)}`)'],
+  ["realtimeClient", "new FetchEventSource(SSE_PATH, { getToken: token })"],
   ["realtimeClient", "source?.close()"],
   ["adminLayout", 'onRealtimeEvent("permissions.updated"'],
   ["adminLayout", "PERMISSIONS_POLL_INTERVAL_MS = 60_000"],

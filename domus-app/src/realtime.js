@@ -1,6 +1,6 @@
 // Domus — client temps réel (SSE) + hooks React.
 //
-// Se connecte à GET /api/events/me?token=… (même endpoint que le CRM). Le backend
+// Se connecte à GET /api/events/me (Authorization: Bearer) (même endpoint que le CRM). Le backend
 // pousse des évènements `data.updated` portant un tableau `tags`
 // (properties, units, leases, payments, maintenance, …) à chaque mutation.
 // Les écrans s'abonnent via useRealtimeReload(reload, tags) pour se rafraîchir tout seuls.
@@ -8,6 +8,7 @@
 // - Reconnexion automatique avec backoff exponentiel.
 // - BroadcastChannel : une seule connexion SSE par origine, partagée entre les onglets.
 // - Indicateur de connexion via useRealtimeStatus() pour la pastille du topbar.
+import { FetchEventSource } from "./fetchEventSource.js";
 import { useEffect, useRef, useState } from "react";
 import { API_ROOT } from "./api.js";
 import { readToken } from "./auth.jsx";
@@ -71,7 +72,7 @@ function connect() {
   const t = token();
   if (!t) return;
   try {
-    source = new EventSource(`${SSE_PATH}?token=${encodeURIComponent(t)}`);
+    source = new FetchEventSource(SSE_PATH, { getToken: token });
     source.addEventListener("open", () => {
       backoffMs = INITIAL_BACKOFF_MS;
       setConnected(true);

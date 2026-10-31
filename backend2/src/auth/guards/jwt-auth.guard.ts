@@ -38,8 +38,12 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const authHeader: string | undefined = request.headers["authorization"];
 
-    // EventSource (SSE) cannot set headers — allow token via ?token= query param as fallback
-    const queryToken: string | undefined = (request.query as Record<string, string>)["token"];
+    // Bugs #35/#39 : ?token= tolere UNIQUEMENT sur /events/me (anciens clients
+    // EventSource deja installes). Ailleurs : en-tete Authorization obligatoire.
+    const requestPath: string = String(request.originalUrl ?? request.url ?? "").split("?")[0];
+    const isEventsRoute = /(^|\/)events\/me\/?$/.test(requestPath);
+    const rawQueryToken = (request.query as Record<string, unknown> | undefined)?.["token"];
+    const queryToken: string | undefined = isEventsRoute && typeof rawQueryToken === "string" ? rawQueryToken : undefined;
 
     let token: string;
     if (authHeader?.startsWith("Bearer ")) {

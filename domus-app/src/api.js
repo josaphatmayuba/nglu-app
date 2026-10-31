@@ -178,11 +178,6 @@ function xhrUpload(path, formData, { onProgress, inactivityMs = 60000, signal } 
   });
 }
 
-function authenticatedFileUrl(path) {
-  const token = readToken();
-  const sep = path.includes("?") ? "&" : "?";
-  return `${BASE}${path}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
-}
 
 /**
  * Ouvre un fichier protege par JWT dans un nouvel onglet SANS jamais mettre
@@ -293,7 +288,7 @@ export const api = {
     return multipartFetch(`/tenants/${id}/id-document`, form);
   },
   deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
-  tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
+  tenantIdDocumentPath: (id) => `/tenants/${id}/id-document/file`,
   // Lien portail locataire (accès public sans login, token opaque dans l'URL).
   tenantPortalLink: (id) => get(`/tenants/${id}/portal-link`),
   tenantChangeRequests: (status = "pending") => get(`/tenant-change-requests?status=${encodeURIComponent(status)}`),
@@ -356,7 +351,7 @@ export const api = {
     return multipartFetch(`/properties/${id}/photos`, form);
   },
   deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),
-  propertyPhotoUrl: (photoId) => authenticatedFileUrl(`/properties/photos/${photoId}/file`),
+  propertyPhotoPath: (photoId) => `/properties/photos/${photoId}/file`,
   // Justificatif de paiement (quittance signee envoyee par le locataire ou
   // declaree par un delegue) : verifie l'appartenance a l'organisation du JWT
   // avant de streamer le fichier — jamais de route statique /uploads publique,
@@ -389,7 +384,7 @@ export const api = {
     return multipartFetch(`/leases/${id}/documents`, form);
   },
   deleteLeaseDocument: (documentId) => del(`/leases/documents/${documentId}`),
-  leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
+  leaseDocumentPath: (documentId) => `/leases/documents/${documentId}/file`,
 
   // Carnet de quittances (PDF imprimable) : lease enrichi + tous les paiements du bail.
   rentBook: (id) => get(`/leases/${id}/rent-book`),
@@ -492,7 +487,7 @@ export const api = {
     return multipartFetch(`/maintenance/${id}/photos`, form);
   },
   deleteMaintenancePhoto: (photoId) => del(`/maintenance/photos/${photoId}`),
-  maintenancePhotoUrl: (photoId) => authenticatedFileUrl(`/maintenance/photos/${photoId}/file`),
+  maintenancePhotoPath: (photoId) => `/maintenance/photos/${photoId}/file`,
   // Justificatif (recu) d'un cout de maintenance — verifie l'appartenance a
   // l'organisation du JWT avant de streamer le fichier (meme pattern que paymentProofUrl).
   maintenanceCostReceiptUrl: (costId) => openAuthenticatedFile(`/maintenance/costs/${costId}/receipt-file`),

@@ -31,15 +31,20 @@ function jwtSecret() {
 
 const JWT_SECRET = jwtSecret();
 
+function isEventsPath(req) {
+  return typeof req.path === 'string' && req.path.startsWith('/events/');
+}
+
 function bearerTokenFromRequest(req) {
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.split(' ')[1];
   }
 
-  // EventSource cannot send custom headers. Accept ?token= only after the
-  // route has been matched as auth-protected, then forward it as Authorization.
-  if (typeof req.query?.token === 'string' && req.query.token) {
+  // Bugs #35/#39 : ?token= (anciens clients EventSource, deja installes en
+  // mobile) n'est tolere QUE sur /events/. Partout ailleurs le JWT d'acces ne
+  // doit plus transiter par l'URL : seul l'en-tete Authorization est accepte.
+  if (isEventsPath(req) && typeof req.query?.token === 'string' && req.query.token) {
     return req.query.token;
   }
 
@@ -120,7 +125,7 @@ app.use((req, res, next) => {
       // Le jeton est desormais porte par l'en-tete : le retirer de l'URL avant
       // de proxyfier, sinon le backend le journalise a son tour (et il partirait
       // aussi dans le Referer d'une eventuelle redirection).
-      if (req.query && req.query.token) {
+      if (isEventsPath(req) && req.query && req.query.token) {
         delete req.query.token;
         const [path, qs] = String(req.url).split('?');
         const rest = (qs || '')
