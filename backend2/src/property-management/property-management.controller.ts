@@ -228,6 +228,30 @@ export class PropertyManagementController {
     return this.smsPreview(body, orgId, () => this.propertyManagementService.resendSmsLog(id, orgId));
   }
 
+  @ApiOperation({ summary: "Former tenants who still owe rent on an ended lease (grouped totals per currency)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("former-debtors")
+  formerDebtors(
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("currencyId") currencyId?: string,
+    @Query("propertyId") propertyId?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.propertyManagementService.formerDebtors(orgId, scope, {
+      currencyId: Number(currencyId) > 0 ? Number(currencyId) : undefined,
+      propertyId: Number(propertyId) > 0 ? Number(propertyId) : undefined,
+      search: search || undefined,
+    });
+  }
+
+  @ApiOperation({ summary: "Unpaid rent of a tenant on ended leases (blocks a new lease)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("tenants/:id/former-debt")
+  tenantFormerDebt(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.tenantFormerDebt(id, orgId);
+  }
+
   @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
   @Permissions("readAll-propertyManagement")
   @Get("tenant-change-requests")

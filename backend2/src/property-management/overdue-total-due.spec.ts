@@ -184,3 +184,24 @@ describe("SMS de retard du bail 11 : meme total du partout", () => {
     expect(byType.payment_overdue_owner).not.toContain("3 000 $");
   });
 });
+
+describe("computeLeaseTotalDue : plafond a la sortie d'un bail 'ended'", () => {
+  const ended = { startDate: "2026-01-01", endDate: null, billingCycle: "monthly", rentAmount: "100", rentProrationEnabled: 0, status: "ended", terminationDate: "2026-03-15" };
+  it("ne grossit plus apres la sortie (janvier a mars = 3 loyers)", () => {
+    expect(computeLeaseTotalDue(ended as any, 0, 2, new Date(2026, 3, 10))).toBe(300);
+    expect(computeLeaseTotalDue(ended as any, 0, 2, new Date(2026, 9, 31))).toBe(300);
+    expect(computeLeaseTotalDue(ended as any, 100, 2, new Date(2027, 5, 1))).toBe(200);
+  });
+  it("repli sur endDate sans terminationDate", () => {
+    expect(computeLeaseTotalDue({ ...ended, terminationDate: null, endDate: "2026-02-28" } as any, 0, 2, new Date(2026, 9, 31))).toBe(200);
+  });
+  it("bail actif inchange (pas de plafond)", () => {
+    expect(computeLeaseTotalDue({ ...ended, status: "active" } as any, 0, 2, new Date(2026, 9, 31))).toBe(1000);
+  });
+  it("prorata : plafonne aussi", () => {
+    const l = { ...ended, rentProrationEnabled: 1 };
+    const a = computeLeaseTotalDue(l as any, 0, 2, new Date("2026-06-01T00:00:00Z"));
+    const b = computeLeaseTotalDue(l as any, 0, 2, new Date("2026-12-01T00:00:00Z"));
+    expect(b).toBe(a);
+  });
+});

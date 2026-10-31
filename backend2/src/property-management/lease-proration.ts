@@ -21,6 +21,9 @@ export interface ProrationLease {
   billingCycle?: string | null;
   rentAmount?: string | number | null;
   nextInvoiceDate?: string | null;
+  /** Bail 'ended' : le total du est plafonne a la sortie (terminationDate ?? endDate). */
+  status?: string | null;
+  terminationDate?: string | null;
 }
 
 export interface LeaseNextDue {
@@ -97,18 +100,27 @@ export function computeLeaseTotalDue(
   now: Date,
 ): number {
   const paid = Number(paidTotal) || 0;
+  const cutoff = leaseEndedCutoff(lease);
+  const realToday = formatDateOnly(now);
+  const capped = cutoff !== null && cutoff < realToday;
   if (lease.rentProrationEnabled) {
-    const todayStr = formatDateOnly(now);
+    const todayStr = capped ? (cutoff as string) : realToday;
     const schedule = scheduleForLease(lease, decimals, paid, todayStr);
     return applyCoverage(schedule, [paid], todayStr, decimals).balance;
   }
   const rent = Number(lease.rentAmount) || 0;
   const start = parseDateOnly(lease.startDate);
-  const elapsedPast = Math.max(
-    0,
-    (now.getFullYear() - start.getUTCFullYear()) * 12 + (now.getMonth() - start.getUTCMonth()),
-  );
+  const nowY = capped ? Number((cutoff as string).slice(0, 4)) : now.getFullYear();
+  const nowM = capped ? Number((cutoff as string).slice(5, 7)) - 1 : now.getMonth();
+  const elapsedPast = Math.max(0, (nowY - start.getUTCFullYear()) * 12 + (nowM - start.getUTCMonth()));
   return Math.max(0, Math.round(((elapsedPast + 1) * rent - paid) * 100) / 100);
+}
+
+/** Date de sortie (YYYY-MM-DD) d'un bail 'ended' ; null si le bail n'est pas termine. */
+export function leaseEndedCutoff(lease: { status?: string | null; terminationDate?: string | null; endDate?: string | null }): string | null {
+  if (lease.status !== "ended") return null;
+  const d = lease.terminationDate || lease.endDate;
+  return d ? String(d).slice(0, 10) : null;
 }
 
 export interface OverdueStats {

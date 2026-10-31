@@ -52,6 +52,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { listFormerDebtors, loadTenantFormerDebt, type FormerDebtorsFilters } from "./former-debt";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
@@ -2088,6 +2089,17 @@ export class PropertyManagementService implements OnModuleInit {
       .where(and(eq(realEstateUnits.id, id), eq(realEstateUnits.organizationId, orgId)));
     await this.publishUnitUpdate("deleted", id, { unitId: id });
     return { message: "Unit deleted successfully." };
+  }
+
+  /** Dettes d'anciens locataires (baux termines) ; RBAC bien via `scope`. */
+  async formerDebtors(orgId: number, scope: "all" | number[], filters: FormerDebtorsFilters) {
+    return listFormerDebtors(this.db, orgId, scope, filters);
+  }
+
+  /** Dette d'un locataire (principal ou co-locataire) sur ses baux termines. */
+  async tenantFormerDebt(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    return loadTenantFormerDebt(this.db, orgId, tenantId);
   }
 
   // RBAC bien : filtre direct sur le property_id du bail.
@@ -5328,6 +5340,9 @@ export class PropertyManagementService implements OnModuleInit {
         rentAmount: realEstateLeases.rentAmount,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
+        // Plafond a la sortie (bail termine) : sans eux la relance cite une dette qui grossit.
+        status: realEstateLeases.status,
+        terminationDate: realEstateLeases.terminationDate,
         billingCycle: realEstateLeases.billingCycle,
         currencyId: realEstateLeases.currencyId,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,

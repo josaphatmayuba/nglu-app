@@ -371,6 +371,9 @@ export interface LeaseForOverdue {
   nextInvoiceDate?: string | null;
   /** Renseigne = bail « flagge » : lecteurs bascules sur l'etat impute. */
   allocationLedgerAt?: unknown;
+  /** Bail 'ended' : le total du est plafonne a la sortie. */
+  status?: string | null;
+  terminationDate?: string | null;
 }
 
 export interface LeaseOverdueEntry {
