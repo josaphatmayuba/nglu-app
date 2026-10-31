@@ -5,6 +5,7 @@ import {
   Receipt, Smartphone, Wrench, X, FileCheck, ChevronDown,
 } from "lucide-react";
 import { api } from "../api.js";
+import { paymentMethodLabel } from "../depositUtils.js";
 import { filterLeases, filterPayments, filterTenants, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -174,7 +175,7 @@ export function Portail({ go }) {
           id: `receipt-${p.id}`,
           kind: "receipt",
           title: `Quittance — ${monthLabel(p.paymentDate)}`,
-          sub: p.method || "Paiement",
+          sub: paymentMethodLabel(p.method) || "Paiement",
           payment: p,
         });
       });
@@ -324,7 +325,7 @@ export function Portail({ go }) {
                   <div key={p.id} className="portail-hist-row">
                     <span className="portail-hist-dot" />
                     <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
-                    <span className="muted">{p.method || "—"}</span>
+                    <span className="muted">{paymentMethodLabel(p.method) || "—"}</span>
                     <strong>{money(p.amount, p.currencySymbol || card?.symbol || "$")}</strong>
                   </div>
                 ))}

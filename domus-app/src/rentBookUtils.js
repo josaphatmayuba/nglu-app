@@ -3,6 +3,7 @@
 // (window.open + win.print()), pas de jsPDF ici (document long, pagination
 // native du navigateur avec @page/break-inside plus fiable qu'un rendu jsPDF).
 import QRCode from "qrcode";
+import { PAID_BY_DEPOSIT_PDF_LABEL, isDepositMethod, paymentMethodLabel } from "./depositUtils.js";
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
 import { mountPrintShell } from "./printShell.js";
@@ -521,7 +522,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   // Bail flagge : paiements imputes sur cette echeance (date, moyen, montant) + reste eventuel.
   const linkedRows = Array.isArray(payment.linkedPayments) && payment.linkedPayments.length
     ? `<div class="receipt-row"><div><span>Paiements liés</span><span>${payment.linkedPayments
-      .map((x) => escapeHtml(`${fmtDateShort(x.payment.paymentDate)} · ${x.payment.method || "—"} · ${moneyAfter(x.amount, payment.currencySymbol || "CDF")}`))
+      .map((x) => escapeHtml(`${fmtDateShort(x.payment.paymentDate)} · ${paymentMethodLabel(x.payment.method) || "—"} · ${moneyAfter(x.amount, payment.currencySymbol || "CDF")}`))
       .join("<br/>")}</span></div>${payment.remaining > 0.005 ? `<div><span>Reste dû</span><span>${escapeHtml(moneyAfter(payment.remaining, payment.currencySymbol || "CDF"))}</span></div>` : "<div></div>"}</div>`
     : "";
   return `
@@ -537,7 +538,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
     <div class="receipt-row"><div><span>Locataire</span><span>${escapeHtml(tenantName)}</span></div><div><span>Logement</span><span>${escapeHtml(dwelling)}</span></div></div>
     <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
     ${isPaid
-      ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(payment.method || "—")}</span></div><div><span>Perçu par</span><span>${escapeHtml(payment.receivedBy || "—")}</span></div></div>`
+      ? `<div class="receipt-row"><div><span>Moyen de paiement</span><span>${escapeHtml(isDepositMethod(payment.method) ? PAID_BY_DEPOSIT_PDF_LABEL : (paymentMethodLabel(payment.method) || "—"))}</span></div><div><span>Perçu par</span><span>${escapeHtml(isDepositMethod(payment.method) ? "—" : (payment.receivedBy || "—"))}</span></div></div>`
       : `<div class="receipt-row"><div><span>Moyen de paiement</span><span>........................................</span></div><div><span>Perçu par</span><span>........................................</span></div></div>`
     }
     ${linkedRows}

@@ -14,6 +14,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 import { SmsNotice, useSmsSend, useToast } from "../components/Dialog.jsx";
+import { cashPayments, paymentMethodLabel } from "../depositUtils.js";
 
 // Enregistrer un paiement envoie automatiquement un SMS de reçu (locataire + propriétaire).
 const PAY_SMS_NOTE = "Un SMS de reçu sera envoyé au locataire et au propriétaire après l'enregistrement.";
@@ -34,7 +35,10 @@ const METHODS = [
   { key: "bank", label: "Bancaire", color: "#2563eb", short: "BQ" },
   { key: "card", label: "Carte", color: "#0d9488", short: "CB" },
   { key: "cheque", label: "Chèque", color: "#7c3aed", short: "CH" },
+  // Moyen SYSTEME (imputation de la caution à la sortie) : jamais proposé à la saisie.
+  { key: "deposit", label: "Caution", system: true },
 ];
+const CHOOSABLE_METHODS = METHODS.filter((m) => !m.system);
 
 // Construit la liste UI des moyens de paiement à partir de la config backend
 // (/payment-method). Réutilise les jolis styles de METHODS pour les noms connus
@@ -42,13 +46,13 @@ const METHODS = [
 // Repli sur METHODS si rien n'est actif (app utilisable même sans config).
 function uiMethodsFrom(raw) {
   const rows = paymentMethodRows(raw).filter((m) => m.active);
-  if (!rows.length) return METHODS;
+  if (!rows.length) return CHOOSABLE_METHODS;
   return rows.map((m) => {
     const isCash = m.name.toLowerCase() === "espèces"
       || m.name.toLowerCase() === "cash"
       || String(m.subAccount || "").toLowerCase() === "cash";
     if (isCash) return { key: "cash", label: m.name, color: m.color, short: m.short, mobile: false };
-    const known = METHODS.find((d) => d.label.toLowerCase() === m.name.toLowerCase());
+    const known = CHOOSABLE_METHODS.find((d) => d.label.toLowerCase() === m.name.toLowerCase());
     return known || { key: String(m.id), label: m.name, color: m.color, short: m.short, mobile: m.mobile };
   });
 }
@@ -578,7 +582,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                     <div className="immo-pay-panel">
                       <strong>{fmtMonthYear(d)} · {t("payé")}</strong>
                       {pp && <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{money(pp.amount, pp.currencySymbol || cur)}{pp.paymentDate ? ` · ${new Date(pp.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>}
-                      {pp?.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{pp.method}</strong></div>}
+                      {pp?.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{paymentMethodLabel(pp.method)}</strong></div>}
                       {pp?.proofUrl ? (
                         <button type="button" className="immo-btn primary" onClick={() => setProofOpen(pp)}>
                           <FileDown size={14} /> {t("Quittance signée")}
@@ -710,7 +714,7 @@ function DueMonthPanel({ card, index, kind, label, onPay, onConfirm, onReceipt, 
       {pays.map(({ a, p }) => (
         <div key={p.id}>
           <div className="immo-pay-row"><span>{t("Paiement")}</span><strong>{moneyExact(a.amount, p.currencySymbol || symbol)}{p.paymentDate ? ` · ${new Date(p.paymentDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}` : ""}</strong></div>
-          {p.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{p.method}</strong></div>}
+          {p.method && <div className="immo-pay-row"><span>{t("Moyen de paiement")}</span><strong>{paymentMethodLabel(p.method)}</strong></div>}
           <PaymentAllocations payment={p} dues={dueFrise.dues} symbol={symbol} onChanged={onChanged} />
           <div className="immo-pay-mini-actions">
             {p.status === "pending" && onConfirm && (
@@ -837,7 +841,7 @@ export function ProrataBadge({ p }) {
 // Mini-modale d'encaissement rapide depuis une carte en retard.
 // Relance manuelle : le gestionnaire choisit qui recoit un SMS (rien n'est
 // envoye au proprietaire ni aux delegues sans case cochee).
-function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
+function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   // Prorata : la « période » à régler est nextDueAmount (peut être partielle) ;
   // sans l'option c'est le loyer mensuel, comme avant.
@@ -987,7 +991,7 @@ function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
 // generate-missing-payments). Contrairement à QuickPayModal, la date par
 // défaut est celle DU MOIS CONCERNÉ (pas today()) — l'échéance de janvier
 // doit se confirmer avec une date de janvier, éditable par l'utilisateur.
-function ConfirmPayModal({ payment, methods = METHODS, fullAmount = null, onClose, onConfirmed }) {
+function ConfirmPayModal({ payment, methods = CHOOSABLE_METHODS, fullAmount = null, onClose, onConfirmed }) {
   const computedAmount = String(payment.amount ?? "");
   const [amount, setAmount] = useState(computedAmount);
   const [paymentDate, setPaymentDate] = useState(() => {
@@ -1192,9 +1196,9 @@ export function Loyers({ go }) {
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
 
-  const total = useMemo(() => rows.reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
+  const total = useMemo(() => cashPayments(rows).reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
   const totalByCurrency = useMemo(
-    () => groupAmountsByCurrency(rows, (row) => row.amount, currency.defaultCurrencySymbol),
+    () => groupAmountsByCurrency(cashPayments(rows), (row) => row.amount, currency.defaultCurrencySymbol),
     [rows, currency.defaultCurrencySymbol],
   );
   const [view, setView] = useState("locataire");
@@ -1361,7 +1365,7 @@ export function Loyers({ go }) {
 
   // Calendrier : 12 mois glissants, total encaissé + nb de paiements par mois.
   const calendar = useMemo(() => lastMonths(BAR_MONTHS).map((d) => {
-    const inMonth = rows.filter((p) => p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
+    const inMonth = cashPayments(rows).filter((p) => p.paymentDate && monthKey(p.paymentDate) === monthKey(d));
     return {
       date: d,
       count: inMonth.length,
@@ -1538,7 +1542,7 @@ export function Loyers({ go }) {
                     <td style={{ fontWeight: 500 }}>{tenantName(p)}</td>
                     <td className="muted">{[p.propertyName, p.unitName].filter(Boolean).join(" · ") || "—"}</td>
                     <td className="muted">{p.paymentDate || "—"}</td>
-                    <td><span className="chip chip-ink">{p.method || "—"}</span></td>
+                    <td><span className="chip chip-ink">{paymentMethodLabel(p.method) || "—"}</span></td>
                     <td><span className={`immo-pill ${isPending ? "warning" : "success"}`}>{isPending ? "En attente" : "Payé"}</span></td>
                     <td style={{ fontWeight: 600, color: isPending ? "#d97706" : undefined }}>{money(p.amount, p.currencySymbol || "$")}<ProrataBadge p={p} /></td>
                     <td style={{ display: "flex", gap: 6 }}>

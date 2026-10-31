@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
+import { paymentMethodLabel } from "../depositUtils.js";
 import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill, setPnlPrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
@@ -1106,7 +1107,7 @@ function RecentPayments({ payments, go }) {
               <td><b>{payment.tenant}</b><div className="muted">{payment.property}</div></td>
               <td>{payment.date}</td>
               <td><b>{payment.amount}</b></td>
-              <td>{payment.method}</td>
+              <td>{paymentMethodLabel(payment.method)}</td>
             </tr>
           )) : (
             <tr><td className="muted">Aucun paiement recent depuis l'API.</td></tr>
@@ -1731,7 +1732,7 @@ function normalizePayment(payment) {
     property: [payment.propertyName, payment.unitName].filter(Boolean).join(" - ") || "Propriete",
     date: String(payment.paymentDate || "").slice(0, 10) || "-",
     amount: money(payment.amount, payment.currencySymbol || "$"),
-    method: payment.method || "-",
+    method: paymentMethodLabel(payment.method) || "-",
   };
 }
 

@@ -93,6 +93,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   // Devise : symbole, sinon code ; sans aucune devise on masque le montant plutôt que d'afficher un nombre nu.
   const symbol = preview?.currency?.symbol || preview?.currency?.code || lease.currencySymbol || "";
   const amountText = (n, s = symbol) => (s ? moneyExact(n, s) : "");
+  const depSymbol = preview?.deposit?.currencySymbol || preview?.deposit?.currencyCode || symbol;
   const countLine = (n, total) => {
     const base = tf(t("{n} échéance(s)"), { n });
     const m = amountText(total);
@@ -212,16 +213,34 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
                   <span>{t("Caution détenue")}</span>
                   {preview.deposit ? (
                     <strong>
-                      {amountText(preview.deposit.amount, preview.deposit.currencySymbol || preview.deposit.currencyCode || symbol) || t("Oui")}
+                      {amountText(preview.deposit.amount, depSymbol) || t("Oui")}
                     </strong>
                   ) : (
                     <strong>{t("Aucune")}</strong>
                   )}
                 </div>
+                {preview.deposit && Number(preview.deposit.rentApplied) > 0 && (
+                  <div className="immo-pay-row">
+                    <span>{t("Déjà imputée sur loyers")}</span>
+                    <strong>{amountText(preview.deposit.rentApplied, depSymbol) || "—"}</strong>
+                  </div>
+                )}
+                {preview.deposit && (
+                  <div className="immo-pay-row">
+                    <span>{t("Caution disponible")}</span>
+                    <strong>{amountText(preview.deposit.available, depSymbol) || "—"}</strong>
+                  </div>
+                )}
+                {preview.deposit && (
+                  <div className="immo-pay-row">
+                    <span>{t("Impayés couvrables par la caution")}</span>
+                    <strong>{amountText(preview.deposit.maxApplicable, depSymbol) || "—"}</strong>
+                  </div>
+                )}
                 <div className="domus-terminate-links">
                   {preview.deposit && (
-                    <button type="button" className="immo-btn" onClick={() => onOpenDeposit?.(preview.deposit)}>
-                      <Shield size={15} /> {t("Restituer la caution")}
+                    <button type="button" className="immo-btn" style={{ minHeight: 44 }} onClick={() => onOpenDeposit?.(preview.deposit)}>
+                      <Shield size={15} /> {lease.status === "ended" ? t("Imputer / restituer la caution") : t("Restituer la caution")}
                     </button>
                   )}
                   {onOpenExitInspection && (

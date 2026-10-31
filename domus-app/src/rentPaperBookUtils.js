@@ -496,7 +496,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   SLOTS.push(`<h2>Fin du bail et départ</h2>
       <div class="g2"><div class="kv"><span class="lbl">Préavis donné le</span><div class="wl"></div></div><div class="kv"><span class="lbl">Sortie le</span><div class="wl"></div></div></div>
       <table><colgroup><col style="width:70%"><col></colgroup><thead><tr><th>Compte de sortie</th><th>Montant</th></tr></thead><tbody>
-        <tr><td>Garantie détenue</td><td></td></tr><tr><td>− Loyers restant dus</td><td></td></tr><tr><td>− Eau, courant restant dus</td><td></td></tr>
+        <tr><td>Garantie détenue</td><td></td></tr><tr><td>− Loyers restant dus (payés par la caution)</td><td></td></tr><tr><td>− Eau, courant restant dus</td><td></td></tr>
         <tr><td>− Réparations (état des lieux de sortie)</td><td></td></tr><tr><td>+ Travaux du locataire non déduits</td><td></td></tr>
         <tr class="rep"><td>= À rendre au locataire (ou à payer par lui)</td><td></td></tr></tbody></table>
       <div class="kv"><span class="lbl">Clés rendues : nombre et date</span><div class="wl"></div></div>

@@ -519,6 +519,7 @@ const MESSAGE_EVENTS = [
   ["lease_created", "Bail créé / signé"],
   ["contract_signed", "Bienvenue / contrat signé"],
   ["payment_received", "Paiement reçu / quittance"],
+  ["deposit_applied", "Caution imputée sur le loyer"],
   ["payment_reminder", "Rappel de loyer / retard"],
   // Preavis pour defaut de paiement (declenche a la main depuis Loyers, au-dela
   // d'un mois de loyer du) : un texte par destinataire.
@@ -581,6 +582,13 @@ const DEFAULT_MESSAGES = [
       "Bonjour {tenantName}, nous confirmons la réception de votre paiement de {amount} " +
       "pour le bail {reference}. Votre quittance et le detail de vos paiements : {url}. " +
       "Merci ! — Votre gestionnaire",
+  },
+  {
+    name: "Caution imputée sur le loyer",
+    eventType: "deposit_applied",
+    subject: "Caution imputée sur votre loyer",
+    // Variables : {firstName} {depositAmount} {months} {remaining}. Pas de {reference} : 1 SMS max.
+    body: "Bonjour {firstName}, votre caution de {depositAmount} a payé le loyer de {months}. Reste : {remaining}.",
   },
   {
     name: "Rappel de loyer en retard",

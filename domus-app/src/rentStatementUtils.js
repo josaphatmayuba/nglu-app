@@ -4,6 +4,7 @@
 //   - sinon buildFullRentSchedule() (prorata / échéancier / historique).
 // Soldes TOUJOURS par devise (jamais de mélange $ / FC).
 import { escapeHtml } from "./contractUtils.js";
+import { paymentMethodLabel } from "./depositUtils.js";
 import { buildFullRentSchedule, fmtDateShort, fmtPeriodShort, monthLabel, moneyAfter } from "./rentBookUtils.js";
 import { classifyDue, normalizeGrace } from "./overdue.js";
 
@@ -304,6 +305,7 @@ function depositHtml(lease) {
     ${Number(b.depositContract) > 0 ? kv("Montant du contrat", moneyAfter(b.depositContract, lease.currencySymbol || "CDF") + (b.depositMonths ? ` (${b.depositMonths} mois)` : "")) : ""}
     ${rec ? kv("Montant reçu", moneyAfter(rec.amount, sym)) : kv("Montant reçu", "non enregistré")}
     ${rec?.date ? kv("Reçue le", fmtDateShort(rec.date)) : ""}
+    ${Number(rec?.rentApplied) > 0 ? kv("Imputée sur loyers", moneyAfter(rec.rentApplied, sym)) : ""}
     <p>La garantie n'entre jamais dans le solde des loyers. Elle sert seulement à l'arrêté final, au départ du locataire.</p>
   </section>`;
 }
@@ -326,7 +328,7 @@ export function statementBodyHtml(lease, payments, { qrDataUrl, today } = {}) {
         return `<tr><td class="date">${fmtDateShort(e.date)}</td><td class="op"><b>Loyer ${escapeHtml(monthLabel(`${d.key}-01`))}</b>${d.note ? `<small>${escapeHtml(d.note)}</small>` : ""}</td><td class="amt r">${escapeHtml(moneyAfter(e.amount, e.symbol))}</td><td></td><td class="r">${balTag(e.balance, e.symbol)}</td></tr>`;
       }
       const p = e.p;
-      const detail = [p.reference && `Réf. ${p.reference}`, p.method, e.covers.length && `couvre ${e.covers.join(", ")}`].filter(Boolean).join(" · ");
+      const detail = [p.reference && `Réf. ${p.reference}`, paymentMethodLabel(p.method), e.covers.length && `couvre ${e.covers.join(", ")}`].filter(Boolean).join(" · ");
       return `<tr><td class="date">${fmtDateShort(e.date)}</td><td class="op"><b>Paiement reçu</b>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</td><td></td><td class="amt pay r">${escapeHtml(moneyAfter(e.amount, e.symbol))}</td><td class="r">${balTag(e.balance, e.symbol)}</td></tr>`;
     }).join("");
     const report = i > 0 ? `<tr class="report"><td class="date">${fmtDateShort(`${yr.year}-01-01`)}</td><td class="op"><b>Report de ${Number(yr.year) - 1}</b></td><td></td><td></td><td class="r">${Object.keys(yr.opening).length ? Object.entries(yr.opening).map(([s, v]) => balTag(v, s)).join(" ") : balTag(0, sym0)}</td></tr>` : "";

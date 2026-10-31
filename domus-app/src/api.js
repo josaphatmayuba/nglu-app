@@ -598,6 +598,10 @@ export const api = {
     form.append("proof", proofFile);
     return multipartFetch(`/leases/${leaseId}/deposit/return`, form);
   },
+  // Caution imputée sur les loyers impayés (bail terminé). Corps : { amount, applicationDate,
+  // allocationMode:'auto'|'manual', allocations:[{dueId, amount}], notifyTenant, notes }.
+  depositApplyPreview: (leaseId, b) => post(`/leases/${leaseId}/deposit/apply-to-rent/preview`, b),
+  applyDepositToRent: (leaseId, b) => post(`/leases/${leaseId}/deposit/apply-to-rent`, b),
 
   // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
   reservations: () => get("/reservations"),
