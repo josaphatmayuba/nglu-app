@@ -222,8 +222,6 @@ export class LedgerService {
       sourceModule?: string;
       relatedId?: string;
       currencyId?: number;
-      /** Taux fige de l'operation (optionnel), transmis tel quel a journal_entries.exchange_rate. */
-      exchangeRate?: number;
       idempotencyKey?: string;
       dimensions?: Pick<LedgerLineInput, "siteId" | "departmentId" | "projectId" | "activityId">;
     },
@@ -276,7 +274,6 @@ export class LedgerService {
         sourceModule: input.sourceModule ?? input.type,
         relatedId: input.relatedId,
         currencyId: input.currencyId,
-        exchangeRate: input.exchangeRate,
         idempotencyKey: input.idempotencyKey,
         lines,
       },

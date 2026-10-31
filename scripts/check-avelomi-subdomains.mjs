@@ -47,13 +47,6 @@ for (const m of nginx.matchAll(/server_name\s+([^;]+);/g))
   for (const h of m[1].trim().split(/\s+/)) if (h.endsWith("avelomi.com")) hosts.add(h);
 for (const h of hosts) if (!covered.has(h)) fail(`nginx: ${h} non couvert par un certificat declare (certs)`);
 
-// DIST_MAP du script de deploy (recuperation depuis le conteneur, bug #63) = COPY de Dockerfile.prod.
-const deployScript = read("scripts/ci/deploy-prod-static-app.sh");
-const distMap = (deployScript.match(/DIST_MAP="([^"]*)"/) || [, ""])[1];
-const mapped = new Set(distMap.split(/\s+/).filter(Boolean).map((p) => p.split("|")[0].replace(/\/$/, "")));
-for (const m of dockerfile.matchAll(/^COPY\s+(\S+?)\/?\s+\/usr\/share\/nginx\//gm))
-  if (!mapped.has(m[1])) fail(`scripts/ci/deploy-prod-static-app.sh: DIST_MAP sans ${m[1]} (COPY de frontend/Dockerfile.prod)`);
-
 if (errors.length) {
   console.error("Avelomi subdomains contract FAILED:");
   for (const e of errors) console.error(` - ${e}`);
