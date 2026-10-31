@@ -1,16 +1,18 @@
 <script setup>
 // Pages Connexion / Inscription / Espace propres a Avelomi (site Vue).
 // Tapent le MEME backend que l'ERP via le proxy /api (nginx -> middleware) :
-//   POST /api/auth/login    { username, password }           -> { token, ... } | { requireMfa, mfaToken }  (username = email)
-//   POST /api/auth/register { firstName,lastName,email,... }  -> { token, organization }
+//   POST /api/auth/login    { username, password }           -> { token, ... } | { requireMfa, mfaToken }  (username = email ou telephone)
+//   POST /api/auth/register { firstName,lastName,email|phone,... } -> { token, organization }
+//   GET  /api/auth/refresh-token (cookie)                     -> { token, firstName, ... } (session restauree au rechargement)
+//   POST /api/auth/forgot-password { email } / reset-password { token, newPassword }
 // Token en memoire applicative (SCRUM-119) ; cookie refresh pose par le backend.
-// Vues pilotees par le hash : #/login, #/signup, #/accueil (espace).
-// Parcours inscription en 4 etapes : compte -> organisation -> plan -> confirmation.
+// Vues pilotees par le hash : #/login, #/signup, #/accueil (espace), #/forgot, #/reset?token=.
+// Parcours inscription en 2 etapes : compte -> organisation (slug genere par le backend).
 import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue';
 
 const props = defineProps({
   lang: { type: String, default: 'fr' },
-  view: { type: String, default: 'login' }, // 'login' | 'signup' | 'accueil'
+  view: { type: String, default: 'login' }, // 'login' | 'signup' | 'accueil' | 'forgot' | 'reset'
 });
 const t = (fr, en) => (props.lang === 'en' ? en : fr);
 
@@ -21,7 +23,7 @@ const loading = ref(false);
 const googleLoading = ref(false);
 const error = ref('');
 const googleError = ref('');
-const me = ref(null);          // { firstName, email, org, slug }
+const me = ref(null);          // { firstName, email, org, sector }
 const success = ref(false);    // ecran bienvenue
 const inWorkspace = ref(false); // espace de travail
 const loginGoogleButton = ref(null);
@@ -142,59 +144,61 @@ const login = reactive({ email: '', password: '' });
 async function submitLogin() {
   error.value = '';
   googleError.value = '';
-  if (!login.email || !login.password) { error.value = t('Email et mot de passe requis.', 'Email and password required.'); return; }
+  if (!login.email || !login.password) { error.value = t('Email (ou téléphone) et mot de passe requis.', 'Email (or phone) and password required.'); return; }
   loading.value = true;
   try {
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ username: login.email.trim().toLowerCase(), password: login.password }),
+      // Email -> minuscules ; telephone -> tel quel (normalise en +243... par le backend).
+      body: JSON.stringify({ username: login.email.includes('@') ? login.email.trim().toLowerCase() : login.email.trim(), password: login.password }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || t('Identifiants invalides.', 'Invalid credentials.'));
+    if (!res.ok) {
+      if (res.status === 429) throw new Error(t('Trop de tentatives. Patientez une minute puis réessayez.', 'Too many attempts. Wait a minute and try again.'));
+      if (res.status >= 500) throw new Error(t('Service momentanément indisponible. Réessayez dans un instant.', 'Service temporarily unavailable. Try again shortly.'));
+      if (res.status === 401 || res.status === 400) throw new Error(t('Identifiant ou mot de passe incorrect.', 'Incorrect login or password.'));
+      if (res.status === 403) throw new Error(data?.message || t('Accès refusé.', 'Access denied.'));
+      throw new Error(data?.message || t('Identifiants invalides.', 'Invalid credentials.'));
+    }
     if (data.requireMfa) { error.value = t('Authentification a deux facteurs requise — connectez-vous depuis l’application.', 'Two-factor authentication required — sign in from the app.'); return; }
     accessToken = data.token || null;
     me.value = { firstName: data.firstName || data.name || login.email, email: login.email, org: data.organization?.name };
     enterWorkspace();
-  } catch (e) { error.value = Array.isArray(e.message) ? e.message[0] : e.message; }
+  } catch (e) {
+    // fetch rejette en TypeError quand le réseau est coupé.
+    error.value = e instanceof TypeError ? t('Réseau indisponible. Vérifiez votre connexion et réessayez.', 'Network unavailable. Check your connection and try again.') : e.message;
+  }
   finally { loading.value = false; }
 }
 
-// ───────────────────────── Inscription (4 etapes) ─────────────────────────
+// ───────────────────────── Inscription (2 etapes) ─────────────────────────
 const step = ref(1);
-const TOTAL = 4;
+const TOTAL = 2;
+const idMode = ref('email'); // identifiant de connexion : 'email' | 'phone'
 const accountType = ref('org'); // 'org' | 'solo'
 // Plan pre-selectionne depuis la grille de prix de la landing (#/signup?plan=business).
 const PLAN_IDS = ['free', 'starter', 'business', 'enterprise'];
 const planFromUrl = (location.hash.split('?')[1] || '').split('&').map(p => p.split('=')).find(([k]) => k === 'plan')?.[1];
-const reg = reactive({ firstName: '', lastName: '', email: '', password: '', orgName: '', slug: '', sector: 'agri', phone: '', plan: PLAN_IDS.includes(planFromUrl) ? planFromUrl : 'free', acceptedTerms: false });
+const showPwd = ref(false);
+const reg = reactive({ firstName: '', lastName: '', email: '', password: '', orgName: '', slug: '', sector: 'agri', phone: '+243 ', plan: PLAN_IDS.includes(planFromUrl) ? planFromUrl : 'free', acceptedTerms: false });
 const fieldErr = reactive({});
 
 const stepLabel = computed(() => {
   const l = props.lang === 'en'
-    ? { 1: 'Your account', 2: 'Your organization', 3: 'Your plan', 4: 'Confirmation' }
-    : { 1: 'Votre compte', 2: 'Votre organisation', 3: 'Votre abonnement', 4: 'Confirmation' };
+    ? { 1: 'Your account', 2: 'Your business' }
+    : { 1: 'Votre compte', 2: 'Votre activité' };
   return t(`Étape ${step.value} sur ${TOTAL} — ${l[step.value]}`, `Step ${step.value} of ${TOTAL} — ${l[step.value]}`);
 });
 
+// Secteur -> app recommandee (ouverte en premier apres l inscription).
 const sectors = computed(() => ([
-  { v: 'agri', l: t('Agriculture / Élevage', 'Agriculture / Livestock') },
-  { v: 'immo', l: t('Immobilier', 'Real estate') },
-  { v: 'btp', l: t('Construction / BTP', 'Construction') },
-  { v: 'commerce', l: t('Commerce / Vente', 'Retail / Sales') },
-  { v: 'autre', l: t('Autre', 'Other') },
+  { v: 'agri', ico: '🌾', l: t('Agriculture / Élevage', 'Agriculture / Livestock'), app: 'farmos' },
+  { v: 'immo', ico: '🏠', l: t('Immobilier / Location', 'Real estate / Rentals'), app: 'domus' },
+  { v: 'btp', ico: '🏗️', l: t('Construction / BTP', 'Construction'), app: 'batipro' },
+  { v: 'commerce', ico: '🛒', l: t('Commerce / Vente', 'Retail / Sales'), app: 'compta' },
+  { v: 'autre', ico: '✨', l: t('Autre', 'Other'), app: null },
 ]));
-
-const plans = computed(() => ([
-  { v: 'free',    name: t('Gratuit', 'Free'),       price: t('0 $', '$0'),        per: t('pour toujours', 'forever'),   desc: t('Toutes les apps, 3 utilisateurs.', 'All apps, 3 users.') },
-  { v: 'starter', name: 'Starter',                  price: t('5 $', '$5'),        per: t('/ mois', '/ mo'),             desc: t('Jusqu’à 50 utilisateurs.', 'Up to 50 users.') },
-  { v: 'business',name: 'Business', popular: true,  price: t('19 $', '$19'),      per: t('/ mois', '/ mo'),             desc: t('IA pleine puissance, illimité.', 'Full-power AI, unlimited.') },
-  { v: 'enterprise', name: 'Enterprise',            price: t('Sur devis', 'Custom'), per: t('multi-entités', 'multi-entity'), desc: t('Consolidation & SSO.', 'Consolidation & SSO.') },
-]));
-
-const slugAuto = computed(() => (reg.orgName || '').toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, ''));
-const effectiveSlug = computed(() => (reg.slug || slugAuto.value));
-function syncSlug() { reg.slug = slugAuto.value; }
 
 const pwdScore = computed(() => {
   const p = reg.password; let s = 0;
@@ -213,7 +217,8 @@ function validateStep(n) {
     else if (!NAME_RE.test(reg.firstName.trim())) { fieldErr.firstName = t('Prénom invalide.', 'Invalid first name.'); ok = false; }
     if (!reg.lastName.trim()) { fieldErr.lastName = t('Nom requis.', 'Last name required.'); ok = false; }
     else if (!NAME_RE.test(reg.lastName.trim())) { fieldErr.lastName = t('Nom invalide.', 'Invalid last name.'); ok = false; }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reg.email.trim())) { fieldErr.email = t('Email invalide.', 'Invalid email.'); ok = false; }
+    if (idMode.value === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reg.email.trim())) { fieldErr.email = t('Email invalide.', 'Invalid email.'); ok = false; }
+    if (idMode.value === 'phone' && reg.phone.replace(/[^0-9]/g, '').length < 9) { fieldErr.phone = t('Numéro incomplet (ex. +243 81 234 5678).', 'Incomplete number (e.g. +243 81 234 5678).'); ok = false; }
     if (reg.password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*\d).+$/.test(reg.password)) { fieldErr.password = t('Au moins 8 caractères, une lettre et un chiffre.', 'At least 8 characters, one letter and one digit.'); ok = false; }
   }
   if (n === 2) {
@@ -221,10 +226,7 @@ function validateStep(n) {
       if (!reg.orgName.trim()) { fieldErr.orgName = t('Indiquez un nom.', 'Enter a name.'); ok = false; }
       else if (!/^[\p{L}\p{N}][\p{L}\p{N} &.,'-]*$/u.test(reg.orgName.trim())) { fieldErr.orgName = t('Nom d’entreprise invalide.', 'Invalid company name.'); ok = false; }
     }
-    const s = effectiveSlug.value;
-    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(s) || s.length < 3 || s.length > 63) {
-      fieldErr.slug = t('Adresse invalide (3+ caractères : minuscules, chiffres, tirets).', 'Invalid address (3+ chars: lowercase, digits, hyphens).'); ok = false;
-    }
+    if (!reg.acceptedTerms) { fieldErr.terms = t('Vous devez accepter les conditions.', 'You must accept the terms.'); ok = false; }
   }
   return ok;
 }
@@ -237,8 +239,9 @@ watch(() => [props.view, step.value, props.lang], renderGoogleButtons);
 
 async function submitSignup() {
   error.value = '';
-  if (!reg.acceptedTerms) { fieldErr.terms = t('Vous devez accepter les conditions.', 'You must accept the terms.'); return; }
+  if (!validateStep(2)) return;
   loading.value = true;
+  const phoneTyped = reg.phone.replace(/\s/g, '').length > 4; // « +243 » seul = pas de numero
   try {
     const res = await fetch(`${API}/auth/register`, {
       method: 'POST', credentials: 'include',
@@ -246,13 +249,13 @@ async function submitSignup() {
       body: JSON.stringify({
         firstName: reg.firstName.trim(),
         lastName: reg.lastName.trim(),
-        email: reg.email.trim().toLowerCase(),
+        email: idMode.value === 'email' ? reg.email.trim().toLowerCase() : undefined,
         password: reg.password,
         accountType: accountType.value,
         orgName: accountType.value === 'org' ? reg.orgName.trim() : undefined,
-        slug: effectiveSlug.value,
         sector: reg.sector,
-        phone: reg.phone.trim() || undefined,
+        phone: phoneTyped ? reg.phone.trim() : undefined,
+        country: 'CD',
         plan: reg.plan,
         acceptedTerms: true,
       }),
@@ -260,13 +263,14 @@ async function submitSignup() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = data?.message || t('La création a échoué. Vérifiez vos informations.', 'Sign-up failed. Check your details.');
-      if (res.status === 409 && /adresse|slug/i.test(msg)) { step.value = 2; fieldErr.slug = msg; }
-      else if (/email/i.test(msg)) { step.value = 1; fieldErr.email = Array.isArray(msg) ? msg[0] : msg; }
+      const first = Array.isArray(msg) ? msg[0] : msg;
+      if (/email/i.test(first)) { step.value = 1; fieldErr.email = first; }
+      else if (/numéro|téléphone|phone/i.test(first)) { step.value = 1; fieldErr.phone = first; }
       else error.value = Array.isArray(msg) ? msg[0] : msg;
       return;
     }
     accessToken = data.token || null;
-    me.value = { firstName: reg.firstName.trim(), email: reg.email.trim().toLowerCase(), org: data.organization?.name || reg.orgName.trim(), slug: data.organization?.slug || effectiveSlug.value };
+    me.value = { firstName: reg.firstName.trim(), email: reg.email.trim().toLowerCase(), org: data.organization?.name || reg.orgName.trim(), sector: reg.sector };
     success.value = true;
   } catch (e) { error.value = t('Réseau indisponible. Réessayez.', 'Network unavailable. Try again.'); }
   finally { loading.value = false; }
@@ -279,35 +283,106 @@ async function submitSignup() {
 const IS_DEV = typeof window !== 'undefined' && window.location.hostname.startsWith('dev.');
 const appUrl = (sub) => `https://${sub}.${IS_DEV ? 'dev.' : ''}avelomi.com`;
 const apps = computed(() => ([
-  { img: '/img/farmos-icon.png', nm: 'FarmOS', url: appUrl('farmos') },
-  { img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: appUrl('compta') },
-  { img: '/img/domus-icon.svg', nm: 'Domus', url: appUrl('domus') },
-  { img: '/img/batipro-icon.svg', nm: 'BatiPro', url: appUrl('batipro') },
-  { img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: appUrl('rh') },
-  { ico: '📊', nm: t('Stats', 'Stats'), url: 'https://avelomi.com/crm' },
+  { id: 'farmos', img: '/img/farmos-icon.png', nm: 'FarmOS', url: appUrl('farmos') },
+  { id: 'compta', img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: appUrl('compta') },
+  { id: 'domus', img: '/img/domus-icon.svg', nm: 'Domus', url: appUrl('domus') },
+  { id: 'batipro', img: '/img/batipro-icon.svg', nm: 'BatiPro', url: appUrl('batipro') },
+  { id: 'rh', img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: appUrl('rh') },
+  { id: 'stats', ico: '📊', nm: t('Stats', 'Stats'), url: 'https://avelomi.com/crm' },
 ]));
+// App conseillee selon le secteur choisi a l inscription.
+const recommended = computed(() => {
+  const id = sectors.value.find(s => s.v === me.value?.sector)?.app;
+  return apps.value.find(a => a.id === id) || null;
+});
 function enterWorkspace() { success.value = false; inWorkspace.value = true; go('#/accueil'); }
 function go(hash) { location.hash = hash; }
-function logout() { accessToken = null; me.value = null; success.value = false; inWorkspace.value = false; go('#/login'); }
+async function logout() {
+  // Coupe aussi le cookie refresh (poste partage) ; best-effort.
+  if (accessToken) fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include', headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => {});
+  accessToken = null; me.value = null; success.value = false; inWorkspace.value = false; go('#/login');
+}
+
+// Rechargement de #/accueil : le token (memoire) est perdu, on le reprend
+// via le cookie refresh au lieu de renvoyer a la connexion.
+const restoring = ref(false);
+async function restoreSession() {
+  if (props.view !== 'accueil' || inWorkspace.value) return;
+  restoring.value = true;
+  try {
+    const res = await fetch(`${API}/auth/refresh-token`, { credentials: 'include', headers: { Accept: 'application/json' } });
+    if (!res.ok) return;
+    const data = await res.json();
+    accessToken = data.token || null;
+    me.value = { firstName: data.firstName || data.username, email: data.email };
+    inWorkspace.value = true;
+  } catch { /* reseau : ecran « session expiree » */ }
+  finally { restoring.value = false; }
+}
+onMounted(restoreSession);
+
+// ───────────────────────── Mot de passe oublie ─────────────────────────
+const forgot = reactive({ email: '', sent: false });
+async function submitForgot() {
+  error.value = '';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(forgot.email.trim())) { error.value = t('Indiquez l’email de votre compte.', 'Enter your account email.'); return; }
+  loading.value = true;
+  try {
+    const res = await fetch(`${API}/auth/forgot-password`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ email: forgot.email.trim().toLowerCase() }),
+    });
+    if (res.status === 429) { error.value = t('Trop de demandes. Réessayez dans une heure.', 'Too many requests. Try again in an hour.'); return; }
+    forgot.sent = true;
+  } catch { error.value = t('Réseau indisponible. Réessayez.', 'Network unavailable. Try again.'); }
+  finally { loading.value = false; }
+}
+
+const resetToken = (location.hash.split('?')[1] || '').split('&').map(p => p.split('=')).find(([k]) => k === 'token')?.[1] || '';
+const reset = reactive({ password: '', confirm: '', done: false });
+async function submitReset() {
+  error.value = '';
+  if (reset.password.length < 12 || !/^(?=.*[a-zA-Z])(?=.*\d).+$/.test(reset.password)) { error.value = t('Au moins 12 caractères, une lettre et un chiffre.', 'At least 12 characters, one letter and one digit.'); return; }
+  if (reset.password !== reset.confirm) { error.value = t('Les deux mots de passe ne correspondent pas.', 'Passwords do not match.'); return; }
+  loading.value = true;
+  try {
+    const res = await fetch(`${API}/auth/reset-password`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ token: resetToken, newPassword: reset.password }),
+    });
+    if (!res.ok) {
+      error.value = res.status === 410
+        ? t('Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.', 'This link has expired or was already used. Request a new one.')
+        : t('Réinitialisation impossible. Réessayez.', 'Reset failed. Try again.');
+      return;
+    }
+    reset.done = true;
+  } catch { error.value = t('Réseau indisponible. Réessayez.', 'Network unavailable. Try again.'); }
+  finally { loading.value = false; }
+}
 </script>
 
 <template>
   <!-- ESPACE DE TRAVAIL -->
-  <div v-if="view === 'accueil' && inWorkspace" class="ws-app">
+  <div v-if="view === 'accueil' && restoring" class="auth-wrap"><div class="auth-card success-card"><p class="auth-sub">{{ t('Chargement de votre espace…', 'Loading your workspace…') }}</p></div></div>
+  <div v-else-if="view === 'accueil' && inWorkspace" class="ws-app">
     <aside class="ws-side">
       <div class="ws-brand"><span class="mark"><svg viewBox="0 0 64 64"><g transform="translate(32 32)"><rect x="-17.5" y="-17.5" width="14" height="14" rx="4.5" fill="#34d27e"/><rect x="3.5" y="-17.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="-17.5" y="3.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="3.5" y="3.5" width="14" height="14" rx="4.5" fill="#0e7a48"/></g></svg></span>{{ me?.org || 'Avelomi' }}</div>
       <div class="ws-side-sub">{{ t('Votre espace', 'Your workspace') }}</div>
       <div class="ws-nav active">📊 <span>{{ t('Accueil', 'Home') }}</span></div>
       <a class="ws-nav" v-for="a in apps" :key="a.nm" :href="a.url" target="_blank" rel="noopener"><img v-if="a.img" :src="a.img" :alt="a.nm" class="ws-nav-ic" /><template v-else>{{ a.ico }}</template> <span>{{ a.nm }}</span></a>
-      <div class="ws-nav" @click="logout">⏻ <span>{{ t('Se déconnecter', 'Sign out') }}</span></div>
+      <button type="button" class="ws-nav ws-nav-btn" @click="logout">⏻ <span>{{ t('Se déconnecter', 'Sign out') }}</span></button>
     </aside>
     <main class="ws-main">
       <div class="ws-banner">
-        <span>⏳ <strong>{{ t('Période d’essai', 'Trial') }}</strong> — {{ t('14 jours restants.', '14 days left.') }}</span>
-        <a class="btn-mini" href="#/signup" @click.prevent="go('#/signup')">{{ t('Voir les offres', 'See plans') }}</a>
+        <span>⏳ <strong>{{ t('Période d’essai', 'Trial') }}</strong> — {{ t('toutes les apps sont ouvertes.', 'all apps are open.') }}</span>
+        <a class="btn-mini" href="#pricing">{{ t('Voir les offres', 'See plans') }}</a>
       </div>
       <h1 class="ws-title">{{ t('Bonjour', 'Hello') }}, {{ me?.firstName }} 👋</h1>
-      <p class="ws-sub">{{ t('Vous gérez', 'You manage') }} <strong>{{ me?.org }}</strong>. {{ t('Vos données sont isolées à votre organisation.', 'Your data is isolated to your organization.') }}</p>
+      <p class="ws-sub"><template v-if="me?.org">{{ t('Vous gérez', 'You manage') }} <strong>{{ me.org }}</strong>. </template>{{ t('Vos données sont isolées à votre organisation.', 'Your data is isolated to your organization.') }}</p>
+      <a v-if="recommended" class="auth-btn ws-reco" :href="recommended.url" target="_blank" rel="noopener">{{ t('Commencer avec', 'Start with') }} {{ recommended.nm }} →</a>
       <h3>{{ t('Vos applications', 'Your apps') }}</h3>
       <div class="mod-grid">
         <a class="mod-card" v-for="a in apps" :key="a.nm" :href="a.url" target="_blank" rel="noopener">
@@ -331,12 +406,13 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
         <button v-else type="button" class="google-btn" @click="showGoogleConfigError">
           <span class="google-mark">G</span>{{ t('Se connecter avec Google', 'Sign in with Google') }}
         </button>
-        <div class="auth-divider"><span>{{ t('ou avec email', 'or with email') }}</span></div>
+        <div class="auth-divider"><span>{{ t('ou avec email / téléphone', 'or with email / phone') }}</span></div>
       </div>
-      <label>{{ t('Email', 'Email') }}<input v-model="login.email" type="email" autocomplete="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></label>
+      <label>{{ t('Email ou téléphone', 'Email or phone') }}<input v-model="login.email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="t('vous@entreprise.com ou +243…','you@company.com or +243…')" /></label>
       <label>{{ t('Mot de passe', 'Password') }}<input v-model="login.password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
-      <p v-if="googleError" class="auth-err">{{ googleError }}</p>
-      <p v-if="error" class="auth-err">{{ error }}</p>
+      <a class="auth-forgot" href="#/forgot" @click.prevent="go('#/forgot')">{{ t('Mot de passe oublié ?', 'Forgot password?') }}</a>
+      <p v-if="googleError" class="auth-err" role="alert">{{ googleError }}</p>
+      <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
       <button class="auth-btn" :disabled="loading">{{ loading ? t('Connexion…','Signing in…') : t('Se connecter','Sign in') }}</button>
       <p class="auth-alt">{{ t('Pas encore de compte ?', 'No account yet?') }} <a href="#/signup" @click.prevent="go('#/signup')">{{ t('Commencer', 'Get started') }}</a></p>
     </form>
@@ -346,15 +422,16 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       <div class="success-icon">🎉</div>
       <h1>{{ t('Bienvenue', 'Welcome') }}, {{ me?.firstName }} !</h1>
       <p class="auth-sub">{{ t('Votre espace', 'Your workspace') }} <strong>{{ me?.org }}</strong> {{ t('est prêt.', 'is ready.') }}</p>
-      <div class="ws-url">{{ me?.slug }}.avelomi.com</div>
       <p class="auth-sub">{{ t('Toutes les applications sont activées :', 'All apps are enabled:') }}</p>
       <div class="apps-preview">
-        <div class="app-chip" v-for="a in apps" :key="a.nm"><div class="ico">{{ a.ico }}</div><div class="nm">{{ a.nm }}</div></div>
+        <div class="app-chip" v-for="a in apps" :key="a.nm"><div class="ico"><img v-if="a.img" :src="a.img" :alt="''" class="mod-ic" width="28" height="28" /><template v-else>{{ a.ico }}</template></div><div class="nm">{{ a.nm }}</div></div>
       </div>
-      <button class="auth-btn" @click="enterWorkspace">{{ t('Entrer dans mon espace →', 'Enter my workspace →') }}</button>
+      <a v-if="recommended" class="auth-btn" :href="recommended.url" target="_blank" rel="noopener">{{ t('Commencer avec', 'Start with') }} {{ recommended.nm }} →</a>
+      <p v-if="recommended" class="auth-sub">{{ t('Connectez-vous avec le même identifiant et mot de passe.', 'Sign in with the same login and password.') }}</p>
+      <button class="auth-btn" :class="{ ghost: recommended }" @click="enterWorkspace">{{ t('Voir toutes mes apps', 'See all my apps') }}</button>
     </div>
 
-    <!-- INSCRIPTION (4 etapes) -->
+    <!-- INSCRIPTION (2 etapes) -->
     <div v-else-if="view === 'signup'" class="auth-card">
       <h1>{{ t('Créer votre compte', 'Create your account') }}</h1>
       <div class="steps-head"><span class="step-label">{{ stepLabel }}</span><span class="step-count">{{ step }}/{{ TOTAL }}</span></div>
@@ -369,13 +446,18 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
           </button>
           <div class="auth-divider"><span>{{ t('ou renseignez vos informations', 'or enter your details') }}</span></div>
         </div>
-        <p v-if="googleError" class="auth-err">{{ googleError }}</p>
+        <p v-if="googleError" class="auth-err" role="alert">{{ googleError }}</p>
         <div class="auth-row">
-          <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
-          <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
+          <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" autocomplete="given-name" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
+          <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" autocomplete="family-name" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
         </div>
-        <label>{{ t('Email professionnel','Work email') }}<span class="field" :class="{err:fieldErr.email}"><i class="fi">✉️</i><input v-model="reg.email" type="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></span><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
-        <label>{{ t('Mot de passe','Password') }}<span class="field" :class="{err:fieldErr.password}"><i class="fi">🔒</i><input v-model="reg.password" type="password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" /></span>
+        <div class="id-toggle" role="radiogroup" :aria-label="t('Identifiant de connexion','Login identifier')">
+          <button type="button" role="radio" :aria-checked="idMode==='email'" :class="{active:idMode==='email'}" @click="idMode='email'">✉️ {{ t('Email','Email') }}</button>
+          <button type="button" role="radio" :aria-checked="idMode==='phone'" :class="{active:idMode==='phone'}" @click="idMode='phone'">📱 {{ t('Téléphone','Phone') }}</button>
+        </div>
+        <label v-if="idMode==='email'">{{ t('Email','Email') }}<span class="field" :class="{err:fieldErr.email}"><i class="fi" aria-hidden="true">✉️</i><input v-model="reg.email" type="email" autocomplete="email" inputmode="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></span><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
+        <label v-else>{{ t('Numéro de téléphone','Phone number') }}<span class="field" :class="{err:fieldErr.phone}"><i class="fi" aria-hidden="true">📱</i><input v-model="reg.phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+243 81 234 5678" /></span><small v-if="fieldErr.phone" class="fe">{{ fieldErr.phone }}</small><small v-else class="hint">{{ t('Vous vous connecterez avec ce numéro.','You will sign in with this number.') }}</small></label>
+        <label>{{ t('Mot de passe','Password') }}<span class="field" :class="{err:fieldErr.password}"><i class="fi">🔒</i><input v-model="reg.password" :type="showPwd ? 'text' : 'password'" autocomplete="new-password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" /><button type="button" class="pwd-eye" :aria-label="showPwd ? t('Masquer le mot de passe','Hide password') : t('Afficher le mot de passe','Show password')" @click="showPwd = !showPwd">{{ showPwd ? '🙈' : '👁' }}</button></span>
           <span v-if="reg.password" class="pwd-bar"><i :style="{ width: (pwdScore/4*100)+'%', background: pwdColor }"></i></span>
           <small v-if="fieldErr.password" class="fe">{{ fieldErr.password }}</small>
         </label>
@@ -385,55 +467,56 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
         </div>
       </form>
 
-      <!-- Etape 2 : organisation -->
-      <form v-else-if="step === 2" class="step-form" @submit.prevent="next">
+      <!-- Etape 2 : activite + creation -->
+      <form v-else class="step-form" @submit.prevent="submitSignup">
         <div class="type-toggle">
           <button type="button" class="type-btn" :class="{active:accountType==='org'}" @click="setType('org')"><div class="ico">🏢</div><div class="tit">{{ t('Une entreprise','A company') }}</div><div class="des">{{ t('Équipe, plusieurs utilisateurs','Team, multiple users') }}</div></button>
           <button type="button" class="type-btn" :class="{active:accountType==='solo'}" @click="setType('solo')"><div class="ico">👤</div><div class="tit">{{ t('Moi seul','Just me') }}</div><div class="des">{{ t('Usage individuel','Individual use') }}</div></button>
         </div>
-        <label v-if="accountType==='org'">{{ t('Nom de l’entreprise','Company name') }}<input v-model="reg.orgName" type="text" @input="syncSlug" :class="{err:fieldErr.orgName}" /><small v-if="fieldErr.orgName" class="fe">{{ fieldErr.orgName }}</small></label>
-        <label>{{ t('Adresse de votre espace','Your workspace address') }}
-          <span class="slug-row"><input v-model="reg.slug" type="text" :placeholder="slugAuto || 'mon-entreprise'" /><span class="slug-suffix">.avelomi.com</span></span>
-          <small v-if="fieldErr.slug" class="fe">{{ fieldErr.slug }}</small>
-          <small v-else class="hint">{{ effectiveSlug ? '✓ ' + effectiveSlug + '.avelomi.com' : t('Identifiant unique de votre espace.','Your workspace’s unique ID.') }}</small>
-        </label>
-        <label>{{ t('Secteur d’activité','Industry') }}<select v-model="reg.sector"><option v-for="s in sectors" :key="s.v" :value="s.v">{{ s.l }}</option></select></label>
-        <div class="btn-row"><button type="button" class="auth-btn ghost" @click="prev">← {{ t('Retour','Back') }}</button><button class="auth-btn">{{ t('Continuer →','Continue →') }}</button></div>
-      </form>
-
-      <!-- Etape 3 : plan -->
-      <form v-else-if="step === 3" class="step-form" @submit.prevent="next">
-        <p class="auth-sub">{{ t('Choisissez votre formule. Modifiable à tout moment.','Pick your plan. Change anytime.') }}</p>
-        <div class="plan-list">
-          <label class="plan-opt" v-for="p in plans" :key="p.v" :class="{sel:reg.plan===p.v}">
-            <input type="radio" :value="p.v" v-model="reg.plan" />
-            <span class="plan-main">
-              <b>{{ p.name }} <em v-if="p.popular" class="pop">{{ t('Populaire','Popular') }}</em></b>
-              <small>{{ p.desc }}</small>
-            </span>
-            <span class="plan-price">{{ p.price }}<em>{{ p.per }}</em></span>
-          </label>
-        </div>
-        <div class="btn-row"><button type="button" class="auth-btn ghost" @click="prev">← {{ t('Retour','Back') }}</button><button class="auth-btn">{{ t('Continuer →','Continue →') }}</button></div>
-      </form>
-
-      <!-- Etape 4 : confirmation -->
-      <form v-else class="step-form" @submit.prevent="submitSignup">
-        <label>{{ t('Téléphone (RDC par défaut)','Phone (DRC default)') }}<input v-model="reg.phone" type="tel" placeholder="+243 …" /><small class="hint">{{ t('Pour sécuriser votre compte (optionnel).','To secure your account (optional).') }}</small></label>
-        <div class="recap">
-          <div class="recap-t">{{ t('Récapitulatif','Summary') }}</div>
-          <div>👤 {{ reg.firstName }} {{ reg.lastName }} — {{ reg.email }}</div>
-          <div>{{ accountType==='org' ? '🏢' : '👤' }} {{ accountType==='org' ? reg.orgName : (reg.firstName+' '+reg.lastName) }}</div>
-          <div>🔗 {{ effectiveSlug }}.avelomi.com</div>
-          <div>💳 {{ plans.find(p=>p.v===reg.plan)?.name }} — {{ plans.find(p=>p.v===reg.plan)?.price }}{{ plans.find(p=>p.v===reg.plan)?.per ? ' '+plans.find(p=>p.v===reg.plan).per : '' }}</div>
-          <div class="recap-ok">✓ {{ t('Toutes les apps · Essai gratuit 14 jours','All apps · 14-day free trial') }}</div>
-        </div>
+        <label v-if="accountType==='org'">{{ t('Nom de l’entreprise','Company name') }}<input v-model="reg.orgName" type="text" autocomplete="organization" :class="{err:fieldErr.orgName}" /><small v-if="fieldErr.orgName" class="fe">{{ fieldErr.orgName }}</small></label>
+        <fieldset class="sector-grid">
+          <legend>{{ t('Que gérez-vous ?','What do you manage?') }}</legend>
+          <label v-for="s in sectors" :key="s.v" class="sector-opt" :class="{sel:reg.sector===s.v}"><input type="radio" :value="s.v" v-model="reg.sector" /><span aria-hidden="true">{{ s.ico }}</span> {{ s.l }}</label>
+        </fieldset>
+        <label v-if="idMode==='email'">{{ t('Téléphone (optionnel)','Phone (optional)') }}<input v-model="reg.phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+243 81 234 5678" /></label>
+        <p class="hint plan-note">✓ {{ t('Gratuit pour démarrer · Toutes les apps · Sans carte bancaire','Free to start · All apps · No credit card') }}</p>
         <label class="auth-check"><input v-model="reg.acceptedTerms" type="checkbox" /><span>{{ t('J’accepte les conditions d’utilisation et la politique de confidentialité.','I accept the terms of service and privacy policy.') }}</span></label>
         <small v-if="fieldErr.terms" class="fe">{{ fieldErr.terms }}</small>
-        <p v-if="error" class="auth-err">{{ error }}</p>
+        <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
         <div class="btn-row"><button type="button" class="auth-btn ghost" @click="prev">← {{ t('Retour','Back') }}</button><button class="auth-btn" :disabled="loading">{{ loading ? t('Création…','Creating…') : t('Créer mon espace 🚀','Create my workspace 🚀') }}</button></div>
       </form>
+
     </div>
+
+    <!-- MOT DE PASSE OUBLIE -->
+    <form v-else-if="view === 'forgot'" class="auth-card" @submit.prevent="submitForgot">
+      <h1>{{ t('Mot de passe oublié', 'Forgot password') }}</h1>
+      <template v-if="!forgot.sent">
+        <p class="auth-sub">{{ t('Recevez un lien par email pour choisir un nouveau mot de passe.', 'Get an email link to choose a new password.') }}</p>
+        <label>{{ t('Email du compte', 'Account email') }}<input v-model="forgot.email" type="email" autocomplete="email" inputmode="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></label>
+        <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
+        <button class="auth-btn" :disabled="loading">{{ loading ? t('Envoi…','Sending…') : t('Envoyer le lien','Send link') }}</button>
+        <p class="hint">{{ t('Compte créé avec un numéro de téléphone ? Contactez le support Avelomi.', 'Account created with a phone number? Contact Avelomi support.') }}</p>
+      </template>
+      <p v-else class="auth-sub" role="status">{{ t('Si un compte existe pour cet email, un lien vient d’être envoyé. Il est valable 15 minutes.', 'If an account exists for this email, a link has been sent. It is valid for 15 minutes.') }}</p>
+      <p class="auth-alt"><a href="#/login" @click.prevent="go('#/login')">← {{ t('Retour à la connexion', 'Back to sign in') }}</a></p>
+    </form>
+
+    <!-- NOUVEAU MOT DE PASSE (lien recu par email) -->
+    <form v-else-if="view === 'reset'" class="auth-card" @submit.prevent="submitReset">
+      <h1>{{ t('Nouveau mot de passe', 'New password') }}</h1>
+      <template v-if="!reset.done">
+        <label>{{ t('Nouveau mot de passe', 'New password') }}<input v-model="reset.password" type="password" autocomplete="new-password" :placeholder="t('Au moins 12 caractères','At least 12 characters')" /></label>
+        <label>{{ t('Confirmez', 'Confirm') }}<input v-model="reset.confirm" type="password" autocomplete="new-password" /></label>
+        <p v-if="error" class="auth-err" role="alert">{{ error }}</p>
+        <button class="auth-btn" :disabled="loading || !resetToken">{{ loading ? t('Enregistrement…','Saving…') : t('Enregistrer','Save') }}</button>
+        <p v-if="!resetToken" class="hint">{{ t('Lien incomplet : ouvrez le lien reçu par email.', 'Incomplete link: open the link from your email.') }}</p>
+      </template>
+      <template v-else>
+        <p class="auth-sub" role="status">{{ t('Mot de passe modifié. Toutes vos anciennes sessions ont été fermées.', 'Password changed. All your previous sessions were signed out.') }}</p>
+        <a class="auth-btn" href="#/login" @click.prevent="go('#/login')">{{ t('Se connecter', 'Sign in') }}</a>
+      </template>
+    </form>
 
     <!-- Fallback accueil sans session -->
     <div v-else class="auth-card success-card">
@@ -468,6 +551,20 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 .field:focus-within{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
 .field.err{border-color:#dc2626;background:#fff}
 .field .fi{font-size:15px;opacity:.6;flex-shrink:0;line-height:1}
+.id-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.id-toggle button{min-height:44px;border:1.5px solid #e2e8f0;border-radius:12px;background:#fff;font:inherit;font-weight:700;cursor:pointer;color:#334155}
+.id-toggle button.active{border-color:#1fbf73;background:#effaf4;color:#0e7a48}
+.sector-grid{border:none;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sector-grid legend{font-weight:700;font-size:14px;margin-bottom:8px;color:#0f1729}
+.sector-opt{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;min-height:44px;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:12px;cursor:pointer;font-size:14px;font-weight:600}
+.sector-opt input{position:absolute;opacity:0;pointer-events:none}
+.sector-opt.sel{border-color:#1fbf73;background:#effaf4}
+.sector-opt:focus-within{outline:2px solid #1fbf73;outline-offset:2px}
+.auth-forgot{align-self:flex-end;font-size:13.5px;font-weight:700;color:#0e7a48;margin-top:-8px}
+.ws-nav-btn{border:none;background:transparent;font:inherit;text-align:left;width:100%;cursor:pointer}
+.ws-reco{display:inline-flex;width:auto;align-self:flex-start;margin:6px 0 18px;text-decoration:none}
+@media (max-width:420px){.sector-grid{grid-template-columns:1fr}}
+.pwd-eye{border:none;background:transparent;cursor:pointer;font-size:16px;padding:8px;min-width:40px;min-height:40px;line-height:1}
 .field input{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:15px 0;font-size:15.5px;font-family:inherit;color:#0f1729}
 /* champs hors wrapper (select, slug, tel des autres etapes) */
 .auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:14px;padding:15px 14px;font-size:15.5px;font-family:inherit;color:#0f1729;outline:none;transition:.16s;background:#fbfcfd}

@@ -11,6 +11,7 @@
  */
 
 import { getAccessToken } from "../utils/tokenStore";
+import { FetchEventSource } from "./fetchEventSource.js";
 
 const SSE_PATH = "/api/events/me";
 const MAX_BACKOFF_MS = 30_000;
@@ -57,7 +58,7 @@ function connect() {
   if (!t) return;
 
   try {
-    source = new EventSource(`${SSE_PATH}?token=${encodeURIComponent(t)}`);
+    source = new FetchEventSource(SSE_PATH, { getToken: token });
 
     source.addEventListener("open", () => {
       backoffMs = INITIAL_BACKOFF_MS;

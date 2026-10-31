@@ -1,10 +1,11 @@
 import { randomBytes, randomUUID } from "crypto";
-import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
 import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
+import { normalizePhoneE164 } from "../common/phone.util";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import { provisionOrgChartOfAccounts } from "../database/provisioning/chart-of-accounts";
@@ -24,6 +25,9 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 min lockout after MAX_ATTEMPTS failures
 
 export const MFA_TOKEN_SECRET_SUFFIX = "_mfa";
+
+// Identifiant qui ressemble a un numero de telephone (pas d arobase, chiffres).
+const PHONE_LIKE = /^\+?[0-9 ()-]{6,40}$/;
 
 @Injectable()
 export class AuthService {
@@ -147,6 +151,8 @@ export class AuthService {
     // pour ne pas changer le comportement historique de l ERP.
     const identifier = dto.username;
     const emailCandidate = identifier.trim().toLowerCase();
+    // Comptes crees par telephone : username = numero E.164 (+243...).
+    const phoneCandidate = PHONE_LIKE.test(identifier.trim()) ? normalizePhoneE164(identifier) : null;
 
     const [user] = await this.db
       .select({
@@ -165,7 +171,11 @@ export class AuthService {
         email: users.email,
       })
       .from(users)
-      .where(or(eq(users.username, identifier), eq(users.email, emailCandidate)))
+      .where(or(
+        eq(users.username, identifier),
+        eq(users.email, emailCandidate),
+        ...(phoneCandidate ? [eq(users.username, phoneCandidate)] : []),
+      ))
       .limit(1);
 
     if (!user) {
@@ -195,6 +205,16 @@ export class AuthService {
     if (user.status !== "true") {
       await this.audit.log("auth.login.fail", dto.username, { ...ctx, userId: user.id }, { reason: "account_disabled" });
       throw new UnauthorizedException("Ce compte est désactivé. Contactez un administrateur.");
+    }
+
+    const [org] = await this.db
+      .select({ status: organizations.status })
+      .from(organizations)
+      .where(eq(organizations.id, user.organizationId))
+      .limit(1);
+    if (org?.status === "suspended") {
+      await this.audit.log("auth.login.fail", dto.username, { ...ctx, userId: user.id }, { reason: "org_suspended" });
+      throw new ForbiddenException("Cette organisation est suspendue. Contactez le support Avelomi.");
     }
 
     // If MFA is enabled, return a short-lived mfaToken instead of full tokens
@@ -319,8 +339,14 @@ export class AuthService {
       throw new BadRequestException("Vous devez accepter les conditions d utilisation.");
     }
 
-    const email = dto.email.trim().toLowerCase();
-    const slug = dto.slug.trim().toLowerCase();
+    const email = dto.email?.trim().toLowerCase() || null;
+    const country = dto.country ?? "CD";
+    const phone = dto.phone ? normalizePhoneE164(dto.phone, { defaultCountry: country as never }) : null;
+    if (dto.phone && !phone) throw new BadRequestException("Numéro de téléphone invalide.");
+    if (!email && !phone) throw new BadRequestException("Indiquez un email ou un numéro de téléphone.");
+    // Identifiant de connexion : l email s il est fourni, sinon le numero E.164.
+    const username = email ?? (phone as string);
+
     const orgName = dto.accountType === "org"
       ? (dto.orgName?.trim() || "")
       : `${dto.firstName} ${dto.lastName}`.trim();
@@ -328,11 +354,12 @@ export class AuthService {
       throw new BadRequestException("Le nom de l organisation est requis.");
     }
 
-    // Unicite email (= username de connexion) et slug, hors transaction (lecture).
-    const [emailTaken] = await this.db.select({ id: users.id }).from(users).where(eq(users.username, email)).limit(1);
-    if (emailTaken) throw new ConflictException("Un compte existe deja avec cet email.");
-    const [slugTaken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
-    if (slugTaken) throw new ConflictException("Cette adresse est deja utilisee.");
+    // Unicite identifiant et slug, hors transaction (lecture).
+    const [taken] = await this.db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+    if (taken) {
+      throw new ConflictException(email ? "Un compte existe deja avec cet email." : "Un compte existe deja avec ce numéro.");
+    }
+    const slug = await this.resolveSlug(dto.slug, orgName);
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const publicId = `org_${randomBytes(6).toString("hex")}`; // 12 hexa opaques
@@ -345,6 +372,8 @@ export class AuthService {
         slug,
         status: "trial",
         plan: dto.plan ?? "free",
+        sector: dto.sector ?? null,
+        country,
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       } as any);
@@ -360,9 +389,9 @@ export class AuthService {
         organizationId: orgId,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        username: email,
+        username,
         email,
-        phone: dto.phone ?? null,
+        phone,
         password: passwordHash,
         roleId: adminRoleId,
         status: "true",
@@ -380,7 +409,7 @@ export class AuthService {
     });
 
     await this.audit.log("auth.register.ok", `org:${created.orgId}`, { ...ctx, userId: created.userId }, {
-      slug, publicId, accountType: dto.accountType,
+      slug, publicId, accountType: dto.accountType, sector: dto.sector, by: email ? "email" : "phone",
     });
 
     // Connexion immediate : JWT + refresh (nouvelle famille = 1er device).
@@ -392,9 +421,26 @@ export class AuthService {
       token: accessToken,
       refreshToken,
       role: "admin",
-      user: { id: created.userId, firstName: dto.firstName, lastName: dto.lastName, email, organizationId: created.orgId },
-      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial", plan: dto.plan ?? "free" },
+      user: { id: created.userId, firstName: dto.firstName, lastName: dto.lastName, email, phone, organizationId: created.orgId },
+      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial", plan: dto.plan ?? "free", sector: dto.sector ?? null },
     };
+  }
+
+  // Slug saisi : doit etre libre (409 sinon). Absent : derive du nom de l org,
+  // avec un suffixe aleatoire si deja pris (le client ne voit jamais ce champ).
+  private async resolveSlug(wanted: string | undefined, orgName: string): Promise<string> {
+    const isTaken = async (s: string) =>
+      (await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, s)).limit(1)).length > 0;
+    if (wanted) {
+      const slug = wanted.trim().toLowerCase();
+      if (await isTaken(slug)) throw new ConflictException("Cette adresse est deja utilisee.");
+      return slug;
+    }
+    const base = orgName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "espace";
+    let slug = base.length >= 3 ? base : `${base}-org`;
+    for (let i = 0; i < 5 && (await isTaken(slug)); i++) slug = `${base}-${randomBytes(2).toString("hex")}`;
+    return slug;
   }
 
   /** Complete MFA login after TOTP/recovery verification. Exchanges mfaToken for full tokens. */

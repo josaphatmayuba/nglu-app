@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { AuthImg } from "./AuthImg.jsx";
 
 // Visionneuse plein ecran partagee (CSS .lightbox-* deja global dans app.css).
 // items : [{ url, label }] ; index : photo courante ; onIndexChange : navigation.
@@ -31,7 +32,9 @@ export function Lightbox({ items, index, onIndexChange, onClose }) {
           <ChevronLeft size={36} />
         </button>
       )}
-      <img src={current.url} alt={current.label || ""} onClick={(e) => e.stopPropagation()} />
+      {current.path
+        ? <AuthImg path={current.path} alt={current.label || ""} onClick={(e) => e.stopPropagation()} />
+        : <img src={current.url} alt={current.label || ""} onClick={(e) => e.stopPropagation()} />}
       {count > 1 && (
         <button className="lightbox-nav lightbox-next" onClick={(e) => { e.stopPropagation(); next(); }} aria-label="Photo suivante">
           <ChevronRight size={36} />

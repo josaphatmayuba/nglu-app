@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { and, eq, gt } from "drizzle-orm";
 import { env } from "../../config/env";
@@ -8,6 +8,7 @@ import type { Database } from "../../database/types";
 
 // P1 multi-tenant : seul ce role peut basculer d organisation via X-Active-Org.
 const SUPER_OWNER_ROLE = "super_owner";
+const PLATFORM_ORG_ID = 1;
 
 // Roles a portee transverse : voient TOUS les departements de leur organisation
 // (pas de filtrage par department_id). Cf. design RBAC par departement, Phase 2.
@@ -37,8 +38,12 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const authHeader: string | undefined = request.headers["authorization"];
 
-    // EventSource (SSE) cannot set headers — allow token via ?token= query param as fallback
-    const queryToken: string | undefined = (request.query as Record<string, string>)["token"];
+    // Bugs #35/#39 : ?token= tolere UNIQUEMENT sur /events/me (anciens clients
+    // EventSource deja installes). Ailleurs : en-tete Authorization obligatoire.
+    const requestPath: string = String(request.originalUrl ?? request.url ?? "").split("?")[0];
+    const isEventsRoute = /(^|\/)events\/me\/?$/.test(requestPath);
+    const rawQueryToken = (request.query as Record<string, unknown> | undefined)?.["token"];
+    const queryToken: string | undefined = isEventsRoute && typeof rawQueryToken === "string" ? rawQueryToken : undefined;
 
     let token: string;
     if (authHeader?.startsWith("Bearer ")) {
@@ -104,13 +109,16 @@ export class JwtAuthGuard implements CanActivate {
         id: users.id,
         roleId: users.roleId,
         roleName: roles.name,
+        roleOrgId: roles.organizationId,
         organizationId: users.organizationId,
+        orgStatus: organizations.status,
         departmentId: users.departmentId,
         isLogin: users.isLogin,
         status: users.status,
       })
       .from(users)
       .leftJoin(roles, eq(roles.id, users.roleId))
+      .leftJoin(organizations, eq(organizations.id, users.organizationId))
       .where(eq(users.id, payload.sub))
       .limit(1);
 
@@ -126,7 +134,15 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("AUTH_CONTEXT_STALE");
     }
 
-    const isSuperOwner = user.roleName === SUPER_OWNER_ROLE;
+    // super_owner = role de l org plateforme (1) porte par un user de cette org.
+    // Un role copie ailleurs ou un roleId d une autre org ne donne rien.
+    const isSuperOwner =
+      user.roleName === SUPER_OWNER_ROLE && user.roleOrgId === PLATFORM_ORG_ID && user.organizationId === PLATFORM_ORG_ID;
+
+    // Organisation suspendue (console super_owner) : plus aucun acces API.
+    if (user.orgStatus === "suspended" && !isSuperOwner) {
+      throw new ForbiddenException("Cette organisation est suspendue. Contactez le support Avelomi.");
+    }
 
     // Portee departement (Phase 2) : les roles transverses voient tous les
     // departements ("all"), les autres sont limites a leur department_id.

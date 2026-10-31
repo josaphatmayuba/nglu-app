@@ -65,6 +65,9 @@ export const organizations = mysqlTable("organizations", {
   status: varchar("status", { length: 50 }).default("active").notNull(),
   // Plan d abonnement choisi a l inscription (free|starter|business|enterprise).
   plan: varchar("plan", { length: 30 }).default("free").notNull(),
+  // Secteur choisi a l inscription (agri|immo|btp|commerce|autre) et pays ISO-2 (migration 0330).
+  sector: varchar("sector", { length: 30 }),
+  country: varchar("country", { length: 2 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -3308,6 +3311,15 @@ export const batiproDocuments = mysqlTable("batipro_documents", {
   paymentLedgerEntryId: bigint("payment_ledger_entry_id", { mode: "number" }),
   // Montant deja regle sur une facture (type=invoice). Suivi du solde/paiement (Phase 4).
   paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
+  // === Multi-devise : taux fige par document (migration 0329) ===
+  // 1 unite devise chantier = fxRate unites devise du document.
+  fxRate: decimal("fx_rate", { precision: 18, scale: 6 }),
+  fxRateDate: date("fx_rate_date", { mode: "string" }),
+  // 'manual' | 'last_exchange'
+  fxRateSource: varchar("fx_rate_source", { length: 16 }),
+  // Contre-valeurs en devise du chantier.
+  totalTtcProjectCcy: decimal("total_ttc_project_ccy", { precision: 14, scale: 2 }),
+  paidAmountProjectCcy: decimal("paid_amount_project_ccy", { precision: 14, scale: 2 }).default("0").notNull(),
   issueDate: date("issue_date", { mode: "string" }),
   dueDate: date("due_date", { mode: "string" }),
   // === Bon de commande : confirmation fournisseur (migration 0231) ===

@@ -5,11 +5,20 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { AuditService } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { passwordResetTokens, users } from "../database/schema";
+import { passwordResetTokens, refreshTokens, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { SystemEmailService } from "../system-email/system-email.service";
 
 const TOKEN_TTL_MINUTES = 15;
+
+// Lien de reset : une demande venant d un site Avelomi (vitrine ou app en
+// sous-domaine) renvoie vers la page Avelomi ; sinon, ecran historique du CRM.
+export function resetUrlFor(origin: string | undefined, token: string): string {
+  const host = /^https:\/\/([a-z0-9.-]+)$/i.exec(origin ?? "")?.[1]?.toLowerCase() ?? "";
+  if (host === "dev.avelomi.com" || host.endsWith(".dev.avelomi.com")) return `https://dev.avelomi.com/#/reset?token=${token}`;
+  if (host === "avelomi.com" || host.endsWith(".avelomi.com")) return `https://avelomi.com/#/reset?token=${token}`;
+  return `${env.appUrl}/admin/auth/reset-password?token=${token}`;
+}
 
 @Injectable()
 export class PasswordResetService {
@@ -22,7 +31,7 @@ export class PasswordResetService {
   ) {}
 
   /** POST /auth/forgot-password - always returns 200 regardless of whether email exists. */
-  async forgotPassword(email: string, ctx: { ip?: string; userAgent?: string } = {}): Promise<void> {
+  async forgotPassword(email: string, ctx: { ip?: string; userAgent?: string } = {}, origin?: string): Promise<void> {
     const [user] = await this.db
       .select({ id: users.id, email: users.email, username: users.username })
       .from(users)
@@ -44,7 +53,7 @@ export class PasswordResetService {
       expiresAt,
     });
 
-    const resetUrl = `${env.appUrl}/admin/auth/reset-password?token=${token}`;
+    const resetUrl = resetUrlFor(origin, token);
 
     await this.sendResetEmail(user.email ?? email, user.username, resetUrl).catch((err) => {
       this.logger.error(`Failed to send reset email to ${email}: ${String(err)}`);
@@ -89,6 +98,17 @@ export class PasswordResetService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(users.id, record.identityId));
+
+    // Coupe toutes les sessions et familles refresh (comme logout) : un voleur
+    // de session ne garde pas l acces apres le reset.
+    await this.db
+      .update(sessions)
+      .set({ revoked: 1 })
+      .where(and(eq(sessions.userId, record.identityId), eq(sessions.revoked, 0)));
+    await this.db
+      .update(refreshTokens)
+      .set({ revokedAt: sql`CURRENT_TIMESTAMP`, revokedReason: "password_reset" })
+      .where(and(eq(refreshTokens.userId, record.identityId), isNull(refreshTokens.revokedAt)));
 
     await this.audit.log("auth.reset_password.ok", `user:${record.identityId}`, { ...ctx, userId: record.identityId });
   }

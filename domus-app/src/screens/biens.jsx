@@ -48,6 +48,7 @@ import { nextDueAmountOf } from "../prorationUtils.js";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { AnnouncementModal } from "./communiques.jsx";
+import { AuthImg } from "../components/AuthImg.jsx";
 
 const TYPES = ["Tous", "Appartement", "Maison", "Bureau", "Commerce"];
 const TYPE_MAP = {
@@ -143,7 +144,7 @@ export function Biens({ go }) {
       if (photo.unitId != null) return;
       const propertyId = Number(photo.propertyId);
       if (!grouped.has(propertyId)) grouped.set(propertyId, []);
-      grouped.get(propertyId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+      grouped.get(propertyId).push({ ...photo, path: api.propertyPhotoPath(photo.id) });
     });
     return grouped;
   }, [data?.propertyPhotos]);
@@ -153,7 +154,7 @@ export function Biens({ go }) {
       if (photo.unitId == null) return;
       const unitId = Number(photo.unitId);
       if (!grouped.has(unitId)) grouped.set(unitId, []);
-      grouped.get(unitId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+      grouped.get(unitId).push({ ...photo, path: api.propertyPhotoPath(photo.id) });
     });
     return grouped;
   }, [data?.propertyPhotos]);
@@ -372,7 +373,7 @@ export function Biens({ go }) {
       });
       setDetailModal((current) => current ? {
         ...current,
-        photos: targetPhotos.map((photo) => ({ ...photo, url: api.propertyPhotoUrl(photo.id) })),
+        photos: targetPhotos.map((photo) => ({ ...photo, path: api.propertyPhotoPath(photo.id) })),
       } : current);
     } catch (e) {
       setActionError(e.message);
@@ -592,7 +593,7 @@ function PropertyGroupCard({ card, onOpen, onEdit, onDelete, fallbackSymbol }) {
   return (
     <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
       <div className={`immo-property-media${card.coverPhoto ? " has-photo" : ""}`}>
-        {card.coverPhoto ? <img className="immo-property-photo" src={card.coverPhoto.url} alt={card.name} /> : null}
+        {card.coverPhoto ? <AuthImg className="immo-property-photo" path={card.coverPhoto.path} alt={card.name} /> : null}
         <span className="immo-status-chip">{card.underConstruction ? t("En construction") : `${card.unitsCount} unite${card.unitsCount > 1 ? "s" : ""}`}</span>
         <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
@@ -732,7 +733,7 @@ function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
   return (
     <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
       <div className={`immo-property-media${property.coverPhoto ? " has-photo" : ""}`}>
-        {property.coverPhoto ? <img className="immo-property-photo" src={property.coverPhoto.url} alt={property.name} /> : null}
+        {property.coverPhoto ? <AuthImg className="immo-property-photo" path={property.coverPhoto.path} alt={property.name} /> : null}
         <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? (property.raw?.status === "under_construction" ? t("En construction") : "Sans lot") : property.status}</span>
         <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
@@ -875,7 +876,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
       <div className="domus-property-detail">
         <section className="domus-detail-gallery">
           <div className={`domus-detail-hero${cover ? " has-photo" : ""}`}>
-            {cover ? <img src={cover.url} alt={property.name} /> : (
+            {cover ? <AuthImg path={cover.path} alt={property.name} /> : (
               <div className="domus-detail-empty-photo">
                 <Camera size={34} />
                 <span>Aucune photo</span>
@@ -899,7 +900,7 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
           <div className="domus-photo-strip">
             {photos.map((photo) => (
               <div className="domus-photo-thumb" key={photo.id}>
-                <img src={photo.url} alt={photo.originalName || property.name} />
+                <AuthImg path={photo.path} alt={photo.originalName || property.name} />
                 <button type="button" onClick={() => onDeletePhoto(photo.id)} disabled={busy} title="Supprimer la photo">
                   <Trash2 size={13} />
                 </button>

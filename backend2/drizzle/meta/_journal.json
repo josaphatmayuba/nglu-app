@@ -2129,6 +2129,20 @@
       "when": 1782885600000,
       "tag": "0328_transaction_manual_payment_money_decimal",
       "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "5",
+      "when": 1782972000000,
+      "tag": "0329_batipro_documents_fx_rate",
+      "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "5",
+      "when": 1782975600000,
+      "tag": "0330_organizations_sector_country",
+      "breakpoints": true
     }
   ]
 }

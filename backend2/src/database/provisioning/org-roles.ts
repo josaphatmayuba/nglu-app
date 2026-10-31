@@ -6,6 +6,8 @@ import type { Database } from "../types";
 // a la creation de chaque nouvelle organisation (Phase 0 multi-tenant).
 export const TEMPLATE_ORG_ID = 1;
 
+export const PLATFORM_ROLE_NAMES = new Set(["super_owner", "super-admin"]);
+
 // Copie le jeu de roles (status=true) + leurs permissions de l org modele vers
 // une nouvelle org. Idempotent par org cible : ne copie un role que s il n y
 // existe pas deja (par nom). Renvoie l id du role « admin » de la nouvelle org
@@ -30,6 +32,8 @@ export async function cloneRolesForOrg(
   let adminRoleId: number | null = existingByName.get("admin") ?? null;
 
   for (const tpl of templateRoles) {
+    // Roles plateforme : jamais copies dans une organisation cliente.
+    if (PLATFORM_ROLE_NAMES.has(tpl.name ?? "")) continue;
     let newRoleId = existingByName.get(tpl.name) ?? null;
 
     if (newRoleId === null) {

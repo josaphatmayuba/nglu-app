@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -17,6 +18,8 @@ import {
   designations,
   educations,
   employmentStatuses,
+  permissions,
+  rolePermissions,
   roles,
   salaryHistories,
   shifts,
@@ -27,6 +30,19 @@ import { MailAccountsService } from "../mail-accounts/mail-accounts.service";
 import { RealtimePermissionsPublisher } from "../realtime/realtime-permissions-publisher.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+
+// Appelant authentifie (req.user) : sert a verifier les droits sur les ecritures.
+export type UserCaller = { sub?: number; roleId?: number };
+
+// Roles plateforme : jamais attribuables par une organisation cliente.
+const PLATFORM_ROLES = new Set(["super_owner", "super-admin"]);
+
+// Champs qu un utilisateur sans « update-user » peut modifier sur son propre profil.
+const SELF_EDITABLE_FIELDS = new Set([
+  "firstName", "lastName", "email", "phone", "password", "image", "gender", "birthDate",
+  "maritalStatus", "childrenCount", "nationality", "bloodGroup", "street", "city", "state",
+  "zipCode", "country", "emergencyContactName", "emergencyContactPhone", "emergencyContactRelationship",
+]);
 
 @Injectable()
 export class UsersService {
@@ -181,7 +197,9 @@ export class UsersService {
     };
   }
 
-  async create(dto: CreateUserDto, orgId: number, ctx: AuditContext = {}) {
+  async create(dto: CreateUserDto, orgId: number, ctx: AuditContext = {}, caller: UserCaller = {}) {
+    await this.assertAssignableRole(dto.roleId, orgId, caller);
+
     const existing = await this.db
       .select({ id: users.id })
       .from(users)
@@ -195,7 +213,8 @@ export class UsersService {
       .from(users)
       .where(like(users.email, `%@ongdngolu.org`));
 
-    const mailbox = await this.mailAccounts.createEmployeeMailbox({
+    // Boite @ongdngolu.org : seulement pour l org plateforme (1), jamais pour un client Avelomi.
+    const mailbox = orgId !== 1 ? null : await this.mailAccounts.createEmployeeMailbox({
       firstName: dto.firstName,
       lastName: dto.lastName,
       password: dto.password,
@@ -236,7 +255,7 @@ export class UsersService {
     return this.findOne(newId, orgId);
   }
 
-  async update(id: number, dto: UpdateUserDto, orgId: number, ctx: AuditContext = {}) {
+  async update(id: number, dto: UpdateUserDto, orgId: number, ctx: AuditContext = {}, caller: UserCaller = {}) {
     const [user] = await this.db
       .select({ id: users.id, roleId: users.roleId })
       .from(users)
@@ -244,6 +263,19 @@ export class UsersService {
       .limit(1);
 
     if (!user) throw new NotFoundException("User not found!");
+
+    const callerRole = await this.callerRole(caller);
+    const canManage = callerRole.isSystem || callerRole.perms.has("update-user");
+    if (!canManage) {
+      // Sans « update-user » : seulement son propre profil, champs non sensibles.
+      if (caller.sub !== id) throw new ForbiddenException("Missing permission. One of: update-user.");
+      for (const key of Object.keys(dto)) {
+        if (!SELF_EDITABLE_FIELDS.has(key)) delete (dto as Record<string, unknown>)[key];
+      }
+    }
+    if (dto.roleId && dto.roleId !== user.roleId) {
+      await this.assertAssignableRole(dto.roleId, orgId, caller, callerRole);
+    }
 
     const updateData: Record<string, unknown> = { ...dto };
 
@@ -277,6 +309,46 @@ export class UsersService {
     });
 
     return this.findOne(id, orgId);
+  }
+
+  private async callerRole(caller: UserCaller) {
+    if (!caller.roleId) return { name: null as string | null, isSystem: false, perms: new Set<string>() };
+    const [role] = await this.db
+      .select({ name: roles.name, isSystem: roles.isSystem, organizationId: roles.organizationId })
+      .from(roles)
+      .where(eq(roles.id, caller.roleId))
+      .limit(1);
+    const rows = await this.db
+      .select({ name: permissions.name })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(eq(rolePermissions.roleId, caller.roleId));
+    return {
+      name: role?.name ?? null,
+      isSystem: Boolean(role?.isSystem),
+      perms: new Set(rows.map((r) => r.name).filter((n): n is string => Boolean(n))),
+    };
+  }
+
+  // Le role attribue doit appartenir a l organisation ; les roles plateforme
+  // (super_owner, super-admin) ne sont attribuables que par le super_owner.
+  private async assertAssignableRole(
+    roleId: number | undefined,
+    orgId: number,
+    caller: UserCaller,
+    callerRole?: { name: string | null },
+  ) {
+    if (!roleId) return;
+    const [role] = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(and(eq(roles.id, roleId), eq(roles.organizationId, orgId), eq(roles.status, "true")))
+      .limit(1);
+    if (!role) throw new BadRequestException("Rôle inconnu dans cette organisation.");
+    if (PLATFORM_ROLES.has(role.name ?? "")) {
+      const name = (callerRole ?? (await this.callerRole(caller))).name;
+      if (name !== "super_owner") throw new ForbiddenException("Ce rôle ne peut pas être attribué.");
+    }
   }
 
   async remove(id: number, status: string, orgId: number, ctx: AuditContext = {}) {

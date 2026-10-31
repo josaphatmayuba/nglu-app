@@ -23,10 +23,12 @@ import { Throttle } from "@nestjs/throttler";
 import { Request } from "express";
 import type { AuditContext } from "../audit/audit.service";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
-import { UsersService } from "./users.service";
+import { UsersService, type UserCaller } from "./users.service";
 
 function auditCtx(req: Request): AuditContext {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,18 +36,24 @@ function auditCtx(req: Request): AuditContext {
   return { userId: user?.sub, ip: req.ip, userAgent: req.headers["user-agent"] };
 }
 
+function caller(req: Request): UserCaller {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((req as any).user ?? {}) as UserCaller;
+}
+
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("user")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("user")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @ApiOperation({ summary: "Register a new user in the current organization" })
   @Post("register")
+  @Permissions("create-user")
   register(@Body() body: CreateUserDto, @Req() req: Request, @CurrentOrg() orgId: number) {
-    return this.usersService.create(body, orgId, auditCtx(req));
+    return this.usersService.create(body, orgId, auditCtx(req), caller(req));
   }
 
   @ApiOperation({ summary: "Get all users (query=all|search or paginated)" })
@@ -69,12 +77,14 @@ export class UsersController {
   @ApiOperation({ summary: "Update user" })
   @Put(":id")
   update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUserDto, @Req() req: Request, @CurrentOrg() orgId: number) {
-    return this.usersService.update(id, body, orgId, auditCtx(req));
+    // Droits verifies dans le service : « update-user », ou son propre profil.
+    return this.usersService.update(id, body, orgId, auditCtx(req), caller(req));
   }
 
   @ApiOperation({ summary: "Soft delete user (update status)" })
   @ApiOkResponse({ schema: { example: { message: "User deleted successfully" } } })
   @Patch(":id")
+  @Permissions("delete-user")
   @HttpCode(200)
   remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request, @CurrentOrg() orgId: number) {
     return this.usersService.remove(id, status, orgId, auditCtx(req));

@@ -3,6 +3,7 @@
 // { kind, tables, action, id, updatedAt }
 
 import { getToken, ensureFreshToken } from "./auth.jsx";
+import { FetchEventSource } from "./fetchEventSource.js";
 
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
@@ -52,18 +53,18 @@ export function startFarmosRealtime() {
 async function connectSse() {
   if (!hasToken()) return;
   if (source || connecting) return;
-  // Le JWT part dans l URL de l EventSource : s il a expire (app rouverte apres
+  // Le JWT part dans l en-tete Authorization du flux SSE : s il a expire (app rouverte apres
   // > 15 min, reconnexion auto), le renouveler avant, sinon 401 a chaque essai.
   connecting = true;
   try { await ensureFreshToken(); } catch {} finally { connecting = false; }
   if (!hasToken() || source) return;
-  if (typeof EventSource === "undefined") {
+  if (typeof ReadableStream === "undefined") {
     startPolling();
     return;
   }
 
   try {
-    source = new EventSource(`${API_ROOT}/events/me${eventQuery()}`);
+    source = new FetchEventSource(`${API_ROOT}/events/me${eventQuery()}`, { getToken: currentToken });
   } catch {
     scheduleReconnect();
     startPolling();
@@ -186,9 +187,7 @@ function authHeaders() {
 }
 
 function eventQuery() {
-  const token = currentToken();
   const qs = [];
-  if (token) qs.push(`token=${encodeURIComponent(token)}`);
   if (lastSeen) qs.push(`since=${encodeURIComponent(lastSeen)}`);
   return qs.length ? `?${qs.join("&")}` : "";
 }

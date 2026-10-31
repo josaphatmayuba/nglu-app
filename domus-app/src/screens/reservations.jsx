@@ -28,6 +28,7 @@ import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActio
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { takeReservationPrefill } from "./reservationPrefill.js";
+import { AuthImg } from "../components/AuthImg.jsx";
 
 // Réservation temporaire type hôtel : un client occupe un bien entier OU une
 // unité sur une plage de dates, au tarif par jour. Recette au check-out.
@@ -146,7 +147,7 @@ export function Reservations({ go }) {
       if (photo.unitId != null) return;
       const pid = Number(photo.propertyId);
       if (!grouped.has(pid)) grouped.set(pid, []);
-      grouped.get(pid).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+      grouped.get(pid).push({ ...photo, path: api.propertyPhotoPath(photo.id) });
     });
     return grouped;
   }, [photosApi.data]);
@@ -158,7 +159,7 @@ export function Reservations({ go }) {
       if (photo.unitId == null) return;
       const unitId = Number(photo.unitId);
       if (!grouped.has(unitId)) grouped.set(unitId, []);
-      grouped.get(unitId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+      grouped.get(unitId).push({ ...photo, path: api.propertyPhotoPath(photo.id) });
     });
     return grouped;
   }, [photosApi.data]);
@@ -515,7 +516,7 @@ function StayCard({ stay, nights, symbol, onBook }) {
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onBook(); } }}>
       <div className="reserve-card-media">
         {stay.cover
-          ? <img src={stay.cover.url} alt={stay.title} loading="lazy" />
+          ? <AuthImg path={stay.cover.path} alt={stay.title} loading="lazy" />
           : <div className="reserve-card-noimg"><ImageOff size={26} /></div>}
         <span className="reserve-card-badge">Disponible</span>
       </div>
@@ -681,14 +682,14 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
           <div className="stay-gallery">
             <div className="stay-gallery-main">
               {photos[active]
-                ? <img src={photos[active].url} alt={stay.title} />
+                ? <AuthImg path={photos[active].path} alt={stay.title} />
                 : <div className="stay-gallery-noimg"><ImageOff size={30} /> Pas de photo</div>}
             </div>
             {photos.length > 1 && (
               <div className="stay-gallery-thumbs">
                 {photos.map((p, i) => (
                   <button key={p.id || i} className={i === active ? "active" : ""} onClick={() => setActive(i)}>
-                    <img src={p.url} alt="" />
+                    <AuthImg path={p.path} alt="" />
                   </button>
                 ))}
               </div>

@@ -28,6 +28,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { Lightbox } from "../components/Lightbox.jsx";
+import { AuthImg } from "../components/AuthImg.jsx";
 import { takeMaintenancePrefill } from "./reservationPrefill.js";
 import { t, tf } from "../i18n.js";
 
@@ -697,7 +698,7 @@ function TicketPhotoStrip({ ticket }) {
       .map((photo) => ({ ...photo, typeLabel: type.label })),
   );
   const items = ordered.map((photo) => ({
-    url: api.maintenancePhotoUrl(photo.id),
+    path: api.maintenancePhotoPath(photo.id),
     label: `${photo.typeLabel}${photo.createdAt ? ` - ${compactDate(photo.createdAt)}` : ""}`,
   }));
 
@@ -721,7 +722,7 @@ function TicketPhotoStrip({ ticket }) {
                   onClick={() => setLightboxIndex(ordered.findIndex((p) => p.id === photo.id))}
                   title={t("Agrandir")}
                 >
-                  <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || type.label} />
+                  <AuthImg path={api.maintenancePhotoPath(photo.id)} alt={photo.originalName || type.label} />
                 </button>
               ))}
             </div>
@@ -1005,7 +1006,7 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
                 .filter((photo) => (photo.photoType || "before") === editType)
                 .map((photo) => (
                   <div className="domus-photo-thumb" key={photo.id}>
-                    <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || editType} />
+                    <AuthImg path={api.maintenancePhotoPath(photo.id)} alt={photo.originalName || editType} />
                   </div>
                 ))}
               <label className="domus-photo-add">
@@ -1171,7 +1172,7 @@ function PhotosModal({ ticket, onClose }) {
               <div className="domus-photo-strip">
                 {group.items.map((photo) => (
                   <div className="domus-photo-thumb" key={photo.id}>
-                    <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || group.label} />
+                    <AuthImg path={api.maintenancePhotoPath(photo.id)} alt={photo.originalName || group.label} />
                     <button type="button" onClick={() => handleDelete(photo.id)} disabled={busy} title={t("Supprimer la photo")}>
                       <Trash2 size={13} />
                     </button>
@@ -1246,7 +1247,7 @@ function ResolveModal({ ticket, busy, error, onClose, onConfirm }) {
           <div className="domus-photo-strip">
             {afterPhotos.map((photo) => (
               <div className="domus-photo-thumb" key={photo.id}>
-                <img src={api.maintenancePhotoUrl(photo.id)} alt={photo.originalName || "after"} />
+                <AuthImg path={api.maintenancePhotoPath(photo.id)} alt={photo.originalName || "after"} />
               </div>
             ))}
             <label className="domus-photo-add">

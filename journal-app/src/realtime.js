@@ -1,4 +1,5 @@
 // Journal — client SSE temps réel (partagé same-origin avec CRM/Domus).
+import { FetchEventSource } from "./fetchEventSource.js";
 import { useEffect, useRef, useState } from "react";
 import { API_ROOT } from "./api.js";
 import { readToken } from "./auth.jsx";
@@ -48,7 +49,7 @@ function connect() {
   const t = token();
   if (!t) return;
   try {
-    source = new EventSource(`${SSE_PATH}?token=${encodeURIComponent(t)}`);
+    source = new FetchEventSource(SSE_PATH, { getToken: token });
     source.addEventListener("open", () => { backoffMs = INITIAL_BACKOFF_MS; setConnected(true); });
     source.addEventListener("error", () => { setConnected(false); source?.close(); source = null; scheduleReconnect(); });
     for (const [type] of listeners) source.addEventListener(type, handleEvent);
