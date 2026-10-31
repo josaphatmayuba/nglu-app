@@ -104,12 +104,19 @@ export async function restoreSession() {
 export async function bootstrapAuth() {
   try {
     if (typeof window !== "undefined") {
-      const q = new URLSearchParams(window.location.search).get("qc");
+      // Bug #39 : le handoff CRM doit passer par le fragment (#qc=...), jamais
+      // envoye au serveur donc absent des logs nginx. ?qc= reste lu pour les
+      // anciens liens (puis efface de l URL).
+      const url = new URL(window.location.href);
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const q = hashParams.get("qc") || url.searchParams.get("qc");
       if (q) {
         setToken(q);
         localStorage.setItem("isLogged", "true");
-        const url = new URL(window.location.href);
         url.searchParams.delete("qc");
+        hashParams.delete("qc");
+        const rest = hashParams.toString();
+        url.hash = rest ? `#${rest}` : "";
         window.history.replaceState({}, "", url.toString());
         return;
       }
