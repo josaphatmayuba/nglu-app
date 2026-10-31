@@ -179,7 +179,7 @@ export function OwnerPortalPublic({ token }) {
                     <Row label={t("Prochaine échéance")} value={money(nextDueAmountOf(lease), symbol)} />
                   )}
                   <Row label={t("Périodicité")} value={lease.billingCycle} />
-                  <Row label={t("Caution contractuelle")} value={money(lease.securityDeposit, symbol)} />
+                  <Row label={t("Caution contractuelle")} value={Number(lease.securityDeposit) > 0 ? money(lease.securityDeposit, symbol) : t("Aucune")} />
                   <Row label={t("Charges")} value={charges} />
                   <Row label={t("Statut")} value={lease.status} />
 

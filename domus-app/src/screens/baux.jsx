@@ -477,6 +477,7 @@ export function Baux({ go } = {}) {
                       depositDue={depositDue}
                       onCollectDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "collect", lease, amount: depositDue }); }}
                       onReturnDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "return", lease, deposit }); }}
+                      onWaiveDeposit={() => { setOpenMenuId(null); handleWaiveDeposit(lease, setBusyAction, setActionError, reload, confirm); }}
                       busy={busyAction}
                       onInspection={(type) => { setOpenMenuId(null); setInspectionView({ kind: "launch", lease, type }); }}
                       onCompareInspections={() => { setOpenMenuId(null); setInspectionView({ kind: "compare", lease }); }}
@@ -659,6 +660,7 @@ function LeaseActionsMenu({
   deposit,
   depositDue = 0,
   onCollectDeposit,
+  onWaiveDeposit,
   onReturnDeposit,
   busy,
   onDetail,
@@ -716,7 +718,10 @@ function LeaseActionsMenu({
           ) : deposit?.status === "returned" ? (
             <button disabled><Shield size={15} /> Caution restituée</button>
           ) : (
-            <button className="highlight" onClick={onCollectDeposit}><Shield size={15} /> Encaisser la caution</button>
+            <>
+              <button className="highlight" onClick={onCollectDeposit}><Shield size={15} /> Encaisser la caution</button>
+              {onWaiveDeposit && !deposit && <button onClick={onWaiveDeposit}><Shield size={15} /> {t("Dispenser de caution")}</button>}
+            </>
           )}
           <hr />
         </>
@@ -977,7 +982,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
       unitId,
       propertyId: unit?.propertyId ? String(unit.propertyId) : form.propertyId,
       rentAmount: unit?.monthlyRent ?? form.rentAmount,
-      securityDeposit: unit?.securityDeposit ?? form.securityDeposit,
+      securityDeposit: form.noDeposit ? 0 : (unit?.securityDeposit ?? form.securityDeposit),
       currencyId: unit?.currencyId ?? form.currencyId ?? defaultCurrencyId,
     });
   };
@@ -1143,15 +1148,25 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 onCurrencyChange={(currencyId) => set({ currencyId })}
                 placeholder="ex. 850000"
               />
-              <LeaseMoneyField
-                label="Depot de garantie"
-                value={form.securityDeposit}
-                currencyId={form.currencyId || defaultCurrencyId || ""}
-                currencyOptions={currencyOptions}
-                onAmountChange={(securityDeposit) => set({ securityDeposit })}
-                onCurrencyChange={(currencyId) => set({ currencyId })}
-                placeholder="ex. 1700000"
-              />
+              {!form.noDeposit && (
+                <LeaseMoneyField
+                  label="Depot de garantie"
+                  value={form.securityDeposit}
+                  currencyId={form.currencyId || defaultCurrencyId || ""}
+                  currencyOptions={currencyOptions}
+                  onAmountChange={(securityDeposit) => set({ securityDeposit })}
+                  onCurrencyChange={(currencyId) => set({ currencyId })}
+                  placeholder="ex. 1700000"
+                />
+              )}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, gridColumn: "1 / -1" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.noDeposit)}
+                  onChange={(e) => set({ noDeposit: e.target.checked, securityDeposit: e.target.checked ? 0 : "" })}
+                />
+                {t("Pas de caution pour ce bail")}
+              </label>
             </div>
             {selectedUnit && (
               <div className="domus-lease-unit-note">
@@ -1672,6 +1687,7 @@ function leaseToForm(lease) {
     billingCycle: lease.billingCycle || "monthly",
     rentAmount: lease.rentAmount ?? "",
     securityDeposit: lease.securityDeposit ?? "",
+    noDeposit: !(Number(lease.securityDeposit) > 0),
     currencyId: lease.currencyId,
     status: lease.status || "active",
     terms: lease.terms || "",
@@ -1698,7 +1714,7 @@ function leasePayload(form) {
     ...(form.rentProrationEnabled ? { rentProrationEnabled: true } : form.id && form._prorationWas ? { rentProrationEnabled: false } : {}),
     billingCycle: form.billingCycle || "monthly",
     rentAmount: toNumber(form.rentAmount),
-    securityDeposit: toNumber(form.securityDeposit),
+    securityDeposit: form.noDeposit ? 0 : toNumber(form.securityDeposit),
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     terms: form.terms || null,
     moveInNotes: form.moveInNotes || null,
@@ -1753,6 +1769,26 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de telecharger le contrat.");
+  } finally {
+    setBusyAction("");
+  }
+}
+
+// Bail sans caution : « pas de caution » = securityDeposit à 0 (pas de migration).
+async function handleWaiveDeposit(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Dispenser de caution"),
+    message: tf(t("Le bail {ref} n'exigera plus de caution (aucune caution n'a été encaissée). Confirmer ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Dispenser"),
+  });
+  if (!ok) return;
+  setBusyAction(`waive-${lease.id}`);
+  setActionError("");
+  try {
+    await api.updateLease(lease.id, { securityDeposit: 0 });
+    await reload();
+  } catch (e) {
+    setActionError(e.message || "Impossible de dispenser la caution.");
   } finally {
     setBusyAction("");
   }

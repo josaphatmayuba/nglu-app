@@ -1283,7 +1283,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         startDate: this.shortDate(lease.startDate),
         endDate: this.shortDate(lease.endDate),
         amount: this.money(lease.rentAmount, lease.currencySymbol),
-        deposit: this.money(lease.securityDeposit, lease.currencySymbol),
+        deposit: Number(lease.securityDeposit) > 0 ? this.money(lease.securityDeposit, lease.currencySymbol) : "aucune",
         charges: charges ? ` Charges : ${charges}.` : "",
         url,
       };

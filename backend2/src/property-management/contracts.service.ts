@@ -2126,11 +2126,11 @@ export class ContractsService {
       au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
     </p>
     <p style="margin:0;">
-      <strong>4.2. Garantie Locative&nbsp;:</strong> ${multi ? "Les Preneurs versent" : "Le Preneur verse"} ce jour une garantie de
+      <strong>4.2. Garantie Locative&nbsp;:</strong> ${!(Number(lease.securityDeposit) > 0) ? "Aucune garantie locative n&rsquo;est exigée pour ce bail." : `${multi ? "Les Preneurs versent" : "Le Preneur verse"} ce jour une garantie de
       <strong style="color:#1a237e;">${securityDeposit} ${e(currency)}</strong> correspondant à ${guaranteeMonths}.
       Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées
       ou réparations locatives. La garantie ne peut pas excéder <strong>trois (3) mois</strong> de loyer
-      pour un usage résidentiel.
+      pour un usage résidentiel.`}
     </p>
   `)}
 

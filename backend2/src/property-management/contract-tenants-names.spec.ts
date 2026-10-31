@@ -48,6 +48,16 @@ describe("contrat par defaut - pluriel", () => {
   });
 });
 
+describe("contrat par defaut - bail sans caution", () => {
+  it("caution 0 ou vide : clause 'Aucune garantie locative'", () => {
+    for (const dep of ["0", "", null]) {
+      const html: string = svc().generateContent({ ...lease(), securityDeposit: dep }, company);
+      expect(html).toContain("Aucune garantie locative");
+      expect(html).not.toContain("verse ce jour une garantie");
+    }
+  });
+});
+
 describe("contrat modele - variables", () => {
   it("1 locataire : variable inchangee", () => {
     const v = svc().buildVariables(lease(), company);
