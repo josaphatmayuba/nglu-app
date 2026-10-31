@@ -4,8 +4,8 @@
 #   master -> ongdngolu.org (16.54.167.125) + avelomi.com (3.128.45.29)
 # Les apps statiques sont buildees UNE fois puis deployees vers les 2 prods
 # (aucune variable VITE specifique par serveur, contrairement au frontend).
-# Le deploy Avelomi est tolerant : s'il echoue, le deploy ongdngolu deja
-# reussi n'est pas remis en cause.
+# Le deploy Avelomi est BLOQUANT (REQUIRE_READY=1, plus de skip vert) mais place
+# APRES ongdngolu : celui-ci est deploye meme si Avelomi echoue (job en rouge).
 #
 # environment: production -> ajoute une gate d'approbation GitHub si tu la
 # configures dans Settings > Environments (recommande pour la prod).
@@ -30,7 +30,27 @@ env:
   APP: /opt/nglu-app
 
 jobs:
+  # Contrats statiques (sans npm install) : bloquent le deploiement si KO.
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: '24' }
+      - name: Contrats
+        run: |
+          set -e
+          node scripts/check-avelomi-subdomains.mjs
+          node scripts/check-data-update-event-contract.mjs
+          node scripts/check-data-update-rules.mjs
+          node scripts/check-permissions-update-event-contract.mjs
+          node scripts/check-realtime-deploy-contract.mjs
+          node scripts/check-realtime-observability.mjs
+          node scripts/check-routing-contract.mjs
+
   changes:
+    needs: contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -331,21 +351,27 @@ jobs:
       - uses: ./.github/actions/ssh-setup
         with: { key: '${{ secrets.AVELOMI_SSH_KEY }}', name: avelomi }
       - name: Build (une fois pour les 2 prods)
+        id: build
         run: cd ${{ matrix.app }} && npm install --legacy-peer-deps && npx --yes audit-ci@7 --config audit-ci.jsonc && npm run ${{ matrix.build }}
-      # Build sous-domaine <app>.avelomi.com (base "/", dist-avelomi). Tolerant :
-      # en cas d'echec, Avelomi garde le dist-avelomi deja present sur le serveur.
-      - name: Build Avelomi sous-domaine (tolerant)
-        run: cd ${{ matrix.app }} && npm run build:avelomi || echo "::warning::build:avelomi echoue pour ${{ matrix.app }}"
       - name: Deploy ongdngolu (bloquant)
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.ONGD_SERVER }}
           BASE_URL: https://ongdngolu.org
           SUPPORT_CONF: nginx/nginx.frontend.conf
           SSH: ssh -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
           SCP: scp -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
         run: sh scripts/ci/deploy-prod-static-app.sh ${{ matrix.app }} ${{ matrix.base }}
-      - name: Deploy Avelomi (tolerant)
+      # Build sous-domaine <app>.avelomi.com (base "/", dist-avelomi) APRES le deploy
+      # ongdngolu : un echec ici ne bloque pas ongdngolu, mais bloque Avelomi (echec franc).
+      - name: Build Avelomi sous-domaine
+        id: build_avelomi
+        if: always() && steps.build.outcome == 'success'
+        run: cd ${{ matrix.app }} && npm run build:avelomi
+      - name: Deploy Avelomi (bloquant, apres ongdngolu)
+        if: always() && steps.build.outcome == 'success' && steps.build_avelomi.outcome == 'success'
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.AVELOMI_SERVER }}
           BASE_URL: https://avelomi.com
           SUPPORT_CONF: nginx/nginx.avelomi.conf
@@ -353,7 +379,7 @@ jobs:
           EXTRA_DIST: dist-avelomi
           SSH: ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2
           SCP: scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
-        run: sh scripts/ci/deploy-prod-static-app.sh ${{ matrix.app }} ${{ matrix.base }} || echo "[deploy] Avelomi skip/echec tolere"
+        run: sh scripts/ci/deploy-prod-static-app.sh ${{ matrix.app }} ${{ matrix.base }}
 
   # Frontend : builds SEPARES (API differente par serveur), donc 2 jobs distincts.
   frontend-prod:
@@ -371,6 +397,7 @@ jobs:
       - run: cd frontend && npm install --legacy-peer-deps && npx --yes audit-ci@7 --config audit-ci.jsonc && npm run build:prod
       - name: Deploy
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.ONGD_SERVER }}
           SSH: ssh -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
           SCP: scp -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
@@ -391,6 +418,7 @@ jobs:
       - run: cd marketing-site && npm install --legacy-peer-deps && npm run build
       - name: Deploy
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.ONGD_SERVER }}
           SSH: ssh -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
           SCP: scp -i ~/.ssh/ongdngolu.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20
@@ -543,6 +571,7 @@ jobs:
         run: cd frontend && npm install --legacy-peer-deps && npx --yes audit-ci@7 --config audit-ci.jsonc && npm run build:prod
       - name: Deploy
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.AVELOMI_SERVER }}
           BASE_URL: https://avelomi.com
           SUPPORT_CONF: nginx/nginx.avelomi.conf
@@ -563,6 +592,7 @@ jobs:
       - run: cd avelomi-site && npm install --legacy-peer-deps && npm run build
       - name: Deploy
         env:
+          REQUIRE_READY: '1'
           SERVER: ${{ env.AVELOMI_SERVER }}
           BASE_URL: https://avelomi.com
           SUPPORT_CONF: nginx/nginx.avelomi.conf

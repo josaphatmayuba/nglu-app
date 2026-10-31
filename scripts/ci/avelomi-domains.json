@@ -1,0 +1,126 @@
+{
+  "apps": [
+    {
+      "dir": "farmos-app",
+      "sub": "farmos",
+      "title": "FarmOS Pro"
+    },
+    {
+      "dir": "domus-app",
+      "sub": "domus",
+      "title": "Domus · Gestion locative"
+    },
+    {
+      "dir": "batipro-app",
+      "sub": "batipro",
+      "title": "BatiPro Construction"
+    },
+    {
+      "dir": "comptabilite-app",
+      "sub": "compta",
+      "title": "Compta NgoluApp"
+    },
+    {
+      "dir": "hr-app",
+      "sub": "rh",
+      "title": "RH NgoluApp"
+    },
+    {
+      "dir": "journal-app",
+      "sub": "journal",
+      "title": "Journal Entreprise"
+    },
+    {
+      "dir": "kodatill-app",
+      "sub": "kodatill",
+      "title": "KodaTill"
+    },
+    {
+      "dir": "tickets-app",
+      "sub": "tickets",
+      "title": "Tickets · SIFA"
+    },
+    {
+      "dir": "chat-app",
+      "sub": "chat",
+      "title": "Chat SIFA"
+    },
+    {
+      "dir": "migration-app",
+      "sub": "migration",
+      "title": "Migration Cockpit"
+    }
+  ],
+  "aliases": [
+    {
+      "sub": "hr",
+      "to": "rh"
+    },
+    {
+      "sub": "comptabilite",
+      "to": "compta"
+    }
+  ],
+  "certs": {
+    "avelomi-wildcard": [
+      "farmos.avelomi.com",
+      "farmos.dev.avelomi.com",
+      "domus.avelomi.com",
+      "domus.dev.avelomi.com",
+      "batipro.avelomi.com",
+      "batipro.dev.avelomi.com",
+      "compta.avelomi.com",
+      "compta.dev.avelomi.com",
+      "rh.avelomi.com",
+      "rh.dev.avelomi.com",
+      "journal.avelomi.com",
+      "journal.dev.avelomi.com",
+      "kodatill.avelomi.com",
+      "kodatill.dev.avelomi.com",
+      "tickets.avelomi.com",
+      "tickets.dev.avelomi.com",
+      "chat.avelomi.com",
+      "chat.dev.avelomi.com",
+      "migration.avelomi.com",
+      "migration.dev.avelomi.com",
+      "hr.avelomi.com",
+      "hr.dev.avelomi.com",
+      "comptabilite.avelomi.com",
+      "comptabilite.dev.avelomi.com"
+    ],
+    "avelomi.com": [
+      "avelomi.com",
+      "www.avelomi.com"
+    ],
+    "dev.avelomi.com": [
+      "dev.avelomi.com"
+    ],
+    "allodocta.avelomi.com": [
+      "allodocta.avelomi.com"
+    ]
+  },
+  "sites": [
+    {
+      "url": "https://avelomi.com/",
+      "notTitle": "non deploye"
+    },
+    {
+      "url": "https://allodocta.avelomi.com/"
+    },
+    {
+      "url": "https://ongdngolu.org/"
+    },
+    {
+      "url": "https://ongdngolu.org/crm/",
+      "codes": [
+        200,
+        301,
+        302
+      ]
+    },
+    {
+      "url": "https://dev.ongdngolu.org/",
+      "dev": true
+    }
+  ]
+}

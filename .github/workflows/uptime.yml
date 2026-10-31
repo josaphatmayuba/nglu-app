@@ -1,0 +1,143 @@
+name: Uptime
+
+# Surveillance horaire des sites/sous-domaines Avelomi + ongdngolu (HTTP, titre, expiration cert).
+# Source de verite : scripts/ci/avelomi-domains.json
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      MIN_CERT_DAYS: '20'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: '24' }
+      - name: Verifier sites et certificats
+        shell: bash
+        run: |
+          set -u
+          CFG=scripts/ci/avelomi-domains.json
+          REPORT=$(mktemp)
+          ERRORS=0
+
+          # Cibles : severite<TAB>url<TAB>codes(csv)<TAB>titre attendu<TAB>titre interdit
+          targets=$(node -e '
+            const c = require("./" + process.argv[1]);
+            const out = [];
+            const row = (sev, url, codes, title, bad) => out.push([sev, url, codes, title || "-", bad || "non deploy"].join("\t"));
+            for (const a of c.apps) {
+              row("err", "https://" + a.sub + ".avelomi.com/", "200", a.title);
+              row("warn", "https://" + a.sub + ".dev.avelomi.com/", "200", a.title);
+            }
+            for (const a of c.aliases) {
+              row("err", "https://" + a.sub + ".avelomi.com/", "301,302,308", "-", "@none");
+              row("warn", "https://" + a.sub + ".dev.avelomi.com/", "301,302,308", "-", "@none");
+            }
+            for (const s of c.sites) {
+              row(s.dev ? "warn" : "err", s.url, (s.codes || [200]).join(","), s.title, s.notTitle);
+            }
+            console.log(out.join("\n"));
+          ' "$CFG")
+
+          fail() { # $1=sev $2=message
+            if [ "$1" = "warn" ]; then
+              echo "::warning::$2"
+            else
+              echo "::error::$2"
+              echo "- $2" >> "$REPORT"
+              ERRORS=$((ERRORS + 1))
+            fi
+          }
+
+          while IFS=$'\t' read -r sev url codes title bad; do
+            [ -z "$url" ] && continue
+            body=$(mktemp)
+            code=$(curl -sS -m 20 --retry 1 -o "$body" -w '%{http_code}' "$url" 2>/dev/null) || code=000
+            case ",$codes," in
+              *",$code,"*) ;;
+              *) fail "$sev" "$url : HTTP $code (attendu $codes)"; rm -f "$body"; continue ;;
+            esac
+            # Le titre n'est verifie que sur une reponse 200.
+            if [ "$code" = "200" ]; then
+              t=$(tr '\n' ' ' < "$body" | grep -io '<title>[^<]*' | head -1 | sed 's/<title>//I')
+              if [ "$title" != "-" ] && ! printf '%s' "$t" | grep -qiF -- "$title"; then
+                fail "$sev" "$url : titre inattendu '$t' (attendu '$title')"
+              elif [ "$bad" != "@none" ] && printf '%s' "$t" | grep -qiF -- "$bad"; then
+                fail "$sev" "$url : titre '$t' (site non deploye)"
+              else
+                echo "OK   $code $url ($t)"
+              fi
+            else
+              echo "OK   $code $url"
+            fi
+            rm -f "$body"
+          done <<< "$targets"
+
+          # Certificats : un hote par certificat declare + ongdngolu.
+          hosts=$(node -e '
+            const c = require("./" + process.argv[1]);
+            const h = Object.values(c.certs).map((n) => "err " + n[0]);
+            h.push("warn " + c.certs["avelomi-wildcard"].find((n) => n.includes(".dev.")));
+            h.push("err ongdngolu.org", "warn dev.ongdngolu.org");
+            console.log(h.join("\n"));
+          ' "$CFG")
+
+          while read -r sev host; do
+            [ -z "$host" ] && continue
+            end=$(echo | timeout 20 openssl s_client -servername "$host" -connect "$host:443" 2>/dev/null \
+                  | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+            if [ -z "$end" ]; then
+              fail "$sev" "cert $host : illisible (connexion TLS impossible)"
+              continue
+            fi
+            left=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
+            if [ "$left" -lt "$MIN_CERT_DAYS" ]; then
+              fail "$sev" "cert $host : expire dans $left jours ($end)"
+            else
+              echo "OK   cert $host : $left jours restants"
+            fi
+          done <<< "$hosts"
+
+          echo "errors=$ERRORS" >> "$GITHUB_ENV"
+          cp "$REPORT" "$RUNNER_TEMP/uptime-report.md"
+          echo "Total erreurs : $ERRORS"
+
+      - name: Issue uptime (ouvrir/commenter ou fermer)
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          existing=$(gh issue list --label uptime --state open --json number --jq '.[0].number // empty' || true)
+          errors="${errors:-}"
+          if [ -z "$errors" ]; then
+            echo "Check non execute jusqu'au bout : issue inchangee."
+            exit 0
+          fi
+          if [ "$errors" -gt 0 ]; then
+            body=$(printf 'Echecs detectes par le workflow Uptime ([run](%s)) :\n\n%s\n' "$run_url" "$(cat "$RUNNER_TEMP/uptime-report.md")")
+            if [ -z "$existing" ]; then
+              gh label create uptime --color B60205 --description "Surveillance uptime" 2>/dev/null || true
+              gh issue create --label uptime --title "Uptime : sites/certificats en echec" --body "$body"
+            else
+              gh issue comment "$existing" --body "$body"
+            fi
+            exit 1
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "Tout est revenu OK ([run]($run_url))."
+          fi
