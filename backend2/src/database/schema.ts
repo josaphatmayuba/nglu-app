@@ -65,6 +65,9 @@ export const organizations = mysqlTable("organizations", {
   status: varchar("status", { length: 50 }).default("active").notNull(),
   // Plan d abonnement choisi a l inscription (free|starter|business|enterprise).
   plan: varchar("plan", { length: 30 }).default("free").notNull(),
+  // Secteur choisi a l inscription (agri|immo|btp|commerce|autre) et pays ISO-2 (migration 0330).
+  sector: varchar("sector", { length: 30 }),
+  country: varchar("country", { length: 2 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

@@ -25,9 +25,11 @@ export class RegisterDto {
   @Matches(NAME_RE, { message: "Nom invalide." })
   lastName: string;
 
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
-  @IsEmail() @MaxLength(255)
-  email: string;
+  // Identifiant de connexion : email OU telephone (au moins l un des deux, verifie
+  // dans le service). Beaucoup de clients RDC n ont qu un numero.
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() || undefined : value))
+  @IsOptional() @IsEmail() @MaxLength(255)
+  email?: string;
 
   @IsString()
   @MinLength(8, { message: "Le mot de passe doit contenir au moins 8 caractères." })
@@ -47,10 +49,11 @@ export class RegisterDto {
   orgName?: string;
 
   // Sous-domaine : <slug>.nglu.cloud — minuscules, chiffres, tirets.
-  @IsString() @IsNotEmpty()
+  // Optionnel : genere depuis le nom de l organisation si absent.
+  @IsOptional() @IsString()
   @MinLength(3) @MaxLength(63)
   @Matches(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, { message: "Adresse invalide (minuscules, chiffres, tirets)." })
-  slug: string;
+  slug?: string;
 
   // Secteur : valeurs connues de la grille d inscription (allowlist stricte).
   @IsOptional() @IsIn(["agri", "immo", "btp", "commerce", "autre"])
@@ -61,6 +64,10 @@ export class RegisterDto {
   @IsOptional() @IsString() @MaxLength(40)
   @Matches(/^\+?[0-9 ()-]{6,40}$/, { message: "Numéro de téléphone invalide." })
   phone?: string;
+
+  // Pays ISO 3166-1 alpha-2 (defaut CD) : indicatif par defaut du telephone.
+  @IsOptional() @Matches(/^[A-Z]{2}$/, { message: "Pays invalide." })
+  country?: string;
 
   // Plan d abonnement choisi sur la grille de prix (defaut: free).
   @IsOptional() @IsIn(["free", "starter", "business", "enterprise"])

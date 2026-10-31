@@ -213,7 +213,8 @@ export class UsersService {
       .from(users)
       .where(like(users.email, `%@ongdngolu.org`));
 
-    const mailbox = await this.mailAccounts.createEmployeeMailbox({
+    // Boite @ongdngolu.org : seulement pour l org plateforme (1), jamais pour un client Avelomi.
+    const mailbox = orgId !== 1 ? null : await this.mailAccounts.createEmployeeMailbox({
       firstName: dto.firstName,
       lastName: dto.lastName,
       password: dto.password,

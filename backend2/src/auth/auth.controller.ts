@@ -242,7 +242,7 @@ export class AuthController {
       ip: (req as unknown as { ip: string }).ip,
       userAgent: (req.headers as Record<string, string>)["user-agent"],
     };
-    await this.passwordResetService.forgotPassword(body.email, ctx);
+    await this.passwordResetService.forgotPassword(body.email, ctx, req.headers.origin);
     return { message: "Si cet email existe, un lien a été envoyé." };
   }
 

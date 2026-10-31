@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, ForbiddenException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { and, eq, gt } from "drizzle-orm";
 import { env } from "../../config/env";
@@ -107,12 +107,14 @@ export class JwtAuthGuard implements CanActivate {
         roleName: roles.name,
         roleOrgId: roles.organizationId,
         organizationId: users.organizationId,
+        orgStatus: organizations.status,
         departmentId: users.departmentId,
         isLogin: users.isLogin,
         status: users.status,
       })
       .from(users)
       .leftJoin(roles, eq(roles.id, users.roleId))
+      .leftJoin(organizations, eq(organizations.id, users.organizationId))
       .where(eq(users.id, payload.sub))
       .limit(1);
 
@@ -132,6 +134,11 @@ export class JwtAuthGuard implements CanActivate {
     // Un role copie ailleurs ou un roleId d une autre org ne donne rien.
     const isSuperOwner =
       user.roleName === SUPER_OWNER_ROLE && user.roleOrgId === PLATFORM_ORG_ID && user.organizationId === PLATFORM_ORG_ID;
+
+    // Organisation suspendue (console super_owner) : plus aucun acces API.
+    if (user.orgStatus === "suspended" && !isSuperOwner) {
+      throw new ForbiddenException("Cette organisation est suspendue. Contactez le support Avelomi.");
+    }
 
     // Portee departement (Phase 2) : les roles transverses voient tous les
     // departements ("all"), les autres sont limites a leur department_id.

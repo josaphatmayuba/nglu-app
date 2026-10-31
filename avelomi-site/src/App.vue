@@ -24,6 +24,8 @@ const authView = computed(() => {
   if (route.value.startsWith('#/login')) return 'login';
   if (route.value.startsWith('#/signup')) return 'signup';
   if (route.value.startsWith('#/accueil')) return 'accueil';
+  if (route.value.startsWith('#/forgot')) return 'forgot';
+  if (route.value.startsWith('#/reset')) return 'reset';
   return null;
 });
 </script>
