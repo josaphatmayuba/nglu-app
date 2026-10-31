@@ -247,6 +247,10 @@ export class CreateBatiproDocumentDto {
   @IsOptional() @IsInt() subcontractor_id?: number;
   @IsOptional() @IsDateString() issue_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
+  // Taux fige (1 unite devise chantier = fx_rate unites devise document), max 6 decimales.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
   // Photo/scan source (batipro_site_photos.id, kind='source_document') dont ce document est issu (scan OCR).
   // Optionnel : si fourni, le document cree est relie a la photo (linkedDocumentId).
@@ -295,6 +299,17 @@ export class CreateBatiproSituationDocumentDto {
 // Enregistrement d'un reglement (partiel/total) sur une facture (Phase 4).
 export class RecordPaymentDto {
   @IsNumber() @Min(0) amount!: number;
+  // Obligatoire (verifie cote service) si la devise du document differe de celle du chantier.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+}
+
+// Fixe/corrige le taux fige d'un document en autre devise que son chantier.
+// paid_fx_rate : reprise d'un document deja regle avant l'introduction du taux.
+export class UpdateBatiproDocumentFxRateDto {
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate!: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) paid_fx_rate?: number;
 }
 
 // Fonds du chantier : apport recu (proprietaire, associe, autre). Montant exact
@@ -416,6 +431,10 @@ export class UpdateBatiproDocumentDto {
   @IsOptional() @IsDateString() issue_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
   @IsOptional() @IsIn(UPDATABLE_DOCUMENT_STATUSES) status?: string;
+  // Taux fige (1 unite devise chantier = fx_rate unites devise document), max 6 decimales.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
   @IsOptional()
   @IsArray()
@@ -429,6 +448,10 @@ export class UpdateBatiproDocumentDto {
 export class ConfirmBatiproDocumentDto {
   @IsOptional() @IsString() @MaxLength(120) supplier_reference?: string;
   @IsOptional() @IsDateString() expected_delivery_date?: string;
+  // Taux fige (1 unite devise chantier = fx_rate unites devise document), max 6 decimales.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
 }
 
 // Une ligne receptionnee : quantite physiquement recue sur cette ligne du BC

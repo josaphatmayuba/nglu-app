@@ -1,3 +1,5 @@
+import { convertToProjectCents, parseFxRate } from "./fx.util";
+
 // Fonds du chantier BatiPro : logique PURE (testable sans base) pour
 //  - la definition UNIQUE du "decaisse" d'un chantier (carte Budget, liste des
 //    chantiers, synthese des fonds) ;
@@ -21,6 +23,10 @@ export type SpendDoc = {
   totalTtc: string | number | null;
   paidAmount: string | number | null;
   totals?: { currencyId: number; totalTtc: string | number | null }[];
+  // Taux fige (migration 0329) : 1 unite devise chantier = fxRate unites devise doc.
+  fxRate?: string | number | null;
+  totalTtcProjectCcy?: string | number | null;
+  paidAmountProjectCcy?: string | number | null;
 };
 
 export type FundInput = {
@@ -175,4 +181,132 @@ export function buildFundsSummary(
     if (b.currency_id === projectCurrencyId) return 1;
     return (a.currency_id ?? 0) - (b.currency_id ?? 0);
   });
+}
+
+// ── Multi-devise : taux fige par document (migration 0329) ───────────────────
+// Document en AUTRE devise que le chantier (devise doc explicite et differente ;
+// un document sans devise suit celle du chantier).
+const isOtherCurrency = (d: SpendDoc, projectCurrencyId: number | null) =>
+  projectCurrencyId != null && d.currencyId != null && d.currencyId !== projectCurrencyId;
+
+// Contre-valeur (devise chantier) des reglements deja faits sur des documents en
+// autre devise, chacun converti a SON taux de reglement (paidAmountProjectCcy).
+// S'ajoute au decaisse en devise chantier pour le "deja depense" du chantier.
+export function convertedPaidCents(docs: SpendDoc[], projectCurrencyId: number | null): number {
+  let sum = 0;
+  for (const d of docs) {
+    if (!isLive(d) || !(isPurchaseOrder(d) || isSupplierInvoice(d))) continue;
+    if (!isOtherCurrency(d, projectCurrencyId)) continue;
+    sum += toCents(d.paidAmountProjectCcy);
+  }
+  return sum;
+}
+
+export type ConvertedCurrencyRow = {
+  currency_id: number;
+  origin_amount: number; // engage (BC avec taux) en devise d'origine
+  converted_amount: number; // contre-valeur engagee en devise chantier
+  paid_origin_amount: number; // paye en devise d'origine (docs dont le paye est converti)
+  paid_converted_amount: number; // contre-valeur payee (taux de reglement)
+};
+
+export type FxSummary = {
+  // Σ totalTtcProjectCcy des BC en autre devise AVEC taux (s'ajoute a l'engage).
+  engagedConvertedCents: number;
+  // BC actifs en autre devise SANS taux ("taux a fixer").
+  poWithoutRateCount: number;
+  // Ids des BC comptes dans l'engage converti (a exclure de other_currency_amounts).
+  convertedPoIds: number[];
+  rows: ConvertedCurrencyRow[];
+  // Ecart de change analytique (devise chantier, signe) : voir fxGainLoss.
+  gainLossCents: number;
+  gainLossByCurrency: { currency_id: number; amount: number }[];
+};
+
+// Ecart de change ANALYTIQUE, par BC en autre devise ayant un taux fige :
+//   prevu  = contre-valeur, AU TAUX DU BC, de ce qui a ete regle en devise doc
+//            (paye du BC + paye de ses factures fournisseur enfants) ;
+//   reel   = Σ paidAmountProjectCcy (taux de reglement) du BC et de ses enfants ;
+//   ecart  = prevu - reel   (> 0 = gain : on a paye moins cher que prevu ;
+//                            < 0 = perte).
+// Seul le PAYE entre dans l'ecart (un BC non paye n'a pas d'ecart realise). Un BC
+// sans taux n'a pas de "prevu" -> exclu. N'alimente aucune ecriture comptable.
+export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null): FxSummary {
+  const rows = new Map<number, ConvertedCurrencyRow & { _o: number; _c: number; _po: number; _pc: number }>();
+  const row = (cur: number) => {
+    let r = rows.get(cur);
+    if (!r) {
+      r = { currency_id: cur, origin_amount: 0, converted_amount: 0, paid_origin_amount: 0, paid_converted_amount: 0, _o: 0, _c: 0, _po: 0, _pc: 0 };
+      rows.set(cur, r);
+    }
+    return r;
+  };
+  let engaged = 0;
+  let withoutRate = 0;
+  const convertedPoIds: number[] = [];
+  let gainLoss = 0;
+  const glByCur = new Map<number, number>();
+
+  const livePos = docs.filter((d) => isLive(d) && isPurchaseOrder(d));
+  const livePoIds = new Set(livePos.map((d) => d.id));
+
+  // Paye (origine + contre-valeur) des factures fournisseur enfants, par BC parent.
+  const childPaid = new Map<number, { o: number; c: number }>();
+  for (const d of docs) {
+    if (!isLive(d) || !isSupplierInvoice(d) || d.parentDocumentId == null || !livePoIds.has(d.parentDocumentId)) continue;
+    if (!isOtherCurrency(d, projectCurrencyId)) continue;
+    const m = childPaid.get(d.parentDocumentId) ?? { o: 0, c: 0 };
+    m.o += toCents(d.paidAmount);
+    m.c += toCents(d.paidAmountProjectCcy);
+    childPaid.set(d.parentDocumentId, m);
+  }
+
+  for (const d of docs) {
+    if (!isLive(d) || !(isPurchaseOrder(d) || isSupplierInvoice(d))) continue;
+    if (!isOtherCurrency(d, projectCurrencyId)) continue;
+    const cur = d.currencyId as number;
+    const r = row(cur);
+    // Seul le paye deja converti compte (sinon paid_origin incoherent avec paid_converted).
+    if (toCents(d.paidAmountProjectCcy) > 0) {
+      r._po += toCents(d.paidAmount);
+      r._pc += toCents(d.paidAmountProjectCcy);
+    }
+
+    if (!isPurchaseOrder(d)) continue;
+    const rate = parseFxRate(d.fxRate);
+    if (rate == null || d.totalTtcProjectCcy == null) {
+      withoutRate += 1;
+      continue;
+    }
+    r._o += toCents(d.totalTtc);
+    r._c += toCents(d.totalTtcProjectCcy);
+    engaged += toCents(d.totalTtcProjectCcy);
+    convertedPoIds.push(d.id);
+
+    const kids = childPaid.get(d.id) ?? { o: 0, c: 0 };
+    const paidOrigin = toCents(d.paidAmount) + kids.o;
+    const paidActual = toCents(d.paidAmountProjectCcy) + kids.c;
+    if (paidOrigin > 0) {
+      const gl = convertToProjectCents(paidOrigin, rate) - paidActual;
+      gainLoss += gl;
+      glByCur.set(cur, (glByCur.get(cur) ?? 0) + gl);
+    }
+  }
+
+  return {
+    engagedConvertedCents: engaged,
+    poWithoutRateCount: withoutRate,
+    convertedPoIds,
+    rows: [...rows.values()]
+      .sort((a, b) => a.currency_id - b.currency_id)
+      .map((r) => ({
+        currency_id: r.currency_id,
+        origin_amount: fromCents(r._o),
+        converted_amount: fromCents(r._c),
+        paid_origin_amount: fromCents(r._po),
+        paid_converted_amount: fromCents(r._pc),
+      })),
+    gainLossCents: gainLoss,
+    gainLossByCurrency: [...glByCur.entries()].map(([currency_id, c]) => ({ currency_id, amount: fromCents(c) })),
+  };
 }
