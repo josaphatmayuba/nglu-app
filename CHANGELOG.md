@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Audit npm : 2 avis publiés le 2026-10-30 bloquaient tout le deploy prod (v3.260.2).** GHSA-g3hv-75wg-m249 (minimatch < 11.0.1) et GHSA-3g3m-2fjr-6pw4 (glob 9-14.0.1) ajoutés aux exceptions des 16 `audit-ci.jsonc` : correctif seulement en version majeure, outillage build/test uniquement (analyse : aucun usage runtime, aucun motif venant d’un utilisateur). Montée ciblée des parents (overrides workbox-build/rimraf/filelist/eslint) à faire.
+
 - **avelomi.com : index.html de la vitrine sans cache (v3.260.1).** `expires -1` sur `location = /index.html` dans `nginx.avelomi.conf` : après un déploiement, les navigateurs affichaient encore l’ancienne page (« avelomi-site non deploye ») faute de `Cache-Control`.
 
 - **Anti-récidive panne Avelomi - bugs #58/#61/#62 (v3.260.0).** `deploy-prod-static-app.sh` ne verrouille plus `/opt/nglu-app` (chmod 755 du staging, `tar --no-same-owner --no-same-permissions --no-overwrite-dir`, racine remise à l’utilisateur ssh) ; « serveur pas prêt » = job rouge (`REQUIRE_READY=1`, fin du `|| echo tolere`) ; contrôle que le bundle déployé est bien servi (ongdngolu, avelomi.com et `<sub>.avelomi.com`) ; build Avelomi après le deploy ongdngolu. Nouveau `.github/workflows/uptime.yml` (horaire) : code HTTP, titre attendu, jours restants des certificats (< 20 j = erreur), issue GitHub `uptime` ouverte/fermée automatiquement. Contrat `scripts/check-avelomi-subdomains.mjs` + source unique `scripts/ci/avelomi-domains.json`, job `contracts` en tête des 2 pipelines avec les `check-*.mjs` existants (sauf `check-stale-auth-context`, déjà cassé).
