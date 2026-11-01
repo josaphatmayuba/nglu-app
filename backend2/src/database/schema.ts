@@ -1174,6 +1174,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   terminationReason: text("termination_reason"),
   terminatedAt: timestamp("terminated_at"),
   terminatedBy: bigint("terminated_by", { mode: "number" }),
+  // Migration 0332 : 1 = periode de sortie facturee en entier (historique), 0 = prorata des jours occupes.
+  terminationFullPeriod: tinyint("termination_full_period").default(1).notNull(),
   // Registre des affectations (migration 0317) : date de bascule du bail sur le
   // modele 1 mois = 1 echeance = ses paiements. NULL = comportement historique.
   allocationLedgerAt: datetime("allocation_ledger_at"),
@@ -1192,6 +1194,8 @@ export const realEstateLeaseScheduledTerminations = mysqlTable("real_estate_leas
   effectiveDate: date("effective_date", { mode: "string" }).notNull(),
   reason: text("reason"),
   notifyTenant: tinyint("notify_tenant").default(0).notNull(),
+  // Migration 0332 : 1 = facturer la periode complete, 0 = prorata.
+  fullPeriod: tinyint("full_period").default(1).notNull(),
   status: varchar("status", { length: 20 }).default("scheduled").notNull(),
   createdBy: bigint("created_by", { mode: "number" }),
   createdAt: timestamp("created_at"),

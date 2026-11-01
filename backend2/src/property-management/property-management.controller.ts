@@ -1047,8 +1047,9 @@ export class PropertyManagementController {
     @Query("date") date: string,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("fullPeriod") fullPeriod?: string,
   ) {
-    return this.propertyManagementService.terminationPreview(id, date, orgId, scope);
+    return this.propertyManagementService.terminationPreview(id, date, orgId, scope, fullPeriod === "true" || fullPeriod === "1");
   }
 
   @ApiOperation({ summary: "Resilier un bail avec motif (statut ended, echeances futures annulees)" })

@@ -374,6 +374,7 @@ export interface LeaseForOverdue {
   /** Bail 'ended' : le total du est plafonne a la sortie. */
   status?: string | null;
   terminationDate?: string | null;
+  terminationFullPeriod?: boolean | number | null;
 }
 
 export interface LeaseOverdueEntry {

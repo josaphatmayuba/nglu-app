@@ -2366,4 +2366,9 @@ export class TerminateLeaseDto {
   @IsOptional()
   @IsBoolean()
   notifyTenant?: boolean;
+
+  @ApiPropertyOptional({ default: false, description: "true = facturer la periode de sortie en entier (preavis) ; defaut false = prorata des jours occupes." })
+  @IsOptional()
+  @IsBoolean()
+  fullPeriod?: boolean;
 }

@@ -52,6 +52,7 @@ export interface EndedLeaseInput {
   rentAmount?: string | number | null;
   rentProrationEnabled?: boolean | number | null;
   terminationDate?: string | null;
+  terminationFullPeriod?: boolean | number | null;
   allocationLedgerAt?: unknown;
   currencyId?: number | null;
 }
@@ -211,6 +212,7 @@ export async function loadEndedLeaseBalances(
       rentAmount: realEstateLeases.rentAmount,
       rentProrationEnabled: realEstateLeases.rentProrationEnabled,
       terminationDate: realEstateLeases.terminationDate,
+      terminationFullPeriod: realEstateLeases.terminationFullPeriod,
       allocationLedgerAt: realEstateLeases.allocationLedgerAt,
       currencyId: realEstateLeases.currencyId,
       curCode: currencies.currencyCode,

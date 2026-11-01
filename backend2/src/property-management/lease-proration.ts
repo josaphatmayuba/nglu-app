@@ -24,6 +24,8 @@ export interface ProrationLease {
   /** Bail 'ended' : le total du est plafonne a la sortie (terminationDate ?? endDate). */
   status?: string | null;
   terminationDate?: string | null;
+  /** 0/false = mois de sortie au prorata des jours occupes ; absent/1 = periode complete (historique). */
+  terminationFullPeriod?: boolean | number | null;
 }
 
 export interface LeaseNextDue {
@@ -102,18 +104,191 @@ export function computeLeaseTotalDue(
   const paid = Number(paidTotal) || 0;
   const cutoff = leaseEndedCutoff(lease);
   const realToday = formatDateOnly(now);
-  const capped = cutoff !== null && cutoff < realToday;
+  const capped = cutoff !== null && cutoff <= realToday;
   if (lease.rentProrationEnabled) {
     const todayStr = capped ? (cutoff as string) : realToday;
     const schedule = scheduleForLease(lease, decimals, paid, todayStr);
     return applyCoverage(schedule, [paid], todayStr, decimals).balance;
   }
   const rent = Number(lease.rentAmount) || 0;
+  if (capped) {
+    // Bail termine : meme regle partout (anciens debiteurs, apercu caution, trop-percu).
+    return Math.max(0, Math.round((terminationPeriodCharge(lease, cutoff as string, rent, 2).charge - paid) * 100) / 100);
+  }
   const start = parseDateOnly(lease.startDate);
-  const nowY = capped ? Number((cutoff as string).slice(0, 4)) : now.getFullYear();
-  const nowM = capped ? Number((cutoff as string).slice(5, 7)) - 1 : now.getMonth();
-  const elapsedPast = Math.max(0, (nowY - start.getUTCFullYear()) * 12 + (nowM - start.getUTCMonth()));
+  const elapsedPast = Math.max(0, (now.getFullYear() - start.getUTCFullYear()) * 12 + (now.getMonth() - start.getUTCMonth()));
   return Math.max(0, Math.round(((elapsedPast + 1) * rent - paid) * 100) / 100);
+}
+
+/** Vrai si la resiliation de ce bail facture la periode de sortie au prorata (colonne explicitement a 0). */
+export function isTerminationProrated(lease: { terminationFullPeriod?: boolean | number | null }): boolean {
+  const v = lease.terminationFullPeriod;
+  return v !== undefined && v !== null && (v === false || Number(v) === 0);
+}
+
+export interface ExitMonthProration {
+  occupiedDays: number;
+  periodDays: number;
+  fullAmount: number;
+  amount: number;
+  reduction: number;
+  periodStart: string;
+  periodEnd: string;
+}
+
+/**
+ * Periode de facturation (ancree sur startDate + k cycles, comme la couverture des echeances)
+ * qui contient `day` : debut = dernier addBillingCycle(start, cycle, k) <= day ; fin = le suivant - 1 jour.
+ * k = index 0-based de la periode. SOURCE UNIQUE des calculs de sortie au prorata.
+ */
+export function anchoredExitPeriod(startDate: string, billingCycle: string | null | undefined, day: string) {
+  const start = parseDateOnly(startDate);
+  const d = parseDateOnly(day);
+  let k = Math.max(0, Math.floor(monthsBetween(start, d) / cycleMonths(billingCycle)));
+  while (addBillingCycle(start, billingCycle, k + 1).getTime() <= d.getTime()) k++;
+  while (k > 0 && addBillingCycle(start, billingCycle, k).getTime() > d.getTime()) k--;
+  const ps = addBillingCycle(start, billingCycle, k);
+  const next = addBillingCycle(start, billingCycle, k + 1);
+  const DAY = 86_400_000;
+  return {
+    k,
+    periodStart: formatDateOnly(ps),
+    periodEnd: formatDateOnly(new Date(next.getTime() - DAY)),
+    periodDays: Math.round((next.getTime() - ps.getTime()) / DAY),
+    occupiedDays: Math.max(0, Math.round((d.getTime() - ps.getTime()) / DAY) + 1),
+  };
+}
+
+/**
+ * Prorata de la periode de sortie d'un loyer fixe : loyer x jours occupes (debut de periode ancree ->
+ * sortie incluse) / jours de la periode. null si la sortie couvre la periode entiere ou si le prorata
+ * n'est pas demande.
+ */
+export function exitMonthProration(
+  lease: { startDate: string; billingCycle?: string | null; terminationFullPeriod?: boolean | number | null },
+  cutoff: string,
+  rent: number,
+  decimals: number,
+): ExitMonthProration | null {
+  if (!isTerminationProrated(lease)) return null;
+  const p = anchoredExitPeriod(String(lease.startDate).slice(0, 10), lease.billingCycle, cutoff);
+  if (p.occupiedDays >= p.periodDays || p.occupiedDays < 1) return null;
+  const amount = roundMoney((rent * p.occupiedDays) / p.periodDays, decimals);
+  return {
+    occupiedDays: p.occupiedDays, periodDays: p.periodDays, fullAmount: roundMoney(rent, decimals), amount,
+    reduction: roundMoney(rent - amount, decimals), periodStart: p.periodStart, periodEnd: p.periodEnd,
+  };
+}
+
+/**
+ * Total facture d'un bail a loyer fixe sorti le `cutoff` (avant versements).
+ * - prorata (terminationFullPeriod = 0) : periodes ancrees jusqu'a la sortie, la derniere au prorata ;
+ * - sinon (historique) : mois civils depuis le debut, mois de sortie inclus, en entier.
+ */
+export function terminationPeriodCharge(
+  lease: { startDate: string; billingCycle?: string | null; terminationFullPeriod?: boolean | number | null },
+  cutoff: string,
+  rent: number,
+  decimals: number,
+): { periods: number; exit: ExitMonthProration | null; charge: number } {
+  if (isTerminationProrated(lease)) {
+    const p = anchoredExitPeriod(String(lease.startDate).slice(0, 10), lease.billingCycle, cutoff);
+    const exit = exitMonthProration(lease, cutoff, rent, decimals);
+    return { periods: p.k + 1, exit, charge: roundMoney((p.k + 1) * rent - (exit ? exit.reduction : 0), decimals) };
+  }
+  const months = Math.max(0, monthsBetween(parseDateOnly(lease.startDate), parseDateOnly(cutoff))) + 1;
+  return { periods: months, exit: null, charge: roundMoney(months * rent, decimals) };
+}
+
+/**
+ * Total facture d'un bail resilie a la date `day` (non plafonne par les versements) : meme regle
+ * que computeLeaseTotalDue. Sert a mesurer un trop-percu : max(0, verse - charge).
+ */
+export function computeTerminationCharge(
+  lease: ProrationLease & { terminationFullPeriod?: boolean | number | null },
+  day: string,
+  decimals: number,
+): number {
+  const rent = Number(lease.rentAmount) || 0;
+  if (lease.rentProrationEnabled) {
+    const end = lease.endDate && String(lease.endDate).slice(0, 10) < day ? String(lease.endDate).slice(0, 10) : day;
+    const schedule = buildLeaseSchedule({
+      startDate: lease.startDate,
+      endDate: end,
+      billingCycle: lease.billingCycle as any,
+      rentAmount: rent,
+      currencyDecimals: decimals,
+      horizonPeriods: 12,
+    });
+    return roundMoney(schedule.reduce((s, p) => s + p.amount, 0), decimals);
+  }
+  return terminationPeriodCharge(lease, day, rent, decimals).charge;
+}
+
+export interface TerminationDueRow {
+  id: number;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  paymentDate: string;
+  amount: number;
+  taxAmount?: number | null;
+}
+
+export interface TerminationRowProration {
+  rowId: number;
+  periodStart: string;
+  periodEnd: string;
+  occupiedDays: number;
+  periodDays: number;
+  initialAmount: number;
+  amount: number;
+  initialTax: number | null;
+  tax: number | null;
+}
+
+/**
+ * Echeance dont la periode CONTIENT le jour de sortie (periodStart <= jour <= periodEnd) et son
+ * montant au prorata : montant x jours occupes (debut de periode -> sortie incluse) / jours de la
+ * periode de la ligne. Periode sans periodEnd : un cycle de facturation depuis son debut.
+ * Arrondi a `decimals` (centimes), jamais a l'unite. null si aucune ligne ou sortie = fin de periode.
+ */
+export function planTerminationProration(
+  rows: TerminationDueRow[],
+  day: string,
+  billingCycle: string | null | undefined,
+  decimals: number,
+): TerminationRowProration | null {
+  const dayD = parseDateOnly(day);
+  let best: { row: TerminationDueRow; s: Date; e: Date } | null = null;
+  for (const row of rows) {
+    const sStr = String(row.periodStart || row.paymentDate || "").slice(0, 10);
+    if (!sStr) continue;
+    const s = parseDateOnly(sStr);
+    if (s.getTime() > dayD.getTime()) continue;
+    const e = row.periodEnd
+      ? parseDateOnly(String(row.periodEnd))
+      : new Date(addBillingCycle(s, billingCycle, 1).getTime() - 86_400_000);
+    if (e.getTime() < dayD.getTime()) continue;
+    if (!best || s.getTime() > best.s.getTime()) best = { row, s, e };
+  }
+  if (!best) return null;
+  const DAY = 86_400_000;
+  const periodDays = Math.round((best.e.getTime() - best.s.getTime()) / DAY) + 1;
+  const occupiedDays = Math.round((dayD.getTime() - best.s.getTime()) / DAY) + 1;
+  if (occupiedDays >= periodDays || occupiedDays < 1) return null;
+  const initialAmount = Number(best.row.amount) || 0;
+  const initialTax = best.row.taxAmount == null ? null : Number(best.row.taxAmount) || 0;
+  return {
+    rowId: best.row.id,
+    periodStart: formatDateOnly(best.s),
+    periodEnd: formatDateOnly(best.e),
+    occupiedDays,
+    periodDays,
+    initialAmount,
+    amount: roundMoney((initialAmount * occupiedDays) / periodDays, decimals),
+    initialTax,
+    tax: initialTax === null ? null : roundMoney((initialTax * occupiedDays) / periodDays, decimals),
+  };
 }
 
 /** Date de sortie (YYYY-MM-DD) d'un bail 'ended' ; null si le bail n'est pas termine. */

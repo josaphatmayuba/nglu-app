@@ -121,6 +121,12 @@ import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, 
 import {
   assignPaidRows,
   computeLeaseTotalDue,
+  computeTerminationCharge,
+  exitMonthProration,
+  terminationPeriodCharge,
+  isTerminationProrated,
+  leaseEndedCutoff,
+  planTerminationProration,
   planProrationRealign,
   scheduleForLease,
   occupiedMonthKeys,
@@ -2640,8 +2646,10 @@ export class PropertyManagementService implements OnModuleInit {
   }
 
   // Recapitulatif SANS ecriture pour la modale de resiliation.
-  async terminationPreview(leaseId: number, date: string, orgId: number, propertyScope: "all" | number[] = "all") {
+  async terminationPreview(leaseId: number, date: string, orgId: number, propertyScope: "all" | number[] = "all", fullPeriodRequested = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    const fullPeriod = this.effectiveFullPeriod(lease, fullPeriodRequested);
+    const moneyDec = 2; // prorata / trop-percu : toujours 2 decimales
     this.ensurePropertyInScope(lease.propertyId, propertyScope);
     const day = this.terminationDay(date);
     const scheduled = day > this.formatDateOnly(new Date());
@@ -2681,7 +2689,51 @@ export class PropertyManagementService implements OnModuleInit {
     const depRentApplied = dep ? roundMoney(Number(dep.rentApplied) || 0, decimals) : 0;
     const depAvailable = dep ? roundMoney((Number(dep.amount) || 0) - depRentApplied, decimals) : 0;
 
+    // Derniere periode (celle qui contient la date de sortie) : montant plein vs prorata.
+    const flaggedLease = isLeaseFlagged(lease);
+    const rp = realEstateRentPayments;
+    const dueCandidates: any[] = await this.db
+      .select({
+        id: rp.id, periodStart: rp.periodStart, periodEnd: rp.periodEnd, paymentDate: rp.paymentDate,
+        amount: rp.amount, taxAmount: rp.taxAmount, amountPaid: rp.amountPaid,
+      })
+      .from(rp)
+      .where(and(
+        eq(rp.organizationId, orgId),
+        eq(rp.leaseId, leaseId),
+        inArray(rp.status, flaggedLease ? ["pending", "overdue", "settled"] : ["pending", "overdue"]),
+        flaggedLease ? eq(rp.rowKind, "due") : isNull(rp.transactionId),
+      ));
+    const plan = planTerminationProration(
+      dueCandidates.map((r) => ({
+        id: Number(r.id), periodStart: r.periodStart, periodEnd: r.periodEnd, paymentDate: String(r.paymentDate),
+        amount: Number(r.amount) || 0, taxAmount: r.taxAmount == null ? null : Number(r.taxAmount),
+      })),
+      day,
+      lease.billingCycle,
+      moneyDec,
+    );
+    // Sans ligne d'echeance (periode deja encaissee directement) : meme regle sur le loyer du bail.
+    const exit = plan ? null : exitMonthProration({ startDate: String(lease.startDate).slice(0, 10), billingCycle: lease.billingCycle, terminationFullPeriod: 0 }, day, Number(lease.rentAmount) || 0, moneyDec);
+    const lastPeriod = plan
+      ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd, occupiedDays: plan.occupiedDays, periodDays: plan.periodDays, initialAmount: plan.initialAmount, prorataAmount: plan.amount }
+      : exit
+        ? { periodStart: null, periodEnd: null, occupiedDays: exit.occupiedDays, periodDays: exit.periodDays, initialAmount: exit.fullAmount, prorataAmount: exit.amount }
+        : null;
+    let overpaid = 0;
+    if (flaggedLease) {
+      const src = plan ? dueCandidates.find((r) => Number(r.id) === plan.rowId) : null;
+      overpaid = plan && !fullPeriod ? Math.max(0, roundMoney((Number(src?.amountPaid) || 0) - plan.amount, moneyDec)) : 0;
+    } else {
+      overpaid = await this.terminationOverpaid(lease, day, orgId, moneyDec, fullPeriod);
+    }
+
     return {
+      fullPeriod,
+      lastPeriod: lastPeriod
+        ? { ...lastPeriod, prorated: !fullPeriod, billedAmount: fullPeriod ? lastPeriod.initialAmount : lastPeriod.prorataAmount }
+        : null,
+      overpaid,
       leaseId,
       status: lease.status,
       startDate: lease.startDate,
@@ -2707,6 +2759,11 @@ export class PropertyManagementService implements OnModuleInit {
     };
   }
 
+  /** Un bail au prorata par conception (rent_proration_enabled) n'a pas de periode complete : prorata force. */
+  private effectiveFullPeriod(lease: any, requested: boolean): boolean {
+    return lease?.rentProrationEnabled ? false : requested;
+  }
+
   async terminateLease(
     id: number,
     input: TerminateLeaseDto,
@@ -2729,9 +2786,9 @@ export class PropertyManagementService implements OnModuleInit {
       throw new BadRequestException("La date de resiliation ne peut pas preceder le debut du bail.");
     }
     if (day > today) {
-      return this.scheduleTermination(lease, day, today, reason, !!input.notifyTenant, orgId, userId);
+      return this.scheduleTermination(lease, day, today, reason, !!input.notifyTenant, orgId, userId, this.effectiveFullPeriod(lease, !!input.fullPeriod));
     }
-    return this.executeTermination({ lease, day, reason, orgId, userId, notifyTenant: !!input.notifyTenant });
+    return this.executeTermination({ lease, day, reason, orgId, userId, notifyTenant: !!input.notifyTenant, fullPeriod: this.effectiveFullPeriod(lease, !!input.fullPeriod) });
   }
 
   /** Date limite (YYYY-MM-DD, UTC) d'une resiliation programmee : aujourd'hui + TERMINATION_MAX_FUTURE_MONTHS. */
@@ -2750,6 +2807,7 @@ export class PropertyManagementService implements OnModuleInit {
     notifyTenant: boolean,
     orgId: number,
     userId?: number,
+    fullPeriod = false,
   ) {
     const id = Number(lease.id);
     const max = this.terminationMaxDay(today);
@@ -2789,6 +2847,7 @@ export class PropertyManagementService implements OnModuleInit {
         effectiveDate: day,
         reason,
         notifyTenant: notifyTenant ? 1 : 0,
+        fullPeriod: fullPeriod ? 1 : 0,
         status: "scheduled",
         createdBy: userId ?? null,
         createdAt: sql`CURRENT_TIMESTAMP`,
@@ -2875,15 +2934,21 @@ export class PropertyManagementService implements OnModuleInit {
     userId?: number;
     notifyTenant: boolean;
     scheduleId?: number;
+    /** true/absent = periode de sortie facturee en entier (historique) ; false = prorata des jours occupes. */
+    fullPeriod?: boolean;
   }): Promise<any> {
     const { lease, day, reason, orgId, userId, scheduleId } = args;
+    const fullPeriod = this.effectiveFullPeriod(lease, args.fullPeriod ?? true);
     const id = Number(lease.id);
     const currentEnd = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
     const newEnd = currentEnd && currentEnd <= day ? currentEnd : day;
+    // Argent : toujours 2 decimales exactes (prorata, taxe, trop-percu, notes), meme si la devise en declare 0.
+    const decimals = 2;
 
     let voidedCount = 0;
     let voidedTotal = 0;
     let skipped = false;
+    let proration: any = null;
     await this.db.transaction(async (tx) => {
       // Ordre de verrous unique partout : bail d'abord, puis ligne de planning.
       let leaseLocked = false;
@@ -2918,6 +2983,7 @@ export class PropertyManagementService implements OnModuleInit {
           terminationReason: reason,
           terminatedAt: sql`CURRENT_TIMESTAMP`,
           terminatedBy: userId ?? null,
+          terminationFullPeriod: fullPeriod ? 1 : 0,
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(and(
@@ -2927,6 +2993,57 @@ export class PropertyManagementService implements OnModuleInit {
         ));
       if (Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) === 0) {
         throw new BadRequestException("Seul un bail actif peut etre resilie.");
+      }
+
+      // Prorata de la periode contenant la date de sortie (echeance non encaissee ou soldee d'un bail
+      // flagge). Jamais de suppression : montant reduit, trace dans les notes.
+      if (!fullPeriod) {
+        const flagged = isLeaseFlagged(lease);
+        const rp = realEstateRentPayments;
+        const statuses = flagged ? ["pending", "overdue", "settled"] : ["pending", "overdue"];
+        const candidates: any[] = await tx
+          .select({
+            id: rp.id, status: rp.status, periodStart: rp.periodStart, periodEnd: rp.periodEnd,
+            paymentDate: rp.paymentDate, amount: rp.amount, taxAmount: rp.taxAmount, amountPaid: rp.amountPaid,
+          })
+          .from(rp)
+          .where(and(
+            eq(rp.organizationId, orgId),
+            eq(rp.leaseId, id),
+            inArray(rp.status, statuses),
+            flagged ? eq(rp.rowKind, "due") : isNull(rp.transactionId),
+          ));
+        const plan = planTerminationProration(
+          candidates.map((r) => ({
+            id: Number(r.id), periodStart: r.periodStart, periodEnd: r.periodEnd, paymentDate: String(r.paymentDate),
+            amount: Number(r.amount) || 0, taxAmount: r.taxAmount == null ? null : Number(r.taxAmount),
+          })),
+          day,
+          lease.billingCycle,
+          decimals,
+        );
+        if (plan) {
+          const note = ` [PRORATA resiliation: ${plan.occupiedDays}/${plan.periodDays} jours, montant initial ${plan.initialAmount.toFixed(decimals)}]`;
+          const set: Record<string, unknown> = {
+            amount: plan.amount.toFixed(decimals),
+            notes: sql`TRIM(CONCAT(COALESCE(${rp.notes}, ''), ${note}))`,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          };
+          if (plan.tax !== null) set.taxAmount = plan.tax.toFixed(decimals);
+          await tx.update(rp).set(set as any).where(and(
+            eq(rp.id, plan.rowId),
+            eq(rp.organizationId, orgId),
+            eq(rp.leaseId, id),
+            inArray(rp.status, statuses),
+          ));
+          const src = candidates.find((r) => Number(r.id) === plan.rowId);
+          proration = {
+            ...plan,
+            reduction: roundMoney(plan.initialAmount - plan.amount, decimals),
+            // Bail flagge : la part deja imputee au-dela du nouveau montant redevient credit (rebuild ci-dessous).
+            overpaid: flagged ? Math.max(0, roundMoney((Number(src?.amountPaid) || 0) - plan.amount, decimals)) : 0,
+          };
+        }
       }
 
       // Echeances a venir : soft void, jamais une echeance payee.
@@ -3010,7 +3127,33 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Lecture post-commit : un echec d'affichage ne doit pas faire echouer une resiliation deja validee.
     const fresh = await this.findLease(id, orgId).catch(() => null);
-    return { lease: fresh, voidedCount, voidedTotal, sms };
+    // Trop-percu (credit locataire) : bail flagge = part imputee au-dela du nouveau montant (registre
+    // reconstruit) ; bail non flagge = verse - total facture a la sortie. Information, aucune ecriture.
+    let overpaid = proration?.overpaid ?? 0;
+    if (!fullPeriod && !isLeaseFlagged(lease)) {
+      try {
+        overpaid = await this.terminationOverpaid(lease, day, orgId, decimals);
+      } catch (error) {
+        this.logger.warn(`Lease termination overpaid calc failed (lease ${id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    return { lease: fresh, voidedCount, voidedTotal, sms, fullPeriod, proration, overpaid };
+  }
+
+  /** Non flagge : max(0, total verse - total facture a la date de sortie), au centime. */
+  private async terminationOverpaid(lease: any, day: string, orgId: number, decimals: number, fullPeriod = false): Promise<number> {
+    const rows: Array<{ amount: unknown; rowKind?: string | null }> = await this.db
+      .select({ amount: realEstateRentPayments.amount, rowKind: realEstateRentPayments.rowKind })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, Number(lease.id)),
+        eq(realEstateRentPayments.status, "paid"),
+      ));
+    // Meme filtre que former-debt.ts : paiements encaisses, hors lignes d'echeance.
+    const paid = rows.filter((r) => r.rowKind !== "due").reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const charge = computeTerminationCharge({ ...lease, terminationFullPeriod: fullPeriod ? 1 : 0 }, day, decimals);
+    return Math.max(0, roundMoney(paid - charge, decimals));
   }
 
   /** Planning actif d'un bail qui quitte 'active' par une autre voie : obsolete. */
@@ -5359,6 +5502,7 @@ export class PropertyManagementService implements OnModuleInit {
         // Plafond a la sortie (bail termine) : sans eux la relance cite une dette qui grossit.
         status: realEstateLeases.status,
         terminationDate: realEstateLeases.terminationDate,
+        terminationFullPeriod: realEstateLeases.terminationFullPeriod,
         billingCycle: realEstateLeases.billingCycle,
         currencyId: realEstateLeases.currencyId,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
@@ -5746,7 +5890,7 @@ export class PropertyManagementService implements OnModuleInit {
     // Couverture en montant : total deja verse / loyer mensuel. Les echeances
     // "pending" (generees mais non encaissees) ne comptent pas comme payees.
     const payments = await this.db
-      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
+      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status, rowKind: realEstateRentPayments.rowKind })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.leaseId, leaseId),
@@ -5755,7 +5899,8 @@ export class PropertyManagementService implements OnModuleInit {
       ));
     const rent = Number(lease.rentAmount) || 0;
     const totalPaid = payments
-      .filter((p) => p.status !== "pending" && p.status !== "settled")
+      // Versements encaisses uniquement (meme filtre que former-debt.ts)
+      .filter((p) => p.status === "paid" && p.rowKind !== "due")
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     // Le preavis ne reclame que les echeances dont le delai de grace est depasse
     // (meme regle que la carte Loyers) ; une echeance encore dans la grace est
@@ -5786,6 +5931,42 @@ export class PropertyManagementService implements OnModuleInit {
         totalPaid,
         decimals,
       );
+    } else if (leaseEndedCutoff(lease)) {
+      // Bail termine, loyer fixe (bug #80) : meme regle que computeLeaseTotalDue (anciens debiteurs).
+      const cutoff = leaseEndedCutoff(lease) as string;
+      const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
+      const periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }> = [];
+      const charge = terminationPeriodCharge(lease, cutoff, rent, 2);
+      if (isTerminationProrated(lease)) {
+        // Prorata : periodes ancrees sur le jour de debut et le cycle du bail, derniere au prorata.
+        for (let i = 0; i < charge.periods; i++) {
+          const first = this.formatDateOnly(addScheduleCycle(start, lease.billingCycle as any, i));
+          if (first > todayStr) break;
+          const last = i === charge.periods - 1;
+          periods.push({
+            periodStart: first,
+            periodEnd: last ? cutoff : this.formatDateOnly(new Date(addScheduleCycle(start, lease.billingCycle as any, i + 1).getTime() - 86_400_000)),
+            dueDate: first,
+            amount: last && charge.exit ? charge.exit.amount : rent,
+            prorated: last && !!charge.exit,
+          });
+        }
+      } else {
+        // Historique (periode complete) : un mois civil par echeance, mois de sortie inclus.
+        for (let i = 0; i < charge.periods; i++) {
+          const first = i === 0 ? start : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+          const dueDate = this.formatDateOnly(first);
+          if (dueDate > todayStr) break;
+          periods.push({
+            periodStart: dueDate,
+            periodEnd: i === charge.periods - 1 ? cutoff : this.formatDateOnly(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i + 1, 0))),
+            dueDate,
+            amount: rent,
+            prorated: false,
+          });
+        }
+      }
+      lines = coverDuesSequentially(periods, totalPaid, 2);
     } else {
       // Loyer fixe : une echeance par cycle depuis le debut du bail.
       const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
@@ -8604,6 +8785,7 @@ export class PropertyManagementService implements OnModuleInit {
         // Bail precedent quand ce bail est un renouvellement.
         renewedFromLeaseId: realEstateLeases.renewedFromLeaseId,
         terminationDate: realEstateLeases.terminationDate,
+        terminationFullPeriod: realEstateLeases.terminationFullPeriod,
         terminationReason: realEstateLeases.terminationReason,
         terminatedAt: realEstateLeases.terminatedAt,
         terminatedBy: realEstateLeases.terminatedBy,

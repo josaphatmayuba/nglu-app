@@ -373,7 +373,7 @@ export const api = {
   // Résiliation avec motif (statut ended) + récapitulatif préalable.
   terminateLease: (id, b) => post(`/leases/${id}/terminate`, b),
   cancelScheduledTermination: (id, b) => post(`/leases/${id}/scheduled-termination/cancel`, b || {}),
-  terminationPreview: (id, date) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}`),
+  terminationPreview: (id, date, fullPeriod = false) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}${fullPeriod ? "&fullPeriod=true" : ""}`),
 
   // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
   leaseDocuments: (id) => jsonFetch(`/leases/${id}/documents`, { method: "GET", cache: "no-store" }),

@@ -70,6 +70,7 @@ export class LeaseScheduledTerminationService {
           orgId: rowOrg,
           userId: row.createdBy != null ? Number(row.createdBy) : undefined,
           notifyTenant: false,
+          fullPeriod: Number(row.fullPeriod ?? 1) === 1,
           scheduleId,
         });
         if (res?.skipped) out.skipped += 1;
