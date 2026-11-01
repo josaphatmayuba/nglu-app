@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : signatures du cahier du bailleur (v3.275.7).** Pages roses (Loyers, Eau, Exemple, Guide) : « Signature du bailleur » + « Signature du locataire » au lieu de « Signature de qui reçoit » ; le cahier du locataire est inchangé.
+
 - **Domus carnet : exemple rempli sans débordement, pages Hausses/Garantie, Corrections et Notes agrandies (v3.275.6).** Exemple : `table.ex`, écriture d exemple dimensionnée par colonne (Moyen 7 pt, Montant 9 pt sur 2 lignes) ; nouvelle classe `p-misc` (en-têtes 8 pt, tableau 9 pt, lignes 9,6 mm, même nombre de lignes). Retour de QA dev v3.275.5.
 
 - **Domus carnet : trame de points roses du bailleur enfin visible (v3.275.5) - bug #88.** Le radial-gradient de 0,3 mm disparaissait à l'écran et dans l'aperçu d'impression ; remplacé par un motif SVG (mêmes points de 0,3 mm tous les 1,5 mm).

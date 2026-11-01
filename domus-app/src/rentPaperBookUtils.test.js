@@ -344,6 +344,16 @@ describe("carnet lisible : tailles et textes", () => {
     expect(rent).toMatch(/class="foot"><span>Carnet [^<]*· Bail /);
     expect(rent).toContain("$ ou FC + taux");
   });
+  it("cahier du bailleur : signature du bailleur et du locataire", () => {
+    for (const pass of ["coupe", "pleine", "simple", "plie"]) {
+      const guide = paperBookHtml(base, { pass, years: 2, copy: "landlord" }).split('<div class="a5 ').filter((p) => p.includes("p-guide"));
+      expect(guide.length).toBeGreaterThan(0);
+      for (const page of guide) expect(page).not.toContain("Signature de qui reçoit");
+    }
+    const pages = paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" }).split('<div class="a5 ').filter((p) => p.includes("p-rent") || p.includes("p-water"));
+    for (const page of pages) expect(page).not.toContain("Signature de qui reçoit");
+    expect(pages.some((p) => p.includes("Signature du bailleur") && p.includes("Signature du locataire"))).toBe(true);
+  });
   it("classes de page ajoutees a cote de dup", () => {
     expect(paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" })).toContain('class="a5 p-rent"');
     for (const c of ["p-rent", "p-cond", "p-water", "p-end", "p-guide"]) expect(html).toMatch(new RegExp(`class="a5[^"]* ${c}"`));
