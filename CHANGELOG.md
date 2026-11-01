@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : bail sans caution avec un modèle de contrat en base - bug #78 (v3.271.2).** Les modèles commercial / court terme imprimaient « Garantie : 0 $ ([NUMÉRO DE MOIS DE GARANTIE] mois de loyer) ». Caution 0 : chaque ligne citant `[MONTANT GARANTIE…]` / `[NUMÉRO DE MOIS DE GARANTIE]` devient « aucune garantie locative n est exigée pour ce bail. » en gardant numérotation et libellé (`stripGuaranteeClause`).
 - **CI : avelomi.com ne repasse plus sur « avelomi-site non deploye » - bug #77 (v3.271.1).** `deploy-prod-static-app.sh` : sur Avelomi, un `avelomi-site/dist` non récupérable fait échouer le déploiement avant rebuild (plus de placeholder cuit en vert) ; le smoke vérifie aussi que la racine ne sert pas « non deploye » (sinon rollback `:previous`) ; plus de warning pour les dist non servis (avelomi-site sur ongdngolu, marketing-site sur Avelomi). `deploy-prod.yml` : `avelomi-site-prod` rejoue la vitrine en fin de chaîne à chaque deploy statique/frontend.
 - **BâtiPro : montants sur le Planning (v3.271.0).** Chaque carte de phase affiche « Utilisé / Prévu » (engagé sur bons de commande vs budget planifié, devise de la phase) et le % du budget consommé (rouge au-delà de 100 %), en plus de l avancement. Carte « Total des phases » en tête (utilisé, prévu, reste, par devise). `GET /phases?project_id=` renvoie `spentAmount` + `currencyCode`.
 

@@ -58,6 +58,24 @@ describe("contrat par defaut - bail sans caution", () => {
   });
 });
 
+describe("contrat modele - bail sans caution", () => {
+  const strip = ContractsService.stripGuaranteeClause;
+
+  it("ligne numerotee avec libelle : garde « 4.2 Garantie : »", () => {
+    const body = "ARTICLE 4\n4.2 Garantie : [MONTANT GARANTIE] $ ([NUMÉRO DE MOIS DE GARANTIE] mois de loyer)\nARTICLE 5";
+    expect(strip(body)).toBe("ARTICLE 4\n4.2 Garantie : aucune garantie locative n'est exigée pour ce bail.\nARTICLE 5");
+  });
+
+  it("phrase sans libelle : majuscule, autres lignes intactes", () => {
+    const body = "Loyer : [MONTANT DU LOYER]\nLe Preneur verse une garantie de [MONTANT GARANTIE AVEC DEVISE].";
+    expect(strip(body)).toBe("Loyer : [MONTANT DU LOYER]\nAucune garantie locative n'est exigée pour ce bail.");
+  });
+
+  it("HTML : seul le texte entre balises est remplace", () => {
+    expect(strip("<p>Garantie : [MONTANT GARANTIE] $</p><p>Fin</p>")).toBe("<p>Garantie : aucune garantie locative n'est exigée pour ce bail.</p><p>Fin</p>");
+  });
+});
+
 describe("contrat modele - variables", () => {
   it("1 locataire : variable inchangee", () => {
     const v = svc().buildVariables(lease(), company);

@@ -195,7 +195,23 @@ export class ContractsService {
     }
 
     const vars = this.buildVariables(lease, company);
-    return ContractTemplatesService.applyVariables(template.body, vars);
+    const body = Number(lease.securityDeposit ?? 0) > 0 ? template.body : ContractsService.stripGuaranteeClause(template.body);
+    return ContractTemplatesService.applyVariables(body, vars);
+  }
+
+  /**
+   * Bail sans caution : chaque ligne (ou texte entre balises) d'un modele qui cite
+   * [MONTANT GARANTIE...] / [NUMÉRO DE MOIS DE GARANTIE] est remplacee par la clause
+   * « aucune garantie », en gardant sa numerotation et son libelle (« 4.2 Garantie : »).
+   */
+  static stripGuaranteeClause(body: string): string {
+    const NO_GUARANTEE = "aucune garantie locative n'est exigée pour ce bail.";
+    return body.replace(/[^\n<>]*\[(?:MONTANT GARANTIE|NUMÉRO DE MOIS DE GARANTIE)[^\]]*\][^\n<>]*/g, (run) => {
+      if (run.length > 600) return run; // paragraphe trop long : on ne reecrit pas a l'aveugle
+      const prefix = run.match(/^\s*(?:(?:article\s*)?\d+(?:\.\d+)*\s*[-:).]?\s*)?(?:[^:[\n]{1,40}:\s*)?/i)?.[0] ?? "";
+      const text = /:\s*$/.test(prefix) ? NO_GUARANTEE : NO_GUARANTEE[0].toUpperCase() + NO_GUARANTEE.slice(1);
+      return prefix + text;
+    });
   }
 
   private resolveTemplateType(unitType: string | null, propertyType: string | null): ContractTemplateType {
