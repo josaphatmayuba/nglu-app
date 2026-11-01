@@ -397,12 +397,14 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .print-actions button { background: #2f6e4e; border: none; color: #fff; cursor: pointer; font-family: 'Source Sans 3', Arial, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 10px 20px; border-radius: 4px; text-transform: uppercase; }
   .rent-book .copy-break { break-before: page; page-break-before: always; height: 0; }
   .rent-book .cover { break-after: page; page-break-after: always; background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-  .rent-book .cover-header { background: #2f6e4e; color: #fff; padding: 22px 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  /* En-tête : trame de points verts (≈ 8 % d'encre) au lieu d'un aplat, pour économiser l'encre ; texte vert foncé. */
+  .rent-book .cover-header { background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2mm' height='2mm' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='32' fill='%232f6e4e'/%3E%3C/svg%3E"); background-size: 2mm 2mm; border-bottom: 2px solid #2f6e4e; color: #1f2a24; padding: 22px 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
   .rent-book .cover-header h1 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; margin: 0 0 4px; letter-spacing: .02em; font-weight: 700; }
-  .rent-book .cover-header .ref { color: #e4ede6; opacity: .9; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .rent-book .cover-header h1, .rent-book .cover-header .ref, .rent-book .cover-header .qr span { background: #fff; padding: 1px 4px; display: inline-block; }
+  .rent-book .cover-header .ref { color: #2f6e4e; font-weight: 700; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
   .rent-book .cover-header .qr { text-align: center; flex: none; }
   .rent-book .cover-header .qr img { background: #fff; padding: 6px; border-radius: 4px; display: block; }
-  .rent-book .cover-header .qr span { display: block; color: #fff; opacity: .9; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
+  .rent-book .cover-header .qr span { display: block; color: #2f6e4e; font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
   .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .rent-book .cover-grid .cell { padding: 14px 24px; border-bottom: 1px solid #e3ddce; }
   .rent-book .cover-grid .cell.full { grid-column: 1 / -1; }
