@@ -551,6 +551,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
                     {monthKinds.map((k, i) => ({ k, i, d: monthAt(i) })).filter((m) => m.d.getFullYear() === y).map(({ k, i, d }) => (
                       <button type="button" key={d.getTime()} className={`immo-pay-m ${k}${selMonth === i ? " sel" : ""}`}
                         aria-pressed={selMonth === i}
+                        style={k === "partial" ? { "--f": `${dueFrise ? dueFrise.fills[i] : Math.round(((monthsCoveredFloat || 0) - i) * 100)}%` } : undefined}
                         aria-label={`${fmtMonthYear(d)} : ${t(kindLabel[k])}`}
                         onClick={() => setSelMonth(selMonth === i ? null : i)}>
                         <span>{MONTHS_FR[d.getMonth()]}</span><small>{t(kindLabel[k])}</small>
