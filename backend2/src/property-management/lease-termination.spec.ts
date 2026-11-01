@@ -63,7 +63,7 @@ function makeService(fake: Fake, lease: any = LEASE) {
   return svc;
 }
 
-const input = (over: any = {}) => ({ terminationDate: "2026-06-30", reason: "Depart du locataire", notifyTenant: false, ...over });
+const input = (over: any = {}) => ({ terminationDate: "2026-06-30", reason: "Depart du locataire", notifyTenant: false, fullPeriod: true, ...over });
 
 describe("PropertyManagementService.terminateLease", () => {
   it("motif obligatoire : vide ou < 5 caracteres -> 400, aucune ecriture", async () => {

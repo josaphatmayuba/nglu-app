@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { and, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
 import { env } from "../config/env";
@@ -19,9 +19,13 @@ import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, LeaseRecipient, OwnerNotificationsService } from "./owner-notifications.service";
 import { loadFlaggedDueStates, loadLeaseOverdueAmount, readOverdueGraceDays, resolveCurrencySymbol, type LeaseDueState } from "./lease-overdue";
 import { isLeaseFlagged } from "./lease-allocation";
+import { loadEndedLeaseBalances, loadLastReminders, FORMER_DEBT_STATUS } from "./former-debt";
 import { formatDateOnly, parseDateOnly } from "./lease-schedule";
 import { escapeHtmlText } from "./notification-utils";
 import { isPreviewing, notePreviewMissing } from "../compat/sms-preview";
+
+/** Relance d'un ancien bail : au plus une par 24 h. */
+const ENDED_REMINDER_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** Marqueur interne : SMS non envoye car desactive (pas un echec). */
 const SMS_SKIPPED = "__sms_skipped__";
@@ -85,12 +89,70 @@ export class RentReminderService {
    * Relance MANUELLE d'un seul bail (bouton « Relancer » d'une carte en retard) :
    * renvoie meme si une relance a deja ete envoyee pour cette periode.
    */
-  runLeaseReminder(leaseId: number, orgId: number, targets?: Partial<ReminderTargets>) {
+  async runLeaseReminder(leaseId: number, orgId: number, targets?: Partial<ReminderTargets>) {
+    // Bail termine : relance de la dette de l'ancien locataire (jamais dans la passe automatique).
+    const [head] = await this.db
+      .select({ status: realEstateLeases.status })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
+    if (head?.status === FORMER_DEBT_STATUS) return this.remindEndedLease(leaseId, orgId);
     return this.runOverdueReminders({
       leaseId,
       orgId,
       targets: { tenant: true, emergency: true, owner: false, delegates: false, ...targets },
     });
+  }
+
+  /**
+   * Relance MANUELLE d'un bail TERMINE : montant = solde de l'ancien bail (plafonne a la sortie),
+   * SMS unique (1 segment) a chaque ancien locataire, au plus une relance par 24 h et par bail.
+   * Aucun marquage de periode (lastOverdueReminderDate) : le suivi se fait via sms_logs.
+   */
+  private async remindEndedLease(leaseId: number, orgId: number) {
+    const bal = (await loadEndedLeaseBalances(this.db, orgId, [leaseId])).get(leaseId);
+    if (!bal || bal.balanceMinor <= 0) throw new BadRequestException("Aucune dette sur cet ancien bail.");
+    const recipients = (await this.recipientsByLease([{ leaseId, organizationId: orgId, tenantId: bal.tenantId }])).get(leaseId) ?? [];
+    const last = (await loadLastReminders(this.db, orgId, [{ leaseId, tenantIds: recipients.map((r) => r.customerId) }])).get(leaseId);
+    if (last && Date.now() - new Date(last).getTime() < ENDED_REMINDER_MIN_INTERVAL_MS) {
+      throw new HttpException(
+        { statusCode: 429, code: "FORMER_DEBT_REMINDER_TOO_RECENT", message: "Une relance a deja ete envoyee il y a moins de 24 h.", lastReminderAt: last },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const symbol = await resolveCurrencySymbol(this.db, orgId, bal.currency.symbol || bal.currency.code);
+    const amount = `${Number(bal.balance).toLocaleString("fr-FR", { minimumFractionDigits: bal.decimals, maximumFractionDigits: bal.decimals })}${symbol ? ` ${symbol}` : ""}`;
+    const [prop] = await this.db
+      .select({ name: realEstateProperties.name })
+      .from(realEstateProperties)
+      .where(and(eq(realEstateProperties.id, bal.propertyId), eq(realEstateProperties.organizationId, orgId)));
+    const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    let sentCount = 0;
+    let failures = 0;
+    let skipped = 0;
+    let smsError: string | null = null;
+    const multi = recipients.length > 1;
+    for (const r of recipients) {
+      const first = (r.firstName || r.name || "").trim().split(/\s+/)[0] || "Locataire";
+      const msg = await this.ownerNotifications.renderMessage(
+        "payment_reminder_former",
+        "Bonjour {firstName}, il reste {amount} sur votre ancien bail {address}. Merci de regulariser. {companyName}",
+        { firstName: first.slice(0, 20), amount, address: prop?.name || "", companyName },
+      );
+      if (!r.phone) {
+        notePreviewMissing(`Ancien locataire · ${r.name} · bail ${bal.reference || leaseId}`);
+        continue;
+      }
+      const err = await this.safeSms(
+        r.phone, this.ownerNotifications.fitOneSms(msg), leaseId, orgId, this.related(multi, r.customerId, leaseId),
+        `Ancien locataire · ${r.name} · bail ${bal.reference || leaseId}`,
+      );
+      if (err === SMS_SKIPPED) skipped += 1;
+      else if (err) { failures += 1; smsError = smsError ?? err; }
+      else sentCount += 1;
+    }
+    const smsStatus = sentCount > 0 ? "sent" : failures > 0 ? "failed" : skipped > 0 ? "skipped" : "no_phone";
+    return { candidates: 1, sent: 1, smsStatus, smsError, hasEmail: false };
   }
 
   async runOverdueReminders(

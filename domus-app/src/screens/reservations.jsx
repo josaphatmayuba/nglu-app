@@ -24,6 +24,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
@@ -337,19 +338,20 @@ export function Reservations({ go }) {
           <h1>{t("Réservations")}</h1>
           <p>Séjours courte durée (type hôtel), facturés au jour</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === "stay" ? t("Ville, bien, type...") : t("Réf, client, bien...")} />
-          </label>
-          <button className="immo-btn primary" onClick={() => setModal({ ...emptyReservation, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> Réservation
-          </button>
-          <button className="immo-btn" onClick={() => setCouponModal({})}>
-            <Percent size={16} /> Coupon
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === "stay" ? t("Ville, bien, type...") : t("Réf, client, bien...")} />
+        </label>
+        <button className="immo-btn primary" onClick={() => setModal({ ...emptyReservation, currencyId: currency.defaultCurrencyId || "" })}>
+          <Plus size={16} /> Réservation
+        </button>
+        <button className="immo-btn" onClick={() => setCouponModal({})}>
+          <Percent size={16} /> Coupon
+        </button>
+      </ImmoToolbar>
 
       <div className="maintenance-toolbar">
         <div className="immo-filter-group">

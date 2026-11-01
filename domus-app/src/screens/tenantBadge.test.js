@@ -232,3 +232,35 @@ describe("tenantLeaseInfo", () => {
     expect(r.activeUnit).toEqual({ id: 11 });
   });
 });
+
+describe("dettes d'anciens baux (formerDebts)", () => {
+  const usd = { id: 1, code: "USD", symbol: "$", decimals: 2 };
+  const cdf = { id: 2, code: "CDF", symbol: "FC", decimals: 2 };
+  const ended = lease({ status: "ended", startDate: "2026-01-01", endDate: "2026-03-01" });
+
+  it("« Doit X devise » prioritaire sur « Ancien locataire », 2 decimales exactes", () => {
+    const t = tenant({ formerDebts: [{ leaseId: 5, amount: "150.50", currency: usd }, { leaseId: 6, amount: "0.10", currency: usd }] });
+    const b = tenantBadge(t, [ended], null, NOW);
+    expect(b.tone).toBe("danger");
+    expect(b.label.replace(/[\s  ]+/g, " ")).toBe("Doit 150,60 $");
+  });
+
+  it("plusieurs devises separees par « · »", () => {
+    const t = tenant({ formerDebts: [{ amount: "10.00", currency: usd }, { amount: "5000.00", currency: cdf }] });
+    const label = tenantBadge(t, [ended], null, NOW).label.replace(/[\s  ]+/g, " ");
+    expect(label).toBe("Doit 10,00 $ · 5 000,00 FC");
+  });
+
+  it("sans dette -> « Ancien locataire » inchange", () => {
+    expect(tenantBadge(tenant({ formerDebts: [] }), [ended], null, NOW).label).toContain("Ancien locataire");
+  });
+
+  it("tenantLeaseInfo : activeLease null pour un bail termine, latestLease garde l'affichage", () => {
+    const r = tenantLeaseInfo({ id: 1 }, [{ tenantId: 1, unitId: 10, status: "ended", startDate: "2024-01-01", isOverdue: true }], [{ id: 10 }]);
+    expect(r.activeLease).toBeNull();
+    expect(r.latestLease.unitId).toBe(10);
+    expect(r.activeUnit).toEqual({ id: 10 });
+    // Pas de « En retard » pour un bail termine, meme flagge isOverdue.
+    expect(tenantBadge({ id: 1 }, r.tenantLeases, r.activeLease, NOW).label).not.toContain("retard");
+  });
+});

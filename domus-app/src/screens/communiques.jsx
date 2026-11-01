@@ -10,6 +10,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Modal } from "./biens.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 
 const MAX_LEN = 480;
 const BIG_AUDIENCE = 50;
@@ -342,12 +343,13 @@ export function Communiques() {
           <h1>{t("Communiqués")}</h1>
           <p>{t("SMS envoyés aux locataires")}</p>
         </div>
-        <div className="immo-header-actions">
-          <button className="immo-btn primary" style={touch} onClick={() => setOpen(true)}>
-            <Plus size={16} /> {t("Nouveau communiqué")}
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <button className="immo-btn primary" style={touch} onClick={() => setOpen(true)}>
+          <Plus size={16} /> {t("Nouveau communiqué")}
+        </button>
+      </ImmoToolbar>
 
       {list.length === 0 ? (
         <div className="immo-empty">

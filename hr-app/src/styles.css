@@ -357,3 +357,7 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
   .more-panel .navlink { color: var(--ink-700); }
   .more-panel .navlink .ic { color: var(--teal-600); }
 }
+
+/* Bouton d'action de page : placé sous les KPI, à droite de la barre de recherche */
+.page-action { margin-left: auto; }
+@media (max-width: 960px) { .searchbar .page-action { min-height: 44px; } }

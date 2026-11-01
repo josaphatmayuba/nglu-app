@@ -52,6 +52,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { listFormerDebtors, loadEndedLeaseBalances, loadFormerDebtsForTenants, loadTenantFormerDebt, toMinor, type FormerDebtorsFilters } from "./former-debt";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
@@ -76,6 +77,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  ApplyDepositToRentDto,
   TerminateLeaseDto,
   CreateTenantDto,
   UpdateTenantDto,
@@ -110,6 +112,7 @@ import { ObjectStorageService } from "./object-storage.service";
 import { LeaseAllocationService, type ExplicitAllocation } from "./lease-allocation.service";
 import { buildRentBookExtras } from "./rent-book-extras";
 import { isLeaseFlagged } from "./lease-allocation";
+import { planDepositApplication, monthsLabelFromLines, eligibleDues, type DepositDueInput } from "./deposit-rent-application";
 import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
@@ -118,6 +121,12 @@ import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, 
 import {
   assignPaidRows,
   computeLeaseTotalDue,
+  computeTerminationCharge,
+  exitMonthProration,
+  terminationPeriodCharge,
+  isTerminationProrated,
+  leaseEndedCutoff,
+  planTerminationProration,
   planProrationRealign,
   scheduleForLease,
   occupiedMonthKeys,
@@ -288,8 +297,11 @@ export class PropertyManagementService implements OnModuleInit {
     };
   }
 
-  tenants(orgId: number) {
-    return this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
+  async tenants(orgId: number) {
+    const rows = await this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
+    // Badge « Doit X » : dettes sur baux termines, calculees en lot (pas de N+1).
+    const debts = await loadFormerDebtsForTenants(this.db, orgId, rows.map((r) => Number(r.id)));
+    return rows.map((r) => ({ ...r, formerDebts: debts.get(Number(r.id)) ?? [] }));
   }
 
   private tenantQuery(customerId: number | undefined, orgId: number) {
@@ -2088,6 +2100,17 @@ export class PropertyManagementService implements OnModuleInit {
     return { message: "Unit deleted successfully." };
   }
 
+  /** Dettes d'anciens locataires (baux termines) ; RBAC bien via `scope`. */
+  async formerDebtors(orgId: number, scope: "all" | number[], filters: FormerDebtorsFilters) {
+    return listFormerDebtors(this.db, orgId, scope, filters);
+  }
+
+  /** Dette d'un locataire (principal ou co-locataire) sur ses baux termines. */
+  async tenantFormerDebt(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    return loadTenantFormerDebt(this.db, orgId, tenantId);
+  }
+
   // RBAC bien : filtre direct sur le property_id du bail.
   async leases(orgId: number, propertyScope: "all" | number[] = "all") {
     const scopeFilter = this.propertyViaColumnFilter(realEstateLeases.propertyId, propertyScope);
@@ -2623,8 +2646,10 @@ export class PropertyManagementService implements OnModuleInit {
   }
 
   // Recapitulatif SANS ecriture pour la modale de resiliation.
-  async terminationPreview(leaseId: number, date: string, orgId: number, propertyScope: "all" | number[] = "all") {
+  async terminationPreview(leaseId: number, date: string, orgId: number, propertyScope: "all" | number[] = "all", fullPeriodRequested = false) {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    const fullPeriod = this.effectiveFullPeriod(lease, fullPeriodRequested);
+    const moneyDec = 2; // prorata / trop-percu : toujours 2 decimales
     this.ensurePropertyInScope(lease.propertyId, propertyScope);
     const day = this.terminationDay(date);
     const scheduled = day > this.formatDateOnly(new Date());
@@ -2647,6 +2672,7 @@ export class PropertyManagementService implements OnModuleInit {
       .select({
         id: realEstateSecurityDeposits.id,
         amount: realEstateSecurityDeposits.amount,
+        rentApplied: realEstateSecurityDeposits.rentAppliedAmount,
         symbol: currencies.currencySymbol,
         code: currencies.currencyCode,
       })
@@ -2660,8 +2686,54 @@ export class PropertyManagementService implements OnModuleInit {
       ))
       .orderBy(desc(realEstateSecurityDeposits.id))
       .limit(1);
+    const depRentApplied = dep ? roundMoney(Number(dep.rentApplied) || 0, decimals) : 0;
+    const depAvailable = dep ? roundMoney((Number(dep.amount) || 0) - depRentApplied, decimals) : 0;
+
+    // Derniere periode (celle qui contient la date de sortie) : montant plein vs prorata.
+    const flaggedLease = isLeaseFlagged(lease);
+    const rp = realEstateRentPayments;
+    const dueCandidates: any[] = await this.db
+      .select({
+        id: rp.id, periodStart: rp.periodStart, periodEnd: rp.periodEnd, paymentDate: rp.paymentDate,
+        amount: rp.amount, taxAmount: rp.taxAmount, amountPaid: rp.amountPaid,
+      })
+      .from(rp)
+      .where(and(
+        eq(rp.organizationId, orgId),
+        eq(rp.leaseId, leaseId),
+        inArray(rp.status, flaggedLease ? ["pending", "overdue", "settled"] : ["pending", "overdue"]),
+        flaggedLease ? eq(rp.rowKind, "due") : isNull(rp.transactionId),
+      ));
+    const plan = planTerminationProration(
+      dueCandidates.map((r) => ({
+        id: Number(r.id), periodStart: r.periodStart, periodEnd: r.periodEnd, paymentDate: String(r.paymentDate),
+        amount: Number(r.amount) || 0, taxAmount: r.taxAmount == null ? null : Number(r.taxAmount),
+      })),
+      day,
+      lease.billingCycle,
+      moneyDec,
+    );
+    // Sans ligne d'echeance (periode deja encaissee directement) : meme regle sur le loyer du bail.
+    const exit = plan ? null : exitMonthProration({ startDate: String(lease.startDate).slice(0, 10), billingCycle: lease.billingCycle, terminationFullPeriod: 0 }, day, Number(lease.rentAmount) || 0, moneyDec);
+    const lastPeriod = plan
+      ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd, occupiedDays: plan.occupiedDays, periodDays: plan.periodDays, initialAmount: plan.initialAmount, prorataAmount: plan.amount }
+      : exit
+        ? { periodStart: null, periodEnd: null, occupiedDays: exit.occupiedDays, periodDays: exit.periodDays, initialAmount: exit.fullAmount, prorataAmount: exit.amount }
+        : null;
+    let overpaid = 0;
+    if (flaggedLease) {
+      const src = plan ? dueCandidates.find((r) => Number(r.id) === plan.rowId) : null;
+      overpaid = plan && !fullPeriod ? Math.max(0, roundMoney((Number(src?.amountPaid) || 0) - plan.amount, moneyDec)) : 0;
+    } else {
+      overpaid = await this.terminationOverpaid(lease, day, orgId, moneyDec, fullPeriod);
+    }
 
     return {
+      fullPeriod,
+      lastPeriod: lastPeriod
+        ? { ...lastPeriod, prorated: !fullPeriod, billedAmount: fullPeriod ? lastPeriod.initialAmount : lastPeriod.prorataAmount }
+        : null,
+      overpaid,
       leaseId,
       status: lease.status,
       startDate: lease.startDate,
@@ -2672,11 +2744,24 @@ export class PropertyManagementService implements OnModuleInit {
       unpaidCount: late.length,
       unpaidTotal: lateTotal,
       deposit: dep
-        ? { id: Number(dep.id), amount: Number(dep.amount) || 0, currencySymbol: dep.symbol ?? cur?.symbol ?? null, currencyCode: dep.code ?? cur?.code ?? null }
+        ? {
+            id: Number(dep.id),
+            amount: Number(dep.amount) || 0,
+            rentApplied: depRentApplied,
+            available: depAvailable,
+            maxApplicable: roundMoney(Math.max(0, Math.min(depAvailable, lateTotal)), decimals),
+            currencySymbol: dep.symbol ?? cur?.symbol ?? null,
+            currencyCode: dep.code ?? cur?.code ?? null,
+          }
         : null,
       scheduled,
       sms: await this.terminationSmsPreview(leaseId, day, orgId, scheduled ? "scheduled" : "immediate"),
     };
+  }
+
+  /** Un bail au prorata par conception (rent_proration_enabled) n'a pas de periode complete : prorata force. */
+  private effectiveFullPeriod(lease: any, requested: boolean): boolean {
+    return lease?.rentProrationEnabled ? false : requested;
   }
 
   async terminateLease(
@@ -2701,9 +2786,9 @@ export class PropertyManagementService implements OnModuleInit {
       throw new BadRequestException("La date de resiliation ne peut pas preceder le debut du bail.");
     }
     if (day > today) {
-      return this.scheduleTermination(lease, day, today, reason, !!input.notifyTenant, orgId, userId);
+      return this.scheduleTermination(lease, day, today, reason, !!input.notifyTenant, orgId, userId, this.effectiveFullPeriod(lease, !!input.fullPeriod));
     }
-    return this.executeTermination({ lease, day, reason, orgId, userId, notifyTenant: !!input.notifyTenant });
+    return this.executeTermination({ lease, day, reason, orgId, userId, notifyTenant: !!input.notifyTenant, fullPeriod: this.effectiveFullPeriod(lease, !!input.fullPeriod) });
   }
 
   /** Date limite (YYYY-MM-DD, UTC) d'une resiliation programmee : aujourd'hui + TERMINATION_MAX_FUTURE_MONTHS. */
@@ -2722,6 +2807,7 @@ export class PropertyManagementService implements OnModuleInit {
     notifyTenant: boolean,
     orgId: number,
     userId?: number,
+    fullPeriod = false,
   ) {
     const id = Number(lease.id);
     const max = this.terminationMaxDay(today);
@@ -2761,6 +2847,7 @@ export class PropertyManagementService implements OnModuleInit {
         effectiveDate: day,
         reason,
         notifyTenant: notifyTenant ? 1 : 0,
+        fullPeriod: fullPeriod ? 1 : 0,
         status: "scheduled",
         createdBy: userId ?? null,
         createdAt: sql`CURRENT_TIMESTAMP`,
@@ -2847,15 +2934,21 @@ export class PropertyManagementService implements OnModuleInit {
     userId?: number;
     notifyTenant: boolean;
     scheduleId?: number;
+    /** true/absent = periode de sortie facturee en entier (historique) ; false = prorata des jours occupes. */
+    fullPeriod?: boolean;
   }): Promise<any> {
     const { lease, day, reason, orgId, userId, scheduleId } = args;
+    const fullPeriod = this.effectiveFullPeriod(lease, args.fullPeriod ?? true);
     const id = Number(lease.id);
     const currentEnd = lease.endDate ? String(lease.endDate).slice(0, 10) : null;
     const newEnd = currentEnd && currentEnd <= day ? currentEnd : day;
+    // Argent : toujours 2 decimales exactes (prorata, taxe, trop-percu, notes), meme si la devise en declare 0.
+    const decimals = 2;
 
     let voidedCount = 0;
     let voidedTotal = 0;
     let skipped = false;
+    let proration: any = null;
     await this.db.transaction(async (tx) => {
       // Ordre de verrous unique partout : bail d'abord, puis ligne de planning.
       let leaseLocked = false;
@@ -2890,6 +2983,7 @@ export class PropertyManagementService implements OnModuleInit {
           terminationReason: reason,
           terminatedAt: sql`CURRENT_TIMESTAMP`,
           terminatedBy: userId ?? null,
+          terminationFullPeriod: fullPeriod ? 1 : 0,
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(and(
@@ -2899,6 +2993,57 @@ export class PropertyManagementService implements OnModuleInit {
         ));
       if (Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) === 0) {
         throw new BadRequestException("Seul un bail actif peut etre resilie.");
+      }
+
+      // Prorata de la periode contenant la date de sortie (echeance non encaissee ou soldee d'un bail
+      // flagge). Jamais de suppression : montant reduit, trace dans les notes.
+      if (!fullPeriod) {
+        const flagged = isLeaseFlagged(lease);
+        const rp = realEstateRentPayments;
+        const statuses = flagged ? ["pending", "overdue", "settled"] : ["pending", "overdue"];
+        const candidates: any[] = await tx
+          .select({
+            id: rp.id, status: rp.status, periodStart: rp.periodStart, periodEnd: rp.periodEnd,
+            paymentDate: rp.paymentDate, amount: rp.amount, taxAmount: rp.taxAmount, amountPaid: rp.amountPaid,
+          })
+          .from(rp)
+          .where(and(
+            eq(rp.organizationId, orgId),
+            eq(rp.leaseId, id),
+            inArray(rp.status, statuses),
+            flagged ? eq(rp.rowKind, "due") : isNull(rp.transactionId),
+          ));
+        const plan = planTerminationProration(
+          candidates.map((r) => ({
+            id: Number(r.id), periodStart: r.periodStart, periodEnd: r.periodEnd, paymentDate: String(r.paymentDate),
+            amount: Number(r.amount) || 0, taxAmount: r.taxAmount == null ? null : Number(r.taxAmount),
+          })),
+          day,
+          lease.billingCycle,
+          decimals,
+        );
+        if (plan) {
+          const note = ` [PRORATA resiliation: ${plan.occupiedDays}/${plan.periodDays} jours, montant initial ${plan.initialAmount.toFixed(decimals)}]`;
+          const set: Record<string, unknown> = {
+            amount: plan.amount.toFixed(decimals),
+            notes: sql`TRIM(CONCAT(COALESCE(${rp.notes}, ''), ${note}))`,
+            updatedAt: sql`CURRENT_TIMESTAMP`,
+          };
+          if (plan.tax !== null) set.taxAmount = plan.tax.toFixed(decimals);
+          await tx.update(rp).set(set as any).where(and(
+            eq(rp.id, plan.rowId),
+            eq(rp.organizationId, orgId),
+            eq(rp.leaseId, id),
+            inArray(rp.status, statuses),
+          ));
+          const src = candidates.find((r) => Number(r.id) === plan.rowId);
+          proration = {
+            ...plan,
+            reduction: roundMoney(plan.initialAmount - plan.amount, decimals),
+            // Bail flagge : la part deja imputee au-dela du nouveau montant redevient credit (rebuild ci-dessous).
+            overpaid: flagged ? Math.max(0, roundMoney((Number(src?.amountPaid) || 0) - plan.amount, decimals)) : 0,
+          };
+        }
       }
 
       // Echeances a venir : soft void, jamais une echeance payee.
@@ -2982,7 +3127,33 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Lecture post-commit : un echec d'affichage ne doit pas faire echouer une resiliation deja validee.
     const fresh = await this.findLease(id, orgId).catch(() => null);
-    return { lease: fresh, voidedCount, voidedTotal, sms };
+    // Trop-percu (credit locataire) : bail flagge = part imputee au-dela du nouveau montant (registre
+    // reconstruit) ; bail non flagge = verse - total facture a la sortie. Information, aucune ecriture.
+    let overpaid = proration?.overpaid ?? 0;
+    if (!fullPeriod && !isLeaseFlagged(lease)) {
+      try {
+        overpaid = await this.terminationOverpaid(lease, day, orgId, decimals);
+      } catch (error) {
+        this.logger.warn(`Lease termination overpaid calc failed (lease ${id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    return { lease: fresh, voidedCount, voidedTotal, sms, fullPeriod, proration, overpaid };
+  }
+
+  /** Non flagge : max(0, total verse - total facture a la date de sortie), au centime. */
+  private async terminationOverpaid(lease: any, day: string, orgId: number, decimals: number, fullPeriod = false): Promise<number> {
+    const rows: Array<{ amount: unknown; rowKind?: string | null }> = await this.db
+      .select({ amount: realEstateRentPayments.amount, rowKind: realEstateRentPayments.rowKind })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, Number(lease.id)),
+        eq(realEstateRentPayments.status, "paid"),
+      ));
+    // Meme filtre que former-debt.ts : paiements encaisses, hors lignes d'echeance.
+    const paid = rows.filter((r) => r.rowKind !== "due").reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const charge = computeTerminationCharge({ ...lease, terminationFullPeriod: fullPeriod ? 1 : 0 }, day, decimals);
+    return Math.max(0, roundMoney(paid - charge, decimals));
   }
 
   /** Planning actif d'un bail qui quitte 'active' par une autre voie : obsolete. */
@@ -3110,6 +3281,7 @@ export class PropertyManagementService implements OnModuleInit {
         paymentDate: realEstateRentPayments.paymentDate,
         amount: realEstateRentPayments.amount,
         method: realEstateRentPayments.method,
+        securityDepositId: realEstateRentPayments.securityDepositId,
         status: realEstateRentPayments.status,
         reference: realEstateRentPayments.reference,
         receivedBy: realEstateRentPayments.receivedBy,
@@ -3170,6 +3342,19 @@ export class PropertyManagementService implements OnModuleInit {
   async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string, userId?: number, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    // Bail termine : encaisser une dette d'ancien locataire exige une confirmation explicite
+    // et ne peut pas depasser le solde (plafonne a la sortie). apply-to-rent n'appelle pas createPayment.
+    if ((lease as any).status === "ended") {
+      if (!input.confirmEndedLease) {
+        throw new ConflictException({ statusCode: 409, code: "ENDED_LEASE_CONFIRM_REQUIRED", message: "Ce bail est termine : confirmez le paiement sur ancien bail." });
+      }
+      const bal = (await loadEndedLeaseBalances(this.db, orgId, [Number(lease.id)])).get(Number(lease.id));
+      const balMinor = bal?.balanceMinor ?? 0;
+      const payMinor = toMinor(input.amount, bal?.decimals ?? 2);
+      if (!bal || payMinor > balMinor) {
+        throw new BadRequestException(`Le montant depasse le solde de ${bal ? bal.balance : "0.00"} ${bal?.currency.symbol || bal?.currency.code || ""}`.trim());
+      }
+    }
     const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
     // Registre d'imputations (bail flagge seulement) : valider l'imputation explicite AVANT toute ecriture.
     const allocFlagged = isLeaseFlagged(lease);
@@ -4078,9 +4263,10 @@ export class PropertyManagementService implements OnModuleInit {
     return /(banc|bank|carte|card|cheque|virement)/.test(m);
   }
 
-  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
+  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number, proof?: any, publicApiBase?: string, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const proofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
 
     // Une seule caution active détenue par bail.
     const existing = await this.db
@@ -4161,9 +4347,10 @@ export class PropertyManagementService implements OnModuleInit {
     return this.findDeposit(depositId);
   }
 
-  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string) {
-    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
+  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number, proof?: any, publicApiBase?: string, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    const returnProofUrl = (await this.saveProofFile(proof, `domus/deposits/${orgId}`)) ?? input.proofUrl ?? null;
     const rows = await this.db
       .select()
       .from(realEstateSecurityDeposits)
@@ -4177,9 +4364,10 @@ export class PropertyManagementService implements OnModuleInit {
     if (!rows.length) throw new BadRequestException("Aucune caution détenue à restituer pour ce bail.");
     const deposit = rows[0];
 
-    const held = Number(deposit.amount);
-    const deduction = Math.min(Math.max(0, Number(input.deductionAmount ?? 0)), held);
-    const returned = Math.round((held - deduction) * 100) / 100;
+    // Disponible = caution detenue - part deja imputee sur des loyers (le passif correspondant est deja solde).
+    const held = roundMoney(Number(deposit.amount) - Number((deposit as any).rentAppliedAmount ?? 0));
+    const deduction = roundMoney(Math.min(Math.max(0, Number(input.deductionAmount ?? 0)), held));
+    const returned = roundMoney(held - deduction);
 
     // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
@@ -4286,6 +4474,310 @@ export class PropertyManagementService implements OnModuleInit {
       .where(eq(realEstateSecurityDeposits.id, id))
       .limit(1);
     return rows[0];
+  }
+
+  // ─── Caution imputee sur les loyers impayes (a la sortie du locataire) ───────
+
+  /** Libere atomiquement une part de caution imputee (void) : jamais sous 0. */
+  private async releaseDepositReservation(depositId: number, orgId: number, amount: number) {
+    await this.db
+      .update(realEstateSecurityDeposits)
+      .set({
+        rentAppliedAmount: sql`GREATEST(${realEstateSecurityDeposits.rentAppliedAmount} - ${this.money(amount)}, 0)`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateSecurityDeposits.id, depositId), eq(realEstateSecurityDeposits.organizationId, orgId)));
+  }
+
+  /** Contexte commun apercu/imputation : bail termine, caution detenue, echeances eligibles. Lecture seule. */
+  private async depositApplyContext(leaseId: number, orgId: number, propertyScope: "all" | number[]) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    if (lease.status !== "ended") {
+      throw new BadRequestException({ code: "LEASE_NOT_ENDED", message: "La caution ne peut etre imputee sur les loyers qu'une fois le bail termine." });
+    }
+    const [dep] = await this.db
+      .select()
+      .from(realEstateSecurityDeposits)
+      .where(and(
+        eq(realEstateSecurityDeposits.leaseId, leaseId),
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .orderBy(desc(realEstateSecurityDeposits.id))
+      .limit(1);
+    if (!dep) {
+      throw new BadRequestException({ code: "NO_DEPOSIT", message: "Aucune caution detenue pour ce bail." });
+    }
+    const leaseCurrencyId = (lease as any).currencyId ?? null;
+    const depCurrencyId = (dep as any).currencyId ?? leaseCurrencyId;
+    if (leaseCurrencyId != null && depCurrencyId != null && Number(depCurrencyId) !== Number(leaseCurrencyId)) {
+      throw new BadRequestException({ code: "CURRENCY_MISMATCH", message: "La caution et le bail n'ont pas la meme devise." });
+    }
+    const decimals = await this.currencyDecimals(leaseCurrencyId);
+    const rentApplied = roundMoney(Number((dep as any).rentAppliedAmount) || 0, decimals);
+    const available = roundMoney(Number(dep.amount) - rentApplied, decimals);
+    const terminationDate = this.terminatedOn(lease as any)
+      ?? ((lease as any).endDate ? String((lease as any).endDate).slice(0, 10) : this.formatDateOnly(new Date()));
+
+    const flagged = isLeaseFlagged(lease);
+    let dues: DepositDueInput[];
+    if (flagged) {
+      const st = await this.leaseAllocations.getLeaseDueState(leaseId, orgId);
+      dues = st.dues.map((d) => ({ id: Number(d.id), periodStart: d.periodStart, periodEnd: d.periodEnd, dueDate: d.dueDate, remaining: Number(d.remaining) || 0 }));
+    } else {
+      const { lines } = await this.noticeDueLines(lease, leaseId, orgId);
+      dues = lines.map((l, i) => ({ id: i + 1, periodStart: l.periodStart, periodEnd: l.periodEnd, dueDate: l.dueDate, remaining: l.remaining }));
+    }
+    return { lease, dep, flagged, decimals, rentApplied, available, terminationDate, dues, currencyId: leaseCurrencyId ?? depCurrencyId };
+  }
+
+  private depositSummary(dep: any, rentApplied: number, decimals: number) {
+    const amount = roundMoney(Number(dep.amount), decimals);
+    return { amount, rentApplied, available: roundMoney(amount - rentApplied, decimals) };
+  }
+
+  /** Apercu SANS ecriture de l'imputation de la caution sur les loyers impayes. */
+  async previewDepositToRent(leaseId: number, input: ApplyDepositToRentDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const ctx = await this.depositApplyContext(leaseId, orgId, propertyScope);
+    const mode = input.allocationMode ?? "auto";
+    if (mode === "manual" && !ctx.flagged) {
+      throw new BadRequestException("Choix manuel indisponible : registre non active sur ce bail.");
+    }
+    const plan = planDepositApplication({
+      dues: ctx.dues,
+      available: ctx.available,
+      amount: input.amount ?? null,
+      mode,
+      explicit: input.allocations,
+      terminationDate: ctx.terminationDate,
+      decimals: ctx.decimals,
+    });
+    return {
+      leaseId,
+      depositId: Number(ctx.dep.id),
+      deposit: this.depositSummary(ctx.dep, ctx.rentApplied, ctx.decimals),
+      totalUnpaid: plan.totalUnpaid,
+      maxApplicable: plan.maxApplicable,
+      amount: plan.amount,
+      allocations: plan.allocations,
+      warnings: plan.warnings,
+      monthsLabel: plan.monthsLabel,
+      dues: eligibleDues(ctx.dues, ctx.terminationDate, ctx.decimals),
+    };
+  }
+
+  /**
+   * Impute la caution detenue sur les loyers impayes (bail termine). Ecriture :
+   * debit passif « Tenant Deposits » / credit revenu du loyer, AUCUNE ligne Caisse/Banque.
+   */
+  async applyDepositToRent(leaseId: number, input: ApplyDepositToRentDto, orgId: number, propertyScope: "all" | number[] = "all", userId?: number) {
+    const ctx = await this.depositApplyContext(leaseId, orgId, propertyScope);
+    const { lease, dep, decimals } = ctx;
+    const mode = input.allocationMode ?? "auto";
+    const applicationDate = input.applicationDate ? String(input.applicationDate).slice(0, 10) : this.formatDateOnly(new Date());
+    if (input.amount == null) throw new BadRequestException("Le montant a imputer est obligatoire.");
+
+    // Anti-rejeu : meme caution, meme montant, meme date, paiement tout recent -> renvoyer l'existant.
+    const [recent] = await this.db
+      .select({ id: realEstateRentPayments.id })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, leaseId),
+        eq(realEstateRentPayments.securityDepositId, Number(dep.id)),
+        eq(realEstateRentPayments.status, "paid"),
+        eq(realEstateRentPayments.paymentDate, applicationDate),
+        eq(realEstateRentPayments.amount, this.money(roundMoney(Number(input.amount), decimals))),
+        gte(realEstateRentPayments.createdAt, sql`(CURRENT_TIMESTAMP - INTERVAL 2 MINUTE)`),
+      ))
+      .limit(1);
+    if (recent) {
+      return {
+        payment: await this.findPayment(Number(recent.id)),
+        deposit: this.depositSummary(dep, ctx.rentApplied, decimals),
+        allocations: [],
+        warnings: [],
+        sms: { requested: false, sent: 0 },
+        replayed: true,
+      };
+    }
+
+    if (mode === "manual" && !ctx.flagged) {
+      throw new BadRequestException("Choix manuel indisponible : registre non active sur ce bail.");
+    }
+    const plan = planDepositApplication({
+      dues: ctx.dues,
+      available: ctx.available,
+      amount: input.amount,
+      mode,
+      explicit: input.allocations,
+      terminationDate: ctx.terminationDate,
+      decimals,
+    });
+    const amount = plan.amount;
+    if (ctx.flagged && mode === "manual") {
+      await this.leaseAllocations.validateExplicit(lease.id, orgId, input.allocations, amount);
+    }
+
+    const rentPaymentType = await this.getRentPaymentType(orgId);
+    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
+    const taxAmt = this.computeInclusiveTax(amount, lease as any);
+    const taxType = taxAmt != null && taxAmt > 0 ? await this.getRealEstateTaxTypeOptional(orgId) : null;
+
+    // Reservation atomique : echoue (409) si la caution n'a plus assez de disponible.
+    const reserved: any = await this.db
+      .update(realEstateSecurityDeposits)
+      .set({
+        rentAppliedAmount: sql`${realEstateSecurityDeposits.rentAppliedAmount} + ${this.money(amount)}`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(
+        eq(realEstateSecurityDeposits.id, Number(dep.id)),
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+        sql`${realEstateSecurityDeposits.amount} - ${realEstateSecurityDeposits.rentAppliedAmount} >= ${this.money(amount)}`,
+      ));
+    if (Number((Array.isArray(reserved) ? reserved[0] : reserved)?.affectedRows ?? 0) === 0) {
+      throw new ConflictException({ code: "DEPOSIT_CONFLICT", message: "La caution disponible a change : actualisez et recommencez." });
+    }
+
+    const note = input.notes ? `Payé par la caution — ${input.notes}` : "Payé par la caution";
+    const when = new Date(applicationDate);
+    let txId: number | null = null;
+    let taxTxId: number | null = null;
+    let paymentId: number | null = null;
+    try {
+      const [txRes] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: when,
+        debitId: tenantDeposits,
+        creditId: rentPaymentType.creditAccountId,
+        particulars: input.notes || `Caution imputee sur loyer — bail ${lease.reference || lease.id}`,
+        amount,
+        currencyId: ctx.currencyId ?? null,
+        type: "OD - Security Deposit Applied to Rent",
+        relatedId: String(lease.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      txId = Number(txRes.insertId);
+
+      const [payRes] = await this.db.insert(realEstateRentPayments).values({
+        organizationId: orgId,
+        leaseId: lease.id,
+        currencyId: ctx.currencyId ?? null,
+        transactionId: txId,
+        securityDepositId: Number(dep.id),
+        paymentDate: this.requiredDate(applicationDate),
+        amount: this.money(amount),
+        method: "deposit",
+        status: "paid",
+        notes: note,
+        taxAmount: taxAmt != null ? this.money(taxAmt) : null,
+        taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      paymentId = Number(payRes.insertId);
+
+      if (taxType && taxAmt != null) {
+        const [taxRes] = await this.db.insert(transactions).values({
+          organizationId: orgId,
+          date: when,
+          debitId: taxType.debitAccountId,
+          creditId: taxType.creditAccountId,
+          particulars: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})`,
+          amount: taxAmt,
+          currencyId: ctx.currencyId ?? null,
+          type: "Real Estate Tax",
+          relatedId: String(lease.id),
+          status: "true",
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+        taxTxId = Number(taxRes.insertId);
+      }
+
+      const lines: Array<{ accountId: number; side: "DEBIT" | "CREDIT"; amount: number; description?: string }> = [
+        { accountId: tenantDeposits, side: "DEBIT", amount, description: "Caution imputee sur loyer" },
+        { accountId: rentPaymentType.creditAccountId, side: "CREDIT", amount, description: note },
+      ];
+      if (taxType && taxAmt != null) {
+        lines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT", amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT", amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+      await this.ledger.post(
+        {
+          date: when,
+          reference: `RENT-${paymentId}`,
+          particulars: `Caution imputee sur loyer — bail ${lease.reference || lease.id}`,
+          sourceModule: "rent",
+          relatedId: String(lease.id),
+          currencyId: ctx.currencyId ?? undefined,
+          idempotencyKey: `rent-payment:${paymentId}`,
+          lines,
+        },
+        orgId,
+      );
+    } catch (err) {
+      // Compensation : rien n'est poste au ledger, on rend la reservation et on neutralise (soft) les lignes ecrites.
+      try {
+        await this.releaseDepositReservation(Number(dep.id), orgId, amount);
+        for (const id of [txId, taxTxId]) {
+          if (id) {
+            await this.db.update(transactions).set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+              .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)));
+          }
+        }
+        if (paymentId) {
+          await this.db.update(realEstateRentPayments).set({ status: "voided", updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+        }
+      } catch (compErr: any) {
+        this.logger.error(`applyDepositToRent bail ${leaseId}: compensation echouee : ${compErr?.message ?? compErr}`);
+      }
+      throw err;
+    }
+
+    const warnings = [...plan.warnings];
+    if (ctx.flagged) {
+      const w = await this.allocateAfterPayment(lease.id, orgId, paymentId!, mode, input.allocations, userId);
+      if (w) warnings.push(w);
+    }
+    try {
+      await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, applicationDate);
+    } catch (e: any) {
+      this.logger.warn(`applyDepositToRent bail ${leaseId}: nextInvoiceDate non avance : ${e?.message ?? e}`);
+    }
+    await this.publishPaymentUpdate("created", paymentId!, { propertyId: lease.propertyId, unitId: lease.unitId });
+
+    const deposit = this.depositSummary(dep, roundMoney(ctx.rentApplied + amount, decimals), decimals);
+    // SMS locataire optionnel (best-effort). Jamais le recu de paiement standard.
+    let sms: { requested: boolean; sent: number } = { requested: false, sent: 0 };
+    if (input.notifyTenant !== false) {
+      const res = await this.ownerNotifications.notifyDepositAppliedTenant({
+        paymentId: paymentId!,
+        leaseId: Number(lease.id),
+        orgId,
+        amount,
+        months: plan.monthsLabel,
+        remaining: roundMoney(plan.totalUnpaid - amount, decimals),
+      });
+      sms = { requested: true, sent: res?.sent ?? 0 };
+    }
+    return {
+      payment: await this.findPayment(paymentId!),
+      deposit,
+      allocations: plan.allocations,
+      warnings,
+      sms,
+    };
   }
 
   // ─── Réservation temporaire type hôtel (courte durée, tarif par jour) ────────
@@ -5007,6 +5499,10 @@ export class PropertyManagementService implements OnModuleInit {
         rentAmount: realEstateLeases.rentAmount,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
+        // Plafond a la sortie (bail termine) : sans eux la relance cite une dette qui grossit.
+        status: realEstateLeases.status,
+        terminationDate: realEstateLeases.terminationDate,
+        terminationFullPeriod: realEstateLeases.terminationFullPeriod,
         billingCycle: realEstateLeases.billingCycle,
         currencyId: realEstateLeases.currencyId,
         rentProrationEnabled: realEstateLeases.rentProrationEnabled,
@@ -5033,7 +5529,15 @@ export class PropertyManagementService implements OnModuleInit {
     if (!recipients.length) throw new BadRequestException("Email du locataire introuvable.");
     const multi = recipients.length > 1;
     // {amount} = TOTAL DU avec devise (ex. « 4 645,16 $ ») — comme le rappel automatique.
-    const rentDisplay = (await loadLeaseTotalDue(this.db, orgId, { ...lease, id: lease.leaseId }, lease.currencySymbol)).text;
+    let rentDisplay: string;
+    if (lease.status === "ended") {
+      // Bail termine : montant = solde de l'ancien bail (plafonne a la sortie), 2 decimales exactes.
+      const bal = (await loadEndedLeaseBalances(this.db, orgId, [Number(leaseId)])).get(Number(leaseId));
+      if (!bal || bal.balanceMinor <= 0) throw new BadRequestException("Aucune dette sur cet ancien bail.");
+      rentDisplay = `${Number(bal.balance).toLocaleString("fr-FR", { minimumFractionDigits: bal.decimals, maximumFractionDigits: bal.decimals })} ${lease.currencySymbol}`.trim();
+    } else {
+      rentDisplay = (await loadLeaseTotalDue(this.db, orgId, { ...lease, id: lease.leaseId }, lease.currencySymbol)).text;
+    }
     // Le locataire est renvoyé vers les personnes en charge de SON immeuble
     // (propriétaire + gestionnaire assigné), comme le rappel automatique, et non
     // vers un « nous » anonyme. Repli sur le contact société si aucun des deux
@@ -5386,7 +5890,7 @@ export class PropertyManagementService implements OnModuleInit {
     // Couverture en montant : total deja verse / loyer mensuel. Les echeances
     // "pending" (generees mais non encaissees) ne comptent pas comme payees.
     const payments = await this.db
-      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status })
+      .select({ amount: realEstateRentPayments.amount, status: realEstateRentPayments.status, rowKind: realEstateRentPayments.rowKind })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.leaseId, leaseId),
@@ -5395,7 +5899,8 @@ export class PropertyManagementService implements OnModuleInit {
       ));
     const rent = Number(lease.rentAmount) || 0;
     const totalPaid = payments
-      .filter((p) => p.status !== "pending" && p.status !== "settled")
+      // Versements encaisses uniquement (meme filtre que former-debt.ts)
+      .filter((p) => p.status === "paid" && p.rowKind !== "due")
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     // Le preavis ne reclame que les echeances dont le delai de grace est depasse
     // (meme regle que la carte Loyers) ; une echeance encore dans la grace est
@@ -5426,6 +5931,42 @@ export class PropertyManagementService implements OnModuleInit {
         totalPaid,
         decimals,
       );
+    } else if (leaseEndedCutoff(lease)) {
+      // Bail termine, loyer fixe (bug #80) : meme regle que computeLeaseTotalDue (anciens debiteurs).
+      const cutoff = leaseEndedCutoff(lease) as string;
+      const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
+      const periods: Array<{ periodStart: string; periodEnd: string | null; dueDate: string; amount: number; prorated: boolean }> = [];
+      const charge = terminationPeriodCharge(lease, cutoff, rent, 2);
+      if (isTerminationProrated(lease)) {
+        // Prorata : periodes ancrees sur le jour de debut et le cycle du bail, derniere au prorata.
+        for (let i = 0; i < charge.periods; i++) {
+          const first = this.formatDateOnly(addScheduleCycle(start, lease.billingCycle as any, i));
+          if (first > todayStr) break;
+          const last = i === charge.periods - 1;
+          periods.push({
+            periodStart: first,
+            periodEnd: last ? cutoff : this.formatDateOnly(new Date(addScheduleCycle(start, lease.billingCycle as any, i + 1).getTime() - 86_400_000)),
+            dueDate: first,
+            amount: last && charge.exit ? charge.exit.amount : rent,
+            prorated: last && !!charge.exit,
+          });
+        }
+      } else {
+        // Historique (periode complete) : un mois civil par echeance, mois de sortie inclus.
+        for (let i = 0; i < charge.periods; i++) {
+          const first = i === 0 ? start : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+          const dueDate = this.formatDateOnly(first);
+          if (dueDate > todayStr) break;
+          periods.push({
+            periodStart: dueDate,
+            periodEnd: i === charge.periods - 1 ? cutoff : this.formatDateOnly(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i + 1, 0))),
+            dueDate,
+            amount: rent,
+            prorated: false,
+          });
+        }
+      }
+      lines = coverDuesSequentially(periods, totalPaid, 2);
     } else {
       // Loyer fixe : une echeance par cycle depuis le debut du bail.
       const start = parseScheduleDate(String(lease.startDate).slice(0, 10));
@@ -5909,13 +6450,14 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Champs complementaires du carnet papier / releve : lectures best-effort,
     // une erreur (table/colonne absente en prod) ne doit jamais casser la route.
-    let depositReceived: { amount: string; date: string | null; currencySymbol: string | null; status: string } | null = null;
+    let depositReceived: { amount: string; date: string | null; currencySymbol: string | null; status: string; rentApplied?: string } | null = null;
     try {
       const [dep] = await this.db
         .select({
           amount: realEstateSecurityDeposits.amount,
           paymentDate: realEstateSecurityDeposits.paymentDate,
           status: realEstateSecurityDeposits.status,
+          rentApplied: realEstateSecurityDeposits.rentAppliedAmount,
           currencySymbol: currencies.currencySymbol,
         })
         .from(realEstateSecurityDeposits)
@@ -5928,7 +6470,7 @@ export class PropertyManagementService implements OnModuleInit {
         ))
         .orderBy(desc(realEstateSecurityDeposits.id))
         .limit(1);
-      if (dep) depositReceived = { amount: dep.amount, date: dep.paymentDate || null, currencySymbol: dep.currencySymbol || null, status: dep.status };
+      if (dep) depositReceived = { amount: dep.amount, date: dep.paymentDate || null, currencySymbol: dep.currencySymbol || null, status: dep.status, rentApplied: dep.rentApplied };
     } catch (err) {
       this.logger.warn(`rentBook: garantie illisible (bail ${leaseId}): ${(err as Error)?.message}`);
     }
@@ -6374,6 +6916,20 @@ export class PropertyManagementService implements OnModuleInit {
     }
     const lease = await this.getLeaseOrThrow(payment.leaseId, orgId);
 
+    // Paiement par la caution : annulable seulement tant que la caution est encore detenue
+    // (sinon la restitution a deja solde le passif).
+    const depositId = (payment as any).securityDepositId ? Number((payment as any).securityDepositId) : null;
+    if (depositId) {
+      const [dep] = await this.db
+        .select({ status: realEstateSecurityDeposits.status })
+        .from(realEstateSecurityDeposits)
+        .where(and(eq(realEstateSecurityDeposits.id, depositId), eq(realEstateSecurityDeposits.organizationId, orgId)))
+        .limit(1);
+      if (!dep || dep.status !== "held") {
+        throw new BadRequestException("Caution deja restituee : annulation impossible.");
+      }
+    }
+
     // 1. Ledger : contre-passation (jamais de DELETE).
     let [entry] = await this.db
       .select({ id: journalEntries.id, status: journalEntries.status })
@@ -6429,6 +6985,11 @@ export class PropertyManagementService implements OnModuleInit {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateRentPayments.id, paymentId), eq(realEstateRentPayments.organizationId, orgId)));
+
+    // 3a. Caution : la part imputee redevient disponible (decrement atomique, jamais sous 0).
+    if (depositId) {
+      await this.releaseDepositReservation(depositId, orgId, Number(payment.amount));
+    }
 
     // 3b. Registre d'imputations (bail flagge) : desimputation + recalcul (la compta ci-dessus est inchangee).
     if (isLeaseFlagged(lease)) {
@@ -8224,6 +8785,7 @@ export class PropertyManagementService implements OnModuleInit {
         // Bail precedent quand ce bail est un renouvellement.
         renewedFromLeaseId: realEstateLeases.renewedFromLeaseId,
         terminationDate: realEstateLeases.terminationDate,
+        terminationFullPeriod: realEstateLeases.terminationFullPeriod,
         terminationReason: realEstateLeases.terminationReason,
         terminatedAt: realEstateLeases.terminatedAt,
         terminatedBy: realEstateLeases.terminatedBy,

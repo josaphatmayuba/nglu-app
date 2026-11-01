@@ -63,6 +63,7 @@ import {
   RejectPendingPaymentDto,
   CollectDepositDto,
   ReturnDepositDto,
+  ApplyDepositToRentDto,
   CancelScheduledTerminationDto,
   TerminateLeaseDto,
   CreateTenantDto,
@@ -225,6 +226,30 @@ export class PropertyManagementController {
   @HttpCode(200)
   resendSmsLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: SmsPreviewBody = {}) {
     return this.smsPreview(body, orgId, () => this.propertyManagementService.resendSmsLog(id, orgId));
+  }
+
+  @ApiOperation({ summary: "Former tenants who still owe rent on an ended lease (grouped totals per currency)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("former-debtors")
+  formerDebtors(
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("currencyId") currencyId?: string,
+    @Query("propertyId") propertyId?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.propertyManagementService.formerDebtors(orgId, scope, {
+      currencyId: Number(currencyId) > 0 ? Number(currencyId) : undefined,
+      propertyId: Number(propertyId) > 0 ? Number(propertyId) : undefined,
+      search: search || undefined,
+    });
+  }
+
+  @ApiOperation({ summary: "Unpaid rent of a tenant on ended leases (blocks a new lease)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("tenants/:id/former-debt")
+  tenantFormerDebt(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.tenantFormerDebt(id, orgId);
   }
 
   @ApiOperation({ summary: "List tenant personal-data change requests submitted from the portal" })
@@ -1022,8 +1047,9 @@ export class PropertyManagementController {
     @Query("date") date: string,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("fullPeriod") fullPeriod?: string,
   ) {
-    return this.propertyManagementService.terminationPreview(id, date, orgId, scope);
+    return this.propertyManagementService.terminationPreview(id, date, orgId, scope, fullPeriod === "true" || fullPeriod === "1");
   }
 
   @ApiOperation({ summary: "Resilier un bail avec motif (statut ended, echeances futures annulees)" })
@@ -1146,8 +1172,9 @@ export class PropertyManagementController {
     @UploadedFile() proof: any,
     @Req() req: Request,
     @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.collectDeposit(id, body, orgId, proof, this.publicApiBase(req));
+    return this.propertyManagementService.collectDeposit(id, body, orgId, proof, this.publicApiBase(req), scope);
   }
 
   @ApiOperation({ summary: "Return a security deposit with optional damage deduction" })
@@ -1170,8 +1197,35 @@ export class PropertyManagementController {
     @UploadedFile() proof: any,
     @Req() req: Request,
     @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.returnDeposit(id, body, orgId, proof, this.publicApiBase(req));
+    return this.propertyManagementService.returnDeposit(id, body, orgId, proof, this.publicApiBase(req), scope);
+  }
+
+  @ApiOperation({ summary: "Apercu (lecture seule) de l'imputation de la caution sur les loyers impayes" })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/deposit/apply-to-rent/preview")
+  @HttpCode(200)
+  previewDepositToRent(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ApplyDepositToRentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.previewDepositToRent(id, body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Imputer la caution detenue sur les loyers impayes (bail termine uniquement)" })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/deposit/apply-to-rent")
+  applyDepositToRent(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ApplyDepositToRentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.propertyManagementService.applyDepositToRent(id, body, orgId, scope, userId);
   }
 
   @ApiOperation({ summary: "List rent payments" })

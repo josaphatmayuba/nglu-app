@@ -7,9 +7,10 @@
 import { useEffect, useState } from "react";
 import { Building2, Loader2, User, FileSignature, Wallet, Receipt, Download } from "lucide-react";
 import { publicApi } from "../api.js";
-import { money } from "../data.js";
+import { money, moneyExact } from "../data.js";
 import { nextDueAmountOf } from "../prorationUtils.js";
 import { t } from "../i18n.js";
+import { PAID_BY_DEPOSIT_LABEL, isDepositMethod, rentAppliedOf } from "../depositUtils.js";
 
 function fmtDate(dateLike) {
   if (!dateLike) return "—";
@@ -179,7 +180,7 @@ export function OwnerPortalPublic({ token }) {
                     <Row label={t("Prochaine échéance")} value={money(nextDueAmountOf(lease), symbol)} />
                   )}
                   <Row label={t("Périodicité")} value={lease.billingCycle} />
-                  <Row label={t("Caution contractuelle")} value={money(lease.securityDeposit, symbol)} />
+                  <Row label={t("Caution contractuelle")} value={Number(lease.securityDeposit) > 0 ? money(lease.securityDeposit, symbol) : t("Aucune")} />
                   <Row label={t("Charges")} value={charges} />
                   <Row label={t("Statut")} value={lease.status} />
 
@@ -192,7 +193,7 @@ export function OwnerPortalPublic({ token }) {
                         <div key={i} className="portail-hist-row">
                           <Receipt size={14} className="muted" />
                           <span className="flex-1">{fmtDate(d.paymentDate)}</span>
-                          <span className="muted">{d.status === "returned" ? t("restituée") : t("détenue")}</span>
+                          <span className="muted">{d.status === "returned" ? t("restituée") : t("détenue")}{rentAppliedOf(d) > 0 ? ` · ${t("imputé loyers")} ${moneyExact(rentAppliedOf(d), d.currencySymbol || symbol)}` : ""}</span>
                           <strong>{money(d.amount, d.currencySymbol || symbol)}</strong>
                         </div>
                       ))}
@@ -208,7 +209,7 @@ export function OwnerPortalPublic({ token }) {
                         <div key={p.id} className="portail-hist-row">
                           <Receipt size={14} className="muted" />
                           <span className="flex-1">{fmtDate(p.paymentDate)}</span>
-                          <span className="muted">{p.status === "paid" ? t("payé") : t("en attente")}</span>
+                          <span className="muted">{p.status === "paid" ? (isDepositMethod(p.method) ? t(PAID_BY_DEPOSIT_LABEL) : t("payé")) : t("en attente")}</span>
                           <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                           {p.hasProof ? (
                             <button

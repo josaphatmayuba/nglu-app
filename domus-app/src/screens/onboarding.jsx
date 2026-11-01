@@ -17,6 +17,7 @@ import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import {
   OnboardingCard, OnboardingLinkModal, isPendingOnboarding, onboardingUrl,
   onboardingStatusMeta, onboardingDisplayName, parseOnboardingData, formatShortDate,
@@ -267,12 +268,13 @@ export function Onboarding({ go } = {}) {
           <h1>{t("Onboarding locataire")}</h1>
           <p>{t("Invitez un futur locataire à compléter son dossier, puis validez-le pour créer sa fiche.")}</p>
         </div>
-        <div className="immo-header-actions">
-          <button className="immo-btn primary" onClick={openLinkModal}>
-            <Link size={16} /> {t("Générer un lien")}
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <button className="immo-btn primary" onClick={openLinkModal}>
+          <Link size={16} /> {t("Générer un lien")}
+        </button>
+      </ImmoToolbar>
 
       <div className="domus-onboarding-top">
         {/* Bloc lien sécurisé + étapes du parcours */}

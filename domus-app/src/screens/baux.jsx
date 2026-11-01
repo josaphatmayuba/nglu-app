@@ -44,7 +44,9 @@ import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 import { MAX_UPLOAD_BYTES, UploadProgress, useUploadSuccess, useUploads } from "../uploads/uploadManager.jsx";
 import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import { TerminateLeaseModal } from "./leaseTermination.jsx";
+import { depositFigures, fifoDistribution, fmtWithCurrency, isValidApplyAmount, manualAllocations, manualCap, rentAppliedOf } from "../depositUtils.js";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -303,17 +305,18 @@ export function Baux({ go } = {}) {
           <h1>Baux</h1>
           <p>Contrats de location, échéances et renouvellements</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Locataire, unite, reference..." />
-          </label>
-          <button className="immo-btn" onClick={() => downloadLeasesCsv(leases)}><Download size={16} /> CSV</button>
-          <button className="immo-btn primary" onClick={() => setLeaseModal({ ...emptyLease, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> Nouveau bail
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Locataire, unite, reference..." />
+        </label>
+        <button className="immo-btn" onClick={() => downloadLeasesCsv(leases)}><Download size={16} /> CSV</button>
+        <button className="immo-btn primary" onClick={() => setLeaseModal({ ...emptyLease, currencyId: currency.defaultCurrencyId || "" })}>
+          <Plus size={16} /> Nouveau bail
+        </button>
+      </ImmoToolbar>
 
       <div className="immo-filters">
         <div className="immo-filter-group">
@@ -414,14 +417,16 @@ export function Baux({ go } = {}) {
                     <span className="immo-pill muted">{tf(t("Reportée sur {ref}"), { ref: nextLease.reference || nextLease.id })}</span>
                   ) : deposit?.status === "held" ? (
                     <>
-                      <span className="immo-pill success">Reçue · {money(deposit.amount, lease.currencySymbol || "$")}</span>
-                      <button className="immo-deposit-link" onClick={() => setDepositModal({ mode: "return", lease, deposit })}>Restituer</button>
+                      <span className="immo-pill success">{rentAppliedOf(deposit) > 0
+                        ? `Détenue · ${fmtWithCurrency(deposit.amount, depositSymbol(lease, deposit))} (dont ${fmtWithCurrency(rentAppliedOf(deposit), depositSymbol(lease, deposit))} imputé loyers)`
+                        : `Reçue · ${fmtWithCurrency(deposit.amount, depositSymbol(lease, deposit))}`}</span>
+                      <button className="immo-deposit-link" style={{ minHeight: 44 }} onClick={() => setDepositModal({ mode: "return", lease, deposit })}>Restituer</button>
                     </>
                   ) : deposit?.status === "returned" ? (
-                    <span className="immo-pill muted">Restituée{toNumber(deposit.deductionAmount) > 0 ? ` · retenue ${money(deposit.deductionAmount, lease.currencySymbol || "$")}` : ""}</span>
+                    <span className="immo-pill muted">Restituée{rentAppliedOf(deposit) > 0 ? ` · imputé loyers ${fmtWithCurrency(rentAppliedOf(deposit), depositSymbol(lease, deposit))}` : ""}{toNumber(deposit.deductionAmount) > 0 ? ` · retenue ${fmtWithCurrency(deposit.deductionAmount, depositSymbol(lease, deposit))}` : ""}</span>
                   ) : (
                     <>
-                      <span className="immo-pill warning">Due · {money(depositDue, lease.currencySymbol || "$")}</span>
+                      <span className="immo-pill warning">Due · {fmtWithCurrency(depositDue, depositSymbol(lease))}</span>
                       <button className="immo-deposit-link" onClick={() => setDepositModal({ mode: "collect", lease, amount: depositDue })}>Encaisser</button>
                     </>
                   )}
@@ -477,6 +482,7 @@ export function Baux({ go } = {}) {
                       depositDue={depositDue}
                       onCollectDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "collect", lease, amount: depositDue }); }}
                       onReturnDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "return", lease, deposit }); }}
+                      onWaiveDeposit={() => { setOpenMenuId(null); handleWaiveDeposit(lease, setBusyAction, setActionError, reload, confirm); }}
                       busy={busyAction}
                       onInspection={(type) => { setOpenMenuId(null); setInspectionView({ kind: "launch", lease, type }); }}
                       onCompareInspections={() => { setOpenMenuId(null); setInspectionView({ kind: "compare", lease }); }}
@@ -561,6 +567,7 @@ export function Baux({ go } = {}) {
         <DepositModal
           state={depositModal}
           onClose={() => setDepositModal(null)}
+          onChanged={() => reload()}
           onDone={async (msg) => {
             setDepositModal(null);
             setActionError("");
@@ -659,6 +666,7 @@ function LeaseActionsMenu({
   deposit,
   depositDue = 0,
   onCollectDeposit,
+  onWaiveDeposit,
   onReturnDeposit,
   busy,
   onDetail,
@@ -716,7 +724,10 @@ function LeaseActionsMenu({
           ) : deposit?.status === "returned" ? (
             <button disabled><Shield size={15} /> Caution restituée</button>
           ) : (
-            <button className="highlight" onClick={onCollectDeposit}><Shield size={15} /> Encaisser la caution</button>
+            <>
+              <button className="highlight" onClick={onCollectDeposit}><Shield size={15} /> Encaisser la caution</button>
+              {onWaiveDeposit && !deposit && <button onClick={onWaiveDeposit}><Shield size={15} /> {t("Dispenser de caution")}</button>}
+            </>
           )}
           <hr />
         </>
@@ -784,10 +795,15 @@ const DEPOSIT_METHODS = [
 ];
 
 // Modale caution : encaissement (mode "collect") ou restitution avec retenue (mode "return").
-function DepositModal({ state, onClose, onDone }) {
+// Devise d'une caution : celle de la caution, sinon celle du bail (jamais « $ » en dur ; vide = montant masqué).
+const depositSymbol = (lease, deposit) => deposit?.currencySymbol || deposit?.currencyCode || lease?.currencySymbol || lease?.currencyCode || "";
+
+export function DepositModal({ state, onClose, onDone, onChanged }) {
   const { mode, lease, deposit } = state;
-  const symbol = lease?.currencySymbol || "$";
+  const symbol = depositSymbol(lease, deposit);
   const held = Number(deposit?.amount) || 0;
+  // Part déjà imputée sur des loyers (mise à jour sur place après une imputation, sans fermer la modale).
+  const [rentApplied, setRentApplied] = useState(rentAppliedOf(deposit));
   const [amount, setAmount] = useState(String(mode === "collect" ? (state.amount || lease?.securityDeposit || "") : held));
   const [method, setMethod] = useState(mode === "collect" ? "cash" : "bank");
   const [date, setDate] = useState(todayISO());
@@ -813,8 +829,9 @@ function DepositModal({ state, onClose, onDone }) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  const dedNum = Math.min(Math.max(0, Number(deduction) || 0), held);
-  const refund = Math.round((held - dedNum) * 100) / 100;
+  const figures = depositFigures({ amount: held, rentApplied, deduction: Number(deduction) || 0 });
+  const dedNum = figures.deduction;
+  const refund = figures.refund;
 
   const submit = async () => {
     if (busy) return;
@@ -826,13 +843,13 @@ function DepositModal({ state, onClose, onDone }) {
           notes: notes || null,
           ...(lease.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
         }, proofFile);
-        onDone(`Caution de ${money(Number(amount), symbol)} encaissée`);
+        onDone(`Caution de ${fmtWithCurrency(Number(amount), symbol)} encaissée`);
       } else {
         await api.returnDeposit(lease.id, {
           returnDate: date, deductionAmount: dedNum, deductionReason: reason || null,
           returnMethod: method, notes: notes || null,
         }, proofFile);
-        onDone(`Caution restituée (${money(refund, symbol)})`);
+        onDone(`Caution restituée (${fmtWithCurrency(refund, symbol)})`);
       }
     } catch (e) {
       setErr(e.message || String(e));
@@ -860,7 +877,7 @@ function DepositModal({ state, onClose, onDone }) {
           {mode === "collect" ? (
             <section className="domus-form-section">
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Montant ({symbol})</span>
+                <label className="immo-field"><span>Montant{symbol ? ` (${symbol})` : ""}</span>
                   <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
                 <label className="immo-field"><span>Date</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -892,10 +909,25 @@ function DepositModal({ state, onClose, onDone }) {
             </section>
           ) : (
             <section className="domus-form-section">
-              <div className="immo-pay-row"><span>Caution détenue</span><strong>{money(held, symbol)}</strong></div>
+              <div className="immo-pay-row"><span>Caution détenue</span><strong>{fmtWithCurrency(figures.held, symbol)}</strong></div>
+              {figures.rentApplied > 0 && (
+                <div className="immo-pay-row"><span>Imputée sur loyers</span><strong>− {fmtWithCurrency(figures.rentApplied, symbol)}</strong></div>
+              )}
+              {lease?.status === "ended" && held > 0 && (
+                <DepositRentApply
+                  lease={lease}
+                  deposit={deposit}
+                  symbol={symbol}
+                  available={figures.available}
+                  onApplied={(res) => {
+                    if (res?.deposit?.rentApplied != null) setRentApplied(Number(res.deposit.rentApplied) || 0);
+                    onChanged?.();
+                  }}
+                />
+              )}
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Retenue (dégâts) ({symbol})</span>
-                  <input type="number" min="0" max={held} value={deduction} onChange={(e) => setDeduction(e.target.value)} /></label>
+                <label className="immo-field"><span>Retenue (dégâts){symbol ? ` (${symbol})` : ""}</span>
+                  <input type="number" min="0" max={figures.available} step="0.01" value={deduction} onChange={(e) => setDeduction(e.target.value)} /></label>
                 <label className="immo-field"><span>Date de restitution</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
               </div>
@@ -905,8 +937,11 @@ function DepositModal({ state, onClose, onDone }) {
                 <select value={method} onChange={(e) => setMethod(e.target.value)}>
                   {DEPOSIT_METHODS.filter(([k]) => k !== "mpesa").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </select></label>
+              {dedNum > 0 && (
+                <div className="immo-pay-row" style={{ marginTop: 8 }}><span>Retenue</span><strong>− {fmtWithCurrency(dedNum, symbol)}</strong></div>
+              )}
               <div className="immo-pay-row" style={{ marginTop: 8 }}>
-                <span>Montant restitué</span><strong style={{ color: "#16a34a" }}>{money(refund, symbol)}</strong>
+                <span>Montant restitué</span><strong style={{ color: "#16a34a" }}>{fmtWithCurrency(refund, symbol)}</strong>
               </div>
               <label className="immo-field"><span>Preuve / reçu signé (optionnel)</span>
                 <input
@@ -938,6 +973,176 @@ function DepositModal({ state, onClose, onDone }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const APPLY_ERRORS = {
+  LEASE_NOT_ENDED: "La caution ne peut être imputée sur les loyers qu'une fois le bail terminé.",
+  NO_DEPOSIT: "Aucune caution détenue pour ce bail.",
+  CURRENCY_MISMATCH: "La caution et le bail n'ont pas la même devise : l'imputation sur les loyers est impossible. Restituez la caution ou corrigez la devise.",
+  DEPOSIT_CONFLICT: "La caution disponible a changé : les montants ont été actualisés, vérifiez puis recommencez.",
+};
+const dueMonthLabel = (iso) => {
+  const d = new Date(`${String(iso || "").slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
+};
+
+// Imputation de la caution sur les loyers impayés (bail terminé). L'API recalcule et fait foi ;
+// la répartition affichée est un aperçu local (FIFO ou mois cochés).
+function DepositRentApply({ lease, deposit, symbol, available, onApplied }) {
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState("");
+  const [manual, setManual] = useState(false);
+  const [checked, setChecked] = useState([]);
+  const [amount, setAmount] = useState("");
+  const [notify, setNotify] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [err, setErr] = useState("");
+  const [okMsg, setOkMsg] = useState("");
+
+  const registryActive = lease?.allocationLedger === true;
+  const hasPhone = Boolean(lease?.tenantPhone) || (lease?.coTenants || []).some((c) => c?.phone);
+  const depSym = deposit?.currencySymbol || deposit?.currencyCode || "";
+  const leaseSym = lease?.currencySymbol || lease?.currencyCode || "";
+  const currencyClash = Boolean(depSym && leaseSym && depSym !== leaseSym)
+    || (deposit?.currencyId != null && lease?.currencyId != null && Number(deposit.currencyId) !== Number(lease.currencyId));
+
+  const load = async (resetAmount = true) => {
+    setLoading(true); setLoadErr("");
+    try {
+      const p = await api.depositApplyPreview(lease.id, { allocationMode: "auto" });
+      setPreview(p);
+      if (resetAmount) { setAmount(String(p?.maxApplicable ?? "")); setChecked([]); setManual(false); }
+    } catch (e) {
+      setPreview(null);
+      setLoadErr(APPLY_ERRORS[e?.code] || e?.message || "Aperçu indisponible.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { if (!currencyClash) load(); else setLoading(false); }, [lease.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dues = preview?.dues || [];
+  const maxApplicable = Number(preview?.maxApplicable) || 0;
+  const totalUnpaid = Number(preview?.totalUnpaid) || 0;
+  const cap = manual ? manualCap(dues, checked, available) : maxApplicable;
+  const valid = isValidApplyAmount(amount, cap);
+  const amountNum = valid ? Number(String(amount).replace(",", ".")) : 0;
+  const lines = manual ? manualAllocations(dues, checked, amountNum) : fifoDistribution(dues, amountNum);
+  const coveredById = new Map(lines.map((l) => [l.dueId, l]));
+  const monthsText = lines.map((l) => dueMonthLabel(l.periodStart)).join(", ");
+  const remainingAfter = Math.max(0, Math.round((totalUnpaid - amountNum) * 100) / 100);
+  const smsText = `Bonjour ${lease?.tenantFirstName || "Locataire"}, votre caution de ${fmtWithCurrency(amountNum, symbol)} a payé le loyer de ${monthsText || "…"}. Reste : ${fmtWithCurrency(remainingAfter, symbol)}.`;
+
+  const toggleDue = (id) => {
+    const next = checked.includes(id) ? checked.filter((x) => x !== id) : [...checked, id];
+    setChecked(next);
+    setAmount(String(manualCap(dues, next, available)));
+  };
+  const toggleManual = (on) => {
+    setManual(on);
+    if (on) { setChecked([]); setAmount("0"); } else { setAmount(String(maxApplicable)); }
+  };
+
+  const submit = async () => {
+    if (busyRef.current || !valid) return;
+    busyRef.current = true; setBusy(true); setErr(""); setOkMsg("");
+    try {
+      const body = {
+        amount: amountNum,
+        applicationDate: todayISO(),
+        allocationMode: manual ? "manual" : "auto",
+        notifyTenant: Boolean(notify && hasPhone),
+        ...(manual ? { allocations: lines.map((l) => ({ dueId: l.dueId, amount: l.amount })) } : {}),
+      };
+      const res = await api.applyDepositToRent(lease.id, body);
+      if (res?._queued) {
+        setOkMsg("Hors ligne : l'imputation sera envoyée au retour du réseau.");
+        return;
+      }
+      const smsInfo = res?.sms?.requested ? (res.sms.sent > 0 ? " · SMS envoyé" : " · SMS non envoyé") : "";
+      setOkMsg(`${fmtWithCurrency(amountNum, symbol)} imputé sur les loyers${smsInfo}${res?.replayed ? " (déjà enregistré)" : ""}.`);
+      onApplied?.(res);
+      await load(true);
+    } catch (e) {
+      setErr(APPLY_ERRORS[e?.code] || e?.message || String(e));
+      if (e?.status === 409) await load(true);
+    } finally {
+      busyRef.current = false; setBusy(false);
+    }
+  };
+
+  const box = { border: "1px solid var(--line, #e2e8f0)", borderRadius: 10, padding: 12, margin: "10px 0", display: "grid", gap: 10 };
+  const tap = { minHeight: 44 };
+
+  if (currencyClash) {
+    return <div style={box} role="alert"><strong>Imputer sur les loyers impayés</strong><span className="muted">{APPLY_ERRORS.CURRENCY_MISMATCH}</span></div>;
+  }
+  if (loading && !preview) return <div style={box} role="status"><span className="muted">Chargement des loyers impayés…</span></div>;
+  if (loadErr) return <div style={box} role="alert"><strong>Imputer sur les loyers impayés</strong><span className="api-error">{loadErr}</span></div>;
+  if (!dues.length || (available <= 0 && !okMsg)) {
+    return okMsg ? <div style={box} role="status"><span style={{ color: "#16a34a" }}>{okMsg}</span></div> : null;
+  }
+
+  return (
+    <div style={box}>
+      <strong>Imputer sur les loyers impayés</strong>
+      <span className="muted">Disponible : {fmtWithCurrency(available, symbol)} · Impayés : {fmtWithCurrency(totalUnpaid, symbol)}</span>
+
+      <div style={{ display: "grid", gap: 6 }}>
+        {dues.map((d) => {
+          const cov = coveredById.get(Number(d.id));
+          const row = (
+            <>
+              <span style={{ flex: 1, textTransform: "capitalize" }}>{dueMonthLabel(d.periodStart)}</span>
+              <span>
+                {fmtWithCurrency(d.remaining, symbol)}
+                {cov ? <small style={{ display: "block", color: "#16a34a" }}>− {fmtWithCurrency(cov.amount, symbol)}</small> : null}
+              </span>
+            </>
+          );
+          return manual ? (
+            <label key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, ...tap }}>
+              <input type="checkbox" checked={checked.includes(Number(d.id))} onChange={() => toggleDue(Number(d.id))} style={{ width: 22, height: 22 }} />
+              {row}
+            </label>
+          ) : (
+            <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 36 }}>{row}</div>
+          );
+        })}
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 10, ...tap, opacity: registryActive ? 1 : 0.6 }}>
+        <input type="checkbox" checked={manual} disabled={!registryActive || busy} onChange={(e) => toggleManual(e.target.checked)} style={{ width: 22, height: 22 }} />
+        <span>Choisir les mois</span>
+      </label>
+      {!registryActive && (
+        <small className="muted">Choix des mois indisponible : le registre d'imputation n'est pas activé sur ce bail. La caution est imputée du plus ancien au plus récent.</small>
+      )}
+
+      <label className="immo-field"><span>Montant à imputer{symbol ? ` (${symbol})` : ""} · max {fmtWithCurrency(cap, symbol)}</span>
+        <input type="number" inputMode="decimal" min="0" step="0.01" max={cap} value={amount} style={tap}
+          onChange={(e) => setAmount(e.target.value)} disabled={busy} aria-invalid={!valid} /></label>
+      {!valid && String(amount) !== "" && Number(amount) !== 0 && <small className="api-error">Montant invalide : 2 décimales au plus, ne dépasse pas {fmtWithCurrency(cap, symbol)}.</small>}
+
+      <label style={{ display: "flex", alignItems: "center", gap: 10, ...tap }}>
+        <input type="checkbox" checked={notify && hasPhone} disabled={!hasPhone || busy} onChange={(e) => setNotify(e.target.checked)} style={{ width: 22, height: 22 }} />
+        <span>SMS au locataire</span>
+      </label>
+      {!hasPhone && <small className="muted">Aucun numéro de téléphone renseigné pour ce bail.</small>}
+      {notify && hasPhone && valid && (
+        <blockquote className="muted" style={{ margin: 0, padding: "6px 10px", borderLeft: "3px solid #cbd5e1", fontSize: 13 }} aria-label="Aperçu du SMS">{smsText}</blockquote>
+      )}
+
+      {err && <div className="api-error" role="alert">{err}</div>}
+      {okMsg && <div role="status" style={{ color: "#16a34a" }}>{okMsg}</div>}
+
+      <button type="button" className="immo-btn primary" style={tap} onClick={submit} disabled={busy || !valid} aria-busy={busy}>
+        {busy ? "Imputation…" : <><Check size={16} /> Imputer</>}
+      </button>
     </div>
   );
 }
@@ -977,7 +1182,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
       unitId,
       propertyId: unit?.propertyId ? String(unit.propertyId) : form.propertyId,
       rentAmount: unit?.monthlyRent ?? form.rentAmount,
-      securityDeposit: unit?.securityDeposit ?? form.securityDeposit,
+      securityDeposit: form.noDeposit ? 0 : (unit?.securityDeposit ?? form.securityDeposit),
       currencyId: unit?.currencyId ?? form.currencyId ?? defaultCurrencyId,
     });
   };
@@ -1143,15 +1348,25 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 onCurrencyChange={(currencyId) => set({ currencyId })}
                 placeholder="ex. 850000"
               />
-              <LeaseMoneyField
-                label="Depot de garantie"
-                value={form.securityDeposit}
-                currencyId={form.currencyId || defaultCurrencyId || ""}
-                currencyOptions={currencyOptions}
-                onAmountChange={(securityDeposit) => set({ securityDeposit })}
-                onCurrencyChange={(currencyId) => set({ currencyId })}
-                placeholder="ex. 1700000"
-              />
+              {!form.noDeposit && (
+                <LeaseMoneyField
+                  label="Depot de garantie"
+                  value={form.securityDeposit}
+                  currencyId={form.currencyId || defaultCurrencyId || ""}
+                  currencyOptions={currencyOptions}
+                  onAmountChange={(securityDeposit) => set({ securityDeposit })}
+                  onCurrencyChange={(currencyId) => set({ currencyId })}
+                  placeholder="ex. 1700000"
+                />
+              )}
+              <label style={{ display: "flex", alignItems: "center", gap: 8, gridColumn: "1 / -1" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.noDeposit)}
+                  onChange={(e) => set({ noDeposit: e.target.checked, securityDeposit: e.target.checked ? 0 : "" })}
+                />
+                {t("Pas de caution pour ce bail")}
+              </label>
             </div>
             {selectedUnit && (
               <div className="domus-lease-unit-note">
@@ -1672,6 +1887,7 @@ function leaseToForm(lease) {
     billingCycle: lease.billingCycle || "monthly",
     rentAmount: lease.rentAmount ?? "",
     securityDeposit: lease.securityDeposit ?? "",
+    noDeposit: !(Number(lease.securityDeposit) > 0),
     currencyId: lease.currencyId,
     status: lease.status || "active",
     terms: lease.terms || "",
@@ -1698,7 +1914,7 @@ function leasePayload(form) {
     ...(form.rentProrationEnabled ? { rentProrationEnabled: true } : form.id && form._prorationWas ? { rentProrationEnabled: false } : {}),
     billingCycle: form.billingCycle || "monthly",
     rentAmount: toNumber(form.rentAmount),
-    securityDeposit: toNumber(form.securityDeposit),
+    securityDeposit: form.noDeposit ? 0 : toNumber(form.securityDeposit),
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     terms: form.terms || null,
     moveInNotes: form.moveInNotes || null,
@@ -1753,6 +1969,26 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de telecharger le contrat.");
+  } finally {
+    setBusyAction("");
+  }
+}
+
+// Bail sans caution : « pas de caution » = securityDeposit à 0 (pas de migration).
+async function handleWaiveDeposit(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Dispenser de caution"),
+    message: tf(t("Le bail {ref} n'exigera plus de caution (aucune caution n'a été encaissée). Confirmer ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Dispenser"),
+  });
+  if (!ok) return;
+  setBusyAction(`waive-${lease.id}`);
+  setActionError("");
+  try {
+    await api.updateLease(lease.id, { securityDeposit: 0 });
+    await reload();
+  } catch (e) {
+    setActionError(e.message || "Impossible de dispenser la caution.");
   } finally {
     setBusyAction("");
   }

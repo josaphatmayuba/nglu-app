@@ -25,6 +25,7 @@ import { moneyExact, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from
 import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
 import { Lightbox } from "../components/Lightbox.jsx";
@@ -401,16 +402,6 @@ export function Maintenance() {
           <h1>{t("Maintenance")}</h1>
           <p>{t("Interventions, tickets et couts")}</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Ticket, unite, locataire...")} />
-          </label>
-          <button className="immo-btn" onClick={() => setViewAndStore("calendar")}><CalendarDays size={16} /> {t("Planning")}</button>
-          <button className="immo-btn primary" onClick={() => setTicketModal({ ...emptyTicket, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> {t("Ticket")}
-          </button>
-        </div>
       </div>
 
       <div className="immo-metrics-grid">
@@ -419,6 +410,17 @@ export function Maintenance() {
         <Metric icon={<Columns3 size={20} />} tone="immo-tone-brand" label={t("En cours")} value={inProgressTickets.length} />
         <Metric icon={<CheckCircle2 size={20} />} tone="immo-tone-green" label={t("Termines")} value={doneTickets.length} success />
       </div>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Ticket, unite, locataire...")} />
+        </label>
+        <button className="immo-btn" onClick={() => setViewAndStore("calendar")}><CalendarDays size={16} /> {t("Planning")}</button>
+        <button className="immo-btn primary" onClick={() => setTicketModal({ ...emptyTicket, currencyId: currency.defaultCurrencyId || "" })}>
+          <Plus size={16} /> {t("Ticket")}
+        </button>
+      </ImmoToolbar>
 
       <div className="maintenance-toolbar">
         <div className="immo-filter-group">

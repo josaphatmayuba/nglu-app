@@ -582,9 +582,11 @@ jobs:
           SUPPORT_CONF: nginx/nginx.avelomi.conf
         run: sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
+  # Rejoue la vitrine a chaque deploy qui rebuild l'image Avelomi (build ~2 s) :
+  # en fin de chaine, elle repare un avelomi-site/dist perdu (placeholder "non deploye").
   avelomi-site-prod:
-    needs: [changes, frontend-avelomi-prod]
-    if: always() && needs.changes.outputs.avelomi_site == 'true'
+    needs: [changes, static-prod, frontend-avelomi-prod]
+    if: always() && (needs.changes.outputs.avelomi_site == 'true' || needs.changes.outputs.static_any == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

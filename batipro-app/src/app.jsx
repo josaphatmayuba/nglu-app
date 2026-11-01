@@ -329,7 +329,6 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
         <div>
           <p className="eyebrow">Vue d'ensemble · {new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p>
           <h2 className="title font-display">Vos chantiers</h2>
-        </div>
         <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
       </div>
 
@@ -338,6 +337,9 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
         <KPI label="Avancement moyen" value={`${avg} %`} sub="tous projets" subClass="up" icon="trendingUp" />
         <KPI label="Budget engagé" value={moneyByCurrency(projects, "cost_actual")} sub={`/ ${moneyByCurrency(projects, "reference_budget")} contractés`} icon="wallet" />
         <KPI label="Retards / blocages" value={late} sub={late ? "à traiter" : "aucun"} subClass={late ? "down" : ""} icon="alert" danger={late > 0} />
+      </div>
+      <div className="page-toolbar">
+        </div>
       </div>
 
       <div className="g3">
@@ -1054,6 +1056,27 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         <div className="card pad"><span className="muted">Aucune phase définie pour ce chantier.</span></div>
       ) : (
         <div className="phase-list">
+          {(() => {
+            // Totaux par devise (pas de conversion : une phase garde sa devise).
+            const byCur = {};
+            for (const r of phases) {
+              const cur = r.currencyCode || selected?.currencyCode || "";
+              byCur[cur] = byCur[cur] || { planned: 0, spent: 0 };
+              byCur[cur].planned += n(r.plannedBudget);
+              byCur[cur].spent += n(r.spentAmount);
+            }
+            return (
+              <div className="phase-card" style={{ background: "var(--ink-50, #f8fafc)" }}>
+                <div className="phase-card-top"><span className="phase-name">Total des phases</span></div>
+                {Object.entries(byCur).map(([cur, t]) => (
+                  <div className="phase-card-bottom" key={cur} style={{ marginTop: 4 }}>
+                    <span>Utilisé {money(t.spent, cur)} / Prévu {money(t.planned, cur)} — Reste {money(t.planned - t.spent, cur)}</span>
+                    {t.planned > 0 && <strong>{Math.round((t.spent / t.planned) * 100)} % du budget</strong>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           {phases.map((r) => {
             const tone = statusTone(r.status);
             const barColor = tone === "emerald" ? "var(--emerald-500)" : tone === "amber" ? "var(--amber-500)" : "var(--ink-300)";
@@ -1069,8 +1092,19 @@ function Planning({ projects, canMutate, fixedProjectId }) {
                 </div>
                 <div className="phase-card-bottom">
                   <span>{hasRange ? `${r.startDate} → ${r.endDate}` : "Dates non définies"}</span>
-                  <strong>{r.progress} %</strong>
+                  <strong>{n(r.progress)} %</strong>
                 </div>
+                {(() => {
+                  const cur = r.currencyCode || selected?.currencyCode;
+                  const planned = n(r.plannedBudget), spent = n(r.spentAmount);
+                  const usedPct = planned > 0 ? Math.round((spent / planned) * 100) : null;
+                  return (
+                    <div className="phase-card-bottom" style={{ marginTop: 4 }}>
+                      <span>Utilisé {money(spent, cur)} / Prévu {r.plannedBudget != null ? money(planned, cur) : "—"}</span>
+                      {usedPct != null && <strong style={{ color: usedPct > 100 ? "var(--rose-600, #e11d48)" : undefined }}>{usedPct} % du budget</strong>}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -4270,12 +4304,14 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         <div className="topbar">
           <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux du chantier</h2></div>
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({})}><Icon name="box" /> Déclarer une sortie</button>
-        </div>
         {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="g3 kpis" style={{ marginBottom: 16 }}>
           <div className="card pad"><div className="kpi-label">Reçu (total)</div><div className="font-display kpi-value" style={{ color: "var(--emerald-600)" }}>{totalReceived}</div></div>
           <div className="card pad"><div className="kpi-label">Consommé (total)</div><div className="font-display kpi-value" style={{ color: "var(--amber-600)" }}>{totalConsumed}</div></div>
           <div className="card pad"><div className="kpi-label">Restant (total)</div><div className="font-display kpi-value">{totalRemaining}</div></div>
+        </div>
+        <div className="page-toolbar">
+          </div>
         </div>
         <div className="card table-card" style={{ marginBottom: 16 }}>
           <table className="bp">
@@ -4348,13 +4384,15 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
     <>
       <div className="topbar">
         <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux & achats</h2></div>
-        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Références suivies</div><div className="font-display kpi-value">{materials.length}</div></div>
         <div className="card pad"><div className="kpi-label">Sous le seuil</div><div className="font-display kpi-value" style={{ color: low ? "var(--rose-600)" : undefined }}>{low}</div></div>
         <div className="card pad"><div className="kpi-label">Réservé total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.reserved), 0)}</div></div>
         <div className="card pad"><div className="kpi-label">En stock total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.stock), 0)}</div></div>
+      </div>
+      <div className="page-toolbar">
+        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="card table-card" style={{ marginBottom: 16 }}>
         <table className="bp">

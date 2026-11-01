@@ -1174,6 +1174,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   terminationReason: text("termination_reason"),
   terminatedAt: timestamp("terminated_at"),
   terminatedBy: bigint("terminated_by", { mode: "number" }),
+  // Migration 0332 : 1 = periode de sortie facturee en entier (historique), 0 = prorata des jours occupes.
+  terminationFullPeriod: tinyint("termination_full_period").default(1).notNull(),
   // Registre des affectations (migration 0317) : date de bascule du bail sur le
   // modele 1 mois = 1 echeance = ses paiements. NULL = comportement historique.
   allocationLedgerAt: datetime("allocation_ledger_at"),
@@ -1192,6 +1194,8 @@ export const realEstateLeaseScheduledTerminations = mysqlTable("real_estate_leas
   effectiveDate: date("effective_date", { mode: "string" }).notNull(),
   reason: text("reason"),
   notifyTenant: tinyint("notify_tenant").default(0).notNull(),
+  // Migration 0332 : 1 = facturer la periode complete, 0 = prorata.
+  fullPeriod: tinyint("full_period").default(1).notNull(),
   status: varchar("status", { length: 20 }).default("scheduled").notNull(),
   createdBy: bigint("created_by", { mode: "number" }),
   createdAt: timestamp("created_at"),
@@ -1288,9 +1292,13 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   dueStatus: varchar("due_status", { length: 20 }),
   // due | payment (NULL = ligne historique non classee).
   rowKind: varchar("row_kind", { length: 10 }),
+  // Caution source quand ce paiement est une imputation de caution sur loyer (migration 0331).
+  securityDepositId: bigint("security_deposit_id", { mode: "number", unsigned: true }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
-});
+}, (t) => ({
+  securityDepositIdx: index("idx_rent_payments_security_deposit").on(t.securityDepositId),
+}));
 
 // Affectation d un encaissement a une echeance (migration 0317). payment_id et due_id
 // pointent vers real_estate_rent_payments. source = auto|manual|backfill.
@@ -1328,6 +1336,8 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
   deductionAmount: decimal("deduction_amount", { precision: 15, scale: 2 }),
   deductionReason: varchar("deduction_reason", { length: 500 }),
   returnedAmount: decimal("returned_amount", { precision: 15, scale: 2 }),
+  // Part de la caution imputee sur des loyers impayes a la sortie (migration 0331).
+  rentAppliedAmount: decimal("rent_applied_amount", { precision: 15, scale: 2 }).default("0").notNull(),
   returnMethod: varchar("return_method", { length: 255 }),
   returnDate: date("return_date", { mode: "string" }),
   reference: varchar("reference", { length: 255 }),

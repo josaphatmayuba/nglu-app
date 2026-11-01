@@ -1036,6 +1036,13 @@ function Bar({ pct, cls = "grad-accent" }) {
   const width = Number.isFinite(Number(pct)) ? Math.max(0, Math.min(100, Number(pct))) : 0;
   return <div className="bar"><span className={bg ? "" : cls} style={{ width: `${width}%`, background: bg }} /></div>;
 }
+function PageAction({ action, onAction, actionIcon = "plus", disabled, ghost }) {
+  return (
+    <button className={`btn page-action ${ghost ? "btn-ghost" : "btn-accent grad-accent"}`} disabled={disabled} onClick={onAction}>
+      <Icon name={actionIcon} /> {action}
+    </button>
+  );
+}
 function PageHead({ eyebrow, title, action, onAction, actionIcon = "plus", disabled, ghost }) {
   return (
     <div className="topbar">
@@ -1671,13 +1678,14 @@ function Dashboard({ data, staff, masse, go, setModal }) {
   ].filter(Boolean);
   return (
     <>
-      <PageHead eyebrow="Vue d'ensemble" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
+      <PageHead eyebrow="Vue d'ensemble" title="Ressources humaines" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Effectif total" value={total} icon="users" />
         <KPI label="En congé aujourd'hui" value={leavesToday} icon="palmtree" />
         <KPI label="Congés en attente" value={pendingLeaves} sub={pendingLeaves ? "A approuver" : ""} tone={pendingLeaves ? "warn" : undefined} icon="palmtree" />
         <KPI label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} icon="wallet" />
       </div>
+      <div className="searchbar"><PageAction action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} /></div>
       <div className="g3">
         <section className="card pad span2">
           <div className="section-head"><h3 className="font-display">Effectif par département</h3><button className="link" onClick={() => go("organigramme")}>Organigramme</button></div>
@@ -1733,7 +1741,13 @@ function Employes({ data, staff, setModal }) {
   );
   return (
     <>
-      <PageHead eyebrow="Annuaire" title="Employés" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
+      <PageHead eyebrow="Annuaire" title="Employés" />
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label={q || dept ? "Résultats" : "Actifs"} value={filtered.length} />
+        <Mini label="En congé" value={enConge} />
+        <Mini label="Nouveaux (30 j)" value={nouveaux} valueClass="" />
+        <Mini label="Contrats < 30 j" value={expirent} />
+      </div>
       <div className="searchbar">
         <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employé, poste, matricule…" /></label>
         <Autocomplete
@@ -1746,12 +1760,7 @@ function Employes({ data, staff, setModal }) {
         />
         <button type="button" className="pillbtn" onClick={() => setView(view === "grid" ? "list" : "grid")} title="Changer l'affichage"><Icon name={view === "grid" ? "list" : "dashboard"} /> {view === "grid" ? "Liste" : "Grille"}</button>
         <button type="button" className="pillbtn" onClick={exportEmployes} title="Exporter en CSV"><Icon name="download" /> Exporter</button>
-      </div>
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label={q || dept ? "Résultats" : "Actifs"} value={filtered.length} />
-        <Mini label="En congé" value={enConge} />
-        <Mini label="Nouveaux (30 j)" value={nouveaux} valueClass="" />
-        <Mini label="Contrats < 30 j" value={expirent} />
+        <PageAction action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
       </div>
       {view === "list" ? (
         <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 760 }}>
@@ -2184,13 +2193,14 @@ function Presences({ data, staff, setModal }) {
   );
   return (
     <>
-      <PageHead eyebrow="Pointage" title="Presences & pointage" action="Nouveau pointage" actionIcon="plus" onAction={() => setModal({ kind: "attendance" })} />
+      <PageHead eyebrow="Pointage" title="Presences & pointage" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Presents" value={totals.present ?? rows.filter((r) => ["present", "validated"].includes(String(r.status || "").toLowerCase())).length} icon="checkCircle" />
         <KPI label="En retard" value={totals.late ?? rows.filter((r) => String(r.status || "").toLowerCase() === "late").length} tone={(totals.late || 0) ? "warn" : undefined} icon="clock" />
         <KPI label="Absents" value={totals.absent ?? rows.filter((r) => String(r.status || "").toLowerCase() === "absent").length} tone={(totals.absent || 0) ? "danger" : undefined} icon="xCircle" />
         <Mini label="Heures travaillees" value={nf.format(Number(totals.workedHours || rows.reduce((sum, r) => sum + Number(r.workedHours || 0), 0)))} />
       </div>
+      <div className="searchbar"><PageAction action="Nouveau pointage" actionIcon="plus" onAction={() => setModal({ kind: "attendance" })} /></div>
       <div className="g3" style={{ marginBottom: 16 }}>
         <Mini label="Pointages" value={totals.records ?? rows.length} />
         <Mini label="Minutes retard" value={nf.format(Number(totals.lateMinutes || 0))} />
@@ -2236,13 +2246,14 @@ function Conges({ data, staff, setModal }) {
   const decision = (request, status) => setModal({ kind: "leaveDecision", initial: { id: request.id, status, userId: request.userId, managerId: request.managerId || "", decidedBy: "", decisionComment: "" } });
   return (
     <>
-      <PageHead eyebrow="Absences" title="Conges & absences" action="Nouvelle demande" onAction={addRequest} />
+      <PageHead eyebrow="Absences" title="Conges & absences" />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <KPI label="A valider chef" value={pending.length} tone={pending.length ? "warn" : undefined} />
         <KPI label="A valider RH" value={managerApproved.length} tone={managerApproved.length ? "warn" : undefined} />
         <Mini label="En conge aujourd'hui" value={today.length} />
         <Mini label="Solde total" value={`${nf.format(Number(summary.totals?.balanceDays || 0))} j`} />
       </div>
+      <div className="searchbar"><PageAction action="Nouvelle demande" onAction={addRequest} /></div>
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Jours approuves" value={`${nf.format(Number(summary.totals?.usedDays || 0))} j`} />
         <Mini label="Jours en attente" value={`${nf.format(Number(summary.totals?.pendingDays || 0))} j`} />
@@ -2428,7 +2439,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
   );
   return (
     <>
-      <PageHead eyebrow="Payroll" title="Paie professionnelle" action={generating ? "Calcul..." : `Generer la paie de ${payPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} />
+      <PageHead eyebrow="Payroll" title="Paie professionnelle" />
       <div className="card pad" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ flex: "1 1 200px", minWidth: 200 }}>
@@ -2463,6 +2474,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
         <Mini label="Brut total" value={<MoneyLines lines={payrollGrossLines} empty={`0 ${CUR}`} />} />
         <Mini label="Net a payer" value={<MoneyLines lines={payrollNetLines} empty={`0 ${CUR}`} />} />
       </div>
+      <div className="searchbar"><PageAction action={generating ? "Calcul..." : `Generer la paie de ${payPeriod}`} actionIcon="play" onAction={handleGenerateMonth} disabled={generating} /></div>
       <div className="card pad table-card">
         <div className="section-head">
           <h3 className="font-display">Bulletins de paie</h3>
@@ -2568,10 +2580,10 @@ function Contrats({ data, staff, setModal }) {
   const exportContrats = () => exportCsv("contrats.csv", ["Reference", "Employe", "Type", "Debut", "Fin", "Montant", "Statut"], filtered.map((c) => [c.reference || "", personName(staff, c.userId), c.contractType || "", dateOnly(c.startDate), dateOnly(c.endDate), contractMoneyText(c), statusLabel(c.status)]));
   return (
     <>
-      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => setModal({ kind: "hrContract" })} />
+      <PageHead eyebrow="Cycle de vie" title="Contrats" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Total contrats" value={rows.length} /><KPI label="Expirent < 90 j" value={soon90.length} tone={soon90.length ? "warn" : undefined} /><KPI label="Expirent < 30 j" value={soon30.length} tone={soon30.length ? "warn" : undefined} /><KPI label="Urgent < 7 j" value={soon7.length} tone={soon7.length ? "warn" : undefined} /></div>
       <div className="card pad table-card">
-        <div className="searchbar"><label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employe, reference, type, montant, statut)..." /></label><button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button></div>
+        <div className="searchbar"><label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employe, reference, type, montant, statut)..." /></label><button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button><PageAction action="Nouveau contrat" onAction={() => setModal({ kind: "hrContract" })} /></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 900 }}><thead><tr><th>Reference</th><th>Employe</th><th>Type</th><th>Debut</th><th>Fin</th><th className="r">Montant</th><th className="r">Alerte</th><th className="r">Statut</th></tr></thead><tbody>{filtered.map((c) => { const days = daysUntil(c.endDate); return <tr key={c.id}><td className="muted">{c.reference || "-"}</td><td style={{ fontWeight: 500 }}>{personName(staff, c.userId)}</td><td><span className="chip ink">{c.contractType || "Contrat"}</span></td><td>{dateOnly(c.startDate) || "-"}</td><td className="muted">{dateOnly(c.endDate) || "-"}</td><td className="r">{contractMoneyText(c)}</td><td className="r">{days == null || days < 0 ? "-" : days <= 7 ? <span className="chip amber">{days} j</span> : days <= 30 ? <span className="chip amber">{days} j</span> : days <= 90 ? <span className="chip ink">{days} j</span> : "-"}</td><td className="r"><span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span></td></tr>; })}</tbody></table></div>
         {filtered.length === 0 && <EmptyState title="Aucun contrat en base" />}
       </div>
@@ -2646,13 +2658,14 @@ function Dossiers({ data, staff, setModal, reload }) {
 
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Documents & signature" action="Deposer un document" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
+      <PageHead eyebrow="Dossier du personnel" title="Documents & signature" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Documents total" value={summary.total} />
         <Mini label="Generes depuis template" value={summary.generated} />
         <KPI label="Signes" value={summary.signed} tone={summary.signed ? "emerald" : undefined} />
         <KPI label="En attente" value={summary.pending} tone={summary.pending ? "warn" : undefined} />
       </div>
+      <div className="searchbar"><PageAction action="Deposer un document" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost /></div>
 
       <div className="card pad" style={{ marginBottom: 16 }}>
         <h3 className="block-title font-display" style={{ marginBottom: 12 }}>Generer un document depuis template</h3>
@@ -2767,13 +2780,14 @@ function Timesheet({ data, staff, setModal }) {
   );
   return (
     <>
-      <PageHead eyebrow="Allocation du temps" title="Temps projets" action="Nouvelle saisie" actionIcon="plus" onAction={() => setModal({ kind: "timesheet" })} />
+      <PageHead eyebrow="Allocation du temps" title="Temps projets" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Lignes en base" value={rows.length} />
         <Mini label="Heures saisies" value={nf.format(totalHours)} />
         <Mini label="Projets" value={projectCount} />
         <KPI label="A valider" value={pending} tone={pending ? "warn" : undefined} />
       </div>
+      <div className="searchbar"><PageAction action="Nouvelle saisie" actionIcon="plus" onAction={() => setModal({ kind: "timesheet" })} /></div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Heures saisies</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 840 }}>
@@ -2816,13 +2830,14 @@ function ProjetsONG({ data, staff, setModal }) {
   );
   return (
     <>
-      <PageHead eyebrow="ONG & projets" title="Affectations projets" action="Nouveau projet" actionIcon="plus" onAction={() => setModal({ kind: "hrProject" })} />
+      <PageHead eyebrow="ONG & projets" title="Affectations projets" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Projets actifs" value={activeProjects.length} sub={`${projects.length} projets en base`} icon="folder" />
         <KPI label="Affectations" value={assignments.length} sub={`${new Set(assignments.map((a) => a.userId)).size} employes affectes`} icon="users" />
         <KPI label="Budget RH projets" value={<MoneyLines lines={budgetLines} />} sub="par devise" icon="wallet" />
         <KPI label="Cout reel timesheets" value={<MoneyLines lines={actualLines} />} sub={`${report.linkedTimesheets || 0} lignes liees`} icon="banknote" />
       </div>
+      <div className="searchbar"><PageAction action="Nouveau projet" actionIcon="plus" onAction={() => setModal({ kind: "hrProject" })} /></div>
       <div className="g3" style={{ marginBottom: 16 }}>
         <Mini label="Cout planifie / mois" value={<MoneyLines lines={costLines} />} />
         <Mini label="Timesheets non lies" value={report.unlinkedTimesheets || 0} />
@@ -2908,8 +2923,9 @@ function Performance({ data, staff, setModal }) {
   const avg = scored.length ? (scored.reduce((s, r) => s + Number(r.score || 0), 0) / scored.length).toFixed(1).replace(".", ",") : "-";
   return (
     <>
-      <PageHead eyebrow="Evaluations" title="Performance" action="Nouvelle evaluation" onAction={() => setModal({ kind: "performanceReview" })} />
+      <PageHead eyebrow="Evaluations" title="Performance" />
       <div className="g4 kpis" style={{ marginBottom: 18 }}><Mini label="Evaluations" value={rows.length} /><Mini label="Note moyenne" value={avg} valueClass="" /><Mini label="Scores renseignes" value={scored.length} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
+      <div className="searchbar"><PageAction action="Nouvelle evaluation" onAction={() => setModal({ kind: "performanceReview" })} /></div>
       <div className="card pad"><h3 className="block-title font-display">Evaluations en base</h3>{rows.length === 0 && <EmptyState title="Aucune evaluation en base" />}{rows.map((p) => { const name = personName(staff, p.userId); const pct = Math.max(0, Math.min(100, Number(p.score || 0) * 20)); return <div className="row" key={p.id}><Avatar name={name} color={colorFor(name)} size={36} /><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{name}</div><div className="tiny">{p.cycle || "Cycle non renseigne"}</div></div><div style={{ width: 120 }} className="desk-only"><Bar pct={pct} cls="grad-accent" /></div><span className="font-display" style={{ fontWeight: 700, fontSize: 14, width: 40, textAlign: "right" }}>{p.score ?? "-"}</span><span className={"chip " + chipForStatus(p.status)} style={{ marginLeft: 8 }}>{statusLabel(p.status)}</span></div>; })}</div>
     </>
   );
@@ -2998,7 +3014,7 @@ function Recrutement({ data, reload, setModal }) {
 
   return (
     <>
-      <PageHead eyebrow="Pipeline RH" title="Recrutement" action="Nouveau candidat" actionIcon="userPlus" onAction={() => setModal({ kind: "candidate" })} />
+      <PageHead eyebrow="Pipeline RH" title="Recrutement" />
 
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Candidats actifs" value={summary.total} />
@@ -3006,6 +3022,7 @@ function Recrutement({ data, reload, setModal }) {
         <Mini label="Avec entretien" value={summary.withInterview} />
         <Mini label="Convertis employe" value={summary.converted} />
       </div>
+      <div className="searchbar"><PageAction action="Nouveau candidat" actionIcon="userPlus" onAction={() => setModal({ kind: "candidate" })} /></div>
 
       {/* Pipeline kanban-style KPIs */}
       <div className="card pad" style={{ marginBottom: 16 }}>
@@ -3237,8 +3254,9 @@ function Reporting({ data, staff, masse }) {
   const exportRows = () => exportCsv("reporting-rh.csv", ["Indicateur", "Valeur"], [["Effectif", total], ["Masse salariale", salaryText], ["Departements", data.departments.length], ["Contrats", data.contracts.length], ["Conges en attente", data.leaveRequests.filter((l) => isPending(l.status)).length]]);
   return (
     <>
-      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={exportRows} ghost />
+      <PageHead eyebrow="Analytique RH" title="Reporting RH" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Effectif" value={total} /><Mini label="Departements" value={data.departments.length} /><Mini label="Masse salariale" value={<MoneyLines lines={salaryLines} />} /><Mini label="Contrats" value={data.contracts.length} /></div>
+      <div className="searchbar"><PageAction action="Exporter" actionIcon="download" onAction={exportRows} ghost /></div>
       <div className="g2"><div className="card pad"><h3 className="block-title font-display">Effectif par departement</h3>{data.departments.length === 0 && <EmptyState title="Aucun departement en base" />}{data.departments.map((d) => <div key={d.id || d.name} style={{ marginBottom: 12, fontSize: 13 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span>{d.name}</span><span className="muted">{d.count}</span></div><Bar pct={Math.max(5, Math.round((Number(d.count || 0) / deptMax) * 100))} cls={d.color === "sky" ? "grad-sky" : d.color === "teal" ? "grad-accent" : d.color} /></div>)}</div><div className="card pad"><h3 className="block-title font-display">Sources BD</h3><div className="kv"><div><span>Employes</span><span>{staff.length}</span></div><div><span>Conges</span><span>{data.leaveRequests.length}</span></div><div><span>Frais</span><span>{data.expenseRequests.length}</span></div><div><span>Formations</span><span>{data.trainingSessions.length}</span></div></div></div></div>
     </>
   );

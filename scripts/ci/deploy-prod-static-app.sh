@@ -268,11 +268,28 @@ while IFS='|' read -r dm_src dm_dest; do
     if recover_from_container "$dm_src" "$dm_dest"; then
       echo "[remote] recovered $dm_src from nglu_prod_frontend:$dm_dest"
     else
+      # Vitrine avelomi.com : jamais de placeholder cuit en vert (sinon chaque
+      # deploy d'une autre app remet "non deploye"). Echec avant rebuild = conteneur
+      # live intact ; le job avelomi-site-prod (en fin de chaine) reconstruit le dist.
+      case "$BASE_URL" in *avelomi.com*)
+        if [ "$dm_src" = "avelomi-site/dist" ]; then
+          echo "::error title=Vitrine absente::avelomi-site/dist absent du disque et non recuperable : rebuild annule, relancer avelomi-site-prod" >&2
+          exit 1
+        fi ;;
+      esac
       dm_label="${dm_src%%/*}"
       case "$dm_src" in */dist-avelomi) dm_label="$dm_label (avelomi)" ;; esac
       sudo -n rm -f "$REMOTE_ROOT/$dm_src/index.html"
       write_placeholder "$REMOTE_ROOT/$dm_src" "$dm_label"
-      echo "::warning title=Placeholder cuit::$dm_src absent du disque et non recuperable depuis nglu_prod_frontend : placeholder dans la nouvelle image"
+      # Pas de warning pour un dist non servi sur cette cible (bruit trompeur) :
+      # avelomi-site hors Avelomi, marketing-site sur Avelomi.
+      dm_served=1
+      case "$BASE_URL|$dm_src" in
+        *avelomi.com*"|marketing-site/dist") dm_served=0 ;;
+        *avelomi.com*) ;;
+        *"|avelomi-site/dist") dm_served=0 ;;
+      esac
+      [ "$dm_served" = "0" ] || echo "::warning title=Placeholder cuit::$dm_src absent du disque et non recuperable depuis nglu_prod_frontend : placeholder dans la nouvelle image"
     fi
   fi
 done <<EOF_MAP
@@ -333,9 +350,15 @@ check_url() {
   curl -fsSIL --connect-timeout 5 --max-time 10 "$1" >/dev/null 2>&1
 }
 
+# Le placeholder repond 200 : la racine doit aussi ne pas etre "non deploye".
+check_root_content() {
+  ! curl -fsSL --connect-timeout 5 --max-time 10 -H 'Cache-Control: no-cache' "$BASE_URL/" 2>/dev/null | grep -q 'non deploye'
+}
+
 smoke_once() {
   route_url="$BASE_URL$SMOKE_ROUTE"
   check_url "$BASE_URL/" \
+    && check_root_content \
     && check_url "$BASE_URL/crm" \
     && check_url "$BASE_URL/admin/auth/login" \
     && check_url "$route_url" \
@@ -360,6 +383,13 @@ diagnose_smoke() {
       failed=1
     fi
   done
+
+  if check_root_content; then
+    echo "[remote] smoke ok: root content"
+  else
+    echo "[remote] smoke fail: root content ($BASE_URL/ sert le placeholder 'non deploye')" >&2
+    failed=1
+  fi
 
   nginx_test_log="$(mktemp)"
   if $DOCKER exec nglu_prod_frontend nginx -t >"$nginx_test_log" 2>&1; then

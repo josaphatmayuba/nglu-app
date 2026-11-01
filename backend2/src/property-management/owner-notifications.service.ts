@@ -148,6 +148,12 @@ export class OwnerNotificationsService implements OnModuleInit {
         "Bonjour {firstName}, paiement de {amount} reçu. Quittance : {url}. Merci !",
     },
     {
+      name: "Caution imputee sur le loyer",
+      eventType: "deposit_applied",
+      subject: "Caution imputee sur votre loyer",
+      body: "Bonjour {firstName}, votre caution de {depositAmount} a payé le loyer de {months}. Reste : {remaining}.",
+    },
+    {
       name: "Rappel de loyer en retard",
       eventType: "payment_reminder",
       subject: "Rappel : loyer en retard — bail {reference}",
@@ -1283,7 +1289,7 @@ export class OwnerNotificationsService implements OnModuleInit {
         startDate: this.shortDate(lease.startDate),
         endDate: this.shortDate(lease.endDate),
         amount: this.money(lease.rentAmount, lease.currencySymbol),
-        deposit: this.money(lease.securityDeposit, lease.currencySymbol),
+        deposit: Number(lease.securityDeposit) > 0 ? this.money(lease.securityDeposit, lease.currencySymbol) : "aucune",
         charges: charges ? ` Charges : ${charges}.` : "",
         url,
       };
@@ -1400,6 +1406,58 @@ export class OwnerNotificationsService implements OnModuleInit {
         `notifyPaymentReceivedTenant failed (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * SMS au(x) locataire(s) quand la caution detenue est imputee sur les loyers
+   * impayes. Best-effort (gating SMS habituel dans sms.sendSms), jamais le
+   * recu de paiement standard. Pas de {reference} : 1 SMS max.
+   */
+  async notifyDepositAppliedTenant(input: {
+    paymentId: number; leaseId: number; orgId: number; amount: number; months: string; remaining: number;
+  }): Promise<{ sent: number }> {
+    let sent = 0;
+    try {
+      const { paymentId, leaseId, orgId } = input;
+      const [lease] = await this.db
+        .select({ id: realEstateLeases.id, currencySymbol: currencies.currencySymbol })
+        .from(realEstateLeases)
+        .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
+        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
+        .limit(1);
+      if (!lease) return { sent };
+      const symbol = await resolveCurrencySymbol(this.db, orgId, lease.currencySymbol);
+      const recipients = (await this.leaseRecipients([leaseId], orgId)).get(Number(leaseId)) ?? [];
+      const multi = recipients.length > 1;
+      for (const r of recipients) {
+        if (!r.phone) continue;
+        try {
+          const fallback = "Bonjour {firstName}, votre caution de {depositAmount} a payé le loyer de {months}. Reste : {remaining}.";
+          const message = await this.renderMessage("deposit_applied", fallback, {
+            tenantName: r.civilName,
+            firstName: r.civilName,
+            depositAmount: this.money(input.amount, symbol),
+            amount: this.money(input.amount, symbol),
+            months: input.months,
+            remaining: this.money(input.remaining, symbol),
+          });
+          const res = await this.sms.sendSms({
+            phone: r.phone,
+            message: this.fitOneSms(message),
+            organizationId: orgId,
+            smsType: "deposit_applied",
+            ...this.tenantRelated(multi, r.customerId, "real-estate-rent-payment", paymentId),
+          });
+          if (res?.success) sent += 1;
+          else this.logger.warn(`Deposit applied SMS not sent (payment ${paymentId}, tenant ${r.customerId}): ${res?.message}`);
+        } catch (error) {
+          this.logger.warn(`Deposit applied SMS error (payment ${paymentId}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`notifyDepositAppliedTenant failed (payment ${input.paymentId}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return { sent };
   }
 
   /**

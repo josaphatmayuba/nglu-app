@@ -274,16 +274,16 @@ const GetAllProduct = () => {
       <PageHeader
         title="Produits"
         subtitle="Catalogue et gestion d'inventaire"
-        actions={
-          <CreateDrawer
-            permission={"create-product"}
-            title={"Create Product"}
-            width={60}>
-            <AddProd />
-          </CreateDrawer>
-        }
       />
       {card && <ProductCard card={card} />}
+      <div className="flex flex-wrap items-center justify-end gap-2 my-3 [&_button]:min-h-[44px] md:[&_button]:min-h-0">
+        <CreateDrawer
+          permission={"create-product"}
+          title={"Create Product"}
+          width={60}>
+          <AddProd />
+        </CreateDrawer>
+      </div>
       <Card
         className="max-md:border-0 max-md:bg-white"
         bodyClass="max-md:p-0 "

@@ -174,18 +174,18 @@ export default function GetAllOrder() {
         <PageHeader
           title="Commandes en ligne"
           subtitle="Commandes eCommerce et statuts de livraison"
-          actions={
-            <RangePicker
-              className='range-picker'
-              onCalendarChange={onCalendarChange}
-              defaultValue={[
-                dayjs(pageConfig.startDate, "YYYY-MM-DD"),
-                dayjs(pageConfig.endDate, "YYYY-MM-DD"),
-              ]}
-            />
-          }
         />
         <DashboardCard information={info?._sum} count={info?._count?.id} />
+        <div className='flex flex-wrap items-center justify-end gap-2 mt-5 [&_.ant-picker]:min-h-[44px] md:[&_.ant-picker]:min-h-0'>
+          <RangePicker
+            className='range-picker'
+            onCalendarChange={onCalendarChange}
+            defaultValue={[
+              dayjs(pageConfig.startDate, "YYYY-MM-DD"),
+              dayjs(pageConfig.endDate, "YYYY-MM-DD"),
+            ]}
+          />
+        </div>
         <Card
           className='max-md:border-0 max-md:bg-white mt-5'
           bodyClass='max-md:p-0 '

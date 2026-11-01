@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
+import { paymentMethodLabel } from "../depositUtils.js";
 import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill, setPnlPrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { cleanCurrencySymbol, groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
@@ -43,7 +44,7 @@ import { EXPENSE_CATEGORIES, expenseTotalsByCurrency } from "./depenses.jsx";
 import { mortgageTotalsByCurrency } from "./hypotheque.jsx";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
+import { ImmoHeader, ImmoToolbar, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
 import { nextDueAmountOf } from "../prorationUtils.js";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
@@ -411,7 +412,20 @@ export function Biens({ go }) {
 
   return (
     <section className="property-crm">
-      <ImmoHeader title="Immobilier" subtitle="Proprietes, baux, locataires et paiements de loyer">
+      <ImmoHeader title="Immobilier" subtitle="Proprietes, baux, locataires et paiements de loyer" />
+
+      <MetricsGrid>
+        <Metric icon={<Building2 size={20} />} tone="brand" label="Proprietes" value={properties.length}
+          helper={`${units.length} lots`} />
+        <Metric icon={<Users size={20} />} tone="green" label="Taux d'occupation" value={`${occupiedCount}/${units.length}`}
+          helper={<span className="immo-progress"><span style={{ width: `${occupancy}%` }} /></span>} />
+        <Metric icon={<CreditCard size={20} />} tone="amber" label="Loyers du mois" value={<MoneyStack rows={monthlyRentByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} />}
+          helper={`${occupiedCount} lots loues`} />
+        <Metric icon={<AlertTriangle size={20} />} tone="red" label="Loyers en retard" value={<MoneyStack rows={overdueRentByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} emptyText="0" />}
+          valueColor="#dc2626" helper={`${lateUnits.length} a recouvrer`} />
+      </MetricsGrid>
+
+      <ImmoToolbar>
         <label className="immo-search">
           <Search size={16} />
           <input
@@ -426,18 +440,7 @@ export function Biens({ go }) {
         <button className="immo-btn primary" onClick={() => setPropertyModal({ ...emptyProperty, currencyId: currency.defaultCurrencyId || "" })}>
           <Plus size={18} /> Nouvelle propriete
         </button>
-      </ImmoHeader>
-
-      <MetricsGrid>
-        <Metric icon={<Building2 size={20} />} tone="brand" label="Proprietes" value={properties.length}
-          helper={`${units.length} lots`} />
-        <Metric icon={<Users size={20} />} tone="green" label="Taux d'occupation" value={`${occupiedCount}/${units.length}`}
-          helper={<span className="immo-progress"><span style={{ width: `${occupancy}%` }} /></span>} />
-        <Metric icon={<CreditCard size={20} />} tone="amber" label="Loyers du mois" value={<MoneyStack rows={monthlyRentByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} />}
-          helper={`${occupiedCount} lots loues`} />
-        <Metric icon={<AlertTriangle size={20} />} tone="red" label="Loyers en retard" value={<MoneyStack rows={overdueRentByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} emptyText="0" />}
-          valueColor="#dc2626" helper={`${lateUnits.length} a recouvrer`} />
-      </MetricsGrid>
+      </ImmoToolbar>
 
       {filtersOpen && (
         <div className="card property-filters">
@@ -1106,7 +1109,7 @@ function RecentPayments({ payments, go }) {
               <td><b>{payment.tenant}</b><div className="muted">{payment.property}</div></td>
               <td>{payment.date}</td>
               <td><b>{payment.amount}</b></td>
-              <td>{payment.method}</td>
+              <td>{paymentMethodLabel(payment.method)}</td>
             </tr>
           )) : (
             <tr><td className="muted">Aucun paiement recent depuis l'API.</td></tr>
@@ -1731,7 +1734,7 @@ function normalizePayment(payment) {
     property: [payment.propertyName, payment.unitName].filter(Boolean).join(" - ") || "Propriete",
     date: String(payment.paymentDate || "").slice(0, 10) || "-",
     amount: money(payment.amount, payment.currencySymbol || "$"),
-    method: payment.method || "-",
+    method: paymentMethodLabel(payment.method) || "-",
   };
 }
 

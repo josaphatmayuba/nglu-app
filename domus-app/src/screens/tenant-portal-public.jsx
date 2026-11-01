@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Loader2, Receipt, History, CheckCircle2, AlertTriangle, User, Send, Download, Clock, FileSignature, Pencil, Upload } from "lucide-react";
 import { publicApi } from "../api.js";
+import { paymentMethodLabel } from "../depositUtils.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { money } from "../data.js";
 import { buildLeaseCards, ProrataBadge } from "./loyers.jsx";
@@ -685,7 +686,7 @@ export function TenantPortalPublic({ token }) {
                     <div key={p.id} className="portail-hist-row">
                       <Receipt size={14} className="muted" />
                       <span className="flex-1">{monthLabel(p.paymentDate)}<ProrataBadge p={p} /></span>
-                      <span className="muted">{p.method || "—"}</span>
+                      <span className="muted">{paymentMethodLabel(p.method) || "—"}</span>
                       <strong>{money(p.amount, p.currencySymbol || symbol)}</strong>
                       {p.hasProof ? (
                         <button

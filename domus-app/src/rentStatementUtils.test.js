@@ -83,6 +83,16 @@ describe("statementBodyHtml", () => {
     expect(html).toContain("Garantie locative");
     expect(html).toContain("Paiement reçu");
   });
+  it("loyer payé par la caution : libellé dédié + ligne garantie « Imputée sur loyers »", () => {
+    const l = lease([due(1, "2026-01-01", 400, 0, [{ paymentId: 1, paymentDate: "2026-01-02", amount: 400 }])], {
+      book: { graceDays: 5, depositContract: 800, depositReceived: { amount: "800.00", date: "2026-01-01", currencySymbol: "$", status: "held", rentApplied: "400.00" } },
+    });
+    const html = statementBodyHtml(l, [pay(1, "2026-01-02", 400, { method: "deposit" })], { today: "2026-01-31" });
+    expect(html).toContain("Payée par la caution");
+    expect(html).not.toContain(">deposit<");
+    expect(html).toContain("Imputée sur loyers");
+    expect(html).toContain("400");
+  });
   it("sans garantie connue : pas de section garantie", () => {
     const html = statementBodyHtml(lease([due(1, "2026-01-01", 400, 400)]), [], { today: "2026-01-31" });
     expect(html).not.toContain("Garantie locative");

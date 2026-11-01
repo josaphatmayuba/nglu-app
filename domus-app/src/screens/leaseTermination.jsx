@@ -33,6 +33,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   const minDate = dayOf(lease.startDate);
   const [date, setDate] = useState(() => (minDate && today < minDate ? minDate : today));
   const [reason, setReason] = useState("");
+  const [fullPeriod, setFullPeriod] = useState(false); // false = prorata des jours occupés
   const [notify, setNotify] = useState(null); // null = pas encore choisi : suit la disponibilité d'un numéro
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -77,12 +78,12 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
     let alive = true;
     setLoadingPreview(true);
     setPreviewError("");
-    api.terminationPreview(lease.id, date)
+    api.terminationPreview(lease.id, date, fullPeriod)
       .then((p) => { if (alive) setPreview(p); })
       .catch((e) => { if (alive) { setPreview(null); setPreviewError(e?.message || t("Récapitulatif indisponible.")); } })
       .finally(() => { if (alive) setLoadingPreview(false); });
     return () => { alive = false; };
-  }, [lease.id, date, dateValid, refreshKey, retry]);
+  }, [lease.id, date, dateValid, fullPeriod, refreshKey, retry]);
 
   const hasPhone = useMemo(() => {
     if (preview?.sms) return preview.sms.recipientCount > 0;
@@ -93,6 +94,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   // Devise : symbole, sinon code ; sans aucune devise on masque le montant plutôt que d'afficher un nombre nu.
   const symbol = preview?.currency?.symbol || preview?.currency?.code || lease.currencySymbol || "";
   const amountText = (n, s = symbol) => (s ? moneyExact(n, s) : "");
+  const depSymbol = preview?.deposit?.currencySymbol || preview?.deposit?.currencyCode || symbol;
   const countLine = (n, total) => {
     const base = tf(t("{n} échéance(s)"), { n });
     const m = amountText(total);
@@ -110,6 +112,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
         terminationDate: date,
         reason: trimmed,
         notifyTenant: notifyChecked,
+        fullPeriod: lease.rentProrationEnabled ? false : fullPeriod,
       });
       if (res?.scheduled) {
         if (notifyChecked && res?.sms?.failed > 0) toast.error?.(t("Résiliation programmée, mais l'envoi du SMS a échoué pour au moins un locataire."));
@@ -127,7 +130,7 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
   const ids = {
     date: `term-date-${lease.id}`, dateErr: `term-date-err-${lease.id}`,
     reason: `term-reason-${lease.id}`, count: `term-count-${lease.id}`,
-    notify: `term-notify-${lease.id}`, error: `term-error-${lease.id}`,
+    notify: `term-notify-${lease.id}`, full: `term-full-${lease.id}`, error: `term-error-${lease.id}`,
   };
   const dateError = dateValid
     ? ""
@@ -202,6 +205,26 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
                   <span>{t("Échéances futures annulées")}</span>
                   <strong>{countLine(preview.futureCount, preview.futureTotal)}</strong>
                 </div>
+                {preview.lastPeriod && (
+                  <div className="immo-pay-row">
+                    <span>
+                      {preview.lastPeriod.prorated
+                        ? tf(t("Dernière période au prorata ({x}/{y} jours)"), { x: preview.lastPeriod.occupiedDays, y: preview.lastPeriod.periodDays })
+                        : t("Dernière période (facturée en entier)")}
+                    </span>
+                    <strong>
+                      {preview.lastPeriod.prorated
+                        ? [amountText(preview.lastPeriod.prorataAmount), amountText(preview.lastPeriod.initialAmount) && `(${t("au lieu de")} ${amountText(preview.lastPeriod.initialAmount)})`].filter(Boolean).join(" ") || "—"
+                        : amountText(preview.lastPeriod.initialAmount) || "—"}
+                    </strong>
+                  </div>
+                )}
+                {Number(preview.overpaid) > 0 && (
+                  <div className="immo-pay-row">
+                    <span>{t("Trop-perçu à restituer / créditer au locataire")}</span>
+                    <strong className="domus-terminate-warn">{amountText(preview.overpaid) || "—"}</strong>
+                  </div>
+                )}
                 <div className="immo-pay-row">
                   <span>{t("Impayés en retard (délai de grâce dépassé)")}</span>
                   <strong className={preview.unpaidCount > 0 ? "domus-terminate-warn" : undefined}>
@@ -212,16 +235,34 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
                   <span>{t("Caution détenue")}</span>
                   {preview.deposit ? (
                     <strong>
-                      {amountText(preview.deposit.amount, preview.deposit.currencySymbol || preview.deposit.currencyCode || symbol) || t("Oui")}
+                      {amountText(preview.deposit.amount, depSymbol) || t("Oui")}
                     </strong>
                   ) : (
                     <strong>{t("Aucune")}</strong>
                   )}
                 </div>
+                {preview.deposit && Number(preview.deposit.rentApplied) > 0 && (
+                  <div className="immo-pay-row">
+                    <span>{t("Déjà imputée sur loyers")}</span>
+                    <strong>{amountText(preview.deposit.rentApplied, depSymbol) || "—"}</strong>
+                  </div>
+                )}
+                {preview.deposit && (
+                  <div className="immo-pay-row">
+                    <span>{t("Caution disponible")}</span>
+                    <strong>{amountText(preview.deposit.available, depSymbol) || "—"}</strong>
+                  </div>
+                )}
+                {preview.deposit && (
+                  <div className="immo-pay-row">
+                    <span>{t("Impayés couvrables par la caution")}</span>
+                    <strong>{amountText(preview.deposit.maxApplicable, depSymbol) || "—"}</strong>
+                  </div>
+                )}
                 <div className="domus-terminate-links">
                   {preview.deposit && (
-                    <button type="button" className="immo-btn" onClick={() => onOpenDeposit?.(preview.deposit)}>
-                      <Shield size={15} /> {t("Restituer la caution")}
+                    <button type="button" className="immo-btn" style={{ minHeight: 44 }} onClick={() => onOpenDeposit?.(preview.deposit)}>
+                      <Shield size={15} /> {lease.status === "ended" ? t("Imputer / restituer la caution") : t("Restituer la caution")}
                     </button>
                   )}
                   {onOpenExitInspection && (
@@ -235,6 +276,15 @@ export function TerminateLeaseModal({ lease, refreshKey = 0, onClose, onDone, on
           </section>
 
           <section className="domus-form-section">
+            {!lease.rentProrationEnabled && (
+              <>
+                <label className="domus-terminate-check" htmlFor={ids.full}>
+                  <input id={ids.full} type="checkbox" checked={fullPeriod} onChange={(e) => setFullPeriod(e.target.checked)} />
+                  <span>{t("Facturer la période complète (préavis)")}</span>
+                </label>
+                <small className="domus-terminate-hint">{t("Décoché : la dernière période est facturée au prorata des jours occupés.")}</small>
+              </>
+            )}
             <label className="domus-terminate-check" htmlFor={ids.notify}>
               <input
                 id={ids.notify}

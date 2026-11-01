@@ -373,7 +373,7 @@ export const api = {
   // Résiliation avec motif (statut ended) + récapitulatif préalable.
   terminateLease: (id, b) => post(`/leases/${id}/terminate`, b),
   cancelScheduledTermination: (id, b) => post(`/leases/${id}/scheduled-termination/cancel`, b || {}),
-  terminationPreview: (id, date) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}`),
+  terminationPreview: (id, date, fullPeriod = false) => get(`/leases/${id}/termination-preview?date=${encodeURIComponent(date)}${fullPeriod ? "&fullPeriod=true" : ""}`),
 
   // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
   leaseDocuments: (id) => jsonFetch(`/leases/${id}/documents`, { method: "GET", cache: "no-store" }),
@@ -415,6 +415,12 @@ export const api = {
   // extra = { preview: true } (aperçu) ou { previewHash } (confirmation) : voir useSmsSend.
   sendDefaultNotice: (leaseId, targets, extra) => post("/payments/default-notice", { leaseId, targets, ...extra }),
   runOverdueReminders: (extra) => post("/payments/run-overdue-reminders", extra),
+  // Dettes d'anciens locataires (baux termines, hors compta). params : { currencyId, propertyId, search }.
+  formerDebtors: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
+    return get(`/former-debtors${q ? `?${q}` : ""}`);
+  },
+  tenantFormerDebt: (id) => get(`/tenants/${id}/former-debt`),
   remindLease: (leaseId, targets, extra) => post("/payments/remind-lease", { leaseId, targets, ...extra }),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
@@ -598,6 +604,10 @@ export const api = {
     form.append("proof", proofFile);
     return multipartFetch(`/leases/${leaseId}/deposit/return`, form);
   },
+  // Caution imputée sur les loyers impayés (bail terminé). Corps : { amount, applicationDate,
+  // allocationMode:'auto'|'manual', allocations:[{dueId, amount}], notifyTenant, notes }.
+  depositApplyPreview: (leaseId, b) => post(`/leases/${leaseId}/deposit/apply-to-rent/preview`, b),
+  applyDepositToRent: (leaseId, b) => post(`/leases/${leaseId}/deposit/apply-to-rent`, b),
 
   // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
   reservations: () => get("/reservations"),

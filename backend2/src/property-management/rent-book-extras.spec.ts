@@ -20,7 +20,7 @@ describe("rent-book extras", () => {
 
   it("garantie recue passee telle quelle (montant numerique)", () => {
     const r = buildRentBookExtras({ graceDays: 5, depositReceived: { amount: "1000.00", date: "2026-07-09", currencySymbol: "$", status: "held" } });
-    expect(r.depositReceived).toEqual({ amount: 1000, date: "2026-07-09", currencySymbol: "$", status: "held" });
+    expect(r.depositReceived).toEqual({ amount: 1000, date: "2026-07-09", currencySymbol: "$", status: "held", rentApplied: 0 });
   });
 
   it("jour d'echeance : mois civil -> 1, sinon 2e echeance, sinon jour de debut", () => {
