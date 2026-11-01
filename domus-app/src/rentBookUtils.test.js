@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignPaymentsToMonths, buildFullRentSchedule } from "./rentBookUtils.js";
+import { assignPaymentsToMonths, buildFullRentSchedule, rentBookPrintBody } from "./rentBookUtils.js";
 
 const paid = (id, paymentDate, amount = 230, extra = {}) => ({ id, paymentDate, amount, status: "paid", ...extra });
 
@@ -65,5 +65,24 @@ describe("buildFullRentSchedule (prorata)", () => {
     const s = buildFullRentSchedule(lease, [pend, paid(1, "2026-08-06", 170)]);
     expect(s[0].id).toBe(1);
     expect(s.find((l) => l.id === 9)).toBeUndefined();
+  });
+});
+
+describe("rentBookPrintBody (exemplaire)", () => {
+  const lease = { id: 1, reference: "B1", startDate: "2026-01-01", endDate: "2026-03-31", rentAmount: 230, currencySymbol: "$" };
+  const count = (h, re) => (h.match(re) || []).length;
+
+  it("locataire par défaut, bailleur au choix, les deux à la suite", () => {
+    const t = rentBookPrintBody(lease, []);
+    expect(t).toContain("Carnet du locataire");
+    expect(count(t, /Exemplaire du locataire/g)).toBe(3);
+    expect(t).not.toContain("bailleur");
+    const b = rentBookPrintBody(lease, [], null, {}, "landlord");
+    expect(b).toContain("Carnet du bailleur");
+    expect(count(b, /Exemplaire du bailleur/g)).toBe(3);
+    const both = rentBookPrintBody(lease, [], null, {}, "both");
+    expect(count(both, /Exemplaire du locataire/g)).toBe(3);
+    expect(count(both, /Exemplaire du bailleur/g)).toBe(3);
+    expect(count(both, /class="copy-break"/g)).toBe(1);
   });
 });

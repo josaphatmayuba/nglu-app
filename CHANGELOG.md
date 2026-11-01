@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet de quittances : choix de l exemplaire (v3.275.9).** Sélecteur « Cahier : Du locataire / Du bailleur / Les deux » ; en-tête « Carnet du locataire|bailleur » et mention « Exemplaire du … » sur chaque quittance ; « Les deux » = locataire puis bailleur, saut de page entre les deux.
+
 - **Domus carnet : chaque page dit à qui est le cahier (v3.275.8).** Étiquette « Cahier du locataire / du bailleur » aussi sur le guide, l exemple et le dos (avant : pages à remplir seulement), plus lisible (7 pt gras) ; tous les modes d impression.
 
 - **Domus carnet : signatures du cahier du bailleur (v3.275.7).** Pages roses (Loyers, Eau, Exemple, Guide) : « Signature du bailleur » + « Signature du locataire » au lieu de « Signature de qui reçoit » ; le cahier du locataire est inchangé.
