@@ -519,7 +519,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       for (let i = 0; i < B.length / 2; i++) {
         const l = 2 * i, r = 2 * i + 1;
         out += `<div class="caption">Feuille ${i + 1} / ${B.length / 2} · cahier du ${d ? "bailleur" : "locataire"} · pages ${l + 1} et ${r + 1}</div>`;
-        out += sheet(a5(`${B[l][0]}<span class="bk">${l + 1}</span>`, B[l][1], B[l][2]), a5(`${B[r][0]}<span class="bk">${r + 1}</span>`, B[r][1], B[r][2]), "cut");
+        out += sheet(a5(`${B[l][0]}<span class="bk">${l + 1}</span>`, B[l][1], B[l][2]), a5(`${B[r][0]}<span class="bk">${r + 1}</span>`, B[r][1], B[r][2]), `cut${d ? " dup" : ""}`);
       }
     });
   } else if (pass === "pleine") {
@@ -530,12 +530,12 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       const B = book(d);
       B.forEach(([html, tg, cls], i) => {
         out += `<div class="caption">Feuille ${i + 1} / ${B.length} · cahier du ${d ? "bailleur" : "locataire"}</div>`;
-        out += `<div class="sheet full">${a5(`${html}<span class="bk">${i + 1}</span>`, tg, cls)}</div>`;
+        out += `<div class="sheet full${d ? " dup" : ""}">${a5(`${html}<span class="bk">${i + 1}</span>`, tg, cls)}</div>`;
       });
     });
   } else if (pass === "simple") {
     // Cahier simple : recto seul, chaque feuille pliée en deux (impression dehors) = 1 feuillet ; feuillets empilés, agrafés au pli.
-    // Feuille i : gauche = page 2i+2 (dos du feuillet), droite = page 2i+1 (devant). Sans copie : pas de feuille rose.
+    // Feuille i : gauche = page 2i+2 (dos du feuillet), droite = page 2i+1 (devant). Cahier du bailleur : fond rose très pâle.
     const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, null, "covpage"], [EXAMPLE, null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     const N = book(false).length;
@@ -545,7 +545,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       for (let i = 0; i < N / 2; i++) {
         const l = 2 * i + 1, r = 2 * i;
         out += `<div class="caption">Feuille ${i + 1} / ${N / 2} · cahier du ${d ? "bailleur" : "locataire"} · devant : page ${r + 1}, derrière : page ${l + 1}</div>`;
-        out += sheet(a5(mark(B[l][0], l + 1, i), B[l][1], B[l][2]), a5(mark(B[r][0], r + 1, i), B[r][1], B[r][2]), "fold");
+        out += sheet(a5(mark(B[l][0], l + 1, i), B[l][1], B[l][2]), a5(mark(B[r][0], r + 1, i), B[r][1], B[r][2]), `fold${d ? " dup" : ""}`);
       }
     });
   } else if (pass === "plie" || pass === "plie-r" || pass === "plie-v") {

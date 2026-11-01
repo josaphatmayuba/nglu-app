@@ -243,14 +243,17 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
     expect(first.indexOf('<span class="bk">2</span>')).toBeLessThan(first.indexOf('<span class="bk">1</span>'));
     expect(first).toContain("Exemplaire du locataire");
   });
-  it("sans copie : pas de rose, pas d'autocopiant ni de carton dans le guide", () => {
+  it("sans copie : bailleur en rose pale, pas d'autocopiant ni de carton dans le guide", () => {
     const h = paperBookHtml(base, { pass: "simple", years: 2, copy: "both" });
-    expect(h).not.toContain("dup");
+    expect(h).toContain("sheet fold dup");
+    expect(paperBookHtml(base, { pass: "simple", years: 2 })).not.toContain("dup");
+    expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("sheet cut dup");
+    expect(paperBookHtml(base, { pass: "pleine", years: 2, copy: "landlord" })).toContain("sheet full dup");
     expect(h).toContain("Exemplaire du bailleur");
     expect(h).toContain("la même ligne");
     expect(h).not.toMatch(/cahier rose|page rose|se copie/);
     expect(paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" })).toContain("dans les deux cahiers");
-    expect((h.match(/class="sheet fold"/g) || []).length).toBe(12);
+    expect((h.match(/class="sheet fold( dup)?"/g) || []).length).toBe(12);
   });
   it("3 ans : 7 feuilles", () => {
     expect((paperBookHtml(base, { pass: "simple", years: 3 }).match(/class="sheet fold"/g) || []).length).toBe(7);
@@ -291,7 +294,7 @@ describe("feuilles entieres (defaut)", () => {
   });
   it("bailleur et les deux ; 3 ans = 14 feuilles ; Letter", () => {
     expect(paperBookHtml(base, { pass: "pleine", years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
-    expect((paperBookHtml(base, { pass: "pleine", years: 2, copy: "both" }).match(/class="sheet full"/g) || []).length).toBe(24);
+    expect((paperBookHtml(base, { pass: "pleine", years: 2, copy: "both" }).match(/class="sheet full( dup)?"/g) || []).length).toBe(24);
     expect((paperBookHtml(base, { pass: "pleine", years: 3 }).match(/class="sheet full"/g) || []).length).toBe(14);
     expect(paperBookHtml(base, { pass: "pleine", years: 2, paper: "letter" })).toContain('class="paper  letter"');
   });
