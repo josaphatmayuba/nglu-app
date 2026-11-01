@@ -209,6 +209,15 @@ describe("cahier plie (livret recto-verso)", () => {
     const caps = [...both.matchAll(/(blanche|roses) \(cahier/g)].map((m) => m[1]);
     expect(caps).toEqual([...Array(6).fill("blanche"), ...Array(6).fill("roses")]);
   });
+  it("chaque page (sauf couverture) dit à qui est le cahier", () => {
+    ["coupe", "pleine", "simple", "plie"].forEach((pass) => {
+      const t = paperBookHtml(base, { pass, years: 2, copy: "tenant" });
+      const pages = (t.match(/class="a5/g) || []).length;
+      expect((t.match(/class="tag">Cahier du locataire/g) || []).length).toBe(pages - 1);
+      const b = paperBookHtml(base, { pass, years: 2, copy: "landlord" });
+      expect((b.match(/class="tag">Cahier du bailleur/g) || []).length).toBe(pages - 1);
+    });
+  });
   it("3 ans : 14 pages + 2 Notes = 16 (plie)", () => {
     const h = paperBookHtml(base, { pass: "plie", years: 3 });
     expect((h.match(/class="sheet fold/g) || []).length).toBe(8);
