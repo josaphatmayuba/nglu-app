@@ -257,3 +257,54 @@ describe("generateMissingPayments - bail resilie (bug #82)", () => {
     expect(inserts[0].notes).not.toContain("PRORATA");
   });
 });
+
+describe("generateMissingPayments - bail resilie trimestriel / annuel (bug #84)", () => {
+  const base = {
+    id: 66, organizationId: 1, status: "ended", currencyId: 1, terminationFullPeriod: 0,
+  };
+  const quarterly = { ...base, startDate: "2026-01-01", endDate: "2026-05-10", terminationDate: "2026-05-10", billingCycle: "quarterly", rentAmount: "900.00" };
+  const annual = { ...base, startDate: "2026-01-01", endDate: "2027-03-10", terminationDate: "2027-03-10", billingCycle: "annual", rentAmount: "1200.00" };
+  function run(lease: any, existing: any[]) {
+    const inserts: any[] = [];
+    const fake = makeFakeDb([existing, []]);
+    fake.db.insert = () => ({ values: (v: any) => { inserts.push(v); return Promise.resolve([{ insertId: inserts.length }]); } });
+    const svc = makeService(fake);
+    svc.getLeaseOrThrow = jest.fn().mockResolvedValue(lease);
+    return svc.generateMissingPayments(66, 1, true).then(() => inserts);
+  }
+  const sum = (rows: any[]) => Math.round(rows.reduce((s, r) => s + Number(r.amount), 0) * 100) / 100;
+
+  it("trimestriel 900, sortie 10/05 : cycle plein + periode 01/04-30/06 a 40/91 jours, rien apres", async () => {
+    const inserts = await run(quarterly, []);
+    expect(inserts.map((i: any) => i.paymentDate)).toEqual(["2026-01-01", "2026-04-01"]);
+    expect(Number(inserts[0].amount)).toBe(900);
+    expect(Number(inserts[1].amount)).toBe(395.6);
+    expect(inserts[1].notes).toContain("[PRORATA resiliation: 40/91 jours, montant initial 900.00]");
+    expect(inserts[0].notes).not.toContain("PRORATA");
+  });
+
+  it("annuel : cycle plein + annee de sortie proratisee (69/365)", async () => {
+    const inserts = await run(annual, []);
+    expect(inserts.map((i: any) => i.paymentDate)).toEqual(["2026-01-01", "2027-01-01"]);
+    expect(Number(inserts[1].amount)).toBe(Math.round((1200 * 69 / 365) * 100) / 100);
+    expect(inserts[1].notes).toContain("69/365 jours");
+  });
+
+  it("pas de doublon si la periode de sortie existe deja (non voidee)", async () => {
+    const inserts = await run(quarterly, [{ amount: "395.60", paymentDate: "2026-04-01", status: "pending", periodStart: "2026-04-01" }]);
+    expect(inserts.map((i: any) => i.paymentDate)).toEqual(["2026-01-01"]);
+  });
+
+  it("somme des lignes = computeLeaseTotalDue (sans versement)", async () => {
+    for (const l of [quarterly, annual]) {
+      const inserts = await run(l, []);
+      const due = computeLeaseTotalDue(l as any, 0, 2, new Date("2027-06-01T00:00:00Z"));
+      expect(sum(inserts)).toBe(due);
+    }
+  });
+
+  it("fullPeriod (colonne 1) : comportement historique inchange (pas de prorata)", async () => {
+    const inserts = await run({ ...quarterly, terminationFullPeriod: 1 }, []);
+    expect(inserts.every((i: any) => !String(i.notes).includes("PRORATA"))).toBe(true);
+  });
+});
