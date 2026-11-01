@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : cahier du bailleur en trame de points roses au lieu d'un fond rose plein (v3.275.1).** Points de 0,3 mm tous les 1,5 mm (~2 % d'encre), cases des tableaux blanches ; textes d'impression, légendes et guide (« reconnaissable à sa trame de points roses ») sans mention de papier rose ; consigne « imprimez en Couleur » pour le cahier du bailleur.
 - **Domus : renouvellement de bail avec conditions modifiables (v3.275.0).** « Renouveler » ouvre le formulaire de bail pré-rempli : loyer (ancien → nouveau, avertissement > +20 %, confirmation si baisse), dates, cycle, caution (refus sous la caution détenue, complément affiché), taxe, prorata, conditions, modèle de contrat ; bien, unité, locataire et devise figés. Serveur : `RenewLeaseDto` étendu, garde-fous dates/chevauchement/caution, écritures en transaction, `lease-renewal.spec.ts`. Corrige BUGS #85 (devise, taxe et prorata perdus au renouvellement) et #86 (`Math.round` dans l'aperçu de taxe).
 - **Domus carnet : rose pâle du cahier du bailleur enfin visible à l'impression (v3.274.7).** `#fdeef1` : `#fffbfc` (v3.274.6) était trop proche du blanc pour se voir sur papier.
 - **Domus carnet : rose du cahier du bailleur encore plus pâle à l'impression (v3.274.6).** `#fffbfc` au lieu de `#fff6f8`, pour économiser l'encre ; le cahier du locataire reste blanc.

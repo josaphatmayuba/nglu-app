@@ -206,8 +206,8 @@ describe("cahier plie (livret recto-verso)", () => {
     expect(b).toContain("Exemplaire du bailleur");
     expect((b.match(/class="sheet fold dup"/g) || []).length).toBe(6);
     const both = paperBookHtml(base, { pass: "plie", years: 2, copy: "both" });
-    const caps = [...both.matchAll(/(blanche|rose) \(cahier/g)].map((m) => m[1]);
-    expect(caps).toEqual([...Array(6).fill("blanche"), ...Array(6).fill("rose")]);
+    const caps = [...both.matchAll(/(blanche|roses) \(cahier/g)].map((m) => m[1]);
+    expect(caps).toEqual([...Array(6).fill("blanche"), ...Array(6).fill("roses")]);
   });
   it("3 ans : 14 pages + 2 Notes = 16 (plie)", () => {
     const h = paperBookHtml(base, { pass: "plie", years: 3 });
