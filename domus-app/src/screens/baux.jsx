@@ -796,7 +796,7 @@ const DEPOSIT_METHODS = [
 // Devise d'une caution : celle de la caution, sinon celle du bail (jamais « $ » en dur ; vide = montant masqué).
 const depositSymbol = (lease, deposit) => deposit?.currencySymbol || deposit?.currencyCode || lease?.currencySymbol || lease?.currencyCode || "";
 
-function DepositModal({ state, onClose, onDone, onChanged }) {
+export function DepositModal({ state, onClose, onDone, onChanged }) {
   const { mode, lease, deposit } = state;
   const symbol = depositSymbol(lease, deposit);
   const held = Number(deposit?.amount) || 0;

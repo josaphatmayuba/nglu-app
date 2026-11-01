@@ -454,7 +454,7 @@ export async function listFormerDebtors(
 }
 
 /** Dernier rappel SMS de paiement par bail (rattache au bail ou, pour les baux multi-locataires, au locataire). */
-async function loadLastReminders(
+export async function loadLastReminders(
   db: Database,
   orgId: number,
   leases: Array<{ leaseId: number; tenantIds: number[] }>,
@@ -512,4 +512,42 @@ export async function loadTenantFormerDebt(db: Database, orgId: number, tenantId
     .filter((b) => b.balanceMinor > 0)
     .map((b) => ({ leaseId: b.leaseId, reference: b.reference, amount: b.balance, currency: b.currency }));
   return { blocking: debts.length > 0, debts };
+}
+
+/** Dettes de plusieurs locataires (principal OU co-locataire actif) en lot : pas de N+1. */
+export async function loadFormerDebtsForTenants(db: Database, orgId: number, tenantIds: number[], now: Date = new Date()) {
+  const out = new Map<number, Array<{ leaseId: number; reference: string; amount: string; currency: EndedLeaseBalanceWithCurrency["currency"] }>>();
+  const ids = [...new Set(tenantIds.map(Number))].filter((n) => n > 0);
+  if (!ids.length) return out;
+  const links = await db
+    .select({ leaseId: realEstateLeaseCotenants.leaseId, customerId: realEstateLeaseCotenants.customerId })
+    .from(realEstateLeaseCotenants)
+    .where(and(
+      eq(realEstateLeaseCotenants.organizationId, orgId),
+      inArray(realEstateLeaseCotenants.customerId, ids),
+      eq(realEstateLeaseCotenants.isActive, 1),
+    ));
+  const coLeaseIds = links.map((l) => Number(l.leaseId));
+  const leases = await db
+    .select({ id: realEstateLeases.id, tenantId: realEstateLeases.tenantId })
+    .from(realEstateLeases)
+    .where(and(
+      eq(realEstateLeases.organizationId, orgId),
+      eq(realEstateLeases.status, FORMER_DEBT_STATUS),
+      coLeaseIds.length ? or(inArray(realEstateLeases.tenantId, ids), inArray(realEstateLeases.id, coLeaseIds))! : inArray(realEstateLeases.tenantId, ids),
+    ))
+    .orderBy(desc(realEstateLeases.id));
+  const balances = await loadEndedLeaseBalances(db, orgId, leases.map((l) => Number(l.id)), now);
+  for (const l of leases) {
+    const b = balances.get(Number(l.id));
+    if (!b || b.balanceMinor <= 0) continue;
+    const holders = new Set<number>([Number(l.tenantId), ...links.filter((k) => Number(k.leaseId) === Number(l.id)).map((k) => Number(k.customerId))]);
+    for (const t of holders) {
+      if (!ids.includes(t)) continue;
+      const list = out.get(t) ?? [];
+      list.push({ leaseId: b.leaseId, reference: b.reference, amount: b.balance, currency: b.currency });
+      out.set(t, list);
+    }
+  }
+  return out;
 }

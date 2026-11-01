@@ -11,6 +11,8 @@ import { normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
+import { useFormerDebtActions } from "./loyers.jsx";
+import { fmtWithCurrency } from "../depositUtils.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
@@ -138,6 +140,46 @@ function unitKindIcon(kind) {
   const k = String(kind || "").toLowerCase();
   if (/(house|villa|maison|residence)/.test(k)) return <Home size={15} />;
   return <Building2 size={15} />;
+}
+
+// Section « Dette ancien bail » de la fiche : montant par bail terminé + Encaisser / Relancer (hors compta).
+function FormerDebtSection({ tenant }) {
+  const [debts, setDebts] = useState([]);
+  const [rev, setRev] = useState(0);
+  const actions = useFormerDebtActions(() => setRev((n) => n + 1));
+  useEffect(() => {
+    let alive = true;
+    api.tenantFormerDebt(tenant.id)
+      .then((r) => { if (alive) setDebts(Array.isArray(r?.debts) ? r.debts : []); })
+      .catch(() => { if (alive) setDebts([]); });
+    return () => { alive = false; };
+  }, [tenant.id, rev]);
+  if (!debts.length) return null;
+  const btn = { minHeight: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, flex: "1 1 120px" };
+  return (
+    <div className="info-grid" style={{ marginTop: 8, gridTemplateColumns: "1fr" }}>
+      <b style={{ color: "#dc2626" }}>{t("Dette ancien bail")}</b>
+      {debts.map((d) => {
+        const debt = {
+          leaseId: d.leaseId, reference: d.reference, name: tenant._name, unit: null,
+          balance: d.amount, currency: d.currency, phones: [], provisional: false,
+        };
+        return (
+          <div key={d.leaseId} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="immo-pay-row">
+              <span>{tf(t("Ancien bail {ref}"), { ref: d.reference })}</span>
+              <strong style={{ color: "#dc2626" }}>{fmtWithCurrency(d.amount, d.currency?.symbol || d.currency?.code)}</strong>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-primary" style={btn} onClick={() => actions.pay(debt)}>{t("Encaisser")}</button>
+              <button type="button" className="btn" style={btn} disabled={actions.busyId === d.leaseId} onClick={() => actions.remind(debt)}>{t("Relancer")}</button>
+            </div>
+          </div>
+        );
+      })}
+      {actions.modals}
+    </div>
+  );
 }
 
 function leaseDueLabel(activeLease) {
@@ -437,9 +479,9 @@ export function Locataires({ go } = {}) {
       ) : (
         <div className="immo-tenant-grid">
           {filtered.map((tenant, index) => {
-            const { tenantLeases, activeLease, activeUnit } = tenantLeaseInfo(tenant, leases, units);
-            const badge = tenantBadge(tenant, tenantLeases, activeLease);
-            const isLate = activeLease?.isOverdue || activeLease?.status === "late";
+            const { tenantLeases, activeLease: liveLease, latestLease: activeLease, activeUnit } = tenantLeaseInfo(tenant, leases, units);
+            const badge = tenantBadge(tenant, tenantLeases, liveLease);
+            const isLate = liveLease?.isOverdue || liveLease?.status === "late";
             return (
               <button
                 type="button"
@@ -650,7 +692,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
 
   const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
-  const { activeLease, activeUnit } = leaseInfo || {};
+  const { latestLease: activeLease, activeUnit } = leaseInfo || {};
 
   const labelFor = (opts, code) => {
     const lbl = opts.find(([v]) => v === code)?.[1];
@@ -791,6 +833,8 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
               </ProofButton>
             </div>
           )}
+
+          <FormerDebtSection tenant={tenant} />
 
           {activeLease && (
             <div className="info-grid" style={{ marginTop: 8 }}>

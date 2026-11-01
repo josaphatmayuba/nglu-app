@@ -2030,3 +2030,7 @@ button.immo-pay-m:focus-visible { outline:2px solid #4f46e5; outline-offset:2px;
 .signed-scan-generated { border-top:1px dashed var(--border); margin-top:12px; padding-top:10px; }
 .signed-scan-generated summary { cursor:pointer; font-size:13px; font-weight:700; min-height:44px; display:flex; align-items:center; }
 .signed-scan-note { background:var(--ink-100); border-radius:8px; color:var(--ink-600); font-size:12px; margin:8px 0; padding:8px 10px; }
+
+/* Anciens locataires debiteurs (Loyers > Anciens debiteurs) : cartes empilees sur mobile. */
+.immo-former-grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); }
+.immo-former-grid > * { min-width:0; }

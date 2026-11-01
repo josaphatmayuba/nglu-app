@@ -10,6 +10,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
 import { buildLeaseCards, cardFriseLateDue } from "./loyers.jsx";
 import { splitRentPayments } from "../rentBreakdown.js";
+import { cashPayments } from "../depositUtils.js";
 import { t, tf } from "../i18n.js";
 
 export function Dashboard({ go }) {
@@ -38,13 +39,20 @@ export function Dashboard({ go }) {
   const monthlyRentRows = groupAmountsByCurrency(activeLeases, (lease) => lease.rentAmount, currency.defaultCurrencySymbol);
   const fallbackSym = currency.defaultCurrencySymbol;
   // Encaissé = paiements confirmes (status paid) sur la periode filtree.
-  const collectedRows = groupAmountsByCurrency(splitRentPayments(payments).paid, (payment) => payment.amount, fallbackSym);
+  // Les loyers payés par la caution ne sont pas un encaissement (aucune entrée en caisse).
+  const collectedRows = groupAmountsByCurrency(cashPayments(splitRentPayments(payments).paid), (payment) => payment.amount, fallbackSym);
   // Impaye echu = « Retard » des cartes Loyers : echeances dont le delai de grace est
   // depasse (les mois encore dans la grace ne comptent pas).
   const allLeasePayments = (Array.isArray(data?.payments) ? data.payments : []).filter((p) => leaseIds.has(p.leaseId));
   const overdueCards = buildLeaseCards(leases, allLeasePayments)
     .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, balance: cardFriseLateDue(c).lateDue.late }))
     .filter((c) => Number(c.balance) > 0.005);
+  // Baux terminés : solde reste dû calculé côté API (plafonné à la sortie, après caution).
+  for (const r of Array.isArray(data?.former?.rows) ? data.former.rows : []) {
+    if (leaseIds.has(r.leaseId) && Number(r.balance) > 0) {
+      overdueCards.push({ currencyId: r.currency?.id, currencySymbol: r.currency?.symbol, balance: Number(r.balance) });
+    }
+  }
   const overdueRows = groupAmountsByCurrency(overdueCards, (c) => c.balance, fallbackSym);
   const activeIds = new Set(activeLeases.map((l) => l.id));
   const upcomingRows = groupAmountsByCurrency(
@@ -140,14 +148,15 @@ export function Dashboard({ go }) {
 }
 
 async function loadDashboardModule() {
-  const [dashboard, leases, payments, currencies, setting] = await Promise.all([
+  const [dashboard, leases, payments, currencies, setting, former] = await Promise.all([
     api.dashboard(),
     api.leases(),
     api.payments(),
     api.currencies(),
     api.setting(),
+    api.formerDebtors().catch(() => ({ rows: [] })),
   ]);
-  return { dashboard, leases, payments, currencies, setting };
+  return { dashboard, leases, payments, currencies, setting, former };
 }
 
 function Row({ icon, bg, title, sub, onClick, last }) {

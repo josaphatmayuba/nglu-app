@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet, Download, Plus, Check, Clock, Smartphone, ArrowRight, ArrowLeft,
-  BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera,
+  BellRing, CheckCircle2, FileDown, Send, List, Users, CalendarRange, X, AlertTriangle, Search, Camera, Phone, UserX,
 } from "lucide-react";
 import { api } from "../api.js";
 import { getLang, t, tf } from "../i18n.js";
@@ -14,7 +14,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 import { SmsNotice, useSmsSend, useToast } from "../components/Dialog.jsx";
-import { cashPayments, paymentMethodLabel } from "../depositUtils.js";
+import { cashPayments, fmtWithCurrency, paymentMethodLabel } from "../depositUtils.js";
 
 // Enregistrer un paiement envoie automatiquement un SMS de reçu (locataire + propriétaire).
 const PAY_SMS_NOTE = "Un SMS de reçu sera envoyé au locataire et au propriétaire après l'enregistrement.";
@@ -148,17 +148,18 @@ function groupByTenant(rows) {
 // Construit une carte par bail actif, enrichie des paiements de ce bail.
 // status : "late" (un mois PASSÉ impayé) · "pending" (mois courant impayé,
 // en attente) · "ok" (à jour).
-// Bail suivi dans Loyers : actif, ou TERMINÉ (résilié OU renouvelé) tant qu'il reste des impayés
-// à recouvrer — un renouvellement n'efface pas les arriérés de l'ancien bail. « cancelled » exclu.
-const isRentTracked = (l) =>
+// Bail suivi dans Loyers : actif, ou TERMINÉ tant que l'API des anciens débiteurs
+// (GET /former-debtors, solde plafonné à la sortie) y trouve un solde > 0 — même pour un bail
+// non flaggé. `owing` = Map leaseId -> ligne former-debtors. « cancelled » exclu.
+const isRentTracked = (l, owing) =>
   (l.status || "active") === "active" ||
-  (l.status === "ended" && Number(l.openDueCount ?? l.unpaidCount) > 0);
+  (l.status === "ended" && Boolean(owing?.has(String(l.id))));
 
-export function buildLeaseCards(leases, payments) {
+export function buildLeaseCards(leases, payments, owing) {
   const now = new Date();
   const thisM = new Date(now.getFullYear(), now.getMonth(), 1);
   return leases
-    .filter(isRentTracked)
+    .filter((l) => isRentTracked(l, owing))
     .map((l) => {
       const list = payments.filter((p) => String(p.leaseId) === String(l.id));
       // Seules les échéances réellement réglées comptent pour la couverture/frise ;
@@ -323,7 +324,8 @@ export function buildLeaseCards(leases, payments) {
         status,
         list,
       };
-    });
+    })
+    .map((c) => (c.lease?.status === "ended" ? { ...c, formerDebt: owing?.get(String(c.lease.id)) || null } : c));
 }
 
 // Carte « Par locataire » : frise de 12 mois (vert = mois payé) + paiement direct du retard.
@@ -474,7 +476,13 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           <div style={{ minWidth: 0 }}>
             <div className="name">{name}</div>
             <div className="unit">{[unit, `${money(rent ?? latest?.amount, symbol)} / ${t("mois")}`].filter(Boolean).join(" · ")}</div>
-            {lease?.status === "ended" && <div className="unit">{tf(t("Ancien bail {ref} · arriérés à recouvrer"), { ref: lease.reference || lease.id })}</div>}
+            {lease?.status === "ended" && (
+              <div className="unit">
+                {card.formerDebt
+                  ? tf(t("Ancien bail {ref} · reste dû {m} à recouvrer"), { ref: lease.reference || lease.id, m: fmtWithCurrency(card.formerDebt.balance, card.formerDebt.currency?.symbol || card.formerDebt.currency?.code) })
+                  : tf(t("Ancien bail {ref} · dette à recouvrer"), { ref: lease.reference || lease.id })}
+              </div>
+            )}
           </div>
         </div>
         <span className={`immo-pill ${meta.pill}`}>{meta.label}</span>
@@ -842,6 +850,7 @@ export function ProrataBadge({ p }) {
 // Mini-modale d'encaissement rapide depuis une carte en retard.
 // Relance manuelle : le gestionnaire choisit qui recoit un SMS (rien n'est
 // envoye au proprietaire ni aux delegues sans case cochee).
+const moneyList = money;
 function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   // Prorata : la « période » à régler est nextDueAmount (peut être partielle) ;
@@ -861,6 +870,10 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
   const [err, setErr] = useState(null);
   const [alloc, setAlloc] = useState({ allocationMode: "auto" });
   const dueLease = isDuesLease(card.lease);
+  // Ancien bail (dette d'ancien locataire) : confirmation explicite + montants a 2 decimales exactes.
+  const ended = card.lease?.status === "ended";
+  const [confirmEnded, setConfirmEnded] = useState(false);
+  const money = ended ? fmtWithCurrency : moneyList;
 
   const activeKey = method ?? methods[0]?.key;
   const amountNum = Number(String(amount).replace(/\s/g, "").replace(",", "."));
@@ -868,6 +881,7 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
   const submit = async () => {
     if (busy) return;
     if (!Number.isFinite(amountNum) || amountNum <= 0) { setErr("Montant invalide."); return; }
+    if (ended && !confirmEnded) { setErr(t("Cochez la confirmation de paiement sur ancien bail.")); return; }
     setBusy(true); setErr(null);
     try {
       const m = methods.find((x) => x.key === activeKey);
@@ -880,6 +894,7 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
         receivedBy: activeKey === "cash" ? (receivedBy.trim() || null) : null,
         ...(card.currencyId ? { currencyId: Number(card.currencyId) } : {}),
         ...(dueLease ? allocationPayload(alloc) : {}),
+        ...(ended ? { confirmEndedLease: true } : {}),
       }, proofFile);
       onPaid(`Paiement de ${money(amountNum, card.symbol)} enregistré pour ${card.name}${created?.allocationWarning ? ` — ${typeof created.allocationWarning === "string" ? created.allocationWarning : created.allocationWarning.message || ""}` : ""}`);
     } catch (e) {
@@ -895,7 +910,7 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
         <div className="immo-modal-head">
           <div>
             <div className="eyebrow">Encaissement rapide</div>
-            <h3>{card.payAdvance ? t("Payer d'avance") : t("Régler le loyer en retard")}</h3>
+            <h3>{ended ? t("Encaisser une dette d'ancien bail") : card.payAdvance ? t("Payer d'avance") : t("Régler le loyer en retard")}</h3>
           </div>
           <button className="immo-flat-icon" onClick={onClose} aria-label={t("Fermer")}><X size={16} /></button>
         </div>
@@ -907,6 +922,12 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
               <span>Solde dû{card.monthsBehind > 1 ? ` (${card.monthsBehind} mois)` : ""}</span>
               <strong style={{ color: "#dc2626" }}>{money(fullBalance, card.symbol)}</strong>
             </div>
+          )}
+          {ended && (
+            <label className="immo-pay-row" style={{ minHeight: 44, alignItems: "center", gap: 10, cursor: "pointer" }}>
+              <input type="checkbox" checked={confirmEnded} onChange={(e) => setConfirmEnded(e.target.checked)} style={{ width: 22, height: 22 }} />
+              <span>{tf(t("Paiement sur ancien bail {ref}"), { ref: card.lease.reference || card.lease.id })}</span>
+            </label>
           )}
           {isProrataRow(prorataRow) && (
             <ProrataInfo row={prorataRow} fullAmount={card.rent} symbol={card.symbol} />
@@ -924,7 +945,7 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
                   Tout le solde · {money(fullBalance, card.symbol)}
                 </button>
               )}
-              {monthRent > 0 && (
+              {monthRent > 0 && !ended && (
                 <button type="button" className={Number(amount) === monthRent ? "active" : ""} onClick={() => setAmount(String(monthRent))}>
                   {proratedNext ? t("Dernière période") : "1 mois"} · {money(monthRent, card.symbol)}
                 </button>
@@ -979,7 +1000,7 @@ function QuickPayModal({ card, methods = CHOOSABLE_METHODS, onClose, onPaid }) {
         </div>
         <div className="immo-modal-foot">
           <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
-          <button className="immo-btn primary" onClick={submit} disabled={busy || !amount}>
+          <button className="immo-btn primary" onClick={submit} disabled={busy || !amount || (ended && !confirmEnded)}>
             {busy ? "Encaissement…" : <><Check size={16} /> Confirmer le paiement</>}
           </button>
         </div>
@@ -1158,7 +1179,7 @@ function ConfirmPayModal({ payment, methods = CHOOSABLE_METHODS, fullAmount = nu
 
 // ─────────────────────────── LOYERS (liste) ───────────────────────────
 async function loadPaymentsModule() {
-  const [payments, leases, currencies, setting, paymentMethods, delegateChecks] = await Promise.all([
+  const [payments, leases, currencies, setting, paymentMethods, delegateChecks, former] = await Promise.all([
     api.payments(),
     api.leases(),
     api.currencies(),
@@ -1167,8 +1188,194 @@ async function loadPaymentsModule() {
     // Reponses des delegues aux relances de retard. Tolerant a l'echec : un
     // backend anterieur a la feature ne doit pas casser l'ecran Loyers.
     api.delegateRentChecks().catch(() => []),
+    // Anciens locataires debiteurs (baux termines, solde > 0). Tolerant : backend anterieur.
+    api.formerDebtors().catch(() => ({ rows: [], totals: [] })),
   ]);
-  return { payments, leases, currencies, setting, paymentMethods, delegateChecks };
+  return { payments, leases, currencies, setting, paymentMethods, delegateChecks, former };
+}
+
+// ─── Anciens locataires débiteurs (baux terminés, suivi HORS comptabilité) ───
+const DAY_MS = 86400000;
+const fmtDay = (iso) => {
+  const d = iso ? new Date(`${String(iso).slice(0, 10)}T00:00:00`) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("fr-FR") : "—";
+};
+const debtSymbol = (c) => c?.symbol || c?.code || "";
+const remindedWithin24h = (iso) => Boolean(iso) && Date.now() - new Date(iso).getTime() < DAY_MS;
+
+// Ligne de /former-debtors -> modèle d'affichage unique (page Loyers et fiche locataire).
+export function normalizeFormerDebt(r) {
+  const tenants = Array.isArray(r.tenants) ? r.tenants : [];
+  return {
+    leaseId: r.leaseId,
+    reference: r.reference,
+    name: tenants.map((x) => x.companyName || x.name).filter(Boolean).join(" & ") || `Bail #${r.reference || r.leaseId}`,
+    unit: [r.propertyName, r.unitName].filter(Boolean).join(" · ") || null,
+    phones: tenants.filter((x) => x.phone).map((x) => ({ name: x.name, phone: x.phone })),
+    balance: r.balance,
+    currency: r.currency,
+    terminationDate: r.terminationDate,
+    lastPayment: r.lastPayment,
+    provisional: Boolean(r.provisional),
+    depositAvailable: r.depositAvailable,
+    lastReminderAt: r.lastReminderAt,
+  };
+}
+
+// Actions Encaisser / Relancer / Imputer la caution d'un ancien bail ; `modals` à rendre dans l'écran.
+export function useFormerDebtActions(reload) {
+  const toast = useToast();
+  const smsSend = useSmsSend();
+  const [payTarget, setPayTarget] = useState(null);
+  const [methods, setMethods] = useState(null);
+  const [depositState, setDepositState] = useState(null);
+  const [DepositModalCmp, setDepositModalCmp] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
+  const pay = async (debt) => {
+    try {
+      setMethods(uiMethodsFrom(await api.paymentMethods().catch(() => [])));
+      setPayTarget({
+        lease: { id: debt.leaseId, reference: debt.reference, status: "ended" },
+        name: debt.name, unit: debt.unit, rent: 0, list: [],
+        balance: Number(debt.balance), symbol: debtSymbol(debt.currency), currencyId: debt.currency?.id ?? null,
+      });
+    } catch (e) {
+      toast.error(e.message || String(e));
+    }
+  };
+
+  const remind = async (debt) => {
+    if (busyId) return;
+    setBusyId(debt.leaseId);
+    try {
+      const res = await smsSend((extra) => api.remindLease(debt.leaseId, { tenant: true }, extra), { title: t("Relance : vérifier le message") });
+      if (!res) return;
+      if (res?.smsStatus === "no_phone") toast.error(tf(t("Aucun SMS : {name} n'a pas de numéro de téléphone."), { name: debt.name }));
+      else if (res?.smsStatus === "failed") toast.error(tf(t("SMS non envoyé à {name} : {reason}"), { name: debt.name, reason: res.smsError || "" }));
+      else if (res?.smsStatus === "skipped") toast.info?.(t("Envoi des SMS désactivé sur cet environnement."));
+      else toast.success(tf(t("Rappel envoyé à {name}."), { name: debt.name }));
+      reload?.();
+    } catch (e) {
+      toast.error(e.message || String(e));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Ouvre la fenêtre caution existante (baux.jsx, chargée à la demande : évite un import circulaire).
+  const impute = async (debt) => {
+    try {
+      const [leases, deposits] = await Promise.all([api.leases(), api.deposits().catch(() => [])]);
+      const lease = (Array.isArray(leases) ? leases : []).find((l) => String(l.id) === String(debt.leaseId));
+      const deposit = (Array.isArray(deposits) ? deposits : []).find((d) => String(d.leaseId) === String(debt.leaseId));
+      if (!lease || !deposit) { toast.error(t("Aucune caution détenue pour ce bail.")); return; }
+      const mod = await import("./baux.jsx");
+      setDepositModalCmp(() => mod.DepositModal);
+      setDepositState({ mode: "return", lease, deposit });
+    } catch (e) {
+      toast.error(e.message || String(e));
+    }
+  };
+
+  const modals = (
+    <>
+      {payTarget && methods && (
+        <QuickPayModal
+          card={payTarget}
+          methods={methods}
+          onClose={() => setPayTarget(null)}
+          onPaid={(msg) => { setPayTarget(null); toast.success(msg); reload?.(); }}
+        />
+      )}
+      {depositState && DepositModalCmp && (
+        <DepositModalCmp
+          state={depositState}
+          onClose={() => setDepositState(null)}
+          onChanged={() => reload?.()}
+          onDone={async () => { setDepositState(null); reload?.(); }}
+        />
+      )}
+    </>
+  );
+  return { pay, remind, impute, busyId, modals };
+}
+
+// Carte (empilée sur mobile, cibles >= 44 px) d'un ancien bail débiteur.
+export function FormerDebtCard({ debt, actions, compact = false }) {
+  const sym = debtSymbol(debt.currency);
+  const recent = remindedWithin24h(debt.lastReminderAt);
+  const btn = { minHeight: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 };
+  return (
+    <div className="immo-pay-card late immo-former-card">
+      <div className="immo-pay-head">
+        <div style={{ minWidth: 0 }}>
+          {!compact && <div className="name">{debt.name}</div>}
+          <div className="unit">{[debt.unit, tf(t("Ancien bail {ref}"), { ref: debt.reference })].filter(Boolean).join(" · ")}</div>
+        </div>
+        {debt.provisional && <span className="immo-pill warning" title={t("De la caution est encore disponible : le solde peut baisser")}>{t("provisoire")}</span>}
+      </div>
+      <div className="immo-pay-row"><span>{t("Reste dû")}</span><strong style={{ color: "#dc2626" }}>{fmtWithCurrency(debt.balance, sym)}</strong></div>
+      <div className="immo-pay-row"><span>{t("Date de sortie")}</span><strong>{fmtDay(debt.terminationDate)}</strong></div>
+      <div className="immo-pay-row">
+        <span>{t("Dernier paiement")}</span>
+        <strong>{debt.lastPayment ? `${fmtDay(debt.lastPayment.date)} · ${fmtWithCurrency(debt.lastPayment.amount, sym)}` : "—"}</strong>
+      </div>
+      {debt.lastReminderAt && <div className="immo-pay-row"><span>{t("Dernière relance")}</span><strong>{new Date(debt.lastReminderAt).toLocaleString("fr-FR")}</strong></div>}
+      {debt.phones.map((p) => (
+        <a key={p.phone} href={`tel:${p.phone}`} className="immo-btn" style={{ ...btn, marginTop: 6, width: "100%", textDecoration: "none" }}>
+          <Phone size={14} /> {compact ? p.phone : `${p.name} · ${p.phone}`}
+        </a>
+      ))}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        {debt.provisional && (
+          <button type="button" className="immo-btn" style={{ ...btn, flex: "1 1 100%" }} onClick={() => actions.impute(debt)}>
+            {t("Imputer la caution")} · {fmtWithCurrency(debt.depositAvailable, sym)}
+          </button>
+        )}
+        <button type="button" className="immo-btn primary" style={{ ...btn, flex: "1 1 120px" }} onClick={() => actions.pay(debt)}>
+          <Smartphone size={14} /> {t("Encaisser")}
+        </button>
+        <button
+          type="button" className="immo-btn" style={{ ...btn, flex: "1 1 120px" }}
+          disabled={actions.busyId === debt.leaseId || recent}
+          title={recent ? t("Une relance a déjà été envoyée il y a moins de 24 h") : undefined}
+          onClick={() => actions.remind(debt)}
+        >
+          <BellRing size={14} /> {actions.busyId === debt.leaseId ? t("Envoi…") : t("Relancer")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FormerDebtorsView({ rows, totals, query, actions }) {
+  const debts = useMemo(() => rows.map(normalizeFormerDebt), [rows]);
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? debts.filter((d) => [d.name, d.unit, d.reference, ...d.phones.map((p) => p.phone)].some((v) => String(v || "").toLowerCase().includes(q)))
+    : debts;
+  const symOf = (id) => debtSymbol(rows.find((r) => (r.currency?.id ?? null) === id)?.currency);
+  if (!debts.length) {
+    return <div className="immo-empty"><CheckCircle2 size={28} /><h3>{t("Aucune dette d'ancien locataire")}</h3></div>;
+  }
+  return (
+    <>
+      <div className="immo-card" style={{ marginBottom: 12, padding: 14 }}>
+        <span className="muted">{t("Total dû par les anciens locataires")} : </span>
+        <strong style={{ color: "#dc2626" }}>
+          {(totals || []).map((x) => fmtWithCurrency(x.amount, symOf(x.currencyId))).join(" · ")}
+        </strong>
+      </div>
+      {shown.length === 0 ? (
+        <div className="immo-empty"><Wallet size={28} /><h3>{t("Aucun résultat")}</h3></div>
+      ) : (
+        <div className="immo-former-grid">
+          {shown.map((d) => <FormerDebtCard key={d.leaseId} debt={d} actions={actions} />)}
+        </div>
+      )}
+    </>
+  );
 }
 
 export function Loyers({ go }) {
@@ -1203,6 +1410,9 @@ export function Loyers({ go }) {
     [rows, currency.defaultCurrencySymbol],
   );
   const [view, setView] = useState("locataire");
+  const formerRows = useMemo(() => (Array.isArray(data?.former?.rows) ? data.former.rows : []), [data?.former]);
+  const owing = useMemo(() => new Map(formerRows.map((r) => [String(r.leaseId), r])), [formerRows]);
+  const formerActions = useFormerDebtActions(reload);
   const [payTarget, setPayTarget] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [generatingLeaseId, setGeneratingLeaseId] = useState(null);
@@ -1224,7 +1434,7 @@ export function Loyers({ go }) {
   // Cartes par bail actif (détection du retard). Fallback : regroupement par
   // paiements si aucun bail n'est renvoyé par l'API (pas de paiement direct).
   const cards = useMemo(() => {
-    if (leases.length) return buildLeaseCards(leases, leasePayments);
+    if (leases.length) return buildLeaseCards(leases, leasePayments, owing);
     return groupByTenant(rows).map((g) => ({
       lease: null, name: g.name, unit: g.unit, rent: g.list[0]?.amount,
       currencyId: g.list[0]?.currencyId,
@@ -1233,14 +1443,14 @@ export function Loyers({ go }) {
       latest: [...g.list].sort((a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0))[0] || null,
       status: "ok",
     }));
-  }, [leases, rows, leasePayments]);
+  }, [leases, rows, leasePayments, owing]);
   const lateCount = cards.filter((c) => c.status === "late").length;
   const pendingCount = cards.filter((c) => c.status === "pending").length;
   // Arriérés = loyers en retard (délai de grâce dépassé), groupés par devise :
   // même règle que le KPI « Impayé échu » du tableau de bord.
   const arrearsByCurrency = useMemo(() => groupAmountsByCurrency(
     cards
-      .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, late: Number(cardFriseLateDue(c).lateDue.late) || 0 }))
+      .map((c) => ({ currencyId: c.currencyId, currencySymbol: c.symbol, late: c.lease?.status === "ended" ? Number(c.formerDebt?.balance) || 0 : Number(cardFriseLateDue(c).lateDue.late) || 0 }))
       .filter((c) => c.late > 0.005),
     (c) => c.late, currency.defaultCurrencySymbol,
   ), [cards, currency.defaultCurrencySymbol]);
@@ -1383,6 +1593,7 @@ export function Loyers({ go }) {
     { key: "liste", label: "Liste", icon: <List size={15} /> },
     { key: "locataire", label: "Par locataire", icon: <Users size={15} /> },
     { key: "calendrier", label: "Calendrier", icon: <CalendarRange size={15} /> },
+    { key: "anciens", label: `${t("Anciens débiteurs")}${formerRows.length ? ` (${formerRows.length})` : ""}`, icon: <UserX size={15} /> },
   ];
 
   return (
@@ -1491,7 +1702,9 @@ export function Loyers({ go }) {
 
       {/* Vue « Par locataire » : un bail actif sans aucun paiement doit quand
           meme afficher sa carte (retard + bouton Generer les echeances). */}
-      {rows.length === 0 && (view !== "locataire" || cards.length === 0) ? (
+      {view === "anciens" ? (
+        <FormerDebtorsView rows={formerRows} totals={data?.former?.totals} query={query} actions={formerActions} />
+      ) : rows.length === 0 && (view !== "locataire" || cards.length === 0) ? (
         <div className="immo-empty">
           <Wallet size={28} />
           <h3>{t("Aucun paiement")}</h3>
@@ -1579,6 +1792,7 @@ export function Loyers({ go }) {
 
       {remindTarget && <RemindModal card={remindTarget} busy={!!remindingLeaseId} onClose={() => setRemindTarget(null)} onSend={(targets) => handleRemind(remindTarget, targets)} />}
       {noticeTarget && <RemindModal kind="notice" card={noticeTarget} busy={!!noticingLeaseId} onClose={() => setNoticeTarget(null)} onSend={(targets) => handleDefaultNotice(noticeTarget, targets)} />}
+      {formerActions.modals}
       {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
       {confirmTarget && <ConfirmPayModal payment={confirmTarget} methods={methods} fullAmount={leases.find((l) => String(l.id) === String(confirmTarget.leaseId))?.rentAmount ?? null} onClose={() => setConfirmTarget(null)} onConfirmed={handleConfirmed} />}
       {proofView && <ProofModal path={`/leases/payments/${proofView.id}/proof-file`} title={tenantName(proofView)} onClose={() => setProofView(null)} />}
@@ -1713,14 +1927,16 @@ export function Paiement({ go }) {
         // Tolerant : un echec ne doit pas bloquer l'encaissement.
         api.payments().catch(() => []),
       ]);
-      return { leases, paymentMethods, payments };
+      const former = await api.formerDebtors().catch(() => ({ rows: [], totals: [] }));
+      return { leases, paymentMethods, payments, former };
     },
     [],
   );
   useRealtimeReload(reload, ["leases", "payments"]);
   const leases = data?.leases;
   const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
-  const active = (Array.isArray(leases) ? leases : []).filter(isRentTracked);
+  const owing = useMemo(() => new Map((Array.isArray(data?.former?.rows) ? data.former.rows : []).map((r) => [String(r.leaseId), r])), [data?.former]);
+  const active = (Array.isArray(leases) ? leases : []).filter((l) => isRentTracked(l, owing));
 
   const [step, setStep] = useState(() => {
     try {
@@ -1761,9 +1977,9 @@ export function Paiement({ go }) {
   const cards = useMemo(() => {
     const order = { late: 0, pending: 1, ok: 2 };
     const pays = Array.isArray(data?.payments) ? data.payments : [];
-    return buildLeaseCards(Array.isArray(leases) ? leases : [], pays)
+    return buildLeaseCards(Array.isArray(leases) ? leases : [], pays, owing)
       .sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3) || a.name.localeCompare(b.name));
-  }, [leases, data?.payments]);
+  }, [leases, data?.payments, owing]);
   const needle = q.trim().toLowerCase();
   const filteredCards = needle
     ? cards.filter((c) => `${c.name} ${c.unit || ""} ${c.lease.reference || ""}`.toLowerCase().includes(needle))

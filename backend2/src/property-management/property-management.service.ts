@@ -52,7 +52,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
-import { listFormerDebtors, loadTenantFormerDebt, type FormerDebtorsFilters } from "./former-debt";
+import { listFormerDebtors, loadEndedLeaseBalances, loadFormerDebtsForTenants, loadTenantFormerDebt, toMinor, type FormerDebtorsFilters } from "./former-debt";
 import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
@@ -291,8 +291,11 @@ export class PropertyManagementService implements OnModuleInit {
     };
   }
 
-  tenants(orgId: number) {
-    return this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
+  async tenants(orgId: number) {
+    const rows = await this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
+    // Badge « Doit X » : dettes sur baux termines, calculees en lot (pas de N+1).
+    const debts = await loadFormerDebtsForTenants(this.db, orgId, rows.map((r) => Number(r.id)));
+    return rows.map((r) => ({ ...r, formerDebts: debts.get(Number(r.id)) ?? [] }));
   }
 
   private tenantQuery(customerId: number | undefined, orgId: number) {
@@ -3196,6 +3199,19 @@ export class PropertyManagementService implements OnModuleInit {
   async createPayment(input: CreateRentPaymentDto, orgId: number, proof?: any, publicApiBase?: string, userId?: number, propertyScope: "all" | number[] = "all") {
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     this.ensurePropertyInScope(lease.propertyId, propertyScope);
+    // Bail termine : encaisser une dette d'ancien locataire exige une confirmation explicite
+    // et ne peut pas depasser le solde (plafonne a la sortie). apply-to-rent n'appelle pas createPayment.
+    if ((lease as any).status === "ended") {
+      if (!input.confirmEndedLease) {
+        throw new ConflictException({ statusCode: 409, code: "ENDED_LEASE_CONFIRM_REQUIRED", message: "Ce bail est termine : confirmez le paiement sur ancien bail." });
+      }
+      const bal = (await loadEndedLeaseBalances(this.db, orgId, [Number(lease.id)])).get(Number(lease.id));
+      const balMinor = bal?.balanceMinor ?? 0;
+      const payMinor = toMinor(input.amount, bal?.decimals ?? 2);
+      if (!bal || payMinor > balMinor) {
+        throw new BadRequestException(`Le montant depasse le solde de ${bal ? bal.balance : "0.00"} ${bal?.currency.symbol || bal?.currency.code || ""}`.trim());
+      }
+    }
     const proofUrl = (await this.saveProofFile(proof, `domus/payments/${orgId}/proofs`)) ?? input.proofUrl ?? null;
     // Registre d'imputations (bail flagge seulement) : valider l'imputation explicite AVANT toute ecriture.
     const allocFlagged = isLeaseFlagged(lease);
@@ -5369,7 +5385,15 @@ export class PropertyManagementService implements OnModuleInit {
     if (!recipients.length) throw new BadRequestException("Email du locataire introuvable.");
     const multi = recipients.length > 1;
     // {amount} = TOTAL DU avec devise (ex. « 4 645,16 $ ») — comme le rappel automatique.
-    const rentDisplay = (await loadLeaseTotalDue(this.db, orgId, { ...lease, id: lease.leaseId }, lease.currencySymbol)).text;
+    let rentDisplay: string;
+    if (lease.status === "ended") {
+      // Bail termine : montant = solde de l'ancien bail (plafonne a la sortie), 2 decimales exactes.
+      const bal = (await loadEndedLeaseBalances(this.db, orgId, [Number(leaseId)])).get(Number(leaseId));
+      if (!bal || bal.balanceMinor <= 0) throw new BadRequestException("Aucune dette sur cet ancien bail.");
+      rentDisplay = `${Number(bal.balance).toLocaleString("fr-FR", { minimumFractionDigits: bal.decimals, maximumFractionDigits: bal.decimals })} ${lease.currencySymbol}`.trim();
+    } else {
+      rentDisplay = (await loadLeaseTotalDue(this.db, orgId, { ...lease, id: lease.leaseId }, lease.currencySymbol)).text;
+    }
     // Le locataire est renvoyé vers les personnes en charge de SON immeuble
     // (propriétaire + gestionnaire assigné), comme le rappel automatique, et non
     // vers un « nous » anonyme. Repli sur le contact société si aucun des deux

@@ -2,6 +2,7 @@
 // d'un badge dans l'écran Locataires. Extrait pour être testable unitairement.
 //
 // Le badge combine, par ordre de priorité :
+//   0. dette sur un ancien bail (formerDebts) -> « Doit X devise » (danger), prioritaire
 //   1. retard en cours          -> danger
 //   2. mauvais payeur (retards graves sur 12 mois) -> danger, même parti ;
 //      3 mois à jour d'affilée -> « En amélioration » (warning), 6 -> statut levé
@@ -29,17 +30,39 @@ export function tenantLeaseInfo(tenant, leases, units) {
   const id = String(tenant.id);
   const tenantLeases = leases.filter((l) => String(l.tenantId) === id
     || (Array.isArray(l.coTenants) && l.coTenants.some((c) => String(c?.id) === id)));
-  const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0] || null;
-  const activeUnit = activeLease ? units.find((u) => String(u.id) === String(activeLease.unitId)) || null : null;
-  return { tenantLeases, activeLease, activeUnit };
+  // activeLease = bail ACTIF uniquement (logique de retard) ; latestLease = repli d'affichage
+  // (bien, loyer) pour un locataire parti : ne doit jamais declencher « En retard ».
+  const activeLease = tenantLeases.find((l) => l.status === "active") || null;
+  const latest = activeLease || latestLease(tenantLeases);
+  const activeUnit = latest ? units.find((u) => String(u.id) === String(latest.unitId)) || null : null;
+  return { tenantLeases, activeLease, latestLease: latest, activeUnit };
+}
+
+// « Doit 150,50 $ · 20,00 FC » : dettes d'anciens baux sommees par devise (centimes entiers, 2 decimales exactes).
+export function formerDebtLabel(formerDebts) {
+  const byCur = new Map();
+  for (const d of formerDebts || []) {
+    const dec = Number.isInteger(d?.currency?.decimals) ? d.currency.decimals : 2;
+    const key = String(d?.currency?.id ?? d?.currency?.code ?? "");
+    const cur = byCur.get(key) || { sym: d?.currency?.symbol || d?.currency?.code || "", dec, minor: 0 };
+    cur.minor += Math.round(Number(d.amount) * 10 ** dec);
+    byCur.set(key, cur);
+  }
+  const parts = [...byCur.values()].filter((c) => c.minor > 0).map((c) => {
+    const n = (c.minor / 10 ** c.dec).toLocaleString("fr-FR", { minimumFractionDigits: c.dec, maximumFractionDigits: c.dec });
+    return c.sym ? `${n} ${c.sym}` : n;
+  });
+  return parts.length ? `Doit ${parts.join(" · ")}` : null;
 }
 
 // `now` injectable pour rendre les tests déterministes.
-export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now()) {
+export function tenantBadge(tenant, tenantLeases, activeLease, now = Date.now(), formerDebts = tenant?.formerDebts) {
   // Pas de bail du tout : prospect / contact, pas de badge de fidélité.
   if (!activeLease && (!tenantLeases || tenantLeases.length === 0)) {
     return { label: "Sans bail", tone: "neutral" };
   }
+  const owes = formerDebtLabel(formerDebts);
+  if (owes) return { label: owes, tone: "danger" };
   const isLate = activeLease?.isOverdue || activeLease?.status === "late";
   if (isLate) {
     const d = activeLease?.overdueDays;

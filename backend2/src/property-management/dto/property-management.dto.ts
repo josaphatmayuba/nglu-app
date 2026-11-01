@@ -512,6 +512,12 @@ export class CreateRentPaymentDto {
   @IsString()
   proofUrl?: string | null;
 
+  @ApiPropertyOptional({ description: "Confirmation explicite d'un paiement sur un bail TERMINE (dette d'ancien locataire). Sans elle : 409 ENDED_LEASE_CONFIRM_REQUIRED." })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true" || value === 1 || value === "1")
+  @IsBoolean()
+  confirmEndedLease?: boolean;
+
   @ApiPropertyOptional({
     enum: ["auto", "manual", "none"],
     description: "Registre d'imputations (baux actives seulement, ignore sinon) : auto = FIFO, manual = allocations explicites, none = pas d'imputation immediate.",

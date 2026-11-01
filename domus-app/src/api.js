@@ -415,6 +415,12 @@ export const api = {
   // extra = { preview: true } (aperçu) ou { previewHash } (confirmation) : voir useSmsSend.
   sendDefaultNotice: (leaseId, targets, extra) => post("/payments/default-notice", { leaseId, targets, ...extra }),
   runOverdueReminders: (extra) => post("/payments/run-overdue-reminders", extra),
+  // Dettes d'anciens locataires (baux termines, hors compta). params : { currencyId, propertyId, search }.
+  formerDebtors: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
+    return get(`/former-debtors${q ? `?${q}` : ""}`);
+  },
+  tenantFormerDebt: (id) => get(`/tenants/${id}/former-debt`),
   remindLease: (leaseId, targets, extra) => post("/payments/remind-lease", { leaseId, targets, ...extra }),
 
   // Bail cree retroactivement (aucun paiement saisi) : genere les echeances
