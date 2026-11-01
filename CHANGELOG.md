@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **CI : avelomi.com ne repasse plus sur « avelomi-site non deploye » - bug #77 (v3.271.1).** `deploy-prod-static-app.sh` : sur Avelomi, un `avelomi-site/dist` non récupérable fait échouer le déploiement avant rebuild (plus de placeholder cuit en vert) ; le smoke vérifie aussi que la racine ne sert pas « non deploye » (sinon rollback `:previous`) ; plus de warning pour les dist non servis (avelomi-site sur ongdngolu, marketing-site sur Avelomi). `deploy-prod.yml` : `avelomi-site-prod` rejoue la vitrine en fin de chaîne à chaque deploy statique/frontend.
 - **BâtiPro : montants sur le Planning (v3.271.0).** Chaque carte de phase affiche « Utilisé / Prévu » (engagé sur bons de commande vs budget planifié, devise de la phase) et le % du budget consommé (rouge au-delà de 100 %), en plus de l avancement. Carte « Total des phases » en tête (utilisé, prévu, reste, par devise). `GET /phases?project_id=` renvoie `spentAmount` + `currencyCode`.
 
 - **Domus : dettes d anciens locataires, étape P0 - backend (v3.270.0).** Correctif : un bail terminé non flaggé arrête de cumuler des loyers après la date de sortie (`computeLeaseTotalDue` plafonné à `terminationDate ?? endDate`, relance manuelle incluse) - bug #76. Nouveau module `former-debt.ts` (solde par bail après caution, en centimes, totaux par devise dédoublonnés co-locataires) et routes `GET /property-management/former-debtors` et `GET /property-management/tenants/:id/former-debt`. Suivi hors comptabilité (loyer constaté à l encaissement). Interface à venir.
