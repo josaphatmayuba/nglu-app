@@ -349,6 +349,14 @@ describe("carnet lisible : tailles et textes", () => {
     for (const c of ["p-rent", "p-cond", "p-water", "p-end", "p-guide"]) expect(html).toMatch(new RegExp(`class="a5[^"]* ${c}"`));
     expect(PAPER_BOOK_CSS).toContain(".paper .sheet.dup .a5, .paper .a5.dup");
   });
+  it("p-misc : Hausses, Corrections et Notes agrandies ; exemple avec colonnes adaptees", () => {
+    const h = paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" });
+    expect(h.match(/class="a5 p-misc"/g).length).toBe(2);
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-misc th { font-size: 8pt; }");
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-misc td { height: 9.6mm; }");
+    expect(h).toContain('<table class="ex">');
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-rent table.ex .via em .pen { font-size: 7pt;");
+  });
   it("A4 pleine page : zoom 1.414", () => {
     expect(PAPER_BOOK_CSS).toContain(".paper .sheet.full .a5 { zoom: 1.414; }");
     expect(PAPER_BOOK_CSS).toContain(".paper .p-rent td { height: 10.6mm; }");

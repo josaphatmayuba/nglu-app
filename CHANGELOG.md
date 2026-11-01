@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : exemple rempli sans débordement, pages Hausses/Garantie, Corrections et Notes agrandies (v3.275.6).** Exemple : `table.ex`, écriture d exemple dimensionnée par colonne (Moyen 7 pt, Montant 9 pt sur 2 lignes) ; nouvelle classe `p-misc` (en-têtes 8 pt, tableau 9 pt, lignes 9,6 mm, même nombre de lignes). Retour de QA dev v3.275.5.
+
 - **Domus carnet : trame de points roses du bailleur enfin visible (v3.275.5) - bug #88.** Le radial-gradient de 0,3 mm disparaissait à l'écran et dans l'aperçu d'impression ; remplacé par un motif SVG (mêmes points de 0,3 mm tous les 1,5 mm).
 - **Domus carnet : montant « À payer » au prorata coupé au milieu du nombre (v3.275.4).** Colonne « À payer » 11 → 13 % (« Montant payé » 20 → 18 %), coupure permise seulement avant la devise (`.p-rent td.due { overflow-wrap: normal }`). BUGS #87.
 

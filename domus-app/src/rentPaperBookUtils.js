@@ -244,6 +244,21 @@ export const PAPER_BOOK_CSS = `
   .paper .p-rent .pen { font-size: 12pt; line-height: .95; }
   .paper .p-rent .via em .pen { font-size: 8pt; }
   .paper .p-rent .foot, .paper .p-rent .tag { font-size: 7.5pt; }
+  /* Exemple rempli : écriture adaptée à chaque colonne pour que tout reste lisible dans sa case. */
+  .paper .p-rent table.ex .pen { font-size: 10pt; }
+  .paper .p-rent table.ex td:nth-child(3) .pen { font-size: 9.5pt; }
+  .paper .p-rent table.ex td:nth-child(4) .pen { font-size: 9pt; line-height: 1; }
+  .paper .p-rent table.ex td:nth-child(6) .pen, .paper .p-rent table.ex td:nth-child(7) .pen { font-size: 10pt; }
+  .paper .p-rent table.ex .via em .pen { font-size: 7pt; line-height: 1; }
+  .paper .p-rent table.ex .via em { overflow: visible; } .paper .p-rent table.ex td.due { font-size: 9pt; }
+  /* Hausses, Garantie, Corrections et Notes. */
+  .paper .p-misc { gap: 2mm; }
+  .paper .p-misc h2 { font-size: 12pt; }
+  .paper .p-misc table { font-size: 9pt; }
+  .paper .p-misc th { font-size: 8pt; } .paper .p-misc th, .paper .p-misc td { padding: .5mm 1mm; }
+  .paper .p-misc td { height: 9.6mm; }
+  .paper .p-misc .note { font-size: 9pt; }
+  .paper .p-misc .foot, .paper .p-misc .tag { font-size: 7.5pt; }
   /* Page Conditions du bail. */
   .paper .p-cond { gap: 2mm; }
   .paper .p-cond h2 { font-size: 13pt; } .paper .p-cond h2 small { font-size: 9pt; }
@@ -430,13 +445,13 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
     [MF[exM[0].m], money(pr), `06/${nextM(0)}`, money(pr), vx("M", "M-Pesa"), "1"],
     [MF[exM[1].m], money(rent), `09/${nextM(1)}`, money(rent), vx("E"), ""],
     [MF[exM[2].m], money(rent), "", "", vx(""), "2"],
-    [MF[exM[3].m], money(rent), `05/${nextM(3)}`, `${fxAmount}<br>taux ${fxRate.toLocaleString("fr-FR")}`, vx("B", "Rawbank"), "3"],
+    [MF[exM[3].m], money(rent), `05/${nextM(3)}`, `${fxAmount}<br>taux ${fxRate.toLocaleString("fr-FR")}`, vx("B", "BCDC"), "3"],
     [MF[exM[4].m], money(rent), `28/${pad(exM[4].m + 1)}`, money(rent), vx("M", "Orange"), "4"],
     [MF[exM[5].m], money(rent), `28/${pad(exM[4].m + 1)}`, money(rent), vx("M", "Orange"), "4"],
   ];
   const EXAMPLE = `<!--p-rent--><h2>Exemple d'une page remplie <small>année 1, ${MF[exM[0].m].toLowerCase()} à ${MF[exM[5].m].toLowerCase()}</small></h2>
-      <table>
-        <colgroup><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:18%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
+      <table class="ex">
+        <colgroup><col style="width:17.5%"><col style="width:12.5%"><col style="width:11.5%"><col style="width:15.5%"><col style="width:19%"><col style="width:12%"><col style="width:12%"></colgroup>
         <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>$ ou FC + taux</small></th><th>Moyen</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${EXR.map((r) => `<tr><td class="m">${r[0]}${r[5] ? ` <span class="numk">${r[5]}</span>` : ""}</td><td class="due">${r[1]}</td><td>${r[2] ? pe(r[2]) : ""}</td><td>${r[3] ? pe(r[3]) : ""}</td><td>${r[4]}</td><td>${r[2] ? pe("~ K.") : ""}</td><td>${r[2] ? pe("~ D.") : ""}</td></tr>`).join("")}
@@ -510,9 +525,9 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   const depRow = L.depositReceived
     ? `<tr><td class="pre">${L.depositReceived.date ? fmtDateShort(L.depositReceived.date) : ""}</td><td class="pre">Reçue${L.depositMonths ? ` (${L.depositMonths} mois)` : ""}</td><td class="pre">${esc(moneyAfter(L.depositReceived.amount, L.depositReceived.symbol))}</td><td class="pre">${esc(moneyAfter(L.depositReceived.amount, L.depositReceived.symbol))}</td><td></td></tr>${empty(6, 5)}`
     : empty(7, 5);
-  SLOTS.push(`<h2>Hausses de loyer</h2>
+  SLOTS.push(`<!--p-misc--><h2>Hausses de loyer</h2>
       <table><thead><tr><th>À partir du</th><th>Ancien loyer</th><th>Nouveau loyer</th><th>Prévenu le</th><th>Signatures</th></tr></thead><tbody>${empty(4, 5)}</tbody></table>
-      <h2 style="margin-top:2mm">Garantie</h2>
+      <h2 class="h2b" style="margin-top:2mm">Garantie</h2>
       <table><thead><tr><th>Date</th><th>Mouvement</th><th>Montant</th><th>Total</th><th>Signatures</th></tr></thead>
       <tbody>${depRow}</tbody></table>
       <p class="note">Mouvements : reçue, complément, retenue (dégâts, impayés), restitution.</p>
@@ -527,7 +542,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
       <div class="g2">${sig("Le bailleur", "Signature")}${sig("Le locataire", "Signature")}</div>
       ${qr("Scannez pour envoyer cette page et clôturer le bail dans Domus.")}
       ${foot(`${pEnd}/${P}`)}`);
-  SLOTS.push(`<h2>Corrections et notes</h2>
+  SLOTS.push(`<!--p-misc--><h2>Corrections et notes</h2>
       <p class="note">Toute correction faite dans le carnet est expliquée ici, datée et signée par les deux.</p>
       <table><colgroup><col style="width:16%"><col style="width:11%"><col><col style="width:22%"></colgroup>
       <thead><tr><th>Date</th><th>Page</th><th>Ce qui a été corrigé, et pourquoi</th><th>Signatures</th></tr></thead><tbody>${empty(16, 4)}</tbody></table>
@@ -538,7 +553,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
       ${qr("Votre compte en ligne : paiements, mois payés, reçus.")}
       ${foot("dos")}`;
 
-  const NOTES = `<h2>Notes</h2>
+  const NOTES = `<!--p-misc--><h2>Notes</h2>
       <table><colgroup><col style="width:18%"><col><col style="width:24%"></colgroup>
       <thead><tr><th>Date</th><th>Note</th><th>Signatures</th></tr></thead><tbody>${empty(17, 3)}</tbody></table>
       ${foot("notes")}`;
