@@ -44,6 +44,7 @@ import { ProofButton } from "../components/ProofModal.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 import { MAX_UPLOAD_BYTES, UploadProgress, useUploadSuccess, useUploads } from "../uploads/uploadManager.jsx";
 import { InspectionComparison, InspectionLauncher, LeaseInspectionsSection } from "./etatDesLieux.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import { TerminateLeaseModal } from "./leaseTermination.jsx";
 import { depositFigures, fifoDistribution, fmtWithCurrency, isValidApplyAmount, manualAllocations, manualCap, rentAppliedOf } from "../depositUtils.js";
 
@@ -304,17 +305,18 @@ export function Baux({ go } = {}) {
           <h1>Baux</h1>
           <p>Contrats de location, échéances et renouvellements</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Locataire, unite, reference..." />
-          </label>
-          <button className="immo-btn" onClick={() => downloadLeasesCsv(leases)}><Download size={16} /> CSV</button>
-          <button className="immo-btn primary" onClick={() => setLeaseModal({ ...emptyLease, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> Nouveau bail
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Locataire, unite, reference..." />
+        </label>
+        <button className="immo-btn" onClick={() => downloadLeasesCsv(leases)}><Download size={16} /> CSV</button>
+        <button className="immo-btn primary" onClick={() => setLeaseModal({ ...emptyLease, currencyId: currency.defaultCurrencyId || "" })}>
+          <Plus size={16} /> Nouveau bail
+        </button>
+      </ImmoToolbar>
 
       <div className="immo-filters">
         <div className="immo-filter-group">

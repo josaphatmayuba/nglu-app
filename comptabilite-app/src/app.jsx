@@ -311,6 +311,9 @@ function KPI({ label, value, sub, valueClass = "", icon, tone }) {
 function Mini({ label, value, valueClass = "", tone }) {
   return <div className={`card pad ${tone === "warn" ? "warn" : tone === "danger" ? "danger" : tone === "info" ? "info" : ""}`}><div className="kpi-label">{label}</div><div className={`font-display num ${valueClass}`} style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>{value}</div></div>;
 }
+function PageAction({ action, onAction, actionIcon = "plus", disabled, ghost }) {
+  return <button className={`btn page-action ${ghost ? "btn-ghost" : "btn-accent grad-accent"}`} disabled={disabled} onClick={onAction}><Icon name={actionIcon} /> {action}</button>;
+}
 function PageHead({ eyebrow, title, action, onAction, actionIcon = "plus", disabled, ghost }) {
   return (
     <div className="topbar">
@@ -606,13 +609,14 @@ function Dashboard({ is, transactions, go, onNew, canMutate }) {
 
   return (
     <>
-      <PageHead eyebrow={`Exercice ${now.getFullYear()}`} title="Comptabilité" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow={`Exercice ${now.getFullYear()}`} title="Comptabilité" />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Produits" value={<ByCur list={revByCur} />} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
         <KPI label="Charges" value={<ByCur list={expByCur} />} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
         <KPI label="Résultat net" value={<ByCur list={profitByCur} />} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
         <KPI label="Écritures" value={txs.length} sub={`${brouillons} brouillon(s)`} icon="penLine" />
       </div>
+      <div className="searchbar"><PageAction action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} /></div>
       <div className="g3">
         <section className="card pad span2">
           <div className="section-head"><h3 className="font-display">Produits vs charges</h3><span className="tiny">6 derniers mois ({CUR})</span></div>
@@ -779,7 +783,7 @@ function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
   const list = rows;
   return (
     <>
-      <PageHead eyebrow="Saisie en partie double" title="Écritures" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow="Saisie en partie double" title="Écritures" />
       <div className="card pad" style={{ marginBottom: 18 }}>
         <div className="section-head"><h3 className="font-display">Saisie réelle</h3><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Contrôle backend</span></div>
         <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Les montants affichés ci-dessous proviennent du grand livre. Les exemples de maquette ont été retirés pour éviter toute confusion avec la comptabilité réelle.</p>
@@ -808,6 +812,7 @@ function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
           </select>
           <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
           <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
+          <PageAction action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 620 }}>
@@ -1283,7 +1288,7 @@ function GrandLivre({ curFilter, dateRange }) {
   const fmt = (v) => nf.format(Number(v || 0));
   return (
     <>
-      <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
+      <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} / ${total} écriture(s)` : "Chargement…"}</span></div>
@@ -1305,6 +1310,7 @@ function GrandLivre({ curFilter, dateRange }) {
           </select>
           <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
           <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
+          <PageAction action="Rafraîchir" actionIcon="download" onAction={load} ghost />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
@@ -1358,13 +1364,14 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
   const page = usePaginated(accounts || [], 20, (accounts || []).length);
   return (
     <>
-      <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Actif" value={<ByCur list={assetsCur} />} />
         <Mini label="Passif" value={<ByCur list={liabCur} />} />
         <Mini label="Produits (cumul)" value={<ByCur list={revCur} />} valueClass="pos" />
         <Mini label="Charges (cumul)" value={<ByCur list={expCur} />} valueClass="neg" />
       </div>
+      <div className="searchbar"><PageAction action="Nouveau compte" onAction={onNew} disabled={!canMutate} /></div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
@@ -2298,9 +2305,7 @@ function Fournisseurs({ canMutate }) {
 
   return (
     <>
-      <PageHead eyebrow="Référentiel central · partagé entre apps" title="Fournisseurs"
-        action={canMutate ? "Nouveau fournisseur" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"}
-        onAction={canMutate ? () => setEditing({}) : load} />
+      <PageHead eyebrow="Référentiel central · partagé entre apps" title="Fournisseurs" />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Fournisseurs actifs" value={active.length} />
@@ -2319,6 +2324,7 @@ function Fournisseurs({ canMutate }) {
           {SUPPLIER_NATURES.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
           <option value="__unset">— Non classés —</option>
         </select>
+        <PageAction action={canMutate ? "Nouveau fournisseur" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"} onAction={canMutate ? () => setEditing({}) : load} />
       </div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Liste des fournisseurs</h3><span className="tiny">{rows ? `${filtered.length} fournisseur(s)` : "Chargement…"}</span></div>
@@ -2511,7 +2517,7 @@ function Achats({ canMutate }) {
 
   return (
     <>
-      <PageHead eyebrow="Comptes fournisseurs · gate purchase" title="Factures fournisseurs" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      <PageHead eyebrow="Comptes fournisseurs · gate purchase" title="Factures fournisseurs" />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Factures" value={(rows || []).length} />
@@ -2519,6 +2525,7 @@ function Achats({ canMutate }) {
         <Mini label="Payé (par devise)" value={<ByCur list={paidByCur} />} valueClass="pos" />
         <Mini label="Reste dû (par devise)" value={<ByCur list={dueByCur} />} valueClass="neg" />
       </div>
+      <div className="searchbar"><PageAction action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost /></div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Liste des factures d'achat</h3><span className="tiny">{rows ? `${rows.length} facture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">

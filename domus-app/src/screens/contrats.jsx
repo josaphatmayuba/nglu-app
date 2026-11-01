@@ -20,7 +20,7 @@ import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { Metric, MetricsGrid } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid } from "./ui.jsx";
 import { ContractSigners } from "../components/ContractSigners.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm, usePrompt, useSmsSend, useToast } from "../components/Dialog.jsx";
@@ -395,15 +395,6 @@ export function Contrats() {
           <h1>Contrats &amp; signature</h1>
           <p>Génération, envoi et suivi des signatures électroniques</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Contrat, locataire..." />
-          </label>
-          <button type="button" className="immo-btn primary" onClick={() => setCreateOpen(true)}>
-            <FilePlus size={16} /> Générer depuis un bail
-          </button>
-        </div>
       </div>
 
       <MetricsGrid>
@@ -413,6 +404,16 @@ export function Contrats() {
         <Metric tone="brand" icon={<FilePen size={20} />} label={t("Brouillons")} value={metrics.draft} />
         <Metric tone="red" icon={<CalendarX size={20} />} label={t("Baux expirent < 30 j")} value={metrics.expiring} />
       </MetricsGrid>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Contrat, locataire..." />
+        </label>
+        <button type="button" className="immo-btn primary" onClick={() => setCreateOpen(true)}>
+          <FilePlus size={16} /> Générer depuis un bail
+        </button>
+      </ImmoToolbar>
 
       <div className="contrats-layout">
         <div className="contrats-main">

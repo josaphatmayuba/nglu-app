@@ -343,3 +343,7 @@ table.bp td .danger-txt { color: var(--rose-600); }
 .owner-sms-hint { grid-column: 1 / -1; font-size: 12px; color: var(--ink-500); margin-top: -6px; }
 .owner-sms-toggle input { width: 18px; height: 18px; min-height: 0; margin-top: 1px; flex: none; }
 .owner-sms-toggle.disabled { opacity: .55; cursor: not-allowed; }
+
+.page-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
+.page-toolbar > .search, .page-toolbar > input { flex: 1; min-width: 180px; }
+@media (max-width: 760px) { .page-toolbar .btn { min-height: 44px; } }

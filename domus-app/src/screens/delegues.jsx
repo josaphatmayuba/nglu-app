@@ -21,7 +21,7 @@ import { t, tf } from "../i18n.js";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { Metric, MetricsGrid } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
@@ -167,15 +167,6 @@ export function Delegues({ go } = {}) {
           <h1>{t("Délégués")}</h1>
           <p>{t("Mandataires chargés du suivi de loyer")}</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, email...")} />
-          </label>
-          <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptyDelegate }); }}>
-            <UserPlus size={16} /> {t("Nouveau délégué")}
-          </button>
-        </div>
       </div>
 
       <MetricsGrid>
@@ -183,6 +174,16 @@ export function Delegues({ go } = {}) {
         <Metric tone="amber" icon={<BellRing size={20} />} label={t("Sans périmètre")} value={unassigned}
           valueColor={unassigned > 0 ? "#d97706" : undefined} helper={t("ne reçoivent aucune notification")} />
       </MetricsGrid>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, email...")} />
+        </label>
+        <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptyDelegate }); }}>
+          <UserPlus size={16} /> {t("Nouveau délégué")}
+        </button>
+      </ImmoToolbar>
 
       {delegates.length === 0 ? (
         <div className="immo-empty">

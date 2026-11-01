@@ -11,7 +11,7 @@ import { t, tf } from "../i18n.js";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { Metric, MetricsGrid } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { SignaturePad } from "../components/SignaturePad.jsx";
@@ -189,15 +189,6 @@ export function Proprietaires({ go } = {}) {
           <h1>{t("Propriétaires")}</h1>
           <p>{t("Annuaire des propriétaires immobiliers")}</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, ville...")} />
-          </label>
-          <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptyOwner }); }}>
-            <UserPlus size={16} /> {t("Nouveau propriétaire")}
-          </button>
-        </div>
       </div>
 
       <MetricsGrid>
@@ -205,6 +196,16 @@ export function Proprietaires({ go } = {}) {
         <Metric tone="amber" icon={<Building2 size={20} />} label={t("Biens sans propriétaire")} value={propertiesWithoutOwner}
           valueColor={propertiesWithoutOwner > 0 ? "#d97706" : undefined} helper={t("assignation depuis la fiche du bien")} />
       </MetricsGrid>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, ville...")} />
+        </label>
+        <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptyOwner }); }}>
+          <UserPlus size={16} /> {t("Nouveau propriétaire")}
+        </button>
+      </ImmoToolbar>
 
       {view.length === 0 ? (
         <div className="immo-empty">

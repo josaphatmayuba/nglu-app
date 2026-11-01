@@ -13,7 +13,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { useFormerDebtActions } from "./loyers.jsx";
 import { fmtWithCurrency } from "../depositUtils.js";
-import { Metric, MetricsGrid } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { SmsNotice, useConfirm, useSmsSend, useToast } from "../components/Dialog.jsx";
@@ -403,29 +403,6 @@ export function Locataires({ go } = {}) {
           <h1>{t("Locataires")}</h1>
           <p>Annuaire des locataires, dossiers et soldes</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, unite...")} />
-          </label>
-          <select
-            className="immo-select"
-            value={onboardingStatus}
-            onChange={(e) => setOnboardingStatus(e.target.value)}
-            title="Filtrer les dossiers d'inscription"
-          >
-            <option value="online">Dossiers en ligne</option>
-            <option value="expired">Dossiers expires</option>
-            <option value="validated">Dossiers valides</option>
-            <option value="all">Tous les dossiers</option>
-          </select>
-          <button className="immo-btn" onClick={openLinkModal}>
-            <UserRound size={16} /> Lien d'inscription
-          </button>
-          <button className="immo-btn primary" onClick={() => setModal({ ...emptyTenant })}>
-            <UserPlus size={16} /> Nouveau locataire
-          </button>
-        </div>
       </div>
 
       <MetricsGrid>
@@ -435,6 +412,30 @@ export function Locataires({ go } = {}) {
           valueColor={pendingOnboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
         <Metric tone="brand" icon={<Briefcase size={20} />} label={t("Salaries / fonction.")} value={salaried} helper={t("revenu stable declare")} />
       </MetricsGrid>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, unite...")} />
+        </label>
+        <select
+          className="immo-select"
+          value={onboardingStatus}
+          onChange={(e) => setOnboardingStatus(e.target.value)}
+          title="Filtrer les dossiers d'inscription"
+        >
+          <option value="online">Dossiers en ligne</option>
+          <option value="expired">Dossiers expires</option>
+          <option value="validated">Dossiers valides</option>
+          <option value="all">Tous les dossiers</option>
+        </select>
+        <button className="immo-btn" onClick={openLinkModal}>
+          <UserRound size={16} /> Lien d'inscription
+        </button>
+        <button className="immo-btn primary" onClick={() => setModal({ ...emptyTenant })}>
+          <UserPlus size={16} /> Nouveau locataire
+        </button>
+      </ImmoToolbar>
 
       {filteredOnboarding.length === 0 && onboardingStatus !== "online" && (
         <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>

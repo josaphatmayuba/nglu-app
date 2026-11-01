@@ -3504,11 +3504,6 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies, onNav
             {lang === "fr" ? <>Caisse POS FarmOS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>ticket multi-lignes</span></> : <>FarmOS POS register, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>multi-line ticket</span></>}
           </h1>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => searchRef.current?.focus()}><Icon name="scanLine" size={14} color="currentColor"/>{lang === "fr" ? "Scanner" : "Scan"}</button>
-          <button className="btn" onClick={goSalesManagement}><Icon name="settings" size={14} color="currentColor"/>{lang === "fr" ? "Prix" : "Prices"}</button>
-          <button className="btn btn-primary" onClick={newTicket}><Icon name="plus" size={14} color="currentColor"/>{lang === "fr" ? "Nouveau ticket" : "New ticket"}</button>
-        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) minmax(340px, 390px)", gap: 14, alignItems: "start" }}>
@@ -3526,6 +3521,11 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies, onNav
               <div className="overline">{lang === "fr" ? "Articles vendables" : "Sellable items"}</div>
               <div className="mono tnum" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink-950)", marginTop: 4 }}>{allItems.length}</div>
             </div>
+          </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button style={{ minHeight: 44 }} className="btn" onClick={() => searchRef.current?.focus()}><Icon name="scanLine" size={14} color="currentColor"/>{lang === "fr" ? "Scanner" : "Scan"}</button>
+            <button style={{ minHeight: 44 }} className="btn" onClick={goSalesManagement}><Icon name="settings" size={14} color="currentColor"/>{lang === "fr" ? "Prix" : "Prices"}</button>
+            <button style={{ minHeight: 44 }} className="btn btn-primary" onClick={newTicket}><Icon name="plus" size={14} color="currentColor"/>{lang === "fr" ? "Nouveau ticket" : "New ticket"}</button>
           </div>
 
           <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14, padding: 14 }}>

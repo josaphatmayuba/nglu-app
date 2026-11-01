@@ -20,7 +20,7 @@ import { t, tf } from "../i18n.js";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
-import { Metric, MetricsGrid } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { useConfirm, useToast } from "../components/Dialog.jsx";
@@ -187,15 +187,6 @@ export function SousTraitants() {
           <h1>{t("Sous-traitants")}</h1>
           <p>{t("Entreprises et artisans qui exécutent les travaux")}</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, email...")} />
-          </label>
-          <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptySubcontractor }); }}>
-            <UserPlus size={16} /> {t("Nouveau sous-traitant")}
-          </button>
-        </div>
       </div>
 
       <MetricsGrid>
@@ -203,6 +194,16 @@ export function SousTraitants() {
         <Metric tone="iris" icon={<Wrench size={20} />} label={t("Entreprises")} value={companies}
           helper={t("le reste sont des artisans indépendants")} />
       </MetricsGrid>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, email...")} />
+        </label>
+        <button className="immo-btn primary" onClick={() => { setActionError(""); setModal({ ...emptySubcontractor }); }}>
+          <UserPlus size={16} /> {t("Nouveau sous-traitant")}
+        </button>
+      </ImmoToolbar>
 
       {subcontractors.length === 0 ? (
         <div className="immo-empty">

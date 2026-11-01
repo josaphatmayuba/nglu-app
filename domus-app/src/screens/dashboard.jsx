@@ -7,7 +7,7 @@ import { api } from "../api.js";
 import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
-import { Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
+import { ImmoToolbar, Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
 import { buildLeaseCards, cardFriseLateDue } from "./loyers.jsx";
 import { splitRentPayments } from "../rentBreakdown.js";
 import { cashPayments } from "../depositUtils.js";
@@ -101,14 +101,6 @@ export function Dashboard({ go }) {
             <div className="eyebrow">{t("Vue d'ensemble")}</div>
             <h2 className="title">{t("Votre parc locatif")}</h2>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <label className="immo-search">
-              <Search size={16} />
-              <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                placeholder={t("Rechercher propriete, locataire...")} />
-            </label>
-            <button className="btn btn-primary" onClick={() => go("baux")}>+ {t("Nouveau bail")}</button>
-          </div>
         </div>
 
         <MetricsGrid>
@@ -132,6 +124,15 @@ export function Dashboard({ go }) {
             value={<MoneyStack rows={upcomingRows} fallbackSymbol={fallbackSym} />}
             helper={t("Échéances futures prévues aux baux")} />
         </MetricsGrid>
+
+        <ImmoToolbar>
+          <label className="immo-search">
+            <Search size={16} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              placeholder={t("Rechercher propriete, locataire...")} />
+          </label>
+          <button className="btn btn-primary" onClick={() => go("baux")}>+ {t("Nouveau bail")}</button>
+        </ImmoToolbar>
 
         <div className="grid g3">
           <div className="card" style={{ padding: 20 }}>

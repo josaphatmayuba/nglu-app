@@ -11,7 +11,7 @@ import { AllocationBlock, PaymentAllocations, allocationPayload } from "../compo
 import { allocationsOfPayment, cumulativeRemaining, dueRemaining, duesCardFields, graceUntilOf, isDuesLease, legacyLateDue, monthAmounts } from "../duesUtils.js";
 import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
-import { MoneyStack } from "./ui.jsx";
+import { ImmoToolbar, MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 import { SmsNotice, useSmsSend, useToast } from "../components/Dialog.jsx";
 import { cashPayments, fmtWithCurrency, paymentMethodLabel } from "../depositUtils.js";
@@ -1603,14 +1603,6 @@ export function Loyers({ go }) {
           <h1>{t("Loyers & paiements")}</h1>
           <p>Encaissements et suivi des paiements de loyer</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Locataire, logement, methode...")} />
-          </label>
-          <button className="immo-btn"><Download size={16} /> Export CSV</button>
-          <button className="immo-btn primary" onClick={() => go("paiement")}><Smartphone size={16} /> Encaisser</button>
-        </div>
       </div>
 
       <div className="immo-metrics-grid">
@@ -1680,6 +1672,15 @@ export function Loyers({ go }) {
           </div>
         </div>
       )}
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Locataire, logement, methode...")} />
+        </label>
+        <button className="immo-btn"><Download size={16} /> Export CSV</button>
+        <button className="immo-btn primary" onClick={() => go("paiement")}><Smartphone size={16} /> Encaisser</button>
+      </ImmoToolbar>
 
       <div className="immo-pay-toolbar">
         <div className="immo-seg-toggle">

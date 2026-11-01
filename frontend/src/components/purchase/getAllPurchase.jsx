@@ -276,22 +276,21 @@ const GetAllPurchase = () => {
       <PageHeader
         title="Achats"
         subtitle="Bons de commande et paiements fournisseurs"
-        actions={
-          <>
-            <RangePicker
-              className="range-picker"
-              onCalendarChange={onCalendarChange}
-              defaultValue={[
-                dayjs(pageConfig.startDate, "YYYY-MM-DD"),
-                dayjs(pageConfig.endDate, "YYYY-MM-DD"),
-              ]}
-            />
-            <CreateButton to="/admin/purchase/add" title="Nouvel achat" />
-          </>
-        }
       />
 
         <DashboardCard information={information} count={total} />
+
+        <div className="flex flex-wrap items-center justify-end gap-2 mt-5 [&_button]:min-h-[44px] [&_.ant-picker]:min-h-[44px] md:[&_button]:min-h-0 md:[&_.ant-picker]:min-h-0">
+          <RangePicker
+            className="range-picker"
+            onCalendarChange={onCalendarChange}
+            defaultValue={[
+              dayjs(pageConfig.startDate, "YYYY-MM-DD"),
+              dayjs(pageConfig.endDate, "YYYY-MM-DD"),
+            ]}
+          />
+          <CreateButton to="/admin/purchase/add" title="Nouvel achat" />
+        </div>
 
         <Card
           className="max-md:border-0 max-md:bg-white mt-5"

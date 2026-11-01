@@ -47,6 +47,10 @@ export function Metric({ icon, label, value, helper, tone = "brand", trend, valu
   );
 }
 
+export function ImmoToolbar({ children }) {
+  return <div className="immo-toolbar">{children}</div>;
+}
+
 export function ImmoHeader({ title, subtitle, children }) {
   return (
     <div className="immo-header">

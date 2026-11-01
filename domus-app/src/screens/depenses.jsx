@@ -16,6 +16,7 @@ import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../
 import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { ImmoToolbar } from "./ui.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 import { useConfirm } from "../components/Dialog.jsx";
@@ -246,16 +247,17 @@ export function Depenses() {
           <h1>{t("Dépenses")}</h1>
           <p>{t("Dépenses par propriété : assurance, taxes, charges, entretien...")}</p>
         </div>
-        <div className="immo-header-actions">
-          <label className="immo-search">
-            <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Description, bien, fournisseur...")} />
-          </label>
-          <button className="immo-btn primary" onClick={() => setExpenseModal({ ...emptyExpense, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> {t("Nouvelle dépense")}
-          </button>
-        </div>
       </div>
+
+      <ImmoToolbar>
+        <label className="immo-search">
+          <Search size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Description, bien, fournisseur...")} />
+        </label>
+        <button className="immo-btn primary" onClick={() => setExpenseModal({ ...emptyExpense, currencyId: currency.defaultCurrencyId || "" })}>
+          <Plus size={16} /> {t("Nouvelle dépense")}
+        </button>
+      </ImmoToolbar>
 
       <div className="maintenance-toolbar">
         <div className="immo-filter-autocomplete">

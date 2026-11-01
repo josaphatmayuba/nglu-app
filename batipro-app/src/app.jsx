@@ -329,7 +329,6 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
         <div>
           <p className="eyebrow">Vue d'ensemble · {new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p>
           <h2 className="title font-display">Vos chantiers</h2>
-        </div>
         <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Nouveau projet</button>
       </div>
 
@@ -338,6 +337,9 @@ function Dashboard({ projects, tasks, go, onNew, canMutate, onOpen }) {
         <KPI label="Avancement moyen" value={`${avg} %`} sub="tous projets" subClass="up" icon="trendingUp" />
         <KPI label="Budget engagé" value={moneyByCurrency(projects, "cost_actual")} sub={`/ ${moneyByCurrency(projects, "reference_budget")} contractés`} icon="wallet" />
         <KPI label="Retards / blocages" value={late} sub={late ? "à traiter" : "aucun"} subClass={late ? "down" : ""} icon="alert" danger={late > 0} />
+      </div>
+      <div className="page-toolbar">
+        </div>
       </div>
 
       <div className="g3">
@@ -4302,12 +4304,14 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         <div className="topbar">
           <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux du chantier</h2></div>
           <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={() => setModal({})}><Icon name="box" /> Déclarer une sortie</button>
-        </div>
         {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
         <div className="g3 kpis" style={{ marginBottom: 16 }}>
           <div className="card pad"><div className="kpi-label">Reçu (total)</div><div className="font-display kpi-value" style={{ color: "var(--emerald-600)" }}>{totalReceived}</div></div>
           <div className="card pad"><div className="kpi-label">Consommé (total)</div><div className="font-display kpi-value" style={{ color: "var(--amber-600)" }}>{totalConsumed}</div></div>
           <div className="card pad"><div className="kpi-label">Restant (total)</div><div className="font-display kpi-value">{totalRemaining}</div></div>
+        </div>
+        <div className="page-toolbar">
+          </div>
         </div>
         <div className="card table-card" style={{ marginBottom: 16 }}>
           <table className="bp">
@@ -4380,13 +4384,15 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
     <>
       <div className="topbar">
         <div><p className="eyebrow">Achats</p><h2 className="title font-display">Matériaux & achats</h2></div>
-        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Références suivies</div><div className="font-display kpi-value">{materials.length}</div></div>
         <div className="card pad"><div className="kpi-label">Sous le seuil</div><div className="font-display kpi-value" style={{ color: low ? "var(--rose-600)" : undefined }}>{low}</div></div>
         <div className="card pad"><div className="kpi-label">Réservé total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.reserved), 0)}</div></div>
         <div className="card pad"><div className="kpi-label">En stock total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.stock), 0)}</div></div>
+      </div>
+      <div className="page-toolbar">
+        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
       <div className="card table-card" style={{ marginBottom: 16 }}>
         <table className="bp">
