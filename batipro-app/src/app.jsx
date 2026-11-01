@@ -1054,6 +1054,27 @@ function Planning({ projects, canMutate, fixedProjectId }) {
         <div className="card pad"><span className="muted">Aucune phase définie pour ce chantier.</span></div>
       ) : (
         <div className="phase-list">
+          {(() => {
+            // Totaux par devise (pas de conversion : une phase garde sa devise).
+            const byCur = {};
+            for (const r of phases) {
+              const cur = r.currencyCode || selected?.currencyCode || "";
+              byCur[cur] = byCur[cur] || { planned: 0, spent: 0 };
+              byCur[cur].planned += n(r.plannedBudget);
+              byCur[cur].spent += n(r.spentAmount);
+            }
+            return (
+              <div className="phase-card" style={{ background: "var(--ink-50, #f8fafc)" }}>
+                <div className="phase-card-top"><span className="phase-name">Total des phases</span></div>
+                {Object.entries(byCur).map(([cur, t]) => (
+                  <div className="phase-card-bottom" key={cur} style={{ marginTop: 4 }}>
+                    <span>Utilisé {money(t.spent, cur)} / Prévu {money(t.planned, cur)} — Reste {money(t.planned - t.spent, cur)}</span>
+                    {t.planned > 0 && <strong>{Math.round((t.spent / t.planned) * 100)} % du budget</strong>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           {phases.map((r) => {
             const tone = statusTone(r.status);
             const barColor = tone === "emerald" ? "var(--emerald-500)" : tone === "amber" ? "var(--amber-500)" : "var(--ink-300)";
@@ -1069,8 +1090,19 @@ function Planning({ projects, canMutate, fixedProjectId }) {
                 </div>
                 <div className="phase-card-bottom">
                   <span>{hasRange ? `${r.startDate} → ${r.endDate}` : "Dates non définies"}</span>
-                  <strong>{r.progress} %</strong>
+                  <strong>{n(r.progress)} %</strong>
                 </div>
+                {(() => {
+                  const cur = r.currencyCode || selected?.currencyCode;
+                  const planned = n(r.plannedBudget), spent = n(r.spentAmount);
+                  const usedPct = planned > 0 ? Math.round((spent / planned) * 100) : null;
+                  return (
+                    <div className="phase-card-bottom" style={{ marginTop: 4 }}>
+                      <span>Utilisé {money(spent, cur)} / Prévu {r.plannedBudget != null ? money(planned, cur) : "—"}</span>
+                      {usedPct != null && <strong style={{ color: usedPct > 100 ? "var(--rose-600, #e11d48)" : undefined }}>{usedPct} % du budget</strong>}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

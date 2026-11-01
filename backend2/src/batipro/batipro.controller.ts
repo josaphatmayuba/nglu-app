@@ -328,7 +328,7 @@ export class BatiproController {
   @Permissions("readAll-batipro")
   @Get("phases")
   phases(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string) {
-    return this.batipro.phases(orgId, projectId ? Number(projectId) : undefined);
+    return this.batipro.phasesWithAmounts(orgId, projectId ? Number(projectId) : undefined);
   }
 
   @ApiOperation({ summary: "Detail d'une phase : prevu vs devis artisan vs depense (lecture seule)" })

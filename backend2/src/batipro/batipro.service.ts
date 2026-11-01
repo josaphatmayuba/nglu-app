@@ -730,6 +730,21 @@ export class BatiproService {
       .orderBy(batiproPhases.projectId, batiproPhases.position);
   }
 
+  // Liste Planning : phases + montant engage (BC, devise de la phase, meme regle
+  // que l'EVM) pour afficher prevu / utilise sur chaque carte.
+  async phasesWithAmounts(orgId: number, projectId?: number) {
+    const phases = await this.phases(orgId, projectId);
+    if (!projectId || !phases.length) return phases;
+    const { byPhase } = await this.phaseCommittedAmounts(orgId, projectId);
+    const currencyRows = await this.db.select({ id: currencies.id, code: currencies.currencyCode }).from(currencies);
+    const codeById = new Map<number, string>(currencyRows.filter((c) => c.code).map((c) => [c.id, c.code as string]));
+    return phases.map((p) => ({
+      ...p,
+      spentAmount: Math.round(this.phaseAmountInCurrency(byPhase, p.id, p.currencyId ?? null) * 100) / 100,
+      currencyCode: p.currencyId != null ? codeById.get(p.currencyId) ?? null : null,
+    }));
+  }
+
   // Avancement du chantier = moyenne des % des phases actives, ponderee par
   // plannedBudget UNIQUEMENT SI TOUTES les phases ont un budget planifie
   // renseigne (sinon une phase sans budget aurait un poids de 0 et son
