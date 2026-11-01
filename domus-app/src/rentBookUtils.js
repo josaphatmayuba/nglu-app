@@ -395,13 +395,16 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book * { box-sizing: border-box; }
   .rent-book .print-actions { margin: 16px 0 24px; text-align: right; }
   .rent-book .print-actions button { background: #2f6e4e; border: none; color: #fff; cursor: pointer; font-family: 'Source Sans 3', Arial, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 10px 20px; border-radius: 4px; text-transform: uppercase; }
+  .rent-book .copy-break { break-before: page; page-break-before: always; height: 0; }
   .rent-book .cover { break-after: page; page-break-after: always; background: #fff; border: 1px solid #c9c2b2; border-radius: 4px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-  .rent-book .cover-header { background: #2f6e4e; color: #fff; padding: 22px 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  /* En-tête : trame de points verts (≈ 8 % d'encre) au lieu d'un aplat, pour économiser l'encre ; texte vert foncé. */
+  .rent-book .cover-header { background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2mm' height='2mm' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='32' fill='%232f6e4e'/%3E%3C/svg%3E"); background-size: 2mm 2mm; border-bottom: 2px solid #2f6e4e; color: #1f2a24; padding: 22px 26px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
   .rent-book .cover-header h1 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; margin: 0 0 4px; letter-spacing: .02em; font-weight: 700; }
-  .rent-book .cover-header .ref { color: #e4ede6; opacity: .9; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .rent-book .cover-header h1, .rent-book .cover-header .ref, .rent-book .cover-header .qr span { background: #fff; padding: 1px 4px; display: inline-block; }
+  .rent-book .cover-header .ref { color: #2f6e4e; font-weight: 700; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
   .rent-book .cover-header .qr { text-align: center; flex: none; }
   .rent-book .cover-header .qr img { background: #fff; padding: 6px; border-radius: 4px; display: block; }
-  .rent-book .cover-header .qr span { display: block; color: #fff; opacity: .9; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
+  .rent-book .cover-header .qr span { display: block; color: #2f6e4e; font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
   .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .rent-book .cover-grid .cell { padding: 14px 24px; border-bottom: 1px solid #e3ddce; }
   .rent-book .cover-grid .cell.full { grid-column: 1 / -1; }
@@ -419,6 +422,7 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .receipt-head .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; letter-spacing: .02em; color: #1f2a24; font-size: 15px; display: block; }
   .rent-book .receipt-head .period { font-size: 13px; font-weight: 700; color: #1f2a24; display: block; margin-top: 3px; letter-spacing: .04em; }
   .rent-book .receipt-head .period-range { font-size: 11px; font-weight: 600; color: #5a655d; display: block; margin-top: 2px; letter-spacing: .02em; }
+  .rent-book .receipt-head .copy-tag { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #1f2a24; border: 1px solid #1f2a24; padding: 3px 8px; white-space: nowrap; }
   .rent-book .receipt-head .status { font-size: 10.5px; font-weight: 600; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
   .rent-book .receipt-head .status::before { content: "●"; margin-right: 5px; font-size: 8px; }
   .rent-book .receipt-head .status.paid { background: #e4ede6; color: #2f6e4e; }
@@ -454,14 +458,14 @@ export const RENT_BOOK_PRINT_CSS = `
   }
 `;
 
-function coverHtml(lease, qrDataUrl) {
+function coverHtml(lease, qrDataUrl, who = "locataire") {
   const ownerPhone = (lease.ownerPhone || lease.ownerPhone2 || "").trim();
   return `
   <div class="cover">
     <div class="cover-header">
       <div>
         <h1>${escapeHtml(lease.propertyName || "Bien")}</h1>
-        <div class="ref">Carnet du locataire · Bail n° ${escapeHtml(lease.reference || `#${lease.id}`)}</div>
+        <div class="ref">Carnet du ${who} · Bail n° ${escapeHtml(lease.reference || `#${lease.id}`)}</div>
       </div>
       ${qrDataUrl ? `<div class="qr"><img src="${qrDataUrl}" width="90" height="90" alt="QR portail" /><span>Scanner pour voir le dossier</span></div>` : ""}
     </div>
@@ -477,7 +481,7 @@ function coverHtml(lease, qrDataUrl) {
   </div>`;
 }
 
-function receiptHtml(lease, payment, index, receiptQrDataUrl) {
+function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire") {
   const isPaid = payment.status === "paid";
   // Quittance detachable : elle doit s'identifier seule (locataire + logement).
   // paymentDate = echeance tant que non paye, date du paiement une fois paye.
@@ -534,6 +538,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
         <span class="period">${headerLine}</span>
         ${rangeLine}
       </div>
+      <span class="copy-tag">Exemplaire du ${who}</span>
     </div>
     <div class="receipt-row"><div><span>Locataire</span><span>${escapeHtml(tenantName)}</span></div><div><span>Logement</span><span>${escapeHtml(dwelling)}</span></div></div>
     <div class="receipt-row">${dueCell ? `<div>${dueCell}</div>` : "<div></div>"}<div><span>Payé le</span><span>${paidOn}</span></div></div>
@@ -558,12 +563,14 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl) {
   </div>`;
 }
 
-export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId = {}) {
+// copy : "tenant" | "landlord" | "both" (carnet du locataire, puis celui du bailleur).
+export function rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId = {}, copy = "tenant") {
   const schedule = buildFullRentSchedule(lease, payments);
-  return `
-  ${coverHtml(lease, qrDataUrl)}
+  const whos = copy === "landlord" ? ["bailleur"] : copy === "both" ? ["locataire", "bailleur"] : ["locataire"];
+  return whos.map((who, k) => `${k ? '<div class="copy-break"></div>' : ""}
+  ${coverHtml(lease, qrDataUrl, who)}
   <div class="receipts-title">Quittances du carnet<span class="dash"></span></div>
-  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null)).join("")}`;
+  ${schedule.map((p, i) => receiptHtml(lease, p, i, p.id != null ? receiptQrByPaymentId[p.id] : null, who)).join("")}`).join("");
 }
 
 // Ouvre une fenêtre d'impression avec le carnet de quittances du bail
@@ -620,7 +627,7 @@ export async function openRentBookPrint(rawLease, payments, portalUrl, { onError
       qrDataUrl,
       format,
       receiptsCss: RENT_BOOK_PRINT_CSS,
-      receiptsHtml: () => rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId),
+      receiptsHtml: (copy) => rentBookPrintBody(lease, payments, qrDataUrl, receiptQrByPaymentId, copy),
     });
   } catch (err) {
     const msg = "Impossible de préparer l'impression du carnet. Fermez cette fenêtre et réessayez.";

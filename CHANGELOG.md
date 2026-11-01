@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet de quittances : en-tête de couverture tramé (v3.275.10).** Trame de points verts en SVG (≈ 8 % d encre) au lieu de l aplat vert, pour économiser l encre ; titre, référence et légende du QR en vert foncé sur fond blanc.
+
+- **Domus carnet de quittances : choix de l exemplaire (v3.275.9).** Sélecteur « Cahier : Du locataire / Du bailleur / Les deux » ; en-tête « Carnet du locataire|bailleur » et mention « Exemplaire du … » sur chaque quittance ; « Les deux » = locataire puis bailleur, saut de page entre les deux.
+
+- **Domus carnet : chaque page dit à qui est le cahier (v3.275.8).** Étiquette « Cahier du locataire / du bailleur » aussi sur le guide, l exemple et le dos (avant : pages à remplir seulement), plus lisible (7 pt gras) ; tous les modes d impression.
+
 - **Domus carnet : signatures du cahier du bailleur (v3.275.7).** Pages roses (Loyers, Eau, Exemple, Guide) : « Signature du bailleur » + « Signature du locataire » au lieu de « Signature de qui reçoit » ; le cahier du locataire est inchangé.
 
 - **Domus carnet : exemple rempli sans débordement, pages Hausses/Garantie, Corrections et Notes agrandies (v3.275.6).** Exemple : `table.ex`, écriture d exemple dimensionnée par colonne (Moyen 7 pt, Montant 9 pt sur 2 lignes) ; nouvelle classe `p-misc` (en-têtes 8 pt, tableau 9 pt, lignes 9,6 mm, même nombre de lignes). Retour de QA dev v3.275.5.

@@ -69,12 +69,6 @@ function shellBarHtml(format, years = 3) {
         <option value="a4">A4</option>
         <option value="letter">Letter (US)</option>
       </select></label>
-    <label>Cahier :
-      <select id="ps-copy">
-        <option value="tenant">Du locataire</option>
-        <option value="landlord">Du bailleur</option>
-        <option value="both">Les deux (locataire puis bailleur)</option>
-      </select></label>
     <label>Durée :
       <select id="ps-years">
         ${opt("2", "2 ans", String(years))}
@@ -88,6 +82,12 @@ function shellBarHtml(format, years = 3) {
       </select></label>
     <label><input type="checkbox" id="ps-dup" checked /> Chaque page en 2 exemplaires</label>
   </span>
+  <label id="ps-copy-wrap">Cahier :
+    <select id="ps-copy">
+      <option value="tenant">Du locataire</option>
+      <option value="landlord">Du bailleur</option>
+      <option value="both">Les deux (locataire puis bailleur)</option>
+    </select></label>
   <button type="button" id="ps-print">Imprimer / Enregistrer en PDF</button>
   <span class="note" id="ps-ink-note" hidden></span>
   <span class="hint" id="ps-hint" hidden></span>`;
@@ -143,7 +143,7 @@ ${PAPER_BOOK_CSS}</style>
     const copy = $("ps-copy").value;
     const size = $("ps-size").value;
     const folded = pass.startsWith("plie") || ["simple", "pleine", "coupe"].includes(pass);
-    $("ps-copy").parentElement.hidden = !folded || pass === "plie-essai";
+    $("ps-copy-wrap").hidden = fmt === "statement" || (fmt === "paper" && (!folded || pass === "plie-essai"));
     $("ps-dup").parentElement.hidden = folded;
     let html;
     if (fmt === "statement") {
@@ -151,7 +151,7 @@ ${PAPER_BOOK_CSS}</style>
     } else if (fmt === "paper") {
       html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years, copy, paper: size });
     } else {
-      html = state.cache.receipts ||= `<div class="rent-book">${ctx.receiptsHtml()}</div>`;
+      html = state.cache[`receipts-${copy}`] ||= `<div class="rent-book">${ctx.receiptsHtml(copy)}</div>`;
     }
     $("book").innerHTML = html;
     $("page-rule").textContent = fmt !== "paper" ? PAGE_RULES[fmt]

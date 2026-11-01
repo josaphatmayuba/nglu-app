@@ -170,7 +170,7 @@ export const PAPER_BOOK_CSS = `
   .paper .single { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .paper .single .a5 { box-shadow: 0 2px 8px rgba(0,0,0,.25); }
   .paper .a5 { width: var(--half-w); height: var(--sheet-h); padding: 8mm 7mm 7mm 14mm; background: #fff; color: #222; position: relative; display: flex; flex-direction: column; gap: 2.4mm; overflow: hidden; }
-  .paper .tag { position: absolute; top: 3mm; right: 7mm; font-size: 6pt; font-weight: 400; letter-spacing: .05em; text-transform: uppercase; border: .4pt solid var(--soft); color: #555; padding: .4mm 1.4mm; }
+  .paper .tag { position: absolute; top: 3mm; right: 7mm; font-size: 7pt; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; border: .4pt solid var(--soft); color: #333; padding: .4mm 1.4mm; }
   .paper .foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 6pt; color: var(--ink2); border-top: .4pt dotted #999; padding-top: 1mm; }
   .paper h1 { font-size: 30pt; line-height: .95; margin: 0; font-weight: 400; color: transparent; -webkit-text-stroke: .5pt #777; }
   .paper h2 { font-size: 11pt; margin: 0; color: #4a4a4a; padding-right: 30mm; line-height: 1.15; }
@@ -582,7 +582,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     out = `<p class="print-msg">Choisissez « Cahier complet » ou un passage pour imprimer.</p><div class="single">${a5(COVER, null, "covpage")}${a5(COVER_B, null, "covpage dup")}${a5(GUIDE, null, "covpage")}${a5(EXAMPLE, null, "covpage")}${SLOTS.map((s, i) => a5(s, false) + (i === 1 ? a5(s, true, "dup") : "")).join("")}</div>`;
   } else if (pass === "coupe") {
     // Cahier coupé A5 : recto seul, feuille i = pages 2i+1 (gauche) et 2i+2 (droite) ; on coupe et on pose les morceaux dans l'ordre.
-    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [sig(GUIDE, d), null, "covpage"], [sig(EXAMPLE, d), null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
+    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, d, "covpage"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     colors.forEach((d) => {
       const B = book(d);
@@ -594,7 +594,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     });
   } else if (pass === "pleine") {
     // Feuilles entières : 1 page du carnet = 1 feuille portrait, recto seul, dans l'ordre ; on agrafe, rien à monter.
-    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [sig(GUIDE, d), null, "covpage"], [sig(EXAMPLE, d), null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
+    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, d, "covpage"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     colors.forEach((d) => {
       const B = book(d);
@@ -606,7 +606,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
   } else if (pass === "simple") {
     // Cahier simple : recto seul, chaque feuille pliée en deux (impression dehors) = 1 feuillet ; feuillets empilés, agrafés au pli.
     // Feuille i : gauche = page 2i+2 (dos du feuillet), droite = page 2i+1 (devant). Cahier du bailleur : trame de points roses.
-    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [sig(GUIDE, d), null, "covpage"], [sig(EXAMPLE, d), null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
+    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, d, "covpage"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     const N = book(false).length;
     const mark = (html, num, i) => `${html}<span class="bk">${num}</span><span class="fl">Feuille ${i + 1}</span>`;
@@ -621,9 +621,9 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
   } else if (pass === "plie" || pass === "plie-r" || pass === "plie-v") {
     // Livret plié recto-verso ; pages « Notes » ajoutées avant le dos pour atteindre un multiple de 4.
     const book = (d) => {
-      const b = [[d ? COVER_B : COVER, null, "covpage"], [sig(GUIDE, d), null, "covpage"], [sig(EXAMPLE, d), null, "covpage"], ...SLOTS.map((x) => [x, d, ""])];
+      const b = [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"], ...SLOTS.map((x) => [x, d, ""])];
       while ((b.length + 1) % 4) b.push([NOTES, d, ""]);
-      return [...b, [BACK, null, "covpage"]];
+      return [...b, [BACK, d, "covpage"]];
     };
     const sides = pass === "plie-r" ? ["recto"] : pass === "plie-v" ? ["verso"] : ["recto", "verso"];
     // copy : "tenant" (papier blanc) | "landlord" (trame de points roses) | "both" (locataire, puis bailleur).
@@ -648,7 +648,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     out += `<div class="caption">Feuille d'essai · côté B</div>` + sheet(a5(box("<b>C'est bon</b><span>Le recto-verso est bien réglé : imprimez le cahier avec les mêmes réglages.</span>"), null, "covpage"), a5(box("<b>Pas bon</b><span>Si vous lisez ceci derrière la page 1, ou si « C'est bon » est à l'envers : changez « Retourner sur le bord court » pour « bord long » (ou l'inverse), puis refaites l'essai.</span>"), null, "covpage"), "fold");
   } else if (pass === "complet") {
     // Tout le cahier, couverture -> dos, en imposition « coupe et empile » ; feuille à points roses = couverture du bailleur.
-    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [sig(GUIDE, d), null, "covpage"], [sig(EXAMPLE, d), null, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, null, "covpage"]];
+    const book = (d) => [[d ? COVER_B : COVER, null, "covpage"], [GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"], ...SLOTS.map((x) => [x, d, ""]), [BACK, d, "covpage"]];
     const count = book(false).length;
     imposeCutStack(count).forEach(([l, r], i) => {
       (duplicate ? [false, true] : [false]).forEach((d) => {
@@ -658,10 +658,10 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       });
     });
   } else if (pass === "1") {
-    const guide = sheet(a5(GUIDE, null, "covpage"), a5(EXAMPLE, null, "covpage"));
+    const guide = sheet(a5(GUIDE, false, "covpage"), a5(EXAMPLE, false, "covpage"));
     out = `<div class="caption">Feuille 1 · carton · 1 fois</div>${sheet(a5(COVER, null, "covpage"), a5(COVER_B, null, "covpage dup"))}`
       + `<div class="caption">Feuille 2 · papier normal${duplicate ? " · 2 fois" : ""}</div>${guide}`
-      + (duplicate ? `<div class="caption">Feuille 2 bis · 2e exemplaire (cahier du bailleur, à points roses)</div>${sheet(a5(GUIDE, null, "covpage"), a5(EXAMPLE, null, "covpage"), "dup")}` : "");
+      + (duplicate ? `<div class="caption">Feuille 2 bis · 2e exemplaire (cahier du bailleur, à points roses)</div>${sheet(a5(GUIDE, true, "covpage"), a5(EXAMPLE, true, "covpage"), "dup")}` : "");
   } else {
     imposeCutStack(SLOTS.length).forEach(([l, r], i) => {
       (duplicate ? [false, true] : [false]).forEach((d) => {
