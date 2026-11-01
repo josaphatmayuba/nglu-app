@@ -222,3 +222,38 @@ describe("bail au prorata par conception (rentProrationEnabled)", () => {
     expect(fake.sets.find((s: any) => s.amount !== undefined).amount).toBe("120.00");
   });
 });
+
+describe("generateMissingPayments - bail resilie (bug #82)", () => {
+  const ended = {
+    id: 66, organizationId: 1, status: "ended", startDate: "2026-09-01", endDate: "2026-09-16", terminationDate: "2026-09-16",
+    billingCycle: "monthly", rentAmount: "300.00", currencyId: 1, terminationFullPeriod: 0,
+  };
+  function run(lease: any, existing: any[]) {
+    const inserts: any[] = [];
+    const fake = makeFakeDb([existing, []]);
+    fake.db.insert = () => ({ values: (v: any) => { inserts.push(v); return Promise.resolve([{ insertId: inserts.length }]); } });
+    const svc = makeService(fake);
+    svc.getLeaseOrThrow = jest.fn().mockResolvedValue(lease);
+    return svc.generateMissingPayments(66, 1, true).then((r: any) => ({ r, inserts }));
+  }
+
+  it("echeance de sortie generee au prorata 160.00 (16/30) avec la note PRORATA, rien apres la sortie", async () => {
+    const { inserts } = await run(ended, []);
+    expect(inserts).toHaveLength(1);
+    expect(Number(inserts[0].amount)).toBe(160);
+    expect(inserts[0].paymentDate).toBe("2026-09-01");
+    expect(inserts[0].notes).toContain("[PRORATA resiliation: 16/30 jours, montant initial 300.00]");
+  });
+
+  it("periode de sortie deja reduite a la resiliation : pas de doublon", async () => {
+    const { inserts } = await run(ended, [{ amount: "160.00", paymentDate: "2026-09-01", status: "pending", periodStart: null }]);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it("fullPeriod (colonne 1) : montant plein inchange", async () => {
+    const { inserts } = await run({ ...ended, terminationFullPeriod: 1 }, []);
+    expect(inserts).toHaveLength(1);
+    expect(Number(inserts[0].amount)).toBe(300);
+    expect(inserts[0].notes).not.toContain("PRORATA");
+  });
+});
