@@ -853,6 +853,19 @@ const EN = {
   "Signature manuscrite : le scan importé fait foi.": "Handwritten signature: the imported scan is authoritative.",
   "Ce document est la preuve de signature du bail. Le contrat apparaîtra en \"Preuve manquante\". Préférez \"Remplacer\".": "This document is the lease signature proof. The contract will show as \"Missing proof\". Prefer \"Replace\".",
   "Remplacer": "Replace",
+  "Bail à renouveler": "Lease to renew",
+  "Bien, unité, locataires et devise sont conservés.": "Property, unit, tenants and currency are kept.",
+  "Modèle de contrat": "Contract template",
+  "Modèle actif par défaut": "Default active template",
+  "actif": "active",
+  "Ancien loyer": "Previous rent",
+  "nouveau loyer": "new rent",
+  "Loyer en baisse": "Rent decrease",
+  "Le nouveau loyer ({n}) est inférieur à l'ancien ({o}). Confirmer le renouvellement ?": "The new rent ({n}) is lower than the previous one ({o}). Confirm the renewal?",
+  "Attention : hausse de {p} supérieure à 20 %.": "Warning: increase of {p} is above 20%.",
+  "La nouvelle caution ne peut pas être inférieure à l'ancienne ({o}).": "The new deposit cannot be lower than the previous one ({o}).",
+  "Complément de {a} à encaisser après le renouvellement.": "Top-up of {a} to collect after the renewal.",
+  "La date de fin doit être postérieure au début.": "The end date must be after the start date.",
 };
 
 const DICT = { fr: {}, en: EN };

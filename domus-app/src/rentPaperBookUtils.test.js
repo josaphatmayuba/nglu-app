@@ -64,7 +64,7 @@ describe("paperBookHtml", () => {
     expect(p1.toLowerCase()).not.toContain("indéterminée");
     expect(html2.toLowerCase()).not.toContain("indéterminée");
     expect(html2).not.toMatch(/<th>Reste/);
-    expect(html2).toContain("Signature de qui reçoit l'argent");
+    expect(html2).toContain("Signature de qui reçoit");
     expect(html2).toContain("Signature du locataire");
   });
   it("prorata du 1er mois et symbole de devise du bail", () => {
@@ -206,8 +206,8 @@ describe("cahier plie (livret recto-verso)", () => {
     expect(b).toContain("Exemplaire du bailleur");
     expect((b.match(/class="sheet fold dup"/g) || []).length).toBe(6);
     const both = paperBookHtml(base, { pass: "plie", years: 2, copy: "both" });
-    const caps = [...both.matchAll(/(blanche|rose) \(cahier/g)].map((m) => m[1]);
-    expect(caps).toEqual([...Array(6).fill("blanche"), ...Array(6).fill("rose")]);
+    const caps = [...both.matchAll(/(blanche|roses) \(cahier/g)].map((m) => m[1]);
+    expect(caps).toEqual([...Array(6).fill("blanche"), ...Array(6).fill("roses")]);
   });
   it("3 ans : 14 pages + 2 Notes = 16 (plie)", () => {
     const h = paperBookHtml(base, { pass: "plie", years: 3 });
@@ -253,6 +253,10 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
     expect(h).toContain("la même ligne");
     expect(h).not.toMatch(/cahier rose|page rose|se copie/);
     expect(paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" })).toContain("dans les deux cahiers");
+    const p1 = paperBookHtml(base, { pass: "1", years: 2, duplicate: true });
+    expect(p1).toContain('class="a5 covpage dup"');
+    expect(p1).toContain('class="sheet dup"');
+    expect(paperBookHtml(base, { pass: "cahier", years: 2 })).toContain('class="a5 covpage dup"');
     expect((h.match(/class="sheet fold( dup)?"/g) || []).length).toBe(12);
   });
   it("3 ans : 7 feuilles", () => {
@@ -324,5 +328,37 @@ describe("cahier coupe A5 (defaut)", () => {
     expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut, .paper .sheet.fold { width: 100vw; height: 100vh; }");
     expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
     expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain("letter");
+  });
+});
+
+describe("carnet lisible : tailles et textes", () => {
+  const html = paperBookHtml(base, { pass: "coupe", years: 2 });
+  it("phrase complete du QR sur Loyers et Eau, signature raccourcie, pied de page Bail", () => {
+    const rent = html.split('<div class="a5 ').filter((p) => p.includes("p-rent") && p.includes("Loyers, année 1"))[0];
+    const water = html.split('<div class="a5 ').filter((p) => p.includes("p-water"))[0];
+    for (const page of [rent, water]) {
+      expect(page).toContain("Scannez pour envoyer la photo de cette page à Domus.");
+      expect(page).toContain("Signature de qui reçoit");
+      expect(page).not.toContain("reçoit l'argent");
+    }
+    expect(rent).toMatch(/class="foot"><span>Carnet [^<]*· Bail /);
+    expect(rent).toContain("$ ou FC + taux");
+  });
+  it("classes de page ajoutees a cote de dup", () => {
+    expect(paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" })).toContain('class="a5 p-rent"');
+    for (const c of ["p-rent", "p-cond", "p-water", "p-end", "p-guide"]) expect(html).toMatch(new RegExp(`class="a5[^"]* ${c}"`));
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.dup .a5, .paper .a5.dup");
+  });
+  it("p-misc : Hausses, Corrections et Notes agrandies ; exemple avec colonnes adaptees", () => {
+    const h = paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" });
+    expect(h.match(/class="a5 p-misc"/g).length).toBe(2);
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-misc th { font-size: 8pt; }");
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-misc td { height: 9.6mm; }");
+    expect(h).toContain('<table class="ex">');
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-rent table.ex .via em .pen { font-size: 7pt;");
+  });
+  it("A4 pleine page : zoom 1.414", () => {
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.full .a5 { zoom: 1.414; }");
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-rent td { height: 10.6mm; }");
   });
 });
