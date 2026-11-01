@@ -117,12 +117,13 @@ import { TenantPortalService } from "./tenant-portal.service";
 import { joinRecipientNames, OwnerNotificationsService } from "./owner-notifications.service";
 import { GeocodingService } from "./geocoding.service";
 import { formatMoneyFr, loadLeaseTotalDue, resolveCurrencySymbol, loadOverdueByLease, readOverdueGraceDays, loadFlaggedDueStates, coverDuesSequentially, splitNoticeDues, noticePeriodLabel, type LeaseDueEntry, type NoticeDueLine } from "./lease-overdue";
-import { anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
+import { cycleMonths, anchoredPeriodDays, isLegacyAnchoredPeriod, applyCoverage, roundMoney, addBillingCycle as addScheduleCycle, parseDateOnly as parseScheduleDate } from "./lease-schedule";
 import {
   assignPaidRows,
   computeLeaseTotalDue,
   computeTerminationCharge,
   exitMonthProration,
+  anchoredExitPeriod,
   terminationPeriodCharge,
   isTerminationProrated,
   leaseEndedCutoff,
@@ -3552,8 +3553,8 @@ export class PropertyManagementService implements OnModuleInit {
       const gen = await this.leaseAllocations.generateMissingDues(leaseId, orgId, upToEnd);
       if (gen) return gen;
     }
-    // Bail resilie : aucune echeance apres la date d'effet.
-    const terminatedOn = this.terminatedOn(lease);
+    // Bail resilie : aucune echeance apres la date d'effet (terminationDate ?? endDate).
+    const terminatedOn = leaseEndedCutoff(lease as any);
 
     // Prorata opt-in : generation par periode de l'echeancier (branche dediee,
     // le calcul historique ci-dessous reste strictement inchange).
@@ -3562,13 +3563,22 @@ export class PropertyManagementService implements OnModuleInit {
     }
 
     const existing = await this.db
-      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate, status: realEstateRentPayments.status })
+      .select({ amount: realEstateRentPayments.amount, paymentDate: realEstateRentPayments.paymentDate, status: realEstateRentPayments.status, periodStart: realEstateRentPayments.periodStart })
       .from(realEstateRentPayments)
       .where(and(
         eq(realEstateRentPayments.organizationId, orgId),
         eq(realEstateRentPayments.leaseId, lease.id),
         ne(realEstateRentPayments.status, "voided"),
       ));
+
+    // Periode de sortie au prorata (resiliation non « periode complete », cycle mensuel) : meme regle que
+    // terminationPeriodCharge / anchoredExitPeriod. L'echeance de cette periode est generee au montant prorata ;
+    // si une ligne existe deja pour ce mois (deja reduite a la resiliation), rien n'est regenere.
+    const exitProration = terminatedOn && isTerminationProrated(lease as any)
+      ? exitMonthProration(lease as any, terminatedOn, Number(lease.rentAmount) || 0, 2)
+      : null;
+    const exitKey = exitProration ? exitProration.periodStart.slice(0, 7) : null;
+    const existingKeys = new Set(existing.map((p) => String(p.periodStart || p.paymentDate).slice(0, 7)));
 
     const start =this.parseDateOnly(lease.startDate);
     const today = this.parseDateOnly(this.formatDateOnly(new Date()));
@@ -3593,6 +3603,45 @@ export class PropertyManagementService implements OnModuleInit {
     const paidRows = existing.filter((p) => p.status !== "pending");
     const totalPaid = paidRows.reduce((s, p) => s + Number(p.amount || 0), 0);
     const monthsPaid = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : paidRows.length;
+
+    // Bail resilie non flagge, cycle trimestriel/annuel, sortie au prorata : UNE ligne par CYCLE (loyer = montant
+    // du cycle, comme terminationPeriodCharge) du debut jusqu'au cycle de sortie inclus, le dernier au prorata.
+    // Somme des lignes = computeLeaseTotalDue (k+1 cycles x loyer - reduction). Rien apres la sortie.
+    if (terminatedOn && isTerminationProrated(lease as any) && cycleMonths((lease as any).billingCycle) > 1) {
+      const cycle = (lease as any).billingCycle;
+      const exitP = anchoredExitPeriod(String(lease.startDate).slice(0, 10), cycle, terminatedOn);
+      const todayStr = this.formatDateOnly(new Date());
+      const coveredCount = upToEnd ? monthsPaid : monthsAlreadyCovered;
+      const createdCycles: number[] = [];
+      for (let k = 0; k <= exitP.k; k++) {
+        const periodStart = this.formatDateOnly(addScheduleCycle(start, cycle, k));
+        if (!upToEnd && periodStart > todayStr) continue;
+        const isExit = !!exitProration && k === exitP.k;
+        if (existingKeys.has(periodStart.slice(0, 7))) continue; // pas de doublon d'une periode deja presente
+        if (!isExit && k < coveredCount) continue;
+        const [result] = await this.db.insert(realEstateRentPayments).values({
+          organizationId: orgId,
+          leaseId: lease.id,
+          currencyId: (lease as any).currencyId ?? null,
+          transactionId: null,
+          paymentDate: periodStart,
+          amount: this.money(isExit ? exitProration!.amount : rent),
+          method: "pending",
+          status: "pending",
+          reference: null,
+          notes: "Echeance generee automatiquement (bail retroactif) — a confirmer."
+            + (isExit ? ` [PRORATA resiliation: ${exitProration!.occupiedDays}/${exitProration!.periodDays} jours, montant initial ${exitProration!.fullAmount.toFixed(2)}]` : ""),
+          proofUrl: null,
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+        createdCycles.push(Number((result as any).insertId));
+      }
+      const cyclePayments = createdCycles.length
+        ? await this.db.select().from(realEstateRentPayments).where(inArray(realEstateRentPayments.id, createdCycles))
+        : [];
+      return { createdCount: createdCycles.length, payments: cyclePayments };
+    }
 
     const monthsToCreate: Date[] = [];
     let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
@@ -3639,17 +3688,21 @@ export class PropertyManagementService implements OnModuleInit {
         const tKey = terminatedOn.slice(0, 7);
         if (key > tKey || (key === tKey && start.getUTCDate() > Number(terminatedOn.slice(8, 10)))) continue;
       }
+      const monthKey = this.formatDateOnly(month).slice(0, 7);
+      const isExit = !!exitProration && monthKey === exitKey;
+      if (isExit && existingKeys.has(monthKey)) continue; // pas de doublon d'une periode deja reduite
       const [result] = await this.db.insert(realEstateRentPayments).values({
         organizationId: orgId,
         leaseId: lease.id,
         currencyId: (lease as any).currencyId ?? null,
         transactionId: null,
         paymentDate: this.formatDateOnly(month),
-        amount: this.money(Number(lease.rentAmount)),
+        amount: this.money(isExit ? exitProration!.amount : Number(lease.rentAmount)),
         method: "pending",
         status: "pending",
         reference: null,
-        notes: "Echeance generee automatiquement (bail retroactif) — a confirmer.",
+        notes: "Echeance generee automatiquement (bail retroactif) — a confirmer."
+          + (isExit ? ` [PRORATA resiliation: ${exitProration!.occupiedDays}/${exitProration!.periodDays} jours, montant initial ${exitProration!.fullAmount.toFixed(2)}]` : ""),
         proofUrl: null,
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,

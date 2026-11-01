@@ -82,12 +82,14 @@ function makeService(opts: {
         }
 
         if (name === "expenses") {
-          // listPropertyExpenses: select().from(expenses).leftJoin().leftJoin().where().orderBy()
+          // listPropertyExpenses: select().from(expenses).leftJoin(property).leftJoin(currency).leftJoin(unit).where().orderBy()
           return {
             leftJoin: () => ({
               leftJoin: () => ({
-                where: () => ({
-                  orderBy: () => Promise.resolve(expenseRows),
+                leftJoin: () => ({
+                  where: () => ({
+                    orderBy: () => Promise.resolve(expenseRows),
+                  }),
                 }),
               }),
             }),

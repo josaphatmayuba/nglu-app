@@ -366,10 +366,12 @@ describe("PropertyManagementService — listPropertyExpenses", () => {
         from: () => ({
           leftJoin: () => ({
             leftJoin: () => ({
-              where: (cond: any) => {
-                capturedWhere.push(cond);
-                return { orderBy: () => Promise.resolve([]) };
-              },
+              leftJoin: () => ({
+                where: (cond: any) => {
+                  capturedWhere.push(cond);
+                  return { orderBy: () => Promise.resolve([]) };
+                },
+              }),
             }),
           }),
         }),
