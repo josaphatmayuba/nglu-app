@@ -162,11 +162,11 @@ export const PAPER_BOOK_CSS = `
   .paper .sheet.fold .foot span:last-child { display: none; } /* un seul numéro : celui du cahier (.bk) */
   .paper .bk { position: absolute; bottom: 1.2mm; font-size: 11pt; font-weight: 700; color: #555; font-variant-numeric: tabular-nums; }
   .paper .sheet.fold .a5:first-child .bk { left: 4mm; } .paper .sheet.fold .a5:last-child .bk { right: 4mm; }
-  .paper .fl { position: absolute; bottom: 1.6mm; font-size: 5.8pt; color: #777; }
+  .paper .fl { position: absolute; bottom: 1.6mm; font-size: 5.8pt; color: #555; }
   .paper .sheet.fold .a5:first-child .fl { right: 3mm; } .paper .sheet.fold .a5:last-child .fl { left: 3mm; }
   .paper .essai { display: grid; align-content: center; gap: 5mm; height: 100%; text-align: center; font-size: 13pt; }
   .paper .essai b { font-size: 26pt; }
-  .paper .sheet::after { content: "✂ couper ici"; position: absolute; left: 50%; top: 0; bottom: 0; border-left: .4pt dashed #777; font-size: 6pt; color: #777; padding: 1mm 0 0 1mm; }
+  .paper .sheet::after { content: "✂ couper ici"; position: absolute; left: 50%; top: 0; bottom: 0; border-left: .4pt dashed #555; font-size: 6pt; color: #555; padding: 1mm 0 0 1mm; }
   .paper .single { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .paper .single .a5 { box-shadow: 0 2px 8px rgba(0,0,0,.25); }
   .paper .a5 { width: var(--half-w); height: var(--sheet-h); padding: 8mm 7mm 7mm 14mm; background: #fff; color: #222; position: relative; display: flex; flex-direction: column; gap: 2.4mm; overflow: hidden; }
@@ -222,6 +222,60 @@ export const PAPER_BOOK_CSS = `
   .paper .numk { display: inline-grid; place-items: center; width: 3.6mm; height: 3.6mm; border-radius: 50%; border: .5pt solid var(--soft); font-size: 5.6pt; font-weight: 700; color: #444; vertical-align: middle; }
   .paper ol.legend { list-style: none; padding: 0; font-size: 6.8pt; gap: 1.1mm; }
   .paper ol.legend li { display: grid; grid-template-columns: 4.5mm 1fr; gap: 1mm; align-items: start; }
+  /* Pied de page lisible sur toutes les pages. */
+  .paper .foot { font-size: 7.2pt; color: #333; }
+  .paper .gq { display: grid; grid-template-columns: 41mm 1fr 1fr; gap: 3mm; align-items: stretch; }
+  /* Page Loyers (et Exemple rempli) : texte plus grand, lignes plus hautes pour écrire au stylo. */
+  .paper .p-rent { gap: 2mm; }
+  .paper .p-rent h2 { font-size: 12pt; } .paper .p-rent h2 small { font-size: 8pt; }
+  .paper .p-rent table { font-size: 9.5pt; }
+  .paper .p-rent th, .paper .p-rent td { padding: .5mm 1mm; }
+  .paper .p-rent th { font-size: 8pt; } .paper .p-rent th small { font-size: 7pt; }
+  .paper .p-rent td { height: 10.6mm; } .paper .p-rent td:nth-child(5) { padding-block: .2mm; }
+  .paper .p-rent td.m { font-size: 9pt; } .paper .p-rent td.m small { font-size: 7.5pt; }
+  .paper .p-rent td.due small { font-size: 7pt; }
+  .paper .p-rent .via { font-size: 7.8pt; gap: .1mm; line-height: 1; } .paper .p-rent .via span { gap: 1mm; }
+  .paper .p-rent .via i { width: 2.7mm; height: 2.7mm; } .paper .p-rent .via em { min-width: 0; height: 2.7mm; }
+  .paper .p-rent .via i.on::after { inset: -1.6mm 0 0 .4mm; font-size: 11pt; }
+  .paper .p-rent .lbl, .paper .p-rent .sig { font-size: 8pt; } .paper .p-rent .sig { height: 15mm; } .paper .p-rent .sig span:last-child { font-size: 7pt; }
+  .paper .p-rent .qrrow { gap: 2mm; } .paper .p-rent .qrrow span { font-size: 7pt; line-height: 1.2; }
+  .paper .p-rent .qr { width: 15mm; height: 15mm; }
+  .paper .p-rent .pen { font-size: 12pt; line-height: .95; }
+  .paper .p-rent .via em .pen { font-size: 8pt; }
+  .paper .p-rent .foot, .paper .p-rent .tag { font-size: 7.5pt; }
+  /* Page Conditions du bail. */
+  .paper .p-cond { gap: 2mm; }
+  .paper .p-cond h2 { font-size: 13pt; } .paper .p-cond h2 small { font-size: 9pt; }
+  .paper .p-cond .lbl { font-size: 9pt; } .paper .p-cond .pre { font-size: 10pt; } .paper .p-cond .note { font-size: 9pt; }
+  .paper .p-cond .sig { font-size: 8.5pt; height: 10.5mm; } .paper .p-cond .sig span:last-child { font-size: 7.5pt; }
+  .paper .p-cond .sig.csig { height: 13mm; }
+  .paper .p-cond .g2, .paper .p-cond .g3 { gap: 1.5mm 3mm; } .paper .p-cond .box { gap: 1mm; padding: 1.6mm 2mm; }
+  .paper .p-cond .foot, .paper .p-cond .tag { font-size: 7.5pt; }
+  /* Page Eau, courant et travaux. */
+  .paper .p-water { gap: 2mm; }
+  .paper .p-water h2 { font-size: 13pt; } .paper .p-water h2 small { font-size: 9pt; }
+  .paper .p-water table { font-size: 9pt; }
+  .paper .p-water th, .paper .p-water td { padding: .5mm 1mm; }
+  .paper .p-water th { font-size: 8pt; } .paper .p-water td { height: 9.9mm; }
+  .paper .p-water .pen { font-size: 11pt; }
+  .paper .p-water .note { font-size: 8pt; } .paper .p-water .lbl { font-size: 8.5pt; }
+  .paper .p-water .qrrow { gap: 2mm; } .paper .p-water .qrrow span { font-size: 7pt; line-height: 1.2; }
+  .paper .p-water .qr { width: 15mm; height: 15mm; }
+  .paper .p-water .foot, .paper .p-water .tag { font-size: 7.5pt; }
+  /* Page Fin du bail et départ. */
+  .paper .p-end { gap: 2mm; }
+  .paper .p-end h2 { font-size: 15pt; } .paper .p-end h2 small { font-size: 9pt; }
+  .paper .p-end table { font-size: 11pt; } .paper .p-end th { font-size: 11pt; }
+  .paper .p-end th, .paper .p-end td { padding: .5mm 1mm; }
+  .paper .p-end td { height: 15mm; } .paper .p-end tr.rep td { height: 12mm; font-size: 11pt; }
+  .paper .p-end .lbl { font-size: 11pt; } .paper .p-end .note { font-size: 9pt; } .paper .p-end .wl { height: 9mm; }
+  .paper .p-end .sig { font-size: 10pt; height: 22mm; } .paper .p-end .sig span:last-child { font-size: 9pt; }
+  .paper .p-end .qrrow { font-size: 9pt; } .paper .p-end .qr { width: 18mm; height: 18mm; }
+  .paper .p-end .foot, .paper .p-end .tag { font-size: 8pt; }
+  /* Guide : 8,6 pt au maximum. */
+  .paper .p-guide h2 { font-size: 12pt; } .paper .p-guide h2 small { font-size: 8pt; }
+  .paper .p-guide .gs, .paper .p-guide .gs > b { font-size: 8.6pt; }
+  .paper .p-guide .foot, .paper .p-guide .tag { font-size: 7pt; }
   /* Choix d'encre : seuls traits, cadres et titres changent ; le texte reste gris foncé. */
   .paper.ink-pale { --line: #a8a8a8; --soft: #c6c6c6; }
   .paper.ink-pale h1 { -webkit-text-stroke-color: #aaa; }
@@ -298,7 +352,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   const foot = (n) => `<div class="foot"><span>Carnet ${esc(L.carnet)} · Bail ${esc(L.ref)}</span><span>${n}</span></div>`;
   const qrBox = qrDataUrl ? `<div class="qr"><img src="${qrDataUrl}" alt="QR Domus" /></div>` : `<div class="qr">QR<br>Domus</div>`;
   const qr = (t) => `<div class="qrrow">${qrBox}<span>${t}</span></div>`;
-  const via = `<div class="via"><span><i></i>Espèces</span><span><i></i>Mobile M. <em></em></span><span><i></i>Banque <em></em></span></div>`;
+  const via = `<div class="via"><span><i></i>Espèces</span><span><i></i>Mobile <em></em></span><span><i></i>Banque <em></em></span></div>`;
   const empty = (n, c) => Array.from({ length: n }, () => `<tr>${"<td></td>".repeat(c)}</tr>`).join("");
   const manager = L.managerLine;
 
@@ -318,7 +372,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
 
   const lostWho = manager ? `le gestionnaire (${esc(manager)})` : "le bailleur";
   // Guide unique (1 page A5) : bases, cas particuliers, fin d'année, erreurs et « Les deux cahiers ».
-  const GUIDE = `<h2>Comment remplir ce carnet<small>À lire avant le premier paiement</small></h2>
+  const GUIDE = `<!--p-guide--><h2>Comment remplir ce carnet<small>À lire avant le premier paiement</small></h2>
       <div class="gs"><b>LES DEUX CAHIERS</b><ul>
         ${noCopy
           ? `<li>Deux cahiers <b>identiques</b> : le <b>locataire</b> garde le sien ; le <b>bailleur</b> ou le gestionnaire garde l'autre, reconnaissable à sa <b>trame de points roses</b>.</li>
@@ -334,8 +388,8 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
         <thead><tr><th>Colonne</th><th>Qui écrit</th><th>Quoi</th></tr></thead><tbody>
         <tr><td><b>Payé le</b></td><td>Celui qui reçoit</td><td>Jour/mois (ex. 06/08).</td></tr>
         <tr><td><b>Montant payé</b></td><td>Celui qui reçoit</td><td>La somme avec sa <b>monnaie</b> ($ ou FC), ex. 400 $. En FC, ajoutez le <b>taux</b> du jour (ex. 1 120 000 FC · taux 2 800).</td></tr>
-        <tr><td><b>Moyen</b></td><td>Celui qui reçoit</td><td>Cochez Espèces, Mobile M. (M-Pesa, Orange, Airtel) ou Banque (nom) ; référence si connue.</td></tr>
-        <tr><td><b>Signature de qui reçoit l'argent</b></td><td>Gestionnaire ou bailleur</td><td>Le loyer du mois est reçu en entier.</td></tr>
+        <tr><td><b>Moyen</b></td><td>Celui qui reçoit</td><td>Cochez Espèces, Mobile (M-Pesa, Orange, Airtel) ou Banque (nom) ; référence si connue.</td></tr>
+        <tr><td><b>Signature de qui reçoit</b></td><td>Gestionnaire ou bailleur</td><td>Le loyer du mois est reçu en entier.</td></tr>
         <tr><td><b>Signature du locataire</b></td><td>Locataire</td><td>Il est d'accord avec la ligne.</td></tr>
       </tbody></table></div>
       <div class="calc"><b>La règle :</b><span>un mois = un paiement complet, en une fois, au plus tard à la date prévue au bail. La ligne n'est remplie et signée qu'alors. <b>Ligne vide = mois non payé.</b></span></div>
@@ -360,7 +414,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
 
   // Exemple rempli : 6 premiers mois du bail, montants dans la devise du bail.
   const pe = (t) => `<span class="pen">${t}</span>`;
-  const vx = (k, t = "") => `<div class="via"><span><i class="${k === "E" ? "on" : ""}"></i>Espèces</span><span><i class="${k === "M" ? "on" : ""}"></i>Mobile M. <em>${k === "M" ? pe(t) : ""}</em></span><span><i class="${k === "B" ? "on" : ""}"></i>Banque <em>${k === "B" ? pe(t) : ""}</em></span></div>`;
+  const vx = (k, t = "") => `<div class="via"><span><i class="${k === "E" ? "on" : ""}"></i>Espèces</span><span><i class="${k === "M" ? "on" : ""}"></i>Mobile <em>${k === "M" ? pe(t) : ""}</em></span><span><i class="${k === "B" ? "on" : ""}"></i>Banque <em>${k === "B" ? pe(t) : ""}</em></span></div>`;
   const rent = L.rent || 400;
   const pr = fm ? fm.amount : rent;
   const prDays = fm ? fm.days : 13;
@@ -379,10 +433,10 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
     [MF[exM[4].m], money(rent), `28/${pad(exM[4].m + 1)}`, money(rent), vx("M", "Orange"), "4"],
     [MF[exM[5].m], money(rent), `28/${pad(exM[4].m + 1)}`, money(rent), vx("M", "Orange"), "4"],
   ];
-  const EXAMPLE = `<h2>Exemple d'une page remplie <small>année 1, ${MF[exM[0].m].toLowerCase()} à ${MF[exM[5].m].toLowerCase()}</small></h2>
+  const EXAMPLE = `<!--p-rent--><h2>Exemple d'une page remplie <small>année 1, ${MF[exM[0].m].toLowerCase()} à ${MF[exM[5].m].toLowerCase()}</small></h2>
       <table>
-        <colgroup><col style="width:17%"><col style="width:14%"><col style="width:9%"><col style="width:15%"><col style="width:19%"><col style="width:13%"><col style="width:13%"></colgroup>
-        <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé</th><th>Moyen</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead>
+        <colgroup><col style="width:15%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
+        <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>$ ou FC + taux</small></th><th>Moyen</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${EXR.map((r) => `<tr><td class="m">${r[0]}${r[5] ? ` <span class="numk">${r[5]}</span>` : ""}</td><td class="due">${r[1]}</td><td>${r[2] ? pe(r[2]) : ""}</td><td>${r[3] ? pe(r[3]) : ""}</td><td>${r[4]}</td><td>${r[2] ? pe("~ K.") : ""}</td><td>${r[2] ? pe("~ D.") : ""}</td></tr>`).join("")}
         </tbody></table>
@@ -411,7 +465,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   ].filter(Boolean).join(" · ");
 
   const SLOTS = [];
-  SLOTS.push(`<h2>Conditions du bail <small>imprimé par Domus</small></h2>
+  SLOTS.push(`<!--p-cond--><h2>Conditions du bail <small>imprimé par Domus</small></h2>
       <div class="g2"><div class="kv"><span class="lbl">Bailleur</span><span class="pre">${val(L.owner)}</span><span>${val(L.ownerPhone)}</span></div>
       <div class="kv"><span class="lbl">Locataire</span><span class="pre">${val(L.tenant)}</span><span>${val(L.tenantPhone)}</span><span class="note">${tenantExtra}</span></div></div>
       ${manager ? `<div class="box"><span class="lbl">Gestionnaire</span><span class="pre">${esc(manager)}</span><span class="note">Délégué Domus : encaisse les loyers et signe ce carnet</span></div>` : ""}
@@ -424,7 +478,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
       </div><span class="note">${esc(conditionsSentence(L.symbol))} Sous-location interdite sans accord écrit. État des lieux d'entrée le ${L.start ? fmtDateShort(L.start) : dots()}.${fm ? ` 1er mois au prorata : ${prDays} jours = ${money(pr)}.` : ""}</span></div>
       <div class="box"><span class="lbl">Où payer</span><span class="note pre">${payWhere}</span></div>
       <div class="g2">${sig("Le bailleur", "Signature")}${sig("Le locataire", "Signature")}${manager ? sig("Le gestionnaire", "Signature et cachet") : ""}${sig("1er témoin", "Nom et téléphone")}${sig("2e témoin", "Nom et téléphone")}</div>
-      <div class="g2"><div class="sig" style="height:18mm"><span>Vu par le chef de quartier (cachet, facultatif)</span><span></span></div>
+      <div class="g2"><div class="sig csig"><span>Vu par le chef de quartier (cachet, facultatif)</span><span></span></div>
       <div style="display:grid;gap:1mm"><div class="kv"><span class="lbl">Fait à</span><div class="wl"></div></div><div class="kv"><span class="lbl">Le</span><div class="wl"></div></div></div></div>
       ${foot(`1/${P}`)}`);
   years.forEach((months, k) => {
@@ -435,23 +489,21 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
       return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td></td><td></td><td>${via}</td><td></td><td></td></tr>`;
     }).join("");
     const range = `${MS[months[0].m]} ${months[0].y} → ${MS[last.m]} ${last.y}`;
-    SLOTS.push(`<h2>Loyers, année ${k + 1} du bail <small>${range}</small></h2>
+    SLOTS.push(`<!--p-rent--><h2>Loyers, année ${k + 1} du bail <small>${range}</small></h2>
       <table>
-        <colgroup><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:16%"><col style="width:21%"><col style="width:13%"><col style="width:13%"></colgroup>
-        <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>écrire $ ou FC (+ taux)</small></th><th>Moyen</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead>
+        <colgroup><col style="width:15%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
+        <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>$ ou FC + taux</small></th><th>Moyen</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${rows}
         </tbody></table>
       <div class="kv"><span class="lbl">Mois non payés au ${lastLabel}</span><div class="wl"></div></div>
-      <div class="g2">${sig(`Bilan au ${lastLabel} · bailleur`, "Signature")}${sig(`Bilan au ${lastLabel} · locataire`, "Signature")}</div>
-      ${qr("Scannez pour envoyer la photo de cette page à Domus.")}
+      <div class="gq">${qr("Scannez pour envoyer la photo de cette page à Domus.")}${sig(`Bilan au ${lastLabel} · bailleur`, "Signature")}${sig(`Bilan au ${lastLabel} · locataire`, "Signature")}</div>
       ${foot(`${2 + k * 2}/${P}`)}`);
-    SLOTS.push(`<h2>Eau, courant et travaux, année ${k + 1} <small>${range}</small></h2>
+    SLOTS.push(`<!--p-water--><h2>Eau, courant et travaux, année ${k + 1} <small>${range}</small></h2>
       <table><colgroup><col style="width:13%"><col style="width:17%"><col style="width:14%"><col style="width:13%"><col style="width:15%"><col style="width:14%"><col style="width:14%"></colgroup>
-      <thead><tr><th>Date</th><th>Nature</th><th>Montant</th><th>Payé par</th><th>Déduit du loyer ?</th><th>Signature de qui reçoit l'argent</th><th>Signature du locataire</th></tr></thead><tbody>${empty(13, 7)}</tbody></table>
+      <thead><tr><th>Date</th><th>Nature</th><th>Montant</th><th>Payé par</th><th>Déduit du loyer ?</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead><tbody>${empty(13, 7)}</tbody></table>
       <p class="note">Nature : eau (REGIDESO), courant (SNEL) ou travaux. Travaux déduits du loyer : écrivez-les aussi sur la page Loyers, dans « Montant payé ».</p>
-      <div class="g2"><div class="kv"><span class="lbl">Total eau et courant</span><div class="wl"></div></div><div class="kv"><span class="lbl">Travaux restant à déduire</span><div class="wl"></div></div></div>
-      ${qr("Scannez pour envoyer la photo de cette page à Domus.")}
+      <div class="gq">${qr("Scannez pour envoyer la photo de cette page à Domus.")}<div class="kv"><span class="lbl">Total eau et courant</span><div class="wl"></div></div><div class="kv"><span class="lbl">Travaux restant à déduire</span><div class="wl"></div></div></div>
       ${foot(`${3 + k * 2}/${P}`)}`);
   });
   const depRow = L.depositReceived
@@ -464,7 +516,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
       <tbody>${depRow}</tbody></table>
       <p class="note">Mouvements : reçue, complément, retenue (dégâts, impayés), restitution.</p>
       ${foot(`${pRaise}/${P}`)}`);
-  SLOTS.push(`<h2>Fin du bail et départ</h2>
+  SLOTS.push(`<!--p-end--><h2>Fin du bail et départ</h2>
       <div class="g2"><div class="kv"><span class="lbl">Préavis donné le</span><div class="wl"></div></div><div class="kv"><span class="lbl">Sortie le</span><div class="wl"></div></div></div>
       <table><colgroup><col style="width:70%"><col></colgroup><thead><tr><th>Compte de sortie</th><th>Montant</th></tr></thead><tbody>
         <tr><td>Garantie détenue</td><td></td></tr><tr><td>− Loyers restant dus (payés par la caution)</td><td></td></tr><tr><td>− Eau, courant restant dus</td><td></td></tr>
@@ -504,7 +556,8 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
   const { COVER, COVER_B, GUIDE, EXAMPLE, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, true, ["simple", "pleine", "coupe"].includes(pass) || pass.startsWith("plie") ? 3 : 0);
   const INTRO = introFor(n);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
-  const a5 = (html, d, cls = "") => `<div class="a5 ${cls}">${d === null ? "" : tag(d)}${html}</div>`;
+  const pcls = (html) => (/^\s*<!--(p-[a-z]+)-->/.exec(html) || [])[1] || "";
+  const a5 = (html, d, cls = "") => `<div class="${["a5", cls, pcls(html)].filter(Boolean).join(" ")}">${d === null ? "" : tag(d)}${html}</div>`;
   const sheet = (l, r, cls = "") => `<div class="sheet ${cls}">${l}${r}</div>`;
   let out = "";
   if (pass === "cahier") {

@@ -64,7 +64,7 @@ describe("paperBookHtml", () => {
     expect(p1.toLowerCase()).not.toContain("indéterminée");
     expect(html2.toLowerCase()).not.toContain("indéterminée");
     expect(html2).not.toMatch(/<th>Reste/);
-    expect(html2).toContain("Signature de qui reçoit l'argent");
+    expect(html2).toContain("Signature de qui reçoit");
     expect(html2).toContain("Signature du locataire");
   });
   it("prorata du 1er mois et symbole de devise du bail", () => {
@@ -328,5 +328,29 @@ describe("cahier coupe A5 (defaut)", () => {
     expect(PAPER_BOOK_CSS).toContain(".paper .sheet.cut, .paper .sheet.fold { width: 100vw; height: 100vh; }");
     expect(paperBookHtml(base, { years: 2, copy: "landlord" })).toContain("Exemplaire du bailleur");
     expect(paperBookHtml(base, { years: 2, paper: "letter" })).toContain("letter");
+  });
+});
+
+describe("carnet lisible : tailles et textes", () => {
+  const html = paperBookHtml(base, { pass: "coupe", years: 2 });
+  it("phrase complete du QR sur Loyers et Eau, signature raccourcie, pied de page Bail", () => {
+    const rent = html.split('<div class="a5 ').filter((p) => p.includes("p-rent") && p.includes("Loyers, année 1"))[0];
+    const water = html.split('<div class="a5 ').filter((p) => p.includes("p-water"))[0];
+    for (const page of [rent, water]) {
+      expect(page).toContain("Scannez pour envoyer la photo de cette page à Domus.");
+      expect(page).toContain("Signature de qui reçoit");
+      expect(page).not.toContain("reçoit l'argent");
+    }
+    expect(rent).toMatch(/class="foot"><span>Carnet [^<]*· Bail /);
+    expect(rent).toContain("$ ou FC + taux");
+  });
+  it("classes de page ajoutees a cote de dup", () => {
+    expect(paperBookHtml(base, { pass: "coupe", years: 2, copy: "landlord" })).toContain('class="a5 p-rent"');
+    for (const c of ["p-rent", "p-cond", "p-water", "p-end", "p-guide"]) expect(html).toMatch(new RegExp(`class="a5[^"]* ${c}"`));
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.dup .a5, .paper .a5.dup");
+  });
+  it("A4 pleine page : zoom 1.414", () => {
+    expect(PAPER_BOOK_CSS).toContain(".paper .sheet.full .a5 { zoom: 1.414; }");
+    expect(PAPER_BOOK_CSS).toContain(".paper .p-rent td { height: 10.6mm; }");
   });
 });
