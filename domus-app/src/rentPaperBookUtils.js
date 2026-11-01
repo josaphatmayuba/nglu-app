@@ -234,6 +234,7 @@ export const PAPER_BOOK_CSS = `
   .paper .p-rent td { height: 10.6mm; } .paper .p-rent td:nth-child(5) { padding-block: .2mm; }
   .paper .p-rent td.m { font-size: 9pt; } .paper .p-rent td.m small { font-size: 7.5pt; }
   .paper .p-rent td.due small { font-size: 7pt; }
+  .paper .p-rent td.due { overflow-wrap: normal; }
   .paper .p-rent .via { font-size: 7.8pt; gap: .1mm; line-height: 1; } .paper .p-rent .via span { gap: 1mm; }
   .paper .p-rent .via i { width: 2.7mm; height: 2.7mm; } .paper .p-rent .via em { min-width: 0; height: 2.7mm; }
   .paper .p-rent .via i.on::after { inset: -1.6mm 0 0 .4mm; font-size: 11pt; }
@@ -435,7 +436,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   ];
   const EXAMPLE = `<!--p-rent--><h2>Exemple d'une page remplie <small>année 1, ${MF[exM[0].m].toLowerCase()} à ${MF[exM[5].m].toLowerCase()}</small></h2>
       <table>
-        <colgroup><col style="width:15%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
+        <colgroup><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:18%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
         <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>$ ou FC + taux</small></th><th>Moyen</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${EXR.map((r) => `<tr><td class="m">${r[0]}${r[5] ? ` <span class="numk">${r[5]}</span>` : ""}</td><td class="due">${r[1]}</td><td>${r[2] ? pe(r[2]) : ""}</td><td>${r[3] ? pe(r[3]) : ""}</td><td>${r[4]}</td><td>${r[2] ? pe("~ K.") : ""}</td><td>${r[2] ? pe("~ D.") : ""}</td></tr>`).join("")}
@@ -491,7 +492,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
     const range = `${MS[months[0].m]} ${months[0].y} → ${MS[last.m]} ${last.y}`;
     SLOTS.push(`<!--p-rent--><h2>Loyers, année ${k + 1} du bail <small>${range}</small></h2>
       <table>
-        <colgroup><col style="width:15%"><col style="width:11%"><col style="width:12%"><col style="width:20%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
+        <colgroup><col style="width:15%"><col style="width:13%"><col style="width:12%"><col style="width:18%"><col style="width:15%"><col style="width:13%"><col style="width:14%"></colgroup>
         <thead><tr><th>Mois</th><th>À payer</th><th>Payé le</th><th>Montant payé<small>$ ou FC + taux</small></th><th>Moyen</th><th>Signature de qui reçoit</th><th>Signature du locataire</th></tr></thead>
         <tbody>
           ${rows}
