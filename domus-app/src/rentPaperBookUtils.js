@@ -250,7 +250,8 @@ export const PAPER_BOOK_CSS = `
     .paper .intro, .paper .caption { display: none !important; }
     .paper .sheet { box-shadow: none; break-after: page; page-break-after: always; }
     .paper .sheet:last-child { break-after: auto; page-break-after: auto; }
-    .paper .sheet.dup .a5 { background: #fff; }
+    /* Exemplaire du bailleur : rose très pâle (peu d'encre) ; « Noir et blanc » dans la fenêtre d'impression l'enlève. */
+    .paper .sheet.dup .a5 { background: #fff6f8; }
     .paper .single { display: none; }
     .paper .print-msg { display: block; font-size: 16pt; padding: 20mm; }
   }
