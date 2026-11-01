@@ -142,8 +142,8 @@ export const PAPER_BOOK_CSS = `
   .paper { --sheet-w: 297mm; --sheet-h: 210mm; --half-w: 148.5mm; }
   .paper.letter { --sheet-w: 279.4mm; --sheet-h: 215.9mm; --half-w: 139.7mm; }
   .paper .sheet { width: var(--sheet-w); height: var(--sheet-h); background: #fff; color: #222; display: grid; grid-template-columns: 1fr 1fr; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,.25); overflow: hidden; }
-  /* Exemplaire du bailleur : trame de points roses (0,3 mm tous les 1,5 mm, ~2 % d'encre) ; cases des tableaux blanches pour écrire. */
-  .paper .sheet.dup .a5, .paper .a5.dup { background-color: #fff; background-image: radial-gradient(circle, #e391a3 .15mm, transparent .17mm); background-size: 1.5mm 1.5mm; }
+  /* Exemplaire du bailleur : trame de points roses (0,3 mm tous les 1,5 mm, ~2 % d'encre), en SVG : un radial-gradient aussi fin disparaît à l'écran et dans l'aperçu d'impression ; cases des tableaux blanches pour écrire. */
+  .paper .sheet.dup .a5, .paper .a5.dup { background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='15' fill='%23e391a3'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
   .paper .sheet.dup .a5 table, .paper .a5.dup table { background: #fff; }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }

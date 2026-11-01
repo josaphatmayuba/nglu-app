@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : trame de points roses du bailleur enfin visible (v3.275.5) - bug #88.** Le radial-gradient de 0,3 mm disparaissait à l'écran et dans l'aperçu d'impression ; remplacé par un motif SVG (mêmes points de 0,3 mm tous les 1,5 mm).
 - **Domus carnet : montant « À payer » au prorata coupé au milieu du nombre (v3.275.4).** Colonne « À payer » 11 → 13 % (« Montant payé » 20 → 18 %), coupure permise seulement avant la devise (`.p-rent td.due { overflow-wrap: normal }`). BUGS #87.
 
 - **Domus carnet : textes et cases plus grands, toujours 12 mois par page (v3.275.3).** Classes par page (`p-rent`, `p-cond`, `p-water`, `p-end`, `p-guide`) : Loyers en 9–9,5 pt avec lignes de 10,6 mm, colonne « Montant payé » élargie (montant + taux), année gardée sous chaque mois, « Signature de qui reçoit » ; QR 15 mm + phrase complète sur la rangée du bilan / des totaux ; Conditions en 9–10 pt ; Eau 13 lignes ; Fin du bail en 11 pt ; guide 8,6 pt ; pied de page « Carnet · Bail » visible partout ; « Mobile M. » → « Mobile ». Trame rose du bailleur et formats d'impression inchangés.
