@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : rose du cahier du bailleur encore plus pâle à l'impression (v3.274.6).** `#fffbfc` au lieu de `#fff6f8`, pour économiser l'encre ; le cahier du locataire reste blanc.
 - **Domus carnet : cahier du bailleur en rose très pâle dans tous les formats (v3.274.5).** Cahier coupé A5, Feuilles entières et Cahier simple restaient blancs pour le bailleur.
 - **Domus carnet : même guide « deux cahiers » pour tous les formats (v3.274.4).** Plus d'autocopiant : à chaque paiement, la même ligne est écrite dans les deux cahiers et signée dans les deux ; consignes d'impression et option « Passage 2 » sans mention d'autocopiant/liasses.
 - **Domus carnet : l'exemplaire du bailleur s'imprime en rose très pâle (v3.274.3).** Le fond n'était plus remis en blanc à l'impression (`#fff6f8`, peu d'encre) ; l'option « Noir et blanc » du navigateur reste possible.
