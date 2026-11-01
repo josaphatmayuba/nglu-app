@@ -140,7 +140,7 @@ describe("carnet 2 ans", () => {
     expect(p1).toContain("page 6.");
     expect(p1).toContain("Départ :</b> page 7");
     expect(p1).toContain("expliquez page 8.");
-    expect(p2).toContain("4 liasses A4");
+    expect(p2).toContain("4 feuilles A4");
     expect(p2).toContain("Liasse 4 ");
     expect(p2).not.toContain("Liasse 5 ");
     expect(p2).toContain("8/8");
@@ -150,7 +150,7 @@ describe("carnet 2 ans", () => {
   });
   it("3 ans inchange : 10 pages, 5 liasses", () => {
     const p2 = paperBookHtml(base, { pass: "2", years: 3 });
-    expect(p2).toContain("5 liasses A4");
+    expect(p2).toContain("5 feuilles A4");
     expect(p2).toContain("10/10");
     expect((p2.match(/class="sheet/g) || []).length).toBe(10);
   });
@@ -249,6 +249,7 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
     expect(h).toContain("Exemplaire du bailleur");
     expect(h).toContain("la même ligne");
     expect(h).not.toMatch(/cahier rose|page rose|se copie/);
+    expect(paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" })).toContain("dans les deux cahiers");
     expect((h.match(/class="sheet fold"/g) || []).length).toBe(12);
   });
   it("3 ans : 7 feuilles", () => {

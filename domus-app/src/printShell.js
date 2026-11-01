@@ -60,7 +60,7 @@ function shellBarHtml(format, years = 3) {
         <option value="plie-r">Cahier plié à la main : rectos</option>
         <option value="plie-v">Cahier plié à la main : versos</option>
         <option value="complet">Cahier coupé (une impression, recto)</option>
-        <option value="2">Passage 2 : pages autocopiantes</option>
+        <option value="2">Passage 2 : pages à remplir</option>
         <option value="1">Passage 1 : couvertures et guide</option>
         <option value="cahier">Vue cahier (écran)</option>
       </select></label>

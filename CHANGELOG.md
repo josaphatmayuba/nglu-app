@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet : même guide « deux cahiers » pour tous les formats (v3.274.4).** Plus d'autocopiant : à chaque paiement, la même ligne est écrite dans les deux cahiers et signée dans les deux ; consignes d'impression et option « Passage 2 » sans mention d'autocopiant/liasses.
 - **Domus carnet : l'exemplaire du bailleur s'imprime en rose très pâle (v3.274.3).** Le fond n'était plus remis en blanc à l'impression (`#fff6f8`, peu d'encre) ; l'option « Noir et blanc » du navigateur reste possible.
 - **Domus : mois de sortie au prorata pour les baux trimestriels/annuels non flaggés - bug #84 ; specs dépenses/P&L réparées - bug #81 (v3.274.2).** La génération rétroactive crée une ligne par cycle jusqu'au cycle de sortie, la dernière au prorata (même total que le total dû) ; mocks db des specs property-expenses/property-pnl complétés avec le 3e leftJoin.
 - **Domus : échéance générée en plein après résiliation au prorata - bug #82 (v3.274.1).** La génération rétroactive des échéances d un bail terminé (non flaggé) s arrête à la date de sortie et crée le mois de sortie au prorata (même règle et même note que la résiliation), sans doublon si la période a déjà été réduite.
