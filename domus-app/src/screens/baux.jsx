@@ -524,7 +524,8 @@ export function Baux({ go } = {}) {
                       }}
                       onRenew={() => {
                         setOpenMenuId(null);
-                        handleRenewLease(lease, setBusyAction, setActionError, reload, confirm);
+                        setActionError("");
+                        setLeaseModal(renewToForm(lease));
                       }}
                       onDelete={() => {
                         setOpenMenuId(null);
@@ -596,7 +597,9 @@ export function Baux({ go } = {}) {
             setSaving(true);
             setActionError("");
             try {
-              if (values.id) {
+              if (values._renewFrom) {
+                await api.renewLease(values._renewFrom.id, renewPayload(values));
+              } else if (values.id) {
                 await api.updateLease(values.id, leasePayload(values));
               } else {
                 await api.createLease(leasePayload(values));
@@ -1149,6 +1152,43 @@ function DepositRentApply({ lease, deposit, symbol, available, onApplied }) {
 
 function LeaseModal({ value, properties, units, tenants, currencyOptions = [], defaultCurrencyId = "", busy, error, onClose, onSave }) {
   const [form, setForm] = useState({ ...value, currencyId: value.currencyId || defaultCurrencyId || "" });
+  // Mode renouvellement : bien/unite/locataires/devise figes, champs pre-remplis depuis l'ancien bail.
+  const src = value._renewFrom || null;
+  const renew = Boolean(src);
+  const confirm = useConfirm();
+  const [templates, setTemplates] = useState([]);
+  useEffect(() => {
+    if (!renew) return;
+    let alive = true;
+    api.contractTemplates().then((list) => { if (alive) setTemplates(Array.isArray(list) ? list : []); }).catch(() => {});
+    return () => { alive = false; };
+  }, [renew]);
+  const renewSymbol = renew
+    ? (src.currencySymbol || currencyOptions.find((o) => String(o.value) === String(src.currencyId))?.symbol || "")
+    : "";
+  const oldRent = renew ? Number(src.rentAmount) || 0 : 0;
+  const newRent = Number(form.rentAmount) || 0;
+  const rentPct = renew && oldRent > 0 ? ((newRent - oldRent) / oldRent) * 100 : null;
+  const oldDeposit = renew ? Number(src.securityDeposit) || 0 : 0;
+  const newDeposit = form.noDeposit ? 0 : (Number(form.securityDeposit) || 0);
+  const depositTooLow = renew && newDeposit < oldDeposit;
+  const depositExtra = renew && newDeposit > oldDeposit ? newDeposit - oldDeposit : 0;
+  const renewDatesBad = renew && Boolean(form.endDate) && form.endDate <= form.startDate;
+  const renewBlocked = renew && (depositTooLow || renewDatesBad || !form.endDate);
+  const pctText = (n) => `${n > 0 ? "+" : ""}${n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+  const submitForm = async () => {
+    if (renew && rentPct != null && rentPct < 0) {
+      const ok = await confirm({
+        title: t("Loyer en baisse"),
+        message: tf("Le nouveau loyer ({n}) est inférieur à l'ancien ({o}). Confirmer le renouvellement ?", {
+          n: moneyExact(newRent, renewSymbol), o: moneyExact(oldRent, renewSymbol),
+        }),
+        confirmLabel: t("Confirmer"),
+      });
+      if (!ok) return;
+    }
+    onSave(form);
+  };
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
   const selectedUnit = units.find((unit) => String(unit.id) === String(form.unitId));
 
@@ -1195,14 +1235,32 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
           <div className="domus-modal-title">
             <span className="domus-modal-title-icon"><FileCheck size={20} /></span>
             <div>
-              <h2>{form.id ? "Modifier le bail" : "Nouveau bail"}</h2>
-              <p>{form.id ? "Mettre a jour le contrat de location" : "Creer un contrat de location pour une unite et un locataire"}</p>
+              <h2>{renew ? t("Renouveler le bail") : form.id ? "Modifier le bail" : "Nouveau bail"}</h2>
+              <p>{renew ? (src.reference || `#${src.id}`) : form.id ? "Mettre a jour le contrat de location" : "Creer un contrat de location pour une unite et un locataire"}</p>
             </div>
           </div>
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
 
         <div className="domus-property-form">
+          {renew && (
+            <section className="domus-form-section">
+              <h3><FileText size={14} /> {t("Bail à renouveler")}</h3>
+              <div className="domus-lease-unit-note">
+                <strong>{unitLabel(selectedUnit || { id: src.unitId, propertyId: src.propertyId }, properties, true)}</strong>
+                <br />{tenantNames(src)}
+                <br /><span style={{ color: "var(--ink-400)" }}>{t("Bien, unité, locataires et devise sont conservés.")}</span>
+              </div>
+              <LeaseSelect
+                label={t("Modèle de contrat")}
+                value={form.templateId || ""}
+                onChange={(templateId) => set({ templateId })}
+                options={[["", t("Modèle actif par défaut")], ...templates.map((tpl) => [String(tpl.id), `${tpl.name}${tpl.isActive ? ` (${t("actif")})` : ""}`])]}
+              />
+            </section>
+          )}
+
+          {!renew && (
           <section className="domus-form-section">
             <h3><FileText size={14} /> Contrat</h3>
             <div className="domus-property-form-grid">
@@ -1286,6 +1344,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
               placeholder="ex. Kinshasa"
             />
           </section>
+          )}
 
           <section className="domus-form-section">
             <h3><RefreshCw size={14} /> Periode</h3>
@@ -1323,16 +1382,19 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                   ["yearly", "Annuel"],
                 ]}
               />
-              <LeaseSelect
-                label="Statut"
-                value={form.status}
-                onChange={(status) => set({ status })}
-                options={[
-                  ["active", "Actif"],
-                  ["draft", "Brouillon"],
-                ]}
-              />
+              {!renew && (
+                <LeaseSelect
+                  label="Statut"
+                  value={form.status}
+                  onChange={(status) => set({ status })}
+                  options={[
+                    ["active", "Actif"],
+                    ["draft", "Brouillon"],
+                  ]}
+                />
+              )}
             </div>
+            {renewDatesBad && <p role="alert" style={{ margin: 0, color: "var(--danger, #b91c1c)", fontSize: 13 }}>{t("La date de fin doit être postérieure au début.")}</p>}
           </section>
 
           <section className="domus-form-section">
@@ -1344,16 +1406,31 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 currencyId={form.currencyId || defaultCurrencyId || ""}
                 currencyOptions={currencyOptions}
                 required
+                lockCurrency={renew}
                 onAmountChange={(rentAmount) => set({ rentAmount })}
                 onCurrencyChange={(currencyId) => set({ currencyId })}
                 placeholder="ex. 850000"
               />
+              {renew && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div className="domus-lease-unit-note">
+                    {t("Ancien loyer")} <strong>{moneyExact(oldRent, renewSymbol)}</strong> → {t("nouveau loyer")} <strong>{moneyExact(newRent, renewSymbol)}</strong>
+                    {rentPct != null && <> (<strong>{pctText(rentPct)}</strong>)</>}
+                  </div>
+                  {rentPct != null && rentPct > 20 && (
+                    <p role="alert" style={{ margin: "6px 0 0", color: "#b45309", fontSize: 13 }}>
+                      {tf("Attention : hausse de {p} supérieure à 20 %.", { p: pctText(rentPct) })}
+                    </p>
+                  )}
+                </div>
+              )}
               {!form.noDeposit && (
                 <LeaseMoneyField
                   label="Depot de garantie"
                   value={form.securityDeposit}
                   currencyId={form.currencyId || defaultCurrencyId || ""}
                   currencyOptions={currencyOptions}
+                  lockCurrency={renew}
                   onAmountChange={(securityDeposit) => set({ securityDeposit })}
                   onCurrencyChange={(currencyId) => set({ currencyId })}
                   placeholder="ex. 1700000"
@@ -1368,7 +1445,17 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 {t("Pas de caution pour ce bail")}
               </label>
             </div>
-            {selectedUnit && (
+            {depositTooLow && (
+              <p role="alert" style={{ margin: 0, color: "var(--danger, #b91c1c)", fontSize: 13 }}>
+                {tf("La nouvelle caution ne peut pas être inférieure à l'ancienne ({o}).", { o: moneyExact(oldDeposit, renewSymbol) })}
+              </p>
+            )}
+            {depositExtra > 0 && (
+              <p role="status" style={{ margin: 0, fontSize: 13 }}>
+                {tf("Complément de {a} à encaisser après le renouvellement.", { a: moneyExact(depositExtra, renewSymbol) })}
+              </p>
+            )}
+            {!renew && selectedUnit && (
               <div className="domus-lease-unit-note">
                 Unite selectionnee : <strong>{unitLabel(selectedUnit, properties)}</strong>
               </div>
@@ -1416,19 +1503,19 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
           <section className="domus-form-section">
             <h3><Pencil size={14} /> Notes</h3>
             <LeaseField label="Conditions" value={form.terms} onChange={(terms) => set({ terms })} textarea placeholder="Clauses, renouvellement, penalites..." />
-            <LeaseField label="Notes d'entree" value={form.moveInNotes} onChange={(moveInNotes) => set({ moveInNotes })} textarea placeholder="Etat des lieux, remise des cles..." />
+            {!renew && <LeaseField label="Notes d'entree" value={form.moveInNotes} onChange={(moveInNotes) => set({ moveInNotes })} textarea placeholder="Etat des lieux, remise des cles..." />}
           </section>
         </div>
 
-        {!form.id && (
+        {!form.id && !renew && (
           <SmsNotice>{t("À la création, des SMS partent automatiquement : bienvenue au locataire (bail actif) et récapitulatif au propriétaire et aux délégués du bien.")}</SmsNotice>
         )}
         {error && <div className="api-error">{error}</div>}
         <div className="domus-modal-footer">
           <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Annuler</button>
           <div>
-            <button className="domus-modal-submit" onClick={() => onSave(form)} disabled={busy || !canSaveLease(form) || prorationBlocked}>
-              <Check size={14} /> {busy ? "Enregistrement..." : form.id ? "Enregistrer" : "Creer le bail"}
+            <button className="domus-modal-submit" onClick={submitForm} disabled={busy || !canSaveLease(form) || prorationBlocked || renewBlocked}>
+              <Check size={14} /> {busy ? "Enregistrement..." : renew ? t("Renouveler") : form.id ? "Enregistrer" : "Creer le bail"}
             </button>
           </div>
         </div>
@@ -1850,13 +1937,14 @@ function LeaseMoneyField({
   type = "number",
   placeholder = "",
   required = false,
+  lockCurrency = false,
 }) {
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
       <div className="domus-money-input">
         <input type={type} value={value ?? ""} placeholder={placeholder} onChange={(e) => onAmountChange(e.target.value)} />
-        <select value={currencyId ?? ""} onChange={(e) => onCurrencyChange(e.target.value)}>
+        <select value={currencyId ?? ""} disabled={lockCurrency} onChange={(e) => onCurrencyChange(e.target.value)}>
           {currencyOptions.map((option) => (
             <option key={option.value} value={option.value}>{option.symbol || option.label}</option>
           ))}
@@ -1933,7 +2021,7 @@ function taxPreview(form) {
   const v = Number(form.taxValue) || 0;
   if (form.taxApplyMode !== "auto" || amount <= 0 || v <= 0) return "—";
   const tax = form.taxType === "percent" ? amount - amount / (1 + v / 100) : Math.min(v, amount);
-  return (Math.round(tax * 100) / 100).toLocaleString("fr-FR");
+  return tax.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 async function ensureContract(lease, contractsByLease) {
@@ -1994,30 +2082,40 @@ async function handleWaiveDeposit(lease, setBusyAction, setActionError, reload, 
   }
 }
 
-async function handleRenewLease(lease, setBusyAction, setActionError, reload, confirm) {
-  const ok = await confirm({
-    title: t("Renouveler le bail"),
-    message: tf(t("Renouveler le bail {ref} pour 12 mois ?"), { ref: lease.reference || lease.id }),
-    confirmLabel: t("Renouveler"),
-  });
-  if (!ok) return;
+// Formulaire de renouvellement pre-rempli depuis l'ancien bail (ouvert dans LeaseModal, mode renew).
+function renewToForm(lease) {
   const startDate = addDaysISO(dateOnly(lease.endDate) || todayISO(), 1);
-  const endDate = addMonthsISO(startDate, 12, -1);
-  setBusyAction(`renew-${lease.id}`);
-  setActionError("");
-  try {
-    await api.renewLease(lease.id, {
-      startDate,
-      endDate,
-      rentAmount: toNumber(lease.rentAmount),
-      endCurrentLease: true,
-    });
-    await reload();
-  } catch (e) {
-    setActionError(e.message || "Impossible de renouveler le bail.");
-  } finally {
-    setBusyAction("");
-  }
+  return {
+    ...leaseToForm(lease),
+    id: undefined,
+    _prorationWas: false,
+    _renewFrom: lease,
+    startDate,
+    endDate: addMonthsISO(startDate, 12, -1),
+    nextInvoiceDate: startDate,
+    status: "active",
+    templateId: "",
+  };
+}
+
+// Payload serveur du renouvellement (pas de currencyId/propertyId/unitId/tenantId).
+function renewPayload(form) {
+  return {
+    startDate: form.startDate,
+    endDate: form.endDate || null,
+    rentAmount: toNumber(form.rentAmount),
+    billingCycle: form.billingCycle || "monthly",
+    securityDeposit: form.noDeposit ? 0 : toNumber(form.securityDeposit),
+    taxName: form.taxName || null,
+    taxType: form.taxType || "percent",
+    taxValue: form.taxValue === "" || form.taxValue == null ? null : toNumber(form.taxValue),
+    taxApplyMode: form.taxApplyMode || "never",
+    rentProrationEnabled: Boolean(form.rentProrationEnabled),
+    terms: form.terms || null,
+    ...(form.nextInvoiceDate ? { nextInvoiceDate: form.nextInvoiceDate } : {}),
+    ...(form.templateId ? { templateId: toNumber(form.templateId) } : {}),
+    endCurrentLease: true,
+  };
 }
 
 async function handleResendContract(contract, setBusyAction, setActionError, reload, smsSend) {

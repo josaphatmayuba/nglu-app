@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import { BadRequestException, ConflictException, GoneException, HttpException, HttpStatus, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { normalizePhoneKey } from "./notification-utils";
 import { loadLeaseTotalDue, resolveCurrencySymbol } from "./lease-overdue";
 import { env } from "../config/env";
@@ -33,6 +33,7 @@ import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
+import type { RenewLeaseDto } from "./dto/contract-template.dto";
 import { ObjectStorageService } from "./object-storage.service";
 import { TenantPortalService } from "./tenant-portal.service";
 import { OwnerNotificationsService } from "./owner-notifications.service";
@@ -1383,7 +1384,7 @@ export class ContractsService {
     return rows[0];
   }
 
-  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, orgId: number, createdBy?: number) {
+  async renewLease(leaseId: number, dto: RenewLeaseDto, orgId: number, createdBy?: number) {
     const rows = await this.db
       .select()
       .from(realEstateLeases)
@@ -1429,58 +1430,63 @@ export class ContractsService {
     }
 
     const formatDate = (d: Date) => d.toISOString().slice(0, 10);
+    const startStr = formatDate(newStart);
+    const endStr = formatDate(newEnd);
+    const money = (n: number | string) => Number(n).toFixed(2); // jamais arrondi a l'entier
 
-    const reference = `${current.reference ?? `BAIL-${current.id}`}-R${Date.now().toString().slice(-4)}`;
-    const rentAmount = dto.rentAmount != null ? String(dto.rentAmount) : current.rentAmount;
-
-    const [insertResult] = await this.db.insert(realEstateLeases).values({
-      organizationId: orgId,
-      reference,
-      propertyId: current.propertyId,
-      unitId: current.unitId,
-      tenantId: current.tenantId,
-      startDate: formatDate(newStart),
-      endDate: formatDate(newEnd),
-      nextInvoiceDate: formatDate(newStart),
-      billingCycle: current.billingCycle,
-      rentAmount,
-      securityDeposit: current.securityDeposit,
-      moveInMeterReading: current.moveInMeterReading,
-      moveInNotes: current.moveInNotes,
-      terms: current.terms,
-      signingCity: current.signingCity,
-      // Renouvellement = suite de l'ancien bail (meme locataire, meme caution).
-      renewedFromLeaseId: current.id,
-      status: "active",
-      createdAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    });
-
-    const newLeaseId = Number(insertResult.insertId);
-
-    if (dto.endCurrentLease) {
-      await this.db
-        .update(realEstateLeases)
-        .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
+    // ── Garde-fous ──
+    if (endStr <= startStr) {
+      throw new BadRequestException("La date de fin du nouveau bail doit être postérieure à sa date de début.");
     }
-
-    // La caution deja encaissee suit le renouvellement : le passif « Tenant
-    // Deposits » ne bouge pas (aucune ecriture), seul le rattachement change.
-    await this.db
-      .update(realEstateSecurityDeposits)
-      .set({ leaseId: newLeaseId, updatedAt: sql`CURRENT_TIMESTAMP` })
+    const oldEnd = current.endDate ? String(current.endDate).slice(0, 10) : null;
+    if (oldEnd && startStr < oldEnd) {
+      throw new BadRequestException("Le nouveau bail ne peut pas commencer avant la fin du bail actuel (chevauchement).");
+    }
+    const overlap = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
       .where(
         and(
-          eq(realEstateSecurityDeposits.leaseId, leaseId),
-          eq(realEstateSecurityDeposits.organizationId, orgId),
-          eq(realEstateSecurityDeposits.status, "held"),
-          eq(realEstateSecurityDeposits.isActive, 1),
+          eq(realEstateLeases.organizationId, orgId),
+          eq(realEstateLeases.propertyId, current.propertyId),
+          eq(realEstateLeases.unitId, current.unitId),
+          eq(realEstateLeases.status, "active"),
+          ne(realEstateLeases.id, leaseId),
+          lt(realEstateLeases.startDate, endStr),
+          sql`COALESCE(${realEstateLeases.endDate}, '9999-12-31') > ${startStr}`,
         ),
-      );
+      )
+      .limit(1);
+    if (overlap.length) {
+      throw new BadRequestException("Un autre bail actif couvre déjà cette unité sur cette période (double location interdite).");
+    }
+    if (dto.securityDeposit != null) {
+      const deposits = await this.db
+        .select({ amount: realEstateSecurityDeposits.amount, rentApplied: realEstateSecurityDeposits.rentAppliedAmount })
+        .from(realEstateSecurityDeposits)
+        .where(
+          and(
+            eq(realEstateSecurityDeposits.leaseId, leaseId),
+            eq(realEstateSecurityDeposits.organizationId, orgId),
+            eq(realEstateSecurityDeposits.status, "held"),
+            eq(realEstateSecurityDeposits.isActive, 1),
+          ),
+        );
+      const held = deposits.reduce((sum, d) => sum + Number(d.amount ?? 0) - Number(d.rentApplied ?? 0), 0);
+      if (Number(money(dto.securityDeposit)) + 0.005 < held) {
+        throw new BadRequestException(
+          `La caution demandée (${money(dto.securityDeposit)}) est inférieure à la caution déjà détenue (${money(held)}). Une restitution doit passer par le flux de caution.`,
+        );
+      }
+    }
 
-    // Les colocataires actifs suivent le renouvellement (avant le contrat, pour
-    // qu'il liste tous les preneurs et que chacun puisse le signer).
+    const reference = `${current.reference ?? `BAIL-${current.id}`}-R${Date.now().toString().slice(-4)}`;
+    const rentAmount = dto.rentAmount != null ? money(dto.rentAmount) : current.rentAmount;
+    const prorata = dto.rentProrationEnabled !== undefined ? !!dto.rentProrationEnabled : !!(current as any).rentProrationEnabled;
+    const reqNext = dto.nextInvoiceDate ? dto.nextInvoiceDate.slice(0, 10) : null;
+    // Prorata actif : jamais avant le debut du bail (meme logique que clampNextInvoiceToStart).
+    const nextInvoiceDate = prorata ? (reqNext && reqNext >= startStr ? reqNext : startStr) : (reqNext ?? startStr);
+
     const coRows = await this.db
       .select({ customerId: realEstateLeaseCotenants.customerId, position: realEstateLeaseCotenants.position })
       .from(realEstateLeaseCotenants)
@@ -1492,20 +1498,80 @@ export class ContractsService {
         ),
       )
       .orderBy(realEstateLeaseCotenants.position, realEstateLeaseCotenants.id);
-    const copied = new Set<number>();
-    for (const co of coRows) {
-      if (co.customerId === current.tenantId || copied.has(co.customerId)) continue;
-      copied.add(co.customerId);
-      await this.db.insert(realEstateLeaseCotenants).values({
+
+    // Tout ou rien : nouveau bail + ancien termine + caution + colocataires.
+    const newLeaseId = await this.db.transaction(async (tx) => {
+      const [insertResult] = await tx.insert(realEstateLeases).values({
         organizationId: orgId,
-        leaseId: newLeaseId,
-        customerId: co.customerId,
-        position: co.position,
-        isActive: 1,
+        reference,
+        propertyId: current.propertyId,
+        unitId: current.unitId,
+        tenantId: current.tenantId,
+        // Devise figee au renouvellement (bug #85 : etait perdue).
+        currencyId: current.currencyId,
+        startDate: startStr,
+        endDate: endStr,
+        nextInvoiceDate,
+        billingCycle: dto.billingCycle ?? current.billingCycle,
+        rentAmount,
+        securityDeposit: dto.securityDeposit != null ? money(dto.securityDeposit) : current.securityDeposit,
+        moveInMeterReading: current.moveInMeterReading,
+        moveInNotes: current.moveInNotes,
+        terms: dto.terms !== undefined ? dto.terms : current.terms,
+        signingCity: current.signingCity,
+        taxName: dto.taxName !== undefined ? dto.taxName : current.taxName,
+        taxType: dto.taxType !== undefined ? dto.taxType : current.taxType,
+        taxValue: dto.taxValue !== undefined ? (dto.taxValue === null ? null : String(dto.taxValue)) : current.taxValue,
+        taxApplyMode: dto.taxApplyMode ?? current.taxApplyMode,
+        rentProrationEnabled: prorata ? 1 : 0,
+        // Ne pas retrograder un bail du registre d'imputation.
+        allocationLedgerAt: (current as any).allocationLedgerAt ? sql`CURRENT_TIMESTAMP` : null,
+        // Renouvellement = suite de l'ancien bail (meme locataire, meme caution).
+        renewedFromLeaseId: current.id,
+        status: "active",
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       });
-    }
+      const id = Number(insertResult.insertId);
+
+      if (dto.endCurrentLease) {
+        await tx
+          .update(realEstateLeases)
+          .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
+      }
+
+      // La caution deja encaissee suit le renouvellement : le passif « Tenant
+      // Deposits » ne bouge pas (aucune ecriture), seul le rattachement change.
+      await tx
+        .update(realEstateSecurityDeposits)
+        .set({ leaseId: id, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(
+          and(
+            eq(realEstateSecurityDeposits.leaseId, leaseId),
+            eq(realEstateSecurityDeposits.organizationId, orgId),
+            eq(realEstateSecurityDeposits.status, "held"),
+            eq(realEstateSecurityDeposits.isActive, 1),
+          ),
+        );
+
+      // Les colocataires actifs suivent le renouvellement (avant le contrat).
+      const copied = new Set<number>();
+      for (const co of coRows) {
+        if (co.customerId === current.tenantId || copied.has(co.customerId)) continue;
+        copied.add(co.customerId);
+        await tx.insert(realEstateLeaseCotenants).values({
+          organizationId: orgId,
+          leaseId: id,
+          customerId: co.customerId,
+          position: co.position,
+          isActive: 1,
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+      }
+      return id;
+    });
 
     const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, orgId, createdBy);
 

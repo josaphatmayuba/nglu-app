@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : renouvellement de bail avec conditions modifiables (v3.275.0).** « Renouveler » ouvre le formulaire de bail pré-rempli : loyer (ancien → nouveau, avertissement > +20 %, confirmation si baisse), dates, cycle, caution (refus sous la caution détenue, complément affiché), taxe, prorata, conditions, modèle de contrat ; bien, unité, locataire et devise figés. Serveur : `RenewLeaseDto` étendu, garde-fous dates/chevauchement/caution, écritures en transaction, `lease-renewal.spec.ts`. Corrige BUGS #85 (devise, taxe et prorata perdus au renouvellement) et #86 (`Math.round` dans l'aperçu de taxe).
 - **Domus carnet : rose pâle du cahier du bailleur enfin visible à l'impression (v3.274.7).** `#fdeef1` : `#fffbfc` (v3.274.6) était trop proche du blanc pour se voir sur papier.
 - **Domus carnet : rose du cahier du bailleur encore plus pâle à l'impression (v3.274.6).** `#fffbfc` au lieu de `#fff6f8`, pour économiser l'encre ; le cahier du locataire reste blanc.
 - **Domus carnet : cahier du bailleur en rose très pâle dans tous les formats (v3.274.5).** Cahier coupé A5, Feuilles entières et Cahier simple restaient blancs pour le bailleur.

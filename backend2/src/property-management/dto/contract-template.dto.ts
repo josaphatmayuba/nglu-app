@@ -2,11 +2,14 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
+  Min,
   MaxLength,
 } from "class-validator";
 
@@ -52,7 +55,7 @@ export class RenewLeaseDto {
     description: "Date de début du nouveau bail. Par défaut: lendemain de la fin du bail courant.",
   })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   startDate?: string;
 
   @ApiPropertyOptional({
@@ -60,7 +63,7 @@ export class RenewLeaseDto {
     description: "Date de fin du nouveau bail. Par défaut: même durée que le bail courant.",
   })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   endDate?: string;
 
   @ApiPropertyOptional({
@@ -69,6 +72,8 @@ export class RenewLeaseDto {
   })
   @IsOptional()
   @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   rentAmount?: number;
 
   @ApiPropertyOptional({
@@ -87,4 +92,53 @@ export class RenewLeaseDto {
   @IsOptional()
   @IsBoolean()
   endCurrentLease?: boolean;
+
+  @ApiPropertyOptional({ example: "monthly", description: "Cycle de facturation. Par défaut: celui du bail courant." })
+  @IsOptional()
+  @IsString()
+  billingCycle?: string;
+
+  @ApiPropertyOptional({ example: 1800, description: "Caution du nouveau bail. Ne peut pas être inférieure à la caution déjà détenue." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  securityDeposit?: number;
+
+  @ApiPropertyOptional({ example: "TVA" })
+  @IsOptional()
+  @IsString()
+  taxName?: string | null;
+
+  @ApiPropertyOptional({ enum: ["percent", "fixed"], example: "percent" })
+  @IsOptional()
+  @IsIn(["percent", "fixed"])
+  taxType?: "percent" | "fixed" | null;
+
+  @ApiPropertyOptional({ example: 16 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxValue?: number | null;
+
+  @ApiPropertyOptional({ enum: ["auto", "never"] })
+  @IsOptional()
+  @IsIn(["auto", "never"])
+  taxApplyMode?: "auto" | "never";
+
+  @ApiPropertyOptional({ description: "Prorata du loyer par période. Par défaut: celui du bail courant." })
+  @IsOptional()
+  @IsBoolean()
+  rentProrationEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  terms?: string | null;
+
+  @ApiPropertyOptional({ example: "2027-03-01", description: "Première échéance. Avec prorata: jamais avant startDate." })
+  @IsOptional()
+  @IsDateString()
+  nextInvoiceDate?: string;
 }
