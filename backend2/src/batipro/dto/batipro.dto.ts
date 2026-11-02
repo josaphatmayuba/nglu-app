@@ -468,6 +468,8 @@ export class ConfirmBatiproDocumentDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
   @IsOptional() @IsDateString() fx_rate_date?: string;
   @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+  // true = marchandise deja livree : receptionne toutes les lignes Materiau a la confirmation.
+  @IsOptional() @IsBoolean() already_delivered?: boolean;
 }
 
 // Une ligne receptionnee : quantite physiquement recue sur cette ligne du BC
@@ -491,6 +493,12 @@ export class ReceiveBatiproDocumentDto {
 // Declaration d'une consommation manuelle de materiau sur un chantier (Stock,
 // Phase 2). movement_type est force serveur a 'consumption' : cet endpoint ne
 // permet jamais de creer une reception (reservee au flux BC automatique).
+export class RestockMaterialDto {
+  @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) @Max(1000000) quantity!: number;
+  @IsOptional() @IsInt() project_id?: number;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
 export class CreateStockMovementDto {
   @IsInt() project_id!: number;
   @IsInt() material_id!: number;

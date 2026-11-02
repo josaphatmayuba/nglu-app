@@ -3438,7 +3438,8 @@ export const batiproDocumentTotals = mysqlTable("batipro_document_totals", {
 export const batiproStockMovements = mysqlTable("batipro_stock_movements", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
-  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  // NULL = mouvement de stock general (sans chantier).
+  projectId: bigint("project_id", { mode: "number" }),
   materialId: bigint("material_id", { mode: "number" }).notNull(),
   // Origine du mouvement : document (BC) a l'origine d'une reception. NULL pour
   // une consommation ou un ajustement manuel.

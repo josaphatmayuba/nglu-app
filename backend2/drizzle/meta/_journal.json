@@ -2164,6 +2164,13 @@
       "when": 1783152000000,
       "tag": "0333_batipro_document_line_type",
       "breakpoints": true
+    },
+    {
+      "idx": 309,
+      "version": "5",
+      "when": 1783238400000,
+      "tag": "0334_batipro_stock_movement_project_nullable",
+      "breakpoints": true
     }
   ]
 }

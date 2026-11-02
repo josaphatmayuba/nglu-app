@@ -73,6 +73,7 @@ import type {
   CreateBatiproWorkerDto,
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
+  RestockMaterialDto,
   ReviewSubmissionDto,
   SubmitSubcontractorDocumentDto,
   UpdateBatiproAttendanceDto,
@@ -681,20 +682,57 @@ export class BatiproService {
     return row;
   }
 
-  async createMaterial(input: CreateBatiproMaterialDto, orgId: number) {
-    const wanted = (input.name || "").trim().toLowerCase();
+  private async findDuplicateMaterial(name: string, orgId: number, excludeId?: number) {
+    const wanted = (name || "").trim().toLowerCase();
     const [duplicate] = await this.db
-      .select({ id: batiproMaterials.id, name: batiproMaterials.name })
+      .select({ id: batiproMaterials.id, name: batiproMaterials.name, unit: batiproMaterials.unit })
       .from(batiproMaterials)
       .where(and(
         eq(batiproMaterials.organizationId, orgId),
         eq(batiproMaterials.isActive, 1),
         sql`lower(trim(${batiproMaterials.name})) = ${wanted}`,
+        ...(excludeId != null ? [ne(batiproMaterials.id, excludeId)] : []),
       ))
       .limit(1);
-    if (duplicate) {
-      throw new ConflictException(`Le matériau « ${duplicate.name} » existe déjà : modifiez son stock au lieu d'en créer un second.`);
+    return duplicate;
+  }
+
+  private throwDuplicateMaterial(duplicate: { id: number; name: string; unit: string }): never {
+    throw new ConflictException({
+      statusCode: 409,
+      error: "Conflict",
+      message: `Le matériau « ${duplicate.name} » existe déjà : modifiez son stock au lieu d'en créer un second.`,
+      existingId: Number(duplicate.id),
+      unit: duplicate.unit,
+    });
+  }
+
+  // materials.stock = cache du stock TOTAL de l'organisation pour ce materiau.
+  // Toujours modifie en SQL (stock + delta), dans la transaction du mouvement.
+  // delta < 0 : refus clair si le stock deviendrait negatif, sauf { floorAtZero }
+  // (consommation : le stock existant servait de solde d'ouverture, on ne bloque pas).
+  private async applyStockDelta(tx: any, materialId: number, orgId: number, delta: number, opts: { floorAtZero?: boolean } = {}) {
+    const abs = Math.abs(delta);
+    if (!(abs > 0)) return;
+    const where = and(eq(batiproMaterials.id, materialId), eq(batiproMaterials.organizationId, orgId));
+    if (delta > 0) {
+      await tx.update(batiproMaterials).set({ stock: sql`${batiproMaterials.stock} + ${abs}` }).where(where);
+      return;
     }
+    if (opts.floorAtZero) {
+      await tx.update(batiproMaterials).set({ stock: sql`GREATEST(${batiproMaterials.stock} - ${abs}, 0)` }).where(where);
+      return;
+    }
+    const res: any = await tx.update(batiproMaterials)
+      .set({ stock: sql`${batiproMaterials.stock} - ${abs}` })
+      .where(and(where, sql`${batiproMaterials.stock} >= ${abs}`));
+    const affected = Number((Array.isArray(res) ? res[0]?.affectedRows : res?.affectedRows) ?? 0);
+    if (affected < 1) throw new BadRequestException("Stock général insuffisant pour retirer cette quantité.");
+  }
+
+  async createMaterial(input: CreateBatiproMaterialDto, orgId: number) {
+    const duplicate = await this.findDuplicateMaterial(input.name, orgId);
+    if (duplicate) this.throwDuplicateMaterial(duplicate);
     const [result] = await this.db.insert(batiproMaterials).values({
       organizationId: orgId,
       name: input.name,
@@ -710,18 +748,39 @@ export class BatiproService {
     return this.getMaterial(id, orgId);
   }
 
-  async updateMaterial(id: number, input: UpdateBatiproMaterialDto, orgId: number) {
-    await this.getMaterial(id, orgId);
+  async updateMaterial(id: number, input: UpdateBatiproMaterialDto, orgId: number, userId?: number) {
+    const current = await this.getMaterial(id, orgId);
+    if (input.name !== undefined) {
+      const duplicate = await this.findDuplicateMaterial(input.name, orgId, id);
+      if (duplicate) this.throwDuplicateMaterial(duplicate);
+    }
     const patch: Partial<typeof batiproMaterials.$inferInsert> = {};
     if (input.name !== undefined) patch.name = input.name;
     if (input.unit !== undefined) patch.unit = input.unit;
-    if (input.stock !== undefined) patch.stock = String(input.stock);
+    // Le stock n'est plus ecrit directement : un changement devient un
+    // mouvement 'adjustment' (Inventaire) applique via applyStockDelta.
     if (input.min_stock !== undefined) patch.minStock = String(input.min_stock);
     if (input.reserved !== undefined) patch.reserved = String(input.reserved);
     if (input.supplier !== undefined) patch.supplier = input.supplier || null;
     if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id || null;
-    if (Object.keys(patch).length) await this.db.update(batiproMaterials).set(patch).where(eq(batiproMaterials.id, id));
-    await this.publish("updateMaterial", ["materials"], "updated", id, orgId);
+    const delta = input.stock !== undefined ? Math.round((Number(input.stock) - Number(current.stock ?? 0)) * 1000) / 1000 : 0;
+    await this.db.transaction(async (tx) => {
+      if (Object.keys(patch).length) await tx.update(batiproMaterials).set(patch).where(eq(batiproMaterials.id, id));
+      if (delta !== 0) {
+        await tx.insert(batiproStockMovements).values({
+          organizationId: orgId,
+          projectId: null,
+          materialId: id,
+          documentId: null,
+          movementType: "adjustment",
+          quantity: String(delta),
+          note: "Inventaire",
+          createdBy: userId ?? null,
+        });
+        await this.applyStockDelta(tx, id, orgId, delta);
+      }
+    });
+    await this.publish("updateMaterial", ["materials", ...(delta !== 0 ? ["stock_movements"] : [])], "updated", id, orgId);
     return this.getMaterial(id, orgId);
   }
 
@@ -732,9 +791,92 @@ export class BatiproService {
     return { message: "Materiau supprime." };
   }
 
+  // Reapprovisionnement manuel : entree de stock (mouvement 'adjustment' positif).
+  // project_id absent = stock general ; present = entree rattachee au chantier
+  // (comptee dans son recu/restant). materials.stock += quantite, meme transaction.
+  async restockMaterial(id: number, input: RestockMaterialDto, orgId: number, userId?: number) {
+    await this.getMaterial(id, orgId);
+    if (input.project_id != null) await this.getProject(input.project_id, orgId);
+    const movementId = await this.db.transaction(async (tx) => {
+      const [result] = await tx.insert(batiproStockMovements).values({
+        organizationId: orgId,
+        projectId: input.project_id ?? null,
+        materialId: id,
+        documentId: null,
+        movementType: "adjustment",
+        quantity: String(input.quantity),
+        note: input.note ?? null,
+        createdBy: userId ?? null,
+      }).$returningId();
+      await this.applyStockDelta(tx, id, orgId, input.quantity);
+      return Number(result.id);
+    });
+    await this.publish("restockMaterial", ["materials", "stock_movements"], "updated", id, orgId);
+    return { material: await this.getMaterial(id, orgId), movement: await this.getStockMovement(movementId, orgId) };
+  }
+
+  // Stock par materiau et par chantier : UNE requete agregee (mouvements actifs
+  // x chantiers), quantites decimales exactes renvoyees en chaine (3 decimales).
+  // project_id null = « Stock general » (mouvements sans chantier). Les totaux
+  // org (materials.stock) sont lus avec une 2e requete (pas de N+1).
+  async materialsStockByProject(orgId: number, materialId?: number) {
+    const movementWhere = and(
+      eq(batiproStockMovements.organizationId, orgId),
+      eq(batiproStockMovements.isActive, 1),
+      eq(batiproMaterials.isActive, 1),
+      ...(materialId != null ? [eq(batiproStockMovements.materialId, materialId)] : []),
+    );
+    const qty = batiproStockMovements.quantity;
+    const type = batiproStockMovements.movementType;
+    const rows = await this.db
+      .select({
+        material_id: batiproMaterials.id,
+        material_name: batiproMaterials.name,
+        unit: batiproMaterials.unit,
+        project_id: batiproStockMovements.projectId,
+        project_name: batiproProjects.name,
+        project_location: batiproProjects.location,
+        project_client: batiproProjects.client,
+        project_manager: batiproProjects.manager,
+        received: sql<string>`CAST(COALESCE(SUM(CASE WHEN ${type} = 'reception' THEN ${qty} ELSE 0 END), 0) AS DECIMAL(14,3))`,
+        consumed: sql<string>`CAST(COALESCE(SUM(CASE WHEN ${type} = 'consumption' THEN ${qty} ELSE 0 END), 0) AS DECIMAL(14,3))`,
+        adjusted: sql<string>`CAST(COALESCE(SUM(CASE WHEN ${type} = 'adjustment' THEN ${qty} ELSE 0 END), 0) AS DECIMAL(14,3))`,
+        remaining: sql<string>`CAST(COALESCE(SUM(CASE WHEN ${type} = 'consumption' THEN -${qty} ELSE ${qty} END), 0) AS DECIMAL(14,3))`,
+      })
+      .from(batiproStockMovements)
+      .innerJoin(batiproMaterials, and(eq(batiproMaterials.id, batiproStockMovements.materialId), eq(batiproMaterials.organizationId, orgId)))
+      .leftJoin(batiproProjects, eq(batiproProjects.id, batiproStockMovements.projectId))
+      .where(movementWhere)
+      .groupBy(batiproMaterials.id, batiproMaterials.name, batiproMaterials.unit, batiproStockMovements.projectId, batiproProjects.name, batiproProjects.location, batiproProjects.client, batiproProjects.manager)
+      .orderBy(batiproMaterials.name, batiproProjects.name);
+
+    const totals = await this.db
+      .select({ material_id: batiproMaterials.id, material_name: batiproMaterials.name, unit: batiproMaterials.unit, stock: batiproMaterials.stock })
+      .from(batiproMaterials)
+      .where(and(
+        eq(batiproMaterials.organizationId, orgId),
+        eq(batiproMaterials.isActive, 1),
+        ...(materialId != null ? [eq(batiproMaterials.id, materialId)] : []),
+      ))
+      .orderBy(batiproMaterials.name);
+
+    return {
+      items: rows.map((r) => ({
+        ...r,
+        material_id: Number(r.material_id),
+        project_id: r.project_id == null ? null : Number(r.project_id),
+        project_name: r.project_id == null ? "Stock général" : r.project_name,
+        project_location: r.project_id == null ? null : r.project_location,
+        project_client: r.project_id == null ? null : r.project_client,
+        project_manager: r.project_id == null ? null : r.project_manager,
+      })),
+      totals: totals.map((t) => ({ ...t, material_id: Number(t.material_id) })),
+    };
+  }
+
   // ── Mouvements de stock materiaux par chantier ──────────────────────────
   // Consommation manuelle uniquement (movement_type force serveur) : la
-  // reception ne se cree QUE via receiveStockFromPurchaseOrder (emission BC).
+  // reception ne se cree QUE via receivePurchaseOrder (reception du BC).
   async createStockMovement(input: CreateStockMovementDto, orgId: number) {
     await this.getProject(input.project_id, orgId);
     await this.getMaterial(input.material_id, orgId);
@@ -746,17 +888,20 @@ export class BatiproService {
     if (input.quantity > remaining) {
       throw new BadRequestException(`Stock insuffisant : ${remaining} ${stock?.unit ?? ""} restant(s)`.replace("  ", " "));
     }
-    const [result] = await this.db.insert(batiproStockMovements).values({
-      organizationId: orgId,
-      projectId: input.project_id,
-      materialId: input.material_id,
-      phaseId: input.phase_id ?? null,
-      movementType: "consumption",
-      quantity: String(input.quantity),
-      note: input.note ?? null,
-    }).$returningId();
-    const id = Number(result.id);
-    await this.publish("createStockMovement", ["stock_movements"], "created", id, orgId);
+    const id = await this.db.transaction(async (tx) => {
+      const [result] = await tx.insert(batiproStockMovements).values({
+        organizationId: orgId,
+        projectId: input.project_id,
+        materialId: input.material_id,
+        phaseId: input.phase_id ?? null,
+        movementType: "consumption",
+        quantity: String(input.quantity),
+        note: input.note ?? null,
+      }).$returningId();
+      await this.applyStockDelta(tx, input.material_id, orgId, -input.quantity, { floorAtZero: true });
+      return Number(result.id);
+    });
+    await this.publish("createStockMovement", ["stock_movements", "materials"], "created", id, orgId);
     return this.getStockMovement(id, orgId);
   }
 
@@ -2452,6 +2597,28 @@ export class BatiproService {
       }
     }
 
+    // Garde-fou : les lignes d'un BC (partiellement) recu ne sont plus modifiables,
+    // sinon quantites/materiaux divergeraient des mouvements de stock existants.
+    if (doc.type === "purchase_order" && input.lines !== undefined) {
+      let locked = doc.status === "received" || doc.status === "partially_received";
+      if (!locked) {
+        const [movement] = await this.db
+          .select({ id: batiproStockMovements.id })
+          .from(batiproStockMovements)
+          .where(and(
+            eq(batiproStockMovements.documentId, id),
+            eq(batiproStockMovements.organizationId, orgId),
+            eq(batiproStockMovements.movementType, "reception"),
+            eq(batiproStockMovements.isActive, 1),
+          ))
+          .limit(1);
+        locked = !!movement;
+      }
+      if (locked) {
+        throw new BadRequestException("Ce bon de commande a déjà été réceptionné (totalement ou en partie) : ses lignes ne peuvent plus être modifiées. Annulez d'abord les réceptions.");
+      }
+    }
+
     const patch: Partial<typeof batiproDocuments.$inferInsert> = {};
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id ?? null;
@@ -2519,6 +2686,15 @@ export class BatiproService {
       expectedDeliveryDate: input.expected_delivery_date ?? null,
     }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
 
+    // Livraison deja effectuee a l'emission : receptionne toutes les lignes Materiau.
+    if (input.already_delivered === true) {
+      const lines = doc.lines
+        .filter((l) => l.isActive === 1 && l.materialId != null)
+        .map((l) => ({ line_id: l.id, quantity: Math.round((Number(l.quantity ?? 0) - Number(l.receivedQuantity ?? 0)) * 100000) / 100000 }))
+        .filter((l) => l.quantity > 0);
+      if (lines.length) await this.receivePurchaseOrder(id, { lines, note: "Livré à l'émission" } as ReceiveBatiproDocumentDto, orgId, userId);
+    }
+
     await this.publish("confirmPurchaseOrder", ["documents"], "updated", id, orgId);
     return this.getDocument(id, orgId);
   }
@@ -2573,6 +2749,7 @@ export class BatiproService {
     for (const entry of input.lines) {
       const line = lineById.get(entry.line_id);
       if (!line) throw new BadRequestException(`Ligne ${entry.line_id} introuvable sur ce document.`);
+      if (line.materialId == null) throw new BadRequestException(`La ligne "${line.designation}" est un service : seule une ligne Matériau peut être réceptionnée.`);
       const ordered = Number(line.quantity ?? 0);
       const alreadyReceived = Number(line.receivedQuantity ?? 0);
       const cumulative = Math.round((alreadyReceived + entry.quantity) * 100000) / 100000;
@@ -2590,7 +2767,7 @@ export class BatiproService {
         await tx.insert(batiproStockMovements).values({
           organizationId: orgId,
           projectId: doc.projectId,
-          materialId: (line.materialId as number) ?? 0,
+          materialId: line.materialId as number,
           documentId,
           movementType: "reception",
           quantity: String(entry.quantity),
@@ -2598,6 +2775,7 @@ export class BatiproService {
           createdBy: userId ?? null,
           ...(receivedAt ? { createdAt: receivedAt as any } : {}),
         });
+        await this.applyStockDelta(tx, line.materialId as number, orgId, entry.quantity);
         await tx.update(batiproDocumentLines)
           .set({ receivedQuantity: sql`${batiproDocumentLines.receivedQuantity} + ${entry.quantity}` })
           .where(and(eq(batiproDocumentLines.id, entry.line_id), eq(batiproDocumentLines.organizationId, orgId)));
@@ -2679,7 +2857,25 @@ export class BatiproService {
     if (!movement) throw new NotFoundException("Mouvement de reception introuvable.");
 
     await this.db.transaction(async (tx) => {
+      // Refus si le stock recu a deja ete consomme sur le chantier.
+      if (movement.projectId != null && movement.materialId) {
+        const [agg] = await tx
+          .select({
+            remaining: sql<string>`COALESCE(SUM(CASE WHEN ${batiproStockMovements.movementType} = 'consumption' THEN -${batiproStockMovements.quantity} ELSE ${batiproStockMovements.quantity} END), 0)`,
+          })
+          .from(batiproStockMovements)
+          .where(and(
+            eq(batiproStockMovements.organizationId, orgId),
+            eq(batiproStockMovements.projectId, movement.projectId),
+            eq(batiproStockMovements.materialId, movement.materialId),
+            eq(batiproStockMovements.isActive, 1),
+          ));
+        if (Number(agg?.remaining ?? 0) - Number(movement.quantity) < -0.0005) {
+          throw new BadRequestException("Stock déjà consommé : annulez d'abord la consommation.");
+        }
+      }
       await tx.update(batiproStockMovements).set({ isActive: 0 }).where(eq(batiproStockMovements.id, movementId));
+      if (movement.materialId) await this.applyStockDelta(tx, movement.materialId, orgId, -Number(movement.quantity));
 
       if (movement.materialId) {
         const [line] = await tx

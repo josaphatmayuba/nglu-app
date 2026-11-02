@@ -31,6 +31,7 @@ import {
   CreateBatiproWorkerDto,
   DecideBatiproQuoteDto,
   CreateStockMovementDto,
+  RestockMaterialDto,
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
   RecordPaymentDto,
@@ -283,6 +284,13 @@ export class BatiproController {
     return this.batipro.materialsCleanupExecute(body, orgId, userId);
   }
 
+  @ApiOperation({ summary: "Stock par materiau et par chantier (+ stock general et total org)" })
+  @Permissions("readAll-batipro")
+  @Get("materials/stock-by-project")
+  materialsStockByProject(@CurrentOrg() orgId: number, @Query("material_id") materialId?: string) {
+    return this.batipro.materialsStockByProject(orgId, materialId ? Number(materialId) : undefined);
+  }
+
   @ApiOperation({ summary: "Create BatiPro material" })
   @Permissions("create-batipro")
   @Post("materials")
@@ -293,8 +301,15 @@ export class BatiproController {
   @ApiOperation({ summary: "Update BatiPro material" })
   @Permissions("update-batipro")
   @Put("materials/:id")
-  updateMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproMaterialDto, @CurrentOrg() orgId: number) {
-    return this.batipro.updateMaterial(id, body, orgId);
+  updateMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproMaterialDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.updateMaterial(id, body, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Restock a material (positive adjustment movement; optional project_id)" })
+  @Permissions("create-batipro")
+  @Post("materials/:id/restock")
+  restockMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: RestockMaterialDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.restockMaterial(id, body, orgId, userId || undefined);
   }
 
   @ApiOperation({ summary: "Soft-delete BatiPro material" })

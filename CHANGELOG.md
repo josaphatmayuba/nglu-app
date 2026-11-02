@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **BâtiPro stock des matériaux : réappro, entrée automatique à la réception, répartition par chantier (v3.276.0).** `POST /batipro/materials/:id/restock` (bouton « + Réappro » par ligne, bandeau « existe déjà » à la création) ; la réception d un bon de commande incrémente le stock global (annulation refusée si déjà consommé) ; `GET /batipro/materials/stock-by-project` (ligne dépliable avec chantier, lieu, reçu, consommé, restant) ; saisie manuelle du stock = ajustement « Inventaire » tracé ; BC reçu non modifiable ; « Dépenses et services » devient une entrée de menu ; bouton « Bon de commande » trompeur retiré de la page Matériaux. Migration 0334 : `batipro_stock_movements.project_id` nullable (stock général).
+
 - **BâtiPro migration 0333 corrigée (v3.275.16).** Les apostrophes du DEFAULT de `line_type` n étaient pas doublées : la requête échouait et les colonnes `line_type`, `service_category`, `line_note` pouvaient manquer. Fichier idempotent, rejoué au démarrage.
 
 - **BâtiPro matériaux : refus des doublons (v3.275.15).** Créer un matériau dont le nom existe déjà (sans tenir compte de la casse ni des espaces) est refusé avec un message invitant à modifier le stock existant.
