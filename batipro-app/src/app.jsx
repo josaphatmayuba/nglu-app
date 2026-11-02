@@ -4436,34 +4436,36 @@ function Materiaux({ materials: globalMaterials, onNew, onRestock, onOpenProject
       </div>
       <>
       <div className="card table-card" style={{ marginBottom: 16, overflowX: "auto" }}>
-        <table className="bp">
-          <thead><tr><th>Matériau</th><th>Stock</th><th>Réservé</th><th>Seuil</th><th>Statut</th><th>Actions</th></tr></thead>
+        <table className="bp mat-table">
+          <thead><tr><th>Matériau</th><th className="num">Stock</th><th className="num col-opt">Réservé</th><th className="num col-opt">Seuil</th><th>Statut</th><th className="col-act"><span className="mat-btn-label">Actions</span></th></tr></thead>
           <tbody>
+            {!materials.length && <tr><td colSpan={6} className="muted">Aucun matériau suivi. Créez-en un avec « Nouveau matériau » ou recevez un bon de commande.</td></tr>}
             {materials.map((m) => {
               const min = n(m.min ?? m.minStock);
               const lowStock = n(m.stock) < min;
               return (
                 <React.Fragment key={m.id ?? m.name}>
-                <tr>
-                  <td style={{ fontWeight: 500 }}>
-                    <button type="button" className="link" style={{ minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 500, textAlign: "left" }}
+                <tr className={openMat === m.id ? "mat-open" : undefined}>
+                  <td>
+                    <button type="button" className="mat-toggle"
                       aria-expanded={openMat === m.id} aria-label={`Répartition par chantier de ${m.name}`} disabled={m.id == null}
                       onClick={() => setOpenMat(openMat === m.id ? null : m.id)}>
-                      <span aria-hidden="true" style={{ display: "inline-block", transform: openMat === m.id ? "rotate(90deg)" : "none", transition: "transform .15s" }}>›</span>
-                      {m.name}
+                      <span aria-hidden="true" className="mat-chevron">›</span>
+                      <span>{m.name}</span>
                     </button>
+                    <div className="mat-sub">Seuil {min} · Réservé {n(m.reserved)}</div>
                   </td>
-                  <td>{n(m.stock)} {m.unit}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{n(m.reserved)}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{min}</td>
+                  <td className="num" style={{ fontWeight: 600, color: lowStock ? "var(--rose-700)" : undefined }}>{n(m.stock)} {m.unit}</td>
+                  <td className="num col-opt" style={{ color: "var(--ink-500)" }}>{n(m.reserved)}</td>
+                  <td className="num col-opt" style={{ color: "var(--ink-500)" }}>{min}</td>
                   <td><span className={`chip ${lowStock ? "rose" : "emerald"}`}>{lowStock ? "À commander" : "OK"}</span></td>
-                  <td>
-                    <button type="button" className="btn btn-ghost" style={{ minHeight: 44, minWidth: 44, whiteSpace: "nowrap" }} aria-label={`Réapprovisionner ${m.name}`}
-                      disabled={!canMutate || !can("update-batipro") || m.id == null} onClick={() => onRestock && onRestock({ id: m.id, name: m.name, unit: m.unit, stock: m.stock })}>+ Réappro</button>
+                  <td className="col-act">
+                    <button type="button" className="btn btn-ghost mat-btn-restock" style={{ minHeight: 44, minWidth: 44, whiteSpace: "nowrap" }} title={`Réapprovisionner ${m.name}`} aria-label={`Réapprovisionner ${m.name}`}
+                      disabled={!canMutate || !can("update-batipro") || m.id == null} onClick={() => onRestock && onRestock({ id: m.id, name: m.name, unit: m.unit, stock: m.stock })}><span aria-hidden="true">+</span><span className="mat-btn-label"> Réappro</span></button>
                   </td>
                 </tr>
                 {openMat === m.id && (
-                  <tr><td colSpan={6} style={{ background: "var(--ink-50, #f8fafc)" }}><MaterialBreakdown materialId={m.id} unit={m.unit} onOpenProject={onOpenProject} /></td></tr>
+                  <tr><td colSpan={6} className="mat-detail"><MaterialBreakdown materialId={m.id} unit={m.unit} onOpenProject={onOpenProject} /></td></tr>
                 )}
                 </React.Fragment>
               );
@@ -4520,11 +4522,11 @@ function MaterialBreakdown({ materialId, unit, onOpenProject }) {
       .catch((e) => { if (alive) setErr(e.message || String(e)); });
     return () => { alive = false; };
   }, [materialId]);
-  if (err) return <div role="alert" style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, padding: 8 }}>{err}</div>;
-  if (!rows) return <div className="muted" style={{ padding: 8 }}>Chargement…</div>;
+  if (err) return <div role="alert" style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, padding: 8 }}>Impossible de charger la répartition : {err}</div>;
+  if (!rows) return <div className="muted" role="status" style={{ padding: 8 }}>Chargement…</div>;
   if (!rows.length) return <div className="muted" style={{ padding: 8 }}>Aucun mouvement enregistré pour ce matériau.</div>;
   return (
-    <div style={{ padding: "4px 0", maxWidth: "100%", overflowX: "auto" }}>
+    <div style={{ padding: "4px 8px", maxWidth: "100%", overflowX: "auto" }}>
       <p className="eyebrow" style={{ margin: "4px 0" }}>Répartition par chantier</p>
       <table className="bp">
         <thead><tr><th>Chantier</th><th>Reçu</th><th>Consommé</th><th>Restant</th></tr></thead>
@@ -4591,10 +4593,10 @@ function RestockModal({ material, onClose, onDone }) {
     finally { setBusy(false); }
   };
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true">
+    <div className="modal-scrim restock-scrim" role="dialog" aria-modal="true" aria-labelledby="restock-title">
       <form className="modal-card" onSubmit={submit}>
         <div className="modal-head">
-          <div><h2 className="font-display">Réapprovisionner {material.name}</h2>{hasStock && <p>Stock actuel : {cur} {unit}</p>}</div>
+          <div><h2 id="restock-title" className="font-display">Réapprovisionner {material.name}</h2>{hasStock && <p>Stock actuel : {cur} {unit}</p>}</div>
           <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
         </div>
         {done ? (
@@ -4607,9 +4609,9 @@ function RestockModal({ material, onClose, onDone }) {
             <div className="form-grid">
               <label className="field">
                 <span>Quantité</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input inputMode="decimal" required autoFocus value={qty} onChange={(e) => setQty(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
-                  <span className="muted" aria-label="Unité">{unit}</span>
+                <div className="restock-qty">
+                  <input inputMode="decimal" required autoFocus value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+                  <span className="unit" aria-label="Unité">{unit}</span>
                 </div>
               </label>
               <label className="field">
@@ -5633,9 +5635,9 @@ function RecordModal({ modal, materials = [], busy, error, onClose, onSave, onRe
             <>
               <Field label="Matériau" value={form.name} onChange={(v) => set("name", v)} required />
               {dup && (
-                <div role="alert" className="login-error" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                <div role="alert" className="login-error dup-banner">
                   <span>« {dup.name} » existe déjà{dup.stock != null ? ` (${n(dup.stock)} ${dup.unit || ""})` : ""}.</span>
-                  <button type="button" className="btn btn-amber grad-amber" style={{ minHeight: 44 }} onClick={() => onRestock && onRestock(dup)}>Ajouter au stock</button>
+                  <button type="button" className="btn btn-amber grad-amber" onClick={() => onRestock && onRestock(dup)}>Ajouter au stock</button>
                 </div>
               )}
               <label className="field">
