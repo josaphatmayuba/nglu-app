@@ -405,6 +405,11 @@ export const RENT_BOOK_PRINT_CSS = `
   .rent-book .cover-header .qr { text-align: center; flex: none; }
   .rent-book .cover-header .qr img { background: #fff; padding: 6px; border-radius: 4px; display: block; }
   .rent-book .cover-header .qr span { display: block; color: #2f6e4e; font-weight: 700; font-size: 9px; text-transform: uppercase; letter-spacing: .07em; max-width: 100px; margin: 6px auto 0; font-family: 'Source Sans 3', Arial, sans-serif; line-height: 1.4; }
+  /* Locataire = trame bleue, bailleur = trame rouge. */
+  .rent-book .cover.locataire .cover-header { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2mm' height='2mm' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='32' fill='%231d4ed8'/%3E%3C/svg%3E"); border-bottom-color: #1d4ed8; }
+  .rent-book .cover.bailleur .cover-header { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='2mm' height='2mm' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='32' fill='%23b91c1c'/%3E%3C/svg%3E"); border-bottom-color: #b91c1c; }
+  .rent-book .cover.locataire .cover-header .ref, .rent-book .cover.locataire .cover-header .qr span, .rent-book .cover.locataire .cover-grid .cell strong.accent { color: #1d4ed8; }
+  .rent-book .cover.bailleur .cover-header .ref, .rent-book .cover.bailleur .cover-header .qr span, .rent-book .cover.bailleur .cover-grid .cell strong.accent { color: #b91c1c; }
   .rent-book .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
   .rent-book .cover-grid .cell { padding: 14px 24px; border-bottom: 1px solid #e3ddce; }
   .rent-book .cover-grid .cell.full { grid-column: 1 / -1; }
@@ -461,7 +466,7 @@ export const RENT_BOOK_PRINT_CSS = `
 function coverHtml(lease, qrDataUrl, who = "locataire") {
   const ownerPhone = (lease.ownerPhone || lease.ownerPhone2 || "").trim();
   return `
-  <div class="cover">
+  <div class="cover ${who === "bailleur" ? "bailleur" : "locataire"}">
     <div class="cover-header">
       <div>
         <h1>${escapeHtml(lease.propertyName || "Bien")}</h1>

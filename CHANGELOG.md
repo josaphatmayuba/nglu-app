@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus carnet de quittances : trame bleue (locataire) / rouge (bailleur) (v3.275.12).** L en-tête de couverture est tramé en bleu pour le carnet du locataire et en rouge pour celui du bailleur ; référence, légende du QR et loyer prennent la même couleur.
+
 - **Domus Loyers : une seule carte par bail renouvelé (v3.275.11).** L ancien bail terminé encore débiteur n a plus sa propre carte : il s affiche dans un encadré rouge « Arriéré bail précédent » sur la carte du bail en cours (Régler l arriéré / Relancer, pas de préavis), avec la ligne « Bail en cours » (dû ou À jour) et un « Total à recouvrer » par devise. Badge « En retard » tant qu un arriéré reste. KPI et compta inchangés.
 
 - **Domus carnet de quittances : en-tête de couverture tramé (v3.275.10).** Trame de points verts en SVG (≈ 8 % d encre) au lieu de l aplat vert, pour économiser l encre ; titre, référence et légende du QR en vert foncé sur fond blanc.
