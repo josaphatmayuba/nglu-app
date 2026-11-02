@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **BâtiPro migration 0333 corrigée (v3.275.16).** Les apostrophes du DEFAULT de `line_type` n étaient pas doublées : la requête échouait et les colonnes `line_type`, `service_category`, `line_note` pouvaient manquer. Fichier idempotent, rejoué au démarrage.
+
 - **BâtiPro matériaux : refus des doublons (v3.275.15).** Créer un matériau dont le nom existe déjà (sans tenir compte de la casse ni des espaces) est refusé avec un message invitant à modifier le stock existant.
 
 - **BâtiPro : onglet « Dépenses et services » + nettoyage des matériaux (v3.275.14).** La page Matériaux a deux onglets ; les lignes de service sont regroupées par type avec totaux par devise (`GET /batipro/service-expenses`). Nettoyage des matériaux non stockables (désactivation is_active=0 et fusion des doublons) disponible via endpoint protégé par confirmation explicite, non exécuté automatiquement.

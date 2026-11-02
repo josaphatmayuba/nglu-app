@@ -11,7 +11,7 @@ SET @bdl_line_type_exists := (
 --> statement-breakpoint
 SET @bdl_line_type_sql := IF(
   @bdl_line_type_exists = 0,
-  'ALTER TABLE `batipro_document_lines` ADD COLUMN `line_type` varchar(20) NOT NULL DEFAULT 'material'',
+  'ALTER TABLE `batipro_document_lines` ADD COLUMN `line_type` varchar(20) NOT NULL DEFAULT ''material''',
   'SELECT 1'
 );
 --> statement-breakpoint
