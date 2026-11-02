@@ -261,6 +261,13 @@ export class BatiproController {
     return this.batipro.materials(orgId, projectId ? Number(projectId) : undefined);
   }
 
+  @ApiOperation({ summary: "Dry-run LECTURE SEULE : materiaux a desactiver (services) et doublons a fusionner" })
+  @Permissions("readAll-batipro")
+  @Get("materials/cleanup-preview")
+  materialsCleanupPreview(@CurrentOrg() orgId: number) {
+    return this.batipro.materialsCleanupPreview(orgId);
+  }
+
   @ApiOperation({ summary: "Create BatiPro material" })
   @Permissions("create-batipro")
   @Post("materials")

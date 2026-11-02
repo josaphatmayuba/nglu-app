@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **BâtiPro bon de commande : type de ligne Matériau / Service (v3.275.13).** Seule une ligne « Matériau » crée ou rattache un article de stock ; les services (main-d'oeuvre, manutention, honoraires et avances, transport, quincaillerie) n'en créent plus. Dates, taux et n° de facture vont dans la note de ligne. Migration 0333 (`line_type`, `service_category`, `line_note`) et contrôle en lecture seule `GET /batipro/materials/cleanup-preview`.
 - **Domus carnet de quittances : trame bleue (locataire) / rouge (bailleur) (v3.275.12).** L en-tête de couverture est tramé en bleu pour le carnet du locataire et en rouge pour celui du bailleur ; référence, légende du QR et loyer prennent la même couleur.
 
 - **Domus Loyers : une seule carte par bail renouvelé (v3.275.11).** L ancien bail terminé encore débiteur n a plus sa propre carte : il s affiche dans un encadré rouge « Arriéré bail précédent » sur la carte du bail en cours (Régler l arriéré / Relancer, pas de préavis), avec la ligne « Bail en cours » (dû ou À jour) et un « Total à recouvrer » par devise. Badge « En retard » tant qu un arriéré reste. KPI et compta inchangés.

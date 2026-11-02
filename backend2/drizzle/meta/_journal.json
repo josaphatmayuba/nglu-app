@@ -2157,6 +2157,13 @@
       "when": 1783065600000,
       "tag": "0332_lease_termination_prorata",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "5",
+      "when": 1783152000000,
+      "tag": "0333_batipro_document_line_type",
+      "breakpoints": true
     }
   ]
 }

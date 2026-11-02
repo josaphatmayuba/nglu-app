@@ -228,6 +228,10 @@ export class DocumentLineDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
   @IsOptional() @IsInt() material_id?: number;
+  // 'material' = article de stock ; 'service' = depense sans stock (ne cree aucun materiau).
+  @IsOptional() @IsIn(["material", "service"]) line_type?: "material" | "service";
+  @IsOptional() @IsIn(["labor", "handling", "fees", "transport", "hardware_invoice", "other"]) service_category?: string;
+  @IsOptional() @IsString() @MaxLength(500) line_note?: string;
   @IsOptional() @IsInt() currency_id?: number;
 }
 

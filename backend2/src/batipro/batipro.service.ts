@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { buildMaterialCleanupPreview } from "./material-cleanup.util";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -475,6 +476,38 @@ export class BatiproService {
         .orderBy(batiproMaterials.name);
     }
     return this.materialsWithProjectStock(orgId, projectId);
+  }
+
+  // DRY-RUN LECTURE SEULE : liste les materiaux a desactiver (libelles de
+  // service/depense) et les doublons a fusionner. N'ecrit rien en base.
+  async materialsCleanupPreview(orgId: number) {
+    const mats = await this.db
+      .select()
+      .from(batiproMaterials)
+      .where(and(eq(batiproMaterials.organizationId, orgId), eq(batiproMaterials.isActive, 1)))
+      .orderBy(batiproMaterials.name);
+    const moves = await this.db
+      .select({ materialId: batiproStockMovements.materialId, c: sql<string>`COUNT(*)` })
+      .from(batiproStockMovements)
+      .where(and(eq(batiproStockMovements.organizationId, orgId), eq(batiproStockMovements.isActive, 1)))
+      .groupBy(batiproStockMovements.materialId);
+    const lns = await this.db
+      .select({ materialId: batiproDocumentLines.materialId, c: sql<string>`COUNT(*)` })
+      .from(batiproDocumentLines)
+      .where(and(eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1)))
+      .groupBy(batiproDocumentLines.materialId);
+    const moveBy = new Map(moves.map((r) => [Number(r.materialId), Number(r.c)]));
+    const lineBy = new Map(lns.map((r) => [Number(r.materialId), Number(r.c)]));
+    return buildMaterialCleanupPreview(mats.map((m) => ({
+      id: m.id,
+      name: m.name,
+      unit: m.unit,
+      stock: Number(m.stock),
+      minStock: Number(m.minStock),
+      reserved: Number(m.reserved),
+      movementCount: moveBy.get(m.id) ?? 0,
+      lineCount: lineBy.get(m.id) ?? 0,
+    })));
   }
 
   // Catalogue enrichi scope-projet : ne renvoie que les materiaux ayant au moins
@@ -1916,7 +1949,7 @@ export class BatiproService {
   // mono-devise (cas d'aujourd'hui, toutes lignes currency_id=NULL), ce sont
   // exactement les memes valeurs qu'avant ce changement.
   private computeDocumentTotals(
-    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; is_adjustment?: boolean; vat_rate?: number; phase_id?: number; material_id?: number; currency_id?: number }>,
+    rawLines: Array<{ designation: string; quantity?: number; unit_price?: number; is_adjustment?: boolean; vat_rate?: number; phase_id?: number; material_id?: number; line_type?: string; service_category?: string; line_note?: string; currency_id?: number }>,
     orgId: number,
     validPhaseIds: Set<number>,
     defaultCurrencyId: number | null = null,
@@ -1957,7 +1990,10 @@ export class BatiproService {
         lineHt: String(lineHt),
         lineTtc: String(Math.round((lineHt + lineVat) * 100) / 100),
         phaseId,
-        materialId: line.material_id ?? null,
+        materialId: line.line_type === "service" ? null : (line.material_id ?? null),
+        lineType: line.line_type === "service" ? "service" : "material",
+        serviceCategory: line.line_type === "service" ? (line.service_category || null) : null,
+        lineNote: line.line_note?.trim() || null,
         currencyId: line.currency_id ?? null,
       };
     });
@@ -1991,14 +2027,21 @@ export class BatiproService {
     };
   }
 
-  // Pour un bon de commande : si une ligne porte une designation mais aucun
-  // material_id (saisie "texte libre"), rattache automatiquement un materiau
-  // existant du meme nom (insensible a la casse) ou en cree un a la volee,
-  // pour eviter la double saisie fournisseur/achat puis materiaux.
+  // Pour un bon de commande : seule une ligne de type "material" cree/rattache un
+  // article de stock (materiau existant du meme nom, insensible a la casse, sinon
+  // creation a la volee). Une ligne "service" (main d oeuvre, manutention,
+  // honoraires, transport, facture) ne cree JAMAIS de materiau et perd tout
+  // material_id. Sans line_type : material_id fourni => materiau, sinon service.
   private async resolveMaterialIdsForPurchaseOrder(
-    lines: Array<{ designation: string; material_id?: number }>,
+    lines: Array<{ designation: string; material_id?: number; line_type?: string }>,
     orgId: number,
   ) {
+    for (const line of lines) {
+      line.line_type = line.line_type ?? (line.material_id ? "material" : "service");
+      if (line.line_type === "service") line.material_id = undefined;
+    }
+    if (!lines.some((l) => l.line_type === "material" && !l.material_id && (l.designation || "").trim())) return;
+
     const existing = await this.db
       .select({ id: batiproMaterials.id, name: batiproMaterials.name })
       .from(batiproMaterials)
@@ -2006,7 +2049,7 @@ export class BatiproService {
     const byName = new Map(existing.map((m) => [m.name.trim().toLowerCase(), m.id]));
 
     for (const line of lines) {
-      if (line.material_id) continue;
+      if (line.line_type !== "material" || line.material_id) continue;
       const name = (line.designation || "").trim();
       if (!name) continue;
       const key = name.toLowerCase();

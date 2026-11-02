@@ -1876,6 +1876,13 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                     <Icon name="x" />
                   </button>
                   <label className="field" style={{ paddingRight: 28 }}>
+                    <span>Type de ligne</span>
+                    <select value={l.line_type || "material"} onChange={(e) => setLines((c) => c.map((line, idx) => (idx === i ? { ...line, line_type: e.target.value, material_id: e.target.value === "service" ? "" : line.material_id } : line)))}>
+                      <option value="material">Matériau (suivi en stock)</option>
+                      <option value="service">Service / dépense (sans stock)</option>
+                    </select>
+                  </label>
+                  <label className="field" style={{ paddingRight: 28 }}>
                     <span>Désignation</span>
                     <input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} placeholder="Prestation…" />
                   </label>
@@ -1993,7 +2000,12 @@ const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confi
 // Statuts manuels proposés dans le select de l'éditeur — confirmed/partially_received/received
 // sont dérivés des actions dédiées (Confirmer/Réceptionner), pas des choix libres.
 const PO_STATUS_MANUAL_LABEL = { draft: "Brouillon", sent: "Envoyé", cancelled: "Annulé" };
-const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "", currency_id: "" });
+const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "", line_type: "material", service_category: "", line_note: "", currency_id: "" });
+
+const PO_SERVICE_CATEGORIES = [
+  ["labor", "Main-d'œuvre"], ["handling", "Manutention"], ["fees", "Honoraires et avances"],
+  ["transport", "Transport et frais"], ["hardware_invoice", "Quincaillerie / facture"], ["other", "Autre dépense"],
+];
 
 function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
@@ -2571,7 +2583,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", line_type: l.lineType === "service" || !l.materialId ? "service" : "material", service_category: l.serviceCategory || "", line_note: l.lineNote || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -2635,6 +2647,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           vat_rate: 0,
           phase_id: "",
           material_id: "",
+          line_type: "material",
+          service_category: "",
+          line_note: "",
           currency_id: "",
         })));
       }
@@ -2678,7 +2693,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           ...(l.is_adjustment ? { is_adjustment: true } : {}),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
-          material_id: l.material_id ? Number(l.material_id) : undefined,
+          line_type: l.line_type === "service" ? "service" : "material",
+          ...(l.line_type === "service" ? { service_category: l.service_category || "other" } : { material_id: l.material_id ? Number(l.material_id) : undefined }),
+          ...(l.line_note && l.line_note.trim() ? { line_note: l.line_note.trim() } : {}),
           currency_id: l.currency_id ? Number(l.currency_id) : undefined,
         })),
       };
@@ -2752,10 +2769,10 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                       onChange={(e) => {
                         const v = e.target.value;
                         const match = (materials || []).find((m) => m.name.trim().toLowerCase() === v.trim().toLowerCase());
-                        setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: match ? match.id : "" } : line)));
+                        setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: line.line_type === "service" ? "" : (match ? match.id : "") } : line)));
                       }}
                       list="batipro-materials-list"
-                      placeholder="Article / prestation… (tapez pour retrouver un matériau)"
+                      placeholder={l.line_type === "service" ? "Libellé court (dates, taux, n° de facture : voir Note)" : "Matériau… (tapez pour retrouver un article)"}
                     />
                   </label>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2788,14 +2805,27 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                         {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                       </select>
                     </label>
-                    <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
-                      <span>Matériau suivi en stock</span>
-                      <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
-                        <option value="">— (texte libre)</option>
-                        {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </label>
+                    {l.line_type === "service" ? (
+                      <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                        <span>Catégorie de dépense</span>
+                        <select value={l.service_category || "other"} onChange={(e) => setLine(i, "service_category", e.target.value)}>
+                          {PO_SERVICE_CATEGORIES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                        </select>
+                      </label>
+                    ) : (
+                      <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                        <span>Matériau suivi en stock</span>
+                        <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
+                          <option value="">— (nouveau matériau selon la désignation)</option>
+                          {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </label>
+                    )}
                   </div>
+                  <label className="field">
+                    <span>Note de ligne (dates, taux, n° de facture)</span>
+                    <input value={l.line_note || ""} maxLength={500} onChange={(e) => setLine(i, "line_note", e.target.value)} />
+                  </label>
                 </div>
               ))}
               <datalist id="batipro-materials-list">
