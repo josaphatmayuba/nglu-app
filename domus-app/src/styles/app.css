@@ -1974,6 +1974,15 @@ fieldset.immo-alloc { min-width:0; }
 .immo-pay-ld .ld-late b { font-size:16px; font-weight:800; }
 .immo-pay-ld .ld-due { color:#b45309; font-size:12px; font-weight:600; }
 .immo-pay-ld .ld-due b { font-size:13px; font-weight:800; }
+/* Carte loyer : arriéré d'un bail précédent (renouvellement) fusionné dans la carte */
+.immo-pay-prior { border:1px solid rgba(220,38,38,.35); background:rgba(220,38,38,.07); border-radius:10px; padding:8px 10px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px; }
+.immo-pay-prior-txt { display:flex; gap:6px; align-items:flex-start; color:#dc2626; font-size:13px; font-weight:600; line-height:1.3; }
+.immo-pay-prior-txt svg { flex:none; margin-top:2px; }
+.immo-pay-prior-txt b { font-size:15px; font-weight:800; }
+.immo-pay-prior-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.immo-pay-prior-actions .immo-btn { min-height:40px; }
+.immo-pay-total { border-top:1px dashed rgba(220,38,38,.35); padding-top:6px; }
+.immo-pay-total strong { color:#dc2626; font-weight:800; }
 /* Frise depliee (bail flagge) : montant par mois + actions du panneau */
 .immo-pay-months > button.immo-pay-m { min-width:0; padding:2px 1px; }
 .immo-pay-m .amt { font-size:9px; font-weight:600; line-height:1.15; text-align:center; max-width:100%; display:flex; flex-direction:column; align-items:center; }
