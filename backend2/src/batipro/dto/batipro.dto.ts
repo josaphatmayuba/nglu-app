@@ -52,6 +52,18 @@ export class UpdateBatiproTaskDto extends CreateBatiproTaskDto {
   @IsOptional() @IsString() declare label: string;
 }
 
+// Execution du nettoyage des materiaux (apres validation du dry-run). confirm doit etre true.
+export class MaterialsMergeDto {
+  @IsInt() keep_id!: number;
+  @IsArray() @ArrayMaxSize(50) @IsInt({ each: true }) merge_ids!: number[];
+}
+
+export class MaterialsCleanupExecuteDto {
+  @IsBoolean() confirm!: boolean;
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsInt({ each: true }) ids?: number[];
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => MaterialsMergeDto) merges?: MaterialsMergeDto[];
+}
+
 export class CreateBatiproMaterialDto {
   @IsString() name!: string;
   @IsOptional() @IsString() unit?: string;
@@ -228,6 +240,10 @@ export class DocumentLineDto {
   @IsOptional() @IsNumber() @Min(0) @Max(100) vat_rate?: number;
   @IsOptional() @IsInt() phase_id?: number;
   @IsOptional() @IsInt() material_id?: number;
+  // 'material' = article de stock ; 'service' = depense sans stock (ne cree aucun materiau).
+  @IsOptional() @IsIn(["material", "service"]) line_type?: "material" | "service";
+  @IsOptional() @IsIn(["labor", "handling", "fees", "transport", "hardware_invoice", "other"]) service_category?: string;
+  @IsOptional() @IsString() @MaxLength(500) line_note?: string;
   @IsOptional() @IsInt() currency_id?: number;
 }
 
@@ -452,6 +468,8 @@ export class ConfirmBatiproDocumentDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
   @IsOptional() @IsDateString() fx_rate_date?: string;
   @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+  // true = marchandise deja livree : receptionne toutes les lignes Materiau a la confirmation.
+  @IsOptional() @IsBoolean() already_delivered?: boolean;
 }
 
 // Une ligne receptionnee : quantite physiquement recue sur cette ligne du BC
@@ -475,6 +493,12 @@ export class ReceiveBatiproDocumentDto {
 // Declaration d'une consommation manuelle de materiau sur un chantier (Stock,
 // Phase 2). movement_type est force serveur a 'consumption' : cet endpoint ne
 // permet jamais de creer une reception (reservee au flux BC automatique).
+export class RestockMaterialDto {
+  @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) @Max(1000000) quantity!: number;
+  @IsOptional() @IsInt() project_id?: number;
+  @IsString() @Matches(/\S/, { message: "Emplacement / note obligatoire" }) @MaxLength(500) note!: string;
+}
+
 export class CreateStockMovementDto {
   @IsInt() project_id!: number;
   @IsInt() material_id!: number;

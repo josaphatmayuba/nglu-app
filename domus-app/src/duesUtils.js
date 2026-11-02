@@ -51,7 +51,7 @@ export function duesCardFields(lease, now = new Date()) {
   const paidCount = kinds.filter((k) => k === "paid").length;
   const credit = creditOf(lease);
   const hasOpen = kinds.some((k) => k === "due" || k === "cur" || k === "partial" || k === "late");
-  const status = lateCount > 0 ? "late" : balance > 0.005 || kinds.includes("cur") ? "pending" : "ok";
+  const status = lateCount > 0 ? "late" : balance > 0.005 || kinds.some((k, i) => k === "cur" && isEchu(dues[i])) ? "pending" : "ok";
   const totalPaid = r2(dues.reduce((s, d) => s + (Number(d.amountPaid) || 0), 0));
   const totalDue = r2(dues.filter((d) => isEchu(d) || kinds[dues.indexOf(d)] === "cur").reduce((s, d) => s + (Number(d.amount) || 0), 0));
   // Dernier mois solde (fin de periode) pour « Couvert jusqu'a ».
@@ -82,7 +82,7 @@ export function duesCardFields(lease, now = new Date()) {
     lateAmount: ld.late, dueAmount: ld.due, graceUntil: ld.graceUntil,
     monthsCovered: paidCount,
     monthsCoveredFloat: paidCount,
-    monthsDue: Math.max(1, dues.filter((d) => isEchu(d)).length + (kinds.includes("cur") ? 1 : 0)),
+    monthsDue: Math.max(1, dues.filter((d, i) => isEchu(d) || kinds[i] === "cur").length),
     totalDue, balance, credit, status, totalPaid,
     monthsBehind: unpaidEchu.length,
     monthsAhead: futurePaid,

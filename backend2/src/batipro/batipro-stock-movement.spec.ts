@@ -4,7 +4,11 @@ import { BatiproService } from "./batipro.service";
 // Sortie de stock : refus si quantite > restant du chantier.
 function setup(stock: any[]) {
   const insertChain: any = { values: jest.fn().mockReturnValue({ $returningId: jest.fn().mockResolvedValue([{ id: 7 }]) }) };
-  const db: any = { insert: jest.fn().mockReturnValue(insertChain) };
+  const db: any = {
+    insert: jest.fn().mockReturnValue(insertChain),
+    update: jest.fn().mockReturnValue({ set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([{ affectedRows: 1 }]) }) }),
+  };
+  db.transaction = jest.fn().mockImplementation(async (cb: any) => cb(db));
   const svc: any = new BatiproService(db, { publish: jest.fn() } as any, {} as any, {} as any, {} as any, {} as any, {} as any);
   svc.getProject = jest.fn().mockResolvedValue({});
   svc.getMaterial = jest.fn().mockResolvedValue({});

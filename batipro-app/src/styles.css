@@ -347,3 +347,33 @@ table.bp td .danger-txt { color: var(--rose-600); }
 .page-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
 .page-toolbar > .search, .page-toolbar > input { flex: 1; min-width: 180px; }
 @media (max-width: 760px) { .page-toolbar .btn { min-height: 44px; } }
+
+/* Materiaux & achats : tableau stock lisible sur mobile */
+.mat-table td.num, .mat-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mat-toggle { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; cursor: pointer; font-weight: 600; color: var(--ink-900); text-align: left; overflow-wrap: anywhere; border-radius: 8px; }
+.mat-toggle:hover:not(:disabled) { color: var(--amber-700); }
+.mat-toggle:focus-visible { outline: 2px solid var(--amber-500); outline-offset: 2px; }
+.mat-toggle:disabled { cursor: default; opacity: .7; }
+.mat-chevron { flex: none; width: 14px; display: inline-block; color: var(--ink-400); transition: transform .15s; }
+.mat-toggle[aria-expanded="true"] .mat-chevron { transform: rotate(90deg); color: var(--amber-600); }
+.mat-sub { display: none; margin: 0 0 4px 22px; font-size: 11.5px; font-weight: 400; color: var(--ink-500); }
+.mat-open > td { background: var(--ink-50); }
+.mat-detail { background: var(--ink-50); padding: 4px 0; }
+.mat-detail table.bp { background: #fff; }
+.dup-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 12px; border-radius: 10px; }
+.dup-banner .btn { min-height: 44px; }
+.restock-qty { display: flex; align-items: center; gap: 10px; }
+.restock-qty input { flex: 1; min-width: 0; font-size: 22px; font-weight: 600; min-height: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.restock-qty .unit { font-size: 15px; font-weight: 600; color: var(--ink-600); min-width: 36px; }
+@media (max-width: 640px) {
+  .mat-table .col-opt { display: none; }
+  .mat-table .col-act { width: 52px; padding-left: 4px; padding-right: 8px; }
+  .mat-sub { display: block; }
+  .mat-btn-label { display: none; }
+  .mat-btn-restock { min-width: 44px; justify-content: center; padding: 0 10px; }
+  .mat-table td, .mat-table th { padding: 6px 8px; }
+  .modal-scrim.restock-scrim { padding: 0; align-items: stretch; }
+  .restock-scrim .modal-card { max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; align-content: start; }
+  .restock-scrim .modal-actions { position: sticky; bottom: 0; background: #fff; padding-top: 8px; }
+  .restock-scrim .modal-actions .btn { flex: 1; min-height: 48px; justify-content: center; }
+}

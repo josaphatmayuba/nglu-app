@@ -24,7 +24,7 @@ const pays = [
 describe("carte depuis dues (bail flagge)", () => {
   it("bail 11 : juil/aout payes, sept en retard, oct du, 2/12, reste 6000", () => {
     const [c] = buildLeaseCards([lease(bail11())], pays);
-    expect(c.dueFrise.kinds.slice(0, 5)).toEqual(["paid", "paid", "late", "due", "future"]);
+    expect(c.dueFrise.kinds.slice(0, 5)).toEqual(["paid", "paid", "late", "cur", "future"]);
     expect(c.dueFrise.kinds.filter((k) => k === "paid").length).toBe(2);
     expect(c.dueFrise.kinds.length).toBe(12);
     expect(c.balance).toBeCloseTo(6000, 2);

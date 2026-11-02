@@ -3379,6 +3379,13 @@ export const batiproDocumentLines = mysqlTable("batipro_document_lines", {
   // les lignes non-materiel (main d'oeuvre, prestations = designation texte libre).
   // Une ligne de BC avec material_id genere un mouvement de reception a l'emission.
   materialId: bigint("material_id", { mode: "number" }),
+  // Type de ligne (migration 0333) : 'material' = article de stock, 'service' =
+  // depense sans stock (main d oeuvre, manutention, honoraires, transport, facture).
+  // Seul 'material' cree/rattache un batipro_materials.
+  lineType: varchar("line_type", { length: 20 }).default("material").notNull(),
+  serviceCategory: varchar("service_category", { length: 30 }),
+  // Note libre de la ligne : dates, taux, n de facture (hors designation).
+  lineNote: varchar("line_note", { length: 500 }),
   // Devise PROPRE a la ligne (migration 0232). Nullable, sans FK physique (pattern
   // batipro). NULL = la ligne herite de la devise du document
   // (batipro_documents.currency_id), qui reste la devise principale et pre-remplit
@@ -3431,7 +3438,8 @@ export const batiproDocumentTotals = mysqlTable("batipro_document_totals", {
 export const batiproStockMovements = mysqlTable("batipro_stock_movements", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
-  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  // NULL = mouvement de stock general (sans chantier).
+  projectId: bigint("project_id", { mode: "number" }),
   materialId: bigint("material_id", { mode: "number" }).notNull(),
   // Origine du mouvement : document (BC) a l'origine d'une reception. NULL pour
   // une consommation ou un ajustement manuel.

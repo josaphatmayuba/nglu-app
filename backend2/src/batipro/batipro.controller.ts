@@ -20,6 +20,7 @@ import {
   CreateBatiproCrewDto,
   CreateBatiproDocumentDto,
   CreateBatiproMaterialDto,
+  MaterialsCleanupExecuteDto,
   CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
@@ -30,6 +31,7 @@ import {
   CreateBatiproWorkerDto,
   DecideBatiproQuoteDto,
   CreateStockMovementDto,
+  RestockMaterialDto,
   CreateSubcontractorLinkDto,
   ReceiveBatiproDocumentDto,
   RecordPaymentDto,
@@ -261,6 +263,34 @@ export class BatiproController {
     return this.batipro.materials(orgId, projectId ? Number(projectId) : undefined);
   }
 
+  @ApiOperation({ summary: "Dry-run LECTURE SEULE : materiaux a desactiver (services) et doublons a fusionner" })
+  @Permissions("readAll-batipro")
+  @Get("materials/cleanup-preview")
+  materialsCleanupPreview(@CurrentOrg() orgId: number) {
+    return this.batipro.materialsCleanupPreview(orgId);
+  }
+
+  @ApiOperation({ summary: "Lignes de BC de type service/depense (sans stock), totaux par categorie et par devise" })
+  @Permissions("readAll-batipro")
+  @Get("service-expenses")
+  serviceExpenses(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string, @Query("category") category?: string) {
+    return this.batipro.serviceExpenses(orgId, { projectId: projectId ? Number(projectId) : undefined, category: category || undefined });
+  }
+
+  @ApiOperation({ summary: "Execute le nettoyage valide des materiaux (soft delete + fusion). Exige confirm:true" })
+  @Permissions("delete-batipro")
+  @Post("materials/cleanup-execute")
+  materialsCleanupExecute(@Body() body: MaterialsCleanupExecuteDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.materialsCleanupExecute(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Stock par materiau et par chantier (+ stock general et total org)" })
+  @Permissions("readAll-batipro")
+  @Get("materials/stock-by-project")
+  materialsStockByProject(@CurrentOrg() orgId: number, @Query("material_id") materialId?: string) {
+    return this.batipro.materialsStockByProject(orgId, materialId ? Number(materialId) : undefined);
+  }
+
   @ApiOperation({ summary: "Create BatiPro material" })
   @Permissions("create-batipro")
   @Post("materials")
@@ -271,8 +301,15 @@ export class BatiproController {
   @ApiOperation({ summary: "Update BatiPro material" })
   @Permissions("update-batipro")
   @Put("materials/:id")
-  updateMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproMaterialDto, @CurrentOrg() orgId: number) {
-    return this.batipro.updateMaterial(id, body, orgId);
+  updateMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproMaterialDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.updateMaterial(id, body, orgId, userId || undefined);
+  }
+
+  @ApiOperation({ summary: "Restock a material (positive adjustment movement; optional project_id)" })
+  @Permissions("create-batipro")
+  @Post("materials/:id/restock")
+  restockMaterial(@Param("id", ParseIntPipe) id: number, @Body() body: RestockMaterialDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.restockMaterial(id, body, orgId, userId || undefined);
   }
 
   @ApiOperation({ summary: "Soft-delete BatiPro material" })

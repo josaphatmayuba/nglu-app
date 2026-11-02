@@ -116,17 +116,21 @@ export function friseKinds({ startDate, graceDays, prorata = false, periodStarts
     if (fill >= 0.999) { kinds.push("paid"); continue; }
     if (i >= monthsDue) { kinds.push(fill > 0 ? "partial" : "future"); continue; }
     let cls;
+    const mk = startD ? (() => { const m = new Date(startD.getFullYear(), startD.getMonth() + i, 1); return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`; })() : null;
+    const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const isCurMonth = mk === nowKey;
+    // Bail pas encore commence : un mois posterieur au mois civil en cours n'est jamais « courant ».
+    if (mk && mk > nowKey) { kinds.push(fill > 0 ? "partial" : "future"); continue; }
     if (normalizeGrace(graceDays) === null) {
       cls = i < monthsDue - 1 ? "late" : "cur";
     } else {
-      const mk = startD ? (() => { const m = new Date(startD.getFullYear(), startD.getMonth() + i, 1); return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`; })() : null;
       const due = prorata && mk && byMonth.has(mk) ? byMonth.get(mk) : dueDateForMonth(startDate, i, prorata);
       cls = classifyDue(due, graceDays, now);
     }
     if (cls === "late") lateCount += 1;
     // Un mois echeance + grace depasse et non solde (meme partiellement paye) reste « late » ;
     // dans la grace ou mois courant, un paiement partiel garde la case « partial ».
-    kinds.push(cls === "late" ? "late" : fill > 0 ? "partial" : cls === "due" ? "due" : "cur");
+    kinds.push(cls === "late" ? "late" : fill > 0 ? "partial" : cls === "due" && !isCurMonth ? "due" : "cur");
   }
   return { kinds, lateCount };
 }
@@ -142,16 +146,17 @@ export function countLateDues(dueDates, graceDays, now = new Date()) {
 //  - solde (remaining <= 0 ou dueStatus paid) -> paid ;
 //  - echeance + grace depassee et reste > 0 -> late (meme partiellement payee) ;
 //  - partiellement payee (dans la grace / a venir) -> partial ;
-//  - echeance passee dans la grace -> due ; mois courant a venir -> cur ; sinon future.
+//  - echeance passee dans la grace -> due (cur si mois civil en cours) ; mois courant a venir -> cur ; sinon future.
 export function dueKind(due, graceDays, now = new Date()) {
   const remaining = Number(due?.remaining ?? (Number(due?.amount || 0) - Number(due?.amountPaid || 0)));
   if (due?.dueStatus === "paid" || remaining <= 0.005) return "paid";
   const cls = classifyDue(due.dueDate ?? due.periodStart, graceDays, now);
   if (cls === "late") return "late";
   if (Number(due?.amountPaid) > 0.005) return "partial";
-  if (cls === "due") return "due";
   const s = parseLocalDay(due.periodStart);
-  return s && s.getFullYear() === now.getFullYear() && s.getMonth() === now.getMonth() ? "cur" : "future";
+  const isCurMonth = s && s.getFullYear() === now.getFullYear() && s.getMonth() === now.getMonth();
+  if (cls === "due") return isCurMonth ? "cur" : "due";
+  return isCurMonth ? "cur" : "future";
 }
 
 export function friseKindsFromDues(dues, graceDays, now = new Date()) {

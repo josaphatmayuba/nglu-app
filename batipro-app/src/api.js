@@ -19,7 +19,7 @@ function apiError(res, body) {
   try {
     const msg = JSON.parse(body)?.message;
     const text = Array.isArray(msg) ? msg.join(" ; ") : msg;
-    if (text) return new Error(String(text));
+    if (text) { const e = new Error(String(text)); e.status = res.status; e.data = JSON.parse(body); return e; }
   } catch { /* corps non JSON */ }
   return new Error(`API ${res.status} ${res.statusText}${body ? ` - ${body.slice(0, 200)}` : ""}`);
 }
@@ -159,8 +159,11 @@ export const api = {
   forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>
     jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { base: API_ROOT }),
   materials: ({ projectId } = {}) => jsonFetch(`/materials${projectId ? `?project_id=${projectId}` : ""}`),
+  serviceExpenses: ({ projectId, category } = {}) => jsonFetch(`/service-expenses?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), ...(category ? { category } : {}) })}`),
   createMaterial: (b) => jsonFetch("/materials", { method: "POST", body: JSON.stringify(b || {}) }),
   updateMaterial: (id, b) => jsonFetch(`/materials/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  restockMaterial: (id, b) => jsonFetch(`/materials/${id}/restock`, { method: "POST", body: JSON.stringify(b || {}) }),
+  stockByProject: ({ material_id } = {}) => jsonFetch(`/materials/stock-by-project${material_id ? `?material_id=${material_id}` : ""}`),
   deleteMaterial: (id) => jsonFetch(`/materials/${id}`, { method: "DELETE" }),
   // Suivi de stock par chantier (mouvements réception/consommation)
   stockMovements: (projectId) => jsonFetch(`/stock-movements${projectId ? `?project_id=${projectId}` : ""}`),

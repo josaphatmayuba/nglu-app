@@ -6,7 +6,7 @@ import {
 import { api } from "../api.js";
 import { getLang, t, tf } from "../i18n.js";
 import { filterLeases, filterPayments, parseDomusDate, useDateRange } from "../dateRange.jsx";
-import { dueDateForMonth, friseKinds, leaseCardStatus } from "../overdue.js";
+import { daysPastDue, dueDateForMonth, friseKinds, leaseCardStatus } from "../overdue.js";
 import { AllocationBlock, PaymentAllocations, allocationPayload } from "../components/Allocation.jsx";
 import { allocationsOfPayment, cumulativeRemaining, dueRemaining, duesCardFields, graceUntilOf, isDuesLease, legacyLateDue, monthAmounts } from "../duesUtils.js";
 import { groupAmountsByCurrency, money, moneyExact, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
@@ -296,6 +296,10 @@ export function buildLeaseCards(leases, payments, owing) {
       // est prioritaire sur l'ancienne regle "mois passe impaye". Solde, monthsBehind,
       // frise et preavis (canNotifyDefault) ne changent pas.
       if (typeof l.isOverdue === "boolean") status = leaseCardStatus(l, balance, now);
+      // « En attente » = echeance passee, dans la grace, rien en retard. Echeance du mois pas encore atteinte (mois precedents couverts) = en regle.
+      if (status === "pending" && !ended && l.startDate
+        && totalPaid + 0.005 >= Array.from({ length: elapsedPast }, (_, k) => (periodAmounts ? periodAmounts[k] : null) ?? rent).reduce((x, y) => x + y, 0)
+        && (daysPastDue(dueDateForMonth(l.startDate, elapsedPast, isProrationLease(l)), now) ?? -1) < 0) status = "ok";
 
       return {
         lease: l,
@@ -518,7 +522,13 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
       {priorDebts.map((p) => {
         const sym = p.formerDebt?.currency?.symbol || p.formerDebt?.currency?.code || p.symbol;
         const amount = p.formerDebt ? p.formerDebt.balance : cardFriseLateDue(p).lateDue.late;
-        const months = cardFriseLateDue(p).frise.lateCount;
+        // Bail terminé : le montant (backend) inclut le mois de sortie ; le nombre de mois est déduit du même montant.
+        const pRent = Number(p.rent) || 0;
+        const owed = Number(amount) || 0;
+        const ratio = p.formerDebt && pRent > 0 ? owed / pRent : null;
+        const months = ratio !== null
+          ? (Math.abs(ratio - Math.round(ratio)) < 0.01 ? Math.round(ratio) : 0)
+          : cardFriseLateDue(p).frise.lateCount;
         return (
           <div key={p.lease.id} className="immo-pay-prior" role="alert">
             <div className="immo-pay-prior-txt">
@@ -728,7 +738,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
       )}
       {(actionable || missingMonths || lease?.id || canNotifyDefault) && (
         <div className="immo-pay-actions">
-          {actionable && (
+          {(actionable || balance > 0) && (
             <button type="button" className="immo-btn primary pay-main" onClick={() => onPay(card)}>
               <Smartphone size={14} /> {status === "late" ? "Régler le retard" : "Payer le loyer"}
             </button>
@@ -2211,7 +2221,7 @@ export function Paiement({ go }) {
                     <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: "none" }}>
                       <span style={{ fontWeight: 700 }}>{money(c.rent, c.symbol)}<span className="muted" style={{ fontSize: 11, fontWeight: 400 }}> /mois</span></span>
                       <span className={`immo-pill ${meta.pill}`} style={{ fontSize: 11, padding: "2px 7px" }}>
-                        {c.balance > 0 ? `Reste ${money(c.balance, c.symbol)}` : meta.label}
+                        {c.balance > 0 && c.status !== "ok" ? `Reste ${money(c.balance, c.symbol)}` : meta.label}
                       </span>
                     </span>
                   </button>

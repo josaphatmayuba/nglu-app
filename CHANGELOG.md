@@ -9,7 +9,24 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus : bail pas encore commencé = aucun mois « courant » (v3.276.6).** Frise des loyers : un mois postérieur au mois civil en cours reste « à venir », y compris le 1er mois d'un bail futur.
+- **Domus : statut « En attente » = échéance passée dans la grâce, rien en retard (v3.276.5).** Avant l'échéance du mois en cours, le bail est « En règle » (le bouton « Payer le loyer » reste disponible) ; le statut ne compare plus une fraction de mois mais les montants payés.
+- **Domus : mois civil en cours impayé dans la grâce = « courant » (v3.276.4).** Frise des loyers : le mois en cours dont l'échéance est passée mais encore dans la grâce s'affiche « Mois courant » (orange) au lieu de « Dû » ; les mois précédents restent « Dû » puis « En retard ». Corrige aussi le double comptage de `monthsDue`.
 
+- **Domus : carte « Arriéré bail précédent » — nombre de mois cohérent avec le montant (v3.276.3).** Le nombre de mois est déduit du montant dû ÷ loyer de l'ancien bail (le mois de sortie est facturé), au lieu du compte de la frise (ex. 6 000 $ à 1 500 $ affichait « 3 mois », désormais « 4 mois »).
+- **BâtiPro réappro : « Emplacement / note » obligatoire (v3.276.2).** La modale « + Réappro » exige une note (ex. dépôt du chantier, étage 1) et le serveur refuse une note absente, vide ou faite d espaces.
+
+- **BâtiPro page Matériaux : lignes plus lisibles (v3.276.1).** Le dépliage de la répartition par chantier n est plus un bouton en pilule mais une ligne cliquable (chevron discret, zone tactile 44 px) ; chiffres alignés, Réservé/Seuil sous le nom sur mobile, bouton « + » compact, modale de réappro plein écran sur mobile, bandeau « existe déjà » retravaillé.
+
+- **BâtiPro stock des matériaux : réappro, entrée automatique à la réception, répartition par chantier (v3.276.0).** `POST /batipro/materials/:id/restock` (bouton « + Réappro » par ligne, bandeau « existe déjà » à la création) ; la réception d un bon de commande incrémente le stock global (annulation refusée si déjà consommé) ; `GET /batipro/materials/stock-by-project` (ligne dépliable avec chantier, lieu, reçu, consommé, restant) ; saisie manuelle du stock = ajustement « Inventaire » tracé ; BC reçu non modifiable ; « Dépenses et services » devient une entrée de menu ; bouton « Bon de commande » trompeur retiré de la page Matériaux. Migration 0334 : `batipro_stock_movements.project_id` nullable (stock général).
+
+- **BâtiPro migration 0333 corrigée (v3.275.16).** Les apostrophes du DEFAULT de `line_type` n étaient pas doublées : la requête échouait et les colonnes `line_type`, `service_category`, `line_note` pouvaient manquer. Fichier idempotent, rejoué au démarrage.
+
+- **BâtiPro matériaux : refus des doublons (v3.275.15).** Créer un matériau dont le nom existe déjà (sans tenir compte de la casse ni des espaces) est refusé avec un message invitant à modifier le stock existant.
+
+- **BâtiPro : onglet « Dépenses et services » + nettoyage des matériaux (v3.275.14).** La page Matériaux a deux onglets ; les lignes de service sont regroupées par type avec totaux par devise (`GET /batipro/service-expenses`). Nettoyage des matériaux non stockables (désactivation is_active=0 et fusion des doublons) disponible via endpoint protégé par confirmation explicite, non exécuté automatiquement.
+
+- **BâtiPro bon de commande : type de ligne Matériau / Service (v3.275.13).** Seule une ligne « Matériau » crée ou rattache un article de stock ; les services (main-d'oeuvre, manutention, honoraires et avances, transport, quincaillerie) n'en créent plus. Dates, taux et n° de facture vont dans la note de ligne. Migration 0333 (`line_type`, `service_category`, `line_note`) et contrôle en lecture seule `GET /batipro/materials/cleanup-preview`.
 - **Domus carnet de quittances : trame bleue (locataire) / rouge (bailleur) (v3.275.12).** L en-tête de couverture est tramé en bleu pour le carnet du locataire et en rouge pour celui du bailleur ; référence, légende du QR et loyer prennent la même couleur.
 
 - **Domus Loyers : une seule carte par bail renouvelé (v3.275.11).** L ancien bail terminé encore débiteur n a plus sa propre carte : il s affiche dans un encadré rouge « Arriéré bail précédent » sur la carte du bail en cours (Régler l arriéré / Relancer, pas de préavis), avec la ligne « Bail en cours » (dû ou À jour) et un « Total à recouvrer » par devise. Badge « En retard » tant qu un arriéré reste. KPI et compta inchangés.

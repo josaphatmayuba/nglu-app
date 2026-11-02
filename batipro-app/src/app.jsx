@@ -71,10 +71,11 @@ const NAV = [
   { id: "pointage", label: "Pointage", icon: "calendarCheck" },
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
+  { id: "depenses", label: "Dépenses et services", icon: "receipt" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "pointage"];
-const MOB_MORE = ["equipes", "previsionnel", "materiaux", "parametres"];
+const MOB_MORE = ["equipes", "previsionnel", "materiaux", "depenses", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -191,6 +192,7 @@ function App() {
   }, []);
   React.useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
+  const [restock, setRestock] = React.useState(null);
   const projectRows = snapshot?.projects || [];
   const taskRows = snapshot?.tasks || [];
   const materialRows = snapshot?.materials || [];
@@ -211,7 +213,12 @@ function App() {
       if (kind === "project") form.id ? await api.updateProject(form.id, payload) : await api.createProject(payload);
       else if (kind === "material") form.id ? await api.updateMaterial(form.id, payload) : await api.createMaterial(payload);
       setModal(null); loadDashboard();
-    } catch (err) { setError(err.message || String(err)); }
+    } catch (err) {
+      if (kind === "material" && err.status === 409 && err.data?.existingId) {
+        // Doublon détecté par le serveur : bascule la fiche en mode « Ajouter au stock ».
+        setModal((m) => ({ ...m, serverDup: { id: err.data.existingId, unit: err.data.unit, name: form.name } }));
+      } else setError(err.message || String(err));
+    }
     finally { setBusy(false); }
   };
 
@@ -221,7 +228,8 @@ function App() {
     pointage: <Pointage projects={projectRows} canMutate={canMutate && can("create-batipro") && can("update-batipro")} />,
     equipes: <Equipes canMutate={canMutate} />,
     previsionnel: <Forecast />,
-    materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
+    materiaux: <Materiaux materials={materialRows} onNew={() => { setError(""); setModal({ kind: "material" }); }} onRestock={setRestock} onOpenProject={setOpenProjectId} canMutate={canMutate} />,
+    depenses: <ServiceExpensesPage />,
     parametres: <Parametres />,
   };
 
@@ -311,7 +319,8 @@ function App() {
         </div>
       )}
 
-      {modal && <RecordModal modal={modal} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveRecord} />}
+      {modal && <RecordModal modal={modal} materials={materialRows} busy={busy} error={error} onClose={() => setModal(null)} onSave={saveRecord} onRestock={(m) => { setModal(null); setRestock(m); }} />}
+      {restock && <RestockModal material={restock} onClose={() => setRestock(null)} onDone={loadDashboard} />}
     </div>
   );
 }
@@ -1876,6 +1885,13 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
                     <Icon name="x" />
                   </button>
                   <label className="field" style={{ paddingRight: 28 }}>
+                    <span>Type de ligne</span>
+                    <select value={l.line_type || "material"} onChange={(e) => setLines((c) => c.map((line, idx) => (idx === i ? { ...line, line_type: e.target.value, material_id: e.target.value === "service" ? "" : line.material_id } : line)))}>
+                      <option value="material">Matériau (suivi en stock)</option>
+                      <option value="service">Service / dépense (sans stock)</option>
+                    </select>
+                  </label>
+                  <label className="field" style={{ paddingRight: 28 }}>
                     <span>Désignation</span>
                     <input value={l.designation} onChange={(e) => setLine(i, "designation", e.target.value)} placeholder="Prestation…" />
                   </label>
@@ -1993,7 +2009,12 @@ const PO_STATUS_LABEL = { draft: "Brouillon", sent: "Envoyé", confirmed: "Confi
 // Statuts manuels proposés dans le select de l'éditeur — confirmed/partially_received/received
 // sont dérivés des actions dédiées (Confirmer/Réceptionner), pas des choix libres.
 const PO_STATUS_MANUAL_LABEL = { draft: "Brouillon", sent: "Envoyé", cancelled: "Annulé" };
-const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "", currency_id: "" });
+const emptyPoLine = () => ({ designation: "", quantity: 1, unit_price: 0, vat_rate: 0, phase_id: "", material_id: "", line_type: "material", service_category: "", line_note: "", currency_id: "" });
+
+const PO_SERVICE_CATEGORIES = [
+  ["labor", "Main-d'œuvre"], ["handling", "Manutention"], ["fees", "Honoraires et avances"],
+  ["transport", "Transport et frais"], ["hardware_invoice", "Quincaillerie / facture"], ["other", "Autre dépense"],
+];
 
 function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [projectId, setProjectId] = React.useState(fixedProjectId ?? projects[0]?.id ?? null);
@@ -2571,7 +2592,7 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", material_id: l.materialId || "", line_type: l.lineType === "service" || !l.materialId ? "service" : "material", service_category: l.serviceCategory || "", line_note: l.lineNote || "", currency_id: l.currencyId || "" })) : [emptyPoLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
           setSupplierId(d.supplierId || "");
@@ -2635,6 +2656,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           vat_rate: 0,
           phase_id: "",
           material_id: "",
+          line_type: "material",
+          service_category: "",
+          line_note: "",
           currency_id: "",
         })));
       }
@@ -2678,7 +2702,9 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
           ...(l.is_adjustment ? { is_adjustment: true } : {}),
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
-          material_id: l.material_id ? Number(l.material_id) : undefined,
+          line_type: l.line_type === "service" ? "service" : "material",
+          ...(l.line_type === "service" ? { service_category: l.service_category || "other" } : { material_id: l.material_id ? Number(l.material_id) : undefined }),
+          ...(l.line_note && l.line_note.trim() ? { line_note: l.line_note.trim() } : {}),
           currency_id: l.currency_id ? Number(l.currency_id) : undefined,
         })),
       };
@@ -2752,10 +2778,10 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                       onChange={(e) => {
                         const v = e.target.value;
                         const match = (materials || []).find((m) => m.name.trim().toLowerCase() === v.trim().toLowerCase());
-                        setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: match ? match.id : "" } : line)));
+                        setLines((c) => c.map((line, idx) => (idx === i ? { ...line, designation: v, material_id: line.line_type === "service" ? "" : (match ? match.id : "") } : line)));
                       }}
                       list="batipro-materials-list"
-                      placeholder="Article / prestation… (tapez pour retrouver un matériau)"
+                      placeholder={l.line_type === "service" ? "Libellé court (dates, taux, n° de facture : voir Note)" : "Matériau… (tapez pour retrouver un article)"}
                     />
                   </label>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2788,14 +2814,27 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
                         {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                       </select>
                     </label>
-                    <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
-                      <span>Matériau suivi en stock</span>
-                      <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
-                        <option value="">— (texte libre)</option>
-                        {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                      </select>
-                    </label>
+                    {l.line_type === "service" ? (
+                      <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                        <span>Catégorie de dépense</span>
+                        <select value={l.service_category || "other"} onChange={(e) => setLine(i, "service_category", e.target.value)}>
+                          {PO_SERVICE_CATEGORIES.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                        </select>
+                      </label>
+                    ) : (
+                      <label className="field" style={{ flex: "1 1 160px", minWidth: 160 }}>
+                        <span>Matériau suivi en stock</span>
+                        <select value={l.material_id} onChange={(e) => setLine(i, "material_id", e.target.value)}>
+                          <option value="">— (nouveau matériau selon la désignation)</option>
+                          {(materials || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </label>
+                    )}
                   </div>
+                  <label className="field">
+                    <span>Note de ligne (dates, taux, n° de facture)</span>
+                    <input value={l.line_note || ""} maxLength={500} onChange={(e) => setLine(i, "line_note", e.target.value)} />
+                  </label>
                 </div>
               ))}
               <datalist id="batipro-materials-list">
@@ -4273,7 +4312,7 @@ function ChangeOrderModal({ modal, defaultCurrencyId, busy, error, onClose, onSa
 const STOCK_MOVEMENT_LABEL = { reception: "Reçu", consumption: "Consommé", adjustment: "Ajustement" };
 const STOCK_MOVEMENT_TONE = { reception: "emerald", consumption: "amber", adjustment: "ink" };
 
-function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectId }) {
+function Materiaux({ materials: globalMaterials, onNew, onRestock, onOpenProject, canMutate, fixedProjectId }) {
   // Mode projet (fixedProjectId) : matériaux + mouvements de CE chantier uniquement.
   // Mode global (sidebar, sans fixedProjectId) : comportement inchangé (props materials).
   const [projectMaterials, setProjectMaterials] = React.useState([]);
@@ -4281,6 +4320,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
   const [loading, setLoading] = React.useState(!!fixedProjectId);
   const [modal, setModal] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [openMat, setOpenMat] = React.useState(null);
 
   const load = React.useCallback(() => {
     if (!fixedProjectId) return;
@@ -4321,7 +4361,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
                 !projectMaterials.length ? <tr><td colSpan={4} className="muted">Aucun mouvement de stock pour ce chantier. Le stock s'alimente à la réception d'un bon de commande (onglet Bons de commande).</td></tr> :
                 projectMaterials.map((m) => (
                   <tr key={m.id}>
-                    <td style={{ fontWeight: 500 }}>{m.name}</td>
+                    <td style={{ fontWeight: 500 }}>{m.name}{(m.last_note ?? m.lastNote) ? <div style={{ fontWeight: 400, fontSize: 12, color: "var(--ink-500)", overflowWrap: "anywhere" }}>{m.last_note ?? m.lastNote}</div> : null}</td>
                     <td style={{ color: "var(--emerald-600)" }}>{n(m.received)} {m.unit}</td>
                     <td style={{ color: "var(--amber-600)" }}>{n(m.consumed)} {m.unit}</td>
                     <td style={{ fontWeight: 600 }}>{n(m.remaining)} {m.unit}</td>
@@ -4391,24 +4431,43 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         <div className="card pad"><div className="kpi-label">Réservé total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.reserved), 0)}</div></div>
         <div className="card pad"><div className="kpi-label">En stock total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.stock), 0)}</div></div>
       </div>
-      <div className="page-toolbar">
-        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
+      <div className="page-toolbar" style={{ flexWrap: "wrap" }}>
+        {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Nouveau matériau</button>}
       </div>
-      <div className="card table-card" style={{ marginBottom: 16 }}>
-        <table className="bp">
-          <thead><tr><th>Matériau</th><th>Stock</th><th>Réservé</th><th>Seuil</th><th>Statut</th></tr></thead>
+      <>
+      <div className="card table-card" style={{ marginBottom: 16, overflowX: "auto" }}>
+        <table className="bp mat-table">
+          <thead><tr><th>Matériau</th><th className="num">Stock</th><th className="num col-opt">Réservé</th><th className="num col-opt">Seuil</th><th>Statut</th><th className="col-act"><span className="mat-btn-label">Actions</span></th></tr></thead>
           <tbody>
+            {!materials.length && <tr><td colSpan={6} className="muted">Aucun matériau suivi. Créez-en un avec « Nouveau matériau » ou recevez un bon de commande.</td></tr>}
             {materials.map((m) => {
               const min = n(m.min ?? m.minStock);
               const lowStock = n(m.stock) < min;
               return (
-                <tr key={m.name}>
-                  <td style={{ fontWeight: 500 }}>{m.name}</td>
-                  <td>{n(m.stock)} {m.unit}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{n(m.reserved)}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{min}</td>
+                <React.Fragment key={m.id ?? m.name}>
+                <tr className={openMat === m.id ? "mat-open" : undefined}>
+                  <td>
+                    <button type="button" className="mat-toggle"
+                      aria-expanded={openMat === m.id} aria-label={`Répartition par chantier de ${m.name}`} disabled={m.id == null}
+                      onClick={() => setOpenMat(openMat === m.id ? null : m.id)}>
+                      <span aria-hidden="true" className="mat-chevron">›</span>
+                      <span>{m.name}</span>
+                    </button>
+                    <div className="mat-sub">Seuil {min} · Réservé {n(m.reserved)}</div>
+                  </td>
+                  <td className="num" style={{ fontWeight: 600, color: lowStock ? "var(--rose-700)" : undefined }}>{n(m.stock)} {m.unit}</td>
+                  <td className="num col-opt" style={{ color: "var(--ink-500)" }}>{n(m.reserved)}</td>
+                  <td className="num col-opt" style={{ color: "var(--ink-500)" }}>{min}</td>
                   <td><span className={`chip ${lowStock ? "rose" : "emerald"}`}>{lowStock ? "À commander" : "OK"}</span></td>
+                  <td className="col-act">
+                    <button type="button" className="btn btn-ghost mat-btn-restock" style={{ minHeight: 44, minWidth: 44, whiteSpace: "nowrap" }} title={`Réapprovisionner ${m.name}`} aria-label={`Réapprovisionner ${m.name}`}
+                      disabled={!canMutate || !can("update-batipro") || m.id == null} onClick={() => onRestock && onRestock({ id: m.id, name: m.name, unit: m.unit, stock: m.stock })}><span aria-hidden="true">+</span><span className="mat-btn-label"> Réappro</span></button>
+                  </td>
                 </tr>
+                {openMat === m.id && (
+                  <tr><td colSpan={6} className="mat-detail"><MaterialBreakdown materialId={m.id} unit={m.unit} onOpenProject={onOpenProject} /></td></tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -4446,6 +4505,234 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
           </tbody>
         </table>
       </div>
+      </>
+    </>
+  );
+}
+
+// Répartition d'un matériau par chantier (project_id null = stock général).
+function MaterialBreakdown({ materialId, unit, onOpenProject }) {
+  const [rows, setRows] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  React.useEffect(() => {
+    let alive = true;
+    setRows(null); setErr("");
+    api.stockByProject({ material_id: materialId })
+      .then((r) => { if (alive) setRows(Array.isArray(r) ? r : (Array.isArray(r?.items) ? r.items : [])); })
+      .catch((e) => { if (alive) setErr(e.message || String(e)); });
+    return () => { alive = false; };
+  }, [materialId]);
+  if (err) return <div role="alert" style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, padding: 8 }}>Impossible de charger la répartition : {err}</div>;
+  if (!rows) return <div className="muted" role="status" style={{ padding: 8 }}>Chargement…</div>;
+  if (!rows.length) return <div className="muted" style={{ padding: 8 }}>Aucun mouvement enregistré pour ce matériau.</div>;
+  return (
+    <div style={{ padding: "4px 8px", maxWidth: "100%", overflowX: "auto" }}>
+      <p className="eyebrow" style={{ margin: "4px 0" }}>Répartition par chantier</p>
+      <table className="bp">
+        <thead><tr><th>Chantier</th><th>Reçu</th><th>Consommé</th><th>Restant</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.project_id ?? "general"}>
+              <td style={{ fontWeight: 500 }}>
+                {r.project_id == null ? "Stock général" : (r.project_name || `Chantier #${r.project_id}`)}
+                {r.project_id != null && (
+                  <div style={{ fontWeight: 400, fontSize: 12, color: "var(--ink-500)", overflowWrap: "anywhere" }}>
+                    {r.project_location
+                      ? <>Lieu : {r.project_location}</>
+                      : (onOpenProject
+                        ? <button type="button" className="link" style={{ minHeight: 32, fontSize: 12 }} onClick={() => onOpenProject(r.project_id)}>Lieu non renseigné</button>
+                        : "Lieu non renseigné")}
+                    {r.project_client ? <> · Client : {r.project_client}</> : null}
+                    {r.project_manager ? <> · Responsable : {r.project_manager}</> : null}
+                    {(r.last_note ?? r.note) ? <> · Emplacement / note : {r.last_note ?? r.note}</> : null}
+                  </div>
+                )}
+              </td>
+              <td>{n(r.received)} {unit}</td>
+              <td>{n(r.consumed)} {unit}</td>
+              <td style={{ fontWeight: 600 }}>{n(r.remaining)} {unit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const MATERIAL_UNITS = ["sac", "kg", "tonne", "m", "m²", "m³", "litre", "pièce", "barre", "rouleau", "unité"];
+const qtyOk = (s) => /^\d+([.,]\d{1,3})?$/.test(String(s).trim()) && Number(String(s).replace(",", ".")) > 0;
+
+function RestockModal({ material, onClose, onDone }) {
+  const [qty, setQty] = React.useState("");
+  const [dest, setDest] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [projects, setProjects] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [done, setDone] = React.useState("");
+  React.useEffect(() => {
+    api.projects().then((r) => setProjects(Array.isArray(r) ? r : (r?.data || []))).catch(() => setProjects([]));
+  }, []);
+  const unit = material.unit || "";
+  const hasStock = material.stock != null;
+  const cur = n(material.stock);
+  const q = qtyOk(qty) ? Number(String(qty).replace(",", ".")) : null;
+  const next = q != null ? Number((cur + q).toFixed(3)) : null;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (q == null) { setError("Quantité invalide : nombre > 0, 3 décimales maximum."); return; }
+    if (!note.trim()) { setError("Indiquez l emplacement ou une note (ex. dépôt du chantier, étage 1)."); return; }
+    setBusy(true); setError("");
+    try {
+      const payload = { quantity: q, ...(dest ? { project_id: Number(dest) } : {}), note: note.trim() };
+      const res = await api.restockMaterial(material.id, payload);
+      const total = res?.material?.stock;
+      const target = dest ? `au chantier ${projects.find((p) => String(p.id) === dest)?.name || `#${dest}`}` : "au stock général";
+      setDone(`+${q} ${unit} ajoutés ${target} de ${material.name}${!dest && total != null ? ` (total ${n(total)} ${unit})` : ""}.`);
+      onDone && onDone();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim restock-scrim" role="dialog" aria-modal="true" aria-labelledby="restock-title">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 id="restock-title" className="font-display">Réapprovisionner {material.name}</h2>{hasStock && <p>Stock actuel : {cur} {unit}</p>}</div>
+          <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {done ? (
+          <>
+            <div role="status" style={{ padding: "8px 0" }}>{done}</div>
+            <div className="modal-actions"><button type="button" className="btn btn-amber grad-amber" onClick={onClose}>Fermer</button></div>
+          </>
+        ) : (
+          <>
+            <div className="form-grid">
+              <label className="field">
+                <span>Quantité</span>
+                <div className="restock-qty">
+                  <input inputMode="decimal" required autoFocus value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" />
+                  <span className="unit" aria-label="Unité">{unit}</span>
+                </div>
+              </label>
+              <label className="field">
+                <span>Destination</span>
+                <select value={dest} onChange={(e) => setDest(e.target.value)}>
+                  <option value="">Stock général</option>
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>Emplacement / note (obligatoire)</span>
+                <input required maxLength={500} placeholder="ex. dépôt du chantier, étage 1" value={note} onChange={(e) => setNote(e.target.value)} />
+              </label>
+              {!dest && next != null && hasStock && <div className="muted">Nouveau stock : {next} {unit}</div>}
+            </div>
+            {error && <div className="login-error" role="alert">{error}</div>}
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+              <button className="btn btn-amber grad-amber" disabled={busy || q == null}>{busy ? "Enregistrement…" : "Réapprovisionner"}</button>
+            </div>
+          </>
+        )}
+      </form>
+    </div>
+  );
+}
+
+// Onglet « Dépenses et services » : lignes de BC de type service (sans stock),
+// groupées par catégorie, total par groupe ET par devise (jamais de devises additionnées).
+function ServiceExpensesPage() {
+  return (
+    <>
+      <div className="topbar">
+        <div><p className="eyebrow">Achats</p><h2 className="title font-display">Dépenses et services</h2></div>
+      </div>
+      <ServiceExpensesTab />
+    </>
+  );
+}
+
+function ServiceExpensesTab() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [query, setQuery] = React.useState("");
+  const [cat, setCat] = React.useState("");
+  const load = React.useCallback(() => {
+    setLoading(true); setError("");
+    api.serviceExpenses({ category: cat })
+      .then((d) => setData(d || { rows: [], totalsByCategoryAndCurrency: [] }))
+      .catch((e) => setError(e.message || String(e)))
+      .finally(() => setLoading(false));
+  }, [cat]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const label = (c) => (PO_SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c])[1];
+  const q = query.trim().toLowerCase();
+  const rows = (data?.rows || []).filter((r) => !q || [r.designation, r.projectName, r.documentNumber, r.lineNote].some((x) => String(x || "").toLowerCase().includes(q)));
+  const groups = new Map();
+  for (const r of rows) { if (!groups.has(r.category)) groups.set(r.category, []); groups.get(r.category).push(r); }
+  // Totaux par devise recalcules sur les lignes affichées (décimales exactes en centimes entiers).
+  const totalsOf = (list) => {
+    const m = new Map();
+    for (const r of list) {
+      const code = r.currencyCode || "";
+      const cur = m.get(code) || { ht: 0n, ttc: 0n };
+      cur.ht += BigInt(Math.round(Number(r.lineHt) * 100)); cur.ttc += BigInt(Math.round(Number(r.lineTtc) * 100));
+      m.set(code, cur);
+    }
+    return [...m.entries()].map(([code, v]) => ({ code, ht: Number(v.ht) / 100, ttc: Number(v.ttc) / 100 }));
+  };
+  const totalsText = (list) => totalsOf(list).map((t) => money(t.ttc, t.code || undefined)).join(" + ") || "—";
+  const all = totalsOf(rows);
+
+  return (
+    <>
+      <div className="g3 kpis" style={{ marginBottom: 16 }}>
+        <div className="card pad"><div className="kpi-label">Lignes de dépense</div><div className="font-display kpi-value">{rows.length}</div></div>
+        <div className="card pad"><div className="kpi-label">Catégories</div><div className="font-display kpi-value">{groups.size}</div></div>
+        <div className="card pad"><div className="kpi-label">Total TTC (par devise)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
+      </div>
+      <div className="page-toolbar" style={{ flexWrap: "wrap" }}>
+        <input className="input" style={{ flex: "1 1 180px", minWidth: 0 }} type="search" placeholder="Rechercher (libellé, chantier, n° BC, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <select className="select" style={{ flex: "0 1 200px", minWidth: 0 }} value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="">Toutes les catégories</option>
+          {PO_SERVICE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      {error ? (
+        <div className="card pad" style={{ color: "var(--rose-600, #b91c1c)" }}>
+          {error} <button type="button" className="btn btn-ghost" onClick={load}>Réessayer</button>
+        </div>
+      ) : loading ? <p className="muted">Chargement…</p> : !groups.size ? (
+        <p className="muted">Aucune dépense ou service enregistré. Ils apparaissent ici quand une ligne de bon de commande est de type « Service / dépense ».</p>
+      ) : [...groups.entries()].map(([c, list]) => (
+        <div key={c} style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <h3 className="font-display" style={{ margin: 0 }}>{label(c)} <span className="muted" style={{ fontSize: 12 }}>({list.length})</span></h3>
+            <strong>{totalsText(list)}</strong>
+          </div>
+          <div className="card table-card" style={{ overflowX: "auto" }}>
+            <table className="bp" style={{ minWidth: 640 }}>
+              <thead><tr><th>Date</th><th>Libellé</th><th>Chantier</th><th>N° BC</th><th>Qté</th><th>Montant TTC</th><th>Note</th></tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ color: "var(--ink-500)" }}>{r.date ? String(r.date).slice(0, 10) : "—"}</td>
+                    <td style={{ fontWeight: 500 }}>{r.designation}</td>
+                    <td>{r.projectName || "—"}</td>
+                    <td>{r.documentNumber}</td>
+                    <td>{n(r.quantity)}</td>
+                    <td>{money(r.lineTtc, r.currencyCode || undefined)}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{r.lineNote || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </>
   );
 }
@@ -5263,7 +5550,7 @@ function payloadFor(kind, form) {
   }
   return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null, supplier_id: form.supplier_id ? Number(form.supplier_id) : null };
 }
-function RecordModal({ modal, busy, error, onClose, onSave }) {
+function RecordModal({ modal, materials = [], busy, error, onClose, onSave, onRestock }) {
   const { kind } = modal;
   const editing = kind === "project" ? modal.project : null;
   const [form, setForm] = React.useState(() => (kind === "project"
@@ -5278,7 +5565,7 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
         domusVisible: Number(editing.domusVisible) === 1,
       }
       : { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0, ownerPhone: "", ownerSmsEnabled: false, domusVisible: false })
-    : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
+    : { name: "", unit: "unité", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const [suppliers, setSuppliers] = React.useState([]);
   const [currencies, setCurrencies] = React.useState([]);
@@ -5296,7 +5583,16 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
       setCurrencies((arr || []).filter((c) => String(c.status) === "true" || c.status === true));
     }).catch(() => setCurrencies([]));
   }, [kind]);
-  const canSave = Boolean(form.name);
+  const normName = String(form.name || "").trim().toLowerCase();
+  let dup = null;
+  if (kind === "material" && !form.id && normName) {
+    const hit = materials.find((m) => String(m.name || "").trim().toLowerCase() === normName);
+    if (hit) dup = { id: hit.id, name: hit.name, unit: hit.unit, stock: hit.stock };
+    else if (modal.serverDup && String(modal.serverDup.name || "").trim().toLowerCase() === normName) {
+      dup = { id: modal.serverDup.id, name: form.name.trim(), unit: modal.serverDup.unit, stock: undefined };
+    }
+  }
+  const canSave = Boolean(form.name) && !dup;
   const phoneInvalid = kind === "project" && Boolean(form.ownerPhone) && !isValidPhoneNumber(form.ownerPhone);
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -5339,7 +5635,18 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
           ) : (
             <>
               <Field label="Matériau" value={form.name} onChange={(v) => set("name", v)} required />
-              <Field label="Unité" value={form.unit} onChange={(v) => set("unit", v)} />
+              {dup && (
+                <div role="alert" className="login-error dup-banner">
+                  <span>« {dup.name} » existe déjà{dup.stock != null ? ` (${n(dup.stock)} ${dup.unit || ""})` : ""}.</span>
+                  <button type="button" className="btn btn-amber grad-amber" onClick={() => onRestock && onRestock(dup)}>Ajouter au stock</button>
+                </div>
+              )}
+              <label className="field">
+                <span>Unité</span>
+                <select value={form.unit} onChange={(e) => set("unit", e.target.value)}>
+                  {(MATERIAL_UNITS.includes(form.unit) ? MATERIAL_UNITS : [...MATERIAL_UNITS, form.unit]).map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </label>
               <Field label="Stock" type="number" value={form.stock} onChange={(v) => set("stock", v)} />
               <Field label="Seuil minimum" type="number" value={form.minStock} onChange={(v) => set("minStock", v)} />
               <Field label="Réservé" type="number" value={form.reserved} onChange={(v) => set("reserved", v)} />
