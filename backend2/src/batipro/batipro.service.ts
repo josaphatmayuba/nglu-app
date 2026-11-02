@@ -682,6 +682,19 @@ export class BatiproService {
   }
 
   async createMaterial(input: CreateBatiproMaterialDto, orgId: number) {
+    const wanted = (input.name || "").trim().toLowerCase();
+    const [duplicate] = await this.db
+      .select({ id: batiproMaterials.id, name: batiproMaterials.name })
+      .from(batiproMaterials)
+      .where(and(
+        eq(batiproMaterials.organizationId, orgId),
+        eq(batiproMaterials.isActive, 1),
+        sql`lower(trim(${batiproMaterials.name})) = ${wanted}`,
+      ))
+      .limit(1);
+    if (duplicate) {
+      throw new ConflictException(`Le matériau « ${duplicate.name} » existe déjà : modifiez son stock au lieu d'en créer un second.`);
+    }
     const [result] = await this.db.insert(batiproMaterials).values({
       organizationId: orgId,
       name: input.name,
