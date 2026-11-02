@@ -328,6 +328,32 @@ export function buildLeaseCards(leases, payments, owing) {
     .map((c) => (c.lease?.status === "ended" ? { ...c, formerDebt: owing?.get(String(c.lease.id)) || null } : c));
 }
 
+// Bail renouvelé : la carte d'un ancien bail terminé encore débiteur est rattachée à la
+// carte du bail en cours de la même chaîne (renewedFromLeaseId) → `priorDebts`, pour
+// qu'un seul locataire n'ait qu'une carte et que l'arriéré reste visible. Sans
+// successeur actif (ex-locataire parti), l'ancien bail garde sa propre carte.
+export function groupRenewalChains(cards, leases) {
+  const next = new Map();
+  for (const l of leases || []) {
+    if (l.renewedFromLeaseId != null && l.status !== "cancelled") next.set(String(l.renewedFromLeaseId), String(l.id));
+  }
+  const activeCards = new Map(cards.filter((c) => c.lease && (c.lease.status || "active") === "active").map((c) => [String(c.lease.id), c]));
+  const priors = new Map();
+  const absorbed = new Set();
+  for (const c of cards) {
+    if (c.lease?.status !== "ended") continue;
+    let id = next.get(String(c.lease.id));
+    const seen = new Set();
+    while (id && !activeCards.has(id) && !seen.has(id)) { seen.add(id); id = next.get(id); }
+    if (!id || !activeCards.has(id)) continue;
+    priors.set(id, [...(priors.get(id) || []), c]);
+    absorbed.add(c);
+  }
+  return cards
+    .filter((c) => !absorbed.has(c))
+    .map((c) => (c.lease && priors.has(String(c.lease.id)) ? { ...c, priorDebts: priors.get(String(c.lease.id)) } : c));
+}
+
 // Carte « Par locataire » : frise de 12 mois (vert = mois payé) + paiement direct du retard.
 const STATUS_META = {
   ok: { pill: "success", label: "À jour", color: undefined, rowLabel: "Dernier paiement" },
@@ -406,7 +432,9 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
   const coveredUntilLabel = coveredUntil
     ? coveredUntil.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
     : null;
-  const meta = STATUS_META[status] || STATUS_META.ok;
+  // Arriéré d'un bail précédent (renouvellement) : la carte passe « En retard ».
+  const priorDebts = card.priorDebts || [];
+  const meta = priorDebts.length ? STATUS_META.late : STATUS_META[status] || STATUS_META.ok;
   const actionable = status !== "ok";
   // Frise ancrée sur le début du bail → se remplit de gauche à droite dans le temps.
   const slots = lease?.startDate ? monthsFrom(lease.startDate, BAR_MONTHS) : lastMonths(BAR_MONTHS);
@@ -469,7 +497,7 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
     : "";
 
   return (
-    <div className={`immo-pay-card ${status}`}>
+    <div className={`immo-pay-card ${priorDebts.length ? "late" : status}`}>
       <div className="immo-pay-head">
         <div className="immo-pay-tenant">
           <span className={`mini-avatar ${PAY_AVATARS[index % PAY_AVATARS.length]}`} style={{ width: 40, height: 40, fontSize: 13 }}>{initials(name)}</span>
@@ -487,6 +515,37 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
         </div>
         <span className={`immo-pill ${meta.pill}`}>{meta.label}</span>
       </div>
+      {priorDebts.map((p) => {
+        const sym = p.formerDebt?.currency?.symbol || p.formerDebt?.currency?.code || p.symbol;
+        const amount = p.formerDebt ? p.formerDebt.balance : cardFriseLateDue(p).lateDue.late;
+        const months = cardFriseLateDue(p).frise.lateCount;
+        return (
+          <div key={p.lease.id} className="immo-pay-prior" role="alert">
+            <div className="immo-pay-prior-txt">
+              <AlertTriangle size={14} />
+              <span>
+                {tf(t("Arriéré bail précédent ({ref})"), { ref: p.lease.reference || p.lease.id })}
+                {" : "}<b>{fmtWithCurrency(amount, sym)}</b>
+                {months > 0 ? ` · ${tf(t("{n} mois"), { n: months })}` : ""}
+              </span>
+            </div>
+            <div className="immo-pay-prior-actions">
+              <button type="button" className="immo-btn danger" onClick={() => onPay(p)}>
+                <Smartphone size={14} /> {t("Régler l'arriéré")}
+              </button>
+              <button type="button" className="immo-btn" title={t("Relancer ce locataire")} disabled={reminding} onClick={() => onRemind?.(p)}>
+                <BellRing size={14} /> {reminding ? t("Envoi…") : t("Relancer")}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {priorDebts.length > 0 && (
+        <div className="immo-pay-row">
+          <span>{t("Bail en cours")}</span>
+          {!(actionable && balance > 0) && <strong style={{ color: "#16a34a" }}>{t("À jour")}</strong>}
+        </div>
+      )}
       {status === "ok" && (
         <div className="immo-pay-row">
           <span>{meta.rowLabel}</span>
@@ -508,6 +567,19 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
           )}
         </div>
       )}
+      {priorDebts.length > 0 && (() => {
+        // Total à recouvrer = arriéré(s) des baux précédents + dû du bail en cours, par devise.
+        const parts = new Map();
+        const add = (sym, v) => { if (Number(v) > 0.005) parts.set(sym, (parts.get(sym) || 0) + Number(v)); };
+        priorDebts.forEach((p) => add(p.formerDebt?.currency?.symbol || p.formerDebt?.currency?.code || p.symbol, p.formerDebt ? p.formerDebt.balance : cardFriseLateDue(p).lateDue.late));
+        if (actionable) add(symbol, balance);
+        return (
+          <div className="immo-pay-row immo-pay-total">
+            <span>{t("Total à recouvrer")}</span>
+            <strong>{[...parts].map(([s, v]) => fmtWithCurrency(v, s)).join(" + ")}</strong>
+          </div>
+        );
+      })()}
       {canNotifyDefault && noticeLabel && (
         <div className="immo-pay-row">
           <span>Préavis notifié le</span>
@@ -1444,8 +1516,11 @@ export function Loyers({ go }) {
       status: "ok",
     }));
   }, [leases, rows, leasePayments, owing]);
-  const lateCount = cards.filter((c) => c.status === "late").length;
-  const pendingCount = cards.filter((c) => c.status === "pending").length;
+  // Affichage : un ancien bail renouvelé encore débiteur est fusionné dans la carte du
+  // bail en cours (les KPI d'arriérés restent calculés sur `cards`, bail par bail).
+  const displayCards = useMemo(() => groupRenewalChains(cards, leases), [cards, leases]);
+  const lateCount = displayCards.filter((c) => c.status === "late" || c.priorDebts?.length).length;
+  const pendingCount = displayCards.filter((c) => c.status === "pending" && !c.priorDebts?.length).length;
   // Arriérés = loyers en retard (délai de grâce dépassé), groupés par devise :
   // même règle que le KPI « Impayé échu » du tableau de bord.
   const arrearsByCurrency = useMemo(() => groupAmountsByCurrency(
@@ -1459,9 +1534,9 @@ export function Loyers({ go }) {
   // Recherche : filtre cartes (locataire/unité) et lignes (locataire/logement/méthode).
   const shownCards = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return cards;
-    return cards.filter((c) => [c.name, c.unit].some((v) => String(v || "").toLowerCase().includes(q)));
-  }, [cards, query]);
+    if (!q) return displayCards;
+    return displayCards.filter((c) => [c.name, c.unit].some((v) => String(v || "").toLowerCase().includes(q)));
+  }, [displayCards, query]);
   const shownRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
