@@ -496,7 +496,7 @@ export class ReceiveBatiproDocumentDto {
 export class RestockMaterialDto {
   @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) @Max(1000000) quantity!: number;
   @IsOptional() @IsInt() project_id?: number;
-  @IsOptional() @IsString() @MaxLength(500) note?: string;
+  @IsString() @Matches(/\S/, { message: "Emplacement / note obligatoire" }) @MaxLength(500) note!: string;
 }
 
 export class CreateStockMovementDto {

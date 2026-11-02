@@ -4581,9 +4581,10 @@ function RestockModal({ material, onClose, onDone }) {
   const submit = async (e) => {
     e.preventDefault();
     if (q == null) { setError("Quantité invalide : nombre > 0, 3 décimales maximum."); return; }
+    if (!note.trim()) { setError("Indiquez l emplacement ou une note (ex. dépôt du chantier, étage 1)."); return; }
     setBusy(true); setError("");
     try {
-      const payload = { quantity: q, ...(dest ? { project_id: Number(dest) } : {}), ...(note.trim() ? { note: note.trim() } : {}) };
+      const payload = { quantity: q, ...(dest ? { project_id: Number(dest) } : {}), note: note.trim() };
       const res = await api.restockMaterial(material.id, payload);
       const total = res?.material?.stock;
       const target = dest ? `au chantier ${projects.find((p) => String(p.id) === dest)?.name || `#${dest}`}` : "au stock général";
@@ -4622,8 +4623,8 @@ function RestockModal({ material, onClose, onDone }) {
                 </select>
               </label>
               <label className="field">
-                <span>Emplacement / note (facultatif)</span>
-                <input maxLength={500} placeholder="ex. dépôt du chantier, étage 1" value={note} onChange={(e) => setNote(e.target.value)} />
+                <span>Emplacement / note (obligatoire)</span>
+                <input required maxLength={500} placeholder="ex. dépôt du chantier, étage 1" value={note} onChange={(e) => setNote(e.target.value)} />
               </label>
               {!dest && next != null && hasStock && <div className="muted">Nouveau stock : {next} {unit}</div>}
             </div>

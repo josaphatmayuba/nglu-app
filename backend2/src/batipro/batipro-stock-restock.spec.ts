@@ -52,13 +52,17 @@ const chunkHas = (sqlObj: any, value: any) => (sqlObj?.queryChunks ?? []).some((
 describe("RestockMaterialDto", () => {
   const check = async (o: any) => validate(plainToInstance(RestockMaterialDto, o));
   it("refuse 0, negatif, > 3 decimales, > max", async () => {
-    expect((await check({ quantity: 0 })).length).toBe(1);
-    expect((await check({ quantity: -5 })).length).toBe(1);
-    expect((await check({ quantity: 1.2345 })).length).toBe(1);
-    expect((await check({ quantity: 1000001 })).length).toBe(1);
+    expect((await check({ quantity: 0, note: "x" })).length).toBe(1);
+    expect((await check({ quantity: -5, note: "x" })).length).toBe(1);
+    expect((await check({ quantity: 1.2345, note: "x" })).length).toBe(1);
+    expect((await check({ quantity: 1000001, note: "x" })).length).toBe(1);
   });
   it("accepte 2.5, project_id et note", async () => {
     expect(await check({ quantity: 2.5, project_id: 3, note: "x" })).toHaveLength(0);
+  });
+  it("refuse une note absente ou vide (emplacement obligatoire)", async () => {
+    expect((await check({ quantity: 2.5 })).length).toBe(1);
+    expect((await check({ quantity: 2.5, note: "  " })).length).toBe(1);
   });
 });
 

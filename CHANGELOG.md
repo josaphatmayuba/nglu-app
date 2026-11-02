@@ -10,6 +10,8 @@ This project follows:
 
 ## [Unreleased]
 
+- **BâtiPro réappro : « Emplacement / note » obligatoire (v3.276.2).** La modale « + Réappro » exige une note (ex. dépôt du chantier, étage 1) et le serveur refuse une note absente, vide ou faite d espaces.
+
 - **BâtiPro page Matériaux : lignes plus lisibles (v3.276.1).** Le dépliage de la répartition par chantier n est plus un bouton en pilule mais une ligne cliquable (chevron discret, zone tactile 44 px) ; chiffres alignés, Réservé/Seuil sous le nom sur mobile, bouton « + » compact, modale de réappro plein écran sur mobile, bandeau « existe déjà » retravaillé.
 
 - **BâtiPro stock des matériaux : réappro, entrée automatique à la réception, répartition par chantier (v3.276.0).** `POST /batipro/materials/:id/restock` (bouton « + Réappro » par ligne, bandeau « existe déjà » à la création) ; la réception d un bon de commande incrémente le stock global (annulation refusée si déjà consommé) ; `GET /batipro/materials/stock-by-project` (ligne dépliable avec chantier, lieu, reçu, consommé, restant) ; saisie manuelle du stock = ajustement « Inventaire » tracé ; BC reçu non modifiable ; « Dépenses et services » devient une entrée de menu ; bouton « Bon de commande » trompeur retiré de la page Matériaux. Migration 0334 : `batipro_stock_movements.project_id` nullable (stock général).
