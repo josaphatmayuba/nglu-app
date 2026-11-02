@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { buildMaterialCleanupPreview } from "./material-cleanup.util";
+import { buildMaterialCleanupPreview, detectServiceCategory } from "./material-cleanup.util";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -508,6 +508,132 @@ export class BatiproService {
       movementCount: moveBy.get(m.id) ?? 0,
       lineCount: lineBy.get(m.id) ?? 0,
     })));
+  }
+
+  // Lignes de BC de type service/depense (aucun stock). Totaux par categorie ET par
+  // devise (jamais de devises additionnees), sommes exactes calculees en SQL decimal.
+  async serviceExpenses(orgId: number, opts: { projectId?: number; category?: string } = {}) {
+    const effCur = sql<number | null>`COALESCE(${batiproDocumentLines.currencyId}, ${batiproDocuments.currencyId})`;
+    const cat = sql<string>`COALESCE(${batiproDocumentLines.serviceCategory}, 'other')`;
+    const where = and(
+      eq(batiproDocumentLines.organizationId, orgId),
+      eq(batiproDocumentLines.isActive, 1),
+      eq(batiproDocumentLines.lineType, "service"),
+      eq(batiproDocuments.type, "purchase_order"),
+      eq(batiproDocuments.isActive, 1),
+      ne(batiproDocuments.status, "cancelled"),
+      opts.projectId ? eq(batiproDocuments.projectId, opts.projectId) : undefined,
+      opts.category ? sql`${cat} = ${opts.category}` : undefined,
+    );
+    const rows = await this.db
+      .select({
+        id: batiproDocumentLines.id,
+        category: cat,
+        designation: batiproDocumentLines.designation,
+        quantity: batiproDocumentLines.quantity,
+        unitPrice: batiproDocumentLines.unitPrice,
+        lineHt: batiproDocumentLines.lineHt,
+        lineTtc: batiproDocumentLines.lineTtc,
+        currencyId: effCur,
+        currencyCode: currencies.currencyCode,
+        projectId: batiproDocuments.projectId,
+        projectName: batiproProjects.name,
+        documentId: batiproDocuments.id,
+        documentNumber: batiproDocuments.number,
+        lineNote: batiproDocumentLines.lineNote,
+        date: sql<string>`COALESCE(${batiproDocuments.issueDate}, DATE(${batiproDocuments.createdAt}))`,
+      })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(currencies, sql`${currencies.id} = ${effCur}`)
+      .leftJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
+      .where(where)
+      .orderBy(desc(batiproDocuments.id), batiproDocumentLines.position);
+    const totals = await this.db
+      .select({
+        category: cat,
+        currencyId: effCur,
+        currencyCode: currencies.currencyCode,
+        count: sql<string>`COUNT(*)`,
+        totalHt: sql<string>`SUM(${batiproDocumentLines.lineHt})`,
+        totalTtc: sql<string>`SUM(${batiproDocumentLines.lineTtc})`,
+      })
+      .from(batiproDocumentLines)
+      .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
+      .leftJoin(currencies, sql`${currencies.id} = ${effCur}`)
+      .where(where)
+      .groupBy(cat, effCur, currencies.currencyCode);
+    return {
+      rows,
+      totalsByCategoryAndCurrency: totals.map((t) => ({ ...t, count: Number(t.count) })),
+    };
+  }
+
+  // EXECUTION du nettoyage (jamais lancee automatiquement). Exige confirm:true ;
+  // les ids/fusions doivent correspondre au dry-run courant. Soft delete uniquement
+  // (is_active=0). Les lignes de BC gardent leurs montants : une ligne dont le
+  // materiau desactive n a aucun mouvement devient une ligne "service" (material_id
+  // NULL), les autres gardent leur lien. Fusion : mouvements et lignes reportes vers
+  // le materiau conserve, stock/reserve cumules, doublon desactive. Transaction.
+  async materialsCleanupExecute(
+    input: { confirm: boolean; ids?: number[]; merges?: Array<{ keep_id: number; merge_ids: number[] }> },
+    orgId: number,
+    userId?: number,
+  ) {
+    if (input.confirm !== true) throw new BadRequestException("Confirmation explicite requise (confirm: true).");
+    const ids = [...new Set(input.ids ?? [])];
+    const merges = input.merges ?? [];
+    if (!ids.length && !merges.length) throw new BadRequestException("Rien a nettoyer : fournissez ids et/ou merges.");
+
+    const preview = await this.materialsCleanupPreview(orgId);
+    const allowedDeactivate = new Set(preview.toDeactivate.map((x) => x.id));
+    for (const id of ids) if (!allowedDeactivate.has(id)) throw new BadRequestException(`Materiau ${id} absent de la liste a desactiver du dry-run.`);
+    const allowedMerge = new Map(preview.duplicatesToMerge.map((g) => [g.keep.id, new Set(g.merge.map((m) => m.id))]));
+    for (const m of merges) {
+      const ok = allowedMerge.get(m.keep_id);
+      if (!ok || m.merge_ids.some((x) => !ok.has(x))) throw new BadRequestException(`Fusion non conforme au dry-run pour le materiau ${m.keep_id}.`);
+      if (ids.includes(m.keep_id)) throw new BadRequestException(`Le materiau conserve ${m.keep_id} ne peut pas etre desactive.`);
+    }
+
+    const report = { deactivated: [] as number[], linesConvertedToService: 0, merged: [] as Array<{ keepId: number; mergedIds: number[] }> };
+    await this.db.transaction(async (tx) => {
+      for (const id of ids) {
+        const [mv] = await tx.select({ id: batiproStockMovements.id }).from(batiproStockMovements)
+          .where(and(eq(batiproStockMovements.materialId, id), eq(batiproStockMovements.organizationId, orgId), eq(batiproStockMovements.isActive, 1))).limit(1);
+        if (!mv) {
+          const [mat] = await tx.select({ name: batiproMaterials.name }).from(batiproMaterials).where(and(eq(batiproMaterials.id, id), eq(batiproMaterials.organizationId, orgId)));
+          const res: any = await tx.update(batiproDocumentLines)
+            .set({ materialId: null, lineType: "service", serviceCategory: detectServiceCategory(mat?.name ?? "") ?? "other" })
+            .where(and(eq(batiproDocumentLines.materialId, id), eq(batiproDocumentLines.organizationId, orgId)));
+          report.linesConvertedToService += Number(res?.[0]?.affectedRows ?? 0);
+        }
+        await tx.update(batiproMaterials).set({ isActive: 0 }).where(and(eq(batiproMaterials.id, id), eq(batiproMaterials.organizationId, orgId)));
+        report.deactivated.push(id);
+      }
+      for (const m of merges) {
+        const mergedIds = [...new Set(m.merge_ids)].filter((x) => x !== m.keep_id);
+        for (const oldId of mergedIds) {
+          const [old] = await tx.select().from(batiproMaterials).where(and(eq(batiproMaterials.id, oldId), eq(batiproMaterials.organizationId, orgId), eq(batiproMaterials.isActive, 1)));
+          if (!old) continue;
+          const tag = ` [Fusion: ancien materiau #${oldId}]`;
+          await tx.update(batiproStockMovements)
+            .set({ materialId: m.keep_id, note: sql`CONCAT(COALESCE(${batiproStockMovements.note}, ''), ${tag})` })
+            .where(and(eq(batiproStockMovements.materialId, oldId), eq(batiproStockMovements.organizationId, orgId)));
+          await tx.update(batiproDocumentLines).set({ materialId: m.keep_id })
+            .where(and(eq(batiproDocumentLines.materialId, oldId), eq(batiproDocumentLines.organizationId, orgId)));
+          await tx.update(batiproMaterials)
+            .set({ stock: sql`${batiproMaterials.stock} + ${old.stock}`, reserved: sql`${batiproMaterials.reserved} + ${old.reserved}` })
+            .where(and(eq(batiproMaterials.id, m.keep_id), eq(batiproMaterials.organizationId, orgId)));
+          await tx.update(batiproMaterials).set({ isActive: 0, stock: "0", reserved: "0" })
+            .where(and(eq(batiproMaterials.id, oldId), eq(batiproMaterials.organizationId, orgId)));
+        }
+        report.merged.push({ keepId: m.keep_id, mergedIds });
+      }
+    });
+    // Journal : trace applicative (pas de table d historique BatiPro existante).
+    console.log(`[batipro] materials cleanup org=${orgId} user=${userId ?? "?"} ${JSON.stringify(report)}`);
+    await this.publish("materialsCleanup", ["materials", "document_lines", "stock_movements"], "updated", 0, orgId);
+    return report;
   }
 
   // Catalogue enrichi scope-projet : ne renvoie que les materiaux ayant au moins

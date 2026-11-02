@@ -20,6 +20,7 @@ import {
   CreateBatiproCrewDto,
   CreateBatiproDocumentDto,
   CreateBatiproMaterialDto,
+  MaterialsCleanupExecuteDto,
   CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
   CreateBatiproSituationDto,
@@ -266,6 +267,20 @@ export class BatiproController {
   @Get("materials/cleanup-preview")
   materialsCleanupPreview(@CurrentOrg() orgId: number) {
     return this.batipro.materialsCleanupPreview(orgId);
+  }
+
+  @ApiOperation({ summary: "Lignes de BC de type service/depense (sans stock), totaux par categorie et par devise" })
+  @Permissions("readAll-batipro")
+  @Get("service-expenses")
+  serviceExpenses(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string, @Query("category") category?: string) {
+    return this.batipro.serviceExpenses(orgId, { projectId: projectId ? Number(projectId) : undefined, category: category || undefined });
+  }
+
+  @ApiOperation({ summary: "Execute le nettoyage valide des materiaux (soft delete + fusion). Exige confirm:true" })
+  @Permissions("delete-batipro")
+  @Post("materials/cleanup-execute")
+  materialsCleanupExecute(@Body() body: MaterialsCleanupExecuteDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.batipro.materialsCleanupExecute(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Create BatiPro material" })

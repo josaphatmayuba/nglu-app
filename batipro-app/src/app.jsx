@@ -4399,6 +4399,7 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
   // Bons de commande — tous chantiers (nouveau, en plus du catalogue matériaux).
   const currencies = useCurrencies();
   const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises
+  const [matTab, setMatTab] = React.useState("materials"); // materials | expenses
   const [allPos, setAllPos] = React.useState([]);
   const [posLoading, setPosLoading] = React.useState(true);
   React.useEffect(() => {
@@ -4421,10 +4422,15 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
         <div className="card pad"><div className="kpi-label">Réservé total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.reserved), 0)}</div></div>
         <div className="card pad"><div className="kpi-label">En stock total</div><div className="font-display kpi-value">{materials.reduce((s, m) => s + n(m.stock), 0)}</div></div>
       </div>
-      <div className="page-toolbar">
+      <div className="page-toolbar" style={{ flexWrap: "wrap" }}>
+        <div role="tablist" style={{ display: "flex", gap: 6, overflowX: "auto", maxWidth: "100%" }}>
+          <button type="button" role="tab" aria-selected={matTab === "materials"} className={`btn ${matTab === "materials" ? "btn-amber grad-amber" : "btn-ghost"}`} onClick={() => setMatTab("materials")}>Matériaux</button>
+          <button type="button" role="tab" aria-selected={matTab === "expenses"} className={`btn ${matTab === "expenses" ? "btn-amber grad-amber" : "btn-ghost"}`} style={{ whiteSpace: "nowrap" }} onClick={() => setMatTab("expenses")}>Dépenses et services</button>
+        </div>
         {onNew && <button className="btn btn-amber grad-amber" disabled={!canMutate || !can("create-batipro")} onClick={onNew}><Icon name="plus" /> Bon de commande</button>}
       </div>
-      <div className="card table-card" style={{ marginBottom: 16 }}>
+      {matTab === "expenses" ? <ServiceExpensesTab /> : (<>
+      <div className="card table-card" style={{ marginBottom: 16, overflowX: "auto" }}>
         <table className="bp">
           <thead><tr><th>Matériau</th><th>Stock</th><th>Réservé</th><th>Seuil</th><th>Statut</th></tr></thead>
           <tbody>
@@ -4476,6 +4482,93 @@ function Materiaux({ materials: globalMaterials, onNew, canMutate, fixedProjectI
           </tbody>
         </table>
       </div>
+      </>)}
+    </>
+  );
+}
+
+// Onglet « Dépenses et services » : lignes de BC de type service (sans stock),
+// groupées par catégorie, total par groupe ET par devise (jamais de devises additionnées).
+function ServiceExpensesTab() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [query, setQuery] = React.useState("");
+  const [cat, setCat] = React.useState("");
+  const load = React.useCallback(() => {
+    setLoading(true); setError("");
+    api.serviceExpenses({ category: cat })
+      .then((d) => setData(d || { rows: [], totalsByCategoryAndCurrency: [] }))
+      .catch((e) => setError(e.message || String(e)))
+      .finally(() => setLoading(false));
+  }, [cat]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const label = (c) => (PO_SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c])[1];
+  const q = query.trim().toLowerCase();
+  const rows = (data?.rows || []).filter((r) => !q || [r.designation, r.projectName, r.documentNumber, r.lineNote].some((x) => String(x || "").toLowerCase().includes(q)));
+  const groups = new Map();
+  for (const r of rows) { if (!groups.has(r.category)) groups.set(r.category, []); groups.get(r.category).push(r); }
+  // Totaux par devise recalcules sur les lignes affichées (décimales exactes en centimes entiers).
+  const totalsOf = (list) => {
+    const m = new Map();
+    for (const r of list) {
+      const code = r.currencyCode || "";
+      const cur = m.get(code) || { ht: 0n, ttc: 0n };
+      cur.ht += BigInt(Math.round(Number(r.lineHt) * 100)); cur.ttc += BigInt(Math.round(Number(r.lineTtc) * 100));
+      m.set(code, cur);
+    }
+    return [...m.entries()].map(([code, v]) => ({ code, ht: Number(v.ht) / 100, ttc: Number(v.ttc) / 100 }));
+  };
+  const totalsText = (list) => totalsOf(list).map((t) => money(t.ttc, t.code || undefined)).join(" + ") || "—";
+  const all = totalsOf(rows);
+
+  return (
+    <>
+      <div className="g3 kpis" style={{ marginBottom: 16 }}>
+        <div className="card pad"><div className="kpi-label">Lignes de dépense</div><div className="font-display kpi-value">{rows.length}</div></div>
+        <div className="card pad"><div className="kpi-label">Catégories</div><div className="font-display kpi-value">{groups.size}</div></div>
+        <div className="card pad"><div className="kpi-label">Total TTC (par devise)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
+      </div>
+      <div className="page-toolbar" style={{ flexWrap: "wrap" }}>
+        <input className="input" style={{ flex: "1 1 180px", minWidth: 0 }} type="search" placeholder="Rechercher (libellé, chantier, n° BC, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <select className="select" style={{ flex: "0 1 200px", minWidth: 0 }} value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="">Toutes les catégories</option>
+          {PO_SERVICE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </div>
+      {error ? (
+        <div className="card pad" style={{ color: "var(--rose-600, #b91c1c)" }}>
+          {error} <button type="button" className="btn btn-ghost" onClick={load}>Réessayer</button>
+        </div>
+      ) : loading ? <p className="muted">Chargement…</p> : !groups.size ? (
+        <p className="muted">Aucune dépense ou service enregistré. Ils apparaissent ici quand une ligne de bon de commande est de type « Service / dépense ».</p>
+      ) : [...groups.entries()].map(([c, list]) => (
+        <div key={c} style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <h3 className="font-display" style={{ margin: 0 }}>{label(c)} <span className="muted" style={{ fontSize: 12 }}>({list.length})</span></h3>
+            <strong>{totalsText(list)}</strong>
+          </div>
+          <div className="card table-card" style={{ overflowX: "auto" }}>
+            <table className="bp" style={{ minWidth: 640 }}>
+              <thead><tr><th>Date</th><th>Libellé</th><th>Chantier</th><th>N° BC</th><th>Qté</th><th>Montant TTC</th><th>Note</th></tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ color: "var(--ink-500)" }}>{r.date ? String(r.date).slice(0, 10) : "—"}</td>
+                    <td style={{ fontWeight: 500 }}>{r.designation}</td>
+                    <td>{r.projectName || "—"}</td>
+                    <td>{r.documentNumber}</td>
+                    <td>{n(r.quantity)}</td>
+                    <td>{money(r.lineTtc, r.currencyCode || undefined)}</td>
+                    <td style={{ color: "var(--ink-500)" }}>{r.lineNote || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </>
   );
 }

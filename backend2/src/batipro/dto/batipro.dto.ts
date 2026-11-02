@@ -52,6 +52,18 @@ export class UpdateBatiproTaskDto extends CreateBatiproTaskDto {
   @IsOptional() @IsString() declare label: string;
 }
 
+// Execution du nettoyage des materiaux (apres validation du dry-run). confirm doit etre true.
+export class MaterialsMergeDto {
+  @IsInt() keep_id!: number;
+  @IsArray() @ArrayMaxSize(50) @IsInt({ each: true }) merge_ids!: number[];
+}
+
+export class MaterialsCleanupExecuteDto {
+  @IsBoolean() confirm!: boolean;
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsInt({ each: true }) ids?: number[];
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => MaterialsMergeDto) merges?: MaterialsMergeDto[];
+}
+
 export class CreateBatiproMaterialDto {
   @IsString() name!: string;
   @IsOptional() @IsString() unit?: string;

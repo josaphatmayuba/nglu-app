@@ -159,6 +159,7 @@ export const api = {
   forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>
     jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { base: API_ROOT }),
   materials: ({ projectId } = {}) => jsonFetch(`/materials${projectId ? `?project_id=${projectId}` : ""}`),
+  serviceExpenses: ({ projectId, category } = {}) => jsonFetch(`/service-expenses?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), ...(category ? { category } : {}) })}`),
   createMaterial: (b) => jsonFetch("/materials", { method: "POST", body: JSON.stringify(b || {}) }),
   updateMaterial: (id, b) => jsonFetch(`/materials/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   deleteMaterial: (id) => jsonFetch(`/materials/${id}`, { method: "DELETE" }),
