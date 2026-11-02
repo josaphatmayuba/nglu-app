@@ -518,7 +518,13 @@ function TenantPayCard({ card, index, onPay, onConfirm, onReceipt, onGenerateMis
       {priorDebts.map((p) => {
         const sym = p.formerDebt?.currency?.symbol || p.formerDebt?.currency?.code || p.symbol;
         const amount = p.formerDebt ? p.formerDebt.balance : cardFriseLateDue(p).lateDue.late;
-        const months = cardFriseLateDue(p).frise.lateCount;
+        // Bail terminé : le montant (backend) inclut le mois de sortie ; le nombre de mois est déduit du même montant.
+        const pRent = Number(p.rent) || 0;
+        const owed = Number(amount) || 0;
+        const ratio = p.formerDebt && pRent > 0 ? owed / pRent : null;
+        const months = ratio !== null
+          ? (Math.abs(ratio - Math.round(ratio)) < 0.01 ? Math.round(ratio) : 0)
+          : cardFriseLateDue(p).frise.lateCount;
         return (
           <div key={p.lease.id} className="immo-pay-prior" role="alert">
             <div className="immo-pay-prior-txt">

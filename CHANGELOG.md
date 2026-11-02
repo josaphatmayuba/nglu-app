@@ -10,6 +10,7 @@ This project follows:
 
 ## [Unreleased]
 
+- **Domus : carte « Arriéré bail précédent » — nombre de mois cohérent avec le montant (v3.276.3).** Le nombre de mois est déduit du montant dû ÷ loyer de l'ancien bail (le mois de sortie est facturé), au lieu du compte de la frise (ex. 6 000 $ à 1 500 $ affichait « 3 mois », désormais « 4 mois »).
 - **BâtiPro réappro : « Emplacement / note » obligatoire (v3.276.2).** La modale « + Réappro » exige une note (ex. dépôt du chantier, étage 1) et le serveur refuse une note absente, vide ou faite d espaces.
 
 - **BâtiPro page Matériaux : lignes plus lisibles (v3.276.1).** Le dépliage de la répartition par chantier n est plus un bouton en pilule mais une ligne cliquable (chevron discret, zone tactile 44 px) ; chiffres alignés, Réservé/Seuil sous le nom sur mobile, bouton « + » compact, modale de réappro plein écran sur mobile, bandeau « existe déjà » retravaillé.
