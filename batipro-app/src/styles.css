@@ -377,3 +377,17 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .restock-scrim .modal-actions { position: sticky; bottom: 0; background: #fff; padding-top: 8px; }
   .restock-scrim .modal-actions .btn { flex: 1; min-height: 48px; justify-content: center; }
 }
+
+/* Depenses chantier : barre d outils, tableau a defilement interne, modale mobile */
+.exp-toolbar { justify-content: flex-start; }
+.exp-toolbar > input { flex: 1 1 200px; min-width: 0; }
+.exp-toolbar > select { flex: 0 1 180px; min-width: 0; }
+.exp-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.exp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.exp-form .form-grid .span2 { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .exp-toolbar > input, .exp-toolbar > select, .exp-toolbar > .btn { flex: 1 1 100%; min-height: 44px; }
+  .exp-actions .link { min-height: 44px; padding: 0 14px; }
+  .exp-form .form-grid { grid-template-columns: 1fr; }
+  .exp-form .btn-touch, .exp-form .icon-btn { min-height: 44px; }
+}

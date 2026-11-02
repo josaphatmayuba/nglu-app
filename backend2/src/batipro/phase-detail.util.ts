@@ -46,7 +46,7 @@ export type PoPayInfo = {
 
 // BC sortant non annule : seul cas ou une ligne compte en depense.
 const isActivePo = (r: Pick<PhaseDetailRow, "docType" | "docDirection" | "docStatus">) =>
-  r.docType === "purchase_order" && r.docDirection === "outbound" && r.docStatus !== "cancelled";
+  (r.docType === "purchase_order" || r.docType === "expense") && r.docDirection === "outbound" && r.docStatus !== "cancelled";
 
 // Statuts d'un document inbound (artisan) qui ne comptent plus.
 const ARTISAN_EXCLUDED_STATUSES = new Set(["refused", "rejected", "cancelled", "draft"]);

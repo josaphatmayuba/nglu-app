@@ -159,7 +159,13 @@ export const api = {
   forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>
     jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { base: API_ROOT }),
   materials: ({ projectId } = {}) => jsonFetch(`/materials${projectId ? `?project_id=${projectId}` : ""}`),
-  serviceExpenses: ({ projectId, category } = {}) => jsonFetch(`/service-expenses?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), ...(category ? { category } : {}) })}`),
+  serviceExpenses: ({ projectId, category, source, status } = {}) => jsonFetch(`/service-expenses?${new URLSearchParams({ ...(projectId ? { project_id: projectId } : {}), ...(category ? { category } : {}), ...(source ? { source } : {}), ...(status ? { status } : {}) })}`),
+  // Dépenses chantier (sans fournisseur/stock/réception) — documents type 'expense'.
+  expense: (id) => jsonFetch(`/expenses/${id}`),
+  createExpense: (b) => jsonFetch("/expenses", { method: "POST", body: JSON.stringify(b || {}) }),
+  updateExpense: (id, b) => jsonFetch(`/expenses/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
+  cancelExpense: (id, reason) => jsonFetch(`/expenses/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+  deleteExpense: (id) => jsonFetch(`/expenses/${id}`, { method: "DELETE" }),
   createMaterial: (b) => jsonFetch("/materials", { method: "POST", body: JSON.stringify(b || {}) }),
   updateMaterial: (id, b) => jsonFetch(`/materials/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
   restockMaterial: (id, b) => jsonFetch(`/materials/${id}/restock`, { method: "POST", body: JSON.stringify(b || {}) }),

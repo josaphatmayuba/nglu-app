@@ -62,6 +62,8 @@ import type {
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
   CreateBatiproDocumentDto,
+  CreateBatiproExpenseDto,
+  UpdateBatiproExpenseDto,
   CreateBatiproMaterialDto,
   CreateBatiproPhaseDto,
   CreateBatiproProjectDto,
@@ -511,18 +513,28 @@ export class BatiproService {
     })));
   }
 
-  // Lignes de BC de type service/depense (aucun stock). Totaux par categorie ET par
-  // devise (jamais de devises additionnees), sommes exactes calculees en SQL decimal.
-  async serviceExpenses(orgId: number, opts: { projectId?: number; category?: string } = {}) {
+  // Lignes de service/depense (aucun stock) des BC ET des depenses directes
+  // (type=expense). Totaux par categorie ET par devise (jamais de devises
+  // additionnees), sommes exactes calculees en SQL decimal. Scope chantier applique.
+  async serviceExpenses(
+    orgId: number,
+    opts: { projectId?: number; category?: string; source?: string; status?: string } = {},
+    scope: BatiproProjectScope = "all",
+  ) {
+    if (opts.source && !["bc", "expense"].includes(opts.source)) throw new BadRequestException("source invalide (bc|expense).");
+    if (scope !== "all" && !scope.length) return { rows: [] as any[], totalsByCategoryAndCurrency: [] as any[] };
     const effCur = sql<number | null>`COALESCE(${batiproDocumentLines.currencyId}, ${batiproDocuments.currencyId})`;
     const cat = sql<string>`COALESCE(${batiproDocumentLines.serviceCategory}, 'other')`;
+    const types = opts.source === "bc" ? ["purchase_order"] : opts.source === "expense" ? ["expense"] : ["purchase_order", "expense"];
     const where = and(
       eq(batiproDocumentLines.organizationId, orgId),
       eq(batiproDocumentLines.isActive, 1),
       eq(batiproDocumentLines.lineType, "service"),
-      eq(batiproDocuments.type, "purchase_order"),
+      inArray(batiproDocuments.type, types),
       eq(batiproDocuments.isActive, 1),
       ne(batiproDocuments.status, "cancelled"),
+      opts.status ? eq(batiproDocuments.status, opts.status) : undefined,
+      scope !== "all" ? inArray(batiproDocuments.projectId, scope) : undefined,
       opts.projectId ? eq(batiproDocuments.projectId, opts.projectId) : undefined,
       opts.category ? sql`${cat} = ${opts.category}` : undefined,
     );
@@ -541,13 +553,29 @@ export class BatiproService {
         projectName: batiproProjects.name,
         documentId: batiproDocuments.id,
         documentNumber: batiproDocuments.number,
+        documentType: batiproDocuments.type,
+        documentStatus: batiproDocuments.status,
+        docPaidAmount: batiproDocuments.paidAmount,
+        docTotalTtc: batiproDocuments.totalTtc,
         lineNote: batiproDocumentLines.lineNote,
+        phaseId: batiproDocumentLines.phaseId,
+        attachedFileKey: batiproDocuments.attachedFileKey,
+        supplierId: batiproDocuments.supplierId,
+        supplierName: suppliers.name,
+        subcontractorId: batiproDocuments.subcontractorId,
+        subcontractorName: batiproSubcontractors.name,
+        workerId: batiproDocuments.beneficiaryWorkerId,
+        workerName: batiproWorkers.fullName,
+        beneficiaryName: batiproDocuments.beneficiaryName,
         date: sql<string>`COALESCE(${batiproDocuments.issueDate}, DATE(${batiproDocuments.createdAt}))`,
       })
       .from(batiproDocumentLines)
       .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
       .leftJoin(currencies, sql`${currencies.id} = ${effCur}`)
       .leftJoin(batiproProjects, eq(batiproProjects.id, batiproDocuments.projectId))
+      .leftJoin(suppliers, eq(suppliers.id, batiproDocuments.supplierId))
+      .leftJoin(batiproSubcontractors, eq(batiproSubcontractors.id, batiproDocuments.subcontractorId))
+      .leftJoin(batiproWorkers, eq(batiproWorkers.id, batiproDocuments.beneficiaryWorkerId))
       .where(where)
       .orderBy(desc(batiproDocuments.id), batiproDocumentLines.position);
     const totals = await this.db
@@ -565,7 +593,11 @@ export class BatiproService {
       .where(where)
       .groupBy(cat, effCur, currencies.currencyCode);
     return {
-      rows,
+      rows: rows.map(({ attachedFileKey, supplierId, supplierName, subcontractorId, subcontractorName, workerId, workerName, beneficiaryName, ...r }) => ({
+        ...r,
+        hasAttachment: !!attachedFileKey,
+        beneficiary: BatiproService.beneficiaryOf({ supplierId, supplierName, subcontractorId, subcontractorName, workerId, workerName, beneficiaryName }),
+      })),
       totalsByCategoryAndCurrency: totals.map((t) => ({ ...t, count: Number(t.count) })),
     };
   }
@@ -1147,7 +1179,7 @@ export class BatiproService {
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.projectId, projectId),
         eq(batiproDocuments.direction, "outbound"),
-        eq(batiproDocuments.type, "purchase_order"),
+        inArray(batiproDocuments.type, ["purchase_order", "expense"]),
         sql`${batiproDocuments.status} <> 'cancelled'`,
         eq(batiproDocuments.isActive, 1),
         eq(batiproDocumentLines.isActive, 1),
@@ -1288,7 +1320,7 @@ export class BatiproService {
 
     // Base du paye (TTC) : totaux par devise de batipro_document_totals quand ils
     // existent, sinon total TTC / paye du document (devise du document seule).
-    const poIds = Array.from(new Set(rows.filter((r) => r.docType === "purchase_order" && r.docDirection === "outbound").map((r) => r.documentId)));
+    const poIds = Array.from(new Set(rows.filter((r) => (r.docType === "purchase_order" || r.docType === "expense") && r.docDirection === "outbound").map((r) => r.documentId)));
     const poPayByDoc = new Map<number, PoPayInfo>();
     if (poIds.length) {
       const docs = await this.db
@@ -2189,6 +2221,7 @@ export class BatiproService {
     purchase_order: "BC",
     situation: "SIT",
     invoice: "FAC",
+    expense: "DEP",
   };
 
   // Numerotation sequentielle par (org, type, annee), sans trou ni doublon.
@@ -2576,6 +2609,7 @@ export class BatiproService {
 
   async updateDocument(id: number, input: UpdateBatiproDocumentDto, orgId: number) {
     const doc = await this.getDocument(id, orgId);
+    this.assertNotExpense(doc, "modifier");
 
     // Garde-fou : un BC dont du stock a deja ete receptionne ne peut plus etre
     // annule (le stock est physiquement entre, l'annulation le laisserait
@@ -2918,10 +2952,443 @@ export class BatiproService {
 
   async deleteDocument(id: number, orgId: number) {
     const doc = await this.getDocument(id, orgId);
+    this.assertNotExpense(doc, "supprimer");
     await this.db.update(batiproDocuments).set({ isActive: 0 }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
     if (doc.type === "purchase_order") await this.recomputeProjectRisk(orgId, doc.projectId);
     await this.publish("deleteDocument", ["documents"], "deleted", id, orgId);
     return { message: "Document supprime." };
+  }
+
+  // ── Depense chantier (lot 2) : type=expense / direction=outbound ───────────
+  // Une depense = une ligne de batipro_documents + UNE ligne de service. Aucun
+  // stock, aucune reception, fournisseur facultatif. Montants EXACTS en centimes
+  // (jamais d arrondi : plus de 2 decimales = 400). Statuts : recorded | paid |
+  // cancelled. Lot 3 : reglement via recordPayment (recordExpensePayment) et
+  // comptabilisation via postPurchaseToLedger (batipro_purchase / batipro_supplier_payment).
+
+  private static readonly EXPENSE_CATEGORIES = ["labor", "handling", "fees", "transport", "hardware_invoice", "other"];
+
+  // Verrou des endpoints generiques (update/delete/share/html) : une depense passe par /expenses.
+  private assertNotExpense(doc: { type: string }, action: string) {
+    if (doc.type === "expense") throw new BadRequestException(`Impossible de ${action} une depense via /documents : utilisez /expenses.`);
+  }
+
+  // Beneficiaire affiche : ouvrier > sous-traitant > fournisseur > texte libre.
+  static beneficiaryOf(b: {
+    supplierId?: number | null; supplierName?: string | null;
+    subcontractorId?: number | null; subcontractorName?: string | null;
+    workerId?: number | null; workerName?: string | null;
+    beneficiaryName?: string | null;
+  }): { kind: "worker" | "subcontractor" | "supplier" | "text" | null; id: number | null; name: string | null } {
+    if (b.workerId != null) return { kind: "worker", id: Number(b.workerId), name: b.workerName ?? b.beneficiaryName ?? null };
+    if (b.subcontractorId != null) return { kind: "subcontractor", id: Number(b.subcontractorId), name: b.subcontractorName ?? b.beneficiaryName ?? null };
+    if (b.supplierId != null) return { kind: "supplier", id: Number(b.supplierId), name: b.supplierName ?? b.beneficiaryName ?? null };
+    if (b.beneficiaryName) return { kind: "text", id: null, name: b.beneficiaryName };
+    return { kind: null, id: null, name: null };
+  }
+
+  private centsStr(c: number) {
+    return (c / 100).toFixed(2);
+  }
+
+  // Valide les montants (2 decimales max, > 0, HT <= TTC) et renvoie les centimes.
+  private expenseAmounts(ttc: number, ht: number | undefined) {
+    const isAmount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    if (!isAmount(ttc) || !(ttc > 0)) throw new BadRequestException("Le montant TTC doit etre strictement positif.");
+    if (!hasAtMostTwoDecimals(ttc)) throw new BadRequestException("Le montant TTC admet 2 decimales maximum.");
+    if (ht !== undefined) {
+      if (!isAmount(ht) || !(ht > 0)) throw new BadRequestException("Le montant HT doit etre strictement positif.");
+      if (!hasAtMostTwoDecimals(ht)) throw new BadRequestException("Le montant HT admet 2 decimales maximum.");
+    }
+    const ttcC = toCents(ttc);
+    const htC = ht === undefined ? ttcC : toCents(ht);
+    if (htC > ttcC) throw new BadRequestException("Le montant HT ne peut pas depasser le TTC.");
+    return { ttcC, htC, vatC: ttcC - htC };
+  }
+
+  // Beneficiaire valide : un seul des supplier_id / subcontractor_id / worker_id selon kind.
+  private async resolveExpenseBeneficiary(
+    orgId: number,
+    input: { beneficiary_kind?: string; beneficiary_name?: string; supplier_id?: number; subcontractor_id?: number; worker_id?: number },
+  ) {
+    const ids = [input.supplier_id, input.subcontractor_id, input.worker_id].filter((v) => v != null);
+    if (ids.length > 1) throw new BadRequestException("Un seul beneficiaire : supplier_id, subcontractor_id ou worker_id.");
+    const kind = input.beneficiary_kind
+      ?? (input.worker_id != null ? "worker" : input.subcontractor_id != null ? "subcontractor" : input.supplier_id != null ? "supplier" : input.beneficiary_name ? "text" : undefined);
+    const out = { supplierId: null as number | null, subcontractorId: null as number | null, beneficiaryWorkerId: null as number | null, beneficiaryName: null as string | null };
+    if (!kind) return out;
+    const idOf = { supplier: input.supplier_id, subcontractor: input.subcontractor_id, worker: input.worker_id } as Record<string, number | undefined>;
+    // Un identifiant fourni qui ne correspond pas au kind choisi = incoherent.
+    const mismatch = (k: string) => ids.length > 0 && idOf[k] == null;
+    if (kind === "text") {
+      const name = (input.beneficiary_name ?? "").trim();
+      if (!name) throw new BadRequestException("Le nom du beneficiaire est obligatoire.");
+      if (ids.length) throw new BadRequestException("Beneficiaire texte : aucun identifiant a fournir.");
+      out.beneficiaryName = name;
+    } else if (kind === "supplier") {
+      if (input.supplier_id == null || mismatch("supplier")) throw new BadRequestException("supplier_id requis pour un beneficiaire fournisseur.");
+      const [r] = await this.db.select({ id: suppliers.id }).from(suppliers)
+        .where(and(eq(suppliers.id, input.supplier_id), eq(suppliers.organizationId, orgId))).limit(1);
+      if (!r) throw new BadRequestException("Fournisseur introuvable.");
+      out.supplierId = r.id;
+    } else if (kind === "subcontractor") {
+      if (input.subcontractor_id == null || mismatch("subcontractor")) throw new BadRequestException("subcontractor_id requis pour un beneficiaire sous-traitant.");
+      const [r] = await this.db.select({ id: batiproSubcontractors.id }).from(batiproSubcontractors)
+        .where(and(eq(batiproSubcontractors.id, input.subcontractor_id), eq(batiproSubcontractors.organizationId, orgId), eq(batiproSubcontractors.isActive, 1))).limit(1);
+      if (!r) throw new BadRequestException("Sous-traitant introuvable.");
+      out.subcontractorId = r.id;
+    } else if (kind === "worker") {
+      if (input.worker_id == null || mismatch("worker")) throw new BadRequestException("worker_id requis pour un beneficiaire ouvrier.");
+      const [r] = await this.db.select({ id: batiproWorkers.id }).from(batiproWorkers)
+        .where(and(eq(batiproWorkers.id, input.worker_id), eq(batiproWorkers.organizationId, orgId), eq(batiproWorkers.isActive, 1))).limit(1);
+      if (!r) throw new BadRequestException("Ouvrier introuvable.");
+      out.beneficiaryWorkerId = r.id;
+    } else {
+      throw new BadRequestException("beneficiary_kind invalide.");
+    }
+    return out;
+  }
+
+  // Document + ligne + libelles pour la reponse JSON d une depense.
+  private async loadExpenseBundle(id: number, orgId: number) {
+    const [doc] = await this.db
+      .select()
+      .from(batiproDocuments)
+      .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.type, "expense"), eq(batiproDocuments.isActive, 1)))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Depense introuvable.");
+    const [line] = await this.db
+      .select()
+      .from(batiproDocumentLines)
+      .where(and(eq(batiproDocumentLines.documentId, id), eq(batiproDocumentLines.isActive, 1)))
+      .orderBy(batiproDocumentLines.position, batiproDocumentLines.id)
+      .limit(1);
+    const [project] = await this.db.select({ name: batiproProjects.name }).from(batiproProjects).where(eq(batiproProjects.id, doc.projectId)).limit(1);
+    let currencyCode: string | null = null;
+    if (doc.currencyId != null) {
+      const [c] = await this.db.select({ code: currencies.currencyCode }).from(currencies).where(eq(currencies.id, doc.currencyId)).limit(1);
+      currencyCode = c?.code ?? null;
+    }
+    let supplierName: string | null = null;
+    let subcontractorName: string | null = null;
+    let workerName: string | null = null;
+    if (doc.supplierId != null) {
+      const [r] = await this.db.select({ n: suppliers.name }).from(suppliers).where(eq(suppliers.id, doc.supplierId)).limit(1);
+      supplierName = r?.n ?? null;
+    }
+    if (doc.subcontractorId != null) {
+      const [r] = await this.db.select({ n: batiproSubcontractors.name }).from(batiproSubcontractors).where(eq(batiproSubcontractors.id, doc.subcontractorId)).limit(1);
+      subcontractorName = r?.n ?? null;
+    }
+    if (doc.beneficiaryWorkerId != null) {
+      const [r] = await this.db.select({ n: batiproWorkers.fullName }).from(batiproWorkers).where(eq(batiproWorkers.id, doc.beneficiaryWorkerId)).limit(1);
+      workerName = r?.n ?? null;
+    }
+    return { doc, line: line ?? null, projectName: project?.name ?? null, currencyCode, supplierName, subcontractorName, workerName };
+  }
+
+  // Contrat JSON d une depense (montants en chaines decimales exactes).
+  static toExpenseJson(b: {
+    doc: any; line: any | null; projectName: string | null; currencyCode: string | null;
+    supplierName?: string | null; subcontractorName?: string | null; workerName?: string | null;
+  }) {
+    const { doc, line } = b;
+    const cents = (v: unknown) => toCents(v as any);
+    const ttc = cents(doc.totalTtc);
+    const paid = cents(doc.paidAmount);
+    const str = (c: number) => (c / 100).toFixed(2);
+    const cancelled = doc.status === "cancelled";
+    const iso = (d: unknown) => (d ? new Date(d as any).toISOString() : null);
+    return {
+      id: Number(doc.id),
+      type: "expense" as const,
+      number: doc.number ?? null,
+      status: doc.status as string,
+      projectId: Number(doc.projectId),
+      projectName: b.projectName,
+      category: (line?.serviceCategory ?? "other") as string,
+      designation: (line?.designation ?? "") as string,
+      expenseDate: (doc.issueDate ?? null) as string | null,
+      currencyId: (doc.currencyId ?? null) as number | null,
+      currencyCode: b.currencyCode,
+      amountHt: str(cents(doc.totalHt)),
+      amountVat: str(cents(doc.totalVat)),
+      amountTtc: str(ttc),
+      vatRate: (line?.vatRate != null ? String(line.vatRate) : null) as string | null,
+      paidAmount: str(paid),
+      balance: cancelled ? "0.00" : str(Math.max(ttc - paid, 0)),
+      fxRate: (doc.fxRate ?? null) as string | null,
+      totalTtcProjectCcy: (doc.totalTtcProjectCcy ?? null) as string | null,
+      paidAmountProjectCcy: doc.paidAmountProjectCcy != null ? String(doc.paidAmountProjectCcy) : "0.00",
+      beneficiary: BatiproService.beneficiaryOf({
+        supplierId: doc.supplierId, supplierName: b.supplierName,
+        subcontractorId: doc.subcontractorId, subcontractorName: b.subcontractorName,
+        workerId: doc.beneficiaryWorkerId, workerName: b.workerName,
+        beneficiaryName: doc.beneficiaryName,
+      }),
+      phaseId: (line?.phaseId ?? null) as number | null,
+      lineNote: (line?.lineNote ?? null) as string | null,
+      notes: (doc.notes ?? null) as string | null,
+      hasAttachment: !!doc.attachedFileKey,
+      ledgerEntryId: (doc.ledgerEntryId ?? null) as number | null,
+      paymentLedgerEntryId: (doc.paymentLedgerEntryId ?? null) as number | null,
+      createdBy: (doc.createdBy ?? null) as number | null,
+      cancelledAt: iso(doc.cancelledAt),
+      cancelledBy: (doc.cancelledBy ?? null) as number | null,
+      cancelReason: (doc.cancelReason ?? null) as string | null,
+    };
+  }
+
+  async getExpense(id: number, orgId: number, scope: BatiproProjectScope = "all") {
+    const bundle = await this.loadExpenseBundle(id, orgId);
+    await this.assertProjectInScope(bundle.doc.projectId, orgId, scope);
+    return BatiproService.toExpenseJson(bundle);
+  }
+
+  async createExpense(input: CreateBatiproExpenseDto, orgId: number, userId: number | undefined, scope: BatiproProjectScope = "all") {
+    await this.assertProjectInScope(input.project_id, orgId, scope);
+    const project = await this.getProject(input.project_id, orgId);
+    if (input.currency_id == null) throw new BadRequestException("La devise est obligatoire.");
+    if (!BatiproService.EXPENSE_CATEGORIES.includes(input.category)) throw new BadRequestException("Categorie de depense invalide.");
+    const designation = (input.designation ?? "").trim();
+    if (!designation || designation.length > 500) throw new BadRequestException("Designation obligatoire (500 caracteres maximum).");
+    if (!input.expense_date) throw new BadRequestException("La date de la depense est obligatoire.");
+    const currency = await this.findActiveCurrency(Number(input.currency_id));
+    if (!currency) throw new BadRequestException("Devise inconnue ou inactive.");
+    const { ttcC, htC, vatC } = this.expenseAmounts(input.amount_ttc, input.amount_ht);
+    if (input.phase_id != null && !(await this.validPhaseIds(orgId, input.project_id)).has(input.phase_id)) {
+      throw new BadRequestException("Cette phase n'appartient pas a ce chantier.");
+    }
+    const beneficiary = await this.resolveExpenseBeneficiary(orgId, input);
+    const fxPatch = this.buildFxPatch(input.currency_id, project.currencyId ?? null, this.centsStr(ttcC), input);
+    const issueDate = String(input.expense_date).slice(0, 10);
+    const year = Number(issueDate.slice(0, 4)) || new Date().getFullYear();
+
+    const documentId = await this.db.transaction(async (tx) => {
+      const { number } = await this.nextDocumentNumber(tx, orgId, "expense", year);
+      const [result] = await tx.insert(batiproDocuments).values({
+        organizationId: orgId,
+        projectId: input.project_id,
+        type: "expense",
+        direction: "outbound",
+        number,
+        status: "recorded",
+        currencyId: input.currency_id,
+        supplierId: beneficiary.supplierId,
+        subcontractorId: beneficiary.subcontractorId,
+        beneficiaryWorkerId: beneficiary.beneficiaryWorkerId,
+        beneficiaryName: beneficiary.beneficiaryName,
+        totalHt: this.centsStr(htC),
+        totalVat: this.centsStr(vatC),
+        totalTtc: this.centsStr(ttcC),
+        ...fxPatch,
+        notes: input.notes ?? null,
+        issueDate,
+        createdBy: userId ?? null,
+      }).$returningId();
+      const id = Number(result.id);
+      await tx.insert(batiproDocumentLines).values({
+        organizationId: orgId,
+        documentId: id,
+        position: 0,
+        designation,
+        quantity: "1",
+        unitPrice: this.centsStr(htC),
+        vatRate: input.vat_rate != null ? String(input.vat_rate) : "0",
+        lineHt: this.centsStr(htC),
+        lineTtc: this.centsStr(ttcC),
+        phaseId: input.phase_id ?? null,
+        materialId: null,
+        lineType: "service",
+        serviceCategory: input.category,
+        lineNote: input.line_note ?? null,
+        currencyId: null,
+      });
+      return id;
+    });
+
+    if (input.phase_id != null) await this.recomputeProjectRisk(orgId, input.project_id);
+    await this.publish("createExpense", ["documents", "document_lines"], "created", documentId, orgId);
+    return BatiproService.toExpenseJson(await this.loadExpenseBundle(documentId, orgId));
+  }
+
+  async updateExpense(id: number, input: UpdateBatiproExpenseDto, orgId: number, scope: BatiproProjectScope = "all") {
+    const cur = await this.loadExpenseBundle(id, orgId);
+    const doc = cur.doc;
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    if (doc.status === "cancelled") throw new BadRequestException("Depense annulee : modification impossible.");
+    const line = cur.line;
+    const locked = doc.ledgerEntryId != null || toCents(doc.paidAmount) > 0;
+
+    const newTtc = input.amount_ttc ?? Number(doc.totalTtc);
+    // TTC change sans HT = HT aligne sur le TTC (defaut de la creation).
+    const newHt = input.amount_ht ?? (input.amount_ttc !== undefined ? undefined : Number(doc.totalHt));
+    const amountsTouched = input.amount_ttc !== undefined || input.amount_ht !== undefined;
+    const currencyTouched = input.currency_id !== undefined && input.currency_id !== doc.currencyId;
+    if (locked) {
+      const amountChanged = (input.amount_ttc !== undefined && toCents(input.amount_ttc) !== toCents(doc.totalTtc))
+        || (input.amount_ht !== undefined && toCents(input.amount_ht) !== toCents(doc.totalHt));
+      if (amountChanged || currencyTouched) {
+        throw new BadRequestException("Montant et devise non modifiables : la depense est deja comptabilisee ou payee.");
+      }
+      if (input.fx_rate != null) throw new BadRequestException("Depense payee/comptabilisee : utilisez PATCH /documents/:id/fx-rate.");
+    }
+
+    const docPatch: Partial<typeof batiproDocuments.$inferInsert> = {};
+    const linePatch: Partial<typeof batiproDocumentLines.$inferInsert> = {};
+    if (input.category !== undefined) {
+      if (!BatiproService.EXPENSE_CATEGORIES.includes(input.category)) throw new BadRequestException("Categorie de depense invalide.");
+      linePatch.serviceCategory = input.category;
+    }
+    if (input.designation !== undefined) {
+      const d = input.designation.trim();
+      if (!d || d.length > 500) throw new BadRequestException("Designation obligatoire (500 caracteres maximum).");
+      linePatch.designation = d;
+    }
+    if (input.expense_date !== undefined) docPatch.issueDate = String(input.expense_date).slice(0, 10);
+    if (input.line_note !== undefined) linePatch.lineNote = input.line_note;
+    if (input.vat_rate !== undefined) linePatch.vatRate = String(input.vat_rate);
+    if (input.notes !== undefined) docPatch.notes = input.notes;
+    if (currencyTouched) {
+      if (input.currency_id == null) throw new BadRequestException("La devise est obligatoire.");
+      if (!(await this.findActiveCurrency(Number(input.currency_id)))) throw new BadRequestException("Devise inconnue ou inactive.");
+      docPatch.currencyId = input.currency_id;
+    }
+    let newTotalForFx: number | undefined;
+    if (amountsTouched && !locked) {
+      const { ttcC, htC, vatC } = this.expenseAmounts(newTtc, newHt);
+      docPatch.totalHt = this.centsStr(htC);
+      docPatch.totalVat = this.centsStr(vatC);
+      docPatch.totalTtc = this.centsStr(ttcC);
+      linePatch.unitPrice = this.centsStr(htC);
+      linePatch.lineHt = this.centsStr(htC);
+      linePatch.lineTtc = this.centsStr(ttcC);
+      newTotalForFx = ttcC / 100;
+    }
+    let phaseTouched = false;
+    if (input.phase_id !== undefined) {
+      if (input.phase_id !== null && !(await this.validPhaseIds(orgId, doc.projectId)).has(input.phase_id)) {
+        throw new BadRequestException("Cette phase n'appartient pas a ce chantier.");
+      }
+      linePatch.phaseId = input.phase_id;
+      phaseTouched = true;
+    }
+    if (["beneficiary_kind", "beneficiary_name", "supplier_id", "subcontractor_id", "worker_id"].some((k) => (input as any)[k] !== undefined)) {
+      Object.assign(docPatch, await this.resolveExpenseBeneficiary(orgId, input));
+    }
+    // Taux fige : recalcule la contre-valeur si le total/devise/taux change.
+    await this.applyFxToUpdatePatch(
+      docPatch,
+      { projectId: doc.projectId, currencyId: doc.currencyId ?? null, totalTtc: doc.totalTtc, fxRate: doc.fxRate ?? null },
+      input as any,
+      newTotalForFx,
+      orgId,
+    );
+
+    if (Object.keys(docPatch).length || Object.keys(linePatch).length) {
+      await this.db.transaction(async (tx) => {
+        if (Object.keys(docPatch).length) await tx.update(batiproDocuments).set(docPatch).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+        if (line && Object.keys(linePatch).length) await tx.update(batiproDocumentLines).set(linePatch).where(eq(batiproDocumentLines.id, line.id));
+      });
+    }
+    if ((phaseTouched || amountsTouched || currencyTouched) && ((line?.phaseId ?? null) != null || (linePatch.phaseId ?? null) != null)) {
+      await this.recomputeProjectRisk(orgId, doc.projectId);
+    }
+    await this.publish("updateExpense", ["documents", "document_lines"], "updated", id, orgId);
+    return BatiproService.toExpenseJson(await this.loadExpenseBundle(id, orgId));
+  }
+
+  // Annulation (soft, historique conserve). Refusee si un reglement existe.
+  async cancelExpense(id: number, reason: string, orgId: number, userId: number | undefined, scope: BatiproProjectScope = "all") {
+    const { doc, line } = await this.loadExpenseBundle(id, orgId);
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    const why = (reason ?? "").trim();
+    if (why.length < 3) throw new BadRequestException("Motif d'annulation obligatoire (3 caracteres minimum).");
+    if (doc.status === "cancelled") throw new BadRequestException("Depense deja annulee.");
+    if (toCents(doc.paidAmount) > 0) throw new BadRequestException("Depense deja payee : annulation impossible (annulez d'abord le reglement).");
+    if (doc.cancelledAt) throw new ConflictException("Annulation deja en cours ou effectuee.");
+
+    // Reserve la ligne (cancelled_at) AVANT de contre-passer : pas de double
+    // contre-passation, et recordPayment refuse une depense en cours d annulation.
+    const claimedAt = new Date();
+    const claim = await this.db.update(batiproDocuments)
+      .set({ cancelledAt: claimedAt })
+      .where(and(
+        eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.status, "recorded"), isNull(batiproDocuments.cancelledAt), sql`${batiproDocuments.paidAmount} = 0`,
+      ));
+    const claimHeader = (Array.isArray(claim) ? claim[0] : claim) as { affectedRows?: number } | undefined;
+    if (Number(claimHeader?.affectedRows ?? 0) === 0) throw new ConflictException("Depense modifiee entre-temps (reglement ou annulation) : rechargez puis reessayez.");
+    const release = () => this.db.update(batiproDocuments).set({ cancelledAt: null })
+      .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.status, "recorded")));
+
+    // Depense comptabilisee (non payee) : contre-passation de l ecriture d achat.
+    // Ecriture encore en attente d approbation : annulee pour ne jamais etre postee.
+    try {
+      let entryId = doc.ledgerEntryId != null ? Number(doc.ledgerEntryId) : null;
+      let alreadyReversed = false;
+      if (entryId == null) {
+        const found = await this.findExpenseEntry(id, orgId);
+        if (found) {
+          entryId = Number(found.id);
+          alreadyReversed = found.status === "reversed" || found.reversedById != null;
+        }
+      }
+      if (entryId != null && !alreadyReversed) {
+        try {
+          await this.ledger.reverse(entryId, `Annulation depense ${doc.number ?? `DEP-${id}`} : ${why}`.slice(0, 200), orgId, userId);
+        } catch (err) {
+          // Seul "deja contre-passee" est tolere (une periode cloturee bloque l annulation).
+          if (!(err instanceof ConflictException && /contre-pass/i.test(err.message))) throw err;
+        }
+      } else if (entryId == null) {
+        await this.db.update(ledgerPendingEntries)
+          .set({ status: "cancelled" })
+          .where(and(
+            eq(ledgerPendingEntries.organizationId, orgId),
+            eq(ledgerPendingEntries.sourceModule, "batipro"),
+            eq(ledgerPendingEntries.relatedId, String(id)),
+            eq(ledgerPendingEntries.status, "pending"),
+          ));
+        // Approuvee entre-temps : ne pas annuler a l aveugle.
+        if (await this.findExpenseEntry(id, orgId)) {
+          throw new ConflictException("L'ecriture comptable vient d'etre approuvee : reessayez l'annulation.");
+        }
+      }
+    } catch (err) {
+      await release();
+      throw err;
+    }
+
+    await this.db.update(batiproDocuments).set({
+      status: "cancelled",
+      cancelledAt: claimedAt,
+      cancelledBy: userId ?? null,
+      cancelReason: why.slice(0, 500),
+    }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+    if (line?.phaseId != null) await this.recomputeProjectRisk(orgId, doc.projectId);
+    await this.publish("cancelExpense", ["documents"], "updated", id, orgId);
+    return BatiproService.toExpenseJson(await this.loadExpenseBundle(id, orgId));
+  }
+
+  // Suppression = soft delete (is_active=0), seulement si la depense est vierge.
+  async deleteExpense(id: number, orgId: number, scope: BatiproProjectScope = "all") {
+    const { doc, line } = await this.loadExpenseBundle(id, orgId);
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    if (doc.status !== "recorded" || toCents(doc.paidAmount) > 0 || doc.ledgerEntryId != null || doc.cancelledAt) {
+      throw new BadRequestException("Suppression impossible : annulez la depense.");
+    }
+    // Ecriture d achat postee (ledger_entry_id non relie) ou en attente d approbation : annuler, pas supprimer.
+    if ((await this.findExpenseEntry(id, orgId)) || (await this.expensePendingRows(id, orgId)).some((r) => r.status === "pending")) {
+      throw new BadRequestException("Suppression impossible : la depense a une ecriture comptable, annulez la depense.");
+    }
+    await this.db.transaction(async (tx) => {
+      await tx.update(batiproDocuments).set({ isActive: 0 }).where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+      await tx.update(batiproDocumentLines).set({ isActive: 0 }).where(eq(batiproDocumentLines.documentId, id));
+    });
+    if (line?.phaseId != null) await this.recomputeProjectRisk(orgId, doc.projectId);
+    await this.publish("deleteExpense", ["documents", "document_lines"], "deleted", id, orgId);
+    return { message: "Depense supprimee." };
   }
 
   // ── Phase 3 : situations de travaux (type=situation, direction=outbound) ──
@@ -3279,6 +3746,20 @@ export class BatiproService {
         sameCurrency,
       ));
 
+    // Depenses directes de chantier (type=expense, lot 2) : engage en devise chantier.
+    const [expenseAgg] = await this.db
+      .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "expense"),
+        sql`${batiproDocuments.status} <> 'cancelled'`,
+        sameCurrency,
+      ));
+
     const [invoiceAgg] = await this.db
       .select({
         issued: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
@@ -3347,6 +3828,7 @@ export class BatiproService {
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.isActive, 1),
         sql`NOT ${sameCurrency}`,
+        sql`NOT (${batiproDocuments.type} = 'expense' AND ${batiproDocuments.status} = 'cancelled')`,
         docsWithTotalsRows.length ? notInArray(batiproDocuments.id, docsWithTotalsRows) : undefined,
         convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
@@ -3370,6 +3852,7 @@ export class BatiproService {
         eq(batiproDocumentTotals.organizationId, orgId),
         eq(batiproDocumentTotals.isActive, 1),
         sql`NOT (${sameCurrencyTotals})`,
+        sql`NOT (${batiproDocuments.type} = 'expense' AND ${batiproDocuments.status} = 'cancelled')`,
         convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
       .groupBy(currencies.currencyCode);
@@ -3386,6 +3869,10 @@ export class BatiproService {
     const quoteAccepted = Number(quoteAgg?.total ?? 0);
     // Engage = BC en devise chantier + contre-valeur figee des BC en autre devise AVEC taux (centimes).
     const purchaseOrdersEngaged = fromCents(toCents(poAgg?.total) + fx.engagedConvertedCents);
+    // Depenses directes engagees (devise chantier + contre-valeur figee des depenses en autre devise AVEC taux).
+    const directExpensesEngaged = fromCents(toCents(expenseAgg?.total) + fx.expenseEngagedConvertedCents);
+    // Engage total du chantier = BC + depenses directes (purchase_orders_engaged reste BC seuls).
+    const costCommitted = fromCents(toCents(purchaseOrdersEngaged) + toCents(directExpensesEngaged));
     // Decaisse reel + fonds recus : definition UNIQUE (funds.util), partagee avec
     // la liste des chantiers et la synthese des fonds.
     const codeById = await this.currencyCodeMap();
@@ -3425,7 +3912,8 @@ export class BatiproService {
       spent,
       quote_accepted: quoteAccepted,
       purchase_orders_engaged: purchaseOrdersEngaged,
-      cost_committed: purchaseOrdersEngaged,
+      direct_expenses_engaged: directExpensesEngaged,
+      cost_committed: costCommitted,
       cost_actual: costActual,
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
@@ -3446,8 +3934,8 @@ export class BatiproService {
       other_currency_amounts: otherCurrencyAmounts,
       other_currency_amount: otherCurrencyAmounts[0]?.amount ?? 0,
       other_currency_code: otherCurrencyAmounts[0]?.currency_code ?? null,
-      remaining_vs_budget: Math.round((referenceBudget - purchaseOrdersEngaged) * 100) / 100,
-      engagement_rate: referenceBudget > 0 ? Math.round((purchaseOrdersEngaged / referenceBudget) * 10000) / 100 : null,
+      remaining_vs_budget: Math.round((referenceBudget - costCommitted) * 100) / 100,
+      engagement_rate: referenceBudget > 0 ? Math.round((costCommitted / referenceBudget) * 10000) / 100 : null,
       // Detail risque EVM par phase (badge risque du chantier + tooltip front).
       phases_evm: phasesEvmOut,
       coverage_pct: coveragePct,
@@ -3465,6 +3953,7 @@ export class BatiproService {
   // partageable est construit cote front). Reutilise le pattern token opaque.
   async shareDocument(id: number, orgId: number, expiryDays = 30) {
     const doc = await this.getDocument(id, orgId);
+    this.assertNotExpense(doc, "partager");
     const token = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "").slice(0, 8);
     await this.db.update(batiproDocuments).set({
       clientToken: token,
@@ -3935,20 +4424,28 @@ export class BatiproService {
     return { id: invoiceDocumentId, ledger_entry_id: ledgerEntryId, deferred };
   }
 
-  // Comptabilise un bon de commande fournisseur (DEPENSE) via le ledger (postByRules,
-  // ROLES metier — JAMAIS de compte en dur). Idempotent par idempotencyKey.
+  // Comptabilise un bon de commande fournisseur OU une depense chantier (type=expense,
+  // lot 3) via le ledger (postByRules, ROLES metier — JAMAIS de compte en dur).
+  // Idempotent par idempotencyKey (batipro:purchase:<id> / batipro:expense:<id>).
   // Ne touche PAS billedAmount (c'est une depense, pas une facturation de vente).
   async postPurchaseToLedger(purchaseOrderId: number, orgId: number, userId?: number) {
     const purchase = await this.getDocument(purchaseOrderId, orgId);
-    if (purchase.type !== "purchase_order") throw new BadRequestException("Seul un bon de commande peut etre comptabilise en depense.");
-    if (purchase.direction !== "outbound") throw new BadRequestException("Bon de commande invalide : direction inattendue.");
-    if (purchase.status === "cancelled") throw new BadRequestException("Bon de commande annule : comptabilisation impossible.");
+    const isExpense = purchase.type === "expense";
+    if (purchase.type !== "purchase_order" && !isExpense) {
+      throw new BadRequestException("Seul un bon de commande ou une depense chantier peut etre comptabilise en depense.");
+    }
+    const label = isExpense ? "Depense" : "Bon de commande";
+    if (purchase.direction !== "outbound") throw new BadRequestException(`${label} invalide : direction inattendue.`);
+    if (purchase.status === "cancelled" || (isExpense && purchase.cancelledAt)) {
+      throw new BadRequestException(`${label} annule(e) : comptabilisation impossible.`);
+    }
     this.assertSingleCurrencyForLedger(purchase);
 
-    const totalHt = Number(purchase.totalHt ?? 0);
-    const totalVat = Number(purchase.totalVat ?? 0);
-    const totalTtc = Number(purchase.totalTtc ?? 0);
-    if (!(totalTtc > 0)) throw new BadRequestException("Montant du bon de commande nul : rien a comptabiliser.");
+    // Depense : montants exacts relus en centimes (jamais d arrondi au-dela).
+    const totalHt = isExpense ? fromCents(toCents(purchase.totalHt)) : Number(purchase.totalHt ?? 0);
+    const totalVat = isExpense ? fromCents(toCents(purchase.totalVat)) : Number(purchase.totalVat ?? 0);
+    const totalTtc = isExpense ? fromCents(toCents(purchase.totalTtc)) : Number(purchase.totalTtc ?? 0);
+    if (!(totalTtc > 0)) throw new BadRequestException(`Montant ${isExpense ? "de la depense" : "du bon de commande"} nul : rien a comptabiliser.`);
 
     // Roles metier (resolus en comptes via transaction_type_rules, type=batipro_purchase) :
     //  - expense    = charge / achat           (DEBIT, HT)
@@ -3959,11 +4456,13 @@ export class BatiproService {
     const result = await this.ledger.postByRules(
       {
         type: "batipro_purchase",
-        reference: purchase.number ?? `BC-${purchaseOrderId}`,
-        particulars: `Bon de commande BatiPro ${purchase.number ?? purchaseOrderId}`,
+        reference: purchase.number ?? (isExpense ? `DEP-${purchaseOrderId}` : `BC-${purchaseOrderId}`),
+        particulars: isExpense
+          ? `Dépense chantier ${purchase.number ?? `DEP-${purchaseOrderId}`}`
+          : `Bon de commande BatiPro ${purchase.number ?? purchaseOrderId}`,
         sourceModule: "batipro",
         relatedId: String(purchaseOrderId),
-        idempotencyKey: `batipro:purchase:${purchaseOrderId}`,
+        idempotencyKey: isExpense ? `batipro:expense:${purchaseOrderId}` : `batipro:purchase:${purchaseOrderId}`,
         currencyId: purchase.currencyId ?? undefined,
         amountsByRole: {
           expense: totalHt,
@@ -4012,6 +4511,9 @@ export class BatiproService {
   // un paiement direct sur BC.
   async recordPayment(invoiceDocumentId: number, amount: number, orgId: number, userId?: number, fxRate?: number) {
     const invoice = await this.getDocument(invoiceDocumentId, orgId);
+    // Depense directe : branche dediee, JAMAIS la branche "avance fournisseur".
+    const isExpense = invoice.type === "expense";
+    if (isExpense) return this.recordExpensePayment(invoice, amount, orgId, userId, fxRate);
     const isPurchaseOrder = invoice.type === "purchase_order";
     const isSupplierInvoice = invoice.type === "invoice" && invoice.direction === "inbound";
     if (!isPurchaseOrder && !isSupplierInvoice && invoice.type !== "invoice") {
@@ -4150,10 +4652,183 @@ export class BatiproService {
     };
   }
 
+  // ── Reglement d une depense chantier (lot 3) ─────────────────────────────
+  // Jamais d avance fournisseur : une depense est une charge constatee.
+  //  1. L achat (charge HT + TVA / dette TTC) est comptabilise s il ne l est pas
+  //     encore (postPurchaseToLedger, idempotent batipro:expense:<id>). Ecriture
+  //     d achat en attente d approbation -> reglement refuse (409), rien n est paye.
+  //  2. Sous verrou de ligne (SELECT ... FOR UPDATE) : relecture du paye, controle
+  //     du solde, puis ecriture de DECAISSEMENT batipro_supplier_payment (DEBIT
+  //     payable / CREDIT cash), cle batipro:expense_payment:<id>:<cumul centimes>,
+  //     et SEULEMENT ENSUITE mise a jour paid_amount / statut. Si le ledger leve
+  //     (pas de regle pour l org, periode cloturee...), la transaction est annulee
+  //     et la depense reste inchangee. Rejouer apres un echec de la mise a jour
+  //     retrouve la meme ecriture (cle de cumul idempotente).
+  private async recordExpensePayment(
+    doc: Awaited<ReturnType<BatiproService["getDocument"]>>,
+    amount: number,
+    orgId: number,
+    userId?: number,
+    fxRate?: number,
+  ) {
+    const id = Number(doc.id);
+    if (typeof amount !== "number" || !Number.isFinite(amount) || !(amount > 0)) {
+      throw new BadRequestException("Le montant du paiement doit etre strictement positif.");
+    }
+    if (!hasAtMostTwoDecimals(amount)) throw new BadRequestException("Le montant du paiement admet 2 decimales maximum.");
+    if (doc.direction !== "outbound") throw new BadRequestException("Depense invalide : direction inattendue.");
+    if (doc.status === "cancelled" || doc.cancelledAt) throw new BadRequestException("Depense annulee : aucun paiement possible.");
+    this.assertSingleCurrencyForLedger(doc);
+    const amountC = toCents(amount);
+    if (amountC > toCents(doc.totalTtc) - toCents(doc.paidAmount)) {
+      throw new BadRequestException(`Le reglement (${this.centsStr(amountC)}) depasse le solde de la depense (${this.centsStr(toCents(doc.totalTtc) - toCents(doc.paidAmount))}).`);
+    }
+
+    // Devise etrangere : taux de reglement obligatoire (contre-valeur cumulee).
+    const project = await this.getProject(doc.projectId, orgId);
+    let paymentRate: bigint | null = null;
+    if (this.isForeignCurrency(doc.currencyId ?? null, project.currencyId ?? null)) {
+      if (fxRate == null) {
+        throw new BadRequestException(
+          `Un taux de change est obligatoire : cette depense est en ${doc.currencyCode ?? "autre devise"} et le chantier en ${project.currencyCode ?? "une autre devise"}. Indiquez le taux du jour (1 ${project.currencyCode ?? "unite chantier"} = X ${doc.currencyCode ?? "unites document"}).`,
+        );
+      }
+      paymentRate = parseFxRate(fxRate);
+      if (paymentRate == null) throw new BadRequestException("Taux de change invalide : nombre strictement positif, 6 decimales maximum.");
+    }
+
+    // Une ecriture de cette depense deja en attente d approbation : le ledger
+    // n en conserverait pas une 2e (savePending idempotent par entite).
+    const pendingRows = await this.expensePendingRows(id, orgId);
+    if (pendingRows.some((r) => r.status === "pending")) {
+      throw new ConflictException("Une ecriture comptable de cette depense est en attente d'approbation : reglement impossible avant approbation.");
+    }
+
+    // 1. Achat comptabilise d abord (idempotent).
+    let ledgerEntryId: number | null = doc.ledgerEntryId != null ? Number(doc.ledgerEntryId) : null;
+    if (ledgerEntryId == null) {
+      const posted = await this.postPurchaseToLedger(id, orgId, userId);
+      if (posted.deferred || posted.ledger_entry_id == null) {
+        throw new ConflictException("Ecriture d'achat de la depense en attente d'approbation comptable : reglement impossible avant approbation.");
+      }
+      ledgerEntryId = posted.ledger_entry_id;
+    }
+
+    const analyticProjectId = await this.resolveAnalyticProjectId(doc.projectId, orgId);
+    const outcome = await this.db.transaction(async (tx) => {
+      const [fresh] = await tx
+        .select({
+          status: batiproDocuments.status,
+          cancelledAt: batiproDocuments.cancelledAt,
+          totalTtc: batiproDocuments.totalTtc,
+          paidAmount: batiproDocuments.paidAmount,
+          paidAmountProjectCcy: batiproDocuments.paidAmountProjectCcy,
+          ledgerEntryId: batiproDocuments.ledgerEntryId,
+        })
+        .from(batiproDocuments)
+        .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.type, "expense"), eq(batiproDocuments.isActive, 1)))
+        .for("update")
+        .limit(1);
+      if (!fresh) throw new NotFoundException("Depense introuvable.");
+      if (fresh.status === "cancelled" || fresh.cancelledAt) throw new BadRequestException("Depense annulee : aucun paiement possible.");
+      const ttcC = toCents(fresh.totalTtc);
+      const newPaidC = toCents(fresh.paidAmount) + amountC;
+      if (newPaidC > ttcC) {
+        throw new BadRequestException(`Le reglement (${this.centsStr(amountC)}) depasse le solde de la depense (${this.centsStr(ttcC - toCents(fresh.paidAmount))}).`);
+      }
+      const newPaidProjectCcy = paymentRate != null
+        ? fromCents(toCents(fresh.paidAmountProjectCcy) + convertToProjectCents(amountC, paymentRate)).toFixed(2)
+        : null;
+
+      // 2. Decaissement au ledger AVANT toute mise a jour du document.
+      const result = await this.ledger.postByRules(
+        {
+          type: "batipro_supplier_payment",
+          reference: doc.number ?? `DEP-${id}`,
+          particulars: `Règlement dépense chantier ${doc.number ?? `DEP-${id}`}`,
+          sourceModule: "batipro",
+          relatedId: String(id),
+          idempotencyKey: `batipro:expense_payment:${id}:${newPaidC}`,
+          currencyId: doc.currencyId ?? undefined,
+          ...(paymentRate != null ? { exchangeRate: fxRateToNumber(paymentRate) } : {}),
+          amountsByRole: { payable: fromCents(amountC), cash: fromCents(amountC) },
+          dimensions: { projectId: analyticProjectId },
+        },
+        orgId,
+        userId,
+      );
+      const paymentDeferred = (result as { deferred?: boolean }).deferred === true;
+      // Ligne d attente deja presente (statut non pending) : le ledger n a rien garde.
+      if (paymentDeferred && pendingRows.length > 0) {
+        throw new ConflictException("Ecriture de reglement non conservee par le ledger (attente d'approbation) : reglement non enregistre.");
+      }
+      const paymentLedgerEntryId = result.id > 0 ? Number(result.id) : null;
+      const status = newPaidC === ttcC ? "paid" : "recorded";
+
+      // 3. Mise a jour du document (meme transaction, ligne verrouillee).
+      await tx.update(batiproDocuments)
+        .set({
+          paidAmount: this.centsStr(newPaidC),
+          status,
+          ...(fresh.ledgerEntryId == null && ledgerEntryId != null ? { ledgerEntryId } : {}),
+          ...(newPaidProjectCcy != null ? { paidAmountProjectCcy: newPaidProjectCcy } : {}),
+          ...(paymentLedgerEntryId ? { paymentLedgerEntryId } : {}),
+        })
+        .where(and(eq(batiproDocuments.id, id), eq(batiproDocuments.organizationId, orgId)));
+      return { newPaidC, ttcC, status, paymentLedgerEntryId, paymentDeferred, newPaidProjectCcy };
+    });
+
+    await this.publish("recordPayment", ["documents"], "updated", id, orgId);
+    void this.ownerNotifier?.notifyPayment(orgId, doc.projectId, {
+      amount: fromCents(amountC),
+      currencyId: doc.currencyId ?? null,
+      supplierName: doc.supplierName || doc.subcontractorName || doc.beneficiaryName || null,
+      loadBudgetSummary: async () => {
+        const s = await this.projectBudgetSummary(doc.projectId, orgId);
+        return { spent: s.spent, budget: s.budget };
+      },
+    });
+    return {
+      id,
+      type: "expense" as const,
+      paid_amount: fromCents(outcome.newPaidC),
+      ...(outcome.newPaidProjectCcy != null ? { paid_amount_project_ccy: Number(outcome.newPaidProjectCcy) } : {}),
+      balance: fromCents(outcome.ttcC - outcome.newPaidC),
+      status: outcome.status,
+      ledger_entry_id: ledgerEntryId,
+      payment_ledger_entry_id: outcome.paymentLedgerEntryId,
+      payment_deferred: outcome.paymentDeferred,
+    };
+  }
+
+  // Lignes d attente (gate d approbation) du ledger pour une depense, tout statut.
+  private async expensePendingRows(expenseId: number, orgId: number) {
+    return this.db
+      .select({ id: ledgerPendingEntries.id, status: ledgerPendingEntries.status })
+      .from(ledgerPendingEntries)
+      .where(and(
+        eq(ledgerPendingEntries.organizationId, orgId),
+        eq(ledgerPendingEntries.sourceModule, "batipro"),
+        eq(ledgerPendingEntries.relatedId, String(expenseId)),
+      ));
+  }
+
+  // Ecriture d achat d une depense retrouvee par sa cle (ledger_entry_id peut etre
+  // NULL si l ecriture a ete approuvee apres une mise en attente).
+  private async findExpenseEntry(expenseId: number, orgId: number) {
+    const [row] = await this.db
+      .select({ id: journalEntries.id, status: journalEntries.status, reversedById: journalEntries.reversedById })
+      .from(journalEntries)
+      .where(and(eq(journalEntries.organizationId, orgId), eq(journalEntries.idempotencyKey, `batipro:expense:${expenseId}`)))
+      .limit(1);
+    return row ?? null;
+  }
+
   // ── Rendu HTML imprimable (calque hr.service.ts payrollPdfHtml) ──────────
   // Sert l'apercu gestionnaire ET la page client publique. Devise via join DB.
   async documentHtml(id: number, orgId: number): Promise<string> {
     const doc = await this.getDocument(id, orgId);
+    this.assertNotExpense(doc, "imprimer");
     const [project] = await this.db
       .select({ name: batiproProjects.name, code: batiproProjects.code, client: batiproProjects.client, location: batiproProjects.location })
       .from(batiproProjects)
@@ -4928,7 +5603,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
         inArray(batiproDocuments.projectId, projectIds),
         eq(batiproDocuments.isActive, 1),
         or(
-          and(eq(batiproDocuments.type, "purchase_order"), eq(batiproDocuments.direction, "outbound")),
+          and(inArray(batiproDocuments.type, ["purchase_order", "expense"]), eq(batiproDocuments.direction, "outbound")),
           and(eq(batiproDocuments.type, "invoice"), eq(batiproDocuments.direction, "inbound")),
         ),
       ));

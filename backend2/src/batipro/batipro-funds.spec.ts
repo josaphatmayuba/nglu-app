@@ -4,7 +4,7 @@ import { validate } from "class-validator";
 import { batiproProjectFunds, ledgerPendingEntries } from "../database/schema";
 import { BatiproService } from "./batipro.service";
 import { CancelBatiproFundDto, CreateBatiproFundDto } from "./dto/batipro.dto";
-import { buildFundsSummary, disbursedCentsByCurrency, type SpendDoc } from "./funds.util";
+import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, summarizeFx, type SpendDoc } from "./funds.util";
 
 const ORG = 1;
 const USD = 1;
@@ -261,5 +261,56 @@ describe("BatiPro fonds du chantier - synthese par devise", () => {
     expect(buildFundsSummary([], [], CDF, codes)).toEqual([
       { currency_id: CDF, currency_code: "CDF", received: 0, disbursed: 0, available: 0, committed_unpaid: 0, shortfall: 0 },
     ]);
+  });
+});
+
+describe("BatiPro fonds - depenses directes (type=expense)", () => {
+  const codes = new Map<number, string | null>([[USD, "USD"], [CDF, "CDF"]]);
+  const dep = (p: Partial<SpendDoc>): SpendDoc => ({
+    id: 50, type: "expense", direction: "outbound", status: "recorded", isActive: 1,
+    currencyId: USD, parentDocumentId: null, totalTtc: "100.00", paidAmount: 0, ...p,
+  });
+  const bc = (p: Partial<SpendDoc>): SpendDoc => ({
+    id: 10, type: "purchase_order", direction: "outbound", status: "confirmed", isActive: 1,
+    currencyId: USD, parentDocumentId: null, totalTtc: "800.00", paidAmount: 0, ...p,
+  });
+
+  it("depense payee = decaissee ; non payee = reste du (et pas decaissee)", () => {
+    const docs = [dep({ id: 51, status: "paid", totalTtc: "123.45", paidAmount: "123.45" }), dep({ id: 52, totalTtc: "150.61" })];
+    const [row] = buildFundsSummary([{ amount: "1000.00", currencyId: USD, isActive: 1 }], docs, USD, codes);
+    expect(row.disbursed).toBe(123.45);
+    expect(row.committed_unpaid).toBe(150.61);
+    expect(row.available).toBe(876.55);
+  });
+
+  it("depense annulee ou inactive exclue partout", () => {
+    const docs = [dep({ id: 51, status: "cancelled", totalTtc: "99.00", paidAmount: "99.00" }), dep({ id: 52, isActive: 0, totalTtc: "99.00" })];
+    const [row] = buildFundsSummary([], docs, USD, codes);
+    expect(row).toMatchObject({ disbursed: 0, committed_unpaid: 0 });
+  });
+
+  it("BC + depense : pas de double comptage (chacun une fois)", () => {
+    const docs = [bc({ paidAmount: "300.00" }), dep({ id: 51, totalTtc: "50.00", paidAmount: "20.00" })];
+    const [row] = buildFundsSummary([], docs, USD, codes);
+    expect(row.disbursed).toBe(320);
+    expect(row.committed_unpaid).toBe(530); // (800-300) + (50-20)
+  });
+
+  it("devise etrangere avec taux : decaisse converti au taux de reglement, engage converti a part du BC", () => {
+    const docs = [
+      dep({ id: 51, currencyId: CDF, totalTtc: "280000.00", paidAmount: "140000.00", fxRate: "2800.000000", totalTtcProjectCcy: "100.00", paidAmountProjectCcy: "50.00" }),
+      bc({ id: 11, currencyId: CDF, totalTtc: "560000.00", fxRate: "2800.000000", totalTtcProjectCcy: "200.00" }),
+    ];
+    expect(convertedPaidCents(docs, USD)).toBe(5000);
+    const fx = summarizeFx(docs, USD);
+    expect(fx.engagedConvertedCents).toBe(20000); // BC seuls
+    expect(fx.expenseEngagedConvertedCents).toBe(10000);
+    expect(fx.convertedPoIds.sort()).toEqual([11, 51]);
+    expect(fx.poWithoutRateCount).toBe(0);
+    expect(disbursedCentsByCurrency(docs, USD).get(CDF)).toBe(14000000);
+  });
+
+  it("depense en autre devise sans taux : comptee 'taux a fixer'", () => {
+    expect(summarizeFx([dep({ currencyId: CDF })], USD).poWithoutRateCount).toBe(1);
   });
 });

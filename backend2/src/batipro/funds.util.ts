@@ -60,6 +60,11 @@ export const hasAtMostTwoDecimals = (v: number) => Math.abs(v * 100 - Math.round
 
 const isPurchaseOrder = (d: SpendDoc) => d.type === "purchase_order" && d.direction === "outbound";
 const isSupplierInvoice = (d: SpendDoc) => d.type === "invoice" && d.direction === "inbound";
+// Depense directe de chantier (type=expense / outbound, lot 2) : pas de BC, pas de
+// stock ; traitee comme une facture sans BC (engage = total - paye).
+const isDirectExpense = (d: SpendDoc) => d.type === "expense" && d.direction === "outbound";
+// Document qui engage de l'argent : BC ou depense directe.
+const isCommitment = (d: SpendDoc) => isPurchaseOrder(d) || isDirectExpense(d);
 const isLive = (d: SpendDoc) => d.isActive === 1 && d.status !== "cancelled";
 
 // Devise effective d'un document = sa devise, a defaut celle du chantier.
@@ -80,7 +85,7 @@ const add = (m: Map<Key, number>, k: Key, cents: number) => {
 export function disbursedCentsByCurrency(docs: SpendDoc[], projectCurrencyId: number | null): Map<Key, number> {
   const out = new Map<Key, number>();
   for (const d of docs) {
-    if (!isLive(d) || !(isPurchaseOrder(d) || isSupplierInvoice(d))) continue;
+    if (!isLive(d) || !(isCommitment(d) || isSupplierInvoice(d))) continue;
     add(out, effectiveCurrency(d, projectCurrencyId), toCents(d.paidAmount));
   }
   return out;
@@ -120,6 +125,9 @@ export function committedUnpaidCentsByCurrency(docs: SpendDoc[], projectCurrency
     let paid: Map<Key, number>;
     if (isPurchaseOrder(d)) {
       paid = new Map(childPaid.get(d.id) ?? []);
+      add(paid, effectiveCurrency(d, projectCurrencyId), toCents(d.paidAmount));
+    } else if (isDirectExpense(d)) {
+      paid = new Map();
       add(paid, effectiveCurrency(d, projectCurrencyId), toCents(d.paidAmount));
     } else if (isSupplierInvoice(d)) {
       if (d.parentDocumentId != null && livePoIds.has(d.parentDocumentId)) continue; // deja dans son BC
@@ -195,7 +203,7 @@ const isOtherCurrency = (d: SpendDoc, projectCurrencyId: number | null) =>
 export function convertedPaidCents(docs: SpendDoc[], projectCurrencyId: number | null): number {
   let sum = 0;
   for (const d of docs) {
-    if (!isLive(d) || !(isPurchaseOrder(d) || isSupplierInvoice(d))) continue;
+    if (!isLive(d) || !(isCommitment(d) || isSupplierInvoice(d))) continue;
     if (!isOtherCurrency(d, projectCurrencyId)) continue;
     sum += toCents(d.paidAmountProjectCcy);
   }
@@ -213,6 +221,8 @@ export type ConvertedCurrencyRow = {
 export type FxSummary = {
   // Σ totalTtcProjectCcy des BC en autre devise AVEC taux (s'ajoute a l'engage).
   engagedConvertedCents: number;
+  // Idem pour les depenses directes (type=expense) en autre devise AVEC taux.
+  expenseEngagedConvertedCents: number;
   // BC actifs en autre devise SANS taux ("taux a fixer").
   poWithoutRateCount: number;
   // Ids des BC comptes dans l'engage converti (a exclure de other_currency_amounts).
@@ -242,6 +252,7 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
     return r;
   };
   let engaged = 0;
+  let expenseEngaged = 0;
   let withoutRate = 0;
   const convertedPoIds: number[] = [];
   let gainLoss = 0;
@@ -262,7 +273,7 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
   }
 
   for (const d of docs) {
-    if (!isLive(d) || !(isPurchaseOrder(d) || isSupplierInvoice(d))) continue;
+    if (!isLive(d) || !(isCommitment(d) || isSupplierInvoice(d))) continue;
     if (!isOtherCurrency(d, projectCurrencyId)) continue;
     const cur = d.currencyId as number;
     const r = row(cur);
@@ -272,7 +283,7 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
       r._pc += toCents(d.paidAmountProjectCcy);
     }
 
-    if (!isPurchaseOrder(d)) continue;
+    if (!isCommitment(d)) continue;
     const rate = parseFxRate(d.fxRate);
     if (rate == null || d.totalTtcProjectCcy == null) {
       withoutRate += 1;
@@ -280,7 +291,8 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
     }
     r._o += toCents(d.totalTtc);
     r._c += toCents(d.totalTtcProjectCcy);
-    engaged += toCents(d.totalTtcProjectCcy);
+    if (isDirectExpense(d)) expenseEngaged += toCents(d.totalTtcProjectCcy);
+    else engaged += toCents(d.totalTtcProjectCcy);
     convertedPoIds.push(d.id);
 
     const kids = childPaid.get(d.id) ?? { o: 0, c: 0 };
@@ -295,6 +307,7 @@ export function summarizeFx(docs: SpendDoc[], projectCurrencyId: number | null):
 
   return {
     engagedConvertedCents: engaged,
+    expenseEngagedConvertedCents: expenseEngaged,
     poWithoutRateCount: withoutRate,
     convertedPoIds,
     rows: [...rows.values()]
