@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus : bail pas encore commencé = aucun mois « courant » (v3.276.6).** Frise des loyers : un mois postérieur au mois civil en cours reste « à venir », y compris le 1er mois d'un bail futur.
 - **Domus : statut « En attente » = échéance passée dans la grâce, rien en retard (v3.276.5).** Avant l'échéance du mois en cours, le bail est « En règle » (le bouton « Payer le loyer » reste disponible) ; le statut ne compare plus une fraction de mois mais les montants payés.
 - **Domus : mois civil en cours impayé dans la grâce = « courant » (v3.276.4).** Frise des loyers : le mois en cours dont l'échéance est passée mais encore dans la grâce s'affiche « Mois courant » (orange) au lieu de « Dû » ; les mois précédents restent « Dû » puis « En retard ». Corrige aussi le double comptage de `monthsDue`.
 

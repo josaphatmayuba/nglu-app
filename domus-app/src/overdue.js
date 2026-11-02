@@ -117,7 +117,10 @@ export function friseKinds({ startDate, graceDays, prorata = false, periodStarts
     if (i >= monthsDue) { kinds.push(fill > 0 ? "partial" : "future"); continue; }
     let cls;
     const mk = startD ? (() => { const m = new Date(startD.getFullYear(), startD.getMonth() + i, 1); return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`; })() : null;
-    const isCurMonth = mk === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const nowKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const isCurMonth = mk === nowKey;
+    // Bail pas encore commence : un mois posterieur au mois civil en cours n'est jamais « courant ».
+    if (mk && mk > nowKey) { kinds.push(fill > 0 ? "partial" : "future"); continue; }
     if (normalizeGrace(graceDays) === null) {
       cls = i < monthsDue - 1 ? "late" : "cur";
     } else {

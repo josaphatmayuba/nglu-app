@@ -82,6 +82,12 @@ describe("dates locales", () => {
 });
 
 describe("friseKinds", () => {
+  it("bail pas encore commence : aucun mois « courant », tout est a venir", () => {
+    const r = friseKinds({ startDate: "2027-09-01", graceDays: 5, totalMonths: 3, monthsDue: 1, monthsCoveredFloat: 0, now: NOW });
+    expect(r.kinds).toEqual(["future", "future", "future"]);
+    expect(r.lateCount).toBe(0);
+    expect(friseKinds({ startDate: "2027-09-01", graceDays: null, totalMonths: 2, monthsDue: 1, now: NOW }).kinds).toEqual(["future", "future"]);
+  });
   const base = { totalMonths: 6, monthsCoveredFloat: 1 };
   it("prorata debut 20/09, grace 5, au 07/10 : Oct rouge (echeance le 1er), compteur 1", () => {
     const now = new Date(2026, 9, 7, 10);
