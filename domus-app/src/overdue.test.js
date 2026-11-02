@@ -92,10 +92,10 @@ describe("friseKinds", () => {
     const r2 = friseKinds({ ...base, startDate: "2026-09-20", graceDays: 5, prorata: false, monthsDue: 2, now });
     expect(r2.kinds[1]).toBe("cur");
   });
-  it("compteur == cases rouges ; echu dans la grace = due", () => {
+  it("compteur == cases rouges ; echu dans la grace = due (cur si mois civil en cours)", () => {
     const now = new Date(2026, 9, 12, 10);
     const r = friseKinds({ totalMonths: 6, monthsDue: 3, monthsCoveredFloat: 0, startDate: "2026-08-01", graceDays: 30, now });
-    expect(r.kinds.slice(0, 4)).toEqual(["late", "late", "due", "future"]);
+    expect(r.kinds.slice(0, 4)).toEqual(["late", "late", "cur", "future"]);
     expect(r.lateCount).toBe(r.kinds.filter((k) => k === "late").length);
   });
   it("mois courant partiellement paye : reste « partial »", () => {
@@ -114,7 +114,7 @@ describe("friseKinds", () => {
     // Lignes de periode existantes : sept -> juin ; juil/aout payes sans periode.
     const periodStarts = ["2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01", "2027-02-01", "2027-03-01", "2027-04-01", "2027-05-01", "2027-06-01"];
     const r = friseKinds({ startDate: "2026-07-15", graceDays: 15, prorata: true, periodStarts, totalMonths: 12, monthsDue: 4, monthsCoveredFloat: 2, now });
-    expect(r.kinds.slice(0, 5)).toEqual(["paid", "paid", "late", "due", "future"]);
+    expect(r.kinds.slice(0, 5)).toEqual(["paid", "paid", "late", "cur", "future"]);
     expect(r.lateCount).toBe(1);
     // Sept partiellement paye (fill 0.5) : reste « late ».
     const p = friseKinds({ startDate: "2026-07-15", graceDays: 15, prorata: true, periodStarts, totalMonths: 12, monthsDue: 4, monthsCoveredFloat: 2.5, now });

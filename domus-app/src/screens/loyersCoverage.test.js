@@ -23,7 +23,7 @@ describe("couverture par mois civil (prorata)", () => {
     expect(c.monthsCoveredFloat).toBeCloseTo(2, 5);
     expect(c.balance).toBeCloseTo(6000, 2);
     const k = frise(c, l).kinds;
-    expect(k.slice(0, 4)).toEqual(["paid", "paid", "late", "due"]);
+    expect(k.slice(0, 4)).toEqual(["paid", "paid", "late", "cur"]);
     expect(k.filter((x) => x === "paid").length).toBe(2);
     expect(k).not.toContain("partial");
   });
@@ -35,7 +35,7 @@ describe("couverture par mois civil (prorata)", () => {
       paid(3000, { periodStart: "2026-08-01", periodEnd: "2026-08-31", paymentDate: "2026-08-02" }),
     ];
     const [c] = buildLeaseCards([l], [...rows, ...months.map(pending)]);
-    expect(frise(c, l).kinds.slice(0, 4)).toEqual(["paid", "paid", "late", "due"]);
+    expect(frise(c, l).kinds.slice(0, 4)).toEqual(["paid", "paid", "late", "cur"]);
     expect(c.monthsCoveredFloat).toBeCloseTo(2, 5);
   });
 

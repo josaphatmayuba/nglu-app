@@ -82,7 +82,7 @@ export function duesCardFields(lease, now = new Date()) {
     lateAmount: ld.late, dueAmount: ld.due, graceUntil: ld.graceUntil,
     monthsCovered: paidCount,
     monthsCoveredFloat: paidCount,
-    monthsDue: Math.max(1, dues.filter((d) => isEchu(d)).length + (kinds.includes("cur") ? 1 : 0)),
+    monthsDue: Math.max(1, dues.filter((d, i) => isEchu(d) || kinds[i] === "cur").length),
     totalDue, balance, credit, status, totalPaid,
     monthsBehind: unpaidEchu.length,
     monthsAhead: futurePaid,
