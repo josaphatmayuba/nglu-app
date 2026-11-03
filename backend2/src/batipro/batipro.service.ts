@@ -1305,6 +1305,9 @@ export class BatiproService {
         docPaidAmount: batiproDocuments.paidAmount,
         docDate: sql<string | null>`COALESCE(${batiproDocuments.issueDate}, DATE(${batiproDocuments.createdAt}))`,
         submittedBy: sql<string | null>`COALESCE(${batiproSubcontractors.name}, ${batiproDocuments.submittedByCompany}, ${batiproDocuments.submittedByName})`,
+        lineType: batiproDocumentLines.lineType,
+        materialId: batiproDocumentLines.materialId,
+        receivedQuantity: batiproDocumentLines.receivedQuantity,
       })
       .from(batiproDocumentLines)
       .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))

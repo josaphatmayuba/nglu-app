@@ -1174,6 +1174,7 @@ function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
   const alerts = data?.alerts || [];
   const artisan = data?.artisan_lines || [];
   const expenses = data?.expense_lines || [];
+  const toBuy = data?.materials_to_buy || [];
   const empty = data && !totals.length && !artisan.length && !expenses.length && !(data.planned_lines || []).length;
   const lineStyle = { display: "flex", justifyContent: "space-between", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap" };
 
@@ -1209,6 +1210,26 @@ function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
             <div style={{ ...lineStyle, borderBottom: 0 }}><span>Reste à dépenser HT</span><strong style={{ color: n(t.remaining) < 0 ? "var(--rose-700)" : undefined }}>{money(t.remaining, t.currency_code)}</strong></div>
           </div>
         ))}
+
+        {toBuy.length > 0 && (
+          <>
+            <h3 className="font-display" style={{ marginTop: 14 }}>Matériaux à acheter</h3>
+            <p className="muted" style={{ margin: "0 0 4px" }}>Quantités du devis accepté, moins ce qui est déjà commandé (bons de commande).</p>
+            {toBuy.map((m, i) => (
+              <div key={i} style={lineStyle}>
+                <span style={{ flex: "1 1 160px", minWidth: 0 }}>
+                  {m.designation}
+                  <br /><small className="muted">Prévu {n(m.planned_qty)} · commandé {n(m.ordered_qty)} · reçu {n(m.received_qty)} · {money(m.unit_price, m.currency_code)} / u</small>
+                </span>
+                <span style={{ textAlign: "right" }}>
+                  {n(m.remaining_qty) > 0
+                    ? <><strong>Reste {n(m.remaining_qty)}</strong><br /><small className="muted">{money(m.remaining_total, m.currency_code)}</small></>
+                    : <span className="chip emerald">Commandé</span>}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
 
         {(data?.planned_lines || []).length > 0 && (
           <>
