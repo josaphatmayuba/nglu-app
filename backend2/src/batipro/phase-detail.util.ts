@@ -21,7 +21,22 @@ export type PhaseDetailRow = {
   docPaidAmount: string | number | null;
   docDate: string | null;
   submittedBy: string | null;
+  // Rapprochement devis -> BC pour "materiaux a acheter" (optionnels : absents = ligne materiel).
+  lineType?: string | null;
+  materialId?: number | null;
+  receivedQuantity?: string | number | null;
 };
+
+// Cle de rapprochement d'une ligne devis/BC : materiau du catalogue si present,
+// sinon designation normalisee (casse, accents, espaces, precision entre parentheses).
+export const materialKey = (designation: string | null | undefined) =>
+  String(designation ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\([^)]*\)/g, " ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 export type PhaseDetailPhase = {
   id: number;
@@ -172,6 +187,60 @@ export function buildPhaseDetail(
     };
   });
 
+  // Materiaux a acheter : quantite prevue (devis accepte, lignes materiel) vs
+  // commandee/recue (BC actifs), rapprochees par materiau puis designation et devise.
+  // Les lignes de BC sans ligne prevue correspondante ne sont pas listees ici
+  // (elles restent visibles dans expense_lines).
+  type Buy = { designation: string; currency_id: number | null; planned_qty: number; unit_price: number; planned_total: number; ordered_qty: number; received_qty: number; ordered_total: number };
+  const toBuy = new Map<string, Buy>();
+  const isMaterial = (r: PhaseDetailRow) => (r.lineType ?? "material") === "material";
+  const keysOf = (r: PhaseDetailRow, currencyId: number | null) => {
+    const cur = currencyId ?? 0;
+    const keys = [`d:${materialKey(r.designation)}:${cur}`];
+    if (r.materialId) keys.unshift(`m:${r.materialId}:${cur}`);
+    return keys;
+  };
+  const aliases = new Map<string, string>(); // cle secondaire -> cle principale
+  for (const r of rows) {
+    if (r.lineActive !== 1 || r.docActive !== 1 || !isMaterial(r)) continue;
+    if (!(r.docType === "quote" && r.docDirection === "outbound" && r.docStatus === "accepted")) continue;
+    const currencyId = r.lineCurrencyId ?? r.docCurrencyId ?? phase.currencyId ?? null;
+    const keys = keysOf(r, currencyId);
+    const main = keys.map((k) => aliases.get(k)).find(Boolean) ?? keys[0];
+    for (const k of keys) aliases.set(k, main);
+    const b = toBuy.get(main) ?? { designation: r.designation, currency_id: currencyId, planned_qty: 0, unit_price: Number(r.unitPrice ?? 0), planned_total: 0, ordered_qty: 0, received_qty: 0, ordered_total: 0 };
+    b.planned_qty += Number(r.quantity ?? 0);
+    b.planned_total += Number(r.lineHt ?? 0);
+    toBuy.set(main, b);
+  }
+  for (const r of rows) {
+    if (r.lineActive !== 1 || r.docActive !== 1 || !isMaterial(r) || !isActivePo(r)) continue;
+    const currencyId = r.lineCurrencyId ?? r.docCurrencyId ?? phase.currencyId ?? null;
+    const main = keysOf(r, currencyId).map((k) => aliases.get(k)).find(Boolean);
+    const b = main ? toBuy.get(main) : undefined;
+    if (!b) continue;
+    b.ordered_qty += Number(r.quantity ?? 0);
+    b.received_qty += Number(r.receivedQuantity ?? 0);
+    b.ordered_total += Number(r.lineHt ?? 0);
+  }
+  const materialsToBuy = Array.from(toBuy.values()).map((b) => {
+    const remaining_qty = Math.max(0, Math.round((b.planned_qty - b.ordered_qty) * 1000) / 1000);
+    return {
+      designation: b.designation,
+      currency_id: b.currency_id,
+      currency_code: codeOf(b.currency_id),
+      planned_qty: b.planned_qty,
+      ordered_qty: b.ordered_qty,
+      received_qty: b.received_qty,
+      remaining_qty,
+      unit_price: b.unit_price,
+      planned_total: round2(b.planned_total),
+      ordered_total: round2(b.ordered_total),
+      // Reste a acheter valorise au prix unitaire du devis.
+      remaining_total: round2(remaining_qty * b.unit_price),
+    };
+  });
+
   const alerts: { code: string; currency_id: number | null; currency_code: string | null; amount: number; planned: number }[] = [];
   for (const t of totalsByCurrency) {
     const mk = (code: string, amount: number) =>
@@ -196,5 +265,6 @@ export function buildPhaseDetail(
     planned_lines: plannedLines,
     artisan_lines: artisanLines,
     expense_lines: expenseLines,
+    materials_to_buy: materialsToBuy,
   };
 }

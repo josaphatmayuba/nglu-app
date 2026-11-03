@@ -194,3 +194,33 @@ describe("buildPhaseDetail - depense directe (type=expense)", () => {
     expect(d.totals_by_currency.find((t) => t.currency_code === "USD")?.committed ?? 0).toBe(0);
   });
 });
+
+describe("buildPhaseDetail - materiaux a acheter", () => {
+  const po = { docType: "purchase_order", docDirection: "outbound", docStatus: "sent" };
+
+  it("prevu - commande = reste a acheter, rapproche par designation et devise", () => {
+    const d = buildPhaseDetail(phase, [
+      row({ designation: "Sable (tonne)", quantity: 20, unitPrice: 17, lineHt: 340 }),
+      row({ designation: "Ciment", quantity: 42, unitPrice: 13, lineHt: 546 }),
+      row({ designation: "Prise simple", quantity: 5, unitPrice: 7000, lineHt: 35000, lineCurrencyId: 2 }),
+      row({ ...po, documentId: 200, designation: "sable", quantity: 8, unitPrice: 17, lineHt: 136, receivedQuantity: 5 }),
+      row({ ...po, documentId: 200, designation: "Prise simple", quantity: 5, unitPrice: 7000, lineHt: 35000, lineCurrencyId: 2 }),
+      row({ ...po, documentId: 200, designation: "Clous", quantity: 3, lineHt: 30 }),
+    ], new Map(), codes);
+    const by = (s: string) => d.materials_to_buy.find((m) => m.designation.startsWith(s))!;
+    expect(d.materials_to_buy).toHaveLength(3);
+    expect(by("Sable")).toMatchObject({ planned_qty: 20, ordered_qty: 8, received_qty: 5, remaining_qty: 12, remaining_total: 204, currency_code: "USD" });
+    expect(by("Ciment")).toMatchObject({ remaining_qty: 42, remaining_total: 546 });
+    expect(by("Prise")).toMatchObject({ remaining_qty: 0, currency_code: "CDF" });
+  });
+
+  it("services et sur-commande : pas de reste negatif, services exclus", () => {
+    const d = buildPhaseDetail(phase, [
+      row({ designation: "Main d'oeuvre", lineType: "service", lineHt: 600 }),
+      row({ designation: "Bois", quantity: 1, unitPrice: 250, lineHt: 250, materialId: 9 }),
+      row({ ...po, documentId: 200, designation: "Bois rouge", materialId: 9, quantity: 2, lineHt: 500 }),
+    ], new Map(), codes);
+    expect(d.materials_to_buy).toHaveLength(1);
+    expect(d.materials_to_buy[0]).toMatchObject({ ordered_qty: 2, remaining_qty: 0, remaining_total: 0 });
+  });
+});
