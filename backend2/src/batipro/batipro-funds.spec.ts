@@ -237,6 +237,22 @@ describe("BatiPro fonds du chantier - synthese par devise", () => {
     expect(rows[0].currency_id).toBe(USD);
   });
 
+  it("BC en CDF regle au taux fige : decaisse et reste du en USD ; sans taux : reste en CDF", () => {
+    const funds = [{ amount: "1500.00", currencyId: USD, isActive: 1 }];
+    const docs = [
+      doc({ id: 10, totalTtc: "1176.52", paidAmount: "1176.52" }), // USD
+      doc({ id: 12, currencyId: CDF, fxRate: "2300", totalTtc: "125000.00", totalTtcProjectCcy: "54.35", paidAmount: "125000.00", paidAmountProjectCcy: "54.35" }),
+      doc({ id: 5, currencyId: CDF, fxRate: "2300", totalTtc: "139230.00", totalTtcProjectCcy: "60.53", paidAmount: "139230.00", paidAmountProjectCcy: "60.53" }),
+      doc({ id: 20, currencyId: CDF, fxRate: "2300", totalTtc: "23000.00", paidAmount: "0" }), // non paye, avec taux -> 10 $ du
+      doc({ id: 21, currencyId: CDF, totalTtc: "5000.00", paidAmount: "5000.00" }), // sans taux -> reste CDF
+    ];
+    const rows = buildFundsSummary(funds, docs, USD, codes);
+    const usd = rows.find((r) => r.currency_id === USD)!;
+    const cdf = rows.find((r) => r.currency_id === CDF)!;
+    expect(usd).toEqual({ currency_id: USD, currency_code: "USD", received: 1500, disbursed: 1291.4, available: 208.6, committed_unpaid: 10, shortfall: 0 });
+    expect(cdf).toEqual({ currency_id: CDF, currency_code: "CDF", received: 0, disbursed: 5000, available: -5000, committed_unpaid: 0, shortfall: 5000 });
+  });
+
   it("pas de double comptage BC + facture enfant dans le decaisse", () => {
     const m = disbursedCentsByCurrency([
       doc({ id: 10, totalTtc: "100.00", paidAmount: "40.00" }),

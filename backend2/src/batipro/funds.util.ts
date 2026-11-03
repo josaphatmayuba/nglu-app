@@ -107,7 +107,7 @@ function dueBuckets(d: SpendDoc, projectCurrencyId: number | null): Map<Key, num
 //  - BC actifs non annules : max(total_ttc - paye du BC - paiements de ses
 //    factures fournisseur enfants (parent_document_id), 0) ;
 //  - factures fournisseur SANS BC actif (ou BC annule) : max(total - paye, 0).
-export function committedUnpaidCentsByCurrency(docs: SpendDoc[], projectCurrencyId: number | null): Map<Key, number> {
+export function committedUnpaidCentsByCurrency(docs: SpendDoc[], projectCurrencyId: number | null, convertFx = false): Map<Key, number> {
   const out = new Map<Key, number>();
   const livePoIds = new Set(docs.filter((d) => isLive(d) && isPurchaseOrder(d)).map((d) => d.id));
 
@@ -137,9 +137,29 @@ export function committedUnpaidCentsByCurrency(docs: SpendDoc[], projectCurrency
     } else {
       continue;
     }
+    // Fonds : un document en autre devise AVEC taux fige (mono-devise) est suivi en
+    // devise chantier, son reste du converti au taux du document.
+    const rate = convertFx && isOtherCurrency(d, projectCurrencyId) && !(d.totals && d.totals.length > 1) ? parseFxRate(d.fxRate) : null;
     for (const [cur, due] of dueBuckets(d, projectCurrencyId)) {
-      add(out, cur, Math.max(due - (paid.get(cur) ?? 0), 0));
+      const left = Math.max(due - (paid.get(cur) ?? 0), 0);
+      if (rate != null && cur === d.currencyId) add(out, projectCurrencyId, convertToProjectCents(left, rate));
+      else add(out, cur, left);
     }
+  }
+  return out;
+}
+
+// DECAISSE pour la synthese des fonds : comme disbursedCentsByCurrency, mais un
+// document en autre devise deja regle AU TAUX (paidAmountProjectCcy > 0) compte
+// en devise chantier pour sa contre-valeur ; sans conversion, il reste dans sa
+// devise. (disbursedCentsByCurrency garde sa definition : le "deja depense" y
+// ajoute convertedPaidCents.)
+export function fundsDisbursedCentsByCurrency(docs: SpendDoc[], projectCurrencyId: number | null): Map<Key, number> {
+  const out = new Map<Key, number>();
+  for (const d of docs) {
+    if (!isLive(d) || !(isCommitment(d) || isSupplierInvoice(d))) continue;
+    if (isOtherCurrency(d, projectCurrencyId) && toCents(d.paidAmountProjectCcy) > 0) add(out, projectCurrencyId, toCents(d.paidAmountProjectCcy));
+    else add(out, effectiveCurrency(d, projectCurrencyId), toCents(d.paidAmount));
   }
   return out;
 }
@@ -162,8 +182,8 @@ export function buildFundsSummary(
   currencyCodeById: Map<number, string | null>,
 ): FundsSummaryRow[] {
   const received = receivedCentsByCurrency(funds);
-  const disbursed = disbursedCentsByCurrency(docs, projectCurrencyId);
-  const committed = committedUnpaidCentsByCurrency(docs, projectCurrencyId);
+  const disbursed = fundsDisbursedCentsByCurrency(docs, projectCurrencyId);
+  const committed = committedUnpaidCentsByCurrency(docs, projectCurrencyId, true);
   const keys = new Set<Key>([...received.keys(), ...disbursed.keys(), ...committed.keys()]);
   if (projectCurrencyId != null) keys.add(projectCurrencyId);
 
