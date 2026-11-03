@@ -3344,10 +3344,24 @@ export const batiproDocuments = mysqlTable("batipro_documents", {
   // Decouplee de l emission : renseignee quand tout est recu (status received).
   receivedAt: timestamp("received_at"),
   receivedBy: bigint("received_by", { mode: "number" }),
+  // === Depense chantier (type=expense, migration 0335) ===
+  // Beneficiaire libre (nom) ou ouvrier BatiPro (batipro_workers.id).
+  beneficiaryName: varchar("beneficiary_name", { length: 255 }),
+  beneficiaryWorkerId: bigint("beneficiary_worker_id", { mode: "number", unsigned: true }),
+  createdBy: bigint("created_by", { mode: "number", unsigned: true }),
+  // Annulation (soft) : status passe a cancelled, jamais de suppression physique.
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: bigint("cancelled_by", { mode: "number", unsigned: true }),
+  cancelReason: varchar("cancel_reason", { length: 500 }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// Valeurs admises pour batipro_documents.status quand type = expense
+// (migration 0335). Contrainte applicative, status reste un varchar(40).
+export const BATIPRO_EXPENSE_STATUSES = ["recorded", "paid", "cancelled"] as const;
+export type BatiproExpenseStatus = (typeof BATIPRO_EXPENSE_STATUSES)[number];
 
 // Valeurs admises pour batipro_documents.status quand type = purchase_order
 // (migration 0231). status reste un varchar(40) : la contrainte est applicative.

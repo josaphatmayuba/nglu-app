@@ -193,11 +193,12 @@ export class BatiproShareService {
     };
     const effCur = (id: number | null | undefined) => id ?? projectCurrencyId;
 
-    // Bons de commande (hors annules).
+    // Bons de commande ET depenses directes (type=expense), hors annules.
     const poRows = await this.db
       .select({
         id: batiproDocuments.id,
         number: batiproDocuments.number,
+        type: batiproDocuments.type,
         issueDate: batiproDocuments.issueDate,
         createdAt: batiproDocuments.createdAt,
         currencyId: batiproDocuments.currencyId,
@@ -211,7 +212,7 @@ export class BatiproShareService {
         eq(batiproDocuments.organizationId, orgId),
         eq(batiproDocuments.isActive, 1),
         eq(batiproDocuments.direction, "outbound"),
-        eq(batiproDocuments.type, "purchase_order"),
+        inArray(batiproDocuments.type, ["purchase_order", "expense"]),
         ne(batiproDocuments.status, "cancelled"),
       ))
       .orderBy(desc(batiproDocuments.id));
@@ -227,7 +228,7 @@ export class BatiproShareService {
     }
 
     const remainingByCur = new Map<string, { currency_code: string | null; currency_symbol: string | null; remaining: number }>();
-    const purchaseOrders = poRows.map((p) => {
+    const engagedRows = poRows.map((p) => {
       const total = Number(p.totalTtc ?? 0);
       const paid = Number(p.paidAmount ?? 0);
       const remaining = round2(Math.max(total - paid, 0));
@@ -237,6 +238,7 @@ export class BatiproShareService {
       acc.remaining = round2(acc.remaining + remaining);
       remainingByCur.set(key, acc);
       return {
+        _isExpense: p.type === "expense",
         id: p.id,
         number: p.number ?? null,
         label: firstLine.get(p.id) ?? null,
@@ -247,6 +249,10 @@ export class BatiproShareService {
         ...cur,
       };
     });
+    const stripType = ({ _isExpense, ...rest }: (typeof engagedRows)[number]) => rest;
+    const purchaseOrders = engagedRows.filter((r) => !r._isExpense).map(stripType);
+    // Depenses directes de chantier (type=expense) : meme gabarit, listees a part.
+    const directExpenses = engagedRows.filter((r) => r._isExpense).map(stripType);
 
     // Factures fournisseur (inbound) + photos rattachees.
     const invRows = await this.db
@@ -311,7 +317,7 @@ export class BatiproShareService {
     const subcontractors = subRows.map((s) => {
       const contract = Number(s.contractAmount ?? 0);
       const paid = poRows
-        .filter((p) => p.subcontractorId === s.id && effCur(p.currencyId) === effCur(s.currencyId))
+        .filter((p) => p.type !== "expense" && p.subcontractorId === s.id && effCur(p.currencyId) === effCur(s.currencyId))
         .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
       return {
         name: s.name,
@@ -355,6 +361,7 @@ export class BatiproShareService {
         ...curOut(project.currencyId),
       },
       purchase_orders: purchaseOrders,
+      direct_expenses: directExpenses,
       supplier_invoices: supplierInvoices,
       subcontractors,
       // Reste a payer par devise (BC non annules) ; jamais additionne entre devises.

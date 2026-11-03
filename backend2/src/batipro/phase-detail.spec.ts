@@ -176,3 +176,21 @@ describe("buildPhaseDetail", () => {
     });
   });
 });
+
+describe("buildPhaseDetail - depense directe (type=expense)", () => {
+  const exp = { docType: "expense", docDirection: "outbound", docStatus: "recorded" };
+  const pay = (docTotalTtc: number, docPaidAmount: number): PoPayInfo => ({ docTotalTtc, docPaidAmount, totals: [] });
+
+  it("depense comptee comme engage de la phase ; paye au prorata", () => {
+    const d = buildPhaseDetail(phase, [row({ ...exp, documentId: 300, lineHt: 100 })], new Map([[300, pay(116, 58)]]), codes);
+    expect(usd(d).committed).toBe(100);
+    expect(usd(d).paid).toBe(50);
+    expect(d.expense_lines).toHaveLength(1);
+  });
+
+  it("depense annulee exclue", () => {
+    const d = buildPhaseDetail(phase, [row({ ...exp, docStatus: "cancelled", documentId: 301, lineHt: 100 })], new Map(), codes);
+    expect(d.expense_lines).toHaveLength(0);
+    expect(d.totals_by_currency.find((t) => t.currency_code === "USD")?.committed ?? 0).toBe(0);
+  });
+});

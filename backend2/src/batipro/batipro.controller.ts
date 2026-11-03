@@ -19,6 +19,10 @@ import {
   CreateBatiproChangeOrderDto,
   CreateBatiproCrewDto,
   CreateBatiproDocumentDto,
+  CreateBatiproExpenseDto,
+  UpdateBatiproExpenseDto,
+  CancelExpenseDto,
+  CancelDocumentPaymentDto,
   CreateBatiproMaterialDto,
   MaterialsCleanupExecuteDto,
   CreateBatiproPhaseDto,
@@ -273,8 +277,71 @@ export class BatiproController {
   @ApiOperation({ summary: "Lignes de BC de type service/depense (sans stock), totaux par categorie et par devise" })
   @Permissions("readAll-batipro")
   @Get("service-expenses")
-  serviceExpenses(@CurrentOrg() orgId: number, @Query("project_id") projectId?: string, @Query("category") category?: string) {
-    return this.batipro.serviceExpenses(orgId, { projectId: projectId ? Number(projectId) : undefined, category: category || undefined });
+  serviceExpenses(
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+    @Query("project_id") projectId?: string,
+    @Query("category") category?: string,
+    @Query("source") source?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.batipro.serviceExpenses(
+      orgId,
+      { projectId: projectId ? Number(projectId) : undefined, category: category || undefined, source: source || undefined, status: status || undefined },
+      scope,
+    );
+  }
+
+  // ── Depense chantier (lot 2) : routes litterales, avant toute route :id ──
+  @ApiOperation({ summary: "Detail d'une depense chantier (type=expense)" })
+  @Permissions("readAll-batipro")
+  @Get("expenses/:id")
+  getExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.getExpense(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Cree une depense chantier (ligne de service, sans stock)" })
+  @Permissions("create-batipro")
+  @Post("expenses")
+  createExpense(
+    @Body() body: CreateBatiproExpenseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.createExpense(body, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Modifie une depense chantier (refuse si annulee ; montant/devise verrouilles si payee/comptabilisee)" })
+  @Permissions("update-batipro")
+  @Put("expenses/:id")
+  updateExpense(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateBatiproExpenseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.updateExpense(id, body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Annule une depense chantier (motif obligatoire, refuse si payee)" })
+  @Permissions("update-batipro")
+  @Post("expenses/:id/cancel")
+  cancelExpense(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelExpenseDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.cancelExpense(id, body.reason, orgId, userId || undefined, scope);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft delete) une depense vierge ; sinon annuler" })
+  @Permissions("delete-batipro")
+  @Delete("expenses/:id")
+  deleteExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.deleteExpense(id, orgId, scope);
   }
 
   @ApiOperation({ summary: "Execute le nettoyage valide des materiaux (soft delete + fusion). Exige confirm:true" })
@@ -808,18 +875,31 @@ export class BatiproController {
     return this.batipro.postInvoiceToLedger(id, orgId, userId || undefined);
   }
 
-  @ApiOperation({ summary: "Comptabilise un bon de commande fournisseur en depense (ledger postByRules, idempotent)" })
+  @ApiOperation({ summary: "Comptabilise un bon de commande fournisseur ou une depense chantier (ledger postByRules batipro_purchase, idempotent)" })
   @Permissions("update-batipro")
   @Post("documents/:id/post-purchase")
   postPurchase(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.batipro.postPurchaseToLedger(id, orgId, userId || undefined);
   }
 
-  @ApiOperation({ summary: "Enregistre un reglement (partiel/total) sur une facture ou un bon de commande" })
+  @ApiOperation({ summary: "Enregistre un reglement (partiel/total) sur une facture, un bon de commande ou une depense chantier" })
   @Permissions("update-batipro")
   @Post("documents/:id/payment")
   recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined, body.fx_rate);
+  }
+
+  @ApiOperation({ summary: "Annule le dernier reglement d'un BC / facture fournisseur et contre-passe l'ecriture (motif obligatoire)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/payment/cancel")
+  cancelDocumentPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelDocumentPaymentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.cancelDocumentPayment(id, body.reason, orgId, userId || undefined, scope);
   }
 
   // ── Multi-devise : taux fige par document (migration 0329) ──

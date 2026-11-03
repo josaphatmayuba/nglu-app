@@ -514,3 +514,64 @@ export class CreateBatiproShareLinkDto {
   @IsOptional() @IsIn([30, 90, 365]) expires_in_days?: number;
   @IsOptional() @IsBoolean() send_sms?: boolean;
 }
+
+// ── Depense chantier (lot 2) : document type=expense, UNE ligne de service ──
+export const BATIPRO_EXPENSE_CATEGORIES = ["labor", "handling", "fees", "transport", "hardware_invoice", "other"] as const;
+export const BATIPRO_EXPENSE_BENEFICIARY_KINDS = ["text", "supplier", "subcontractor", "worker"] as const;
+
+// Montants en nombre a 2 decimales max (jamais arrondi : rejet 400 sinon).
+export class CreateBatiproExpenseDto {
+  @IsInt() project_id!: number;
+  @IsIn(BATIPRO_EXPENSE_CATEGORIES as unknown as string[]) category!: (typeof BATIPRO_EXPENSE_CATEGORIES)[number];
+  @IsString() @MinLength(1) @MaxLength(500) designation!: string;
+  @IsDateString() expense_date!: string;
+  @IsInt() currency_id!: number;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(999999999999) amount_ttc!: number;
+  // Defaut = amount_ttc. 0 < HT <= TTC.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(999999999999) amount_ht?: number;
+  // Taux de TVA informatif (%), n'entre dans aucun calcul.
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) vat_rate?: number;
+  @IsOptional() @IsIn(BATIPRO_EXPENSE_BENEFICIARY_KINDS as unknown as string[]) beneficiary_kind?: (typeof BATIPRO_EXPENSE_BENEFICIARY_KINDS)[number];
+  @IsOptional() @IsString() @MaxLength(255) beneficiary_name?: string;
+  @IsOptional() @IsInt() supplier_id?: number;
+  @IsOptional() @IsInt() subcontractor_id?: number;
+  @IsOptional() @IsInt() worker_id?: number;
+  @IsOptional() @IsInt() phase_id?: number;
+  @IsOptional() @IsString() @MaxLength(500) line_note?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+}
+
+// Patch partiel : memes champs, tous optionnels, sans project_id.
+export class UpdateBatiproExpenseDto {
+  @IsOptional() @IsIn(BATIPRO_EXPENSE_CATEGORIES as unknown as string[]) category?: (typeof BATIPRO_EXPENSE_CATEGORIES)[number];
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(500) designation?: string;
+  @IsOptional() @IsDateString() expense_date?: string;
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(999999999999) amount_ttc?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() @Max(999999999999) amount_ht?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) vat_rate?: number;
+  @IsOptional() @IsIn(BATIPRO_EXPENSE_BENEFICIARY_KINDS as unknown as string[]) beneficiary_kind?: (typeof BATIPRO_EXPENSE_BENEFICIARY_KINDS)[number];
+  @IsOptional() @IsString() @MaxLength(255) beneficiary_name?: string;
+  @IsOptional() @IsInt() supplier_id?: number;
+  @IsOptional() @IsInt() subcontractor_id?: number;
+  @IsOptional() @IsInt() worker_id?: number;
+  // null = detacher de la phase.
+  @IsOptional() @IsInt() phase_id?: number | null;
+  @IsOptional() @IsString() @MaxLength(500) line_note?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate?: number;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+}
+
+export class CancelExpenseDto {
+  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}
+
+// Annulation du dernier reglement d'un BC / facture fournisseur (motif obligatoire).
+export class CancelDocumentPaymentDto {
+  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}

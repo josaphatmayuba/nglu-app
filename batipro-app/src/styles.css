@@ -377,3 +377,47 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .restock-scrim .modal-actions { position: sticky; bottom: 0; background: #fff; padding-top: 8px; }
   .restock-scrim .modal-actions .btn { flex: 1; min-height: 48px; justify-content: center; }
 }
+
+/* Depenses chantier : barre d outils, tableau a defilement interne, modale mobile */
+.exp-toolbar { justify-content: flex-start; }
+.exp-toolbar > input { flex: 1 1 200px; min-width: 0; }
+.exp-toolbar > select { flex: 0 1 180px; min-width: 0; }
+.exp-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.exp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.exp-form .form-grid .span2 { grid-column: 1 / -1; }
+@media (max-width: 640px) {
+  .exp-toolbar > input, .exp-toolbar > select, .exp-toolbar > .btn { flex: 1 1 100%; min-height: 44px; }
+  .exp-actions .link { min-height: 44px; padding: 0 14px; }
+  .exp-form .form-grid { grid-template-columns: 1fr; }
+  .exp-form .btn-touch, .exp-form .icon-btn { min-height: 44px; }
+}
+
+/* Depenses : cartes mobiles, filtres repliables */
+.exp-cards, .exp-filter-toggle, .exp-new-mobile { display: none; }
+.exp-filters { display: contents; }
+.exp-card { padding: 12px; margin-bottom: 10px; }
+.exp-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.exp-card-title { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.exp-card-note { font-size: 11px; font-weight: 400; }
+.exp-card-amount { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.exp-card-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 6px; font-size: 12px; color: var(--ink-500); }
+.exp-card-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.exp-card-btns { margin-left: auto; display: flex; gap: 8px; }
+.exp-card-btns .btn { min-height: 44px; min-width: 44px; justify-content: center; }
+.exp-card-menu { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.exp-card-menu .link { min-height: 44px; justify-content: flex-start; padding: 0 14px; }
+.exp-card button:focus-visible, .exp-toolbar button:focus-visible { outline: 2px solid var(--amber-600); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .exp-cards { display: block; }
+  .exp-table-wrap, .exp-new-desktop { display: none; }
+  .exp-kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .exp-kpis .pad { padding: 10px 12px; }
+  .exp-kpis .kpi-value { font-size: 18px; }
+  .exp-kpi-total { grid-column: 1 / -1; }
+  .exp-toolbar { gap: 8px; }
+  .exp-toolbar > .exp-search { flex: 1 1 100%; }
+  .exp-toolbar > .exp-filter-toggle, .exp-toolbar > .exp-new-mobile { display: inline-flex; flex: 1 1 0; justify-content: center; min-height: 44px; }
+  .exp-filters { display: none; flex: 1 1 100%; flex-direction: column; gap: 8px; }
+  .exp-filters.open { display: flex; }
+  .exp-filters > select { flex: none; width: 100%; min-height: 44px; }
+}

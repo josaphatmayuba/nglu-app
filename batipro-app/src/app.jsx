@@ -229,7 +229,7 @@ function App() {
     equipes: <Equipes canMutate={canMutate} />,
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => { setError(""); setModal({ kind: "material" }); }} onRestock={setRestock} onOpenProject={setOpenProjectId} canMutate={canMutate} />,
-    depenses: <ServiceExpensesPage />,
+    depenses: <ServiceExpensesPage projects={projectRows} canMutate={canMutate} onOpenProject={setOpenProjectId} />,
     parametres: <Parametres />,
   };
 
@@ -2036,6 +2036,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [poInvoices, setPoInvoices] = React.useState({});
   const [invoiceModal, setInvoiceModal] = React.useState(null); // { po }
   const [invoicePayModal, setInvoicePayModal] = React.useState(null); // { invoice, po }
+  const [cancelPayDoc, setCancelPayDoc] = React.useState(null); // { doc, po } : annulation du dernier règlement
   const [fxModal, setFxModal] = React.useState(null); // BC dont on fixe le taux
 
   const selected = projects.find((p) => p.id === projectId);
@@ -2308,6 +2309,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
                       {canPost && <button className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
+                      {canMutate && can("update-batipro") && d.status !== "cancelled" && n(d.paidAmount) > 0 && <button className="link link-danger" disabled={busy === d.id} onClick={() => setCancelPayDoc({ doc: d })}>Annuler le règlement</button>}
                       {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
@@ -2350,6 +2352,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                           <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
                                           {canPayInv && <button className="link link-success" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
+                                          {canMutate && can("update-batipro") && inv.status !== "cancelled" && n(inv.paidAmount) > 0 && <button className="link link-danger" disabled={busy === inv.id} onClick={() => setCancelPayDoc({ doc: inv, po: d })}>Annuler le règlement</button>}
                                           {inv.attachedFileKey && (
                                             <button className="link" onClick={() => setAttachModal({ id: inv.id })}>
                                               <Icon name="eye" /> Voir photo
@@ -2389,6 +2392,22 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           materials={materials}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
+        />
+      )}
+      {cancelPayDoc && (
+        <ExpenseConfirmModal
+          title={`Annuler le règlement ${cancelPayDoc.doc.number || `#${cancelPayDoc.doc.id}`}`}
+          message="Le dernier règlement sera annulé et son écriture comptable contre-passée. Indiquez le motif."
+          confirmLabel="Annuler le règlement" danger reasonRequired
+          onClose={() => setCancelPayDoc(null)}
+          onConfirm={async (reason) => {
+            const r = await api.cancelDocumentPayment(cancelPayDoc.doc.id, reason);
+            const po = cancelPayDoc.po;
+            setCancelPayDoc(null);
+            setNotice(`Règlement annulé. Solde : ${money(r.balance, cancelPayDoc.doc.currencyCode || cur)}.`);
+            if (po) loadPoInvoices(po.id);
+            load();
+          }}
         />
       )}
       {payModal && (
@@ -4640,99 +4659,507 @@ function RestockModal({ material, onClose, onDone }) {
   );
 }
 
-// Onglet « Dépenses et services » : lignes de BC de type service (sans stock),
-// groupées par catégorie, total par groupe ET par devise (jamais de devises additionnées).
-function ServiceExpensesPage() {
+// Onglet « Dépenses et services » : lignes de BC de type service (lecture seule, sans stock)
+// + vraies dépenses chantier (documents type 'expense', sans fournisseur/stock/réception).
+// Totaux par devise (jamais de devises additionnées), décimales exactes (BigInt, aucun arrondi).
+const EXPENSE_STATUS_FILTER = [["recorded", "Enregistrée"], ["paid", "Payée"], ["cancelled", "Annulée"]];
+const BENEFICIARY_KIND_LABEL = [["text", "Texte libre"], ["supplier", "Fournisseur"], ["subcontractor", "Sous-traitant"], ["worker", "Ouvrier"]];
+
+// Décimal exact (échelle 1e6) depuis une chaîne/nombre — jamais Math.round.
+function decToBig(v) {
+  const m = /^(-?)(\d*)(?:\.(\d*))?$/.exec(String(v ?? "0").trim());
+  if (!m) return 0n;
+  const frac = ((m[3] || "") + "000000").slice(0, 6);
+  const big = BigInt((m[2] || "0") + frac);
+  return m[1] ? -big : big;
+}
+function bigToDec(b) {
+  const neg = b < 0n; const abs = (neg ? -b : b).toString().padStart(7, "0");
+  const int = abs.slice(0, -6); const frac = abs.slice(-6).replace(/0+$/, "").padEnd(2, "0");
+  return `${neg ? "-" : ""}${int}.${frac}`;
+}
+const beneficiaryName = (r) => (r.beneficiary && typeof r.beneficiary === "object" ? r.beneficiary.name : r.beneficiary) || "";
+const isExpenseRow = (r) => r.documentType === "expense";
+// Statut affiché : dépense = Enregistrée / Payée partiellement / Payée / Annulée ; BC = statut du BC.
+function expenseRowStatus(r) {
+  if (!isExpenseRow(r)) return { label: PO_STATUS_LABEL[r.documentStatus] || r.documentStatus || "—", tone: PO_STATUS_TONE[r.documentStatus] || "ink" };
+  if (r.documentStatus === "cancelled") return { label: "Annulée", tone: "rose" };
+  const paid = decToBig(r.docPaidAmount); const total = decToBig(r.docTotalTtc);
+  if (r.documentStatus === "paid" || (total > 0n && paid >= total)) return { label: "Payée", tone: "emerald" };
+  if (paid > 0n) return { label: "Payée partiellement", tone: "amber" };
+  return { label: "Enregistrée", tone: "ink" };
+}
+
+function ServiceExpensesPage({ projects = [], canMutate = true, onOpenProject }) {
   return (
     <>
       <div className="topbar">
         <div><p className="eyebrow">Achats</p><h2 className="title font-display">Dépenses et services</h2></div>
       </div>
-      <ServiceExpensesTab />
+      <ServiceExpensesTab projects={projects} canMutate={canMutate} onOpenProject={onOpenProject} />
     </>
   );
 }
 
-function ServiceExpensesTab() {
+// Confirmation dans l'appli (pas de confirm()) ; reasonRequired = motif obligatoire.
+function ExpenseConfirmModal({ title, message, confirmLabel, danger, reasonRequired, onClose, onConfirm }) {
+  const [reason, setReason] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (reasonRequired && !reason.trim()) { setError("Le motif est obligatoire."); return; }
+    setError(""); setBusy(true);
+    try { await onConfirm(reason.trim()); }
+    catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{title}</h2></div>
+          <button type="button" className="icon-btn btn-touch" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <p style={{ margin: 0 }}>{message}</p>
+        {reasonRequired && (
+          <label className="field">
+            <span>Motif (obligatoire)</span>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} autoFocus required />
+          </label>
+        )}
+        {error && <div className="login-error" role="alert">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost btn-touch" onClick={onClose}>Retour</button>
+          <button className={`btn btn-touch ${danger ? "btn-dark" : "btn-amber grad-amber"}`} disabled={busy}>{busy ? "En cours…" : confirmLabel}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Création / modification d'une dépense chantier. expenseId = édition (GET /expenses/:id).
+function ExpenseEditorModal({ expenseId, projects, defaultProjectId, onClose, onSaved }) {
+  const currencies = useCurrencies();
+  const [form, setForm] = React.useState({
+    project_id: defaultProjectId ? String(defaultProjectId) : "", category: "other", designation: "",
+    expense_date: new Date().toISOString().slice(0, 10), currency_id: "", amount_ttc: "", amount_ht: "",
+    beneficiary_kind: "text", beneficiary_name: "", beneficiary_id: "", phase_id: "", line_note: "", notes: "",
+  });
+  const [fx, setFx] = React.useState({ rate: "", source: "manual" });
+  const [phases, setPhases] = React.useState([]);
+  const [lists, setLists] = React.useState({ supplier: [], subcontractor: [], worker: [] });
+  const [loading, setLoading] = React.useState(Boolean(expenseId));
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const project = projects.find((p) => String(p.id) === String(form.project_id));
+
+  React.useEffect(() => {
+    if (!expenseId) return;
+    api.expense(expenseId).then((e) => {
+      const b = e.beneficiary || {};
+      setForm({
+        project_id: String(e.projectId ?? ""), category: e.category || "other", designation: e.designation || "",
+        expense_date: String(e.expenseDate || "").slice(0, 10), currency_id: e.currencyId != null ? String(e.currencyId) : "",
+        amount_ttc: e.amountTtc ?? "", amount_ht: e.amountHt ?? "",
+        beneficiary_kind: b.kind || "text", beneficiary_name: b.name || "", beneficiary_id: b.id != null ? String(b.id) : "",
+        phase_id: e.phaseId != null ? String(e.phaseId) : "", line_note: e.lineNote || "", notes: e.notes || "",
+      });
+      if (e.fxRate != null && Number(e.fxRate) > 0) setFx({ rate: String(e.fxRate), source: "manual" });
+    }).catch((err) => setError(err.message || String(err))).finally(() => setLoading(false));
+  }, [expenseId]);
+
+  // Devise par défaut = devise du chantier choisi (création).
+  React.useEffect(() => {
+    if (!expenseId && project?.currencyId && !form.currency_id) set("currency_id", String(project.currencyId));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.currencyId, expenseId]);
+  React.useEffect(() => {
+    if (!form.project_id) { setPhases([]); return; }
+    api.phases(form.project_id).then((p) => setPhases(p || [])).catch(() => setPhases([]));
+  }, [form.project_id]);
+  React.useEffect(() => {
+    const k = form.beneficiary_kind;
+    if (k === "text" || lists[k].length) return;
+    const loadList = k === "supplier" ? api.suppliers("goods").then((r) => (Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || [])).filter((s) => String(s.status) === "true"))
+      : k === "subcontractor" ? api.subcontractors() : api.listWorkers();
+    loadList.then((rows) => setLists((l) => ({ ...l, [k]: rows || [] }))).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.beneficiary_kind]);
+
+  const curCode = resolveCurrencyCode(currencies, form.currency_id);
+  const foreign = Boolean(project && form.currency_id) && isForeignCurrency(form.currency_id, curCode, project.currencyId, project.currencyCode);
+  const itemLabel = (k, x) => (k === "worker" ? x.fullName : x.name);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!form.project_id) { setError("Choisissez un chantier."); return; }
+    if (!form.designation.trim()) { setError("La désignation est obligatoire."); return; }
+    if (!(n(form.amount_ttc) > 0)) { setError("Montant TTC invalide."); return; }
+    if (!form.currency_id) { setError("Choisissez une devise."); return; }
+    if (foreign && !(n(fx.rate) > 0)) { setError("Le taux de change est obligatoire : la devise diffère de celle du chantier."); return; }
+    const k = form.beneficiary_kind;
+    const body = {
+      project_id: Number(form.project_id), category: form.category, designation: form.designation.trim(),
+      expense_date: form.expense_date, currency_id: Number(form.currency_id), amount_ttc: n(form.amount_ttc),
+      ...(String(form.amount_ht).trim() !== "" ? { amount_ht: n(form.amount_ht) } : {}),
+      beneficiary_kind: k,
+      ...(k === "text" ? { beneficiary_name: form.beneficiary_name.trim() } : {}),
+      ...(k !== "text" && form.beneficiary_id ? { [`${k}_id`]: Number(form.beneficiary_id), beneficiary_name: itemLabel(k, lists[k].find((x) => String(x.id) === String(form.beneficiary_id)) || {}) || undefined } : {}),
+      ...(form.phase_id ? { phase_id: Number(form.phase_id) } : {}),
+      line_note: form.line_note.trim() || undefined, notes: form.notes.trim() || undefined,
+      ...(foreign ? { fx_rate: n(fx.rate), fx_rate_date: form.expense_date, fx_rate_source: fx.source } : {}),
+    };
+    setError(""); setBusy(true);
+    try { const r = expenseId ? await api.updateExpense(expenseId, body) : await api.createExpense(body); onSaved(r); }
+    catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+
+  return (
+    <div className="modal-scrim restock-scrim" role="dialog" aria-modal="true" aria-labelledby="expense-editor-title">
+      <form className="modal-card exp-form" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display" id="expense-editor-title">{expenseId ? "Modifier la dépense" : "Nouvelle dépense"}</h2><p>Dépense chantier sans fournisseur, sans stock ni réception.</p></div>
+          <button type="button" className="icon-btn btn-touch" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {loading ? <p className="muted">Chargement…</p> : (
+          <div className="form-grid">
+            <label className="field span2">
+              <span>Chantier *</span>
+              <select value={form.project_id} onChange={(e) => { set("project_id", e.target.value); set("phase_id", ""); }} required>
+                <option value="">— Choisir —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Catégorie *</span>
+              <select value={form.category} onChange={(e) => set("category", e.target.value)}>
+                {PO_SERVICE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Date *</span>
+              <input type="date" value={form.expense_date} onChange={(e) => set("expense_date", e.target.value)} required />
+            </label>
+            <label className="field span2">
+              <span>Désignation *</span>
+              <input value={form.designation} onChange={(e) => set("designation", e.target.value)} maxLength={255} required />
+            </label>
+            <label className="field">
+              <span>Devise *</span>
+              <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id ? String(id) : "")} currencies={currencies} required />
+            </label>
+            <label className="field">
+              <span>Montant TTC{curCode ? ` (${curCode})` : ""} *</span>
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={form.amount_ttc} onChange={(e) => set("amount_ttc", e.target.value)} required />
+            </label>
+            <label className="field">
+              <span>Montant HT{curCode ? ` (${curCode})` : ""} — facultatif</span>
+              <input type="number" step="0.01" min="0" inputMode="decimal" value={form.amount_ht} onChange={(e) => set("amount_ht", e.target.value)} />
+            </label>
+            {foreign && (
+              <div className="span2">
+                <FxRateField
+                  required
+                  projectCurrencyId={project.currencyId} projectCurrencyCode={project.currencyCode}
+                  docCurrencyId={form.currency_id} docCurrencyCode={curCode}
+                  value={fx.rate}
+                  onChange={(v, src) => setFx({ rate: v, source: src || "manual" })}
+                  amount={n(form.amount_ttc)}
+                />
+              </div>
+            )}
+            <label className="field">
+              <span>Bénéficiaire</span>
+              <select value={form.beneficiary_kind} onChange={(e) => { set("beneficiary_kind", e.target.value); set("beneficiary_id", ""); }}>
+                {BENEFICIARY_KIND_LABEL.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </label>
+            {form.beneficiary_kind === "text" ? (
+              <label className="field">
+                <span>Nom du bénéficiaire</span>
+                <input value={form.beneficiary_name} onChange={(e) => set("beneficiary_name", e.target.value)} maxLength={255} placeholder="ex. journalier, transporteur…" />
+              </label>
+            ) : (
+              <label className="field">
+                <span>{(BENEFICIARY_KIND_LABEL.find(([v]) => v === form.beneficiary_kind) || [])[1]}</span>
+                <select value={form.beneficiary_id} onChange={(e) => set("beneficiary_id", e.target.value)}>
+                  <option value="">— Aucun —</option>
+                  {lists[form.beneficiary_kind].map((x) => <option key={x.id} value={x.id}>{itemLabel(form.beneficiary_kind, x)}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="field span2">
+              <span>Phase — facultatif</span>
+              <select value={form.phase_id} onChange={(e) => set("phase_id", e.target.value)} disabled={!form.project_id}>
+                <option value="">— Aucune —</option>
+                {phases.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </label>
+            <label className="field span2">
+              <span>Note de ligne</span>
+              <input value={form.line_note} onChange={(e) => set("line_note", e.target.value)} />
+            </label>
+            <label className="field span2">
+              <span>Notes</span>
+              <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+            </label>
+          </div>
+        )}
+        {error && <div className="login-error" role="alert">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost btn-touch" onClick={onClose}>Annuler</button>
+          <button className="btn btn-amber grad-amber btn-touch" disabled={busy || loading}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ServiceExpensesTab({ projects = [], canMutate = true, onOpenProject }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [cat, setCat] = React.useState("");
+  const [projectId, setProjectId] = React.useState("");
+  const [source, setSource] = React.useState("");
+  const [status, setStatus] = React.useState("");
+  const [editor, setEditor] = React.useState(null); // { id|null }
+  const [confirm, setConfirm] = React.useState(null); // { kind: "cancel"|"delete", row }
+  const [payRow, setPayRow] = React.useState(null);
+  const [attachRow, setAttachRow] = React.useState(null);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [menuKey, setMenuKey] = React.useState(null);
+  const activeFilters = [cat, projectId, source, status].filter(Boolean).length;
+  const fileRef = React.useRef(null);
+  const uploadFor = React.useRef(null);
   const load = React.useCallback(() => {
     setLoading(true); setError("");
-    api.serviceExpenses({ category: cat })
+    api.serviceExpenses({ category: cat, projectId, source, status })
       .then((d) => setData(d || { rows: [], totalsByCategoryAndCurrency: [] }))
       .catch((e) => setError(e.message || String(e)))
       .finally(() => setLoading(false));
-  }, [cat]);
+  }, [cat, projectId, source, status]);
   React.useEffect(() => { load(); }, [load]);
 
   const label = (c) => (PO_SERVICE_CATEGORIES.find(([v]) => v === c) || [c, c])[1];
   const q = query.trim().toLowerCase();
-  const rows = (data?.rows || []).filter((r) => !q || [r.designation, r.projectName, r.documentNumber, r.lineNote].some((x) => String(x || "").toLowerCase().includes(q)));
+  const rows = (data?.rows || []).filter((r) => !q || [r.designation, r.projectName, r.documentNumber, r.lineNote, beneficiaryName(r)].some((x) => String(x || "").toLowerCase().includes(q)));
   const groups = new Map();
   for (const r of rows) { if (!groups.has(r.category)) groups.set(r.category, []); groups.get(r.category).push(r); }
-  // Totaux par devise recalcules sur les lignes affichées (décimales exactes en centimes entiers).
+  // Totaux par devise sur les lignes affichées (hors annulées), décimales exactes.
   const totalsOf = (list) => {
     const m = new Map();
     for (const r of list) {
+      if (r.documentStatus === "cancelled") continue;
       const code = r.currencyCode || "";
-      const cur = m.get(code) || { ht: 0n, ttc: 0n };
-      cur.ht += BigInt(Math.round(Number(r.lineHt) * 100)); cur.ttc += BigInt(Math.round(Number(r.lineTtc) * 100));
-      m.set(code, cur);
+      m.set(code, (m.get(code) || 0n) + decToBig(r.lineTtc));
     }
-    return [...m.entries()].map(([code, v]) => ({ code, ht: Number(v.ht) / 100, ttc: Number(v.ttc) / 100 }));
+    return [...m.entries()].map(([code, v]) => ({ code, ttc: bigToDec(v) }));
   };
   const totalsText = (list) => totalsOf(list).map((t) => money(t.ttc, t.code || undefined)).join(" + ") || "—";
   const all = totalsOf(rows);
+  const canCreate = canMutate && can("create-batipro");
+  const canUpdate = canMutate && can("update-batipro");
+  const canDelete = canMutate && can("delete-batipro");
+  const projectOf = (id) => projects.find((p) => String(p.id) === String(id));
+
+  const done = (msg) => { setNotice(msg); load(); };
+  const doCancel = async (reason) => { await api.cancelExpense(confirm.row.documentId, reason); setConfirm(null); done("Dépense annulée."); };
+  const doDelete = async () => { await api.deleteExpense(confirm.row.documentId); setConfirm(null); done("Dépense supprimée."); };
+  const doPay = async (amount, fxRate) => { await api.recordPayment(payRow.documentId, amount, fxRate); setPayRow(null); done("Règlement enregistré."); };
+  const onFile = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    const id = uploadFor.current; uploadFor.current = null;
+    if (!f || !id) return;
+    setError("");
+    try { await api.uploadDocumentAttachment(id, f); done("Pièce jointe enregistrée."); }
+    catch (err) { setError(err.message || String(err)); }
+  };
 
   return (
     <>
-      <div className="g3 kpis" style={{ marginBottom: 16 }}>
+      <div className="g3 kpis exp-kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Lignes de dépense</div><div className="font-display kpi-value">{rows.length}</div></div>
         <div className="card pad"><div className="kpi-label">Catégories</div><div className="font-display kpi-value">{groups.size}</div></div>
-        <div className="card pad"><div className="kpi-label">Total TTC (par devise)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
+        <div className="card pad exp-kpi-total"><div className="kpi-label">Total TTC (par devise, hors annulées)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
       </div>
-      <div className="page-toolbar" style={{ flexWrap: "wrap" }}>
-        <input className="input" style={{ flex: "1 1 180px", minWidth: 0 }} type="search" placeholder="Rechercher (libellé, chantier, n° BC, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <select className="select" style={{ flex: "0 1 200px", minWidth: 0 }} value={cat} onChange={(e) => setCat(e.target.value)}>
+      <div className="page-toolbar exp-toolbar">
+        <input className="input exp-search" type="search" aria-label="Rechercher une dépense" placeholder="Rechercher (libellé, chantier, n°, bénéficiaire, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="button" className="btn btn-ghost btn-touch exp-filter-toggle" aria-expanded={filtersOpen} aria-controls="exp-filters" onClick={() => setFiltersOpen((v) => !v)}>Filtres{activeFilters ? ` (${activeFilters})` : ""}</button>
+        {can("create-batipro") && (
+          <button type="button" className="btn btn-amber grad-amber exp-new-mobile" disabled={!canCreate} onClick={() => setEditor({ id: null })}><Icon name="plus" /> Nouvelle dépense</button>
+        )}
+        <div id="exp-filters" className={`exp-filters${filtersOpen ? " open" : ""}`}>
+        <select className="select" aria-label="Catégorie" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">Toutes les catégories</option>
           {PO_SERVICE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <select className="select" aria-label="Chantier" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          <option value="">Tous les chantiers</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select className="select" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Toutes les sources</option>
+          <option value="bc">Bons de commande</option>
+          <option value="expense">Dépenses chantier</option>
+        </select>
+        <select className="select" aria-label="Statut" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Tous les statuts</option>
+          {EXPENSE_STATUS_FILTER.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        </div>
+        {can("create-batipro") && (
+          <button type="button" className="btn btn-amber grad-amber exp-new-desktop" disabled={!canCreate} onClick={() => setEditor({ id: null })}><Icon name="plus" /> Nouvelle dépense</button>
+        )}
       </div>
+      {notice && <div className="card pad" role="status" style={{ marginBottom: 12, color: "var(--emerald-700)" }}>{notice} <button type="button" className="link" onClick={() => setNotice("")}>OK</button></div>}
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={onFile} />
       {error ? (
-        <div className="card pad" style={{ color: "var(--rose-600, #b91c1c)" }}>
-          {error} <button type="button" className="btn btn-ghost" onClick={load}>Réessayer</button>
+        <div className="card pad" role="alert" style={{ color: "var(--rose-600, #b91c1c)" }}>
+          {error} <button type="button" className="btn btn-ghost btn-touch" onClick={load}>Réessayer</button>
         </div>
       ) : loading ? <p className="muted">Chargement…</p> : !groups.size ? (
-        <p className="muted">Aucune dépense ou service enregistré. Ils apparaissent ici quand une ligne de bon de commande est de type « Service / dépense ».</p>
+        <p className="muted">Aucune dépense… Créez-en une avec « + Nouvelle dépense » (ou ajoutez une ligne « Service / dépense » dans un bon de commande).</p>
       ) : [...groups.entries()].map(([c, list]) => (
         <div key={c} style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
             <h3 className="font-display" style={{ margin: 0 }}>{label(c)} <span className="muted" style={{ fontSize: 12 }}>({list.length})</span></h3>
             <strong>{totalsText(list)}</strong>
           </div>
-          <div className="card table-card" style={{ overflowX: "auto" }}>
-            <table className="bp" style={{ minWidth: 640 }}>
-              <thead><tr><th>Date</th><th>Libellé</th><th>Chantier</th><th>N° BC</th><th>Qté</th><th>Montant TTC</th><th>Note</th></tr></thead>
+          <div className="exp-cards">
+            {list.map((r) => {
+              const isExp = isExpenseRow(r);
+              const st = expenseRowStatus(r);
+              const cancelled = r.documentStatus === "cancelled";
+              const paid = decToBig(r.docPaidAmount);
+              const balance = decToBig(r.docTotalTtc) - paid;
+              const key = `${r.documentId}-${r.id}`;
+              const canPay = isExp && canUpdate && !cancelled && balance > 0n;
+              const secondary = isExp ? [
+                canUpdate && !cancelled && { k: "edit", label: "Modifier", fn: () => setEditor({ id: r.documentId }) },
+                r.hasAttachment && { k: "att", label: "Pièce jointe", fn: () => setAttachRow(r) },
+                canUpdate && !cancelled && { k: "up", label: r.hasAttachment ? "Remplacer la pièce" : "Joindre une pièce", fn: () => { uploadFor.current = r.documentId; fileRef.current?.click(); } },
+                canUpdate && !cancelled && { k: "cancel", label: "Annuler", danger: true, fn: () => setConfirm({ kind: "cancel", row: r }) },
+                canDelete && paid === 0n && { k: "del", label: "Supprimer", danger: true, fn: () => setConfirm({ kind: "delete", row: r }) },
+              ].filter(Boolean) : [];
+              return (
+                <article key={key} className="card exp-card">
+                  <div className="exp-card-head">
+                    <div className="exp-card-title">{r.designation}{r.lineNote ? <div className="muted exp-card-note">{r.lineNote}</div> : null}</div>
+                    <div className="exp-card-amount">{money(r.lineTtc, r.currencyCode || undefined)}</div>
+                  </div>
+                  <div className="exp-card-meta">
+                    {isExp ? <strong>{r.documentNumber}</strong> : (
+                      onOpenProject && r.projectId != null
+                        ? <button type="button" className="link" onClick={() => onOpenProject(r.projectId)}>BC {r.documentNumber}</button>
+                        : <span>BC {r.documentNumber}</span>
+                    )}
+                    <span>{r.projectName || "—"}</span>
+                    <span>{beneficiaryName(r) || "—"}</span>
+                    <span>{r.date ? String(r.date).slice(0, 10) : "—"}</span>
+                  </div>
+                  <div className="exp-card-foot">
+                    <span className={`chip ${st.tone}`}>{st.label}</span>
+                    {!isExp && <span className="muted" style={{ fontSize: 11 }}>Lecture seule</span>}
+                    <span className="exp-card-btns">
+                      {canPay && <button type="button" className="btn btn-touch link-success exp-pay" onClick={() => setPayRow(r)}>Régler</button>}
+                      {secondary.length > 0 && <button type="button" className="btn btn-ghost btn-touch exp-more" aria-label={`Autres actions pour ${r.documentNumber}`} aria-expanded={menuKey === key} onClick={() => setMenuKey(menuKey === key ? null : key)}>…</button>}
+                    </span>
+                  </div>
+                  {menuKey === key && secondary.length > 0 && (
+                    <div className="exp-card-menu">
+                      {secondary.map((a) => <button key={a.k} type="button" className={`link${a.danger ? " link-danger" : ""}`} onClick={() => { setMenuKey(null); a.fn(); }}>{a.label}</button>)}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          <div className="card table-card exp-scroll exp-table-wrap">
+            <table className="bp exp-table" style={{ minWidth: 860 }}>
+              <thead><tr><th>Source</th><th>Chantier</th><th>Désignation</th><th>Bénéficiaire</th><th>Date</th><th>Montant TTC</th><th>Statut</th><th>Actions</th></tr></thead>
               <tbody>
-                {list.map((r) => (
-                  <tr key={r.id}>
-                    <td style={{ color: "var(--ink-500)" }}>{r.date ? String(r.date).slice(0, 10) : "—"}</td>
-                    <td style={{ fontWeight: 500 }}>{r.designation}</td>
-                    <td>{r.projectName || "—"}</td>
-                    <td>{r.documentNumber}</td>
-                    <td>{n(r.quantity)}</td>
-                    <td>{money(r.lineTtc, r.currencyCode || undefined)}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{r.lineNote || "—"}</td>
-                  </tr>
-                ))}
+                {list.map((r) => {
+                  const isExp = isExpenseRow(r);
+                  const st = expenseRowStatus(r);
+                  const cancelled = r.documentStatus === "cancelled";
+                  const paid = decToBig(r.docPaidAmount);
+                  const balance = decToBig(r.docTotalTtc) - paid;
+                  return (
+                    <tr key={`${r.documentId}-${r.id}`}>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {isExp ? <strong>{r.documentNumber}</strong> : (
+                          onOpenProject && r.projectId != null
+                            ? <button type="button" className="link" title="Ouvrir le chantier (bon de commande)" onClick={() => onOpenProject(r.projectId)}>BC {r.documentNumber}</button>
+                            : <span>BC {r.documentNumber}</span>
+                        )}
+                      </td>
+                      <td>{r.projectName || "—"}</td>
+                      <td style={{ fontWeight: 500 }}>{r.designation}{r.lineNote ? <div className="muted" style={{ fontSize: 11, fontWeight: 400 }}>{r.lineNote}</div> : null}</td>
+                      <td>{beneficiaryName(r) || "—"}</td>
+                      <td style={{ color: "var(--ink-500)", whiteSpace: "nowrap" }}>{r.date ? String(r.date).slice(0, 10) : "—"}</td>
+                      <td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{money(r.lineTtc, r.currencyCode || undefined)}</td>
+                      <td><span className={`chip ${st.tone}`}>{st.label}</span></td>
+                      <td>
+                        {isExp ? (
+                          <div className="exp-actions">
+                            {canUpdate && !cancelled && <button type="button" className="link" onClick={() => setEditor({ id: r.documentId })}>Modifier</button>}
+                            {r.hasAttachment && <button type="button" className="link" onClick={() => setAttachRow(r)}><Icon name="eye" /> Pièce jointe</button>}
+                            {canUpdate && !cancelled && <button type="button" className="link" onClick={() => { uploadFor.current = r.documentId; fileRef.current?.click(); }}><Icon name="camera" /> {r.hasAttachment ? "Remplacer" : "Joindre"}</button>}
+                            {canUpdate && !cancelled && balance > 0n && <button type="button" className="link link-success" onClick={() => setPayRow(r)}>Régler</button>}
+                            {canUpdate && !cancelled && <button type="button" className="link link-danger" onClick={() => setConfirm({ kind: "cancel", row: r })}>Annuler</button>}
+                            {canDelete && paid === 0n && <button type="button" className="link link-danger" onClick={() => setConfirm({ kind: "delete", row: r })}>Supprimer</button>}
+                          </div>
+                        ) : <span className="muted" style={{ fontSize: 11 }}>Lecture seule</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       ))}
+      {editor && (
+        <ExpenseEditorModal
+          expenseId={editor.id}
+          projects={projects}
+          defaultProjectId={projectId}
+          onClose={() => setEditor(null)}
+          onSaved={(r) => { setEditor(null); done(`Dépense ${r?.number || ""} enregistrée.`.replace("  ", " ")); }}
+        />
+      )}
+      {confirm?.kind === "cancel" && (
+        <ExpenseConfirmModal
+          title={`Annuler ${confirm.row.documentNumber}`}
+          message="La dépense sera annulée et n'entrera plus dans les totaux. Indiquez le motif."
+          confirmLabel="Annuler la dépense" danger reasonRequired
+          onClose={() => setConfirm(null)} onConfirm={doCancel}
+        />
+      )}
+      {confirm?.kind === "delete" && (
+        <ExpenseConfirmModal
+          title={`Supprimer ${confirm.row.documentNumber}`}
+          message="Supprimer cette dépense ? Elle disparaîtra de la liste."
+          confirmLabel="Supprimer" danger
+          onClose={() => setConfirm(null)} onConfirm={doDelete}
+        />
+      )}
+      {payRow && (
+        <PaymentModal
+          balance={Number(bigToDec(decToBig(payRow.docTotalTtc) - decToBig(payRow.docPaidAmount)))}
+          currencyCode={payRow.currencyCode}
+          currencyId={payRow.currencyId}
+          projectCurrencyId={projectOf(payRow.projectId)?.currencyId}
+          projectCurrencyCode={projectOf(payRow.projectId)?.currencyCode}
+          onClose={() => setPayRow(null)}
+          onConfirm={doPay}
+        />
+      )}
+      {attachRow && <DocumentAttachmentModal id={attachRow.documentId} title={`Pièce jointe — ${attachRow.documentNumber}`} onClose={() => setAttachRow(null)} />}
     </>
   );
 }
