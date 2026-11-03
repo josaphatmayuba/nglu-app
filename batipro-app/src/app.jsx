@@ -4911,6 +4911,9 @@ function ServiceExpensesTab({ projects = [], canMutate = true, onOpenProject }) 
   const [confirm, setConfirm] = React.useState(null); // { kind: "cancel"|"delete", row }
   const [payRow, setPayRow] = React.useState(null);
   const [attachRow, setAttachRow] = React.useState(null);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [menuKey, setMenuKey] = React.useState(null);
+  const activeFilters = [cat, projectId, source, status].filter(Boolean).length;
   const fileRef = React.useRef(null);
   const uploadFor = React.useRef(null);
   const load = React.useCallback(() => {
@@ -4959,13 +4962,18 @@ function ServiceExpensesTab({ projects = [], canMutate = true, onOpenProject }) 
 
   return (
     <>
-      <div className="g3 kpis" style={{ marginBottom: 16 }}>
+      <div className="g3 kpis exp-kpis" style={{ marginBottom: 16 }}>
         <div className="card pad"><div className="kpi-label">Lignes de dépense</div><div className="font-display kpi-value">{rows.length}</div></div>
         <div className="card pad"><div className="kpi-label">Catégories</div><div className="font-display kpi-value">{groups.size}</div></div>
-        <div className="card pad"><div className="kpi-label">Total TTC (par devise, hors annulées)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
+        <div className="card pad exp-kpi-total"><div className="kpi-label">Total TTC (par devise, hors annulées)</div><div className="font-display kpi-value" style={{ fontSize: 16 }}>{all.length ? all.map((t) => money(t.ttc, t.code || undefined)).join(" + ") : "—"}</div></div>
       </div>
       <div className="page-toolbar exp-toolbar">
-        <input className="input" type="search" placeholder="Rechercher (libellé, chantier, n°, bénéficiaire, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="input exp-search" type="search" aria-label="Rechercher une dépense" placeholder="Rechercher (libellé, chantier, n°, bénéficiaire, note)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="button" className="btn btn-ghost btn-touch exp-filter-toggle" aria-expanded={filtersOpen} aria-controls="exp-filters" onClick={() => setFiltersOpen((v) => !v)}>Filtres{activeFilters ? ` (${activeFilters})` : ""}</button>
+        {can("create-batipro") && (
+          <button type="button" className="btn btn-amber grad-amber exp-new-mobile" disabled={!canCreate} onClick={() => setEditor({ id: null })}><Icon name="plus" /> Nouvelle dépense</button>
+        )}
+        <div id="exp-filters" className={`exp-filters${filtersOpen ? " open" : ""}`}>
         <select className="select" aria-label="Catégorie" value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">Toutes les catégories</option>
           {PO_SERVICE_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -4983,8 +4991,9 @@ function ServiceExpensesTab({ projects = [], canMutate = true, onOpenProject }) 
           <option value="">Tous les statuts</option>
           {EXPENSE_STATUS_FILTER.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        </div>
         {can("create-batipro") && (
-          <button type="button" className="btn btn-amber grad-amber" disabled={!canCreate} onClick={() => setEditor({ id: null })}><Icon name="plus" /> Nouvelle dépense</button>
+          <button type="button" className="btn btn-amber grad-amber exp-new-desktop" disabled={!canCreate} onClick={() => setEditor({ id: null })}><Icon name="plus" /> Nouvelle dépense</button>
         )}
       </div>
       {notice && <div className="card pad" role="status" style={{ marginBottom: 12, color: "var(--emerald-700)" }}>{notice} <button type="button" className="link" onClick={() => setNotice("")}>OK</button></div>}
@@ -5001,7 +5010,56 @@ function ServiceExpensesTab({ projects = [], canMutate = true, onOpenProject }) 
             <h3 className="font-display" style={{ margin: 0 }}>{label(c)} <span className="muted" style={{ fontSize: 12 }}>({list.length})</span></h3>
             <strong>{totalsText(list)}</strong>
           </div>
-          <div className="card table-card exp-scroll">
+          <div className="exp-cards">
+            {list.map((r) => {
+              const isExp = isExpenseRow(r);
+              const st = expenseRowStatus(r);
+              const cancelled = r.documentStatus === "cancelled";
+              const paid = decToBig(r.docPaidAmount);
+              const balance = decToBig(r.docTotalTtc) - paid;
+              const key = `${r.documentId}-${r.id}`;
+              const canPay = isExp && canUpdate && !cancelled && balance > 0n;
+              const secondary = isExp ? [
+                canUpdate && !cancelled && { k: "edit", label: "Modifier", fn: () => setEditor({ id: r.documentId }) },
+                r.hasAttachment && { k: "att", label: "Pièce jointe", fn: () => setAttachRow(r) },
+                canUpdate && !cancelled && { k: "up", label: r.hasAttachment ? "Remplacer la pièce" : "Joindre une pièce", fn: () => { uploadFor.current = r.documentId; fileRef.current?.click(); } },
+                canUpdate && !cancelled && { k: "cancel", label: "Annuler", danger: true, fn: () => setConfirm({ kind: "cancel", row: r }) },
+                canDelete && paid === 0n && { k: "del", label: "Supprimer", danger: true, fn: () => setConfirm({ kind: "delete", row: r }) },
+              ].filter(Boolean) : [];
+              return (
+                <article key={key} className="card exp-card">
+                  <div className="exp-card-head">
+                    <div className="exp-card-title">{r.designation}{r.lineNote ? <div className="muted exp-card-note">{r.lineNote}</div> : null}</div>
+                    <div className="exp-card-amount">{money(r.lineTtc, r.currencyCode || undefined)}</div>
+                  </div>
+                  <div className="exp-card-meta">
+                    {isExp ? <strong>{r.documentNumber}</strong> : (
+                      onOpenProject && r.projectId != null
+                        ? <button type="button" className="link" onClick={() => onOpenProject(r.projectId)}>BC {r.documentNumber}</button>
+                        : <span>BC {r.documentNumber}</span>
+                    )}
+                    <span>{r.projectName || "—"}</span>
+                    <span>{beneficiaryName(r) || "—"}</span>
+                    <span>{r.date ? String(r.date).slice(0, 10) : "—"}</span>
+                  </div>
+                  <div className="exp-card-foot">
+                    <span className={`chip ${st.tone}`}>{st.label}</span>
+                    {!isExp && <span className="muted" style={{ fontSize: 11 }}>Lecture seule</span>}
+                    <span className="exp-card-btns">
+                      {canPay && <button type="button" className="btn btn-touch link-success exp-pay" onClick={() => setPayRow(r)}>Régler</button>}
+                      {secondary.length > 0 && <button type="button" className="btn btn-ghost btn-touch exp-more" aria-label={`Autres actions pour ${r.documentNumber}`} aria-expanded={menuKey === key} onClick={() => setMenuKey(menuKey === key ? null : key)}>…</button>}
+                    </span>
+                  </div>
+                  {menuKey === key && secondary.length > 0 && (
+                    <div className="exp-card-menu">
+                      {secondary.map((a) => <button key={a.k} type="button" className={`link${a.danger ? " link-danger" : ""}`} onClick={() => { setMenuKey(null); a.fn(); }}>{a.label}</button>)}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          <div className="card table-card exp-scroll exp-table-wrap">
             <table className="bp exp-table" style={{ minWidth: 860 }}>
               <thead><tr><th>Source</th><th>Chantier</th><th>Désignation</th><th>Bénéficiaire</th><th>Date</th><th>Montant TTC</th><th>Statut</th><th>Actions</th></tr></thead>
               <tbody>

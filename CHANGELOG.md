@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro Dépenses et services : version mobile en cartes (v3.277.1).** Sous 640 px le tableau devient une liste de cartes (désignation, montant avec devise, statut, Régler et menu d'actions de 44 px), KPI compacts et filtres repliables ; le tableau reste sur grand écran.
 - **BâtiPro Dépense chantier (v3.277.0).** Vraie dépense de chantier sans stock ni réception (main-d'oeuvre, manutention, honoraires et avances, transport, quincaillerie) créée depuis « Dépenses et services » : `POST/PUT/DELETE /batipro/expenses`, règlement et comptabilisation (jamais comme avance fournisseur), annulation avec contre-passation, comptée dans budget, fonds et suivi propriétaire. Migration 0335 (colonnes bénéficiaire, auteur, annulation).
 - **Domus : bail pas encore commencé = aucun mois « courant » (v3.276.6).** Frise des loyers : un mois postérieur au mois civil en cours reste « à venir », y compris le 1er mois d'un bail futur.
 - **Domus : statut « En attente » = échéance passée dans la grâce, rien en retard (v3.276.5).** Avant l'échéance du mois en cours, le bail est « En règle » (le bouton « Payer le loyer » reste disponible) ; le statut ne compare plus une fraction de mois mais les montants payés.
