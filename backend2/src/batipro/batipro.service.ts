@@ -49,6 +49,7 @@ import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { OcrService } from "./ocr.service";
 import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
 import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, summarizeFx, toCents, type SpendDoc } from "./funds.util";
+import { bucketPhaseSpend } from "./phase-spend.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -1171,6 +1172,9 @@ export class BatiproService {
         lineHt: batiproDocumentLines.lineHt,
         lineCurrencyId: batiproDocumentLines.currencyId,
         phaseCurrencyId: batiproPhases.currencyId,
+        documentId: batiproDocuments.id,
+        docCurrencyId: batiproDocuments.currencyId,
+        docFxRate: batiproDocuments.fxRate,
       })
       .from(batiproDocumentLines)
       .innerJoin(batiproDocuments, eq(batiproDocuments.id, batiproDocumentLines.documentId))
@@ -1184,17 +1188,12 @@ export class BatiproService {
         eq(batiproDocuments.isActive, 1),
         eq(batiproDocumentLines.isActive, 1),
       ));
-    const byPhase = new Map<number, Map<number, number>>();
     let withPhase = 0;
-    for (const r of rows) {
-      if (r.phaseId != null) withPhase += 1;
-      if (r.phaseId == null) continue;
-      // Meme regle de fallback que phaseAmountInCurrency (ligne -> phase, jamais document).
-      const currencyId = r.lineCurrencyId ?? r.phaseCurrencyId ?? 0;
-      const byCurrency = byPhase.get(r.phaseId) ?? new Map<number, number>();
-      byCurrency.set(currencyId, (byCurrency.get(currencyId) ?? 0) + Number(r.lineHt ?? 0));
-      byPhase.set(r.phaseId, byCurrency);
-    }
+    for (const r of rows) if (r.phaseId != null) withPhase += 1;
+    // Lignes en autre devise : converties avec le taux fige du document (sans taux :
+    // exclues, signalees par po_without_fx_rate_count).
+    const project = await this.getProject(projectId, orgId);
+    const { byPhase } = bucketPhaseSpend(rows, project.currencyId ?? null);
     const coveragePct = rows.length > 0 ? Math.round((withPhase / rows.length) * 10000) / 100 : 100;
     return { byPhase, coveragePct };
   }

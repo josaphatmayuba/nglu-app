@@ -2712,7 +2712,8 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
         subcontractor_id: subcontractorId ? Number(subcontractorId) : undefined,
         due_date: dueDate || undefined,
         notes: notes.trim() || undefined,
-        ...(docId ? { status } : { sourcePhotoId: scanPhotoId || undefined }),
+        // Statut derive (confirmed/received...) : non modifiable ici, donc non envoye.
+        ...(docId ? (PO_STATUS_MANUAL_LABEL[status] ? { status } : {}) : { sourcePhotoId: scanPhotoId || undefined }),
         ...(poForeign && n(fxRate) > 0 ? { fx_rate: n(fxRate), fx_rate_source: fxSource } : {}),
         lines: clean.map((l) => ({
           designation: l.designation.trim(),
@@ -2883,7 +2884,13 @@ function BonCommandeEditorModal({ docId, projectId, currencyId, currencyCode, ma
             )}
 
             <label className="field"><span>Échéance / livraison prévue</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
-            {docId && (
+            {docId && !PO_STATUS_MANUAL_LABEL[status] && (
+              <label className="field">
+                <span>Statut</span>
+                <input value={PO_STATUS_LABEL[status] || status} readOnly disabled />
+              </label>
+            )}
+            {docId && PO_STATUS_MANUAL_LABEL[status] && (
               <label className="field">
                 <span>Statut</span>
                 <select value={status} onChange={(e) => setStatus(e.target.value)}>
