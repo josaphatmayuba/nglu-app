@@ -570,3 +570,8 @@ export class UpdateBatiproExpenseDto {
 export class CancelExpenseDto {
   @IsString() @MinLength(3) @MaxLength(500) reason!: string;
 }
+
+// Annulation du dernier reglement d'un BC / facture fournisseur (motif obligatoire).
+export class CancelDocumentPaymentDto {
+  @IsString() @MinLength(3) @MaxLength(500) reason!: string;
+}

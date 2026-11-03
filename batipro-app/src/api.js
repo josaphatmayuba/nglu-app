@@ -269,6 +269,7 @@ export const api = {
   createInvoiceFromSituation: (situationId) => jsonFetch(`/documents/situations/${situationId}/invoice`, { method: "POST", body: "{}" }),
   issueInvoice: (id) => jsonFetch(`/documents/${id}/issue`, { method: "POST", body: "{}" }),
   // fxRate (1 devise chantier = fxRate devise document) : obligatoire si le document est dans une autre devise que le chantier.
+  cancelDocumentPayment: (id, reason) => jsonFetch(`/documents/${id}/payment/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
   recordPayment: (id, amount, fxRate) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount, ...(fxRate != null ? { fx_rate: fxRate } : {}) }) }),
   // Taux fige par document (multi-devise) : fixe/corrige le taux ; paid_fx_rate = reprise d'un BC deja regle.
   setDocumentFxRate: (id, b) => jsonFetch(`/documents/${id}/fx-rate`, { method: "PATCH", body: JSON.stringify(b || {}) }),

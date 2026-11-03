@@ -22,6 +22,7 @@ import {
   CreateBatiproExpenseDto,
   UpdateBatiproExpenseDto,
   CancelExpenseDto,
+  CancelDocumentPaymentDto,
   CreateBatiproMaterialDto,
   MaterialsCleanupExecuteDto,
   CreateBatiproPhaseDto,
@@ -886,6 +887,19 @@ export class BatiproController {
   @Post("documents/:id/payment")
   recordPayment(@Param("id", ParseIntPipe) id: number, @Body() body: RecordPaymentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.batipro.recordPayment(id, body.amount, orgId, userId || undefined, body.fx_rate);
+  }
+
+  @ApiOperation({ summary: "Annule le dernier reglement d'un BC / facture fournisseur et contre-passe l'ecriture (motif obligatoire)" })
+  @Permissions("update-batipro")
+  @Post("documents/:id/payment/cancel")
+  cancelDocumentPayment(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CancelDocumentPaymentDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.batipro.cancelDocumentPayment(id, body.reason, orgId, userId || undefined, scope);
   }
 
   // ── Multi-devise : taux fige par document (migration 0329) ──

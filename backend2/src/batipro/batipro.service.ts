@@ -4652,6 +4652,152 @@ export class BatiproService {
     };
   }
 
+  // ── Annulation du DERNIER reglement d un BC / facture fournisseur ─────────
+  // Le modele ne garde que payment_ledger_entry_id (= dernier reglement) : le
+  // montant a defaire est lu sur cette ecriture (total_debit, devise du document)
+  // ou sur la ligne d attente. Contre-passe l ecriture (ou annule la ligne
+  // d attente), remet paid_amount / paid_amount_project_ccy / statut.
+  private async loadPaymentEntry(entryId: number, orgId: number) {
+    const [row] = await this.db
+      .select({
+        id: journalEntries.id, status: journalEntries.status, reversedById: journalEntries.reversedById,
+        totalDebit: journalEntries.totalDebit, exchangeRate: journalEntries.exchangeRate, idempotencyKey: journalEntries.idempotencyKey,
+      })
+      .from(journalEntries)
+      .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private async paymentPendingRows(docId: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: ledgerPendingEntries.id, payload: ledgerPendingEntries.payload })
+      .from(ledgerPendingEntries)
+      .where(and(
+        eq(ledgerPendingEntries.organizationId, orgId),
+        eq(ledgerPendingEntries.sourceModule, "batipro"),
+        eq(ledgerPendingEntries.relatedId, String(docId)),
+        eq(ledgerPendingEntries.status, "pending"),
+      ));
+    return rows.filter((r) => /^batipro_supplier_(advance|payment)$/.test(String((r.payload as any)?.type ?? "")));
+  }
+
+  async cancelDocumentPayment(documentId: number, reason: string, orgId: number, userId: number | undefined, scope: BatiproProjectScope = "all") {
+    const doc = await this.getDocument(documentId, orgId);
+    this.assertNotExpense(doc, "annuler le reglement de");
+    await this.assertProjectInScope(doc.projectId, orgId, scope);
+    const isPurchaseOrder = doc.type === "purchase_order";
+    const isSupplierInvoice = doc.type === "invoice" && doc.direction === "inbound";
+    if (!isPurchaseOrder && !isSupplierInvoice) {
+      throw new BadRequestException("Seul un bon de commande ou une facture fournisseur permet d'annuler un reglement.");
+    }
+    const why = (reason ?? "").trim();
+    if (why.length < 3) throw new BadRequestException("Motif d'annulation du reglement obligatoire (3 caracteres minimum).");
+    const oldPaidC = toCents(doc.paidAmount);
+    if (oldPaidC <= 0) throw new BadRequestException("Aucun reglement a annuler : ce document n'est pas paye.");
+
+    const entryId = doc.paymentLedgerEntryId != null ? Number(doc.paymentLedgerEntryId) : null;
+    const label = doc.number ?? `${isPurchaseOrder ? "BC" : "FAC"}-${documentId}`;
+    let amountC: number;
+    let rate: bigint | null = null;
+    let entry: Awaited<ReturnType<BatiproService["loadPaymentEntry"]>> | null = null;
+    let pendingIds: number[] = [];
+    if (entryId != null) {
+      entry = await this.loadPaymentEntry(entryId, orgId);
+      if (!entry) throw new ConflictException("Ecriture du dernier reglement introuvable : annulation impossible.");
+      amountC = toCents(entry.totalDebit);
+      if (entry.exchangeRate != null) rate = parseFxRate(Number(entry.exchangeRate));
+    } else {
+      const pending = await this.paymentPendingRows(documentId, orgId);
+      if (pending.length !== 1) {
+        throw new ConflictException("Dernier reglement non identifiable (aucune ecriture liee) : annulation impossible, contactez la comptabilite.");
+      }
+      const p = pending[0].payload as any;
+      amountC = toCents(Number(p?.amountsByRole?.cash ?? 0));
+      if (p?.exchangeRate != null) rate = parseFxRate(Number(p.exchangeRate));
+      pendingIds = pending.map((r) => Number(r.id));
+    }
+    if (!(amountC > 0) || amountC > oldPaidC) {
+      throw new ConflictException(
+        `Le dernier reglement (${this.centsStr(amountC)}) ne correspond pas au total paye (${this.centsStr(oldPaidC)}) : annulation impossible, plusieurs reglements non identifiables.`,
+      );
+    }
+    const newPaidC = oldPaidC - amountC;
+
+    // Contre-valeur chantier a defaire (devise etrangere uniquement).
+    const project = await this.getProject(doc.projectId, orgId);
+    const foreign = this.isForeignCurrency(doc.currencyId ?? null, project.currencyId ?? null);
+    const oldPaidPccC = toCents(doc.paidAmountProjectCcy);
+    let newPaidPccC = oldPaidPccC;
+    if (foreign) {
+      if (rate == null) throw new ConflictException("Taux du dernier reglement introuvable : annulation impossible.");
+      newPaidPccC = Math.max(0, oldPaidPccC - convertToProjectCents(amountC, rate));
+    }
+    const nextStatus = doc.status === "paid" && !isPurchaseOrder ? "issued" : doc.status;
+
+    // Reserve (compare-and-set) AVANT contre-passation : un 2e appel concurrent
+    // ne retrouve plus ni le paye ni l ecriture et echoue en 409.
+    const idCond = entryId != null ? eq(batiproDocuments.paymentLedgerEntryId, entryId) : isNull(batiproDocuments.paymentLedgerEntryId);
+    const claim = await this.db.update(batiproDocuments)
+      .set({
+        paidAmount: this.centsStr(newPaidC), status: nextStatus, paymentLedgerEntryId: null,
+        ...(foreign ? { paidAmountProjectCcy: this.centsStr(newPaidPccC) } : {}),
+      })
+      .where(and(
+        eq(batiproDocuments.id, documentId), eq(batiproDocuments.organizationId, orgId), eq(batiproDocuments.isActive, 1),
+        sql`${batiproDocuments.paidAmount} = ${this.centsStr(oldPaidC)}`, idCond,
+      ));
+    const claimHeader = (Array.isArray(claim) ? claim[0] : claim) as { affectedRows?: number } | undefined;
+    if (Number(claimHeader?.affectedRows ?? 0) === 0) throw new ConflictException("Document modifie entre-temps (reglement ou annulation) : rechargez puis reessayez.");
+    const restore = () => this.db.update(batiproDocuments)
+      .set({
+        paidAmount: this.centsStr(oldPaidC), status: doc.status, paymentLedgerEntryId: entryId,
+        ...(foreign ? { paidAmountProjectCcy: this.centsStr(oldPaidPccC) } : {}),
+      })
+      .where(and(eq(batiproDocuments.id, documentId), eq(batiproDocuments.organizationId, orgId)));
+
+    try {
+      if (entryId != null && entry) {
+        if (entry.status !== "reversed" && entry.reversedById == null) {
+          try {
+            await this.ledger.reverse(entryId, `Annulation reglement ${label} : ${why}`.slice(0, 200), orgId, userId);
+          } catch (err) {
+            // Seul "deja contre-passee" est tolere (une periode cloturee bloque l annulation).
+            if (!(err instanceof ConflictException && /contre-pass/i.test(err.message))) throw err;
+          }
+        }
+        // Libere la cle d idempotence : un nouveau reglement du meme cumul doit
+        // creer une vraie ecriture, pas retrouver celle annulee.
+        if (entry.idempotencyKey) {
+          await this.db.update(journalEntries)
+            .set({ idempotencyKey: `${entry.idempotencyKey}:rev${entryId}`.slice(0, 128) })
+            .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId)));
+        }
+      } else {
+        for (const pid of pendingIds) {
+          await this.db.update(ledgerPendingEntries)
+            .set({ status: "cancelled" })
+            .where(and(eq(ledgerPendingEntries.id, pid), eq(ledgerPendingEntries.organizationId, orgId), eq(ledgerPendingEntries.status, "pending")));
+        }
+      }
+    } catch (err) {
+      await restore();
+      throw err;
+    }
+
+    await this.recomputeProjectRisk(orgId, doc.projectId);
+    await this.publish("cancelDocumentPayment", ["documents"], "updated", documentId, orgId);
+    return {
+      id: documentId,
+      paid_amount: fromCents(newPaidC),
+      ...(foreign ? { paid_amount_project_ccy: fromCents(newPaidPccC) } : {}),
+      balance: fromCents(toCents(doc.totalTtc) - newPaidC),
+      status: nextStatus,
+      cancelled_payment_entry_id: entryId,
+      cancelled_amount: fromCents(amountC),
+    };
+  }
+
   // ── Reglement d une depense chantier (lot 3) ─────────────────────────────
   // Jamais d avance fournisseur : une depense est une charge constatee.
   //  1. L achat (charge HT + TVA / dette TTC) est comptabilise s il ne l est pas

@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : annuler le dernier règlement d un BC / d'une facture fournisseur.** `POST /batipro/documents/:id/payment/cancel` (motif obligatoire) contre-passe l'écriture du règlement (ou annule l'écriture en attente d'approbation), remet payé/statut (facture payée -> émise) et libère la clé d'idempotence ; bouton « Annuler le règlement » dans Bons de commande et leurs factures.
 - **BâtiPro Dépenses et services : version mobile en cartes (v3.277.1).** Sous 640 px le tableau devient une liste de cartes (désignation, montant avec devise, statut, Régler et menu d'actions de 44 px), KPI compacts et filtres repliables ; le tableau reste sur grand écran.
 - **BâtiPro Dépense chantier (v3.277.0).** Vraie dépense de chantier sans stock ni réception (main-d'oeuvre, manutention, honoraires et avances, transport, quincaillerie) créée depuis « Dépenses et services » : `POST/PUT/DELETE /batipro/expenses`, règlement et comptabilisation (jamais comme avance fournisseur), annulation avec contre-passation, comptée dans budget, fonds et suivi propriétaire. Migration 0335 (colonnes bénéficiaire, auteur, annulation).
 - **Domus : bail pas encore commencé = aucun mois « courant » (v3.276.6).** Frise des loyers : un mois postérieur au mois civil en cours reste « à venir », y compris le 1er mois d'un bail futur.

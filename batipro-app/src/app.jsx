@@ -2036,6 +2036,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   const [poInvoices, setPoInvoices] = React.useState({});
   const [invoiceModal, setInvoiceModal] = React.useState(null); // { po }
   const [invoicePayModal, setInvoicePayModal] = React.useState(null); // { invoice, po }
+  const [cancelPayDoc, setCancelPayDoc] = React.useState(null); // { doc, po } : annulation du dernier règlement
   const [fxModal, setFxModal] = React.useState(null); // BC dont on fixe le taux
 
   const selected = projects.find((p) => p.id === projectId);
@@ -2308,6 +2309,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
                       {canPost && <button className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
                       {canPay && <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
+                      {canMutate && can("update-batipro") && d.status !== "cancelled" && n(d.paidAmount) > 0 && <button className="link link-danger" disabled={busy === d.id} onClick={() => setCancelPayDoc({ doc: d })}>Annuler le règlement</button>}
                       {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
@@ -2350,6 +2352,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                           <button className="link" onClick={() => openPreview(inv.id)}><Icon name="eye" /> Aperçu</button>
                                           {canPayInv && <button className="link link-success" disabled={busy === inv.id} onClick={() => setInvoicePayModal({ invoice: inv, po: d })}>Régler</button>}
+                                          {canMutate && can("update-batipro") && inv.status !== "cancelled" && n(inv.paidAmount) > 0 && <button className="link link-danger" disabled={busy === inv.id} onClick={() => setCancelPayDoc({ doc: inv, po: d })}>Annuler le règlement</button>}
                                           {inv.attachedFileKey && (
                                             <button className="link" onClick={() => setAttachModal({ id: inv.id })}>
                                               <Icon name="eye" /> Voir photo
@@ -2389,6 +2392,22 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           materials={materials}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
+        />
+      )}
+      {cancelPayDoc && (
+        <ExpenseConfirmModal
+          title={`Annuler le règlement ${cancelPayDoc.doc.number || `#${cancelPayDoc.doc.id}`}`}
+          message="Le dernier règlement sera annulé et son écriture comptable contre-passée. Indiquez le motif."
+          confirmLabel="Annuler le règlement" danger reasonRequired
+          onClose={() => setCancelPayDoc(null)}
+          onConfirm={async (reason) => {
+            const r = await api.cancelDocumentPayment(cancelPayDoc.doc.id, reason);
+            const po = cancelPayDoc.po;
+            setCancelPayDoc(null);
+            setNotice(`Règlement annulé. Solde : ${money(r.balance, cancelPayDoc.doc.currencyCode || cur)}.`);
+            if (po) loadPoInvoices(po.id);
+            load();
+          }}
         />
       )}
       {payModal && (
