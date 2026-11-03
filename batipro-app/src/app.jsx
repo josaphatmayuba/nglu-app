@@ -1145,6 +1145,13 @@ const PHASE_ALERT_LABELS = {
   committed_over_planned: "Le montant engagé dépasse le prévu",
   paid_over_planned: "Le montant payé dépasse le prévu",
 };
+// Meme alerte quand rien n'est prevu (aucun devis accepte sur la phase).
+const PHASE_ALERT_NO_PLAN_LABELS = {
+  artisan_over_planned: "Devis de l'artisan",
+  committed_over_planned: "Engagé",
+  paid_over_planned: "Payé",
+};
+const EXPENSE_STATUS_LABEL = { recorded: "Enregistrée", paid: "Payée", cancelled: "Annulée" };
 
 // Détail d'une phase : prévu (devis clients acceptés) vs devis artisan vs dépensé (BC).
 // Lecture seule : visible sans droit de modification ; l'édition passe par PhaseModal.
@@ -1187,7 +1194,9 @@ function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
 
         {data && alerts.map((a, i) => (
           <div key={i} className="chip rose" style={{ display: "flex", margin: "6px 0", borderRadius: 10, padding: "8px 10px", whiteSpace: "normal" }}>
-            {PHASE_ALERT_LABELS[a.code] || a.code} : {money(a.amount, a.currency_code)} pour {money(a.planned, a.currency_code)} prévu
+            {n(a.planned) > 0
+              ? <>{PHASE_ALERT_LABELS[a.code] || a.code} : {money(a.amount, a.currency_code)} pour {money(a.planned, a.currency_code)} prévu</>
+              : <>{PHASE_ALERT_NO_PLAN_LABELS[a.code] || PHASE_ALERT_LABELS[a.code] || a.code} : {money(a.amount, a.currency_code)}, sans devis accepté sur cette phase</>}
           </div>
         ))}
 
@@ -1238,7 +1247,7 @@ function PhaseDetailModal({ phase, canMutate, onClose, onEdit }) {
               <div key={i} style={lineStyle}>
                 <span style={{ flex: "1 1 160px", minWidth: 0 }}>
                   {l.designation}
-                  <br /><small className="muted">{l.document_number || `BC #${l.document_id}`} · {l.date || "date inconnue"} · {String(l.status || "").replace(/_/g, " ")}</small>
+                  <br /><small className="muted">{l.document_number || `BC #${l.document_id}`} · {l.date || "date inconnue"} · {PO_STATUS_LABEL[l.status] || EXPENSE_STATUS_LABEL[l.status] || String(l.status || "").replace(/_/g, " ")}</small>
                 </span>
                 <span style={{ textAlign: "right" }}>
                   <strong>{money(l.total, l.currency_code)}</strong>
@@ -1744,7 +1753,7 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
     if (docId) {
       api.getDocument(docId)
         .then((d) => {
-          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "" })) : [emptyDocLine()]);
+          setLines((d.lines || []).length ? d.lines.map((l) => ({ designation: l.designation, quantity: l.quantity, unit_price: l.unitPrice, is_adjustment: n(l.unitPrice) < 0, vat_rate: l.vatRate, phase_id: l.phaseId || "", currency_id: l.currencyId || "", line_type: l.lineType === "service" ? "service" : "material", service_category: l.serviceCategory || "" })) : [emptyDocLine()]);
           setDueDate(d.dueDate || "");
           setNotes(d.notes || "");
         })
@@ -1827,6 +1836,8 @@ function DevisEditorModal({ docId, projectId, currencyId, currencyCode, onClose,
           vat_rate: n(l.vat_rate),
           phase_id: l.phase_id ? Number(l.phase_id) : undefined,
           currency_id: l.currency_id ? Number(l.currency_id) : undefined,
+          line_type: l.line_type === "service" ? "service" : "material",
+          ...(l.line_type === "service" ? { service_category: l.service_category || "other" } : {}),
         })),
       };
       docId ? await api.updateDocument(docId, payload) : await api.createDocument(payload);

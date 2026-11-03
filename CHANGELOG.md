@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : écrans devis et détail de phase corrigés (v3.278.2).** Le type de ligne d'un devis (matériau / service) est relu et enregistré : il ne revient plus à « Matériau » après modification. Le détail d'une phase affiche les statuts en français (« Reçu partiellement », « Envoyé ») et, sans devis accepté sur la phase, l'alerte dit « Engagé : 100,00 $ US, sans devis accepté sur cette phase » au lieu de « dépasse le prévu … pour 0,00 $ ».
 - **BâtiPro : dépense par phase = documents en autre devise convertis.** Le « dépensé » d'une phase (et le risque EVM) ignorait les lignes d'un BC en autre devise que la phase (ex. BC en CDF sur un chantier USD) ; elles sont converties avec le taux figé du document (devise de la ligne, sinon du document, sinon de la phase). Sans taux figé : exclues et signalées par `po_without_fx_rate_count`.
 - **BâtiPro : éditer un BC réceptionné n'échoue plus.** Dans l'éditeur de BC, un statut dérivé (confirmé/réceptionné) n'est plus renvoyé au PUT et s'affiche en lecture seule (corrige « status must be one of… »).
 - **BâtiPro : annuler le dernier règlement d'un BC / d'une facture fournisseur (v3.278.0).** `POST /batipro/documents/:id/payment/cancel` (motif obligatoire) contre-passe l'écriture du règlement (ou annule l'écriture en attente d'approbation), remet payé/statut (facture payée -> émise) et libère la clé d'idempotence ; bouton « Annuler le règlement » dans Bons de commande et leurs factures.
