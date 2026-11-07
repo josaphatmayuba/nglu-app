@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, sql } from "drizzle-orm";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import { normalizePhoneE164 } from "../common/phone.util";
 import { env } from "../config/env";
@@ -8,6 +8,7 @@ import { DRIZZLE } from "../database/database.constants";
 import {
   batiproDocumentLines,
   batiproDocuments,
+  batiproPhases,
   batiproProjects,
   batiproShareLinks,
   batiproSitePhotos,
@@ -18,7 +19,7 @@ import type { Database } from "../database/types";
 import { ObjectStorageService } from "../property-management/object-storage.service";
 import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { BatiproService } from "./batipro.service";
-import type { CreateBatiproShareLinkDto } from "./dto/batipro.dto";
+import type { CreateBatiproShareLinkDto, EngineerPhaseUpdateDto, ReceiveBatiproDocumentDto } from "./dto/batipro.dto";
 
 const INVALID_LINK = "Ce lien n'est plus valide.";
 const DEFAULT_EXPIRY_DAYS = 90;
@@ -83,30 +84,36 @@ export class BatiproShareService {
     scope: BatiproProjectScope,
   ) {
     const project = await this.assertProject(projectId, orgId, scope);
-    // Defaut 90 j ; "sans expiration" = 365 j maximum.
+    const recipientType = input.recipient_type === "engineer" ? "engineer" : "owner";
+    const isEngineer = recipientType === "engineer";
+    // Proprietaire : defaut 90 j ; "sans expiration" = 365 j maximum.
+    // Ingenieur : actif jusqu'a revocation (expires_at NULL).
     const days = input.expires_in_days ?? DEFAULT_EXPIRY_DAYS;
     const token = randomBytes(16).toString("base64url");
-    const recipientName = (input.recipient_name ?? project.ownerName ?? "").trim() || null;
-    const rawPhone = (input.recipient_phone ?? project.ownerPhone ?? "").trim();
+    // Ingenieur : jamais de repli sur le nom/telephone du proprietaire.
+    const recipientName = (isEngineer ? input.recipient_name ?? "" : input.recipient_name ?? project.ownerName ?? "").trim() || null;
+    if (isEngineer && !recipientName) throw new BadRequestException("Nom de l'ingenieur / responsable obligatoire.");
+    const rawPhone = (isEngineer ? input.recipient_phone ?? "" : input.recipient_phone ?? project.ownerPhone ?? "").trim();
     const phone = rawPhone ? normalizePhoneE164(rawPhone, { defaultCountry: "CD" }) : null;
+    if (rawPhone && isEngineer && !phone) throw new BadRequestException("Numero de telephone invalide.");
     if (input.send_sms && !phone) {
       throw new BadRequestException("Aucun numero de telephone valide pour l'envoi du SMS.");
     }
-    const expiresAt = new Date(Date.now() + days * 86_400_000);
+    const expiresAt = isEngineer ? null : new Date(Date.now() + days * 86_400_000);
     const [result] = await this.db.insert(batiproShareLinks).values({
       organizationId: orgId,
       projectId,
-      recipientType: "owner",
+      recipientType,
       recipientName,
       recipientPhone: phone,
       tokenHash: hashShareToken(token),
       expiresAt,
       createdBy: userId ?? null,
     }).$returningId();
-    const url = `${env.appUrl.replace(/\/$/, "")}/batipro/suivi/${token}`;
+    const url = `${env.appUrl.replace(/\/$/, "")}/batipro/${isEngineer ? "chantier" : "suivi"}/${token}`;
     let smsSent: boolean | null = null;
     if (input.send_sms && phone) {
-      smsSent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url);
+      smsSent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, recipientType);
     }
     // Le jeton en clair n'est renvoye QU'ici (impossible a retrouver ensuite).
     return { id: Number(result.id), token, url, expires_at: expiresAt, sms_sent: smsSent };
@@ -132,7 +139,7 @@ export class BatiproShareService {
   // ── Cote public (jeton opaque, lecture seule) ───────────────────────────
 
   // Meme message pour jeton inconnu / revoque / expire (anti-enumeration).
-  private async resolve(token: string) {
+  private async resolve(token: string, recipientType: "owner" | "engineer" = "owner") {
     if (!token?.trim()) throw new NotFoundException(INVALID_LINK);
     const [link] = await this.db
       .select({
@@ -140,14 +147,15 @@ export class BatiproShareService {
         organizationId: batiproShareLinks.organizationId,
         projectId: batiproShareLinks.projectId,
         recipientType: batiproShareLinks.recipientType,
+        recipientName: batiproShareLinks.recipientName,
         expiresAt: batiproShareLinks.expiresAt,
         revokedAt: batiproShareLinks.revokedAt,
       })
       .from(batiproShareLinks)
       .where(eq(batiproShareLinks.tokenHash, hashShareToken(token.trim())))
       .limit(1);
-    // Lot 1 : seul le destinataire proprietaire est servi.
-    if (!link || link.recipientType !== "owner" || this.statusOf(link) !== "active") {
+    // Un jeton ne sert que les routes de SON type (proprietaire != ingenieur).
+    if (!link || link.recipientType !== recipientType || this.statusOf(link) !== "active") {
       throw new NotFoundException(INVALID_LINK);
     }
     // Chantier desactive/supprime : le lien ne sert plus rien (suivi, photos, pieces jointes).
@@ -161,7 +169,10 @@ export class BatiproShareService {
   }
 
   async getPublicTracking(token: string) {
-    const link = await this.resolve(token);
+    return this.buildTracking(await this.resolve(token));
+  }
+
+  private async buildTracking(link: { id: number; organizationId: number; projectId: number }) {
     const orgId = link.organizationId;
     const projectId = link.projectId;
 
@@ -374,6 +385,200 @@ export class BatiproShareService {
     };
   }
 
+  // ── Lien ingenieur / responsable de chantier (jeton opaque, ecritures limitees) ──
+  // Voit tout le suivi (montants compris) + phases + BC a receptionner. Ecritures
+  // autorisees UNIQUEMENT : avancement/statut de phase, photo de chantier,
+  // reception de BC. Chaque objet est reverifie comme appartenant au chantier du lien.
+
+  async getEngineerSite(token: string) {
+    const link = await this.resolve(token, "engineer");
+    const { projectId, organizationId: orgId } = link;
+    const tracking = await this.buildTracking(link);
+    const phases = await this.db
+      .select({
+        id: batiproPhases.id,
+        label: batiproPhases.label,
+        status: batiproPhases.status,
+        progress: batiproPhases.progress,
+        startDate: batiproPhases.startDate,
+        endDate: batiproPhases.endDate,
+      })
+      .from(batiproPhases)
+      .where(and(eq(batiproPhases.projectId, projectId), eq(batiproPhases.organizationId, orgId), eq(batiproPhases.isActive, 1)))
+      .orderBy(asc(batiproPhases.position), asc(batiproPhases.id));
+
+    // BC emis, pas encore entierement recus : lignes Materiau seulement.
+    const orders = await this.db
+      .select({ id: batiproDocuments.id, number: batiproDocuments.number, status: batiproDocuments.status, issueDate: batiproDocuments.issueDate })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.type, "purchase_order"),
+        notInArray(batiproDocuments.status, ["draft", "cancelled", "received"]),
+      ))
+      .orderBy(desc(batiproDocuments.id));
+    const lines = orders.length
+      ? await this.db
+        .select({
+          id: batiproDocumentLines.id,
+          documentId: batiproDocumentLines.documentId,
+          designation: batiproDocumentLines.designation,
+          quantity: batiproDocumentLines.quantity,
+          receivedQuantity: batiproDocumentLines.receivedQuantity,
+        })
+        .from(batiproDocumentLines)
+        .where(and(
+          inArray(batiproDocumentLines.documentId, orders.map((o) => o.id)),
+          eq(batiproDocumentLines.organizationId, orgId),
+          eq(batiproDocumentLines.isActive, 1),
+          isNotNull(batiproDocumentLines.materialId),
+        ))
+        .orderBy(asc(batiproDocumentLines.position), asc(batiproDocumentLines.id))
+      : [];
+
+    // Devis (non annules) et BC (emis, non annules) avec leurs lignes : l'ingenieur
+    // voit le detail prevu/commande, y compris par phase (line.phase_id).
+    const docs = await this.db
+      .select({
+        id: batiproDocuments.id,
+        type: batiproDocuments.type,
+        number: batiproDocuments.number,
+        status: batiproDocuments.status,
+        issueDate: batiproDocuments.issueDate,
+        createdAt: batiproDocuments.createdAt,
+        currencyId: batiproDocuments.currencyId,
+        totalTtc: batiproDocuments.totalTtc,
+        paidAmount: batiproDocuments.paidAmount,
+      })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        inArray(batiproDocuments.type, ["quote", "purchase_order"]),
+        ne(batiproDocuments.status, "cancelled"),
+      ))
+      .orderBy(desc(batiproDocuments.id));
+    const visibleDocs = docs.filter((d) => !(d.type === "purchase_order" && d.status === "draft"));
+    const docLines = visibleDocs.length
+      ? await this.db
+        .select({
+          id: batiproDocumentLines.id,
+          documentId: batiproDocumentLines.documentId,
+          designation: batiproDocumentLines.designation,
+          quantity: batiproDocumentLines.quantity,
+          unitPrice: batiproDocumentLines.unitPrice,
+          lineTtc: batiproDocumentLines.lineTtc,
+          receivedQuantity: batiproDocumentLines.receivedQuantity,
+          phaseId: batiproDocumentLines.phaseId,
+          lineType: batiproDocumentLines.lineType,
+          currencyId: batiproDocumentLines.currencyId,
+        })
+        .from(batiproDocumentLines)
+        .where(and(
+          inArray(batiproDocumentLines.documentId, visibleDocs.map((d) => d.id)),
+          eq(batiproDocumentLines.organizationId, orgId),
+          eq(batiproDocumentLines.isActive, 1),
+        ))
+        .orderBy(asc(batiproDocumentLines.position), asc(batiproDocumentLines.id))
+      : [];
+    const curRows = await this.db.select({ id: currencies.id, code: currencies.currencyCode }).from(currencies);
+    const codeOf = (id: number | null | undefined) => curRows.find((c) => c.id === id)?.code ?? null;
+    const projectCur = tracking.project.currency_code;
+    const documents = visibleDocs.map((d) => {
+      const docCode = codeOf(d.currencyId) ?? projectCur;
+      const total = Number(d.totalTtc ?? 0);
+      const paid = Number(d.paidAmount ?? 0);
+      return {
+        id: d.id,
+        type: d.type as "quote" | "purchase_order",
+        number: d.number ?? null,
+        status: d.status,
+        date: d.issueDate ?? (d.createdAt ? new Date(d.createdAt).toISOString().slice(0, 10) : null),
+        currency_code: docCode,
+        total: round2(total),
+        paid: round2(paid),
+        remaining: round2(Math.max(total - paid, 0)),
+        lines: docLines.filter((l) => l.documentId === d.id).map((l) => ({
+          id: l.id,
+          designation: l.designation,
+          line_type: l.lineType,
+          quantity: Number(l.quantity ?? 0),
+          received: Number(l.receivedQuantity ?? 0),
+          unit_price: round2(Number(l.unitPrice ?? 0)),
+          total: round2(Number(l.lineTtc ?? 0)),
+          currency_code: codeOf(l.currencyId) ?? docCode,
+          phase_id: l.phaseId ?? null,
+        })),
+      };
+    });
+
+    return {
+      ...tracking,
+      recipient_name: link.recipientName ?? null,
+      documents,
+      phases: phases.map((p) => ({ id: p.id, label: p.label, status: p.status, progress: p.progress, start_date: p.startDate ?? null, end_date: p.endDate ?? null })),
+      orders_to_receive: orders.map((o) => ({
+        id: o.id,
+        number: o.number ?? null,
+        status: o.status,
+        date: o.issueDate ?? null,
+        lines: lines.filter((l) => l.documentId === o.id).map((l) => {
+          const ordered = Number(l.quantity ?? 0);
+          const received = Number(l.receivedQuantity ?? 0);
+          return { id: l.id, designation: l.designation, ordered, received, remaining: Math.max(Math.round((ordered - received) * 1000) / 1000, 0) };
+        }),
+      })),
+    };
+  }
+
+  async updatePhaseFromLink(token: string, phaseId: number, input: EngineerPhaseUpdateDto) {
+    const link = await this.resolve(token, "engineer");
+    const [phase] = await this.db
+      .select({ id: batiproPhases.id })
+      .from(batiproPhases)
+      .where(and(eq(batiproPhases.id, phaseId), eq(batiproPhases.projectId, link.projectId), eq(batiproPhases.organizationId, link.organizationId), eq(batiproPhases.isActive, 1)))
+      .limit(1);
+    if (!phase) throw new NotFoundException("Phase introuvable.");
+    if (input.progress === undefined && input.status === undefined) throw new BadRequestException("Rien a mettre a jour.");
+    // Liste blanche : jamais budget, dates, devise ni chantier depuis un lien public.
+    const p = await this.batipro.updatePhase(phaseId, { progress: input.progress, status: input.status } as any, link.organizationId);
+    return { id: p.id, label: p.label, status: p.status, progress: p.progress };
+  }
+
+  async uploadPhotoFromLink(token: string, file: any, caption?: string) {
+    const link = await this.resolve(token, "engineer");
+    const photo: any = await this.batipro.uploadSitePhoto(link.projectId, file, link.organizationId, undefined, "all", { kind: "site" });
+    // Trace l'auteur dans la legende (pas de compte utilisateur derriere le lien).
+    const author = link.recipientName ? ` (${link.recipientName})` : "";
+    const text = `${(caption ?? "").trim() || "Photo chantier"}${author}`.slice(0, 255);
+    await this.batipro.updateSitePhoto(Number(photo.id), { caption: text }, link.organizationId);
+    return { id: Number(photo.id), caption: text };
+  }
+
+  async receiveFromLink(token: string, documentId: number, input: ReceiveBatiproDocumentDto) {
+    const link = await this.resolve(token, "engineer");
+    const [doc] = await this.db
+      .select({ id: batiproDocuments.id })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.id, documentId),
+        eq(batiproDocuments.projectId, link.projectId),
+        eq(batiproDocuments.organizationId, link.organizationId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.type, "purchase_order"),
+      ))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Bon de commande introuvable.");
+    const who = `[Lien chantier${link.recipientName ? ` - ${link.recipientName}` : ""}]`;
+    const note = `${who} ${(input.note ?? "").trim()}`.trim().slice(0, 2000);
+    const res: any = await this.batipro.receivePurchaseOrder(documentId, { ...input, note }, link.organizationId, undefined);
+    return { id: documentId, status: res?.status ?? null };
+  }
+
   private supplierInvoiceFilter(projectId: number, orgId: number, documentId?: number) {
     return and(
       documentId != null ? eq(batiproDocuments.id, documentId) : undefined,
@@ -388,8 +593,8 @@ export class BatiproShareService {
 
   // Photo servie seulement si elle appartient au chantier du lien ET est soit une
   // photo de chantier (kind=site), soit rattachee a une facture fournisseur visible.
-  async getPublicPhoto(token: string, photoId: number) {
-    const link = await this.resolve(token);
+  async getPublicPhoto(token: string, photoId: number, recipientType: "owner" | "engineer" = "owner") {
+    const link = await this.resolve(token, recipientType);
     const [photo] = await this.db
       .select({
         fileKey: batiproSitePhotos.fileKey,
@@ -417,8 +622,8 @@ export class BatiproShareService {
     return this.streamObject(photo.fileKey);
   }
 
-  async getPublicInvoiceAttachment(token: string, documentId: number) {
-    const link = await this.resolve(token);
+  async getPublicInvoiceAttachment(token: string, documentId: number, recipientType: "owner" | "engineer" = "owner") {
+    const link = await this.resolve(token, recipientType);
     const [doc] = await this.db
       .select({ attachedFileKey: batiproDocuments.attachedFileKey })
       .from(batiproDocuments)

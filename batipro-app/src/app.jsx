@@ -621,7 +621,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
-          {canMutate && can("update-batipro") && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
+          {canMutate && can("update-batipro") && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le chantier (propriétaire ou ingénieur)" onClick={() => setShareOpen(true)}>Partager le chantier</button>}
           {canMutate && can("update-batipro") && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
       </div>
@@ -4138,10 +4138,16 @@ function ShareTrackingModal({ project, onClose }) {
   const [loading, setLoading] = React.useState(true);
   const [days, setDays] = React.useState("90");
   const [sendSms, setSendSms] = React.useState(false);
+  // owner = suivi financier lecture seule ; engineer = ingénieur / responsable de chantier.
+  const [kind, setKind] = React.useState("owner");
+  const [engName, setEngName] = React.useState("");
+  const [engPhone, setEngPhone] = React.useState("+243");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [created, setCreated] = React.useState(null); // { url, sms_sent }
   const [copied, setCopied] = React.useState(false);
+  const isEng = kind === "engineer";
+  const engPhoneSet = engPhone.replace(/[\s+]/g, "").length > 3;
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -4150,16 +4156,24 @@ function ShareTrackingModal({ project, onClose }) {
   React.useEffect(load, [load]);
 
   const create = async () => {
+    if (isEng && !engName.trim()) { setError("Indiquez le nom de l'ingénieur / responsable."); return; }
     setBusy(true); setError(""); setCopied(false);
     try {
-      const res = await api.createShareLink(project.id, { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) });
+      const body = isEng
+        ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: engPhone.trim() } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
+        : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
+      const res = await api.createShareLink(project.id, body);
       setCreated({ url: res.url, sms_sent: res.sms_sent });
+      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); }
       load();
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(false); }
   };
   const revoke = async (l) => {
-    if (!window.confirm("Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.")) return;
+    const msg = l.recipientType === "engineer"
+      ? "Révoquer ce lien ? L'ingénieur ne pourra plus accéder au chantier."
+      : "Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.";
+    if (!window.confirm(msg)) return;
     setError("");
     try { await api.revokeShareLink(project.id, l.id); load(); }
     catch (err) { setError(err.message || String(err)); }
@@ -4170,11 +4184,34 @@ function ShareTrackingModal({ project, onClose }) {
     <div className="modal-scrim" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-card">
         <div className="modal-head">
-          <div><h2 className="font-display">Partager le suivi</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien en lecture seule pour le propriétaire (sans compte).</p></div>
+          <div><h2 className="font-display">Partager le chantier</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien sans compte, révocable à tout moment.</p></div>
           <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
         </div>
 
         <div className="form-grid">
+          <label className="field">
+            <span>Destinataire</span>
+            <select value={kind} onChange={(e) => { setKind(e.target.value); setSendSms(false); setCreated(null); setError(""); }}>
+              <option value="owner">Propriétaire — suivi financier (lecture seule)</option>
+              <option value="engineer">Ingénieur / responsable de chantier</option>
+            </select>
+          </label>
+          {isEng ? (
+            <>
+              <p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>
+                Il pourra voir tout le chantier (montants compris), mettre à jour l'avancement des phases, ajouter des photos et réceptionner les bons de commande. Lien actif jusqu'à révocation.
+              </p>
+              <Field label="Nom de l'ingénieur / responsable" value={engName} onChange={setEngName} />
+              {/* Téléphone international — défaut RDC +243. */}
+              <Field label="Téléphone (optionnel)" type="tel" value={engPhone} onChange={setEngPhone} />
+              {engPhoneSet && (
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
+                  <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+                  <span>Envoyer le lien par SMS ({engPhone})</span>
+                </label>
+              )}
+            </>
+          ) : (
           <label className="field">
             <span>Expiration</span>
             <select value={days} onChange={(e) => setDays(e.target.value)}>
@@ -4183,7 +4220,8 @@ function ShareTrackingModal({ project, onClose }) {
               <option value="365">1 an (sans expiration)</option>
             </select>
           </label>
-          {project.ownerPhone && (
+          )}
+          {!isEng && project.ownerPhone && (
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
               <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
               <span>Envoyer par SMS au propriétaire ({project.ownerPhone})</span>
@@ -4215,10 +4253,11 @@ function ShareTrackingModal({ project, onClose }) {
                 return (
                   <div key={l.id} style={{ border: "1px solid var(--ink-100, #e2e8f0)", borderRadius: 10, padding: "8px 10px", fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <strong>{l.recipientName || "Propriétaire"}</strong>
+                      <strong>{l.recipientName || (l.recipientType === "engineer" ? "Ingénieur" : "Propriétaire")}</strong>
                       <span className={`chip ${tone}`}>{label}</span>
                     </div>
-                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {fmtShareDate(l.expiresAt)}</div>
+                    <div style={{ color: "var(--ink-500)" }}>{l.recipientType === "engineer" ? "Ingénieur / responsable de chantier" : "Propriétaire — suivi financier"}</div>
+                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {l.recipientType === "engineer" && !l.expiresAt ? "jusqu'à révocation" : fmtShareDate(l.expiresAt)}</div>
                     <div style={{ color: "var(--ink-500)" }}>Dernière consultation : {fmtShareDate(l.lastViewedAt)}</div>
                     {l.status === "active" && <div><button type="button" className="btn btn-ghost btn-touch" onClick={() => revoke(l)}>Révoquer</button></div>}
                   </div>

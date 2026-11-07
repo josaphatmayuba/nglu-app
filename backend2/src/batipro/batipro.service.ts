@@ -3201,6 +3201,16 @@ export class BatiproService {
 
     if (input.phase_id != null) await this.recomputeProjectRisk(orgId, input.project_id);
     await this.publish("createExpense", ["documents", "document_lines"], "created", documentId, orgId);
+    // SMS proprietaire + ingenieurs (lien actif avec telephone) ; ne throw jamais.
+    void this.ownerNotifier?.notifyExpense(orgId, input.project_id, {
+      designation,
+      amount: fromCents(ttcC),
+      currencyId: Number(input.currency_id),
+      loadBudgetSummary: async () => {
+        const s = await this.projectBudgetSummary(input.project_id, orgId);
+        return { spent: s.spent, budget: s.budget };
+      },
+    });
     return BatiproService.toExpenseJson(await this.loadExpenseBundle(documentId, orgId));
   }
 

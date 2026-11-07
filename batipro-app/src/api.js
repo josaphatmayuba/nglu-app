@@ -376,3 +376,30 @@ export const trackingApi = {
   photoUrl: (token, photoId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
   attachmentUrl: (token, documentId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
 };
+
+// Lien ingenieur / responsable de chantier : aucun JWT, autorisation = token opaque.
+const PUBLIC_SITE_BASE = `${API_ROOT}/batipro/public/site`;
+async function siteFetch(token, path = "", init = {}) {
+  const res = await fetch(`${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}${path}`, { ...init, headers: { Accept: "application/json", ...(init.headers || {}) } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    const err = apiError(res, body);
+    err.invalid = res.status === 404 && !path;
+    throw err;
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+export const siteApi = {
+  get: (token) => siteFetch(token),
+  updatePhase: (token, phaseId, b) => siteFetch(token, `/phases/${phaseId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }),
+  receive: (token, documentId, b) => siteFetch(token, `/orders/${documentId}/receive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }),
+  uploadPhoto: (token, file, caption) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (caption) fd.append("caption", caption);
+    return siteFetch(token, "/photos", { method: "POST", body: fd });
+  },
+  photoUrl: (token, photoId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
+  attachmentUrl: (token, documentId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
+};

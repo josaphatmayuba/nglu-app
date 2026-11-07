@@ -526,6 +526,15 @@ export class CreateBatiproShareLinkDto {
   @IsOptional() @IsString() @MaxLength(32) recipient_phone?: string;
   @IsOptional() @IsIn([30, 90, 365]) expires_in_days?: number;
   @IsOptional() @IsBoolean() send_sms?: boolean;
+  // owner = suivi financier (lecture seule, expire) ; engineer = ingenieur /
+  // responsable de chantier (avancement, photos, reception BC), sans expiration.
+  @IsOptional() @IsIn(["owner", "engineer"]) recipient_type?: "owner" | "engineer";
+}
+
+// Mise a jour d'une phase depuis le lien public ingenieur : avancement + statut seulement.
+export class EngineerPhaseUpdateDto {
+  @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
+  @IsOptional() @IsIn(["A_venir", "En_cours", "Termine"]) status?: string;
 }
 
 // ── Depense chantier (lot 2) : document type=expense, UNE ligne de service ──

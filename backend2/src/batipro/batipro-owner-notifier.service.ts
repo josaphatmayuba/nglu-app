@@ -1,8 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { CompatService } from "../compat/compat.service";
 import { DRIZZLE } from "../database/database.constants";
-import { batiproProjects, currencies } from "../database/schema";
+import { batiproProjects, batiproShareLinks, currencies } from "../database/schema";
 import type { Database } from "../database/types";
 
 type BudgetSummaryLite = { spent: number; budget: number };
@@ -77,6 +77,84 @@ export class BatiproOwnerNotifier {
     }, claim);
   }
 
+  // Nouvelle depense de chantier : SMS au proprietaire (si SMS proprietaire actives
+  // sur le chantier) ET a chaque ingenieur / responsable ayant un lien actif avec
+  // telephone. Un numero ne recoit qu'un SMS meme s'il a plusieurs liens.
+  async notifyExpense(
+    orgId: number,
+    projectId: number,
+    e: { designation: string; amount: number; currencyId: number | null; loadBudgetSummary: () => Promise<BudgetSummaryLite> },
+  ) {
+    try {
+      const [project] = await this.db
+        .select({ currencyId: batiproProjects.currencyId })
+        .from(batiproProjects)
+        .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
+        .limit(1);
+      if (!project) return;
+      const effCur = e.currencyId ?? project.currencyId ?? null;
+      const cur = await this.currencyCode(effCur);
+      const amount = `${this.fmt(e.amount)}${cur ? ` ${cur}` : ""}`;
+      let tail = "";
+      if (effCur === (project.currencyId ?? null)) {
+        const s = await e.loadBudgetSummary();
+        tail = ` Total: ${this.fmt(s.spent)} / budget ${this.fmt(s.budget)}${cur ? ` ${cur}` : ""}.`;
+      }
+      const build = (p: { code: string; name: string }) => (nameMax: number, supMax: number) =>
+        `Chantier ${p.code} ${this.cut(p.name, nameMax)}: depense ${amount} - ${this.cut(e.designation, supMax)}.${tail}`;
+
+      const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
+      await this.run("expense", orgId, projectId, async (p) => this.fit(build(p), p.ownerName));
+
+      const links = await this.db
+        .select({ phone: batiproShareLinks.recipientPhone, name: batiproShareLinks.recipientName })
+        .from(batiproShareLinks)
+        .where(and(
+          eq(batiproShareLinks.projectId, projectId),
+          eq(batiproShareLinks.organizationId, orgId),
+          eq(batiproShareLinks.recipientType, "engineer"),
+          isNull(batiproShareLinks.revokedAt),
+          or(isNull(batiproShareLinks.expiresAt), gt(batiproShareLinks.expiresAt, sql`NOW()`)),
+          isNotNull(batiproShareLinks.recipientPhone),
+        ));
+      const [proj] = await this.db
+        .select({ code: batiproProjects.code, name: batiproProjects.name })
+        .from(batiproProjects)
+        .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId)))
+        .limit(1);
+      const seen = new Set<string>(ownerPhone ? [ownerPhone] : []);
+      for (const l of links) {
+        const phone = (l.phone ?? "").trim();
+        if (!phone || seen.has(phone) || !proj) continue;
+        seen.add(phone);
+        try {
+          await this.compat.sendSms({
+            phone,
+            message: this.fit(build(proj), l.name),
+            smsType: "batipro_engineer_expense",
+            organizationId: orgId,
+            relatedType: "batipro_project",
+            relatedId: projectId,
+          });
+        } catch (err) {
+          this.logger.warn(`SMS ingenieur (expense) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`SMS depense chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Telephone du proprietaire si les SMS proprietaire sont actives (pour dedoublonner).
+  private async ownerPhoneIfEnabled(orgId: number, projectId: number): Promise<string | null> {
+    const [p] = await this.db
+      .select({ phone: batiproProjects.ownerPhone })
+      .from(batiproProjects)
+      .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.ownerSmsEnabled, 1)))
+      .limit(1);
+    return (p?.phone ?? "").trim() || null;
+  }
+
   async notifyProgress(orgId: number, projectId: number, step: number) {
     await this.run("progress", orgId, projectId, async (project) =>
       this.fit((nameMax) => `Chantier ${project.code} ${this.cut(project.name, nameMax)}: avancement ${step}% atteint.`, project.ownerName));
@@ -91,7 +169,7 @@ export class BatiproOwnerNotifier {
   // Envoi explicite (action du gestionnaire) du lien de suivi : 1 seul SMS, lien en
   // fin de message. Ne depend pas du flag ownerSmsEnabled (l'utilisateur a choisi
   // d'envoyer). Ne throw jamais ; renvoie true si la passerelle a accepte.
-  async sendShareLink(orgId: number, projectId: number, phone: string, url: string): Promise<boolean> {
+  async sendShareLink(orgId: number, projectId: number, phone: string, url: string, kind: "owner" | "engineer" = "owner"): Promise<boolean> {
     try {
       const [project] = await this.db
         .select({ code: batiproProjects.code, name: batiproProjects.name, ownerName: batiproProjects.ownerName })
@@ -99,7 +177,7 @@ export class BatiproOwnerNotifier {
         .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
         .limit(1);
       if (!project || !phone.trim()) return false;
-      const message = this.fit((nameMax) => `Chantier ${this.cut(project.code, 12)} ${this.cut(project.name, nameMax)}: suivi financier ${url}`, project.ownerName);
+      const message = this.fit((nameMax) => `Chantier ${this.cut(project.code, 12)} ${this.cut(project.name, nameMax)}: ${kind === "engineer" ? "acces chantier" : "suivi financier"} ${url}`, project.ownerName);
       const res: any = await this.compat.sendSms({
         phone,
         message,

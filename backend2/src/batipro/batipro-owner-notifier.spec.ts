@@ -144,4 +144,45 @@ describe("BatiproOwnerNotifier", () => {
     await expect(n.notifyStatusChange(1, 5, "a", "b")).resolves.toBeUndefined();
     expect(sendSms).not.toHaveBeenCalled();
   });
+
+  it("depense : 1 SMS proprietaire + 1 par ingenieur, numero en double ignore, <=160 ASCII", async () => {
+    const queue = [
+      [{ currencyId: 1 }],                       // projet (devise)
+      [{ code: "USD" }],                         // code devise
+      [{ phone: "+243990000000" }],              // telephone proprietaire (SMS actives)
+      [project()],                               // run() proprietaire
+      [                                          // liens ingenieurs actifs avec telephone
+        { phone: "+243991112222", name: "Ing. Paul" },
+        { phone: "+243991112222", name: "Ing. Paul (doublon)" },
+        { phone: "+243990000000", name: "Proprio aussi ingenieur" },
+      ],
+      [{ code: "CH-001", name: "Residence Elysee" }],
+    ];
+    const { n, sendSms } = setup(queue);
+    await n.notifyExpense(1, 5, { designation: "Main d'oeuvre coffrage équipe", amount: 450, currencyId: 1, loadBudgetSummary: async () => ({ spent: 3200, budget: 10000 }) });
+    expect(sendSms).toHaveBeenCalledTimes(2);
+    expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
+    expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_expense");
+    for (const [arg] of sendSms.mock.calls) {
+      expect(arg.message.length).toBeLessThanOrEqual(160);
+      expect(arg.message).toMatch(/depense 450 USD/);
+      expect(/^[\x00-\x7F]*$/.test(arg.message)).toBe(true);
+    }
+  });
+
+  it("depense : SMS proprietaire desactives -> seuls les ingenieurs recoivent", async () => {
+    const queue = [
+      [{ currencyId: 1 }],
+      [{ code: "USD" }],
+      [],                                        // pas de telephone proprietaire (SMS off)
+      [],                                        // run() : projet non retenu (SMS off)
+      [{ phone: "+243991112222", name: "Ing. Paul" }],
+      [{ code: "CH-001", name: "Residence Elysee" }],
+    ];
+    const { n, sendSms } = setup(queue);
+    await n.notifyExpense(1, 5, { designation: "Transport sable", amount: 80.5, currencyId: 1, loadBudgetSummary: async () => ({ spent: 1, budget: 2 }) });
+    expect(sendSms).toHaveBeenCalledTimes(1);
+    expect(sendSms.mock.calls[0][0].phone).toBe("+243991112222");
+    expect(sendSms.mock.calls[0][0].message).toMatch(/80\.50 USD/);
+  });
 });

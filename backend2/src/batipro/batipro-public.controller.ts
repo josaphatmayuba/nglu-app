@@ -1,11 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Put, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { BatiproShareService } from "./batipro-share.service";
 import { BatiproService } from "./batipro.service";
-import { SubmitSubcontractorDocumentDto } from "./dto/batipro.dto";
+import { EngineerPhaseUpdateDto, ReceiveBatiproDocumentDto, SubmitSubcontractorDocumentDto } from "./dto/batipro.dto";
 
 // Portail sous-traitant : soumission entrante SANS compte. L'autorisation vient
 // du token opaque dans l'URL (jamais un JWT). Sans guard, mais throttle + le
@@ -121,5 +121,79 @@ export class BatiproPublicTrackingController {
   @Get(":token/invoices/:documentId/attachment")
   async invoiceAttachment(@Param("token") token: string, @Param("documentId", ParseIntPipe) documentId: number, @Res({ passthrough: true }) res: Response) {
     return this.send(res, await this.share.getPublicInvoiceAttachment(token, documentId));
+  }
+}
+
+function sendStream(res: Response, file: { body: any; contentType: string; contentLength?: number }) {
+  res.set({
+    "Content-Type": file.contentType,
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+    "Content-Disposition": file.contentType === "application/octet-stream" ? "attachment" : "inline",
+    ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+  });
+  return new StreamableFile(file.body);
+}
+
+// Lien ingenieur / responsable de chantier (sans compte). Autorisation = jeton
+// opaque de type "engineer" (un jeton proprietaire est refuse ici, et inversement).
+// Ecritures limitees : avancement de phase, photo de chantier, reception de BC.
+@Throttle({ default: { ttl: 60000, limit: 60 } })
+@ApiTags("batipro-public")
+@Controller("batipro/public/site")
+export class BatiproPublicSiteController {
+  constructor(private readonly share: BatiproShareService) {}
+
+  @ApiOperation({ summary: "Vue chantier pour l'ingenieur (public — token opaque)" })
+  @ApiParam({ name: "token", type: String })
+  @Header("Cache-Control", "no-store")
+  @Get(":token")
+  site(@Param("token") token: string) {
+    return this.share.getEngineerSite(token);
+  }
+
+  @ApiOperation({ summary: "Mettre a jour avancement/statut d'une phase (public — token opaque)" })
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @Put(":token/phases/:phaseId")
+  updatePhase(@Param("token") token: string, @Param("phaseId", ParseIntPipe) phaseId: number, @Body() body: EngineerPhaseUpdateDto) {
+    return this.share.updatePhaseFromLink(token, phaseId, body);
+  }
+
+  @ApiOperation({ summary: "Ajouter une photo de chantier (public — token opaque)" })
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP."), false);
+    },
+  }))
+  @Post(":token/photos")
+  uploadPhoto(@Param("token") token: string, @UploadedFile() file: any, @Body("caption") caption?: string) {
+    if (!file) throw new BadRequestException("Aucun fichier.");
+    return this.share.uploadPhotoFromLink(token, file, typeof caption === "string" ? caption : undefined);
+  }
+
+  @ApiOperation({ summary: "Receptionner un bon de commande (public — token opaque)" })
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @Post(":token/orders/:documentId/receive")
+  receive(@Param("token") token: string, @Param("documentId", ParseIntPipe) documentId: number, @Body() body: ReceiveBatiproDocumentDto) {
+    return this.share.receiveFromLink(token, documentId, body);
+  }
+
+  @ApiOperation({ summary: "Photo du chantier (stream verifie)" })
+  @Throttle({ default: { ttl: 60000, limit: 300 } })
+  @Get(":token/photos/:photoId")
+  async photo(@Param("token") token: string, @Param("photoId", ParseIntPipe) photoId: number, @Res({ passthrough: true }) res: Response) {
+    return sendStream(res, await this.share.getPublicPhoto(token, photoId, "engineer"));
+  }
+
+  @ApiOperation({ summary: "Fichier joint d'une facture fournisseur (stream verifie)" })
+  @Throttle({ default: { ttl: 60000, limit: 300 } })
+  @Get(":token/invoices/:documentId/attachment")
+  async invoiceAttachment(@Param("token") token: string, @Param("documentId", ParseIntPipe) documentId: number, @Res({ passthrough: true }) res: Response) {
+    return sendStream(res, await this.share.getPublicInvoiceAttachment(token, documentId, "engineer"));
   }
 }
