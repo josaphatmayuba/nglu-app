@@ -661,7 +661,7 @@ export async function loadLeaseOverdueAmount(
   lease: LeaseForOverdue,
   currencySymbol?: string | null,
   now: Date = new Date(),
-): Promise<{ value: number; text: string; totalDue: { value: number; text: string } }> {
+): Promise<{ value: number; text: string; totalDue: { value: number; text: string }; overdueValue: number }> {
   const graceDays = await readOverdueGraceDays(db, orgId);
   const today = parseDateOnly(formatDateOnly(now));
   const [entry, totalDue] = await Promise.all([
@@ -670,7 +670,8 @@ export async function loadLeaseOverdueAmount(
   ]);
   // Jamais plus que le total du (sources differentes : on garde la plus prudente).
   const overdue = Math.min(entry?.stats.overdueAmount ?? 0, totalDue.value);
+  // overdueValue = retard reel (0 si rien en retard) ; value/text gardent le repli sur le total du.
   return overdue > 0
-    ? { value: overdue, text: formatMoneyFr(overdue, currencySymbol), totalDue }
-    : { ...totalDue, totalDue };
+    ? { value: overdue, text: formatMoneyFr(overdue, currencySymbol), totalDue, overdueValue: overdue }
+    : { ...totalDue, totalDue, overdueValue: 0 };
 }
