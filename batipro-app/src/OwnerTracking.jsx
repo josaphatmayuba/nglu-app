@@ -3,7 +3,7 @@ import { trackingApi } from "./api.js";
 
 // Page publique de suivi financier du chantier pour le proprietaire (sans compte,
 // lecture seule). URL : /batipro/suivi/:token. Responsive 360 px : listes en cartes.
-function money(value, code) {
+export function money(value, code) {
   // Pas de devise par defaut : sans code, montant brut + mention explicite.
   if (!code) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
   const c = code;
@@ -13,7 +13,7 @@ function money(value, code) {
     return `${c} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })}`;
   }
 }
-const fmtDate = (d) => {
+export const fmtDate = (d) => {
   if (!d) return "—";
   const dt = new Date(d);
   return Number.isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("fr-CA");
@@ -55,7 +55,7 @@ export default function OwnerTracking({ token }) {
     );
   }
 
-  const { project, budget, purchase_orders: pos, supplier_invoices: invoices, subcontractors, remaining_by_currency: remaining, site_photos: photos } = data;
+  const { project, site_photos: photos } = data;
   const pct = Math.max(0, Math.min(100, Number(project.progress) || 0));
 
   return (
@@ -70,56 +70,7 @@ export default function OwnerTracking({ token }) {
         <span style={muted}>{fmtDate(project.start_date)} → {fmtDate(project.due_date)}</span>
       </div>
 
-      <Section title="Budget">
-        <div style={row}><span>Devis accepté</span><strong>{money(budget.accepted_quote, budget.currency_code)}</strong></div>
-        <div style={row}><span>Budget du chantier</span><strong>{money(budget.project_budget, budget.currency_code)}</strong></div>
-      </Section>
-
-      <Section title="Reste à payer">
-        {remaining.length ? remaining.map((r) => (
-          <div key={r.currency_code || "none"} style={row}><span>{r.currency_code || "Devise non renseignée"}</span><strong>{money(r.remaining, r.currency_code)}</strong></div>
-        )) : <p style={muted}>Rien à payer.</p>}
-        <p style={{ ...muted, fontSize: 11, margin: "6px 0 0" }}>Reste à payer = bons de commande non soldés. Les devises sont présentées séparément, sans conversion.</p>
-      </Section>
-
-      <Section title="Bons de commande">
-        {!pos.length && <p style={muted}>Aucun bon de commande.</p>}
-        {pos.map((p) => (
-          <div key={p.id} style={card}>
-            <div style={row}><strong>{p.number || `BC #${p.id}`}</strong><span style={muted}>{fmtDate(p.date)}</span></div>
-            {p.label && <div style={{ fontSize: 13, color: "#475569", overflowWrap: "anywhere" }}>{p.label}</div>}
-            <Amounts items={[["Engagé", p.engaged], ["Payé", p.paid], ["Reste", p.remaining]]} code={p.currency_code} />
-          </div>
-        ))}
-      </Section>
-
-      <Section title="Factures fournisseur">
-        {!invoices.length && <p style={muted}>Aucune facture.</p>}
-        {invoices.map((i) => (
-          <div key={i.id} style={card}>
-            <div style={row}><strong>{i.number || `Facture #${i.id}`}</strong><span style={muted}>{fmtDate(i.date)}</span></div>
-            <Amounts items={[["Total", i.total], ["Payé", i.paid], ["Reste", i.remaining]]} code={i.currency_code} />
-            {(i.has_attachment || i.photo_ids.length > 0) && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {i.has_attachment && <a href={trackingApi.attachmentUrl(token, i.id)} target="_blank" rel="noopener noreferrer" style={{ ...btnSm, display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Voir la facture</a>}
-                {i.photo_ids.map((pid, idx) => (
-                  <Thumb key={pid} url={trackingApi.photoUrl(token, pid)} alt={`Photo facture ${idx + 1}`} onOpen={setViewer} />
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </Section>
-
-      <Section title="Sous-traitants">
-        {!subcontractors.length && <p style={muted}>Aucun sous-traitant.</p>}
-        {subcontractors.map((s, idx) => (
-          <div key={`${s.name}-${idx}`} style={card}>
-            <div style={row}><strong style={{ overflowWrap: "anywhere" }}>{s.name}</strong><span style={muted}>{s.trade || ""}</span></div>
-            <Amounts items={[["Contrat", s.contract], ["Payé", s.paid], ["Reste", s.remaining]]} code={s.currency_code} />
-          </div>
-        ))}
-      </Section>
+      <FinanceSections data={data} token={token} links={trackingApi} onOpen={setViewer} />
 
       <Section title="Photos du chantier">
         {!photos.length && <p style={muted}>Aucune photo.</p>}
@@ -140,7 +91,84 @@ export default function OwnerTracking({ token }) {
   );
 }
 
-function Thumb({ url, alt, onOpen, fill }) {
+// Sections financieres (budget, reste a payer, BC, factures, sous-traitants),
+// partagees avec la page ingenieur (EngineerSite.jsx). links = trackingApi | siteApi.
+// only = sous-ensemble de ["budget","remaining","orders","expenses","invoices","subcontractors"] ;
+// par defaut (page proprietaire) : tout sauf les depenses (comportement inchange).
+export function FinanceSections({ data, token, links, onOpen, only }) {
+  const show = (k) => (only ? only.includes(k) : k !== "expenses");
+  const { budget, purchase_orders: pos, supplier_invoices: invoices, subcontractors, remaining_by_currency: remaining } = data;
+  const expenses = data.direct_expenses || [];
+  return (
+    <>
+      {show("budget") && <Section title="Budget">
+        <div style={row}><span>Devis accepté</span><strong>{money(budget.accepted_quote, budget.currency_code)}</strong></div>
+        <div style={row}><span>Budget du chantier</span><strong>{money(budget.project_budget, budget.currency_code)}</strong></div>
+      </Section>}
+
+      {show("remaining") && <Section title="Reste à payer">
+        {remaining.length ? remaining.map((r) => (
+          <div key={r.currency_code || "none"} style={row}><span>{r.currency_code || "Devise non renseignée"}</span><strong>{money(r.remaining, r.currency_code)}</strong></div>
+        )) : <p style={muted}>Rien à payer.</p>}
+        <p style={{ ...muted, fontSize: 11, margin: "6px 0 0" }}>Reste à payer = bons de commande non soldés. Les devises sont présentées séparément, sans conversion.</p>
+      </Section>}
+
+      {show("orders") && <Section title="Bons de commande">
+        {!pos.length && <p style={muted}>Aucun bon de commande.</p>}
+        {pos.map((p) => (
+          <div key={p.id} style={card}>
+            <div style={row}><strong>{p.number || `BC #${p.id}`}</strong><span style={muted}>{fmtDate(p.date)}</span></div>
+            {p.label && <div style={{ fontSize: 13, color: "#475569", overflowWrap: "anywhere" }}>{p.label}</div>}
+            <Amounts items={[["Engagé", p.engaged], ["Payé", p.paid], ["Reste", p.remaining]]} code={p.currency_code} />
+          </div>
+        ))}
+      </Section>}
+
+      {show("expenses") && (
+        <Section title="Dépenses du chantier">
+          {!expenses.length && <p style={muted}>Aucune dépense.</p>}
+          {expenses.map((e) => (
+            <div key={e.id} style={card}>
+              <div style={row}><strong style={{ overflowWrap: "anywhere" }}>{e.label || e.number || `Dépense #${e.id}`}</strong><span style={muted}>{fmtDate(e.date)}</span></div>
+              {e.label && e.number && <div style={{ fontSize: 12, color: "#64748b" }}>{e.number}</div>}
+              <Amounts items={[["Montant", e.engaged], ["Payé", e.paid], ["Reste", e.remaining]]} code={e.currency_code} />
+            </div>
+          ))}
+        </Section>
+      )}
+
+      {show("invoices") && <Section title="Factures fournisseur">
+        {!invoices.length && <p style={muted}>Aucune facture.</p>}
+        {invoices.map((i) => (
+          <div key={i.id} style={card}>
+            <div style={row}><strong>{i.number || `Facture #${i.id}`}</strong><span style={muted}>{fmtDate(i.date)}</span></div>
+            <Amounts items={[["Total", i.total], ["Payé", i.paid], ["Reste", i.remaining]]} code={i.currency_code} />
+            {(i.has_attachment || i.photo_ids.length > 0) && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {i.has_attachment && <a href={links.attachmentUrl(token, i.id)} target="_blank" rel="noopener noreferrer" style={{ ...btnSm, display: "inline-flex", alignItems: "center", textDecoration: "none" }}>Voir la facture</a>}
+                {i.photo_ids.map((pid, idx) => (
+                  <Thumb key={pid} url={links.photoUrl(token, pid)} alt={`Photo facture ${idx + 1}`} onOpen={onOpen} />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </Section>}
+
+      {show("subcontractors") && <Section title="Sous-traitants">
+        {!subcontractors.length && <p style={muted}>Aucun sous-traitant.</p>}
+        {subcontractors.map((s, idx) => (
+          <div key={`${s.name}-${idx}`} style={card}>
+            <div style={row}><strong style={{ overflowWrap: "anywhere" }}>{s.name}</strong><span style={muted}>{s.trade || ""}</span></div>
+            <Amounts items={[["Contrat", s.contract], ["Payé", s.paid], ["Reste", s.remaining]]} code={s.currency_code} />
+          </div>
+        ))}
+      </Section>}
+    </>
+  );
+}
+
+export function Thumb({ url, alt, onOpen, fill }) {
   const [failed, setFailed] = React.useState(false);
   return (
     <button type="button" onClick={() => onOpen({ url })} style={{ padding: 0, border: "1px solid #cbd5e1", borderRadius: 8, background: "#f8fafc", cursor: "pointer", overflow: "hidden", width: fill ? "100%" : 72, height: fill ? 96 : 72 }}>
@@ -151,7 +179,7 @@ function Thumb({ url, alt, onOpen, fill }) {
   );
 }
 
-function Amounts({ items, code }) {
+export function Amounts({ items, code }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 6, fontSize: 13 }}>
       {items.map(([label, value]) => (
@@ -161,7 +189,7 @@ function Amounts({ items, code }) {
   );
 }
 
-function Section({ title, children }) {
+export function Section({ title, children }) {
   return (
     <section style={{ marginTop: 20 }}>
       <h3 style={{ margin: "0 0 8px", fontSize: 15, color: "#b45309" }}>{title}</h3>
@@ -170,19 +198,19 @@ function Section({ title, children }) {
   );
 }
 
-function Shell({ children }) {
+export function Shell({ children, title = "Suivi du chantier" }) {
   return (
     <div style={{ minHeight: "100vh", background: "#f1f5f9", padding: "16px 10px", fontFamily: "system-ui, sans-serif", color: "#0f172a" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", background: "#fff", borderRadius: 14, padding: "16px 14px", boxShadow: "0 1px 3px rgba(0,0,0,.08)" }}>
-        <div style={{ fontWeight: 700, color: "#b45309", marginBottom: 12 }}>BâtiPro · Suivi du chantier</div>
+        <div style={{ fontWeight: 700, color: "#b45309", marginBottom: 12 }}>BâtiPro · {title}</div>
         {children}
       </div>
     </div>
   );
 }
 
-const muted = { color: "#64748b", fontSize: 13 };
-const row = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap", fontSize: 14, padding: "3px 0" };
-const card = { border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", marginBottom: 8 };
-const btn = { padding: "10px 16px", border: "none", borderRadius: 8, background: "#d97706", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", minHeight: 44 };
-const btnSm = { padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#0f172a", fontSize: 13, cursor: "pointer", minHeight: 40 };
+export const muted = { color: "#64748b", fontSize: 13 };
+export const row = { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap", fontSize: 14, padding: "3px 0" };
+export const card = { border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", marginBottom: 8 };
+export const btn = { padding: "10px 16px", border: "none", borderRadius: 8, background: "#d97706", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", minHeight: 44 };
+export const btnSm = { padding: "8px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", color: "#0f172a", fontSize: 13, cursor: "pointer", minHeight: 40 };

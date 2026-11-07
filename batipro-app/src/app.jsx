@@ -621,7 +621,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
           {Number(p.ownerSmsEnabled) === 1 && <span className="chip emerald" title="Les SMS automatiques au propriétaire sont actifs"><Icon name="bell" /> SMS propriétaire</span>}
           {Number(p.domusVisible) === 1 && <span className="chip ink" title="Visible dans Domus comme bien en construction">Dans Domus</span>}
           <span className="chip amber">{n(p.progress)} % avancé</span>
-          {canMutate && can("update-batipro") && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le suivi financier avec le propriétaire" onClick={() => setShareOpen(true)}>Partager le suivi</button>}
+          {canMutate && can("update-batipro") && <button type="button" className="btn btn-ghost btn-touch" aria-label="Partager le chantier (propriétaire ou ingénieur)" onClick={() => setShareOpen(true)}>Partager le chantier</button>}
           {canMutate && can("update-batipro") && onEdit && <button type="button" className="btn btn-ghost btn-touch" aria-label="Modifier le chantier" onClick={() => onEdit(p)}>Modifier</button>}
         </div>
       </div>
@@ -665,6 +665,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6, marginBottom: 12 }}>
                   <span>Décaissé : {money(budget?.cost_actual, budgetCur)}</span>
                   <span>Devis accepté : {money(budget?.quote_accepted, budgetCur)}</span>
+                  <DocFxNote converted={budget?.quote_converted_amounts} unconverted={budget?.quote_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("devis")} />
                 </div>
               </div>
               <div onClick={() => setTab("fonds")} style={{ cursor: "pointer" }}>
@@ -684,6 +685,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                 />
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6 }}>
                   <span>Encaissé : {money(budget?.billed_cashed, budgetCur)}</span>
+                  <DocFxNote converted={budget?.invoice_converted_amounts} unconverted={budget?.invoice_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("factures")} />
                 </div>
               </div>
             </div>
@@ -1661,6 +1663,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
+                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "rates", id: d.id })}>Taux de change</button>}
                       {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
                       {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
                       {canMutate && can("update-batipro") && (
@@ -1692,6 +1695,10 @@ function Devis({ projects, canMutate, fixedProjectId }) {
         />
       )}
       {modal?.kind === "share" && <DevisShareModal docId={modal.id} onClose={() => setModal(null)} onShared={load} />}
+      {modal?.kind === "rates" && (
+        <CurrencyRatesModal docId={modal.id} projectCurrencyId={selected?.currencyId} projectCurrencyCode={cur}
+          onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />
+      )}
     </>
   );
 }
@@ -2269,9 +2276,11 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           />
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--ink-500)" }}>
             <span>Devis accepté (prévu) : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.quote_accepted, budgetCur)}</strong></span>
+            <DocFxNote converted={budget.quote_converted_amounts} unconverted={budget.quote_unconverted_amounts} budgetCur={budgetCur} />
             <span>Déjà dépensé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.spent, budgetCur)}</strong></span>
             <span>Reste vs budget : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.remaining_vs_budget, budgetCur)}</strong></span>
           </div>
+          <SpentByNature budget={budget} budgetCur={budgetCur} />
           <div style={{ marginTop: 8 }}><BudgetFxLines budget={budget} budgetCur={budgetCur} /></div>
         </div>
       )}
@@ -3361,6 +3370,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [payModal, setPayModal] = React.useState(null);
+  const [ratesDocId, setRatesDocId] = React.useState(null);
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -3472,6 +3482,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
                         {canMutate && can("update-batipro") && (d.status === "issued") && (
                           <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
                         )}
+                        {canMutate && can("update-batipro") && <button className="link" onClick={() => setRatesDocId(d.id)}>Taux de change</button>}
                       </div>
                     </td>
                   </tr>
@@ -3490,6 +3501,10 @@ function Factures({ projects, canMutate, fixedProjectId }) {
           onClose={() => setPayModal(null)}
           onConfirm={confirmPay}
         />
+      )}
+      {ratesDocId && (
+        <CurrencyRatesModal docId={ratesDocId} projectCurrencyId={selected?.currencyId} projectCurrencyCode={cur}
+          onClose={() => setRatesDocId(null)} onSaved={() => { setRatesDocId(null); load(); }} />
       )}
     </>
   );
@@ -4124,10 +4139,16 @@ function ShareTrackingModal({ project, onClose }) {
   const [loading, setLoading] = React.useState(true);
   const [days, setDays] = React.useState("90");
   const [sendSms, setSendSms] = React.useState(false);
+  // owner = suivi financier lecture seule ; engineer = ingénieur / responsable de chantier.
+  const [kind, setKind] = React.useState("owner");
+  const [engName, setEngName] = React.useState("");
+  const [engPhone, setEngPhone] = React.useState("+243");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [created, setCreated] = React.useState(null); // { url, sms_sent }
   const [copied, setCopied] = React.useState(false);
+  const isEng = kind === "engineer";
+  const engPhoneSet = engPhone.replace(/[\s+]/g, "").length > 3;
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -4136,16 +4157,24 @@ function ShareTrackingModal({ project, onClose }) {
   React.useEffect(load, [load]);
 
   const create = async () => {
+    if (isEng && !engName.trim()) { setError("Indiquez le nom de l'ingénieur / responsable."); return; }
     setBusy(true); setError(""); setCopied(false);
     try {
-      const res = await api.createShareLink(project.id, { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) });
+      const body = isEng
+        ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: engPhone.trim() } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
+        : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
+      const res = await api.createShareLink(project.id, body);
       setCreated({ url: res.url, sms_sent: res.sms_sent });
+      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); }
       load();
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(false); }
   };
   const revoke = async (l) => {
-    if (!window.confirm("Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.")) return;
+    const msg = l.recipientType === "engineer"
+      ? "Révoquer ce lien ? L'ingénieur ne pourra plus accéder au chantier."
+      : "Révoquer ce lien ? Le propriétaire ne pourra plus consulter le suivi.";
+    if (!window.confirm(msg)) return;
     setError("");
     try { await api.revokeShareLink(project.id, l.id); load(); }
     catch (err) { setError(err.message || String(err)); }
@@ -4156,11 +4185,34 @@ function ShareTrackingModal({ project, onClose }) {
     <div className="modal-scrim" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-card">
         <div className="modal-head">
-          <div><h2 className="font-display">Partager le suivi</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien en lecture seule pour le propriétaire (sans compte).</p></div>
+          <div><h2 className="font-display">Partager le chantier</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien sans compte, révocable à tout moment.</p></div>
           <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
         </div>
 
         <div className="form-grid">
+          <label className="field">
+            <span>Destinataire</span>
+            <select value={kind} onChange={(e) => { setKind(e.target.value); setSendSms(false); setCreated(null); setError(""); }}>
+              <option value="owner">Propriétaire — suivi financier (lecture seule)</option>
+              <option value="engineer">Ingénieur / responsable de chantier</option>
+            </select>
+          </label>
+          {isEng ? (
+            <>
+              <p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>
+                Il pourra voir tout le chantier (montants compris), mettre à jour l'avancement des phases, ajouter des photos et réceptionner les bons de commande. Lien actif jusqu'à révocation.
+              </p>
+              <Field label="Nom de l'ingénieur / responsable" value={engName} onChange={setEngName} />
+              {/* Téléphone international — défaut RDC +243. */}
+              <Field label="Téléphone (optionnel)" type="tel" value={engPhone} onChange={setEngPhone} />
+              {engPhoneSet && (
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
+                  <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+                  <span>Envoyer le lien par SMS ({engPhone})</span>
+                </label>
+              )}
+            </>
+          ) : (
           <label className="field">
             <span>Expiration</span>
             <select value={days} onChange={(e) => setDays(e.target.value)}>
@@ -4169,7 +4221,8 @@ function ShareTrackingModal({ project, onClose }) {
               <option value="365">1 an (sans expiration)</option>
             </select>
           </label>
-          {project.ownerPhone && (
+          )}
+          {!isEng && project.ownerPhone && (
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
               <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
               <span>Envoyer par SMS au propriétaire ({project.ownerPhone})</span>
@@ -4201,10 +4254,11 @@ function ShareTrackingModal({ project, onClose }) {
                 return (
                   <div key={l.id} style={{ border: "1px solid var(--ink-100, #e2e8f0)", borderRadius: 10, padding: "8px 10px", fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <strong>{l.recipientName || "Propriétaire"}</strong>
+                      <strong>{l.recipientName || (l.recipientType === "engineer" ? "Ingénieur" : "Propriétaire")}</strong>
                       <span className={`chip ${tone}`}>{label}</span>
                     </div>
-                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {fmtShareDate(l.expiresAt)}</div>
+                    <div style={{ color: "var(--ink-500)" }}>{l.recipientType === "engineer" ? "Ingénieur / responsable de chantier" : "Propriétaire — suivi financier"}</div>
+                    <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {l.recipientType === "engineer" && !l.expiresAt ? "jusqu'à révocation" : fmtShareDate(l.expiresAt)}</div>
                     <div style={{ color: "var(--ink-500)" }}>Dernière consultation : {fmtShareDate(l.lastViewedAt)}</div>
                     {l.status === "active" && <div><button type="button" className="btn btn-ghost btn-touch" onClick={() => revoke(l)}>Révoquer</button></div>}
                   </div>
@@ -5323,6 +5377,33 @@ function FxRateModal({ doc, projectCurrencyId, projectCurrencyCode, onClose, onS
   );
 }
 
+// Depense par nature (decaisse reel, total == "Deja depense"), replie par defaut.
+function SpentByNature({ budget, budgetCur }) {
+  const [open, setOpen] = React.useState(false);
+  const rows = Array.isArray(budget?.spent_by_nature) ? budget.spent_by_nature : [];
+  if (!rows.length) return null;
+  const total = rows.reduce((s, r) => s + Math.round(Number(r.amount || 0) * 100), 0) / 100;
+  return (
+    <div style={{ marginTop: 8, fontSize: 12 }}>
+      <button type="button" className="link" aria-expanded={open} aria-controls="spent-by-nature" onClick={() => setOpen((v) => !v)}>
+        {open ? "▾" : "▸"} Dépensé par nature
+      </button>
+      {open && (
+        <div id="spent-by-nature" style={{ marginTop: 6, maxWidth: 420 }}>
+          {rows.map((r) => (
+            <div key={r.nature} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "2px 0", color: "var(--ink-500)" }}>
+              <span>{r.label}</span><strong style={{ color: "var(--ink-900, #111)" }}>{money(r.amount, budgetCur)}</strong>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "4px 0 0", borderTop: "1px solid var(--line, #e5e7eb)", marginTop: 4 }}>
+            <span>Total</span><strong>{money(total, budgetCur)}</strong>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Lignes multi-devise du suivi budgétaire : convertis / non comptés / écart de change.
 function BudgetFxLines({ budget, budgetCur }) {
   if (!budget) return null;
@@ -5362,6 +5443,97 @@ function PaymentModal({ balance, currencyCode, currencyId, projectCurrencyId, pr
   const [busy, setBusy] = React.useState(false);
   const [fxRate, setFxRate] = React.useState("");
   const [fxSource, setFxSource] = React.useState("manual");
+// Taux PAR DEVISE d'un devis/facture (y compris multi-devises), modifiable à tout
+// moment (PATCH /documents/:id/currency-rates). Champ vide = retirer le taux.
+function CurrencyRatesModal({ docId, projectCurrencyId, projectCurrencyCode, onClose, onSaved }) {
+  const [doc, setDoc] = React.useState(null);
+  const [rates, setRates] = React.useState({}); // currencyId -> { value, source }
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    let active = true;
+    api.getDocument(docId).then((d) => {
+      if (!active) return;
+      setDoc(d);
+      const init = {};
+      (d.totalsByCurrency || []).forEach((t) => {
+        init[t.currencyId] = { value: t.fxRate != null ? String(Number(t.fxRate)) : "", source: t.fxRateSource || "manual" };
+      });
+      setRates(init);
+    }).catch((e) => { if (active) setError(e.message || String(e)); });
+    return () => { active = false; };
+  }, [docId]);
+  const foreign = (doc?.totalsByCurrency || []).filter((t) => t.currencyId !== projectCurrencyId);
+  const save = async (e) => {
+    e.preventDefault();
+    const bad = foreign.find((t) => String(rates[t.currencyId]?.value ?? "").trim() && !(n(rates[t.currencyId].value) > 0));
+    if (bad) { setError(`Taux invalide pour ${bad.currencyCode || "une devise"}.`); return; }
+    setError(""); setBusy(true);
+    try {
+      const r = await api.setDocumentCurrencyRates(docId, {
+        rates: foreign.map((t) => {
+          const v = String(rates[t.currencyId]?.value ?? "").trim();
+          return v ? { currency_id: t.currencyId, fx_rate: n(v), fx_rate_source: rates[t.currencyId].source || "manual" } : { currency_id: t.currencyId, fx_rate: null };
+        }),
+      });
+      onSaved(r);
+    } catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Taux de change — {doc?.number || `#${docId}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {!doc && !error && <p className="muted">Chargement…</p>}
+        {doc && !foreign.length && <p className="muted">Ce document est entièrement en {projectCurrencyCode || "devise du chantier"} : aucun taux à fixer.</p>}
+        {foreign.length > 0 && (
+          <div className="form-grid">
+            {foreign.map((t) => (
+              <FxRateField
+                key={t.currencyId}
+                label={`Part en ${t.currencyCode || "autre devise"} : ${money(t.totalTtc, t.currencyCode)}`}
+                projectCurrencyId={projectCurrencyId} projectCurrencyCode={projectCurrencyCode}
+                docCurrencyId={t.currencyId} docCurrencyCode={t.currencyCode}
+                value={rates[t.currencyId]?.value ?? ""}
+                onChange={(v, src) => setRates((prev) => ({ ...prev, [t.currencyId]: { value: v, source: src || "manual" } }))}
+                amount={n(t.totalTtc)}
+              />
+            ))}
+            <small className="muted">Le taux reste modifiable à tout moment ; videz le champ pour retirer le taux (la part redevient « à convertir »).</small>
+          </div>
+        )}
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          {foreign.length > 0 && <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer les taux"}</button>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Parts en autre devise d'un total devis/facture : converties (taux par devise) / à convertir.
+function DocFxNote({ converted, unconverted, budgetCur, onFix }) {
+  const conv = (converted || []).filter((c) => n(c.origin_amount) > 0);
+  const todo = (unconverted || []).filter((c) => n(c.amount) > 0);
+  if (!conv.length && !todo.length) return null;
+  return (
+    <>
+      {conv.map((c) => (
+        <span key={`c${c.currency_id}`}>dont {money(c.converted_amount, budgetCur)} convertis ({money(c.origin_amount, c.currency_code)})</span>
+      ))}
+      {todo.length > 0 && (
+        <span style={{ color: "var(--amber-700, #b45309)" }}>
+          <Icon name="alert" /> + {todo.map((o) => money(o.amount, o.currency_code)).join(" + ")} à convertir
+          {onFix && <> — <button type="button" className="link" onClick={(e) => { e.stopPropagation(); onFix(); }}>fixer le taux</button></>}
+        </span>
+      )}
+    </>
+  );
+}
+
   const foreign = isForeignCurrency(currencyId, currencyCode, projectCurrencyId, projectCurrencyCode);
   const save = async (e) => {
     e.preventDefault();

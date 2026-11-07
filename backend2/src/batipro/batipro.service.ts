@@ -50,6 +50,8 @@ import { OcrService } from "./ocr.service";
 import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
 import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, summarizeFx, toCents, type SpendDoc } from "./funds.util";
 import { bucketPhaseSpend } from "./phase-spend.util";
+import { spentByNature } from "./spent-by-nature.util";
+import { convertDocsToProjectCurrency, type MultiCurrencyResult } from "./multi-currency-total.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -58,6 +60,7 @@ import type {
   CreateBatiproFundDto,
   ConfirmBatiproDocumentDto,
   UpdateBatiproDocumentFxRateDto,
+  UpdateBatiproDocumentCurrencyRatesDto,
   CreateBatiproBuildingLevelDto,
   CreateBatiproBuildingModelDto,
   CreateBatiproChangeOrderDto,
@@ -230,23 +233,8 @@ export class BatiproService {
     // sur le total du devis accepte (meme regle que projectBudgetSummary), pour
     // que l'onglet Avenants & sous-traitants n'affiche pas 0 par defaut.
     if (Number(row.contractAmount ?? 0) === 0) {
-      const projectCurrencyId = row.currencyId ?? null;
-      const sameCurrency = projectCurrencyId != null
-        ? sql`(${batiproDocuments.currencyId} = ${projectCurrencyId} OR ${batiproDocuments.currencyId} IS NULL)`
-        : sql`${batiproDocuments.currencyId} IS NULL`;
-      const [quoteAgg] = await this.db
-        .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
-        .from(batiproDocuments)
-        .where(and(
-          eq(batiproDocuments.projectId, id),
-          eq(batiproDocuments.organizationId, orgId),
-          eq(batiproDocuments.isActive, 1),
-          eq(batiproDocuments.direction, "outbound"),
-          eq(batiproDocuments.type, "quote"),
-          eq(batiproDocuments.status, "accepted"),
-          sameCurrency,
-        ));
-      const quoteAccepted = Number(quoteAgg?.total ?? 0);
+      const quoteFx = await this.multiCurrencyDocTotals(orgId, id, row.currencyId ?? null, "quote", ["accepted"]);
+      const quoteAccepted = fromCents(quoteFx.totalCents);
       if (quoteAccepted > 0) row.contractAmount = String(quoteAccepted);
     }
     return row;
@@ -2507,6 +2495,9 @@ export class BatiproService {
         totalVat: batiproDocumentTotals.totalVat,
         totalTtc: batiproDocumentTotals.totalTtc,
         paidAmount: batiproDocumentTotals.paidAmount,
+        fxRate: batiproDocumentTotals.fxRate,
+        fxRateDate: batiproDocumentTotals.fxRateDate,
+        fxRateSource: batiproDocumentTotals.fxRateSource,
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
       })
@@ -3211,6 +3202,16 @@ export class BatiproService {
 
     if (input.phase_id != null) await this.recomputeProjectRisk(orgId, input.project_id);
     await this.publish("createExpense", ["documents", "document_lines"], "created", documentId, orgId);
+    // SMS proprietaire + ingenieurs (lien actif avec telephone) ; ne throw jamais.
+    void this.ownerNotifier?.notifyExpense(orgId, input.project_id, {
+      designation,
+      amount: fromCents(ttcC),
+      currencyId: Number(input.currency_id),
+      loadBudgetSummary: async () => {
+        const s = await this.projectBudgetSummary(input.project_id, orgId);
+        return { spent: s.spent, budget: s.budget };
+      },
+    });
     return BatiproService.toExpenseJson(await this.loadExpenseBundle(documentId, orgId));
   }
 
@@ -3710,6 +3711,50 @@ export class BatiproService {
   // Montant devis = somme des devis outbound acceptes. BC engages = somme des
   // bons de commande outbound actifs (hors annules). Compare au budget/contrat
   // du chantier. Aucun montant en dur : totaux recalcules cote serveur/DB.
+  // Total en devise chantier des documents outbound d'un type/statuts, toutes
+  // devises (parts converties au taux de chaque devise). Voir multi-currency-total.util.
+  private async multiCurrencyDocTotals(orgId: number, projectId: number, projectCurrencyId: number | null, type: string, statuses: string[]) {
+    const docs = await this.db
+      .select({ id: batiproDocuments.id, currencyId: batiproDocuments.currencyId, totalTtc: batiproDocuments.totalTtc, fxRate: batiproDocuments.fxRate })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, type),
+        inArray(batiproDocuments.status, statuses),
+      ));
+    const totals = docs.length
+      ? await this.db
+        .select({ documentId: batiproDocumentTotals.documentId, currencyId: batiproDocumentTotals.currencyId, totalTtc: batiproDocumentTotals.totalTtc, fxRate: batiproDocumentTotals.fxRate })
+        .from(batiproDocumentTotals)
+        .where(and(
+          eq(batiproDocumentTotals.organizationId, orgId),
+          eq(batiproDocumentTotals.isActive, 1),
+          inArray(batiproDocumentTotals.documentId, docs.map((d) => d.id)),
+        ))
+      : [];
+    return convertDocsToProjectCurrency(docs, totals, projectCurrencyId);
+  }
+
+  private fxBreakdown(r: MultiCurrencyResult, codeById: Map<number, string | null>) {
+    return Array.from(r.convertedOriginCents.entries()).map(([currencyId, origin]) => ({
+      currency_id: currencyId,
+      currency_code: codeById.get(currencyId) ?? null,
+      origin_amount: fromCents(origin),
+      converted_amount: fromCents(r.convertedProjectCents.get(currencyId) ?? 0),
+    }));
+  }
+
+  private fxUnconverted(r: MultiCurrencyResult, codeById: Map<number, string | null>) {
+    return Array.from(r.unconvertedCents.entries()).map(([currencyId, cents]) => ({
+      currency_id: currencyId,
+      currency_code: codeById.get(currencyId) ?? null,
+      amount: fromCents(cents),
+    }));
+  }
+
   async projectBudgetSummary(projectId: number, orgId: number) {
     const project = await this.getProject(projectId, orgId);
     const projectCurrencyId = project.currencyId ?? null;
@@ -3719,18 +3764,10 @@ export class BatiproService {
       ? sql`(${batiproDocuments.currencyId} = ${projectCurrencyId} OR ${batiproDocuments.currencyId} IS NULL)`
       : sql`${batiproDocuments.currencyId} IS NULL`;
 
-    const [quoteAgg] = await this.db
-      .select({ total: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)` })
-      .from(batiproDocuments)
-      .where(and(
-        eq(batiproDocuments.projectId, projectId),
-        eq(batiproDocuments.organizationId, orgId),
-        eq(batiproDocuments.isActive, 1),
-        eq(batiproDocuments.direction, "outbound"),
-        eq(batiproDocuments.type, "quote"),
-        eq(batiproDocuments.status, "accepted"),
-        sameCurrency,
-      ));
+    // Devis acceptes / factures emises : toutes devises, converties en devise
+    // chantier au taux de chaque devise (parts sans taux = "a convertir").
+    const quoteFx = await this.multiCurrencyDocTotals(orgId, projectId, projectCurrencyId, "quote", ["accepted"]);
+    const invoiceFx = await this.multiCurrencyDocTotals(orgId, projectId, projectCurrencyId, "invoice", ["issued", "paid"]);
 
     const [poAgg] = await this.db
       .select({
@@ -3762,9 +3799,9 @@ export class BatiproService {
         sameCurrency,
       ));
 
+    // Encaisse : part devise chantier uniquement (inchange). Emis : invoiceFx.
     const [invoiceAgg] = await this.db
       .select({
-        issued: sql<string>`COALESCE(SUM(${batiproDocuments.totalTtc}), 0)`,
         cashed: sql<string>`COALESCE(SUM(${batiproDocuments.paidAmount}), 0)`,
       })
       .from(batiproDocuments)
@@ -3831,6 +3868,7 @@ export class BatiproService {
         eq(batiproDocuments.isActive, 1),
         sql`NOT ${sameCurrency}`,
         sql`NOT (${batiproDocuments.type} = 'expense' AND ${batiproDocuments.status} = 'cancelled')`,
+        sql`${batiproDocuments.type} NOT IN ('quote', 'invoice')`,
         docsWithTotalsRows.length ? notInArray(batiproDocuments.id, docsWithTotalsRows) : undefined,
         convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
@@ -3855,6 +3893,8 @@ export class BatiproService {
         eq(batiproDocumentTotals.isActive, 1),
         sql`NOT (${sameCurrencyTotals})`,
         sql`NOT (${batiproDocuments.type} = 'expense' AND ${batiproDocuments.status} = 'cancelled')`,
+        // Devis/factures : ventiles a part (quote_unconverted / invoice_unconverted).
+        sql`${batiproDocuments.type} NOT IN ('quote', 'invoice')`,
         convertedIds.length ? notInArray(batiproDocuments.id, convertedIds) : undefined,
       ))
       .groupBy(currencies.currencyCode);
@@ -3868,7 +3908,7 @@ export class BatiproService {
     }
     const otherCurrencyAgg = Array.from(otherCurrencyMerged.entries()).map(([currencyCode, total]) => ({ currencyCode, total }));
 
-    const quoteAccepted = Number(quoteAgg?.total ?? 0);
+    const quoteAccepted = fromCents(quoteFx.totalCents);
     // Engage = BC en devise chantier + contre-valeur figee des BC en autre devise AVEC taux (centimes).
     const purchaseOrdersEngaged = fromCents(toCents(poAgg?.total) + fx.engagedConvertedCents);
     // Depenses directes engagees (devise chantier + contre-valeur figee des depenses en autre devise AVEC taux).
@@ -3881,7 +3921,25 @@ export class BatiproService {
     const fundsSummary = buildFundsSummary(await this.loadFundRows(orgId, projectId), spendDocs, projectCurrencyId, codeById);
     const fundsProjectCurrency = fundsSummary.find((r) => r.currency_id === projectCurrencyId);
     const costActual = this.projectCostActual(spendDocs, projectCurrencyId);
-    const billedIssued = Number(invoiceAgg?.issued ?? 0);
+    // Depense par nature : ventilation du decaisse (total == cost_actual).
+    const natureDocIds = spendDocs.map((d) => d.id);
+    const natureLines = natureDocIds.length
+      ? await this.db
+          .select({
+            documentId: batiproDocumentLines.documentId,
+            lineTtc: batiproDocumentLines.lineTtc,
+            lineType: batiproDocumentLines.lineType,
+            serviceCategory: batiproDocumentLines.serviceCategory,
+          })
+          .from(batiproDocumentLines)
+          .where(and(
+            eq(batiproDocumentLines.organizationId, orgId),
+            eq(batiproDocumentLines.isActive, 1),
+            inArray(batiproDocumentLines.documentId, natureDocIds),
+          ))
+      : [];
+    const spentByNatureRows = spentByNature(spendDocs, natureLines, projectCurrencyId);
+    const billedIssued = fromCents(invoiceFx.totalCents);
     const billedCashed = Number(invoiceAgg?.cashed ?? 0);
     const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
     const budget = Number(project.budget ?? 0);
@@ -3917,6 +3975,7 @@ export class BatiproService {
       direct_expenses_engaged: directExpensesEngaged,
       cost_committed: costCommitted,
       cost_actual: costActual,
+      spent_by_nature: spentByNatureRows,
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
       contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,
@@ -3930,6 +3989,12 @@ export class BatiproService {
       fx_gain_loss_by_currency: fx.gainLossByCurrency.map((g) => ({ ...g, currency_code: codeById.get(g.currency_id) ?? null })),
       // BC en autre devise sans taux : exclus de l'engage ("taux a fixer").
       po_without_fx_rate_count: fx.poWithoutRateCount,
+      // Devis/factures multi-devises : parts converties (taux par devise) et
+      // parts encore sans taux, en montant d'origine.
+      quote_converted_amounts: this.fxBreakdown(quoteFx, codeById),
+      quote_unconverted_amounts: this.fxUnconverted(quoteFx, codeById),
+      invoice_converted_amounts: this.fxBreakdown(invoiceFx, codeById),
+      invoice_unconverted_amounts: this.fxUnconverted(invoiceFx, codeById),
       has_other_currency: otherCurrencyAmounts.length > 0,
       // Montants non comptes ci-dessus car dans une autre devise que le chantier
       // (pas de taux de change invente, affichage separe uniquement).
@@ -4296,6 +4361,54 @@ export class BatiproService {
       ...updated,
       paid_fx_rate_missing: toCents(updated.paidAmount) > 0 && toCents(updated.paidAmountProjectCcy) === 0,
     };
+  }
+
+  // PATCH /batipro/documents/:id/currency-rates : taux PAR DEVISE d'un devis ou
+  // d'une facture (y compris multi-devises). Modifiable a tout moment : la
+  // contre-valeur est recalculee a la lecture (aucun montant converti stocke).
+  // fx_rate null = retire le taux (la part redevient "a convertir"). Indicateur
+  // de suivi budgetaire uniquement : aucune ecriture comptable modifiee.
+  async setDocumentCurrencyRates(id: number, input: UpdateBatiproDocumentCurrencyRatesDto, orgId: number) {
+    const doc = await this.getDocument(id, orgId);
+    if (doc.type !== "quote" && doc.type !== "invoice") {
+      throw new BadRequestException("Taux par devise : reserve aux devis et factures (BC/depenses : PATCH /documents/:id/fx-rate).");
+    }
+    const projectCcy = await this.projectCurrencyId(doc.projectId, orgId);
+    const docCurrencies = new Set((doc.totalsByCurrency ?? []).map((t) => t.currencyId));
+    const seen = new Set<number>();
+    const updates: Array<{ currencyId: number; patch: Partial<typeof batiproDocumentTotals.$inferInsert> }> = [];
+    for (const r of input.rates) {
+      if (seen.has(r.currency_id)) throw new BadRequestException("Une devise est saisie deux fois.");
+      seen.add(r.currency_id);
+      if (!docCurrencies.has(r.currency_id)) throw new BadRequestException("Cette devise n'apparait pas dans le document.");
+      if (r.currency_id === projectCcy) throw new BadRequestException("La devise du chantier n'a pas besoin de taux.");
+      if (r.fx_rate == null) {
+        updates.push({ currencyId: r.currency_id, patch: { fxRate: null, fxRateDate: null, fxRateSource: null } });
+        continue;
+      }
+      const rate = parseFxRate(r.fx_rate);
+      if (rate == null) throw new BadRequestException("Taux de change invalide : nombre strictement positif, 6 decimales maximum.");
+      updates.push({
+        currencyId: r.currency_id,
+        patch: {
+          fxRate: fxRateToString(rate),
+          fxRateDate: r.fx_rate_date ?? new Date().toISOString().slice(0, 10),
+          fxRateSource: r.fx_rate_source ?? "manual",
+        },
+      });
+    }
+    await this.db.transaction(async (tx) => {
+      for (const u of updates) {
+        await tx.update(batiproDocumentTotals).set(u.patch).where(and(
+          eq(batiproDocumentTotals.documentId, id),
+          eq(batiproDocumentTotals.organizationId, orgId),
+          eq(batiproDocumentTotals.currencyId, u.currencyId),
+          eq(batiproDocumentTotals.isActive, 1),
+        ));
+      }
+    });
+    await this.publish("setDocumentCurrencyRates", ["documents", "projects"], "updated", id, orgId);
+    return this.getDocument(id, orgId);
   }
 
   // GET /batipro/fx-rate-suggestion : taux propose pour (from = devise chantier,

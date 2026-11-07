@@ -328,6 +328,19 @@ export class UpdateBatiproDocumentFxRateDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) paid_fx_rate?: number;
 }
 
+// Taux par devise d'un devis/facture (multi-devises). fx_rate null = retirer le taux.
+export class BatiproCurrencyRateItemDto {
+  @Type(() => Number) @IsInt() @Min(1) currency_id!: number;
+  @ValidateIf((_o, v) => v !== null) @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate!: number | null;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+}
+
+export class UpdateBatiproDocumentCurrencyRatesDto {
+  @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => BatiproCurrencyRateItemDto)
+  rates!: BatiproCurrencyRateItemDto[];
+}
+
 // Fonds du chantier : apport recu (proprietaire, associe, autre). Montant exact
 // au centime, devise obligatoire (jamais de devise par defaut en dur).
 export const FUND_CONTRIBUTOR_KINDS = ["owner", "partner", "other"] as const;
@@ -513,6 +526,15 @@ export class CreateBatiproShareLinkDto {
   @IsOptional() @IsString() @MaxLength(32) recipient_phone?: string;
   @IsOptional() @IsIn([30, 90, 365]) expires_in_days?: number;
   @IsOptional() @IsBoolean() send_sms?: boolean;
+  // owner = suivi financier (lecture seule, expire) ; engineer = ingenieur /
+  // responsable de chantier (avancement, photos, reception BC), sans expiration.
+  @IsOptional() @IsIn(["owner", "engineer"]) recipient_type?: "owner" | "engineer";
+}
+
+// Mise a jour d'une phase depuis le lien public ingenieur : avancement + statut seulement.
+export class EngineerPhaseUpdateDto {
+  @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
+  @IsOptional() @IsIn(["A_venir", "En_cours", "Termine"]) status?: string;
 }
 
 // ── Depense chantier (lot 2) : document type=expense, UNE ligne de service ──

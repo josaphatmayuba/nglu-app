@@ -246,195 +246,213 @@ export class RentReminderService {
       }
     }
     let sent = 0;
+    let errors = 0;
     let lastSms: { smsStatus: string; smsError: string | null; hasEmail: boolean } | null = null;
     for (const lease of rows) {
-      if (!lease.nextInvoiceDate && !only) continue;
-      // Send once per overdue period (next_invoice_date advances when the tenant pays).
-      if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
-      // Reglages de l'organisation : relance manuelle = toujours envoyee ; automatique = si active,
-      // a l'heure choisie et au-dela de (delai de grace + jours de rappel) apres l'echeance.
-      if (!only) {
-        const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
-        const late = Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000);
-        if (!cfg.enabled || late < cfg.graceDays + cfg.overdueDays) continue;
-        if (schedule && schedule.hour !== cfg.hour) continue;
-      }
+      try {
+        if (!lease.nextInvoiceDate && !only) continue;
+        // Send once per overdue period (next_invoice_date advances when the tenant pays).
+        if (!only && lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
+        // Reglages de l'organisation : relance manuelle = toujours envoyee ; automatique = si active,
+        // a l'heure choisie et au-dela de (delai de grace + jours de rappel) apres l'echeance.
+        if (!only) {
+          const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
+          const late = Math.floor((Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000);
+          if (!cfg.enabled || late < cfg.graceDays + cfg.overdueDays) continue;
+          if (schedule && schedule.hour !== cfg.hour) continue;
+        }
 
-      // Etat du SMS au locataire (remonte a l'UI pour la relance manuelle).
-      let smsStatus: "sent" | "failed" | "no_phone" | "skipped" = targets.tenant ? "no_phone" : "skipped";
-      let smsError: string | null = null;
-      let smsFailures = 0;
-      let smsSkipped = 0;
+        // Etat du SMS au locataire (remonte a l'UI pour la relance manuelle).
+        let smsStatus: "sent" | "failed" | "no_phone" | "skipped" = targets.tenant ? "no_phone" : "skipped";
+        let smsError: string | null = null;
+        let smsFailures = 0;
+        let smsSkipped = 0;
 
-      const daysLate = Math.floor(
-        (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
-      );
-      const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-      // {amount} = montant EN RETARD (= « Retard » de la carte Loyers : echeances dont la
-      // grace est depassee), identique dans les SMS locataire / contact / proprietaire /
-      // delegue. {totalDue} = « Reste a payer » (inclut le mois encore dans sa grace).
-      // Bail sans devise : devise par defaut de l'organisation (jamais un montant nu).
-      lease.currencySymbol = await resolveCurrencySymbol(this.db, Number(lease.organizationId), lease.currencySymbol);
-      const overdue = await loadLeaseOverdueAmount(
-        this.db,
-        Number(lease.organizationId),
-        { ...lease, id: Number(lease.leaseId) },
-        lease.currencySymbol,
-      );
-      const amount = overdue.text;
-      const place = lease.propertyAddress || lease.propertyName || "votre logement";
+        const daysLate = Math.floor(
+          (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
+        );
+        const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+        // {amount} = montant EN RETARD (= « Retard » de la carte Loyers : echeances dont la
+        // grace est depassee), identique dans les SMS locataire / contact / proprietaire /
+        // delegue. {totalDue} = « Reste a payer » (inclut le mois encore dans sa grace).
+        // Bail sans devise : devise par defaut de l'organisation (jamais un montant nu).
+        lease.currencySymbol = await resolveCurrencySymbol(this.db, Number(lease.organizationId), lease.currencySymbol);
+        const overdue = await loadLeaseOverdueAmount(
+          this.db,
+          Number(lease.organizationId),
+          { ...lease, id: Number(lease.leaseId) },
+          lease.currencySymbol,
+        );
+        // Passe automatique : jamais de relance de retard si le retard reel est <= 0
+        // (loadLeaseOverdueAmount retombe alors sur le total du : on ne s'en sert pas ici).
+        if (!only && !(overdue.overdueValue > 0)) continue;
+        const amount = overdue.text;
+        const place = lease.propertyAddress || lease.propertyName || "votre logement";
 
-      // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
-      // Le locataire est renvoye vers les personnes en charge de SON immeuble
-      // (proprietaire + gestionnaire assigne), pas vers un numero d'entreprise
-      // generique ; on retombe sur le contact de la societe s'il n'y en a aucun.
-      const propertyContacts = await this.ownerNotifications.propertyContactVars(
-        lease.propertyId ? Number(lease.propertyId) : null,
-        lease.organizationId,
-      );
-      // Bailleur cite dans la relance : proprietaire du bien (nom + telephone), sinon la societe.
-      const landlord = await this.ownerNotifications.landlordForProperty(
-        lease.propertyId ? Number(lease.propertyId) : null,
-        Number(lease.organizationId),
-      );
-      const recipients = recipientsMap.get(Number(lease.leaseId)) ?? [];
-      const multi = recipients.length > 1;
-      // Nom(s) affiche(s) a la personne de contact : "A & B" si plusieurs locataires.
-      const groupName = multi ? joinRecipientNames(recipients) : tenantName;
-      const baseVars = {
-        tenantName,
-        firstName: lease.tenantFirstName || tenantName,
-        reference: lease.reference || "",
-        amount,
-        totalDue: overdue.totalDue.text,
-        monthlyRent: amount,
-        address: place,
-        daysLate: String(daysLate),
-        companyName,
-        contactPhone: contactLine,
-        ownerContact: propertyContacts.ownerContact,
-        managerContact: propertyContacts.managerContact,
-        contacts: propertyContacts.contacts || `${companyName}${contactLine}`,
-        ownerName: landlord.name || companyName,
-        ownerPhone: landlord.phone || companyPhone,
-        url: "",
-      };
-      let anyEmail = false;
-      let sentCount = 0;
+        // Texte pilote depuis Reglages > Messages (evenement "payment_reminder").
+        // Le locataire est renvoye vers les personnes en charge de SON immeuble
+        // (proprietaire + gestionnaire assigne), pas vers un numero d'entreprise
+        // generique ; on retombe sur le contact de la societe s'il n'y en a aucun.
+        const propertyContacts = await this.ownerNotifications.propertyContactVars(
+          lease.propertyId ? Number(lease.propertyId) : null,
+          lease.organizationId,
+        );
+        // Bailleur cite dans la relance : proprietaire du bien (nom + telephone), sinon la societe.
+        const landlord = await this.ownerNotifications.landlordForProperty(
+          lease.propertyId ? Number(lease.propertyId) : null,
+          Number(lease.organizationId),
+        );
+        const recipients = recipientsMap.get(Number(lease.leaseId)) ?? [];
+        const multi = recipients.length > 1;
+        // Nom(s) affiche(s) a la personne de contact : "A & B" si plusieurs locataires.
+        const groupName = multi ? joinRecipientNames(recipients) : tenantName;
+        const baseVars = {
+          tenantName,
+          firstName: lease.tenantFirstName || tenantName,
+          reference: lease.reference || "",
+          amount,
+          totalDue: overdue.totalDue.text,
+          monthlyRent: amount,
+          address: place,
+          daysLate: String(daysLate),
+          companyName,
+          contactPhone: contactLine,
+          ownerContact: propertyContacts.ownerContact,
+          managerContact: propertyContacts.managerContact,
+          contacts: propertyContacts.contacts || `${companyName}${contactLine}`,
+          ownerName: landlord.name || companyName,
+          ownerPhone: landlord.phone || companyPhone,
+          url: "",
+        };
+        let anyEmail = false;
+        let sentCount = 0;
+        let emailsSent = 0;
 
-      // Chaque locataire du bail recoit SON rappel (nom + lien portail propres).
-      // Un echec pour l'un ne bloque pas les autres.
-      for (const r of targets.tenant ? recipients : []) {
-        try {
-          const vars = {
-            ...baseVars,
-            tenantName: r.name || tenantName,
-            firstName: r.firstName || r.name || tenantName,
-            url: await this.tenantPortal.portalUrlForTenant(r.customerId, lease.organizationId),
-          };
-          const tenantMsg = await this.ownerNotifications.renderMessage(
-            "payment_reminder",
-            "Bonjour {tenantName}, loyer en retard de {lateLabel} ({amount}). Merci de régulariser. Bailleur : {ownerName}, {ownerPhone}.",
-            vars,
-            { tenantId: r.customerId },
-          );
-          const rel = this.related(multi, r.customerId, lease.leaseId);
-
-          if (r.phone) {
-            // Pas de lien portail ajoute au SMS : il coupait le message (1 SMS max). Il reste
-            // dans l'email, et dans le SMS seulement si le modele contient {url}.
-            const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg);
-            const err = await this.safeSms(
-              r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel,
-              `Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`,
+        // Chaque locataire du bail recoit SON rappel (nom + lien portail propres).
+        // Un echec pour l'un ne bloque pas les autres.
+        for (const r of targets.tenant ? recipients : []) {
+          try {
+            const vars = {
+              ...baseVars,
+              tenantName: r.name || tenantName,
+              firstName: r.firstName || r.name || tenantName,
+              url: await this.tenantPortal.portalUrlForTenant(r.customerId, lease.organizationId),
+            };
+            const tenantMsg = await this.ownerNotifications.renderMessage(
+              "payment_reminder",
+              "Bonjour {tenantName}, loyer en retard de {lateLabel} ({amount}). Merci de régulariser. Bailleur : {ownerName}, {ownerPhone}.",
+              vars,
+              { tenantId: r.customerId },
             );
-            if (err === SMS_SKIPPED) {
-              smsSkipped += 1;
-            } else if (err) {
-              smsFailures += 1;
-              smsError = smsError ?? err;
-            } else {
-              sentCount += 1;
-            }
-          } else {
-            notePreviewMissing(`Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`);
-          }
+            const rel = this.related(multi, r.customerId, lease.leaseId);
 
-          if (r.email) {
-            anyEmail = true;
-            // Meme contenu que le SMS (un seul texte configurable pour les deux canaux).
-            const html = `<p>${escapeHtmlText(tenantMsg)}</p>`;
-            const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, r.customerId, lease.organizationId);
-            await this.safeEmail(r.email, `Rappel: loyer en retard — bail ${lease.reference}`, htmlWithFooter, lease.leaseId, rel);
+            if (r.phone) {
+              // Pas de lien portail ajoute au SMS : il coupait le message (1 SMS max). Il reste
+              // dans l'email, et dans le SMS seulement si le modele contient {url}.
+              const smsWithFooter = this.ownerNotifications.fitOneSms(tenantMsg);
+              const err = await this.safeSms(
+                r.phone, smsWithFooter, lease.leaseId, lease.organizationId, rel,
+                `Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`,
+              );
+              if (err === SMS_SKIPPED) {
+                smsSkipped += 1;
+              } else if (err) {
+                smsFailures += 1;
+                smsError = smsError ?? err;
+              } else {
+                sentCount += 1;
+              }
+            } else {
+              notePreviewMissing(`Locataire · ${r.name || tenantName} · bail ${lease.reference || lease.leaseId}`);
+            }
+
+            if (r.email) {
+              anyEmail = true;
+              // Meme contenu que le SMS (un seul texte configurable pour les deux canaux).
+              const html = `<p>${escapeHtmlText(tenantMsg)}</p>`;
+              const htmlWithFooter = await this.tenantPortal.appendPortalFooterToEmail(html, r.customerId, lease.organizationId);
+              if (await this.safeEmail(r.email, `Rappel: loyer en retard — bail ${lease.reference}`, htmlWithFooter, lease.leaseId, rel)) emailsSent += 1;
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Overdue reminder failed (lease ${lease.leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
-        } catch (error) {
-          this.logger.warn(
-            `Overdue reminder failed (lease ${lease.leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
+        }
+        if (targets.tenant) {
+          if (sentCount > 0) smsStatus = "sent";
+          else if (smsFailures > 0) smsStatus = "failed";
+          else if (smsSkipped > 0) smsStatus = "skipped";
+        }
+
+        if (targets.emergency && lease.emergencyPhone) {
+          // Message distinct : il s'adresse au CONTACT D'URGENCE, pas au locataire
+          // (aucun lien portail ne doit y figurer). Evenement dedie
+          // "payment_reminder_contact" dans les Reglages.
+          const emergencyMsg = await this.ownerNotifications.renderMessage(
+            "payment_reminder_contact",
+            "Bonjour, {tenantName} a {lateLabel} de retard de loyer. Montant du : {amount}. " +
+              "Merci de l'inviter a regulariser : {contacts}",
+            {
+              ...baseVars,
+              ...(multi ? { tenantName: groupName } : {}),
+              // Le SMS est ramene a 160 caracteres en gardant le DERNIER numero : avec
+              // « proprietaire X au ..., gestionnaire Y au ... », le nom du proprietaire
+              // restait accole au numero du gestionnaire. On cite le bailleur seul, comme
+              // le SMS du locataire (meme nom, meme numero).
+              contacts: landlord.phone
+                ? `proprietaire ${landlord.name || companyName} au ${landlord.phone}`
+                : baseVars.contacts,
+            },
+            multi ? undefined : { tenantId: lease.tenantId },
+          );
+          await this.safeSms(
+            lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId, undefined,
+            `Contact d'urgence · bail ${lease.reference || lease.leaseId}`,
+          );
+        } else if (targets.emergency) {
+          notePreviewMissing(`Contact d'urgence · bail ${lease.reference || lease.leaseId}`);
+        }
+
+        // Le PROPRIETAIRE du bien est prevenu du retard au meme rythme que le
+        // locataire (une fois par periode impayee) : c'est son loyer qui manque.
+        // Best-effort, comme les autres envois de cette boucle.
+        if (targets.owner || targets.delegates) {
+          await this.ownerNotifications.notifyPaymentOverdue(
+            lease.leaseId,
+            Number(lease.propertyId),
+            daysLate,
+            lease.organizationId,
+            { owner: targets.owner, delegates: targets.delegates },
           );
         }
-      }
-      if (targets.tenant) {
-        if (sentCount > 0) smsStatus = "sent";
-        else if (smsFailures > 0) smsStatus = "failed";
-        else if (smsSkipped > 0) smsStatus = "skipped";
-      }
 
-      if (targets.emergency && lease.emergencyPhone) {
-        // Message distinct : il s'adresse au CONTACT D'URGENCE, pas au locataire
-        // (aucun lien portail ne doit y figurer). Evenement dedie
-        // "payment_reminder_contact" dans les Reglages.
-        const emergencyMsg = await this.ownerNotifications.renderMessage(
-          "payment_reminder_contact",
-          "Bonjour, {tenantName} a {lateLabel} de retard de loyer. Montant du : {amount}. " +
-            "Merci de l'inviter a regulariser : {contacts}",
-          {
-            ...baseVars,
-            ...(multi ? { tenantName: groupName } : {}),
-            // Le SMS est ramene a 160 caracteres en gardant le DERNIER numero : avec
-            // « proprietaire X au ..., gestionnaire Y au ... », le nom du proprietaire
-            // restait accole au numero du gestionnaire. On cite le bailleur seul, comme
-            // le SMS du locataire (meme nom, meme numero).
-            contacts: landlord.phone
-              ? `proprietaire ${landlord.name || companyName} au ${landlord.phone}`
-              : baseVars.contacts,
-          },
-          multi ? undefined : { tenantId: lease.tenantId },
+        // Throttle par BAIL, pose UNE seule fois apres la boucle. Periode NON marquee dans 2 cas :
+        // - failed : nouvelle tentative possible ;
+        // - skipped : SMS desactives dans Reglages (meme interrupteur que les SMS proprietaire /
+        //   delegues, eux aussi coupes) -> la periode reste ouverte pour quand ils seront actives,
+        //   sauf si un e-mail locataire est parti.
+        // no_phone : marquee (reessayer ne sert a rien tant que le numero manque).
+        const notDelivered = smsStatus === "failed" || (smsStatus === "skipped" && emailsSent === 0);
+        if (targets.tenant && !notDelivered && !isPreviewing()) {
+          await this.db
+            .update(realEstateLeases)
+            .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
+            .where(eq(realEstateLeases.id, lease.leaseId));
+        }
+        sent += 1;
+        lastSms = { smsStatus, smsError, hasEmail: anyEmail };
+      } catch (error) {
+        errors += 1;
+        this.logger.error(
+          `Overdue reminder failed (lease ${lease.leaseId}, org ${lease.organizationId}): ${error instanceof Error ? error.message : String(error)}`,
         );
-        await this.safeSms(
-          lease.emergencyPhone, emergencyMsg, lease.leaseId, lease.organizationId, undefined,
-          `Contact d'urgence · bail ${lease.reference || lease.leaseId}`,
-        );
-      } else if (targets.emergency) {
-        notePreviewMissing(`Contact d'urgence · bail ${lease.reference || lease.leaseId}`);
+        // Relance manuelle : l'erreur remonte a l'appelant ; passe automatique : on continue avec les autres baux.
+        if (only) throw error;
       }
-
-      // Le PROPRIETAIRE du bien est prevenu du retard au meme rythme que le
-      // locataire (une fois par periode impayee) : c'est son loyer qui manque.
-      // Best-effort, comme les autres envois de cette boucle.
-      if (targets.owner || targets.delegates) {
-        await this.ownerNotifications.notifyPaymentOverdue(
-          lease.leaseId,
-          Number(lease.propertyId),
-          daysLate,
-          lease.organizationId,
-          { owner: targets.owner, delegates: targets.delegates },
-        );
-      }
-
-      // Throttle par BAIL, pose UNE seule fois apres la boucle. Tous les SMS ont
-      // echoue : on ne marque PAS la periode comme relancee, pour que la
-      // prochaine passe automatique (ou un nouveau clic) puisse le renvoyer.
-      if (targets.tenant && smsStatus !== "failed" && !isPreviewing()) {
-        await this.db
-          .update(realEstateLeases)
-          .set({ lastOverdueReminderDate: lease.nextInvoiceDate, updatedAt: sql`CURRENT_TIMESTAMP` })
-          .where(eq(realEstateLeases.id, lease.leaseId));
-      }
-      sent += 1;
-      lastSms = { smsStatus, smsError, hasEmail: anyEmail };
     }
 
-    return { candidates: rows.length, sent, ...(only ? lastSms : {}) };
+    return { candidates: rows.length, sent, errors, ...(only ? lastSms : {}) };
   }
 
   /**
@@ -494,8 +512,10 @@ export class RentReminderService {
 
     const recipientsMap = await this.recipientsByLease(rows);
     let sent = 0;
+    let errors = 0;
 
     for (const lease of rows) {
+      try {
       // Deja annonce pour CETTE echeance : on ne renvoie pas chaque jour.
       if (lease.lastExpiryReminder && lease.lastExpiryReminder === lease.endDate) continue;
       const cfg = await this.reminderConfig(Number(lease.organizationId), configs);
@@ -530,6 +550,8 @@ export class RentReminderService {
       // numero ; un numero partage = un seul SMS). Un echec ne bloque personne.
       const recipients = recipientsMap.get(Number(lease.leaseId)) ?? [];
       const multi = recipients.length > 1;
+      let expirySent = 0;
+      let expiryAttempts = 0;
       for (const r of recipients) {
         if (!r.phone) continue;
         try {
@@ -544,7 +566,9 @@ export class RentReminderService {
             },
             { tenantId: r.customerId },
           );
-          await this.safeSms(r.phone, msg, lease.leaseId, lease.organizationId, this.related(multi, r.customerId, lease.leaseId));
+          expiryAttempts += 1;
+          const err = await this.safeSms(r.phone, msg, lease.leaseId, lease.organizationId, this.related(multi, r.customerId, lease.leaseId));
+          if (err === null) expirySent += 1;
         } catch (error) {
           this.logger.warn(
             `Expiry reminder failed (lease ${lease.leaseId}, tenant ${r.customerId}): ${error instanceof Error ? error.message : String(error)}`,
@@ -558,14 +582,24 @@ export class RentReminderService {
         lease.organizationId,
       );
 
-      await this.db
-        .update(realEstateLeases)
-        .set({ lastExpiryReminderDate: lease.endDate, updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(realEstateLeases.id, lease.leaseId));
+      // Meme regle : NON marquee si un SMS locataire a ete tente sans partir (skipped = SMS
+      // desactives, ou echec). Aucun telephone (aucune tentative) : marquee comme avant.
+      if ((expirySent > 0 || expiryAttempts === 0) && !isPreviewing()) {
+        await this.db
+          .update(realEstateLeases)
+          .set({ lastExpiryReminderDate: lease.endDate, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstateLeases.id, lease.leaseId));
+      }
       sent += 1;
+      } catch (error) {
+        errors += 1;
+        this.logger.error(
+          `Expiry reminder failed (lease ${lease.leaseId}, org ${lease.organizationId}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
-    return { candidates: rows.length, sent };
+    return { candidates: rows.length, sent, errors };
   }
 
   /** Locataires (principal + colocataires actifs) de chaque bail, 1 requete par organisation. */
@@ -660,7 +694,7 @@ export class RentReminderService {
     html: string,
     leaseId: number,
     related: { relatedType: string; relatedId: number } = { relatedType: "real-estate-lease", relatedId: leaseId },
-  ) {
+  ): Promise<boolean> {
     try {
       await this.emails.send({
         to,
@@ -669,8 +703,10 @@ export class RentReminderService {
         type: "payment_reminder",
         ...related,
       });
+      return true;
     } catch (error) {
       this.logger.warn(`Reminder email error (lease ${leaseId}, ${to}): ${error instanceof Error ? error.message : String(error)}`);
+      return false;
     }
   }
 }

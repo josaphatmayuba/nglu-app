@@ -4,6 +4,7 @@ import App from "./app.jsx";
 import SubcontractorSubmit from "./SubcontractorSubmit.jsx";
 import ClientDocument from "./ClientDocument.jsx";
 import OwnerTracking from "./OwnerTracking.jsx";
+import EngineerSite from "./EngineerSite.jsx";
 import { bootstrapAuth } from "./auth.jsx";
 import { mountVersionBadge } from "./version-badge.js";
 import "./styles.css";
@@ -23,6 +24,11 @@ const trackingMatch = typeof window !== "undefined"
   ? window.location.pathname.match(/(?:\/batipro)?\/suivi\/([^/?#]+)/)
   : null;
 
+// Acces ingenieur / responsable de chantier : /batipro/chantier/:token (sans compte).
+const siteMatch = typeof window !== "undefined"
+  ? window.location.pathname.match(/(?:\/batipro)?\/chantier\/([^/?#]+)/)
+  : null;
+
 class ErrorBoundary extends React.Component {
   state = { err: null };
   static getDerivedStateFromError(err) { return { err }; }
@@ -39,7 +45,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-if (trackingMatch) {
+if (siteMatch) {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <ErrorBoundary>
+      <EngineerSite token={decodeURIComponent(siteMatch[1])} />
+    </ErrorBoundary>
+  );
+} else if (trackingMatch) {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <OwnerTracking token={decodeURIComponent(trackingMatch[1])} />

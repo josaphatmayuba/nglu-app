@@ -166,4 +166,60 @@ describe("BatiproShareService", () => {
     await expect(svc.getPublicPhoto(TOKEN, 5)).rejects.toThrow(INVALID);
     expect(storage.getObject).not.toHaveBeenCalled();
   });
+
+  // ── Lien ingenieur / responsable de chantier ──
+  it("createLink ingenieur : sans expiration, URL /chantier, pas de repli sur le proprietaire", async () => {
+    const inserted: any[] = [];
+    const sms = jest.fn().mockResolvedValue(true);
+    const { svc } = setup([], { inserted, sms });
+    const res = await svc.createLink(5, { recipient_type: "engineer", recipient_name: "Ing. Paul", recipient_phone: "0991112222", send_sms: true }, 1, 9, "all");
+    expect(inserted[0].recipientType).toBe("engineer");
+    expect(inserted[0].expiresAt).toBeNull();
+    expect(inserted[0].recipientName).toBe("Ing. Paul");
+    expect(inserted[0].recipientPhone).toBe("+243991112222");
+    expect(res.url.endsWith(`/batipro/chantier/${res.token}`)).toBe(true);
+    expect(sms.mock.calls[0][4]).toBe("engineer");
+  });
+
+  it("createLink ingenieur : nom obligatoire (jamais le nom du proprietaire)", async () => {
+    const inserted: any[] = [];
+    const { svc } = setup([], { inserted });
+    await expect(svc.createLink(5, { recipient_type: "engineer" }, 1, 9, "all")).rejects.toThrow(/obligatoire/);
+    expect(inserted).toHaveLength(0);
+  });
+
+  it("jeton proprietaire refuse sur la vue ingenieur, et inversement", async () => {
+    const a = setup([[linkRow({ recipientType: "owner" })]]);
+    await expect(a.svc.getEngineerSite(TOKEN)).rejects.toThrow(INVALID);
+    const b = setup([[linkRow({ recipientType: "engineer" })]]);
+    await expect(b.svc.getPublicTracking(TOKEN)).rejects.toThrow(INVALID);
+  });
+
+  it("phase d'un autre chantier -> introuvable, aucune mise a jour", async () => {
+    const { svc, batipro } = setup([[linkRow({ recipientType: "engineer" })], [{ id: 5 }], []]);
+    (batipro as any).updatePhase = jest.fn();
+    await expect(svc.updatePhaseFromLink(TOKEN, 99, { progress: 50 })).rejects.toBeInstanceOf(NotFoundException);
+    expect((batipro as any).updatePhase).not.toHaveBeenCalled();
+  });
+
+  it("phase : seuls progress/status sont transmis", async () => {
+    const { svc, batipro } = setup([[linkRow({ recipientType: "engineer" })], [{ id: 5 }], [{ id: 3 }]]);
+    (batipro as any).updatePhase = jest.fn().mockResolvedValue({ id: 3, label: "Fondations", status: "En_cours", progress: 60 });
+    await svc.updatePhaseFromLink(TOKEN, 3, { progress: 60, status: "En_cours", planned_budget: 1 } as any);
+    expect((batipro as any).updatePhase).toHaveBeenCalledWith(3, { progress: 60, status: "En_cours" }, 1);
+  });
+
+  it("reception : BC d'un autre chantier refuse ; sinon note tracee avec le nom", async () => {
+    const ko = setup([[linkRow({ recipientType: "engineer" })], [{ id: 5 }], []]);
+    (ko.batipro as any).receivePurchaseOrder = jest.fn();
+    await expect(ko.svc.receiveFromLink(TOKEN, 77, { lines: [{ line_id: 1, quantity: 2 }] })).rejects.toBeInstanceOf(NotFoundException);
+    expect((ko.batipro as any).receivePurchaseOrder).not.toHaveBeenCalled();
+
+    const ok = setup([[linkRow({ recipientType: "engineer", recipientName: "Paul" })], [{ id: 5 }], [{ id: 77 }]]);
+    (ok.batipro as any).receivePurchaseOrder = jest.fn().mockResolvedValue({ status: "partially_received" });
+    const res = await ok.svc.receiveFromLink(TOKEN, 77, { lines: [{ line_id: 1, quantity: 2 }], note: "camion 1" });
+    expect((ok.batipro as any).receivePurchaseOrder.mock.calls[0][1].note).toBe("[Lien chantier - Paul] camion 1");
+    expect((ok.batipro as any).receivePurchaseOrder.mock.calls[0][3]).toBeUndefined();
+    expect(res.status).toBe("partially_received");
+  });
 });

@@ -36,7 +36,8 @@ function setup(opts: { bundle?: any; ledger?: any } = {}) {
   };
   const db: any = { ...txMock, transaction: jest.fn().mockImplementation(async (fn: any) => fn(txMock)) };
   const ledger: any = opts.ledger ?? { postByRules: jest.fn(), reverse: jest.fn().mockResolvedValue({ reversedEntryId: 7, reversalEntryId: 8 }) };
-  const svc: any = new BatiproService(db, {} as any, {} as any, ledger, {} as any, {} as any, {} as any);
+  const notifier = { notifyExpense: jest.fn().mockResolvedValue(undefined), notifyPayment: jest.fn() };
+  const svc: any = new BatiproService(db, {} as any, {} as any, ledger, {} as any, {} as any, notifier as any);
   svc.findExpenseEntry = jest.fn().mockResolvedValue(null);
   svc.expensePendingRows = jest.fn().mockResolvedValue([]);
   svc.assertProjectInScope = jest.fn().mockImplementation(async (projectId: number, _o: number, scope: any) => {
@@ -56,7 +57,7 @@ function setup(opts: { bundle?: any; ledger?: any } = {}) {
   });
   const docIns = () => inserts.find((i) => i.table === batiproDocuments)!.values;
   const lineIns = () => inserts.find((i) => i.table === batiproDocumentLines)!.values;
-  return { svc, db, ledger, inserts, updates, docIns, lineIns };
+  return { svc, db, ledger, inserts, updates, docIns, lineIns, notifier };
 }
 
 const dto = (over: Record<string, unknown> = {}) => ({
@@ -83,6 +84,16 @@ describe("BatiPro depense chantier - creation", () => {
     expect(line).toMatchObject({ lineType: "service", serviceCategory: "labor", materialId: null, quantity: "1", documentId: 42 });
     expect(inserts.some((i) => i.table === batiproMaterials || i.table === batiproStockMovements)).toBe(false);
     expect(out).toMatchObject({ id: 42, type: "expense", number: "DEP-2026-0007", status: "recorded", amountTtc: "123.45", paidAmount: "0.00", balance: "123.45" });
+  });
+
+  it("SMS : chaque depense notifie proprietaire + ingenieurs (montant exact, devise, chantier)", async () => {
+    const { svc, notifier } = setup();
+    await svc.createExpense(dto(), ORG, 9, "all");
+    expect(notifier.notifyExpense).toHaveBeenCalledTimes(1);
+    const [org, projectId, payload] = notifier.notifyExpense.mock.calls[0];
+    expect(org).toBe(ORG);
+    expect(projectId).toBe(5);
+    expect(payload).toMatchObject({ amount: 123.45, currencyId: USD });
   });
 
   it("montants exacts sans arrondi : 123.45 TTC, 150.61 TTC/HT, TVA = TTC - HT en centimes", async () => {
