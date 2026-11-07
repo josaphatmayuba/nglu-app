@@ -5435,14 +5435,6 @@ function BudgetFxLines({ budget, budgetCur }) {
   );
 }
 
-// Règlement d'un document (bon de commande / facture) — montant toujours dans
-// la devise du document (le backend ne convertit pas), affichée en lecture seule.
-function PaymentModal({ balance, currencyCode, currencyId, projectCurrencyId, projectCurrencyCode, onClose, onConfirm }) {
-  const [amount, setAmount] = React.useState(balance);
-  const [error, setError] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [fxRate, setFxRate] = React.useState("");
-  const [fxSource, setFxSource] = React.useState("manual");
 // Taux PAR DEVISE d'un devis/facture (y compris multi-devises), modifiable à tout
 // moment (PATCH /documents/:id/currency-rates). Champ vide = retirer le taux.
 function CurrencyRatesModal({ docId, projectCurrencyId, projectCurrencyCode, onClose, onSaved }) {
@@ -5534,6 +5526,14 @@ function DocFxNote({ converted, unconverted, budgetCur, onFix }) {
   );
 }
 
+// Règlement d'un document (bon de commande / facture) — montant toujours dans
+// la devise du document (le backend ne convertit pas), affichée en lecture seule.
+function PaymentModal({ balance, currencyCode, currencyId, projectCurrencyId, projectCurrencyCode, onClose, onConfirm }) {
+  const [amount, setAmount] = React.useState(balance);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [fxRate, setFxRate] = React.useState("");
+  const [fxSource, setFxSource] = React.useState("manual");
   const foreign = isForeignCurrency(currencyId, currencyCode, projectCurrencyId, projectCurrencyCode);
   const save = async (e) => {
     e.preventDefault();
