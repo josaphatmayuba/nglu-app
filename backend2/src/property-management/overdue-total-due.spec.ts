@@ -1,4 +1,5 @@
-import { computeLeaseTotalDue } from "./lease-proration";
+import { computeLeaseTotalDue, computeTerminationCharge } from "./lease-proration";
+import { computeEndedLeaseBalance } from "./former-debt";
 import { formatMoneyFr, loadLeaseTotalDue } from "./lease-overdue";
 import { OwnerNotificationsService } from "./owner-notifications.service";
 import { RentReminderService } from "./rent-reminder.service";
@@ -203,5 +204,38 @@ describe("computeLeaseTotalDue : plafond a la sortie d'un bail 'ended'", () => {
     const a = computeLeaseTotalDue(l as any, 0, 2, new Date("2026-06-01T00:00:00Z"));
     const b = computeLeaseTotalDue(l as any, 0, 2, new Date("2026-12-01T00:00:00Z"));
     expect(b).toBe(a);
+  });
+
+  describe("fin normale (bug #89)", () => {
+    const base = { startDate: "2025-10-01", endDate: "2026-10-01", billingCycle: "monthly", rentAmount: "1500", rentProrationEnabled: 0, status: "ended", terminationDate: null };
+    const now = new Date(2026, 10, 7);
+    it("1. 2025-10-01 -> 2026-10-01 : 12 mois, arriere 4500", () => {
+      expect(computeLeaseTotalDue(base as any, 13500, 2, now)).toBe(4500);
+    });
+    it("2. 2025-10-15 -> 2026-10-14 : 12 mois", () => {
+      expect(computeLeaseTotalDue({ ...base, startDate: "2025-10-15", endDate: "2026-10-14" } as any, 0, 2, now)).toBe(18000);
+    });
+    it("3. 2025-10-01 -> 2026-09-30 : 12 mois (inchange)", () => {
+      expect(computeLeaseTotalDue({ ...base, endDate: "2026-09-30" } as any, 0, 2, now)).toBe(18000);
+    });
+    it("4. resiliation explicite avec terminationDate : mois de sortie conserve (13 mois)", () => {
+      expect(computeLeaseTotalDue({ ...base, terminationDate: "2026-10-01" } as any, 0, 2, now)).toBe(19500);
+    });
+    it("5. computeTerminationCharge sur bail actif, jour 2026-10-01 : 13 mois inchange", () => {
+      expect(computeTerminationCharge({ ...base, status: "active" } as any, "2026-10-01", 2)).toBe(19500);
+    });
+    it("6. computeEndedLeaseBalance : 9 paiements de 1500 + 4 pending = 4500.00", () => {
+      const payments = [
+        ...Array.from({ length: 9 }, (_, i) => ({ id: i + 1, status: "paid", rowKind: null, paymentDate: "2025-10-01", amount: "1500", periodStart: null, periodEnd: null })),
+        ...Array.from({ length: 4 }, (_, i) => ({ id: 20 + i, status: "pending", rowKind: null, paymentDate: "2026-07-01", amount: "1500", periodStart: null, periodEnd: null })),
+      ];
+      const r = computeEndedLeaseBalance({ lease: { id: 1, ...base } as any, decimals: 2, payments, now });
+      expect(r.balance).toBe("4500.00");
+    });
+    it("7. duree quelconque : 5 mois et 24 mois, fin au jour anniversaire", () => {
+      const later = new Date(2028, 0, 1);
+      expect(computeLeaseTotalDue({ ...base, endDate: "2026-03-01" } as any, 0, 2, later)).toBe(7500);
+      expect(computeLeaseTotalDue({ ...base, startDate: "2025-06-01", endDate: "2027-06-01" } as any, 0, 2, later)).toBe(36000);
+    });
   });
 });

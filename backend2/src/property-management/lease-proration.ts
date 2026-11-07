@@ -183,10 +183,19 @@ export function exitMonthProration(
 /**
  * Total facture d'un bail a loyer fixe sorti le `cutoff` (avant versements).
  * - prorata (terminationFullPeriod = 0) : periodes ancrees jusqu'a la sortie, la derniere au prorata ;
- * - sinon (historique) : mois civils depuis le debut, mois de sortie inclus, en entier.
+ * - sinon (historique) : mois civils depuis le debut, mois de sortie inclus, en entier ;
+ * - fin normale (status 'ended', sans terminationDate, cutoff = endDate) : echeances mensuelles ancrees
+ *   sur le debut, strictement avant la fin (une echeance tombant le jour de fin ou apres n'est pas due).
  */
 export function terminationPeriodCharge(
-  lease: { startDate: string; billingCycle?: string | null; terminationFullPeriod?: boolean | number | null },
+  lease: {
+    startDate: string;
+    billingCycle?: string | null;
+    terminationFullPeriod?: boolean | number | null;
+    status?: string | null;
+    terminationDate?: string | null;
+    endDate?: string | null;
+  },
   cutoff: string,
   rent: number,
   decimals: number,
@@ -196,7 +205,17 @@ export function terminationPeriodCharge(
     const exit = exitMonthProration(lease, cutoff, rent, decimals);
     return { periods: p.k + 1, exit, charge: roundMoney((p.k + 1) * rent - (exit ? exit.reduction : 0), decimals) };
   }
-  const months = Math.max(0, monthsBetween(parseDateOnly(lease.startDate), parseDateOnly(cutoff))) + 1;
+  const normalEnd =
+    lease.status === "ended" && !lease.terminationDate && !!lease.endDate && cutoff === String(lease.endDate).slice(0, 10);
+  let months: number;
+  if (normalEnd) {
+    const start = parseDateOnly(lease.startDate);
+    months = 0;
+    while (months < 1200 && formatDateOnly(addBillingCycle(start, "monthly", months)) < cutoff) months++;
+    months = Math.max(1, months);
+  } else {
+    months = Math.max(0, monthsBetween(parseDateOnly(lease.startDate), parseDateOnly(cutoff))) + 1;
+  }
   return { periods: months, exit: null, charge: roundMoney(months * rent, decimals) };
 }
 
