@@ -665,6 +665,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6, marginBottom: 12 }}>
                   <span>Décaissé : {money(budget?.cost_actual, budgetCur)}</span>
                   <span>Devis accepté : {money(budget?.quote_accepted, budgetCur)}</span>
+                  <DocFxNote converted={budget?.quote_converted_amounts} unconverted={budget?.quote_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("devis")} />
                 </div>
               </div>
               <div onClick={() => setTab("fonds")} style={{ cursor: "pointer" }}>
@@ -684,6 +685,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                 />
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 11, color: "var(--ink-500)", marginTop: -6 }}>
                   <span>Encaissé : {money(budget?.billed_cashed, budgetCur)}</span>
+                  <DocFxNote converted={budget?.invoice_converted_amounts} unconverted={budget?.invoice_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("factures")} />
                 </div>
               </div>
             </div>
@@ -1661,6 +1663,7 @@ function Devis({ projects, canMutate, fixedProjectId }) {
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "share", id: d.id })}><Icon name="userPlus" /> Envoyer</button>}
+                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "rates", id: d.id })}>Taux de change</button>}
                       {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-success" onClick={() => decide(d, "accepted")}>Marquer accepté</button>}
                       {canMutate && can("update-batipro") && ["draft", "sent", "viewed"].includes(d.status) && <button className="link link-danger" onClick={() => decide(d, "refused")}>Marquer refusé</button>}
                       {canMutate && can("update-batipro") && (
@@ -1692,6 +1695,10 @@ function Devis({ projects, canMutate, fixedProjectId }) {
         />
       )}
       {modal?.kind === "share" && <DevisShareModal docId={modal.id} onClose={() => setModal(null)} onShared={load} />}
+      {modal?.kind === "rates" && (
+        <CurrencyRatesModal docId={modal.id} projectCurrencyId={selected?.currencyId} projectCurrencyCode={cur}
+          onClose={() => setModal(null)} onSaved={() => { setModal(null); load(); }} />
+      )}
     </>
   );
 }
@@ -2269,6 +2276,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
           />
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "var(--ink-500)" }}>
             <span>Devis accepté (prévu) : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.quote_accepted, budgetCur)}</strong></span>
+            <DocFxNote converted={budget.quote_converted_amounts} unconverted={budget.quote_unconverted_amounts} budgetCur={budgetCur} />
             <span>Déjà dépensé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.spent, budgetCur)}</strong></span>
             <span>Reste vs budget : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.remaining_vs_budget, budgetCur)}</strong></span>
           </div>
@@ -3361,6 +3369,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
   const [payModal, setPayModal] = React.useState(null);
+  const [ratesDocId, setRatesDocId] = React.useState(null);
 
   const selected = projects.find((p) => p.id === projectId);
   const cur = selected?.currencyCode;
@@ -3472,6 +3481,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
                         {canMutate && can("update-batipro") && (d.status === "issued") && (
                           <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Encaisser</button>
                         )}
+                        {canMutate && can("update-batipro") && <button className="link" onClick={() => setRatesDocId(d.id)}>Taux de change</button>}
                       </div>
                     </td>
                   </tr>
@@ -3490,6 +3500,10 @@ function Factures({ projects, canMutate, fixedProjectId }) {
           onClose={() => setPayModal(null)}
           onConfirm={confirmPay}
         />
+      )}
+      {ratesDocId && (
+        <CurrencyRatesModal docId={ratesDocId} projectCurrencyId={selected?.currencyId} projectCurrencyCode={cur}
+          onClose={() => setRatesDocId(null)} onSaved={() => { setRatesDocId(null); load(); }} />
       )}
     </>
   );
@@ -5362,6 +5376,97 @@ function PaymentModal({ balance, currencyCode, currencyId, projectCurrencyId, pr
   const [busy, setBusy] = React.useState(false);
   const [fxRate, setFxRate] = React.useState("");
   const [fxSource, setFxSource] = React.useState("manual");
+// Taux PAR DEVISE d'un devis/facture (y compris multi-devises), modifiable à tout
+// moment (PATCH /documents/:id/currency-rates). Champ vide = retirer le taux.
+function CurrencyRatesModal({ docId, projectCurrencyId, projectCurrencyCode, onClose, onSaved }) {
+  const [doc, setDoc] = React.useState(null);
+  const [rates, setRates] = React.useState({}); // currencyId -> { value, source }
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    let active = true;
+    api.getDocument(docId).then((d) => {
+      if (!active) return;
+      setDoc(d);
+      const init = {};
+      (d.totalsByCurrency || []).forEach((t) => {
+        init[t.currencyId] = { value: t.fxRate != null ? String(Number(t.fxRate)) : "", source: t.fxRateSource || "manual" };
+      });
+      setRates(init);
+    }).catch((e) => { if (active) setError(e.message || String(e)); });
+    return () => { active = false; };
+  }, [docId]);
+  const foreign = (doc?.totalsByCurrency || []).filter((t) => t.currencyId !== projectCurrencyId);
+  const save = async (e) => {
+    e.preventDefault();
+    const bad = foreign.find((t) => String(rates[t.currencyId]?.value ?? "").trim() && !(n(rates[t.currencyId].value) > 0));
+    if (bad) { setError(`Taux invalide pour ${bad.currencyCode || "une devise"}.`); return; }
+    setError(""); setBusy(true);
+    try {
+      const r = await api.setDocumentCurrencyRates(docId, {
+        rates: foreign.map((t) => {
+          const v = String(rates[t.currencyId]?.value ?? "").trim();
+          return v ? { currency_id: t.currencyId, fx_rate: n(v), fx_rate_source: rates[t.currencyId].source || "manual" } : { currency_id: t.currencyId, fx_rate: null };
+        }),
+      });
+      onSaved(r);
+    } catch (err) { setError(err.message || String(err)); setBusy(false); }
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={save}>
+        <div className="modal-head">
+          <div><h2 className="font-display">Taux de change — {doc?.number || `#${docId}`}</h2></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        {!doc && !error && <p className="muted">Chargement…</p>}
+        {doc && !foreign.length && <p className="muted">Ce document est entièrement en {projectCurrencyCode || "devise du chantier"} : aucun taux à fixer.</p>}
+        {foreign.length > 0 && (
+          <div className="form-grid">
+            {foreign.map((t) => (
+              <FxRateField
+                key={t.currencyId}
+                label={`Part en ${t.currencyCode || "autre devise"} : ${money(t.totalTtc, t.currencyCode)}`}
+                projectCurrencyId={projectCurrencyId} projectCurrencyCode={projectCurrencyCode}
+                docCurrencyId={t.currencyId} docCurrencyCode={t.currencyCode}
+                value={rates[t.currencyId]?.value ?? ""}
+                onChange={(v, src) => setRates((prev) => ({ ...prev, [t.currencyId]: { value: v, source: src || "manual" } }))}
+                amount={n(t.totalTtc)}
+              />
+            ))}
+            <small className="muted">Le taux reste modifiable à tout moment ; videz le champ pour retirer le taux (la part redevient « à convertir »).</small>
+          </div>
+        )}
+        {error && <div className="login-error">{error}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          {foreign.length > 0 && <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer les taux"}</button>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Parts en autre devise d'un total devis/facture : converties (taux par devise) / à convertir.
+function DocFxNote({ converted, unconverted, budgetCur, onFix }) {
+  const conv = (converted || []).filter((c) => n(c.origin_amount) > 0);
+  const todo = (unconverted || []).filter((c) => n(c.amount) > 0);
+  if (!conv.length && !todo.length) return null;
+  return (
+    <>
+      {conv.map((c) => (
+        <span key={`c${c.currency_id}`}>dont {money(c.converted_amount, budgetCur)} convertis ({money(c.origin_amount, c.currency_code)})</span>
+      ))}
+      {todo.length > 0 && (
+        <span style={{ color: "var(--amber-700, #b45309)" }}>
+          <Icon name="alert" /> + {todo.map((o) => money(o.amount, o.currency_code)).join(" + ")} à convertir
+          {onFix && <> — <button type="button" className="link" onClick={(e) => { e.stopPropagation(); onFix(); }}>fixer le taux</button></>}
+        </span>
+      )}
+    </>
+  );
+}
+
   const foreign = isForeignCurrency(currencyId, currencyCode, projectCurrencyId, projectCurrencyCode);
   const save = async (e) => {
     e.preventDefault();

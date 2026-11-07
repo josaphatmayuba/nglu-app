@@ -3437,6 +3437,11 @@ export const batiproDocumentTotals = mysqlTable("batipro_document_totals", {
   totalTtc: decimal("total_ttc", { precision: 14, scale: 2 }).default("0").notNull(),
   paidAmount: decimal("paid_amount", { precision: 14, scale: 2 }).default("0").notNull(),
   ledgerEntryId: bigint("ledger_entry_id", { mode: "number" }),
+  // Taux par devise (migration 0336) : 1 unite devise chantier = fxRate unites
+  // de currencyId. Sert a convertir la part d'un devis/facture multi-devise.
+  fxRate: decimal("fx_rate", { precision: 18, scale: 6 }),
+  fxRateDate: date("fx_rate_date", { mode: "string" }),
+  fxRateSource: varchar("fx_rate_source", { length: 16 }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

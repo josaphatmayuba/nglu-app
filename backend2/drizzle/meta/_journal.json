@@ -2178,6 +2178,13 @@
       "when": 1783324800000,
       "tag": "0335_batipro_document_expense",
       "breakpoints": true
+    },
+    {
+      "idx": 311,
+      "version": "5",
+      "when": 1783411200000,
+      "tag": "0336_batipro_document_totals_fx_rate",
+      "breakpoints": true
     }
   ]
 }

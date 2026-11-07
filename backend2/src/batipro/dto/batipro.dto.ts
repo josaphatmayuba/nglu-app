@@ -328,6 +328,19 @@ export class UpdateBatiproDocumentFxRateDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) paid_fx_rate?: number;
 }
 
+// Taux par devise d'un devis/facture (multi-devises). fx_rate null = retirer le taux.
+export class BatiproCurrencyRateItemDto {
+  @Type(() => Number) @IsInt() @Min(1) currency_id!: number;
+  @ValidateIf((_o, v) => v !== null) @Type(() => Number) @IsNumber({ maxDecimalPlaces: 6 }) @IsPositive() @Max(999999999999) fx_rate!: number | null;
+  @IsOptional() @IsDateString() fx_rate_date?: string;
+  @IsOptional() @IsIn(["manual", "last_exchange"]) fx_rate_source?: "manual" | "last_exchange";
+}
+
+export class UpdateBatiproDocumentCurrencyRatesDto {
+  @IsArray() @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => BatiproCurrencyRateItemDto)
+  rates!: BatiproCurrencyRateItemDto[];
+}
+
 // Fonds du chantier : apport recu (proprietaire, associe, autre). Montant exact
 // au centime, devise obligatoire (jamais de devise par defaut en dur).
 export const FUND_CONTRIBUTOR_KINDS = ["owner", "partner", "other"] as const;

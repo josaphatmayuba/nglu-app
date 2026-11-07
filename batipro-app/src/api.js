@@ -273,6 +273,7 @@ export const api = {
   recordPayment: (id, amount, fxRate) => jsonFetch(`/documents/${id}/payment`, { method: "POST", body: JSON.stringify({ amount, ...(fxRate != null ? { fx_rate: fxRate } : {}) }) }),
   // Taux fige par document (multi-devise) : fixe/corrige le taux ; paid_fx_rate = reprise d'un BC deja regle.
   setDocumentFxRate: (id, b) => jsonFetch(`/documents/${id}/fx-rate`, { method: "PATCH", body: JSON.stringify(b || {}) }),
+  setDocumentCurrencyRates: (id, b) => jsonFetch(`/documents/${id}/currency-rates`, { method: "PATCH", body: JSON.stringify(b || {}) }),
   fxRateSuggestion: (from, to) => jsonFetch(`/fx-rate-suggestion?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   postPurchase: (id) => jsonFetch(`/documents/${id}/post-purchase`, { method: "POST", body: "{}" }),
   // Factures fournisseur (type=invoice, direction=inbound) rattachees a un BC : un BC peut

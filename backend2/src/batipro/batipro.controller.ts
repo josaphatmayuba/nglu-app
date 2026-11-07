@@ -40,6 +40,7 @@ import {
   ReceiveBatiproDocumentDto,
   RecordPaymentDto,
   UpdateBatiproDocumentFxRateDto,
+  UpdateBatiproDocumentCurrencyRatesDto,
   CreateInvoiceFromPurchaseOrderDto,
   ReviewSubmissionDto,
   UpdateBatiproAttendanceDto,
@@ -908,6 +909,13 @@ export class BatiproController {
   @Patch("documents/:id/fx-rate")
   setDocumentFxRate(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproDocumentFxRateDto, @CurrentOrg() orgId: number) {
     return this.batipro.setDocumentFxRate(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Fixe/retire le taux de change par devise d'un devis ou d'une facture (multi-devises), modifiable a tout moment" })
+  @Permissions("update-batipro")
+  @Patch("documents/:id/currency-rates")
+  setDocumentCurrencyRates(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateBatiproDocumentCurrencyRatesDto, @CurrentOrg() orgId: number) {
+    return this.batipro.setDocumentCurrencyRates(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Taux suggere (1 from = rate to) : dernier echange de devise de l'org, sinon dernier taux fige d'un document" })
