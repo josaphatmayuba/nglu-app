@@ -2280,6 +2280,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
             <span>Déjà dépensé : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.spent, budgetCur)}</strong></span>
             <span>Reste vs budget : <strong style={{ color: "var(--ink-900, #111)" }}>{money(budget.remaining_vs_budget, budgetCur)}</strong></span>
           </div>
+          <SpentByNature budget={budget} budgetCur={budgetCur} />
           <div style={{ marginTop: 8 }}><BudgetFxLines budget={budget} budgetCur={budgetCur} /></div>
         </div>
       )}
@@ -5372,6 +5373,33 @@ function FxRateModal({ doc, projectCurrencyId, projectCurrencyCode, onClose, onS
           <button className="btn btn-amber grad-amber" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer le taux"}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// Depense par nature (decaisse reel, total == "Deja depense"), replie par defaut.
+function SpentByNature({ budget, budgetCur }) {
+  const [open, setOpen] = React.useState(false);
+  const rows = Array.isArray(budget?.spent_by_nature) ? budget.spent_by_nature : [];
+  if (!rows.length) return null;
+  const total = rows.reduce((s, r) => s + Math.round(Number(r.amount || 0) * 100), 0) / 100;
+  return (
+    <div style={{ marginTop: 8, fontSize: 12 }}>
+      <button type="button" className="link" aria-expanded={open} aria-controls="spent-by-nature" onClick={() => setOpen((v) => !v)}>
+        {open ? "▾" : "▸"} Dépensé par nature
+      </button>
+      {open && (
+        <div id="spent-by-nature" style={{ marginTop: 6, maxWidth: 420 }}>
+          {rows.map((r) => (
+            <div key={r.nature} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "2px 0", color: "var(--ink-500)" }}>
+              <span>{r.label}</span><strong style={{ color: "var(--ink-900, #111)" }}>{money(r.amount, budgetCur)}</strong>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "4px 0 0", borderTop: "1px solid var(--line, #e5e7eb)", marginTop: 4 }}>
+            <span>Total</span><strong>{money(total, budgetCur)}</strong>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

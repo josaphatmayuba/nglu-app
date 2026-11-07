@@ -50,6 +50,7 @@ import { OcrService } from "./ocr.service";
 import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-detail.util";
 import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, summarizeFx, toCents, type SpendDoc } from "./funds.util";
 import { bucketPhaseSpend } from "./phase-spend.util";
+import { spentByNature } from "./spent-by-nature.util";
 import { convertDocsToProjectCurrency, type MultiCurrencyResult } from "./multi-currency-total.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
@@ -3920,6 +3921,24 @@ export class BatiproService {
     const fundsSummary = buildFundsSummary(await this.loadFundRows(orgId, projectId), spendDocs, projectCurrencyId, codeById);
     const fundsProjectCurrency = fundsSummary.find((r) => r.currency_id === projectCurrencyId);
     const costActual = this.projectCostActual(spendDocs, projectCurrencyId);
+    // Depense par nature : ventilation du decaisse (total == cost_actual).
+    const natureDocIds = spendDocs.map((d) => d.id);
+    const natureLines = natureDocIds.length
+      ? await this.db
+          .select({
+            documentId: batiproDocumentLines.documentId,
+            lineTtc: batiproDocumentLines.lineTtc,
+            lineType: batiproDocumentLines.lineType,
+            serviceCategory: batiproDocumentLines.serviceCategory,
+          })
+          .from(batiproDocumentLines)
+          .where(and(
+            eq(batiproDocumentLines.organizationId, orgId),
+            eq(batiproDocumentLines.isActive, 1),
+            inArray(batiproDocumentLines.documentId, natureDocIds),
+          ))
+      : [];
+    const spentByNatureRows = spentByNature(spendDocs, natureLines, projectCurrencyId);
     const billedIssued = fromCents(invoiceFx.totalCents);
     const billedCashed = Number(invoiceAgg?.cashed ?? 0);
     const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
@@ -3956,6 +3975,7 @@ export class BatiproService {
       direct_expenses_engaged: directExpensesEngaged,
       cost_committed: costCommitted,
       cost_actual: costActual,
+      spent_by_nature: spentByNatureRows,
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
       contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,
