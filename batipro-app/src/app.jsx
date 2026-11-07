@@ -4143,6 +4143,26 @@ function ShareTrackingModal({ project, onClose }) {
   const [kind, setKind] = React.useState("owner");
   const [engName, setEngName] = React.useState("");
   const [engPhone, setEngPhone] = React.useState("+243");
+  // Sous-traitants enregistrés (préremplissent nom + téléphone ; saisie manuelle toujours possible).
+  const [subs, setSubs] = React.useState([]);
+  const [supplierPhones, setSupplierPhones] = React.useState({});
+  const [subPick, setSubPick] = React.useState("");
+  React.useEffect(() => {
+    if (kind !== "engineer") return;
+    api.subcontractors().then((r) => setSubs(r || [])).catch(() => setSubs([]));
+    api.suppliers().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
+      setSupplierPhones(Object.fromEntries((arr || []).map((x) => [x.id, x.phone])));
+    }).catch(() => setSupplierPhones({}));
+  }, [kind]);
+  const pickSub = (id) => {
+    setSubPick(id);
+    const s = subs.find((x) => String(x.id) === String(id));
+    if (!s) return;
+    setEngName(s.name || "");
+    const ph = String(supplierPhones[s.supplierId] || "").trim();
+    setEngPhone(ph ? (ph.startsWith("+") ? ph : `+${ph.replace(/^0+/, "")}`) : "+243");
+  };
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [created, setCreated] = React.useState(null); // { url, sms_sent }
@@ -4165,7 +4185,7 @@ function ShareTrackingModal({ project, onClose }) {
         : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
       const res = await api.createShareLink(project.id, body);
       setCreated({ url: res.url, sms_sent: res.sms_sent });
-      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); }
+      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); setSubPick(""); }
       load();
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(false); }
@@ -4202,6 +4222,15 @@ function ShareTrackingModal({ project, onClose }) {
               <p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>
                 Il pourra voir tout le chantier (montants compris), mettre à jour l'avancement des phases, ajouter des photos et réceptionner les bons de commande. Lien actif jusqu'à révocation.
               </p>
+              {subs.length > 0 && (
+                <label className="field">
+                  <span>Choisir un sous-traitant enregistré</span>
+                  <select value={subPick} onChange={(e) => pickSub(e.target.value)}>
+                    <option value="">— Saisie manuelle —</option>
+                    {subs.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
+                  </select>
+                </label>
+              )}
               <Field label="Nom de l'ingénieur / responsable" value={engName} onChange={setEngName} />
               {/* Téléphone international — défaut RDC +243. */}
               <Field label="Téléphone (optionnel)" type="tel" value={engPhone} onChange={setEngPhone} />
