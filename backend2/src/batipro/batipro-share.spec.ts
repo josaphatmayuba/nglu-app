@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { BatiproShareService, hashShareToken } from "./batipro-share.service";
 
 // Lien public de suivi : jeton hache, lien revoque/expire refuse, aucune fuite de
@@ -35,7 +35,11 @@ const linkRow = (over: any = {}) => ({
 function setup(selectQueue: any[][], extra: { inserted?: any[]; updated?: any[]; sms?: jest.Mock } = {}) {
   const batipro = {
     getProject: jest.fn().mockResolvedValue({ id: 5, ownerName: "Jean", ownerPhone: "0990000000" }),
-    projectBudgetSummary: jest.fn().mockResolvedValue({ quote_accepted: 1000, notes: "SECRET", margin: 99 }),
+    projectBudgetSummary: jest.fn().mockResolvedValue({ quote_accepted: 1000, notes: "SECRET", margin: 99, spent_by_nature: [{ nature: "materials", label: "Matériaux", amount: 10.1 }, { nature: "fees", label: "Honoraires et avances", amount: 5.25 }], funds_received: 5054, funds_available: 797.23, fees: [
+      { subcontractor_id: 4, name: "Maco", trade: "Maconnerie", mode: "fixed", percent: null, bases: null, base_amount: null, due: 300, paid: 65.5, remaining: 234.5, currency_id: 1 },
+      { subcontractor_id: 99, name: "Ir Remy", trade: null, mode: "percent_materials", percent: 30, bases: ["materials"], base_amount: 3415.25, due: 1024.575, paid: 0, remaining: 1024.575, currency_id: 1 },
+      { subcontractor_id: 98, name: "Sans", trade: null, mode: "none", percent: null, bases: null, base_amount: null, due: 0, paid: 0, remaining: 0, currency_id: 1 },
+    ] }),
   };
   const storage = { getObject: jest.fn().mockResolvedValue({ body: "stream", contentType: "text/html", contentLength: 5 }) };
   const notifier = { sendShareLink: extra.sms ?? jest.fn().mockResolvedValue(true) };
@@ -109,11 +113,15 @@ describe("BatiproShareService", () => {
       [
         { id: 10, number: "BC-1", issueDate: "2026-02-01", createdAt: new Date(), currencyId: 1, totalTtc: "100", paidAmount: "40", subcontractorId: 4, notes: "NOTE BC" },
         { id: 11, number: "BC-2", issueDate: null, createdAt: new Date("2026-03-01"), currencyId: 2, totalTtc: "200000", paidAmount: "0", subcontractorId: null },
+        { id: 12, type: "expense", number: "DEP-1", issueDate: "2026-02-10", createdAt: new Date(), currencyId: 1, totalTtc: "25.50", paidAmount: "25.50", subcontractorId: 4 },
       ],
       [{ documentId: 10, designation: "Ciment" }],
       [{ id: 20, number: "F-1", issueDate: "2026-02-05", createdAt: new Date(), currencyId: 1, totalTtc: "50", paidAmount: "10", attachedFileKey: "k/secret-key" }],
       [{ id: 30, linkedDocumentId: 20 }],
       [{ id: 4, name: "Maco", trade: "Maconnerie", contractAmount: "300", currencyId: 1 }],
+      [{ label: "Fondations", status: "Termine", progress: 100 }, { label: "Gros oeuvre", status: "En_cours", progress: 30 }],
+      [{ id: 10, number: "BC-1", currencyId: 1, totalTtc: "100", paidAmount: "40", expectedDeliveryDate: "2026-11-08", notes: "NOTE BC" }],
+      [{ documentId: 10, designation: "Gravier", quantity: "8", receivedQuantity: "0", unitPrice: "25" }],
       [{ id: 40, caption: "Dalle", takenAt: new Date() }],
     ];
     const { svc } = setup(queue, { updated });
@@ -125,13 +133,29 @@ describe("BatiproShareService", () => {
     expect(json).not.toContain("+243999");
     expect(json).not.toContain("secret-key");
     expect(out.budget.accepted_quote).toBe(1000);
+    expect(out.spent_by_nature).toEqual([{ nature: "materials", label: "Matériaux", amount: 10.1 }, { nature: "fees", label: "Honoraires et avances", amount: 5.25 }]);
+    expect(out.spent_by_nature_total).toBe(15.35);
     expect(out.purchase_orders[0]).toMatchObject({ number: "BC-1", label: "Ciment", engaged: 100, paid: 40, remaining: 60, currency_code: "USD" });
     expect(out.purchase_orders[1]).toMatchObject({ currency_code: "CDF", remaining: 200000 });
     expect(out.remaining_by_currency).toEqual(expect.arrayContaining([
       { currency_code: "USD", currency_symbol: "$", remaining: 60 },
       { currency_code: "CDF", currency_symbol: "FC", remaining: 200000 },
     ]));
-    expect(out.subcontractors[0]).toMatchObject({ name: "Maco", contract: 300, paid: 40, remaining: 260 });
+    expect(out.subcontractors[0]).toMatchObject({ name: "Maco", contract: 300, paid: 65.5, remaining: 234.5 });
+    expect(out.funds).toMatchObject({ received: 5054, available: 797.23, currency_code: "USD" });
+    expect(out.current_phase).toEqual({ label: "Gros oeuvre", status: "En_cours", progress: 30 });
+    // Honoraires : mode "none" masque ; % garde ses decimales ; paiements = BC/depenses regles du sous-traitant.
+    expect(out.fees.map((f: any) => f.mode)).toEqual(["fixed", "percent_materials"]);
+    expect(out.fees[0]).toMatchObject({ name: "Maco", due: 300, paid: 65.5, remaining: 234.5, currency_code: "USD" });
+    expect(out.fees[0].payments).toEqual([
+      { date: "2026-02-10", label: "DEP-1", amount: 25.5 },
+      { date: "2026-02-01", label: "Ciment", amount: 40 },
+    ]);
+    expect(out.fees[1]).toMatchObject({ percent: 30, bases: ["materials"], base_amount: 3415.25, due: 1024.575, remaining: 1024.575, payments: [] });
+    expect(out.next_deliveries).toEqual([
+      expect.objectContaining({ number: "BC-1", expected_date: "2026-11-08", paid: 40, lines: [{ designation: "Gravier", remaining: 8, unit_price: 25 }] }),
+    ]);
+    expect(out.direct_expenses).toHaveLength(1);
     expect(out.supplier_invoices[0]).toMatchObject({ photo_ids: [30], has_attachment: true });
     expect(updated.some((u) => "lastViewedAt" in u)).toBe(true);
   });
@@ -221,5 +245,63 @@ describe("BatiproShareService", () => {
     expect((ok.batipro as any).receivePurchaseOrder.mock.calls[0][1].note).toBe("[Lien chantier - Paul] camion 1");
     expect((ok.batipro as any).receivePurchaseOrder.mock.calls[0][3]).toBeUndefined();
     expect(res.status).toBe("partially_received");
+  });
+
+  describe("sendLinkSms", () => {
+    const row = (over: any = {}) => ({ id: 3, recipientType: "engineer", recipientPhone: "+243990000000", shortCode: "abcde12345", expiresAt: null, revokedAt: null, ...over });
+
+    it("envoi OK : URL courte, compteur incremente", async () => {
+      const updated: any[] = [];
+      const sms = jest.fn().mockResolvedValue(true);
+      const { svc } = setup([[row()]], { updated, sms });
+      const res = await svc.sendLinkSms(5, 3, undefined, 1, "all");
+      expect(res.sms_sent).toBe(true);
+      expect(sms.mock.calls[0][3]).toMatch(/\/batipro\/c\/abcde12345$/);
+      expect(updated.some((u) => "smsSentAt" in u)).toBe(true);
+    });
+
+    it("numero fourni memorise si le lien n'en avait pas", async () => {
+      const updated: any[] = [];
+      const { svc } = setup([[row({ recipientPhone: null })]], { updated });
+      await svc.sendLinkSms(5, 3, "0990000000", 1, "all");
+      expect(updated.some((u) => u.recipientPhone === "+243990000000")).toBe(true);
+    });
+
+    it("sans numero -> 400", async () => {
+      const { svc } = setup([[row({ recipientPhone: null })]]);
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("lien ancien (short_code NULL) -> 409, aucun SMS", async () => {
+      const sms = jest.fn();
+      const { svc } = setup([[row({ shortCode: null })]], { sms });
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toBeInstanceOf(ConflictException);
+      expect(sms).not.toHaveBeenCalled();
+    });
+
+    it("lien revoque -> refuse", async () => {
+      const sms = jest.fn();
+      const { svc } = setup([[row({ revokedAt: new Date() })]], { sms });
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toBeInstanceOf(BadRequestException);
+      expect(sms).not.toHaveBeenCalled();
+    });
+
+    it("autre organisation (lien introuvable) -> 404", async () => {
+      const { svc } = setup([[]]);
+      await expect(svc.sendLinkSms(5, 3, undefined, 2, "all")).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("SMS desactives (echec passerelle) -> 400, compteur inchange", async () => {
+      const updated: any[] = [];
+      const { svc } = setup([[row()]], { updated, sms: jest.fn().mockResolvedValue(false) });
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toBeInstanceOf(BadRequestException);
+      expect(updated).toHaveLength(0);
+    });
+
+    it("limite : 4e renvoi dans l'heure -> 429", async () => {
+      const { svc } = setup([[row()], [row()], [row()], [row()]]);
+      for (let i = 0; i < 3; i++) await svc.sendLinkSms(5, 3, undefined, 1, "all");
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toMatchObject({ status: 429 });
+    });
   });
 });

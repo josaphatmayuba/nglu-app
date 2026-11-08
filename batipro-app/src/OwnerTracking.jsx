@@ -1,5 +1,6 @@
 import React from "react";
 import { trackingApi } from "./api.js";
+import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 
 // Page publique de suivi financier du chantier pour le proprietaire (sans compte,
 // lecture seule). URL : /batipro/suivi/:token. Responsive 360 px : listes en cartes.
@@ -8,7 +9,7 @@ export function money(value, code) {
   if (!code) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
   const c = code;
   try {
-    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: c, maximumFractionDigits: 2 }).format(value || 0);
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: c, maximumFractionDigits: 4 }).format(value || 0);
   } catch {
     return `${c} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })}`;
   }
@@ -56,19 +57,15 @@ export default function OwnerTracking({ token }) {
   }
 
   const { project, site_photos: photos } = data;
-  const pct = Math.max(0, Math.min(100, Number(project.progress) || 0));
 
   return (
     <Shell>
       <p style={{ ...muted, margin: 0 }}>Chantier</p>
       <h2 style={{ margin: "2px 0 8px", fontSize: 20, overflowWrap: "anywhere" }}>{project.name}</h2>
-      <div style={{ height: 8, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" }} aria-label={`Avancement ${pct} %`}>
-        <div style={{ width: `${pct}%`, height: "100%", background: "#d97706" }} />
-      </div>
-      <div style={{ ...row, marginTop: 6 }}>
-        <span><strong>{pct} %</strong> d'avancement</span>
+      <div style={{ ...row, margin: "0 0 10px" }}>
         <span style={muted}>{fmtDate(project.start_date)} → {fmtDate(project.due_date)}</span>
       </div>
+      <SimpleOverview {...trackingOverviewProps(data)} />
 
       <FinanceSections data={data} token={token} links={trackingApi} onOpen={setViewer} />
 
@@ -96,7 +93,7 @@ export default function OwnerTracking({ token }) {
 // only = sous-ensemble de ["budget","remaining","orders","expenses","invoices","subcontractors"] ;
 // par defaut (page proprietaire) : tout sauf les depenses (comportement inchange).
 export function FinanceSections({ data, token, links, onOpen, only }) {
-  const show = (k) => (only ? only.includes(k) : k !== "expenses");
+  const show = (k) => (only ? only.includes(k) : k !== "expenses" && k !== "nature"); // nature : déjà dans l'aperçu simplifié (page proprietaire)
   const { budget, purchase_orders: pos, supplier_invoices: invoices, subcontractors, remaining_by_currency: remaining } = data;
   const expenses = data.direct_expenses || [];
   return (
@@ -104,6 +101,13 @@ export function FinanceSections({ data, token, links, onOpen, only }) {
       {show("budget") && <Section title="Budget">
         <div style={row}><span>Devis accepté</span><strong>{money(budget.accepted_quote, budget.currency_code)}</strong></div>
         <div style={row}><span>Budget du chantier</span><strong>{money(budget.project_budget, budget.currency_code)}</strong></div>
+      </Section>}
+
+      {show("nature") && <Section title="Dépensé par nature">
+        {(data.spent_by_nature || []).map((r) => (
+          <div key={r.nature} style={row}><span style={{ overflowWrap: "anywhere" }}>{r.label}</span><strong>{money(r.amount, budget.currency_code)}</strong></div>
+        ))}
+        <div style={{ ...row, borderTop: "1px solid #e2e8f0", paddingTop: 6 }}><strong>Total dépensé</strong><strong>{money(data.spent_by_nature_total ?? 0, budget.currency_code)}</strong></div>
       </Section>}
 
       {show("remaining") && <Section title="Reste à payer">

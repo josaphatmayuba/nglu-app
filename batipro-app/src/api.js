@@ -231,6 +231,7 @@ export const api = {
   // Liens publics de suivi financier du chantier (proprietaire)
   shareLinks: (projectId) => jsonFetch(`/projects/${projectId}/share-links`),
   createShareLink: (projectId, b) => jsonFetch(`/projects/${projectId}/share-links`, { method: "POST", body: JSON.stringify(b || {}) }),
+  sendShareLinkSms: (projectId, linkId, b) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/send-sms`, { method: "POST", body: JSON.stringify(b || {}) }),
   revokeShareLink: (projectId, linkId) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/revoke`, { method: "POST" }),
   // Portail sous-traitant (Phase 0) — cote gestionnaire
   createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),
@@ -402,4 +403,13 @@ export const siteApi = {
   },
   photoUrl: (token, photoId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
   attachmentUrl: (token, documentId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
+};
+
+// Code court (SMS) : renvoie { kind: "engineer" | "owner" } ; le code sert ensuite de jeton.
+export const shortLinkApi = {
+  kind: async (code) => {
+    const res = await fetch(`${API_ROOT}/batipro/public/short/${encodeURIComponent(code)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("invalid");
+    return res.json();
+  },
 };

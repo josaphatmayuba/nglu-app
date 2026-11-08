@@ -1,5 +1,6 @@
 import React from "react";
 import { siteApi } from "./api.js";
+import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 import { Amounts, FinanceSections, Section, Shell, Thumb, btn, btnSm, card, fmtDate, money, muted, row } from "./OwnerTracking.jsx";
 
 // Page publique ingenieur / responsable de chantier (sans compte). URL :
@@ -16,7 +17,7 @@ export default function EngineerSite({ token }) {
   const [errMsg, setErrMsg] = React.useState("");
   const [viewer, setViewer] = React.useState(null);
   const [flash, setFlash] = React.useState("");
-  const [tab, setTab] = React.useState("phases");
+  const [tab, setTab] = React.useState("overview");
 
   const load = React.useCallback((silent) => {
     if (!silent) setState("loading");
@@ -56,7 +57,6 @@ export default function EngineerSite({ token }) {
   }
 
   const { project, phases, orders_to_receive: orders, site_photos: photos, recipient_name: who } = data;
-  const pct = Math.max(0, Math.min(100, Number(project.progress) || 0));
   const docs = data.documents || [];
   const quotes = docs.filter((d) => d.type === "quote");
   const pos = docs.filter((d) => d.type === "purchase_order");
@@ -71,11 +71,7 @@ export default function EngineerSite({ token }) {
       {who && <p style={{ ...muted, margin: "0 0 4px" }}>Connecté en tant que <strong>{who}</strong></p>}
       <p style={{ ...muted, margin: 0 }}>Chantier</p>
       <h2 style={{ margin: "2px 0 8px", fontSize: 20, overflowWrap: "anywhere" }}>{project.name}</h2>
-      <div style={{ height: 8, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" }} aria-label={`Avancement ${pct} %`}>
-        <div style={{ width: `${pct}%`, height: "100%", background: "#d97706" }} />
-      </div>
-      <div style={{ ...row, marginTop: 6 }}>
-        <span><strong>{pct} %</strong> d'avancement global</span>
+      <div style={{ ...row, margin: "0 0 4px" }}>
         <span style={muted}>{fmtDate(project.start_date)} → {fmtDate(project.due_date)}</span>
       </div>
 
@@ -84,7 +80,10 @@ export default function EngineerSite({ token }) {
       <TabBar tab={tab} setTab={setTab} counts={counts} />
 
       {tab === "overview" && (
-        <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
+        <>
+          <div style={{ marginTop: 12 }}><SimpleOverview {...trackingOverviewProps(data)} /></div>
+          <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
+        </>
       )}
 
       {tab === "phases" && (

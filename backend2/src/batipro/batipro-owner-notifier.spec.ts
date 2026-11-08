@@ -151,8 +151,9 @@ describe("BatiproOwnerNotifier", () => {
       [{ code: "USD" }],                         // code devise
       [{ phone: "+243990000000" }],              // telephone proprietaire (SMS actives)
       [project()],                               // run() proprietaire
+      [{ code: "own1234567" }],                  // lien court proprietaire
       [                                          // liens ingenieurs actifs avec telephone
-        { phone: "+243991112222", name: "Ing. Paul" },
+        { phone: "+243991112222", name: "Ing. Paul", shortCode: "eng1234567" },
         { phone: "+243991112222", name: "Ing. Paul (doublon)" },
         { phone: "+243990000000", name: "Proprio aussi ingenieur" },
       ],
@@ -163,11 +164,37 @@ describe("BatiproOwnerNotifier", () => {
     expect(sendSms).toHaveBeenCalledTimes(2);
     expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
     expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_expense");
+    expect(sendSms.mock.calls[0][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/own1234567$/);
+    expect(sendSms.mock.calls[1][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/eng1234567$/);
+    expect(sendSms.mock.calls[1][0].logMessage).toMatch(/\[lien\]$/);
     for (const [arg] of sendSms.mock.calls) {
       expect(arg.message.length).toBeLessThanOrEqual(160);
       expect(arg.message).toMatch(/depense 450 USD/);
       expect(/^[\x00-\x7F]*$/.test(arg.message)).toBe(true);
     }
+  });
+
+  it("paiement : ingenieurs avec lien actif recoivent aussi, dedoublonnes, proprietaire exclu", async () => {
+    const queue = [
+      [project()],                               // run() proprietaire
+      [{ code: "USD" }],                         // devise
+      [],                                        // pas de lien proprietaire : SMS sans lien
+      [{ phone: "+243990000000" }],              // tel proprietaire (actifs)
+      [{ code: "CH-001", name: "Residence Elysee", currencyId: 1 }],
+      [{ code: "USD" }],
+      [
+        { phone: "+243991112222", name: "Ing. Paul", shortCode: null },
+        { phone: "+243991112222", name: "doublon" },
+        { phone: "+243990000000", name: "Proprio" },
+      ],
+      [{ code: "CH-001", name: "Residence Elysee" }],
+    ];
+    const { n, sendSms } = setup(queue);
+    await n.notifyPayment(1, 5, { amount: 1500.5, currencyId: 1, supplierName: "Quincaillerie", loadBudgetSummary: async () => ({ spent: 10, budget: 100 }) });
+    expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
+    expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_payment");
+    expect(sendSms.mock.calls[1][0].message).toMatch(/paiement fournisseur 1 500\.50 USD/);
+    expect(sendSms.mock.calls[1][0].message).not.toMatch(/batipro\/c\//); // ancien lien sans code : sans lien
   });
 
   it("depense : SMS proprietaire desactives -> seuls les ingenieurs recoivent", async () => {

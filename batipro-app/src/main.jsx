@@ -5,6 +5,7 @@ import SubcontractorSubmit from "./SubcontractorSubmit.jsx";
 import ClientDocument from "./ClientDocument.jsx";
 import OwnerTracking from "./OwnerTracking.jsx";
 import EngineerSite from "./EngineerSite.jsx";
+import ShortLink from "./ShortLink.jsx";
 import { bootstrapAuth } from "./auth.jsx";
 import { mountVersionBadge } from "./version-badge.js";
 import "./styles.css";
@@ -29,6 +30,11 @@ const siteMatch = typeof window !== "undefined"
   ? window.location.pathname.match(/(?:\/batipro)?\/chantier\/([^/?#]+)/)
   : null;
 
+// Lien court SMS : /batipro/c/:code (sans compte).
+const shortMatch = typeof window !== "undefined"
+  ? window.location.pathname.match(/^(?:\/batipro)?\/c\/([^/?#]+)/)
+  : null;
+
 class ErrorBoundary extends React.Component {
   state = { err: null };
   static getDerivedStateFromError(err) { return { err }; }
@@ -45,7 +51,13 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-if (siteMatch) {
+if (shortMatch) {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <ErrorBoundary>
+      <ShortLink code={decodeURIComponent(shortMatch[1])} />
+    </ErrorBoundary>
+  );
+} else if (siteMatch) {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <EngineerSite token={decodeURIComponent(siteMatch[1])} />

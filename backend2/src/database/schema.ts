@@ -3169,6 +3169,10 @@ export const batiproSubcontractors = mysqlTable("batipro_subcontractors", {
   name: varchar("name", { length: 255 }).notNull(),
   trade: varchar("trade", { length: 255 }),
   contractAmount: decimal("contract_amount", { precision: 14, scale: 2 }).default("0").notNull(),
+  // Honoraires (migration 0338) : NULL = fixe (contract_amount) ; fixed ; percent_materials.
+  feeMode: varchar("fee_mode", { length: 30 }),
+  feePercent: decimal("fee_percent", { precision: 5, scale: 2 }),
+  feeBases: varchar("fee_bases", { length: 120 }),
   currencyId: bigint("currency_id", { mode: "number" }),
   status: varchar("status", { length: 40 }).default("En_cours").notNull(),
   rating: decimal("rating", { precision: 3, scale: 1 }),
@@ -3187,6 +3191,11 @@ export const batiproShareLinks = mysqlTable("batipro_share_links", {
   recipientName: varchar("recipient_name", { length: 255 }),
   recipientPhone: varchar("recipient_phone", { length: 32 }),
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  // Code court (10 car. a-z0-9) pour les SMS : /batipro/c/<code>. NULL = ancien lien.
+  shortCode: varchar("short_code", { length: 16 }).unique(),
+  // Suivi des SMS envoyes pour ce lien (migration 0339).
+  smsSentAt: datetime("sms_sent_at"),
+  smsSentCount: int("sms_sent_count").default(0).notNull(),
   expiresAt: timestamp("expires_at"),
   revokedAt: timestamp("revoked_at"),
   lastViewedAt: timestamp("last_viewed_at"),
