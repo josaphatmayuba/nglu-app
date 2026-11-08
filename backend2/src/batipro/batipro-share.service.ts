@@ -738,6 +738,8 @@ export class BatiproShareService {
 
     return {
       ...tracking,
+      // Le lien ingenieur / sous-traitant ne voit PAS l argent disponible (fonds recus / caisse).
+      funds: null,
       recipient_name: link.recipientName ?? null,
       documents,
       phases: phases.map((p) => ({ id: p.id, label: p.label, status: p.status, progress: p.progress, start_date: p.startDate ?? null, end_date: p.endDate ?? null })),

@@ -81,7 +81,7 @@ export default function EngineerSite({ token }) {
 
       {tab === "overview" && (
         <>
-          <div style={{ marginTop: 12 }}><SimpleOverview {...trackingOverviewProps(data)} /></div>
+          <div style={{ marginTop: 12 }}><SimpleOverview {...trackingOverviewProps(data)} hideCash /></div>
           <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
         </>
       )}
