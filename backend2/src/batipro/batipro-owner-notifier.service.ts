@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { and, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { CompatService } from "../compat/compat.service";
 import { DRIZZLE } from "../database/database.constants";
+import { env } from "../config/env";
 import { batiproProjects, batiproShareLinks, currencies } from "../database/schema";
 import type { Database } from "../database/types";
 
@@ -46,7 +47,7 @@ export class BatiproOwnerNotifier {
         return `Chantier ${project.code} ${this.cut(project.name, nameMax)}: paiement fournisseur ${amount}${sup}.${tail}`;
       };
     };
-    await this.run("payment", orgId, projectId, async (project) => this.fit(await compose(project), project.ownerName));
+    await this.run("payment", orgId, projectId, async (project) => this.fit(await compose(project), project.ownerName, await this.ownerShortUrl(orgId, projectId)));
     try {
       const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
       const [pr] = await this.db
@@ -116,7 +117,7 @@ export class BatiproOwnerNotifier {
         `Chantier ${p.code} ${this.cut(p.name, nameMax)}: depense ${amount} - ${this.cut(e.designation, supMax)}.${tail}`;
 
       const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
-      await this.run("expense", orgId, projectId, async (p) => this.fit(build(p), p.ownerName));
+      await this.run("expense", orgId, projectId, async (p) => this.fit(build(p), p.ownerName, await this.ownerShortUrl(orgId, projectId)));
 
       await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_expense", build);
     } catch (err) {
@@ -135,7 +136,7 @@ export class BatiproOwnerNotifier {
   ) {
     try {
       const links = await this.db
-        .select({ phone: batiproShareLinks.recipientPhone, name: batiproShareLinks.recipientName })
+        .select({ phone: batiproShareLinks.recipientPhone, name: batiproShareLinks.recipientName, shortCode: batiproShareLinks.shortCode })
         .from(batiproShareLinks)
         .where(and(
           eq(batiproShareLinks.projectId, projectId),
@@ -156,9 +157,11 @@ export class BatiproOwnerNotifier {
         if (!phone || seen.has(phone) || !proj) continue;
         seen.add(phone);
         try {
+          const message = this.fit(build(proj), l.name, this.shortUrl(l.shortCode));
           await this.compat.sendSms({
             phone,
-            message: this.fit(build(proj), l.name),
+            message,
+            logMessage: this.maskLink(message),
             smsType,
             organizationId: orgId,
             relatedType: "batipro_project",
@@ -256,6 +259,7 @@ export class BatiproOwnerNotifier {
       await this.compat.sendSms({
         phone,
         message,
+        logMessage: this.maskLink(message),
         smsType: `batipro_owner_${evt}`,
         organizationId: orgId,
         relatedType: "batipro_project",
@@ -292,18 +296,53 @@ export class BatiproOwnerNotifier {
 
   // Construit le message en reduisant progressivement les noms jusqu'a <= 160 car.
   // Si le proprietaire est nomme : prefixe "Bonjour {nom}, " ; son nom est raccourci en premier.
-  private fit(build: (nameMax: number, supMax: number) => string, ownerName?: string | null): string {
+  // `link` (URL courte) est toujours conserve en fin de message, jamais tronque.
+  private fit(build: (nameMax: number, supMax: number) => string, ownerName?: string | null, link?: string | null): string {
     // Nom libre non fiable : lettres/espaces/.-' uniquement.
     const owner = String(ownerName ?? "").replace(/[^\p{L} .'-]/gu, "").replace(/\s+/g, " ").trim();
     const greet = (max: number) => (owner ? `Bonjour ${this.cut(owner, max)}, ` : "");
     const steps: Array<[number, number, number]> = owner
       ? [[40, 30, 30], [40, 30, 20], [40, 30, 12], [40, 30, 6], [25, 20, 6], [15, 12, 6], [8, 8, 6]]
       : [[40, 30, 0], [25, 20, 0], [15, 12, 0], [8, 8, 0]];
+    const tail = link ? ` ${link}` : "";
     for (const [n, s, o] of steps) {
       const msg = this.ascii(greet(o) + build(n, s));
-      if (msg.length <= SMS_MAX) return msg;
+      if (msg.length + tail.length <= SMS_MAX) return msg + tail;
     }
-    return this.ascii(greet(6) + build(8, 8)).slice(0, SMS_MAX);
+    return this.ascii(greet(6) + build(8, 8)).slice(0, SMS_MAX - tail.length) + tail;
+  }
+
+  private shortUrl(code?: string | null): string | null {
+    const c = String(code ?? "").trim();
+    return c ? `${env.appUrl.replace(/\/$/, "")}/batipro/c/${c}` : null;
+  }
+
+  // Lien court du proprietaire : lien actif le plus recent avec code ; null sinon (SMS sans lien).
+  private async ownerShortUrl(orgId: number, projectId: number): Promise<string | null> {
+    try {
+      const [l] = await this.db
+        .select({ code: batiproShareLinks.shortCode })
+        .from(batiproShareLinks)
+        .where(and(
+          eq(batiproShareLinks.projectId, projectId),
+          eq(batiproShareLinks.organizationId, orgId),
+          eq(batiproShareLinks.recipientType, "owner"),
+          isNull(batiproShareLinks.revokedAt),
+          isNotNull(batiproShareLinks.shortCode),
+          or(isNull(batiproShareLinks.expiresAt), gt(batiproShareLinks.expiresAt, sql`NOW()`)),
+        ))
+        .orderBy(desc(batiproShareLinks.id))
+        .limit(1);
+      return this.shortUrl(l?.code);
+    } catch (err) {
+      this.logger.warn(`Lien court proprietaire chantier ${projectId} indisponible: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  // Le code ne finit pas en clair dans sms_logs.
+  private maskLink(message: string): string {
+    return message.replace(/https?:\/\/\S+\/batipro\/c\/\S+/g, "[lien]");
   }
 
   private ascii(text: string): string {

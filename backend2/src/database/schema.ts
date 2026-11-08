@@ -3187,6 +3187,8 @@ export const batiproShareLinks = mysqlTable("batipro_share_links", {
   recipientName: varchar("recipient_name", { length: 255 }),
   recipientPhone: varchar("recipient_phone", { length: 32 }),
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  // Code court (10 car. a-z0-9) pour les SMS : /batipro/c/<code>. NULL = ancien lien.
+  shortCode: varchar("short_code", { length: 16 }).unique(),
   expiresAt: timestamp("expires_at"),
   revokedAt: timestamp("revoked_at"),
   lastViewedAt: timestamp("last_viewed_at"),

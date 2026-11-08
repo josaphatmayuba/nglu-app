@@ -197,3 +197,20 @@ export class BatiproPublicSiteController {
     return sendStream(res, await this.share.getPublicInvoiceAttachment(token, documentId, "engineer"));
   }
 }
+
+// Resolution d'un code court (SMS) : renvoie seulement le type de page a ouvrir.
+// Le code sert ensuite de jeton aux routes tracking/site (memes controles).
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("batipro-public")
+@Controller("batipro/public/short")
+export class BatiproPublicShortController {
+  constructor(private readonly share: BatiproShareService) {}
+
+  @ApiOperation({ summary: "Type de lien derriere un code court (public)" })
+  @ApiParam({ name: "code", type: String })
+  @Header("Cache-Control", "no-store")
+  @Get(":code")
+  kind(@Param("code") code: string) {
+    return this.share.getShortCodeKind(code);
+  }
+}

@@ -403,3 +403,12 @@ export const siteApi = {
   photoUrl: (token, photoId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
   attachmentUrl: (token, documentId) => `${PUBLIC_SITE_BASE}/${encodeURIComponent(token)}/invoices/${documentId}/attachment`,
 };
+
+// Code court (SMS) : renvoie { kind: "engineer" | "owner" } ; le code sert ensuite de jeton.
+export const shortLinkApi = {
+  kind: async (code) => {
+    const res = await fetch(`${API_ROOT}/batipro/public/short/${encodeURIComponent(code)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("invalid");
+    return res.json();
+  },
+};

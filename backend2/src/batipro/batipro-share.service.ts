@@ -26,6 +26,22 @@ const DEFAULT_EXPIRY_DAYS = 90;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+const SHORT_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const SHORT_CODE_LEN = 10;
+// Un jeton complet (base64url 22 car.) depasse toujours cette longueur.
+const SHORT_CODE_MAX = 16;
+
+// Code court aleatoire (10 car. a-z0-9, ~51 bits) ; rejection sampling sans biais.
+export function generateShortCode() {
+  let out = "";
+  while (out.length < SHORT_CODE_LEN) {
+    for (const b of randomBytes(16)) {
+      if (b < 252 && out.length < SHORT_CODE_LEN) out += SHORT_ALPHABET[b % 36];
+    }
+  }
+  return out;
+}
+
 export function hashShareToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -100,16 +116,27 @@ export class BatiproShareService {
       throw new BadRequestException("Aucun numero de telephone valide pour l'envoi du SMS.");
     }
     const expiresAt = isEngineer ? null : new Date(Date.now() + days * 86_400_000);
-    const [result] = await this.db.insert(batiproShareLinks).values({
-      organizationId: orgId,
-      projectId,
-      recipientType,
-      recipientName,
-      recipientPhone: phone,
-      tokenHash: hashShareToken(token),
-      expiresAt,
-      createdBy: userId ?? null,
-    }).$returningId();
+    let result: { id: number | string } | undefined;
+    for (let attempt = 0; attempt < 3 && !result; attempt++) {
+      try {
+        [result] = await this.db.insert(batiproShareLinks).values({
+          organizationId: orgId,
+          projectId,
+          recipientType,
+          recipientName,
+          recipientPhone: phone,
+          tokenHash: hashShareToken(token),
+          shortCode: generateShortCode(),
+          expiresAt,
+          createdBy: userId ?? null,
+        }).$returningId();
+      } catch (err: any) {
+        // Collision (tres improbable) sur short_code : nouveau tirage.
+        const msg = String(err?.cause?.code ?? err?.code ?? "") + String(err?.message ?? "");
+        if (attempt === 2 || !/ER_DUP_ENTRY|short_code/.test(msg)) throw err;
+      }
+    }
+    if (!result) throw new BadRequestException("Creation du lien impossible.");
     const url = `${env.appUrl.replace(/\/$/, "")}/batipro/${isEngineer ? "chantier" : "suivi"}/${token}`;
     let smsSent: boolean | null = null;
     if (input.send_sms && phone) {
@@ -138,6 +165,26 @@ export class BatiproShareService {
 
   // ── Cote public (jeton opaque, lecture seule) ───────────────────────────
 
+  // Jeton complet -> hash ; code court (<= 16 car.) -> short_code. Memes controles ensuite.
+  private tokenOrCode(value: string) {
+    return value.length <= SHORT_CODE_MAX
+      ? eq(batiproShareLinks.shortCode, value.toLowerCase())
+      : eq(batiproShareLinks.tokenHash, hashShareToken(value));
+  }
+
+  // Type du lien derriere un code court (actif seulement) : choisit la page cote front.
+  async getShortCodeKind(code: string): Promise<{ kind: "engineer" | "owner" }> {
+    const c = (code ?? "").trim();
+    if (!c || c.length > SHORT_CODE_MAX) throw new NotFoundException(INVALID_LINK);
+    for (const kind of ["engineer", "owner"] as const) {
+      try {
+        await this.resolve(c, kind);
+        return { kind };
+      } catch { /* essaie l'autre type */ }
+    }
+    throw new NotFoundException(INVALID_LINK);
+  }
+
   // Meme message pour jeton inconnu / revoque / expire (anti-enumeration).
   private async resolve(token: string, recipientType: "owner" | "engineer" = "owner") {
     if (!token?.trim()) throw new NotFoundException(INVALID_LINK);
@@ -152,7 +199,7 @@ export class BatiproShareService {
         revokedAt: batiproShareLinks.revokedAt,
       })
       .from(batiproShareLinks)
-      .where(eq(batiproShareLinks.tokenHash, hashShareToken(token.trim())))
+      .where(this.tokenOrCode(token.trim()))
       .limit(1);
     // Un jeton ne sert que les routes de SON type (proprietaire != ingenieur).
     if (!link || link.recipientType !== recipientType || this.statusOf(link) !== "active") {

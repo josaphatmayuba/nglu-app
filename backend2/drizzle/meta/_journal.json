@@ -2185,6 +2185,13 @@
       "when": 1783411200000,
       "tag": "0336_batipro_document_totals_fx_rate",
       "breakpoints": true
+    },
+    {
+      "idx": 312,
+      "version": "5",
+      "when": 1783497600000,
+      "tag": "0337_batipro_share_links_short_code",
+      "breakpoints": true
     }
   ]
 }
