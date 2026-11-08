@@ -67,7 +67,7 @@ function ProgressBar({ label, now }) {
  *  fees [{name, mode, percent, bases, base_amount, due, paid, remaining, currency_code, payments:[{date,label,amount}]}],
  *  deliveries [{number, expected_date, paid, total, currency_code, lines:[{designation, remaining}]}]
  */
-export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name }) {
+export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash }) {
   if (loading) return <div className="sov" role="status" aria-live="polite"><div className="sov-card sov-muted">Chargement de l'aperçu…</div></div>;
 
   const pct = clampPct(progress);
@@ -79,6 +79,8 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
   const total = nature?.total ?? rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   const shownRows = rows.filter((r) => r.nature !== "other" || Number(r.amount || 0) > 0);
   const feeList = (fees || []).filter((f) => f.mode && f.mode !== "none");
+  const feePaid = feeList.reduce((t, f) => t + Number(f.paid || 0), 0);
+  const feeRemaining = feeList.reduce((t, f) => t + Number(f.remaining || 0), 0);
   const hasMoney = funds && (funds.received != null || funds.available != null);
 
   return (
@@ -100,8 +102,14 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
 
       {/* 1. L'argent du chantier */}
       <section className="sov-card" aria-label="L'argent du chantier">
-        <h3 className="sov-h">L'argent du chantier</h3>
-        {hasMoney ? (
+        <h3 className="sov-h">{hideCash ? "Les dépenses du chantier" : "L'argent du chantier"}</h3>
+        {hideCash ? (
+          <div className="sov-money">
+            <div><small>Dépensé</small><strong>{fmtMoney(nature?.total ?? 0, currency)}</strong></div>
+            <div><small>Honoraires payés</small><strong>{fmtMoney(feePaid, currency)}</strong></div>
+            <div className="sov-ok"><small>Reste à payer (honoraires)</small><strong>{fmtMoney(feeRemaining, currency)}</strong></div>
+          </div>
+        ) : hasMoney ? (
           <div className="sov-money">
             <div><small>Reçu</small><strong>{fmtMoney(funds.received, currency)}</strong></div>
             <div><small>Dépensé</small><strong>{fmtMoney(nature?.total ?? 0, currency)}</strong></div>
