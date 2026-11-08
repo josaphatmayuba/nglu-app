@@ -106,6 +106,13 @@ export function FinanceSections({ data, token, links, onOpen, only }) {
         <div style={row}><span>Budget du chantier</span><strong>{money(budget.project_budget, budget.currency_code)}</strong></div>
       </Section>}
 
+      {show("nature") && <Section title="Dépensé par nature">
+        {(data.spent_by_nature || []).map((r) => (
+          <div key={r.nature} style={row}><span style={{ overflowWrap: "anywhere" }}>{r.label}</span><strong>{money(r.amount, budget.currency_code)}</strong></div>
+        ))}
+        <div style={{ ...row, borderTop: "1px solid #e2e8f0", paddingTop: 6 }}><strong>Total dépensé</strong><strong>{money(data.spent_by_nature_total ?? 0, budget.currency_code)}</strong></div>
+      </Section>}
+
       {show("remaining") && <Section title="Reste à payer">
         {remaining.length ? remaining.map((r) => (
           <div key={r.currency_code || "none"} style={row}><span>{r.currency_code || "Devise non renseignée"}</span><strong>{money(r.remaining, r.currency_code)}</strong></div>

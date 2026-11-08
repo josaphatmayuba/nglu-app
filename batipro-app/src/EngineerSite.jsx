@@ -16,7 +16,7 @@ export default function EngineerSite({ token }) {
   const [errMsg, setErrMsg] = React.useState("");
   const [viewer, setViewer] = React.useState(null);
   const [flash, setFlash] = React.useState("");
-  const [tab, setTab] = React.useState("phases");
+  const [tab, setTab] = React.useState("overview");
 
   const load = React.useCallback((silent) => {
     if (!silent) setState("loading");
@@ -84,7 +84,7 @@ export default function EngineerSite({ token }) {
       <TabBar tab={tab} setTab={setTab} counts={counts} />
 
       {tab === "overview" && (
-        <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
+        <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "nature", "remaining", "subcontractors"]} />
       )}
 
       {tab === "phases" && (
