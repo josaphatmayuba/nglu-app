@@ -32,22 +32,34 @@ export class BatiproOwnerNotifier {
       loadBudgetSummary: () => Promise<BudgetSummaryLite>;
     },
   ) {
-    await this.run("payment", orgId, projectId, async (project) => {
+    const compose = async (project: { code: string; name: string; currencyId: number | null }) => {
       const effCur = p.currencyId ?? project.currencyId ?? null;
       const cur = await this.currencyCode(effCur);
-      const sameCurrency = effCur === (project.currencyId ?? null);
       const amount = `${this.fmt(p.amount)}${cur ? ` ${cur}` : ""}`;
       let tail = "";
-      if (sameCurrency) {
+      if (effCur === (project.currencyId ?? null)) {
         const s = await p.loadBudgetSummary();
         tail = ` Depense: ${this.fmt(s.spent)} / budget ${this.fmt(s.budget)}${cur ? ` ${cur}` : ""}.`;
       }
-      const build = (nameMax: number, supMax: number) => {
+      return (nameMax: number, supMax: number) => {
         const sup = p.supplierName ? ` a ${this.cut(p.supplierName, supMax)}` : "";
         return `Chantier ${project.code} ${this.cut(project.name, nameMax)}: paiement fournisseur ${amount}${sup}.${tail}`;
       };
-      return this.fit(build, project.ownerName);
-    });
+    };
+    await this.run("payment", orgId, projectId, async (project) => this.fit(await compose(project), project.ownerName));
+    try {
+      const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
+      const [pr] = await this.db
+        .select({ code: batiproProjects.code, name: batiproProjects.name, currencyId: batiproProjects.currencyId })
+        .from(batiproProjects)
+        .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
+        .limit(1);
+      if (!pr) return;
+      const build = await compose({ code: pr.code, name: pr.name, currencyId: pr.currencyId ?? null });
+      await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_payment", () => build);
+    } catch (err) {
+      this.logger.warn(`SMS ingenieurs (payment) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   async notifyQuoteReceived(
@@ -106,6 +118,22 @@ export class BatiproOwnerNotifier {
       const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
       await this.run("expense", orgId, projectId, async (p) => this.fit(build(p), p.ownerName));
 
+      await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_expense", build);
+    } catch (err) {
+      this.logger.warn(`SMS depense chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Ingenieurs / responsables avec lien actif + telephone ; un numero = 1 SMS
+  // (proprietaire deja notifie exclu). Ne throw jamais.
+  private async sendToEngineers(
+    orgId: number,
+    projectId: number,
+    ownerPhone: string | null,
+    smsType: string,
+    build: (p: { code: string; name: string }) => (nameMax: number, supMax: number) => string,
+  ) {
+    try {
       const links = await this.db
         .select({ phone: batiproShareLinks.recipientPhone, name: batiproShareLinks.recipientName })
         .from(batiproShareLinks)
@@ -131,17 +159,17 @@ export class BatiproOwnerNotifier {
           await this.compat.sendSms({
             phone,
             message: this.fit(build(proj), l.name),
-            smsType: "batipro_engineer_expense",
+            smsType,
             organizationId: orgId,
             relatedType: "batipro_project",
             relatedId: projectId,
           });
         } catch (err) {
-          this.logger.warn(`SMS ingenieur (expense) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+          this.logger.warn(`SMS ingenieur (${smsType}) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     } catch (err) {
-      this.logger.warn(`SMS depense chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.warn(`SMS ingenieurs (${smsType}) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

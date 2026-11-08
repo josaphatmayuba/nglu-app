@@ -170,6 +170,27 @@ describe("BatiproOwnerNotifier", () => {
     }
   });
 
+  it("paiement : ingenieurs avec lien actif recoivent aussi, dedoublonnes, proprietaire exclu", async () => {
+    const queue = [
+      [project()],                               // run() proprietaire
+      [{ code: "USD" }],                         // devise
+      [{ phone: "+243990000000" }],              // tel proprietaire (actifs)
+      [{ code: "CH-001", name: "Residence Elysee", currencyId: 1 }],
+      [{ code: "USD" }],
+      [
+        { phone: "+243991112222", name: "Ing. Paul" },
+        { phone: "+243991112222", name: "doublon" },
+        { phone: "+243990000000", name: "Proprio" },
+      ],
+      [{ code: "CH-001", name: "Residence Elysee" }],
+    ];
+    const { n, sendSms } = setup(queue);
+    await n.notifyPayment(1, 5, { amount: 1500.5, currencyId: 1, supplierName: "Quincaillerie", loadBudgetSummary: async () => ({ spent: 10, budget: 100 }) });
+    expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
+    expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_payment");
+    expect(sendSms.mock.calls[1][0].message).toMatch(/paiement fournisseur 1 500\.50 USD/);
+  });
+
   it("depense : SMS proprietaire desactives -> seuls les ingenieurs recoivent", async () => {
     const queue = [
       [{ currencyId: 1 }],

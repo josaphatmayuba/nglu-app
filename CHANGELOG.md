@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : SMS de paiement aussi aux ingénieurs / responsables (v3.282.5).** Quand un bon de commande ou une dépense est payé, chaque ingénieur du chantier ayant un lien actif et un téléphone reçoit le même SMS que le propriétaire (un SMS par numéro, ASCII, 160 caractères max, jamais bloquant).
 - **BâtiPro : liens partagés — « Dépensé par nature » et Aperçu par défaut (v3.282.4).** Le lien ingénieur s’ouvre sur l’onglet Aperçu ; les pages du lien ingénieur et du lien propriétaire affichent la répartition matériaux / honoraires et avances / main-d’œuvre / manutention.
 - **BâtiPro : « Payé » du sous-traitant compte ses dépenses + « Dépensé par nature » dans l’Aperçu (v3.282.3).** Le bloc Sous-traitants du lien propriétaire inclut maintenant les dépenses payées rattachées (avances d’honoraires) ; la répartition par nature est aussi affichée dans l’onglet Aperçu de la fiche chantier.
 - **BâtiPro : choisir l’ingénieur dans « Partager le chantier » (v3.282.2).** Pour le destinataire Ingénieur / responsable, une liste de sous-traitants enregistrés préremplit le nom et le téléphone (téléphone du fournisseur lié) ; saisie manuelle toujours possible.
