@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : « Payé » du sous-traitant compte ses dépenses + « Dépensé par nature » dans l’Aperçu (v3.282.3).** Le bloc Sous-traitants du lien propriétaire inclut maintenant les dépenses payées rattachées (avances d’honoraires) ; la répartition par nature est aussi affichée dans l’onglet Aperçu de la fiche chantier.
 - **BâtiPro : choisir l’ingénieur dans « Partager le chantier » (v3.282.2).** Pour le destinataire Ingénieur / responsable, une liste de sous-traitants enregistrés préremplit le nom et le téléphone (téléphone du fournisseur lié) ; saisie manuelle toujours possible.
 - **BâtiPro : correctif page d’erreur « DocFxNote is not defined » (v3.282.1).** `CurrencyRatesModal` et `DocFxNote` avaient été collés à l’intérieur de `PaymentModal` (v3.280.0) : invisibles pour le reste de l’app, l’ouverture d’un chantier plantait en prod. Remis au niveau du module, aucun changement de comportement.
 - **BâtiPro : « Dépensé par nature » dans le suivi budgétaire (v3.282.0).** Bloc replié sous « Reste vs budget » : matériaux (quincaillerie comprise), honoraires et avances, main-d'œuvre, manutention et transport, autres. Basé sur le décaissé réel, centimes exacts, total égal à « Déjà dépensé ». Nouveau champ `spent_by_nature` dans `projectBudgetSummary` (aucune route ni migration).

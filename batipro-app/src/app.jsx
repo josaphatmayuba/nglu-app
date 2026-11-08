@@ -688,6 +688,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                   <DocFxNote converted={budget?.invoice_converted_amounts} unconverted={budget?.invoice_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("factures")} />
                 </div>
               </div>
+              <SpentByNature budget={budget} budgetCur={budgetCur} />
             </div>
             {(() => {
               const phasesEvm = budget?.phases_evm || [];

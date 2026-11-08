@@ -328,7 +328,7 @@ export class BatiproShareService {
     const subcontractors = subRows.map((s) => {
       const contract = Number(s.contractAmount ?? 0);
       const paid = poRows
-        .filter((p) => p.type !== "expense" && p.subcontractorId === s.id && effCur(p.currencyId) === effCur(s.currencyId))
+        .filter((p) => p.subcontractorId === s.id && effCur(p.currencyId) === effCur(s.currencyId))
         .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
       return {
         name: s.name,
@@ -371,6 +371,11 @@ export class BatiproShareService {
         accepted_quote: round2(Number(summary.quote_accepted ?? 0)),
         ...curOut(project.currencyId),
       },
+      // Depense par nature (meme util que projectBudgetSummary, deja filtre org+chantier du lien).
+      spent_by_nature: (((summary as any).spent_by_nature ?? []) as Array<{ nature: string; label: string; amount: number }>).map((r) => ({
+        nature: r.nature, label: r.label, amount: r.amount,
+      })),
+      spent_by_nature_total: round2(((summary as any).spent_by_nature ?? []).reduce((t: number, r: any) => t + Number(r.amount || 0), 0)),
       purchase_orders: purchaseOrders,
       direct_expenses: directExpenses,
       supplier_invoices: supplierInvoices,

@@ -35,7 +35,7 @@ const linkRow = (over: any = {}) => ({
 function setup(selectQueue: any[][], extra: { inserted?: any[]; updated?: any[]; sms?: jest.Mock } = {}) {
   const batipro = {
     getProject: jest.fn().mockResolvedValue({ id: 5, ownerName: "Jean", ownerPhone: "0990000000" }),
-    projectBudgetSummary: jest.fn().mockResolvedValue({ quote_accepted: 1000, notes: "SECRET", margin: 99 }),
+    projectBudgetSummary: jest.fn().mockResolvedValue({ quote_accepted: 1000, notes: "SECRET", margin: 99, spent_by_nature: [{ nature: "materials", label: "Matériaux", amount: 10.1 }, { nature: "fees", label: "Honoraires et avances", amount: 5.25 }] }),
   };
   const storage = { getObject: jest.fn().mockResolvedValue({ body: "stream", contentType: "text/html", contentLength: 5 }) };
   const notifier = { sendShareLink: extra.sms ?? jest.fn().mockResolvedValue(true) };
@@ -109,6 +109,7 @@ describe("BatiproShareService", () => {
       [
         { id: 10, number: "BC-1", issueDate: "2026-02-01", createdAt: new Date(), currencyId: 1, totalTtc: "100", paidAmount: "40", subcontractorId: 4, notes: "NOTE BC" },
         { id: 11, number: "BC-2", issueDate: null, createdAt: new Date("2026-03-01"), currencyId: 2, totalTtc: "200000", paidAmount: "0", subcontractorId: null },
+        { id: 12, type: "expense", number: "DEP-1", issueDate: "2026-02-10", createdAt: new Date(), currencyId: 1, totalTtc: "25.50", paidAmount: "25.50", subcontractorId: 4 },
       ],
       [{ documentId: 10, designation: "Ciment" }],
       [{ id: 20, number: "F-1", issueDate: "2026-02-05", createdAt: new Date(), currencyId: 1, totalTtc: "50", paidAmount: "10", attachedFileKey: "k/secret-key" }],
@@ -125,13 +126,16 @@ describe("BatiproShareService", () => {
     expect(json).not.toContain("+243999");
     expect(json).not.toContain("secret-key");
     expect(out.budget.accepted_quote).toBe(1000);
+    expect(out.spent_by_nature).toEqual([{ nature: "materials", label: "Matériaux", amount: 10.1 }, { nature: "fees", label: "Honoraires et avances", amount: 5.25 }]);
+    expect(out.spent_by_nature_total).toBe(15.35);
     expect(out.purchase_orders[0]).toMatchObject({ number: "BC-1", label: "Ciment", engaged: 100, paid: 40, remaining: 60, currency_code: "USD" });
     expect(out.purchase_orders[1]).toMatchObject({ currency_code: "CDF", remaining: 200000 });
     expect(out.remaining_by_currency).toEqual(expect.arrayContaining([
       { currency_code: "USD", currency_symbol: "$", remaining: 60 },
       { currency_code: "CDF", currency_symbol: "FC", remaining: 200000 },
     ]));
-    expect(out.subcontractors[0]).toMatchObject({ name: "Maco", contract: 300, paid: 40, remaining: 260 });
+    expect(out.subcontractors[0]).toMatchObject({ name: "Maco", contract: 300, paid: 65.5, remaining: 234.5 });
+    expect(out.direct_expenses).toHaveLength(1);
     expect(out.supplier_invoices[0]).toMatchObject({ photo_ids: [30], has_attachment: true });
     expect(updated.some((u) => "lastViewedAt" in u)).toBe(true);
   });
