@@ -107,7 +107,7 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
           <div className="sov-money">
             <div><small>Dépensé</small><strong>{fmtMoney(nature?.total ?? 0, currency)}</strong></div>
             <div><small>Honoraires payés</small><strong>{fmtMoney(feePaid, currency)}</strong></div>
-            <div className="sov-ok"><small>Reste à payer (honoraires)</small><strong>{fmtMoney(feeRemaining, currency)}</strong></div>
+            <div className="sov-ok"><small>Reste à payer (honoraires)</small><strong>{feeList.length ? fmtMoney(feeRemaining, currency) : "—"}</strong></div>
           </div>
         ) : hasMoney ? (
           <div className="sov-money">
@@ -116,6 +116,12 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
             <div className={Number(funds.available) < 0 ? "sov-neg" : "sov-ok"}><small>Il reste en caisse</small><strong>{fmtMoney(funds.available, currency)}</strong></div>
           </div>
         ) : <p className="sov-muted" style={{ margin: 0 }}>Aucun fonds enregistré pour ce chantier.</p>}
+        {!hideCash && (
+          <div className="sov-line" style={{ marginTop: 10 }}>
+            <span className="sov-muted">Reste à payer (honoraires)</span>
+            <strong className="sov-due">{feeList.length ? fmtMoney(feeRemaining, currency) : "Non configuré"}</strong>
+          </div>
+        )}
       </section>
 
       {/* 2. Où va l'argent dépensé */}
