@@ -2192,6 +2192,20 @@
       "when": 1783497600000,
       "tag": "0337_batipro_share_links_short_code",
       "breakpoints": true
+    },
+    {
+      "idx": 313,
+      "version": "5",
+      "when": 1783584000000,
+      "tag": "0338_batipro_subcontractor_fee_mode",
+      "breakpoints": true
+    },
+    {
+      "idx": 314,
+      "version": "5",
+      "when": 1783670400000,
+      "tag": "0339_batipro_share_links_sms_tracking",
+      "breakpoints": true
     }
   ]
 }

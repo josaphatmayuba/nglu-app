@@ -5,6 +5,7 @@ import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
 import ProjectFunds from "./components/ProjectFunds.jsx";
+import SimpleOverview from "./SimpleOverview.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -83,7 +84,7 @@ function money(value, currency) {
   if (!currency) return `${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })} (devise non renseignée)`;
   const code = currency;
   try {
-    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(value || 0);
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, maximumFractionDigits: 4 }).format(value || 0);
   } catch {
     return `${code} ${Number(value || 0).toLocaleString("fr-CA", { maximumFractionDigits: 2 })}`;
   }
@@ -605,6 +606,57 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
     api.budgetSummary(p.id).then(setBudget).catch(() => setBudget(null));
   }, [tab, p.id]);
   const budgetCur = budget?.currency_code || p.currencyCode;
+  // Aperçu simplifié : phase en cours, paiements d'honoraires et prochaine livraison
+  // (phases + BC + dépenses du chantier ; lecture seule, échecs silencieux).
+  const [ovExtra, setOvExtra] = React.useState({ loading: true, phases: [], docs: [], lines: {} });
+  React.useEffect(() => {
+    if (tab !== "apercu" || !p.id) return undefined;
+    let cancelled = false;
+    Promise.all([
+      api.phases(p.id).catch(() => []),
+      api.documents(p.id, "purchase_order").catch(() => []),
+      api.documents(p.id, "expense").catch(() => []),
+    ]).then(async ([phases, pos, exps]) => {
+      const nextDocs = (pos || [])
+        .filter((d) => !["draft", "cancelled", "received"].includes(d.status) && n(d.paidAmount) > 0)
+        .sort((a, b) => String(a.expectedDeliveryDate || "9999").localeCompare(String(b.expectedDeliveryDate || "9999")))
+        .slice(0, 3);
+      const pairs = await Promise.all(nextDocs.map((d) => api.getDocument(d.id).then((full) => [d.id, full.lines || []]).catch(() => [d.id, []])));
+      if (!cancelled) setOvExtra({ loading: false, phases: phases || [], docs: [...(pos || []), ...(exps || [])], nextDocs, lines: Object.fromEntries(pairs) });
+    });
+    return () => { cancelled = true; };
+  }, [tab, p.id]);
+  const overviewProps = React.useMemo(() => {
+    const codeOfId = (id) => (id == null || id === budget?.currency_id ? budgetCur : ((budget?.converted_amounts || []).find((c) => c.currency_id === id)?.currency_code || budgetCur));
+    const curPhase = (ovExtra.phases || []).find((ph) => ph.status === "En_cours") || (ovExtra.phases || []).find((ph) => ph.status !== "Termine") || null;
+    const rows = Array.isArray(budget?.spent_by_nature) ? budget.spent_by_nature : [];
+    return {
+      loading: ovExtra.loading,
+      name: p.name,
+      progress: p.progress,
+      phaseLabel: curPhase?.label || null,
+      currency: budgetCur,
+      funds: budget && budget.funds_received != null ? { received: budget.funds_received, available: budget.funds_available } : null,
+      nature: { rows, total: rows.reduce((s, r) => s + Number(r.amount || 0), 0) },
+      fees: (budget?.fees || []).map((f) => ({
+        ...f,
+        currency_code: codeOfId(f.currency_id),
+        payments: (ovExtra.docs || [])
+          .filter((d) => d.subcontractorId === f.subcontractor_id && n(d.paidAmount) > 0 && d.status !== "cancelled" && (d.currencyId ?? budget?.currency_id) === (f.currency_id ?? budget?.currency_id))
+          .map((d) => ({ date: d.issueDate || d.createdAt, label: d.number || null, amount: n(d.paidAmount) }))
+          .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+      })),
+      deliveries: (ovExtra.nextDocs || []).map((d) => ({
+        number: d.number || null,
+        expected_date: d.expectedDeliveryDate || null,
+        paid: n(d.paidAmount),
+        total: n(d.totalTtc),
+        currency_code: d.currencyCode || budgetCur,
+        lines: (ovExtra.lines[d.id] || []).filter((l) => l.materialId && n(l.quantity) - n(l.receivedQuantity) > 0)
+          .map((l) => ({ designation: l.designation, remaining: n(l.quantity) - n(l.receivedQuantity) })),
+      })).filter((d) => d.lines.length > 0),
+    };
+  }, [budget, budgetCur, ovExtra, p.name, p.progress]);
 
   return (
     <>
@@ -650,6 +702,10 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
 
       <div className="proj-tab-body">
         {tab === "apercu" && (
+          <>
+          <SimpleOverview {...overviewProps} />
+          <details style={{ marginTop: 16 }}>
+            <summary style={{ cursor: "pointer", minHeight: 44, display: "flex", alignItems: "center", fontSize: 13, color: "var(--ink-500)" }}>Détail du budget, de la facturation et du risque</summary>
           <div className="g3">
             <div className="card pad">
               <p className="kv-title">
@@ -688,7 +744,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
                   <DocFxNote converted={budget?.invoice_converted_amounts} unconverted={budget?.invoice_unconverted_amounts} budgetCur={budgetCur} onFix={() => setTab("factures")} />
                 </div>
               </div>
-              <SpentByNature budget={budget} budgetCur={budgetCur} />
+              <SpentByNature budget={budget} budgetCur={budgetCur} defaultOpen />
             </div>
             {(() => {
               const phasesEvm = budget?.phases_evm || [];
@@ -726,6 +782,8 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
               );
             })()}
           </div>
+          </details>
+          </>
         )}
         {tab === "devis" && <Devis projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "bonscommande" && <BonsCommande projects={projects} canMutate={canMutate} fixedProjectId={p.id} materials={materials} />}
@@ -4133,6 +4191,93 @@ const SUBMISSION_STATUS_TONE = { submitted: "amber", validated: "emerald", retur
 const SHARE_STATUS = { active: ["Actif", "emerald"], revoked: ["Révoqué", "rose"], expired: ["Expiré", "ink"] };
 const fmtShareDate = (d) => (d ? new Date(d).toLocaleString("fr-CA", { dateStyle: "short", timeStyle: "short" }) : "—");
 
+// Accessibilité d'une fenêtre : focus sur le premier champ, Échap ferme, focus rendu au déclencheur.
+function useModalA11y(onClose) {
+  const ref = React.useRef(null);
+  const closeRef = React.useRef(onClose);
+  closeRef.current = onClose;
+  React.useEffect(() => {
+    const trigger = document.activeElement;
+    const first = ref.current?.querySelector("select, input:not([readonly]), button:not([aria-label='Fermer'])");
+    (first || ref.current)?.focus();
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeRef.current(); } };
+    document.addEventListener("keydown", onKey, true);
+    return () => { document.removeEventListener("keydown", onKey, true); if (trigger && trigger.focus) trigger.focus(); };
+  }, []);
+  return ref;
+}
+const SHARE_PHONE_RE = /^\+\d{8,15}$/;
+const SHARE_TOUCH = { minHeight: 44 };
+
+function fmtShareSmsDate(v) {
+  const d = v ? new Date(v) : null;
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} à ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// Etat d'envoi SMS + bouton « Envoyer / Renvoyer par SMS » d'un lien actif.
+function ShareLinkSmsRow({ projectId, link, onSent }) {
+  const [busy, setBusy] = React.useState(false);
+  const [asking, setAsking] = React.useState(false);
+  const [phone, setPhone] = React.useState("+243");
+  const [error, setError] = React.useState("");
+  const [okPhone, setOkPhone] = React.useState("");
+  const sent = Boolean(link.smsSentAt);
+  const count = Number(link.smsSentCount) || 0;
+  const canSend = link.can_send_sms !== false;
+  const hasPhone = Boolean(String(link.recipientPhone || "").trim());
+
+  const send = async () => {
+    if (!hasPhone && !asking) { setAsking(true); setError(""); setOkPhone(""); return; }
+    const body = {};
+    if (!hasPhone) {
+      const norm = phone.replace(/\s+/g, "");
+      if (!SHARE_PHONE_RE.test(norm)) {
+        setError("Numéro invalide. Écrivez-le avec l'indicatif du pays, par exemple +243 812 345 678.");
+        return;
+      }
+      body.phone = norm;
+    }
+    setBusy(true); setError(""); setOkPhone("");
+    try {
+      const res = await api.sendShareLinkSms(projectId, link.id, body);
+      setOkPhone(res?.phone || body.phone || link.recipientPhone || "");
+      setAsking(false);
+      onSent && onSent();
+    } catch (err) { setError(err.message || "Envoi du SMS impossible."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ color: "var(--ink-500)" }}>
+        {sent ? `SMS envoyé le ${fmtShareSmsDate(link.smsSentAt)} (${count} ${count > 1 ? "fois" : "fois"})` : "SMS jamais envoyé"}
+      </div>
+      {!canSend ? (
+        <>
+          <button type="button" className="btn btn-touch" disabled style={{ maxWidth: "100%" }}>{sent ? "Renvoyer par SMS" : "Envoyer par SMS"}</button>
+          <div style={{ color: "var(--ink-500)" }}>Lien ancien : recréez-le pour l'envoyer par SMS</div>
+        </>
+      ) : (
+        <>
+          {asking && !hasPhone && (
+            <label className="field" style={{ minWidth: 0 }}>
+              <span>Téléphone du destinataire</span>
+              <input style={{ ...SHARE_TOUCH, maxWidth: "100%", boxSizing: "border-box" }} type="tel" inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setError(""); }} />
+            </label>
+          )}
+          <button type="button" className="btn btn-touch" disabled={busy} style={{ maxWidth: "100%" }} onClick={send}>
+            {busy ? "Envoi…" : asking && !hasPhone ? "Envoyer" : sent ? "Renvoyer par SMS" : "Envoyer par SMS"}
+          </button>
+        </>
+      )}
+      {okPhone && <div role="status" style={{ color: "var(--ink-700, #334155)" }}>SMS envoyé à {okPhone}</div>}
+      {error && <div role="alert" style={{ color: "var(--rose-600, #b91c1c)" }}>{error}</div>}
+    </div>
+  );
+}
+
 // Liens publics de suivi financier pour le propriétaire (lecture seule, sans compte).
 // Le jeton n'est affiché qu'une fois, à la création (seul son hash est stocké).
 function ShareTrackingModal({ project, onClose }) {
@@ -4148,21 +4293,34 @@ function ShareTrackingModal({ project, onClose }) {
   const [subs, setSubs] = React.useState([]);
   const [supplierPhones, setSupplierPhones] = React.useState({});
   const [subPick, setSubPick] = React.useState("");
+  const [subsLoading, setSubsLoading] = React.useState(false);
+  const [subsError, setSubsError] = React.useState(false);
+  const [pickNoPhone, setPickNoPhone] = React.useState(false);
+  // Champs modifiés à la main : on ne les écrase pas en choisissant un sous-traitant.
+  const nameEdited = React.useRef(false);
+  const phoneEdited = React.useRef(false);
+  const dialogRef = useModalA11y(onClose);
   React.useEffect(() => {
     if (kind !== "engineer") return;
-    api.subcontractors().then((r) => setSubs(r || [])).catch(() => setSubs([]));
+    setSubsLoading(true); setSubsError(false);
+    api.subcontractors().then((r) => setSubs(r || [])).catch(() => { setSubs([]); setSubsError(true); }).finally(() => setSubsLoading(false));
     api.suppliers().then((r) => {
       const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
       setSupplierPhones(Object.fromEntries((arr || []).map((x) => [x.id, x.phone])));
     }).catch(() => setSupplierPhones({}));
   }, [kind]);
   const pickSub = (id) => {
-    setSubPick(id);
+    setSubPick(id); setPickNoPhone(false);
     const s = subs.find((x) => String(x.id) === String(id));
     if (!s) return;
-    setEngName(s.name || "");
+    if (!engName.trim() || !nameEdited.current) { setEngName(s.name || ""); nameEdited.current = false; }
     const ph = String(supplierPhones[s.supplierId] || "").trim();
-    setEngPhone(ph ? (ph.startsWith("+") ? ph : `+${ph.replace(/^0+/, "")}`) : "+243");
+    const phoneEmpty = engPhone.replace(/[\s+]/g, "").length <= 3;
+    if (ph) {
+      if (phoneEmpty || !phoneEdited.current) { setEngPhone(ph.startsWith("+") ? ph : `+${ph.replace(/^0+/, "")}`); phoneEdited.current = false; }
+    } else if (phoneEmpty) {
+      setPickNoPhone(true);
+    }
   };
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -4179,14 +4337,19 @@ function ShareTrackingModal({ project, onClose }) {
 
   const create = async () => {
     if (isEng && !engName.trim()) { setError("Indiquez le nom de l'ingénieur / responsable."); return; }
+    const phoneNorm = engPhone.replace(/\s+/g, "");
+    if (isEng && (engPhoneSet || sendSms) && !SHARE_PHONE_RE.test(phoneNorm)) {
+      setError("Numéro de téléphone invalide. Écrivez-le avec l'indicatif du pays, par exemple +243 812 345 678.");
+      return;
+    }
     setBusy(true); setError(""); setCopied(false);
     try {
       const body = isEng
-        ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: engPhone.trim() } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
+        ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: phoneNorm } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
         : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
       const res = await api.createShareLink(project.id, body);
       setCreated({ url: res.url, sms_sent: res.sms_sent });
-      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); setSubPick(""); }
+      if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); setSubPick(""); setPickNoPhone(false); nameEdited.current = false; phoneEdited.current = false; }
       load();
     } catch (err) { setError(err.message || String(err)); }
     finally { setBusy(false); }
@@ -4203,17 +4366,17 @@ function ShareTrackingModal({ project, onClose }) {
   const copy = () => { try { navigator.clipboard.writeText(created.url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
 
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-card">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="share-modal-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card" ref={dialogRef} tabIndex={-1}>
         <div className="modal-head">
-          <div><h2 className="font-display">Partager le chantier</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien sans compte, révocable à tout moment.</p></div>
-          <button type="button" className="icon-btn" aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
+          <div><h2 className="font-display" id="share-modal-title">Partager le chantier</h2><p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Lien sans compte, révocable à tout moment.</p></div>
+          <button type="button" className="icon-btn" style={{ width: 44, height: 44 }} aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
         </div>
 
         <div className="form-grid">
           <label className="field">
             <span>Destinataire</span>
-            <select value={kind} onChange={(e) => { setKind(e.target.value); setSendSms(false); setCreated(null); setError(""); }}>
+            <select style={SHARE_TOUCH} value={kind} onChange={(e) => { setKind(e.target.value); setSendSms(false); setCreated(null); setError(""); }}>
               <option value="owner">Propriétaire — suivi financier (lecture seule)</option>
               <option value="engineer">Ingénieur / responsable de chantier</option>
             </select>
@@ -4223,18 +4386,27 @@ function ShareTrackingModal({ project, onClose }) {
               <p style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>
                 Il pourra voir tout le chantier (montants compris), mettre à jour l'avancement des phases, ajouter des photos et réceptionner les bons de commande. Lien actif jusqu'à révocation.
               </p>
+              {subsLoading && <p className="muted" role="status" style={{ fontSize: 12, margin: 0 }}>Chargement des sous-traitants…</p>}
+              {subsError && <p role="alert" style={{ fontSize: 12, color: "var(--rose-600, #b91c1c)", margin: 0 }}>Impossible de charger les sous-traitants. Vous pouvez saisir le nom et le téléphone à la main.</p>}
               {subs.length > 0 && (
                 <label className="field">
                   <span>Choisir un sous-traitant enregistré</span>
-                  <select value={subPick} onChange={(e) => pickSub(e.target.value)}>
-                    <option value="">— Saisie manuelle —</option>
+                  <select style={SHARE_TOUCH} value={subPick} onChange={(e) => pickSub(e.target.value)}>
+                    <option value="">Aucun : saisir à la main</option>
                     {subs.map((s) => <option key={s.id} value={s.id}>{s.name}{s.trade ? ` (${s.trade})` : ""}</option>)}
                   </select>
                 </label>
               )}
-              <Field label="Nom de l'ingénieur / responsable" value={engName} onChange={setEngName} />
+              <label className="field">
+                <span>{subPick ? "Nom du destinataire (modifiable)" : "Nom de l'ingénieur / responsable"}</span>
+                <input style={SHARE_TOUCH} type="text" value={engName} onChange={(e) => { nameEdited.current = true; setEngName(e.target.value); }} />
+              </label>
               {/* Téléphone international — défaut RDC +243. */}
-              <Field label="Téléphone (optionnel)" type="tel" value={engPhone} onChange={setEngPhone} />
+              <label className="field">
+                <span>Téléphone (optionnel)</span>
+                <input style={SHARE_TOUCH} type="tel" inputMode="tel" value={engPhone} onChange={(e) => { phoneEdited.current = true; setPickNoPhone(false); setEngPhone(e.target.value); }} />
+              </label>
+              {pickNoPhone && <p role="status" style={{ fontSize: 12, color: "var(--ink-500)", margin: 0 }}>Téléphone non renseigné : saisissez-le.</p>}
               {engPhoneSet && (
                 <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, minHeight: 44 }}>
                   <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
@@ -4245,7 +4417,7 @@ function ShareTrackingModal({ project, onClose }) {
           ) : (
           <label className="field">
             <span>Expiration</span>
-            <select value={days} onChange={(e) => setDays(e.target.value)}>
+            <select style={SHARE_TOUCH} value={days} onChange={(e) => setDays(e.target.value)}>
               <option value="30">30 jours</option>
               <option value="90">90 jours</option>
               <option value="365">1 an (sans expiration)</option>
@@ -4261,16 +4433,16 @@ function ShareTrackingModal({ project, onClose }) {
           <button type="button" className="btn btn-amber grad-amber btn-touch" disabled={busy} onClick={create}>{busy ? "Création…" : "Créer un lien"}</button>
         </div>
 
-        {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+        {error && <div role="alert" style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
 
         {created && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <p style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
-              Lien créé. Copiez-le maintenant : il ne sera plus affichable ensuite.
+            <p role="status" style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
+              Lien créé. Cette adresse complète n'est affichée qu'ici : copiez-la maintenant si besoin. Si un numéro est renseigné, un lien court est aussi envoyé par SMS.
               {created.sms_sent === true && " SMS envoyé."}
               {created.sms_sent === false && " L'envoi du SMS a échoué : partagez le lien manuellement."}
             </p>
-            <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+            <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box", minHeight: 44 }} aria-label="Lien créé" />
             <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
           </div>
         )}
@@ -4290,6 +4462,7 @@ function ShareTrackingModal({ project, onClose }) {
                     <div style={{ color: "var(--ink-500)" }}>{l.recipientType === "engineer" ? "Ingénieur / responsable de chantier" : "Propriétaire — suivi financier"}</div>
                     <div style={{ color: "var(--ink-500)" }}>Créé : {fmtShareDate(l.createdAt)} · Expire : {l.recipientType === "engineer" && !l.expiresAt ? "jusqu'à révocation" : fmtShareDate(l.expiresAt)}</div>
                     <div style={{ color: "var(--ink-500)" }}>Dernière consultation : {fmtShareDate(l.lastViewedAt)}</div>
+                    {l.status === "active" && <ShareLinkSmsRow projectId={project.id} link={l} onSent={load} />}
                     {l.status === "active" && <div><button type="button" className="btn btn-ghost btn-touch" onClick={() => revoke(l)}>Révoquer</button></div>}
                   </div>
                 );
@@ -4309,6 +4482,7 @@ function SubcontractorLinkModal({ projectId, subcontractors, onClose }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [copied, setCopied] = React.useState(false);
+  const dialogRef = useModalA11y(onClose);
 
   const generate = async () => {
     setBusy(true); setError("");
@@ -4321,30 +4495,30 @@ function SubcontractorLinkModal({ projectId, subcontractors, onClose }) {
   const copy = () => { try { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ } };
 
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true">
-      <div className="modal-card">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-labelledby="sublink-modal-title">
+      <div className="modal-card" ref={dialogRef} tabIndex={-1}>
         <div className="modal-head">
-          <div><h2 className="font-display">Lien sous-traitant</h2></div>
-          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+          <div><h2 className="font-display" id="sublink-modal-title">Lien sous-traitant</h2></div>
+          <button type="button" className="icon-btn" style={{ width: 44, height: 44 }} aria-label="Fermer" onClick={onClose}><Icon name="x" /></button>
         </div>
         {!link ? (
           <div className="form-grid">
             <label className="field">
               <span>Sous-traitant (optionnel — sinon lien générique)</span>
-              <select value={subId} onChange={(e) => setSubId(e.target.value)}>
+              <select style={{ minHeight: 44 }} value={subId} onChange={(e) => setSubId(e.target.value)}>
                 <option value="">Lien générique (le sous-traitant s'identifie)</option>
                 {subcontractors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
             <Field label="Expiration (jours)" type="number" value={expiryDays} onChange={(v) => setExpiryDays(v)} />
-            {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
-            <button className="btn btn-amber grad-amber" disabled={busy} onClick={generate}>{busy ? "Génération…" : "Générer le lien"}</button>
+            {error && <div role="alert" style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13 }}>{error}</div>}
+            <button type="button" className="btn btn-amber grad-amber btn-touch" disabled={busy} onClick={generate}>{busy ? "Génération…" : "Générer le lien"}</button>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <p style={{ fontSize: 13, color: "var(--ink-500)" }}>Partagez ce lien avec le sous-traitant (copier / WhatsApp) :</p>
             <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13 }} />
-            <button className="btn" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
+            <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>
           </div>
         )}
       </div>
@@ -5408,8 +5582,8 @@ function FxRateModal({ doc, projectCurrencyId, projectCurrencyCode, onClose, onS
 }
 
 // Depense par nature (decaisse reel, total == "Deja depense"), replie par defaut.
-function SpentByNature({ budget, budgetCur }) {
-  const [open, setOpen] = React.useState(false);
+function SpentByNature({ budget, budgetCur, defaultOpen = false }) {
+  const [open, setOpen] = React.useState(defaultOpen);
   const rows = Array.isArray(budget?.spent_by_nature) ? budget.spent_by_nature : [];
   if (!rows.length) return null;
   const total = rows.reduce((s, r) => s + Math.round(Number(r.amount || 0) * 100), 0) / 100;
@@ -5714,7 +5888,10 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
     try {
       const payload = {
         name: form.name, trade: form.trade || null, project_id: form.project_id ? Number(form.project_id) : null,
-        contract_amount: n(form.contract_amount), currency_id: form.currency_id ? Number(form.currency_id) : null,
+        contract_amount: form.fee_mode === "percent_materials" ? 0 : n(form.contract_amount), currency_id: form.currency_id ? Number(form.currency_id) : null,
+        fee_mode: form.fee_mode || null,
+        fee_percent: form.fee_mode === "percent_materials" ? n(form.fee_percent) : null,
+        fee_bases: form.fee_mode === "percent_materials" ? (form.fee_bases.length ? form.fee_bases : ["materials"]) : null,
         status: form.status || "En_cours",
       };
       form.id ? await api.updateSubcontractor(form.id, payload) : await api.createSubcontractor(payload);
@@ -5745,7 +5922,7 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                 <span style={{ color: "var(--ink-500)" }}>{siteName(s)}</span>
-                <span style={{ fontWeight: 600 }}>{money(s.contractAmount, s.currencyCode)}</span>
+                <span style={{ fontWeight: 600 }}>{s.feeMode === "percent_materials" ? `${s.feePercent ?? 0} % des bases choisies` : money(s.contractAmount, s.currencyCode)}</span>
               </div>
               <div style={{ marginTop: 8 }}><span className={`chip ${SUBCONTRACTOR_STATUS_TONE[s.status] || "ink"}`}>{s.status?.replace(/_/g, " ")}</span></div>
             </div>
@@ -5756,13 +5933,33 @@ function SousTraitants({ projects, canMutate, fixedProjectId }) {
     </>
   );
 }
+const FEE_BASES = [
+  { code: "materials", label: "Matériaux achetés" },
+  { code: "labor", label: "Main-d'œuvre" },
+  { code: "handling", label: "Manutention et transport" },
+  { code: "other", label: "Autres" },
+  { code: "accepted_quote", label: "Devis accepté" },
+];
 function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
   const project = projects.find((p) => p.id === modal.projectId);
   const [form, setForm] = React.useState(() => ({
     id: modal.id, name: modal.name || "", trade: modal.trade || "", project_id: modal.projectId || "",
     contract_amount: modal.contractAmount ?? 0, currency_id: modal.currencyId || project?.currencyId || "", status: modal.status || "En_cours",
+    fee_mode: modal.feeMode || (n(modal.contractAmount) > 0 ? "fixed" : ""),
+    fee_percent: modal.feePercent ?? "",
+    fee_bases: modal.feeBases ? String(modal.feeBases).split(",").filter((c) => FEE_BASES.some((b) => b.code === c)) : ["materials"],
   }));
+  // Aperçu du dû en mode % : bases du chantier (synthèse budget), calcul identique au backend.
+  const [feeSummary, setFeeSummary] = React.useState(null);
+  React.useEffect(() => {
+    if (form.project_id) api.budgetSummary(form.project_id).then(setFeeSummary).catch(() => setFeeSummary(null));
+    else setFeeSummary(null);
+  }, [form.project_id]);
+  const feeBaseAmount = (code) => code === "accepted_quote" ? n(feeSummary?.quote_accepted) : n((feeSummary?.spent_by_nature || []).find((r) => r.nature === code)?.amount);
+  const feePreview = (n(form.fee_percent) / 100) * form.fee_bases.reduce((t, c) => t + feeBaseAmount(c), 0);
+  const toggleBase = (code) => setForm((c) => ({ ...c, fee_bases: c.fee_bases.includes(code) ? c.fee_bases.filter((x) => x !== code) : [...c.fee_bases, code] }));
   const currencies = useCurrencies();
+  const feeCur = resolveCurrencyCode(currencies, form.currency_id) || project?.currencyCode;
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -5781,7 +5978,37 @@ function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </label>
-          <Field label="Montant contrat" type="number" value={form.contract_amount} onChange={(v) => set("contract_amount", v)} />
+          <label className="field">
+            <span>Honoraires</span>
+            <select value={form.fee_mode} onChange={(e) => set("fee_mode", e.target.value)}>
+              <option value="">Aucun</option>
+              <option value="fixed">Montant fixe</option>
+              <option value="percent_materials">Pourcentage (choix des bases)</option>
+            </select>
+          </label>
+          {form.fee_mode === "fixed" && <Field label="Montant contrat" type="number" value={form.contract_amount} onChange={(v) => set("contract_amount", v)} />}
+          {form.fee_mode === "percent_materials" && (
+            <>
+              <label className="field">
+                <span>Pourcentage (%)</span>
+                <input type="number" min="0" max="100" step="any" value={form.fee_percent} onChange={(e) => set("fee_percent", e.target.value)} required />
+              </label>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <span>% de :</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 4 }}>
+                  {FEE_BASES.map((b) => (
+                    <label key={b.code} style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 36 }}>
+                      <input type="checkbox" checked={form.fee_bases.includes(b.code)} onChange={() => toggleBase(b.code)} />
+                      {b.label}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+                  {form.project_id ? `Dû calculé : ${money(feePreview, feeCur)} (sur les montants actuels du chantier)` : "Choisir un chantier pour voir le dû calculé."}
+                </div>
+              </div>
+            </>
+          )}
           <label className="field">
             <span>Devise</span>
             <CurrencyPicker value={form.currency_id} onChange={(id) => set("currency_id", id)} currencies={currencies} />
@@ -5798,7 +6025,7 @@ function SubcontractorModal({ modal, projects, busy, error, onClose, onSave }) {
         {error && <div className="login-error">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
-          <button className="btn btn-amber grad-amber" disabled={busy || !form.name}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+          <button className="btn btn-amber grad-amber" disabled={busy || !form.name || (form.fee_mode === "percent_materials" && (form.fee_percent === "" || !form.fee_bases.length))}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
         </div>
       </form>
     </div>

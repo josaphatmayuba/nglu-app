@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, MinLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsPositive, IsString, MaxLength, MinLength, Max, Min, ValidateNested, IsDateString, Matches, ValidateIf } from "class-validator";
 import { Type } from "class-transformer";
 import type { BatiproLevelGeometry } from "../../database/schema";
 
@@ -146,6 +146,9 @@ export class CreateBatiproSubcontractorDto {
   @IsOptional() @IsInt() supplier_id?: number;
   @IsOptional() @IsString() trade?: string;
   @IsOptional() @IsNumber() @Min(0) contract_amount?: number;
+  @IsOptional() @IsIn(["fixed", "percent_materials"]) fee_mode?: "fixed" | "percent_materials" | null;
+  @IsOptional() @IsNumber() @Min(0) @Max(100) fee_percent?: number | null;
+  @IsOptional() @IsArray() @ArrayUnique() @ArrayMinSize(1) @IsIn(["materials", "labor", "handling", "other", "accepted_quote"], { each: true }) fee_bases?: string[] | null;
   @IsOptional() @IsInt() currency_id?: number;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsNumber() @Min(0) @Max(5) rating?: number;
@@ -529,6 +532,11 @@ export class CreateBatiproShareLinkDto {
   // owner = suivi financier (lecture seule, expire) ; engineer = ingenieur /
   // responsable de chantier (avancement, photos, reception BC), sans expiration.
   @IsOptional() @IsIn(["owner", "engineer"]) recipient_type?: "owner" | "engineer";
+}
+
+// Renvoi du lien par SMS : numero optionnel (corriger / ajouter), +chiffres 8-15.
+export class SendBatiproShareLinkSmsDto {
+  @IsOptional() @IsString() @Matches(/^\+?\d{8,15}$/, { message: "Numero de telephone invalide (8 a 15 chiffres)." }) phone?: string;
 }
 
 // Mise a jour d'une phase depuis le lien public ingenieur : avancement + statut seulement.

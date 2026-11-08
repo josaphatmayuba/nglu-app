@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { buildMaterialCleanupPreview, detectServiceCategory } from "./material-cleanup.util";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import {
@@ -51,6 +51,7 @@ import { buildPhaseDetail, type PhaseDetailRow, type PoPayInfo } from "./phase-d
 import { buildFundsSummary, convertedPaidCents, disbursedCentsByCurrency, fromCents, hasAtMostTwoDecimals, summarizeFx, toCents, type SpendDoc } from "./funds.util";
 import { bucketPhaseSpend } from "./phase-spend.util";
 import { spentByNature } from "./spent-by-nature.util";
+import { computeSubcontractorFees } from "./subcontractor-fees.util";
 import { convertDocsToProjectCurrency, type MultiCurrencyResult } from "./multi-currency-total.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
@@ -1688,6 +1689,9 @@ export class BatiproService {
       name: input.name,
       trade: input.trade ?? null,
       contractAmount: String(input.contract_amount ?? 0),
+      feeMode: input.fee_mode ?? null,
+      feePercent: input.fee_percent != null ? String(input.fee_percent) : null,
+      feeBases: input.fee_bases?.length ? input.fee_bases.join(",") : null,
       currencyId: input.currency_id ?? null,
       status: input.status ?? "En_cours",
       rating: input.rating != null ? String(input.rating) : null,
@@ -1705,6 +1709,9 @@ export class BatiproService {
     if (input.name !== undefined) patch.name = input.name;
     if (input.trade !== undefined) patch.trade = input.trade || null;
     if (input.contract_amount !== undefined) patch.contractAmount = String(input.contract_amount);
+    if (input.fee_mode !== undefined) patch.feeMode = input.fee_mode ?? null;
+    if (input.fee_percent !== undefined) patch.feePercent = input.fee_percent != null ? String(input.fee_percent) : null;
+    if (input.fee_bases !== undefined) patch.feeBases = input.fee_bases?.length ? input.fee_bases.join(",") : null;
     if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
     if (input.status !== undefined) patch.status = input.status;
     if (input.rating !== undefined) patch.rating = input.rating != null ? String(input.rating) : null;
@@ -3939,6 +3946,42 @@ export class BatiproService {
           ))
       : [];
     const spentByNatureRows = spentByNature(spendDocs, natureLines, projectCurrencyId);
+    // Honoraires par sous-traitant du chantier (fixe / % d'une base / aucun).
+    const feeSubs = await this.db
+      .select({
+        id: batiproSubcontractors.id,
+        name: batiproSubcontractors.name,
+        trade: batiproSubcontractors.trade,
+        currencyId: batiproSubcontractors.currencyId,
+        contractAmount: batiproSubcontractors.contractAmount,
+        feeMode: batiproSubcontractors.feeMode,
+        feePercent: batiproSubcontractors.feePercent,
+        feeBases: batiproSubcontractors.feeBases,
+      })
+      .from(batiproSubcontractors)
+      .where(and(eq(batiproSubcontractors.projectId, projectId), eq(batiproSubcontractors.organizationId, orgId), eq(batiproSubcontractors.isActive, 1)))
+      .orderBy(asc(batiproSubcontractors.name));
+    const feePaidDocs = feeSubs.length
+      ? await this.db
+          .select({ subcontractorId: batiproDocuments.subcontractorId, currencyId: batiproDocuments.currencyId, paidAmount: batiproDocuments.paidAmount })
+          .from(batiproDocuments)
+          .where(and(
+            eq(batiproDocuments.projectId, projectId),
+            eq(batiproDocuments.organizationId, orgId),
+            eq(batiproDocuments.isActive, 1),
+            eq(batiproDocuments.direction, "outbound"),
+            inArray(batiproDocuments.type, ["purchase_order", "expense"]),
+            ne(batiproDocuments.status, "cancelled"),
+          ))
+      : [];
+    const natureAmt = (n: string) => spentByNatureRows.find((r) => r.nature === n)?.amount ?? 0;
+    const feesRows = computeSubcontractorFees(feeSubs, feePaidDocs, {
+      materials: natureAmt("materials"),
+      labor: natureAmt("labor"),
+      handling: natureAmt("handling"),
+      other: natureAmt("other"),
+      accepted_quote: fromCents(quoteFx.totalCents),
+    }, projectCurrencyId);
     const billedIssued = fromCents(invoiceFx.totalCents);
     const billedCashed = Number(invoiceAgg?.cashed ?? 0);
     const changeOrdersValidated = Number(changeOrderAgg?.total ?? 0);
@@ -3976,6 +4019,7 @@ export class BatiproService {
       cost_committed: costCommitted,
       cost_actual: costActual,
       spent_by_nature: spentByNatureRows,
+      fees: feesRows,
       billed_issued: billedIssued,
       billed_cashed: billedCashed,
       contract_with_change_orders: Math.round((contractAmount + changeOrdersValidated) * 100) / 100,

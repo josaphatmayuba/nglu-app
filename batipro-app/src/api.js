@@ -231,6 +231,7 @@ export const api = {
   // Liens publics de suivi financier du chantier (proprietaire)
   shareLinks: (projectId) => jsonFetch(`/projects/${projectId}/share-links`),
   createShareLink: (projectId, b) => jsonFetch(`/projects/${projectId}/share-links`, { method: "POST", body: JSON.stringify(b || {}) }),
+  sendShareLinkSms: (projectId, linkId, b) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/send-sms`, { method: "POST", body: JSON.stringify(b || {}) }),
   revokeShareLink: (projectId, linkId) => jsonFetch(`/projects/${projectId}/share-links/${linkId}/revoke`, { method: "POST" }),
   // Portail sous-traitant (Phase 0) — cote gestionnaire
   createSubcontractorLink: (b) => jsonFetch("/documents/subcontractor-link", { method: "POST", body: JSON.stringify(b || {}) }),

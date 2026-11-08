@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, sql } from "drizzle-orm";
 import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
@@ -83,13 +83,72 @@ export class BatiproShareService {
         expiresAt: batiproShareLinks.expiresAt,
         revokedAt: batiproShareLinks.revokedAt,
         lastViewedAt: batiproShareLinks.lastViewedAt,
+        smsSentAt: batiproShareLinks.smsSentAt,
+        smsSentCount: batiproShareLinks.smsSentCount,
+        shortCode: batiproShareLinks.shortCode,
         createdBy: batiproShareLinks.createdBy,
         createdAt: batiproShareLinks.createdAt,
       })
       .from(batiproShareLinks)
       .where(and(eq(batiproShareLinks.projectId, projectId), eq(batiproShareLinks.organizationId, orgId)))
       .orderBy(desc(batiproShareLinks.id));
-    return rows.map((r) => ({ ...r, status: this.statusOf(r) }));
+    // short_code expose seulement en booleen (can_send_sms) : jamais le code lui-meme.
+    return rows.map(({ shortCode, ...r }) => ({ ...r, can_send_sms: !!shortCode, status: this.statusOf(r) }));
+  }
+
+  private async markSmsSent(linkId: number) {
+    await this.db
+      .update(batiproShareLinks)
+      .set({ smsSentAt: new Date(), smsSentCount: sql`${batiproShareLinks.smsSentCount} + 1` })
+      .where(eq(batiproShareLinks.id, linkId));
+  }
+
+  // Anti-abus : max 3 renvois par heure et par lien (memoire du process).
+  private readonly resendLog = new Map<number, number[]>();
+
+  // Renvoi du lien par SMS (URL courte /batipro/c/<code>). Le jeton complet n'est pas
+  // recuperable : un ancien lien (sans short_code) doit etre recree.
+  async sendLinkSms(projectId: number, linkId: number, phoneInput: string | undefined, orgId: number, scope: BatiproProjectScope) {
+    await this.assertProject(projectId, orgId, scope);
+    const [row] = await this.db
+      .select({
+        id: batiproShareLinks.id,
+        recipientType: batiproShareLinks.recipientType,
+        recipientPhone: batiproShareLinks.recipientPhone,
+        shortCode: batiproShareLinks.shortCode,
+        expiresAt: batiproShareLinks.expiresAt,
+        revokedAt: batiproShareLinks.revokedAt,
+      })
+      .from(batiproShareLinks)
+      .where(and(eq(batiproShareLinks.id, linkId), eq(batiproShareLinks.projectId, projectId), eq(batiproShareLinks.organizationId, orgId)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Lien introuvable.");
+    if (this.statusOf(row) !== "active") throw new BadRequestException("Lien revoque ou expire : creez un nouveau lien.");
+    if (!row.shortCode) {
+      throw new ConflictException("Lien ancien : recreez-le pour pouvoir l'envoyer par SMS.");
+    }
+    const provided = (phoneInput ?? "").trim();
+    const phone = provided ? normalizePhoneE164(provided, { defaultCountry: "CD" }) : row.recipientPhone;
+    if (provided && !phone) throw new BadRequestException("Numero de telephone invalide.");
+    if (!phone) throw new BadRequestException("Numero de telephone requis pour envoyer le SMS.");
+    const now = Date.now();
+    const recent = (this.resendLog.get(linkId) ?? []).filter((t) => now - t < 3_600_000);
+    if (recent.length >= 3) {
+      throw new HttpException("Trop d'envois pour ce lien : reessayez dans une heure.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const url = `${env.appUrl.replace(/\/$/, "")}/batipro/c/${row.shortCode}`;
+    const kind = row.recipientType === "engineer" ? "engineer" : "owner";
+    const ok = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, kind);
+    recent.push(now);
+    this.resendLog.set(linkId, recent);
+    if (!ok) {
+      throw new BadRequestException("SMS non envoye : SMS desactives pour l'organisation ou passerelle indisponible.");
+    }
+    if (!row.recipientPhone) {
+      await this.db.update(batiproShareLinks).set({ recipientPhone: phone }).where(eq(batiproShareLinks.id, linkId));
+    }
+    await this.markSmsSent(linkId);
+    return { sms_sent: true, sms_sent_at: new Date(), phone };
   }
 
   async createLink(
@@ -141,6 +200,7 @@ export class BatiproShareService {
     let smsSent: boolean | null = null;
     if (input.send_sms && phone) {
       smsSent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, recipientType);
+      if (smsSent) await this.markSmsSent(Number(result.id));
     }
     // Le jeton en clair n'est renvoye QU'ici (impossible a retrouver ensuite).
     return { id: Number(result.id), token, url, expires_at: expiresAt, sms_sent: smsSent };
@@ -373,19 +433,118 @@ export class BatiproShareService {
       ))
       .orderBy(asc(batiproSubcontractors.name));
     const subcontractors = subRows.map((s) => {
-      const contract = Number(s.contractAmount ?? 0);
+      // Mode pourcentage : contrat = du calcule (bloc fees de la synthese).
+      const fee = ((summary as any).fees ?? []).find((f: any) => f.subcontractor_id === s.id);
+      const contract = fee ? Number(fee.due) : Number(s.contractAmount ?? 0);
+      const pctMode = fee?.mode === "percent_materials";
       const paid = poRows
         .filter((p) => p.subcontractorId === s.id && effCur(p.currencyId) === effCur(s.currencyId))
         .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
       return {
         name: s.name,
         trade: s.trade ?? null,
-        contract: round2(contract),
+        contract: pctMode ? contract : round2(contract),
         paid: round2(paid),
-        remaining: round2(Math.max(contract - paid, 0)),
+        remaining: pctMode ? Math.max(contract - paid, 0) : round2(Math.max(contract - paid, 0)),
+        fee_mode: fee?.mode ?? null,
+        fee_percent: fee?.percent ?? null,
+        fee_bases: fee?.bases ?? null,
         ...curOut(s.currencyId),
       };
     });
+
+    // Apercu simplifie : honoraires (bloc fees de la synthese) + liste des paiements
+    // (un par BC/depense du sous-traitant deja regle, meme devise effective).
+    const feeBlocks = (((summary as any).fees ?? []) as any[])
+      .filter((f) => f.mode !== "none")
+      .map((f) => {
+        const sub = subRows.find((s) => s.id === f.subcontractor_id);
+        const payments = poRows
+          .filter((p) => p.subcontractorId === f.subcontractor_id && effCur(p.currencyId) === effCur(sub?.currencyId ?? f.currency_id) && Number(p.paidAmount ?? 0) > 0)
+          .map((p) => ({
+            date: p.issueDate ?? (p.createdAt ? new Date(p.createdAt).toISOString().slice(0, 10) : null),
+            label: firstLine.get(p.id) ?? p.number ?? null,
+            amount: Number(p.paidAmount ?? 0),
+          }))
+          .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+        return {
+          name: f.name,
+          trade: f.trade ?? null,
+          mode: f.mode,
+          percent: f.percent ?? null,
+          bases: f.bases ?? null,
+          base_amount: f.base_amount ?? null,
+          due: f.due,
+          paid: f.paid,
+          remaining: f.remaining,
+          ...curOut(f.currency_id),
+          payments,
+        };
+      });
+
+    // Phase en cours (libelle seulement) pour l'en-tete d'avancement.
+    const phaseRows = await this.db
+      .select({ label: batiproPhases.label, status: batiproPhases.status, progress: batiproPhases.progress })
+      .from(batiproPhases)
+      .where(and(eq(batiproPhases.projectId, projectId), eq(batiproPhases.organizationId, orgId), eq(batiproPhases.isActive, 1)))
+      .orderBy(asc(batiproPhases.position), asc(batiproPhases.id));
+    const curPhase = phaseRows.find((p) => p.status === "En_cours") ?? phaseRows.find((p) => p.status !== "Termine") ?? null;
+
+    // Prochaines livraisons : BC emis, deja (au moins en partie) payes, pas encore recus.
+    const deliveryDocs = await this.db
+      .select({
+        id: batiproDocuments.id,
+        number: batiproDocuments.number,
+        currencyId: batiproDocuments.currencyId,
+        totalTtc: batiproDocuments.totalTtc,
+        paidAmount: batiproDocuments.paidAmount,
+        expectedDeliveryDate: batiproDocuments.expectedDeliveryDate,
+      })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.isActive, 1),
+        eq(batiproDocuments.direction, "outbound"),
+        eq(batiproDocuments.type, "purchase_order"),
+        notInArray(batiproDocuments.status, ["draft", "cancelled", "received"]),
+        sql`${batiproDocuments.paidAmount} > 0`,
+      ))
+      .orderBy(asc(batiproDocuments.expectedDeliveryDate), asc(batiproDocuments.id))
+      .limit(5);
+    const deliveryLines = deliveryDocs.length
+      ? await this.db
+        .select({
+          documentId: batiproDocumentLines.documentId,
+          designation: batiproDocumentLines.designation,
+          quantity: batiproDocumentLines.quantity,
+          receivedQuantity: batiproDocumentLines.receivedQuantity,
+          unitPrice: batiproDocumentLines.unitPrice,
+        })
+        .from(batiproDocumentLines)
+        .where(and(
+          inArray(batiproDocumentLines.documentId, deliveryDocs.map((d) => d.id)),
+          eq(batiproDocumentLines.organizationId, orgId),
+          eq(batiproDocumentLines.isActive, 1),
+          isNotNull(batiproDocumentLines.materialId),
+        ))
+        .orderBy(asc(batiproDocumentLines.position), asc(batiproDocumentLines.id))
+      : [];
+    const nextDeliveries = deliveryDocs.map((d) => ({
+      number: d.number ?? null,
+      expected_date: d.expectedDeliveryDate ?? null,
+      total: round2(Number(d.totalTtc ?? 0)),
+      paid: round2(Number(d.paidAmount ?? 0)),
+      ...curOut(d.currencyId),
+      lines: deliveryLines
+        .filter((l) => l.documentId === d.id)
+        .map((l) => ({
+          designation: l.designation,
+          remaining: Math.max(Math.round((Number(l.quantity ?? 0) - Number(l.receivedQuantity ?? 0)) * 1000) / 1000, 0),
+          unit_price: round2(Number(l.unitPrice ?? 0)),
+        }))
+        .filter((l) => l.remaining > 0),
+    })).filter((d) => d.lines.length > 0);
 
     const sitePhotos = await this.db
       .select({ id: batiproSitePhotos.id, caption: batiproSitePhotos.caption, takenAt: batiproSitePhotos.takenAt })
@@ -423,6 +582,15 @@ export class BatiproShareService {
         nature: r.nature, label: r.label, amount: r.amount,
       })),
       spent_by_nature_total: round2(((summary as any).spent_by_nature ?? []).reduce((t: number, r: any) => t + Number(r.amount || 0), 0)),
+      // Fonds du chantier (devise chantier) : recu / disponible (= recu - decaisse, peut etre < 0).
+      funds: {
+        received: Number((summary as any).funds_received ?? 0),
+        available: Number((summary as any).funds_available ?? 0),
+        ...curOut(project.currencyId),
+      },
+      current_phase: curPhase ? { label: curPhase.label, status: curPhase.status, progress: curPhase.progress } : null,
+      fees: feeBlocks,
+      next_deliveries: nextDeliveries,
       purchase_orders: purchaseOrders,
       direct_expenses: directExpenses,
       supplier_invoices: supplierInvoices,

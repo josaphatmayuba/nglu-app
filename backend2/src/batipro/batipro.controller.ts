@@ -30,6 +30,7 @@ import {
   CreateBatiproSituationDto,
   CreateBatiproSituationDocumentDto,
   CreateBatiproShareLinkDto,
+  SendBatiproShareLinkSmsDto,
   CreateBatiproSubcontractorDto,
   CreateBatiproTaskDto,
   CreateBatiproWorkerDto,
@@ -151,6 +152,19 @@ export class BatiproController {
     @CurrentBatiproProject() scope: BatiproProjectScope,
   ) {
     return this.share.revokeLink(projectId, linkId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Renvoyer un lien de partage par SMS (URL courte), numero optionnel" })
+  @Permissions("update-batipro")
+  @Post("projects/:projectId/share-links/:linkId/send-sms")
+  sendShareLinkSms(
+    @Param("projectId", ParseIntPipe) projectId: number,
+    @Param("linkId", ParseIntPipe) linkId: number,
+    @Body() body: SendBatiproShareLinkSmsDto,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    return this.share.sendLinkSms(projectId, linkId, body?.phone, orgId, scope);
   }
 
   // ── Fonds du chantier (apports recus, comptabilises au ledger) ──────────────

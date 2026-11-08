@@ -237,7 +237,7 @@ table.bp td .danger-txt { color: var(--rose-600); }
 
 /* ── Modal ─────────────────────────────────────────────────────────────── */
 .modal-scrim { position: fixed; inset: 0; background: rgba(12,8,3,.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
-.modal-card { background: #fff; border-radius: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.35); display: grid; gap: 16px; max-height: min(760px, calc(100vh - 40px)); max-width: 640px; overflow: auto; padding: 22px; width: 100%; }
+.modal-card { background: #fff; border-radius: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.35); display: grid; gap: 16px; max-height: min(760px, calc(100dvh - 40px)); max-width: 640px; overflow: auto; padding: 22px; width: 100%; }
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .modal-head h2 { margin: 0; font-size: 18px; }
 .modal-head p { margin: 2px 0 0; color: var(--ink-500); font-size: 12px; }
@@ -421,3 +421,40 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .exp-filters.open { display: flex; }
   .exp-filters > select { flex: none; width: 100%; min-height: 44px; }
 }
+
+/* Aperçu simplifié (SimpleOverview.jsx) : tokens de l'app, mobile 360 px sans scroll horizontal */
+.sov { --sov-accent: var(--amber-600, #d97706); --sov-track: var(--ink-100, #e2e8f0); --sov-c-mat: var(--amber-600, #d97706); --sov-c-hon: #2563eb; --sov-c-mo: #0f766e; --sov-c-man: #7c3aed; --sov-c-aut: var(--ink-400, #94a3b8); display: flex; flex-direction: column; gap: 14px; max-width: 560px; width: 100%; min-width: 0; color: var(--ink-900, #0f172a); }
+.sov, .sov * { box-sizing: border-box; }
+.sov-card { background: var(--surface, #fff); border: 1px solid var(--line, #ece6dd); border-radius: 14px; padding: 16px; min-width: 0; }
+.sov-muted { color: var(--ink-500, #64748b); }
+.sov-h { font-size: 15px; margin: 0 0 12px; }
+.sov-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
+.sov-ring { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; }
+.sov-ring span { width: 64px; height: 64px; border-radius: 50%; background: var(--surface, #fff); display: grid; place-items: center; font-weight: 700; font-size: 17px; }
+.sov-hero b { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.sov-hero small { display: block; color: var(--ink-500, #64748b); overflow-wrap: anywhere; }
+.sov-money { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; font-variant-numeric: tabular-nums; }
+.sov-money > div { min-width: 0; }
+.sov-money small { display: block; color: var(--ink-500, #64748b); font-size: 12px; }
+.sov-money strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.sov-ok strong { color: var(--emerald-700, #047857); }
+.sov-neg strong { color: var(--rose-700, #be123c); }
+.sov-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--sov-track); margin-bottom: 12px; }
+.sov-bar i { display: block; height: 100%; }
+.sov-rows { display: flex; flex-direction: column; gap: 9px; font-variant-numeric: tabular-nums; }
+.sov-row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.sov-dot { width: 12px; height: 12px; border-radius: 3px; }
+.sov-pct { color: var(--ink-500, #64748b); font-size: 12px; margin-left: 6px; }
+.sov-total { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line, #ece6dd); margin-top: 12px; padding-top: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sov-line { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-variant-numeric: tabular-nums; }
+.sov-line > span { min-width: 0; overflow-wrap: anywhere; }
+.sov-line + .sov-line { border-top: 1px dashed var(--line, #ece6dd); }
+.sov-due { color: var(--amber-700, #b45309); }
+.sov-prog { height: 10px; border-radius: 5px; background: var(--sov-track); overflow: hidden; margin: 10px 0 4px; }
+.sov-prog i { display: block; height: 100%; background: var(--sov-c-hon); }
+.sov-details summary { cursor: pointer; color: var(--ink-500, #64748b); font-size: 13px; min-height: 44px; display: flex; align-items: center; }
+.sov-details summary:focus-visible { outline: 2px solid var(--sov-accent); outline-offset: 2px; }
+.sov-todo { display: flex; gap: 12px; align-items: flex-start; background: var(--amber-100, #fef3c7); border-color: transparent; }
+.sov-todo b { overflow-wrap: anywhere; }
+.sov-tag { font-weight: 700; font-size: 13px; background: var(--amber-700, #b45309); color: #fff; border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
+@media (max-width: 400px) { .sov-money { grid-template-columns: minmax(0, 1fr); } }

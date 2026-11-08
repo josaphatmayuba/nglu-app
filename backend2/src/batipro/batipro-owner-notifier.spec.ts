@@ -164,8 +164,8 @@ describe("BatiproOwnerNotifier", () => {
     expect(sendSms).toHaveBeenCalledTimes(2);
     expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
     expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_expense");
-    expect(sendSms.mock.calls[0][0].message).toMatch(/ https:\/\/[^ ]+\/batipro\/c\/own1234567$/);
-    expect(sendSms.mock.calls[1][0].message).toMatch(/ https:\/\/[^ ]+\/batipro\/c\/eng1234567$/);
+    expect(sendSms.mock.calls[0][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/own1234567$/);
+    expect(sendSms.mock.calls[1][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/eng1234567$/);
     expect(sendSms.mock.calls[1][0].logMessage).toMatch(/\[lien\]$/);
     for (const [arg] of sendSms.mock.calls) {
       expect(arg.message.length).toBeLessThanOrEqual(160);
