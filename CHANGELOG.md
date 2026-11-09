@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : 8 tableaux lisibles sur mobile (v3.284.5).** Devis, situations de travaux, factures, soumissions sous-traitants, historique de stock, bons de commande (vue globale), équipes et ouvriers passent en cartes sous 640 px (classe `card-table`, libellés par `data-label`, actions 44 px). Bureau inchangé.
 - **BâtiPro : cartes des bons de commande améliorées sur mobile (v3.284.4).** Revue UI : numéro + statut en tête, total en gras, « Payé · Solde » (solde en rouge s'il reste à payer), barre de réception, 1 action principale (Confirmer / Réceptionner / Régler) + Aperçu visibles, le reste dans « Plus ▾ » ; sélecteurs CSS limités à la liste (le sous-tableau des factures n'est plus déformé). Bureau inchangé.
 - **BâtiPro : liste des bons de commande lisible sur mobile (v3.284.3).** Sous 640 px, le tableau à 8 colonnes (coupé à droite, texte haché) devient une carte par bon : numéro, fournisseur, date, total, payé/solde, statut, réception et actions sur toute la largeur.
 - **BâtiPro : le « Reste à payer (honoraires) » est toujours visible dans l'Aperçu (v3.284.2).** Lien propriétaire : ligne sous la caisse ; lien ingénieur : colonne « Reste à payer », « — » ou « Non configuré » tant que les honoraires ne sont pas réglés.

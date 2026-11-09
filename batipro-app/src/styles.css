@@ -483,3 +483,19 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .po-more-menu.open { display: flex; }
   .po-more-menu .link { justify-content: flex-start; }
 }
+
+/* Tableaux génériques en cartes sur mobile (classe .card-table, cellules avec data-label) */
+@media (max-width: 640px) {
+  .card-table, .card-table > tbody { display: block; width: 100%; }
+  .card-table > thead { display: none; }
+  .card-table > tbody > tr { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-bottom: 1px solid var(--ink-200, #e2e8f0); }
+  .card-table > tbody > tr > td { display: block; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+  .card-table > tbody > tr > td[data-label]:not([data-label=""])::before { content: attr(data-label); display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .02em; color: var(--ink-500, #64748b); margin-bottom: 2px; }
+  .card-table > tbody > tr > td:first-child { font-size: 17px; font-weight: 600; }
+  .card-table > tbody > tr > td:first-child::before { font-weight: 400; }
+  .card-table > tbody > tr > td[colspan] { width: 100%; font-size: 14px; font-weight: 400; }
+  .card-table > tbody > tr > td:last-child:not(:first-child) .link,
+  .card-table > tbody > tr > td:last-child:not(:first-child) button,
+  .card-table > tbody > tr > td:last-child:not(:first-child) label.link { min-height: 44px; min-width: 44px; padding: 0 12px; display: inline-flex; align-items: center; }
+  .card-table > tbody > tr > td:last-child:not(:first-child) > div { width: 100%; }
+}

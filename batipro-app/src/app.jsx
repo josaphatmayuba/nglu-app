@@ -1706,18 +1706,18 @@ function Devis({ projects, canMutate, fixedProjectId }) {
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       <div className="card table-card">
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>Numéro</th><th>Émis le</th><th>Total TTC</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={5} className="muted">Chargement…</td></tr> :
               !docs.length ? <tr><td colSpan={5} className="muted">Aucun devis pour ce chantier.</td></tr> :
               docs.map((d) => (
                 <tr key={d.id}>
-                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
-                  <td><span className={`chip ${DOC_STATUS_TONE[d.status] || "ink"}`}>{DOC_STATUS_LABEL[d.status] || d.status}</span></td>
-                  <td>
+                  <td data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td data-label="Émis le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td data-label="Total TTC">{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td data-label="Statut"><span className={`chip ${DOC_STATUS_TONE[d.status] || "ink"}`}>{DOC_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td data-label="">
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
@@ -3382,19 +3382,19 @@ function SituationsTravaux({ projects, canMutate, fixedProjectId }) {
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       <div className="card table-card">
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>Numéro</th><th>Période</th><th>Émise le</th><th>Montant période TTC</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
               !docs.length ? <tr><td colSpan={6} className="muted">Aucune situation de travaux pour ce chantier.</td></tr> :
               docs.map((d) => (
                 <tr key={d.id}>
-                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{(d.notes && /Période\s*:\s*([^\n]+)/.exec(d.notes)?.[1]) || "—"}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                  <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
-                  <td><span className={`chip ${SIT_DOC_STATUS_TONE[d.status] || "ink"}`}>{SIT_DOC_STATUS_LABEL[d.status] || d.status}</span></td>
-                  <td>
+                  <td data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td data-label="Période" style={{ color: "var(--ink-500)" }}>{(d.notes && /Période\s*:\s*([^\n]+)/.exec(d.notes)?.[1]) || "—"}</td>
+                  <td data-label="Émise le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td data-label="Montant période TTC">{money(d.totalTtc, d.currencyCode || cur)}</td>
+                  <td data-label="Statut"><span className={`chip ${SIT_DOC_STATUS_TONE[d.status] || "ink"}`}>{SIT_DOC_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td data-label="">
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                       {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
@@ -3522,7 +3522,7 @@ function Factures({ projects, canMutate, fixedProjectId }) {
       )}
 
       <div className="card table-card" style={{ overflowX: "auto" }}>
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>Numéro</th><th>Émise le</th><th>Total TTC</th><th>Réglé</th><th>Solde</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={7} className="muted">Chargement…</td></tr> :
@@ -3531,13 +3531,13 @@ function Factures({ projects, canMutate, fixedProjectId }) {
                 const balance = Math.max(0, n(d.totalTtc) - n(d.paidAmount));
                 return (
                   <tr key={d.id}>
-                    <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                    <td>{money(d.totalTtc, d.currencyCode || cur)}</td>
-                    <td>{money(d.paidAmount, d.currencyCode || cur)}</td>
-                    <td>{money(balance, d.currencyCode || cur)}</td>
-                    <td><span className={`chip ${INV_STATUS_TONE[d.status] || "ink"}`}>{INV_STATUS_LABEL[d.status] || d.status}</span></td>
-                    <td>
+                    <td data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                    <td data-label="Émise le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                    <td data-label="Total TTC">{money(d.totalTtc, d.currencyCode || cur)}</td>
+                    <td data-label="Réglé">{money(d.paidAmount, d.currencyCode || cur)}</td>
+                    <td data-label="Solde">{money(balance, d.currencyCode || cur)}</td>
+                    <td data-label="Statut"><span className={`chip ${INV_STATUS_TONE[d.status] || "ink"}`}>{INV_STATUS_LABEL[d.status] || d.status}</span></td>
+                    <td data-label="">
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
                         {canMutate && can("update-batipro") && d.status === "draft" && (
@@ -4157,19 +4157,19 @@ function Situations({ projects, canMutate, fixedProjectId }) {
 
       <h3 className="font-display" style={{ fontSize: 15, margin: "18px 0 8px" }}>Soumissions sous-traitants</h3>
       <div className="card table-card" style={{ marginBottom: 18 }}>
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>Sous-traitant</th><th>Type</th><th>Montant TTC</th><th>Fichier</th><th>Statut</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
               !submissions.length ? <tr><td colSpan={6} className="muted">Aucune soumission reçue.</td></tr> :
               submissions.map((s) => (
                 <tr key={s.id}>
-                  <td style={{ fontWeight: 500 }}>{s.subcontractorName || s.submittedByCompany || s.submittedByName || "—"}</td>
-                  <td>{s.type === "invoice" ? "Facture" : "Devis"}</td>
-                  <td>{money(s.totalTtc, s.currencyCode || cur)}</td>
-                  <td>{s.attachedFileKey ? <button className="link" onClick={() => openSubmissionFile(s.id)}><Icon name="eye" /> Voir</button> : <span className="muted">—</span>}</td>
-                  <td><span className={`chip ${SUBMISSION_STATUS_TONE[s.status] || "ink"}`}>{s.status?.replace(/_/g, " ")}</span></td>
-                  <td>
+                  <td data-label="Sous-traitant" style={{ fontWeight: 500 }}>{s.subcontractorName || s.submittedByCompany || s.submittedByName || "—"}</td>
+                  <td data-label="Type">{s.type === "invoice" ? "Facture" : "Devis"}</td>
+                  <td data-label="Montant TTC">{money(s.totalTtc, s.currencyCode || cur)}</td>
+                  <td data-label="Fichier">{s.attachedFileKey ? <button className="link" onClick={() => openSubmissionFile(s.id)}><Icon name="eye" /> Voir</button> : <span className="muted">—</span>}</td>
+                  <td data-label="Statut"><span className={`chip ${SUBMISSION_STATUS_TONE[s.status] || "ink"}`}>{s.status?.replace(/_/g, " ")}</span></td>
+                  <td data-label="">
                     {s.status === "submitted" && canMutate ? (
                       <div style={{ display: "flex", gap: 6 }}>
                         <button className="link link-accent" onClick={() => reviewSubmission(s.id, "validate")}><Icon name="checkCheck" /> Valider</button>
@@ -4693,19 +4693,19 @@ function Materiaux({ materials: globalMaterials, onNew, onRestock, onOpenProject
         </div>
         <p className="eyebrow" style={{ marginBottom: 8 }}>Historique des mouvements</p>
         <div className="card table-card">
-          <table className="bp">
+          <table className="bp card-table">
             <thead><tr><th>Date</th><th>Matériau</th><th>Type</th><th>Quantité</th><th>Phase</th><th>Note</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
                 !movements.length ? <tr><td colSpan={6} className="muted">Aucun mouvement enregistré.</td></tr> :
                 movements.map((mv) => (
                   <tr key={mv.id}>
-                    <td style={{ color: "var(--ink-500)" }}>{mv.createdAt ? String(mv.createdAt).slice(0, 10) : "—"}</td>
-                    <td>{mv.materialName}</td>
-                    <td><span className={`chip ${STOCK_MOVEMENT_TONE[mv.movementType] || "ink"}`}>{STOCK_MOVEMENT_LABEL[mv.movementType] || mv.movementType}</span></td>
-                    <td>{n(mv.quantity)} {mv.materialUnit}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{mv.phaseLabel || "—"}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{mv.note || "—"}</td>
+                    <td data-label="Date" style={{ color: "var(--ink-500)" }}>{mv.createdAt ? String(mv.createdAt).slice(0, 10) : "—"}</td>
+                    <td data-label="Matériau">{mv.materialName}</td>
+                    <td data-label="Type"><span className={`chip ${STOCK_MOVEMENT_TONE[mv.movementType] || "ink"}`}>{STOCK_MOVEMENT_LABEL[mv.movementType] || mv.movementType}</span></td>
+                    <td data-label="Quantité">{n(mv.quantity)} {mv.materialUnit}</td>
+                    <td data-label="Phase" style={{ color: "var(--ink-500)" }}>{mv.phaseLabel || "—"}</td>
+                    <td data-label="Note" style={{ color: "var(--ink-500)" }}>{mv.note || "—"}</td>
                   </tr>
                 ))}
             </tbody>
@@ -4809,18 +4809,18 @@ function Materiaux({ materials: globalMaterials, onNew, onRestock, onOpenProject
         </label>
       </div>
       <div className="card table-card">
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>N°</th><th>Chantier</th><th>Montant TTC</th><th>Devise</th><th>Statut</th></tr></thead>
           <tbody>
             {posLoading ? <tr><td colSpan={5} className="muted">Chargement…</td></tr> :
               !filteredPos.length ? <tr><td colSpan={5} className="muted">Aucun bon de commande.</td></tr> :
               filteredPos.map((d) => (
                 <tr key={d.id}>
-                  <td style={{ fontWeight: 500 }}>{d.number}</td>
-                  <td>{d.projectName || "—"}</td>
-                  <td>{money(d.totalTtc, d.currencyCode)}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{d.currencyCode || "—"}</td>
-                  <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td data-label="N°" style={{ fontWeight: 500 }}>{d.number}</td>
+                  <td data-label="Chantier">{d.projectName || "—"}</td>
+                  <td data-label="Montant TTC">{money(d.totalTtc, d.currencyCode)}</td>
+                  <td data-label="Devise" style={{ color: "var(--ink-500)" }}>{d.currencyCode || "—"}</td>
+                  <td data-label="Statut"><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
                 </tr>
               ))}
           </tbody>
@@ -6087,19 +6087,19 @@ function Equipes({ canMutate }) {
           {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
           <div className="card table-card">
-            <table className="bp">
+            <table className="bp card-table">
               <thead><tr><th>Équipe</th><th>Chef d'équipe</th><th>Effectif</th><th>Chantier</th><th>Statut</th><th></th></tr></thead>
               <tbody>
                 {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
                   !crews.length ? <tr><td colSpan={6} className="muted">Aucune équipe enregistrée.</td></tr> :
                   crews.map((c) => (
                     <tr key={c.id}>
-                      <td style={{ fontWeight: 500 }}>{c.name}</td>
-                      <td style={{ color: "var(--ink-500)" }}>{c.lead || "—"}</td>
-                      <td>{n(c.people)}</td>
-                      <td style={{ color: "var(--ink-500)" }}>{c.site || "—"}</td>
-                      <td><span className={`chip ${CREW_STATUS_TONE[c.status] || "ink"}`}>{c.status ? c.status.replace(/_/g, " ") : "—"}</span></td>
-                      <td>
+                      <td data-label="Équipe" style={{ fontWeight: 500 }}>{c.name}</td>
+                      <td data-label="Chef d'équipe" style={{ color: "var(--ink-500)" }}>{c.lead || "—"}</td>
+                      <td data-label="Effectif">{n(c.people)}</td>
+                      <td data-label="Chantier" style={{ color: "var(--ink-500)" }}>{c.site || "—"}</td>
+                      <td data-label="Statut"><span className={`chip ${CREW_STATUS_TONE[c.status] || "ink"}`}>{c.status ? c.status.replace(/_/g, " ") : "—"}</span></td>
+                      <td data-label="">
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal(c)}>Modifier</button>}
                           {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => remove(c.id)}>Suppr.</button>}
@@ -6177,7 +6177,7 @@ function Ouvriers({ crews, canMutate }) {
       {error && <div style={{ color: "var(--rose-600, #b91c1c)", fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       <div className="card table-card">
-        <table className="bp">
+        <table className="bp card-table">
           <thead><tr><th>Nom</th><th>Rôle</th><th>Téléphone</th><th>Taux journalier</th><th>Équipe</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={6} className="muted">Chargement…</td></tr> :
@@ -6186,12 +6186,12 @@ function Ouvriers({ crews, canMutate }) {
                 const crew = crews.find((c) => String(c.id) === String(w.crewId));
                 return (
                   <tr key={w.id}>
-                    <td style={{ fontWeight: 500 }}>{w.fullName}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{w.role || "—"}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{w.phone || "—"}</td>
-                    <td>{w.dailyRate != null ? money(w.dailyRate, w.currencyCode || currencyLabel(w.currencyId)) : "—"}</td>
-                    <td style={{ color: "var(--ink-500)" }}>{crew?.name || "—"}</td>
-                    <td>
+                    <td data-label="Nom" style={{ fontWeight: 500 }}>{w.fullName}</td>
+                    <td data-label="Rôle" style={{ color: "var(--ink-500)" }}>{w.role || "—"}</td>
+                    <td data-label="Téléphone" style={{ color: "var(--ink-500)" }}>{w.phone || "—"}</td>
+                    <td data-label="Taux journalier">{w.dailyRate != null ? money(w.dailyRate, w.currencyCode || currencyLabel(w.currencyId)) : "—"}</td>
+                    <td data-label="Équipe" style={{ color: "var(--ink-500)" }}>{crew?.name || "—"}</td>
+                    <td data-label="">
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal(w)}>Modifier</button>}
                         {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => remove(w.id)}>Suppr.</button>}
