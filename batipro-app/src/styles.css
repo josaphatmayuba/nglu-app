@@ -458,3 +458,15 @@ table.bp td .danger-txt { color: var(--rose-600); }
 .sov-todo b { overflow-wrap: anywhere; }
 .sov-tag { font-weight: 700; font-size: 13px; background: var(--amber-700, #b45309); color: #fff; border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
 @media (max-width: 400px) { .sov-money { grid-template-columns: minmax(0, 1fr); } }
+
+/* Bons de commande : cartes sur mobile (le tableau 8 colonnes était coupé) */
+@media (max-width: 640px) {
+  .po-table, .po-table tbody { display: block; width: 100%; }
+  .po-table thead { display: none; }
+  .po-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 12px; border-bottom: 1px solid var(--ink-200, #e2e8f0); }
+  .po-table td { display: block; padding: 0; border: 0; min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
+  .po-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-500, #64748b); margin-bottom: 2px; }
+  .po-table td:first-child, .po-table td:last-child, .po-table td[colspan] { grid-column: 1 / -1; }
+  .po-table td:first-child { font-size: 17px; }
+  .po-table td .link { min-height: 44px; padding: 0 10px; }
+}

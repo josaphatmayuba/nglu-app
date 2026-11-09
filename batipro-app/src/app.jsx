@@ -2345,7 +2345,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
       )}
 
       <div className="card table-card">
-        <table className="bp">
+        <table className="bp po-table">
           <thead><tr><th>Numéro</th><th>Fournisseur / sous-traitant</th><th>Émis le</th><th>Total TTC</th><th>Payé / solde</th><th>Statut</th><th>Réception</th><th></th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={8} className="muted">Chargement…</td></tr> :
@@ -2365,10 +2365,10 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                 return (
                 <React.Fragment key={d.id}>
                 <tr>
-                  <td style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
-                  <td>{d.supplierName || d.subcontractorName || "—"}</td>
-                  <td style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                  <td>
+                  <td data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td data-label="Fournisseur / sous-traitant">{d.supplierName || d.subcontractorName || "—"}</td>
+                  <td data-label="Émis le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td data-label="Total TTC">
                     {money(d.totalTtc, d.currencyCode || cur)}
                     {isForeignCurrency(d.currencyId, d.currencyCode, selected?.currencyId, cur) && (
                       <div style={{ fontSize: 11, color: "var(--ink-500)" }}>
@@ -2385,14 +2385,14 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       </div>
                     )}
                   </td>
-                  <td style={{ color: "var(--ink-500)", fontSize: 12 }}>
+                  <td data-label="Payé / solde" style={{ color: "var(--ink-500)", fontSize: 12 }}>
                     {money(n(d.paidAmount), d.currencyCode || cur)} / solde {money(balance, d.currencyCode || cur)}
                     {d.fxRate != null && n(d.paidAmountProjectCcy) > 0 && (
                       <div style={{ fontSize: 11 }}>(≈ {money(d.paidAmountProjectCcy, cur)} payés)</div>
                     )}
                   </td>
-                  <td><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
-                  <td style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                  <td data-label="Statut"><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td data-label="Réception" style={{ fontSize: 12, color: "var(--ink-500)" }}>
                     {showProgress ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 70 }}>
                         <span>{receivedQty}/{orderedQty}</span>
