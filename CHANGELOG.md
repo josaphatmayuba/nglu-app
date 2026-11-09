@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : cartes des bons de commande améliorées sur mobile (v3.284.4).** Revue UI : numéro + statut en tête, total en gras, « Payé · Solde » (solde en rouge s'il reste à payer), barre de réception, 1 action principale (Confirmer / Réceptionner / Régler) + Aperçu visibles, le reste dans « Plus ▾ » ; sélecteurs CSS limités à la liste (le sous-tableau des factures n'est plus déformé). Bureau inchangé.
 - **BâtiPro : liste des bons de commande lisible sur mobile (v3.284.3).** Sous 640 px, le tableau à 8 colonnes (coupé à droite, texte haché) devient une carte par bon : numéro, fournisseur, date, total, payé/solde, statut, réception et actions sur toute la largeur.
 - **BâtiPro : le « Reste à payer (honoraires) » est toujours visible dans l'Aperçu (v3.284.2).** Lien propriétaire : ligne sous la caisse ; lien ingénieur : colonne « Reste à payer », « — » ou « Non configuré » tant que les honoraires ne sont pas réglés.
 - **BâtiPro : le lien ingénieur / sous-traitant ne montre plus l'argent disponible (v3.284.1).** Le serveur ne renvoie plus les fonds reçus ni la caisse sur `/batipro/public/chantier/*` ; l'Aperçu affiche à la place « Dépensé », « Honoraires payés » et « Reste à payer (honoraires) ». Le lien propriétaire garde la caisse.

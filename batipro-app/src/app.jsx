@@ -2131,6 +2131,7 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
   // un BC peut en recevoir plusieurs (facturation partielle/échelonnée). Panneau
   // repliable par BC, chargé à la demande (évite N appels au chargement de la liste).
   const [expandedPoId, setExpandedPoId] = React.useState(null);
+  const [moreId, setMoreId] = React.useState(null);
   const [poInvoices, setPoInvoices] = React.useState({});
   const [invoiceModal, setInvoiceModal] = React.useState(null); // { po }
   const [invoicePayModal, setInvoicePayModal] = React.useState(null); // { invoice, po }
@@ -2364,11 +2365,11 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                 const invData = poInvoices[d.id];
                 return (
                 <React.Fragment key={d.id}>
-                <tr>
-                  <td data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
-                  <td data-label="Fournisseur / sous-traitant">{d.supplierName || d.subcontractorName || "—"}</td>
-                  <td data-label="Émis le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
-                  <td data-label="Total TTC">
+                <tr role="group" aria-label={d.number || `#${d.id}`}>
+                  <td className="po-num" data-label="Numéro" style={{ fontWeight: 500 }}>{d.number || `#${d.id}`}</td>
+                  <td className="po-sup" data-label="Fournisseur / sous-traitant">{d.supplierName || d.subcontractorName || "—"}</td>
+                  <td className="po-date" data-label="Émis le" style={{ color: "var(--ink-500)" }}>{d.issueDate || (d.createdAt ? String(d.createdAt).slice(0, 10) : "—")}</td>
+                  <td className="po-total" data-label="Total TTC">
                     {money(d.totalTtc, d.currencyCode || cur)}
                     {isForeignCurrency(d.currencyId, d.currencyCode, selected?.currencyId, cur) && (
                       <div style={{ fontSize: 11, color: "var(--ink-500)" }}>
@@ -2385,14 +2386,14 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       </div>
                     )}
                   </td>
-                  <td data-label="Payé / solde" style={{ color: "var(--ink-500)", fontSize: 12 }}>
-                    {money(n(d.paidAmount), d.currencyCode || cur)} / solde {money(balance, d.currencyCode || cur)}
+                  <td className="po-pay" data-label="Payé / solde" style={{ color: "var(--ink-500)", fontSize: 12 }}>
+                    Payé {money(n(d.paidAmount), d.currencyCode || cur)} · <strong className={balance > 0.001 ? "po-due" : ""}>Solde {money(balance, d.currencyCode || cur)}</strong>
                     {d.fxRate != null && n(d.paidAmountProjectCcy) > 0 && (
                       <div style={{ fontSize: 11 }}>(≈ {money(d.paidAmountProjectCcy, cur)} payés)</div>
                     )}
                   </td>
-                  <td data-label="Statut"><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
-                  <td data-label="Réception" style={{ fontSize: 12, color: "var(--ink-500)" }}>
+                  <td className="po-status" data-label="Statut"><span className={`chip ${PO_STATUS_TONE[d.status] || "ink"}`}>{PO_STATUS_LABEL[d.status] || d.status}</span></td>
+                  <td className="po-recv" data-label="Réception" style={{ fontSize: 12, color: "var(--ink-500)" }}>
                     {showProgress ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 70 }}>
                         <span>{receivedQty}/{orderedQty}</span>
@@ -2402,17 +2403,21 @@ function BonsCommande({ projects, canMutate, fixedProjectId, materials }) {
                       </div>
                     ) : "—"}
                   </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
-                      {canConfirm && <button className="link" disabled={busy === d.id} onClick={() => setConfirmModal(d)}>Confirmer</button>}
-                      {canReceive && <button className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
-                      {canPost && <button className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
-                      {canPay && <button className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
-                      {canMutate && can("update-batipro") && d.status !== "cancelled" && n(d.paidAmount) > 0 && <button className="link link-danger" disabled={busy === d.id} onClick={() => setCancelPayDoc({ doc: d })}>Annuler le règlement</button>}
-                      {canInvoice && <button className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
-                      {canMutate && can("update-batipro") && <button className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
-                      {canMutate && can("delete-batipro") && <button className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                  <td className="po-act">
+                    <div className="po-actions">
+                      <button type="button" className="link" onClick={() => openPreview(d.id)}><Icon name="eye" /> Aperçu</button>
+                      {canConfirm ? <button type="button" className="link link-accent" disabled={busy === d.id} onClick={() => setConfirmModal(d)}>Confirmer</button> : canReceive ? <button type="button" className="link link-accent" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button> : canPay ? <button type="button" className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button> : null}
+                      <button type="button" className="link po-more-toggle" aria-expanded={moreId === d.id} aria-label={`Plus d'actions pour ${d.number || d.id}`} onClick={() => setMoreId(moreId === d.id ? null : d.id)}>Plus ▾</button>
+                      <div className={`po-more-menu${moreId === d.id ? " open" : ""}`}>
+                        
+                        {canReceive && canConfirm && <button type="button" className="link" disabled={busy === d.id} onClick={() => setReceiveModal(d)}>Réceptionner</button>}
+                        {canPay && (canConfirm || canReceive) && <button type="button" className="link link-success" disabled={busy === d.id} onClick={() => pay(d)}>Régler</button>}
+                        {canPost && <button type="button" className="link link-accent" disabled={busy === d.id} onClick={() => postPurchase(d)}>Comptabiliser</button>}
+                        {canMutate && can("update-batipro") && d.status !== "cancelled" && n(d.paidAmount) > 0 && <button type="button" className="link link-danger" disabled={busy === d.id} onClick={() => setCancelPayDoc({ doc: d })}>Annuler le règlement</button>}
+                        {canInvoice && <button type="button" className="link" onClick={() => toggleInvoices(d)}>{expandedPoId === d.id ? "Masquer factures" : "Factures"}</button>}
+                        {canMutate && can("update-batipro") && <button type="button" className="link" onClick={() => setModal({ kind: "edit", id: d.id })}>Modifier</button>}
+                        {canMutate && can("delete-batipro") && <button type="button" className="link link-danger" onClick={() => removeDoc(d.id)}>Suppr.</button>}
+                      </div>
                     </div>
                   </td>
                 </tr>
