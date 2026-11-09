@@ -5,7 +5,8 @@
 // champs inconnus = pointillés à remplir ; « Durée : 2 ans » ou « 3 ans » (jamais « indéterminée »).
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
-import { fmtDateShort, moneyAfter } from "./rentBookUtils.js";
+import { buildFullRentSchedule, fmtDateShort, moneyAfter } from "./rentBookUtils.js";
+import { paymentMethodLabel } from "./depositUtils.js";
 import { dayDiff } from "./rentStatementUtils.js";
 
 const esc = escapeHtml;
@@ -354,7 +355,7 @@ const dots = () => `<span class="dots"></span>`;
 const val = (v) => (v ? esc(v) : dots());
 const lastDay = (y, m) => `${pad(new Date(y, m + 1, 0).getDate())}/${pad(m + 1)}/${y}`;
 
-function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset = 0) {
+function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset = 0, paidByMonth = new Map()) {
   const years = buildLeaseYears(L.start, nYears);
   const P = 2 * nYears + 4; // conditions + (loyers, eau) × N + hausses/garantie + fin + notes
   // offset : pages placées avant « Conditions » dans le cahier relié (couverture, guide, exemple = 3).
@@ -502,6 +503,11 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
     const lastLabel = lastDay(last.y, last.m);
     const rows = months.map(({ y, m }, i) => {
       const due = k === 0 && i === 0 && fm ? `${money(fm.amount)}<small>${fm.days} j</small>` : money(L.rent);
+      const pd = paidByMonth.get(`${y}-${pad(m + 1)}`);
+      if (pd) {
+        const method = paymentMethodLabel(pd.method);
+        return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td><span class="pen">✓ Payé<br>${fmtDateShort(pd.paymentDate)}</span></td><td><span class="pen">${esc(moneyAfter(pd.amount, pd.currencySymbol || L.symbol))}</span></td><td>${method ? `<span class="pen">${esc(method)}</span>` : via}</td><td></td><td></td></tr>`;
+      }
       return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td></td><td></td><td>${via}</td><td></td><td></td></tr>`;
     }).join("");
     const range = `${MS[months[0].m]} ${months[0].y} → ${MS[last.m]} ${last.y}`;
@@ -566,10 +572,17 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
 // years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
 // paper : "a4" | "letter" (feuille, moitiés et ligne de pliage aux dimensions du papier).
-export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4" } = {}) {
+export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4", payments = [] } = {}) {
   const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
-  const { COVER, COVER_B, GUIDE, EXAMPLE, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, true, ["simple", "pleine", "coupe"].includes(pass) || pass.startsWith("plie") ? 3 : 0);
+  // Mois déjà payés (réels, status "paid") : préremplis avec leur date au lieu d'une ligne vide.
+  const paidByMonth = new Map();
+  try {
+    for (const e of buildFullRentSchedule(lease, Array.isArray(payments) ? payments : [])) {
+      if (e && e.status === "paid" && e.rentMonth && e.paymentDate) paidByMonth.set(e.rentMonth, e);
+    }
+  } catch { /* sans échéancier exploitable : lignes vides */ }
+  const { COVER, COVER_B, GUIDE, EXAMPLE, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, true, ["simple", "pleine", "coupe"].includes(pass) || pass.startsWith("plie") ? 3 : 0, paidByMonth);
   const INTRO = introFor(n);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
   const pcls = (html) => (/^\s*<!--(p-[a-z]+)-->/.exec(html) || [])[1] || "";

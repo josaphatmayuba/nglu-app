@@ -149,7 +149,7 @@ ${PAPER_BOOK_CSS}</style>
     if (fmt === "statement") {
       html = state.cache.statement ||= statementBodyHtml(ctx.lease, ctx.payments, { qrDataUrl: ctx.qrDataUrl });
     } else if (fmt === "paper") {
-      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years, copy, paper: size });
+      html = paperBookHtml(ctx.lease, { pass, ink, duplicate: dup, qrDataUrl: ctx.qrDataUrl, years, copy, paper: size, payments: ctx.payments });
     } else {
       html = state.cache[`receipts-${copy}`] ||= `<div class="rent-book">${ctx.receiptsHtml(copy)}</div>`;
     }
