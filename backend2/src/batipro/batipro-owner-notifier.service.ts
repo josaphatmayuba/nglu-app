@@ -199,15 +199,17 @@ export class BatiproOwnerNotifier {
 
   // Envoi explicite (action du gestionnaire) du lien de suivi : 1 seul SMS, lien en
   // fin de message. Ne depend pas du flag ownerSmsEnabled (l'utilisateur a choisi
-  // d'envoyer). Ne throw jamais ; renvoie true si la passerelle a accepte.
-  async sendShareLink(orgId: number, projectId: number, phone: string, url: string, kind: "owner" | "engineer" = "owner"): Promise<boolean> {
+  // d'envoyer). Ne throw jamais. Comme Domus : on lit success/skipped/message du
+  // service SMS partage (CompatService.sendSms) et on renvoie une raison lisible.
+  async sendShareLink(orgId: number, projectId: number, phone: string, url: string, kind: "owner" | "engineer" = "owner"): Promise<{ ok: boolean; reason?: string }> {
     try {
       const [project] = await this.db
         .select({ code: batiproProjects.code, name: batiproProjects.name, ownerName: batiproProjects.ownerName })
         .from(batiproProjects)
         .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
         .limit(1);
-      if (!project || !phone.trim()) return false;
+      if (!project) return { ok: false, reason: "Chantier introuvable." };
+      if (!phone.trim()) return { ok: false, reason: "Numero de telephone requis pour envoyer le SMS." };
       const message = this.fit((nameMax) => `Chantier ${this.cut(project.code, 12)} ${this.cut(project.name, nameMax)}: ${kind === "engineer" ? "acces chantier" : "suivi financier"} ${url}`, project.ownerName);
       const res: any = await this.compat.sendSms({
         phone,
@@ -219,10 +221,12 @@ export class BatiproOwnerNotifier {
         relatedType: "batipro_project",
         relatedId: projectId,
       });
-      return res?.success !== false;
+      if (res?.success !== false) return { ok: true };
+      this.logger.warn(`SMS lien de suivi chantier ${projectId} non envoye: ${res?.message ?? "inconnu"}`);
+      return { ok: false, reason: shareSmsFailureReason(res) };
     } catch (err) {
       this.logger.warn(`SMS lien de suivi chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
-      return false;
+      return { ok: false, reason: "Echec de la passerelle SMS : reessayez plus tard." };
     }
   }
 
@@ -354,4 +358,12 @@ export class BatiproOwnerNotifier {
     if (!raw) return "-";
     return raw.replace(/_/g, " ");
   }
+}
+
+// Raison lisible d un envoi non abouti. Le detail fournisseur reste dans les logs
+// (il peut contenir un identifiant de compte Twilio).
+export function shareSmsFailureReason(res: any): string {
+  if (res?.skipped) return "SMS desactives pour cette organisation (Reglages).";
+  if (/not configured/i.test(String(res?.message ?? ""))) return "Service SMS non configure.";
+  return "Echec de la passerelle SMS : reessayez plus tard.";
 }

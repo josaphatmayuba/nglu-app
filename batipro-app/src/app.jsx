@@ -4260,7 +4260,7 @@ function ShareLinkSmsRow({ projectId, link, onSent }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ color: "var(--ink-500)" }}>
-        {sent ? `SMS envoyé le ${fmtShareSmsDate(link.smsSentAt)} (${count} ${count > 1 ? "fois" : "fois"})` : "SMS jamais envoyé"}
+        {sent ? `SMS accepté par la passerelle le ${fmtShareSmsDate(link.smsSentAt)} (${count} ${count > 1 ? "fois" : "fois"})` : "SMS jamais envoyé"}
       </div>
       {!canSend ? (
         <>
@@ -4280,7 +4280,7 @@ function ShareLinkSmsRow({ projectId, link, onSent }) {
           </button>
         </>
       )}
-      {okPhone && <div role="status" style={{ color: "var(--ink-700, #334155)" }}>SMS envoyé à {okPhone}</div>}
+      {okPhone && <div role="status" style={{ color: "var(--ink-700, #334155)" }}>SMS accepté par la passerelle pour {okPhone}</div>}
       {error && <div role="alert" style={{ color: "var(--rose-600, #b91c1c)" }}>{error}</div>}
     </div>
   );
@@ -4356,7 +4356,7 @@ function ShareTrackingModal({ project, onClose }) {
         ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: phoneNorm } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
         : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
       const res = await api.createShareLink(project.id, body);
-      setCreated({ url: res.url, sms_sent: res.sms_sent });
+      setCreated({ url: res.url, sms_sent: res.sms_sent, sms_error: res.sms_error });
       if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); setSubPick(""); setPickNoPhone(false); nameEdited.current = false; phoneEdited.current = false; }
       load();
     } catch (err) { setError(err.message || String(err)); }
@@ -4447,8 +4447,8 @@ function ShareTrackingModal({ project, onClose }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <p role="status" style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
               Lien créé. Cette adresse complète n'est affichée qu'ici : copiez-la maintenant si besoin. Si un numéro est renseigné, un lien court est aussi envoyé par SMS.
-              {created.sms_sent === true && " SMS envoyé."}
-              {created.sms_sent === false && " L'envoi du SMS a échoué : partagez le lien manuellement."}
+              {created.sms_sent === true && " SMS accepté par la passerelle."}
+              {created.sms_sent === false && ` SMS non envoyé : ${created.sms_error || "échec de l'envoi"} Partagez le lien manuellement.`}
             </p>
             <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box", minHeight: 44 }} aria-label="Lien créé" />
             <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>

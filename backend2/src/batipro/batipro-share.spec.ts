@@ -42,7 +42,7 @@ function setup(selectQueue: any[][], extra: { inserted?: any[]; updated?: any[];
     ] }),
   };
   const storage = { getObject: jest.fn().mockResolvedValue({ body: "stream", contentType: "text/html", contentLength: 5 }) };
-  const notifier = { sendShareLink: extra.sms ?? jest.fn().mockResolvedValue(true) };
+  const notifier = { sendShareLink: extra.sms ?? jest.fn().mockResolvedValue({ ok: true }) };
   const svc = new BatiproShareService(makeDb(selectQueue, extra.inserted, extra.updated) as any, batipro as any, storage as any, notifier as any);
   return { svc, batipro, storage, notifier };
 }
@@ -50,7 +50,7 @@ function setup(selectQueue: any[][], extra: { inserted?: any[]; updated?: any[];
 describe("BatiproShareService", () => {
   it("createLink : stocke le HASH du jeton, jamais le jeton, numero +243, un SMS", async () => {
     const inserted: any[] = [];
-    const sms = jest.fn().mockResolvedValue(true);
+    const sms = jest.fn().mockResolvedValue({ ok: true });
     const { svc } = setup([], { inserted, sms });
     const res = await svc.createLink(5, { send_sms: true }, 1, 9, "all");
     expect(res.token.length).toBeGreaterThanOrEqual(20);
@@ -194,7 +194,7 @@ describe("BatiproShareService", () => {
   // ── Lien ingenieur / responsable de chantier ──
   it("createLink ingenieur : sans expiration, URL /chantier, pas de repli sur le proprietaire", async () => {
     const inserted: any[] = [];
-    const sms = jest.fn().mockResolvedValue(true);
+    const sms = jest.fn().mockResolvedValue({ ok: true });
     const { svc } = setup([], { inserted, sms });
     const res = await svc.createLink(5, { recipient_type: "engineer", recipient_name: "Ing. Paul", recipient_phone: "0991112222", send_sms: true }, 1, 9, "all");
     expect(inserted[0].recipientType).toBe("engineer");
@@ -252,7 +252,7 @@ describe("BatiproShareService", () => {
 
     it("envoi OK : URL courte, compteur incremente", async () => {
       const updated: any[] = [];
-      const sms = jest.fn().mockResolvedValue(true);
+      const sms = jest.fn().mockResolvedValue({ ok: true });
       const { svc } = setup([[row()]], { updated, sms });
       const res = await svc.sendLinkSms(5, 3, undefined, 1, "all");
       expect(res.sms_sent).toBe(true);
@@ -293,7 +293,7 @@ describe("BatiproShareService", () => {
 
     it("SMS desactives (echec passerelle) -> 400, compteur inchange", async () => {
       const updated: any[] = [];
-      const { svc } = setup([[row()]], { updated, sms: jest.fn().mockResolvedValue(false) });
+      const { svc } = setup([[row()]], { updated, sms: jest.fn().mockResolvedValue({ ok: false, reason: "SMS desactives pour cette organisation (Reglages)." }) });
       await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toBeInstanceOf(BadRequestException);
       expect(updated).toHaveLength(0);
     });
@@ -303,5 +303,21 @@ describe("BatiproShareService", () => {
       for (let i = 0; i < 3; i++) await svc.sendLinkSms(5, 3, undefined, 1, "all");
       await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toMatchObject({ status: 429 });
     });
+
+    it("SMS desactives : 400 avec la raison precise, rien n est marque", async () => {
+      const updated: any[] = [];
+      const sms = jest.fn().mockResolvedValue({ ok: false, reason: "SMS desactives pour cette organisation (Reglages)." });
+      const { svc } = setup([[row()]], { updated, sms });
+      await expect(svc.sendLinkSms(5, 3, undefined, 1, "all")).rejects.toThrow("SMS non envoye : SMS desactives pour cette organisation (Reglages).");
+      expect(updated).toHaveLength(0);
+    });
+  });
+
+  it("createLink : SMS non abouti -> sms_sent false + sms_error", async () => {
+    const sms = jest.fn().mockResolvedValue({ ok: false, reason: "Service SMS non configure." });
+    const { svc } = setup([], { inserted: [], sms });
+    const res: any = await svc.createLink(5, { send_sms: true, recipient_phone: "0991112222" } as any, 1, 9, "all");
+    expect(res.sms_sent).toBe(false);
+    expect(res.sms_error).toBe("Service SMS non configure.");
   });
 });
