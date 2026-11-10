@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : relevé de toutes les transactions (v3.285.0).** Nouvel onglet « Relevé » dans le chantier (fonds reçus et annulés, bons de commande, dépenses, honoraires, manutention ; entrée, sortie et solde courant égal à la caisse ; filtres période/catégorie ; export CSV ; impression ; cartes sur mobile), route `GET /batipro/projects/:id/statement`. Le lien propriétaire montre le relevé complet ; le lien ingénieur/sous-traitant ne montre que les sorties, sans fonds ni solde (filtré côté serveur, test à l'appui).
 - **Domus : carnet à remplir, mois déjà payés préremplis (v3.284.6).** Les mois payés affichent « ✓ Payé », la date, le montant et le moyen de paiement ; les mois non payés restent vides.
 - **BâtiPro : 8 tableaux lisibles sur mobile (v3.284.5).** Devis, situations de travaux, factures, soumissions sous-traitants, historique de stock, bons de commande (vue globale), équipes et ouvriers passent en cartes sous 640 px (classe `card-table`, libellés par `data-label`, actions 44 px). Bureau inchangé.
 - **BâtiPro : cartes des bons de commande améliorées sur mobile (v3.284.4).** Revue UI : numéro + statut en tête, total en gras, « Payé · Solde » (solde en rouge s'il reste à payer), barre de réception, 1 action principale (Confirmer / Réceptionner / Régler) + Aperçu visibles, le reste dans « Plus ▾ » ; sélecteurs CSS limités à la liste (le sous-tableau des factures n'est plus déformé). Bureau inchangé.

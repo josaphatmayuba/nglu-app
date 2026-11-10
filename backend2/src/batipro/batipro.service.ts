@@ -53,6 +53,7 @@ import { bucketPhaseSpend } from "./phase-spend.util";
 import { spentByNature } from "./spent-by-nature.util";
 import { computeSubcontractorFees } from "./subcontractor-fees.util";
 import { convertDocsToProjectCurrency, type MultiCurrencyResult } from "./multi-currency-total.util";
+import { buildStatement, dominantNature, type StatementDoc, type StatementFilter } from "./statement.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -6072,6 +6073,97 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     const spendDocs = (await this.loadSpendDocs(orgId, [projectId])).get(projectId) ?? [];
     const summary = buildFundsSummary(rows, spendDocs, project.currencyId ?? null, await this.currencyCodeMap());
     return { funds: rows.map((r) => this.mapFund(r)), summary_by_currency: summary };
+  }
+
+  // Releve des transactions du chantier (lecture seule). Solde final == funds_available
+  // (meme definition recu/decaisse, cf. statement.util).
+  async buildProjectStatement(projectId: number, orgId: number, filter: StatementFilter, scope: BatiproProjectScope = "all") {
+    await this.assertProjectInScope(projectId, orgId, scope);
+    const project = await this.getProject(projectId, orgId);
+    const day = (v: unknown) => (v ? (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10) : "");
+    const fundRows = await this.db
+      .select()
+      .from(batiproProjectFunds)
+      .where(and(eq(batiproProjectFunds.organizationId, orgId), eq(batiproProjectFunds.projectId, projectId)));
+    const docs = await this.db
+      .select({
+        id: batiproDocuments.id, type: batiproDocuments.type, direction: batiproDocuments.direction, number: batiproDocuments.number,
+        status: batiproDocuments.status, currencyId: batiproDocuments.currencyId, paidAmount: batiproDocuments.paidAmount,
+        fxRate: batiproDocuments.fxRate, paidAmountProjectCcy: batiproDocuments.paidAmountProjectCcy,
+        issueDate: batiproDocuments.issueDate, updatedAt: batiproDocuments.updatedAt, paymentEntryId: batiproDocuments.paymentLedgerEntryId,
+      })
+      .from(batiproDocuments)
+      .where(and(
+        eq(batiproDocuments.organizationId, orgId),
+        eq(batiproDocuments.projectId, projectId),
+        eq(batiproDocuments.isActive, 1),
+        ne(batiproDocuments.status, "cancelled"),
+        or(
+          and(inArray(batiproDocuments.type, ["purchase_order", "expense"]), eq(batiproDocuments.direction, "outbound")),
+          and(eq(batiproDocuments.type, "invoice"), inArray(batiproDocuments.direction, ["inbound", "outbound"])),
+        ),
+      ));
+    const paidDocs = docs.filter((d) => toCents(d.paidAmount) > 0);
+    const ids = paidDocs.map((d) => d.id);
+    const lines = ids.length
+      ? await this.db
+          .select({ documentId: batiproDocumentLines.documentId, lineTtc: batiproDocumentLines.lineTtc, lineType: batiproDocumentLines.lineType, serviceCategory: batiproDocumentLines.serviceCategory })
+          .from(batiproDocumentLines)
+          .where(and(eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1), inArray(batiproDocumentLines.documentId, ids)))
+      : [];
+    const entryIds = paidDocs.map((d) => d.paymentEntryId).filter((v): v is number => v != null);
+    const entries = entryIds.length
+      ? await this.db
+          .select({ id: journalEntries.id, date: journalEntries.date })
+          .from(journalEntries)
+          .where(and(eq(journalEntries.organizationId, orgId), inArray(journalEntries.id, entryIds)))
+      : [];
+    const entryDate = new Map(entries.map((e) => [Number(e.id), day(e.date)] as const));
+    const pendingRows = ids.length
+      ? await this.db
+          .select({ relatedId: ledgerPendingEntries.relatedId, payload: ledgerPendingEntries.payload })
+          .from(ledgerPendingEntries)
+          .where(and(
+            eq(ledgerPendingEntries.organizationId, orgId),
+            eq(ledgerPendingEntries.sourceModule, "batipro"),
+            eq(ledgerPendingEntries.status, "pending"),
+            inArray(ledgerPendingEntries.relatedId, ids.map(String)),
+          ))
+      : [];
+    const pendingByDoc = new Map<number, number>();
+    for (const r of pendingRows) {
+      const p = r.payload as any;
+      if (!/^batipro_supplier_(advance|payment)$/.test(String(p?.type ?? ""))) continue;
+      pendingByDoc.set(Number(r.relatedId), (pendingByDoc.get(Number(r.relatedId)) ?? 0) + toCents(Number(p?.amountsByRole?.cash ?? 0)));
+    }
+    const linesByDoc = new Map<number, typeof lines>();
+    for (const l of lines) linesByDoc.set(l.documentId, [...(linesByDoc.get(l.documentId) ?? []), l]);
+
+    const statementDocs: StatementDoc[] = paidDocs.map((d) => ({
+      id: d.id,
+      kind: d.type === "invoice" && d.direction === "outbound" ? "client_invoice" : "expense_doc",
+      number: d.number,
+      type: d.type,
+      status: d.status,
+      currencyId: d.currencyId,
+      paidAmount: d.paidAmount,
+      fxRate: d.fxRate,
+      paidAmountProjectCcy: d.paidAmountProjectCcy,
+      paidDate: (d.paymentEntryId != null ? entryDate.get(Number(d.paymentEntryId)) : "") || day(d.issueDate) || day(d.updatedAt),
+      nature: dominantNature(linesByDoc.get(d.id) ?? []),
+      pendingCents: pendingByDoc.get(d.id) ?? 0,
+    }));
+
+    const result = buildStatement({
+      projectCurrencyId: project.currencyId ?? null,
+      currencyCodeById: await this.currencyCodeMap(),
+      funds: fundRows.map((f) => ({
+        id: f.id, receivedAt: day(f.receivedAt), amount: f.amount, currencyId: f.currencyId, isActive: f.isActive,
+        cancelledAt: day(f.cancelledAt) || null, contributorName: f.contributorName, reference: f.reference,
+      })),
+      docs: statementDocs,
+    }, filter);
+    return { project_id: projectId, ...result };
   }
 
   async createProjectFund(projectId: number, input: CreateBatiproFundDto, orgId: number, userId: number | undefined, scope: BatiproProjectScope) {

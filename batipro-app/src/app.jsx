@@ -5,6 +5,7 @@ import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
 import ProjectFunds from "./components/ProjectFunds.jsx";
+import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview from "./SimpleOverview.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
@@ -595,6 +596,7 @@ const PROJECT_TABS = [
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
   { id: "fonds", label: "Fonds", icon: "wallet" },
+  { id: "releve", label: "Relevé", icon: "receipt", hint: "Relevé de compte du chantier : entrées, sorties et solde." },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials, onEdit }) {
   const [tab, setTab] = React.useState("apercu");
@@ -796,6 +798,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "fonds" && <ProjectFunds project={p} canMutate={canMutate} money={money} Icon={Icon} useCurrencies={useCurrencies} />}
+        {tab === "releve" && <ProjectStatement projectId={p.id} />}
       </div>
     </>
   );

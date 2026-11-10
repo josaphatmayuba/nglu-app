@@ -256,6 +256,14 @@ export const api = {
   ocrScanDocument: (projectId, file) => { const fd = new FormData(); fd.append("scan", file); return uploadForm(`/projects/${projectId}/documents/ocr-scan`, fd); },
   // Bons de commande (Phase 2) : reutilise les endpoints /documents generiques (type=purchase_order)
   // Fonds du chantier (versements recus)
+  projectStatement: (projectId, { from, to, category } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    if (category) qs.set("category", category);
+    const q = qs.toString();
+    return jsonFetch(`/projects/${projectId}/statement${q ? `?${q}` : ""}`);
+  },
   projectFunds: (projectId) => jsonFetch(`/projects/${projectId}/funds`),
   createProjectFund: (projectId, body) => jsonFetch(`/projects/${projectId}/funds`, { method: "POST", body: JSON.stringify(body) }),
   cancelProjectFund: (fundId, reason) => jsonFetch(`/funds/${fundId}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
@@ -362,6 +370,14 @@ export const publicDocApi = {
 };
 
 // Suivi financier public (proprietaire) : aucun JWT, autorisation = token opaque.
+const stmtQuery = ({ from, to, category } = {}) => {
+  const qs = new URLSearchParams();
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  if (category) qs.set("category", category);
+  const q = qs.toString();
+  return q ? `?${q}` : "";
+};
 const PUBLIC_TRACKING_BASE = `${API_ROOT}/batipro/public/tracking`;
 export const trackingApi = {
   get: async (token) => {
@@ -372,6 +388,11 @@ export const trackingApi = {
       err.invalid = res.status === 404 || res.status === 410;
       throw err;
     }
+    return res.json();
+  },
+  statement: async (token, filter) => {
+    const res = await fetch(`${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/statement${stmtQuery(filter)}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw apiError(res, await res.text().catch(() => ""));
     return res.json();
   },
   photoUrl: (token, photoId) => `${PUBLIC_TRACKING_BASE}/${encodeURIComponent(token)}/photos/${photoId}`,
@@ -393,6 +414,7 @@ async function siteFetch(token, path = "", init = {}) {
 }
 export const siteApi = {
   get: (token) => siteFetch(token),
+  statement: (token, filter) => siteFetch(token, `/statement${stmtQuery(filter)}`),
   updatePhase: (token, phaseId, b) => siteFetch(token, `/phases/${phaseId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }),
   receive: (token, documentId, b) => siteFetch(token, `/orders/${documentId}/receive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }),
   uploadPhoto: (token, file, caption) => {

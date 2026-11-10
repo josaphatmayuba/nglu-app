@@ -175,6 +175,21 @@ export class BatiproController {
     return this.batipro.listProjectFunds(id, orgId, scope);
   }
 
+  @ApiOperation({ summary: "Releve des transactions du chantier (entrees/sorties, solde courant == fonds disponibles)" })
+  @Permissions("readAll-batipro")
+  @Get("projects/:id/statement")
+  projectStatement(
+    @Param("id", ParseIntPipe) id: number,
+    @Query("from") from: string | undefined,
+    @Query("to") to: string | undefined,
+    @Query("category") category: string | undefined,
+    @CurrentOrg() orgId: number,
+    @CurrentBatiproProject() scope: BatiproProjectScope,
+  ) {
+    const iso = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    return this.batipro.buildProjectStatement(id, orgId, { from: iso(from), to: iso(to), category: category || null }, scope);
+  }
+
   @ApiOperation({ summary: "Enregistre un versement de fonds (ecriture ledger batipro_project_funding)" })
   @Permissions("create-batipro")
   @Post("projects/:id/funds")

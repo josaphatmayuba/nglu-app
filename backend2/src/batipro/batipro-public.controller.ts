@@ -1,11 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Put, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Header, Ip, Param, ParseIntPipe, Post, Put, Query, Req, Res, StreamableFile, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { BatiproShareService } from "./batipro-share.service";
+import { BatiproStatementService } from "./batipro-statement.service";
 import { BatiproService } from "./batipro.service";
 import { EngineerPhaseUpdateDto, ReceiveBatiproDocumentDto, SubmitSubcontractorDocumentDto } from "./dto/batipro.dto";
+
+// Dates YYYY-MM-DD seulement ; le reste est ignore.
+const isoDay = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
 
 // Portail sous-traitant : soumission entrante SANS compte. L'autorisation vient
 // du token opaque dans l'URL (jamais un JWT). Sans guard, mais throttle + le
@@ -87,7 +91,7 @@ export class BatiproPublicDocumentsController {
 @ApiTags("batipro-public")
 @Controller("batipro/public/tracking")
 export class BatiproPublicTrackingController {
-  constructor(private readonly share: BatiproShareService) {}
+  constructor(private readonly share: BatiproShareService, private readonly stmt: BatiproStatementService) {}
 
   private send(res: Response, file: { body: any; contentType: string; contentLength?: number }) {
     res.set({
@@ -107,6 +111,14 @@ export class BatiproPublicTrackingController {
   @Get(":token")
   tracking(@Param("token") token: string) {
     return this.share.getPublicTracking(token);
+  }
+
+  @ApiOperation({ summary: "Releve complet du chantier (public — token proprietaire)" })
+  @ApiParam({ name: "token", type: String })
+  @Header("Cache-Control", "no-store")
+  @Get(":token/statement")
+  statement(@Param("token") token: string, @Query("from") from?: string, @Query("to") to?: string, @Query("category") category?: string) {
+    return this.stmt.getOwnerStatement(token, { from: isoDay(from), to: isoDay(to), category: category || null });
   }
 
   @ApiOperation({ summary: "Photo du chantier ou d'une facture de CE chantier (stream verifie)" })
@@ -143,7 +155,7 @@ function sendStream(res: Response, file: { body: any; contentType: string; conte
 @ApiTags("batipro-public")
 @Controller("batipro/public/site")
 export class BatiproPublicSiteController {
-  constructor(private readonly share: BatiproShareService) {}
+  constructor(private readonly share: BatiproShareService, private readonly stmt: BatiproStatementService) {}
 
   @ApiOperation({ summary: "Vue chantier pour l'ingenieur (public — token opaque)" })
   @ApiParam({ name: "token", type: String })
@@ -151,6 +163,14 @@ export class BatiproPublicSiteController {
   @Get(":token")
   site(@Param("token") token: string) {
     return this.share.getEngineerSite(token);
+  }
+
+  @ApiOperation({ summary: "Releve des sorties du chantier, sans fonds ni solde (public — token ingenieur)" })
+  @ApiParam({ name: "token", type: String })
+  @Header("Cache-Control", "no-store")
+  @Get(":token/statement")
+  statement(@Param("token") token: string, @Query("from") from?: string, @Query("to") to?: string, @Query("category") category?: string) {
+    return this.stmt.getEngineerStatement(token, { from: isoDay(from), to: isoDay(to), category: category || null });
   }
 
   @ApiOperation({ summary: "Mettre a jour avancement/statut d'une phase (public — token opaque)" })

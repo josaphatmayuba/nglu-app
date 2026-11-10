@@ -1,5 +1,6 @@
 import React from "react";
 import { trackingApi } from "./api.js";
+import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 
 // Page publique de suivi financier du chantier pour le proprietaire (sans compte,

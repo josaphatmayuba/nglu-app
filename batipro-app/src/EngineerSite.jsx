@@ -1,5 +1,6 @@
 import React from "react";
 import { siteApi } from "./api.js";
+import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 import { Amounts, FinanceSections, Section, Shell, Thumb, btn, btnSm, card, fmtDate, money, muted, row } from "./OwnerTracking.jsx";
 
@@ -118,6 +119,8 @@ export default function EngineerSite({ token }) {
       {tab === "expenses" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["expenses"]} />}
       {tab === "invoices" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["invoices"]} />}
 
+      {tab === "statement" && <Section title="Relevé des sorties"><ProjectStatement fetcher={stmtFetcher} hideBalance /></Section>}
+
       {tab === "photos" && (
         <Section title="Photos du chantier">
           <PhotoUpload token={token} onDone={done} />
@@ -142,7 +145,7 @@ export default function EngineerSite({ token }) {
 
 const TABS = [
   ["overview", "Aperçu"], ["phases", "Phases"], ["quotes", "Devis"], ["orders", "Commandes"],
-  ["expenses", "Dépenses"], ["invoices", "Factures"], ["photos", "Photos"],
+  ["expenses", "Dépenses"], ["invoices", "Factures"], ["statement", "Relevé"], ["photos", "Photos"],
 ];
 const DOC_STATUS = {
   draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", accepted: "Accepté", rejected: "Refusé", issued: "Émis",
