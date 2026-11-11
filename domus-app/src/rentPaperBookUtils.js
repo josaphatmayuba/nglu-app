@@ -54,6 +54,16 @@ export function imposeCutStack(pageCount = 10) {
   return Array.from({ length: half }, (_, i) => [i, i + half]);
 }
 
+// Année 1 du carnet = l'année de bail en cours : si le bail date de plus d'un an, on part du dernier anniversaire
+// (ex. entrée juil. 2025, aujourd'hui nov. 2026 → année 1 = juil. 2026 → juin 2027). Retourne "AAAA-MM" ou null.
+export function currentLeaseYearStart(startDate, today = new Date()) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(startDate || ""));
+  if (!m) return null;
+  const elapsed = (today.getFullYear() - Number(m[1])) * 12 + (today.getMonth() - (Number(m[2]) - 1));
+  const shift = elapsed >= 12 ? Math.floor(elapsed / 12) : 0;
+  return `${Number(m[1]) + shift}-${m[2]}`;
+}
+
 // Durée du carnet par défaut : bail à date de fin de 2 ans ou moins → 2 ans ; sinon (ou sans fin) → 3 ans.
 export function defaultPaperYears(lease) {
   const a = /^(\d{4})-(\d{2})/.exec(String(lease?.startDate || ""));
@@ -349,8 +359,10 @@ const dots = () => `<span class="dots"></span>`;
 const val = (v) => (v ? esc(v) : dots());
 const lastDay = (y, m) => `${pad(new Date(y, m + 1, 0).getDate())}/${pad(m + 1)}/${y}`;
 
-function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset = 0, paidByMonth = new Map()) {
-  const years = buildLeaseYears(L.start, nYears);
+function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset = 0, paidByMonth = new Map(), today = new Date()) {
+  const y1Start = currentLeaseYearStart(L.start, today);
+  const years = buildLeaseYears(y1Start || L.start, nYears);
+  const shifted = !!y1Start && y1Start !== String(L.start || "").slice(0, 7);
   // conditions + loyers × N (+ 1 page de notes si N impair, pour garder un nombre pair de pages) + hausses/garantie + fin + corrections
   const P = nYears + 4 + (nYears % 2);
   // offset : pages placées avant « Conditions » dans le cahier relié (couverture, guide, exemple = 3).
@@ -358,7 +370,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
   const sm = years[0][0].m;
   const startY = years[0][0].y;
   const endCell = years[nYears - 1][11];
-  const fm = L.firstMonth;
+  const fm = shifted ? null : L.firstMonth; // prorata du 1er mois seulement si l'année 1 est bien l'année d'entrée
   const money = (n) => esc(moneyAfter(n, L.symbol));
   const sig = (a, b) => `<div class="sig"><span>${a}</span><span>${b}</span></div>`;
   const foot = (n) => `<div class="foot"><span>Carnet ${esc(L.carnet)} · Bail ${esc(L.ref)}</span><span>${n}</span></div>`;
@@ -566,7 +578,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
 // (feuilles guide « bis » au passage 1, feuilles roses au passage 2).
 // years : 2 | 3 (durée du carnet, défaut defaultPaperYears(lease)).
 // paper : "a4" | "letter" (feuille, moitiés et ligne de pliage aux dimensions du papier).
-export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4", payments = [] } = {}) {
+export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = true, qrDataUrl = null, years, copy = "tenant", paper = "a4", payments = [], today = new Date() } = {}) {
   const n = normYears(years ?? defaultPaperYears(lease));
   const L = paperBookModel(lease);
   // Mois déjà payés (réels, status "paid") : préremplis avec leur date au lieu d'une ligne vide.
@@ -576,7 +588,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       if (e && e.status === "paid" && e.rentMonth && e.paymentDate) paidByMonth.set(e.rentMonth, e);
     }
   } catch { /* sans échéancier exploitable : lignes vides */ }
-  const { COVER, COVER_B, GUIDE, EXAMPLE, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, true, ["simple", "pleine", "coupe"].includes(pass) || pass.startsWith("plie") ? 3 : 0, paidByMonth);
+  const { COVER, COVER_B, GUIDE, EXAMPLE, SLOTS, BACK, NOTES } = slotsAndPages(L, lease, qrDataUrl, n, true, ["simple", "pleine", "coupe"].includes(pass) || pass.startsWith("plie") ? 3 : 0, paidByMonth, today);
   const INTRO = introFor(n, copy);
   const tag = (d) => `<span class="tag">${d ? "Cahier du bailleur" : "Cahier du locataire"}</span>`;
   const pcls = (html) => (/^\s*<!--(p-[a-z]+)-->/.exec(html) || [])[1] || "";

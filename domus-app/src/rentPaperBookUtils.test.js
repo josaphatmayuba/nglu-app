@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { PAPER_BOOK_CSS, buildLeaseYears, conditionsSentence, defaultPaperYears, firstMonthProrata, imposeBooklet, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
+import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
+import { PAPER_BOOK_CSS, buildLeaseYears, conditionsSentence, currentLeaseYearStart, defaultPaperYears, firstMonthProrata, imposeBooklet, imposeCutStack, paperBookHtml, paperBookModel } from "./rentPaperBookUtils.js";
+
+// Date figée : l'année 1 du carnet dépend de la date du jour (année de bail en cours).
+beforeAll(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date(2026, 10, 11)); });
+afterAll(() => { vi.useRealTimers(); });
 
 const base = {
   id: 49, reference: "BL-2026-0049", startDate: "2026-07-19", rentAmount: 400, currencySymbol: "$",
@@ -388,5 +392,28 @@ describe("carnet lisible : tailles et textes", () => {
   it("A4 pleine page : zoom 1.414", () => {
     expect(PAPER_BOOK_CSS).toContain(".paper .sheet.full .a5 { zoom: 1.414; }");
     expect(PAPER_BOOK_CSS).toContain(".paper .p-rent td { height: 10.6mm; }");
+  });
+});
+
+describe("annee 1 = annee de bail en cours", () => {
+  const today = new Date(2026, 10, 11); // 11 nov. 2026
+  it("bail recent : inchange", () => {
+    expect(currentLeaseYearStart("2026-07-19", today)).toBe("2026-07");
+    expect(currentLeaseYearStart("2025-12-01", today)).toBe("2025-12");
+  });
+  it("bail de plus d'un an : dernier anniversaire", () => {
+    expect(currentLeaseYearStart("2025-07-19", today)).toBe("2026-07");
+    expect(currentLeaseYearStart("2025-11-01", today)).toBe("2026-11");
+    expect(currentLeaseYearStart("2024-03-05", today)).toBe("2026-03");
+    expect(currentLeaseYearStart(null, today)).toBeNull();
+  });
+  it("carnet : l'annee 1 commence a l'annee en cours, sans prorata", () => {
+    const old = { ...base, startDate: "2025-07-19" };
+    const h = paperBookHtml(old, { pass: "pleine", years: 2, today });
+    expect(h).toContain("Loyers, année 1 du bail");
+    expect(h).toContain("juil. 2026 → juin 2027");
+    expect(h).not.toContain("juil. 2025");
+    expect(h).not.toContain("13 j");
+    expect(h).toContain("entrée le 19/07/2025");
   });
 });
