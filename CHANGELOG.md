@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro mobile : « $ US » ne se coupe plus au milieu sur les cartes KPI (v3.285.10).** Valeur réduite à 16 px, retour à la ligne aux espaces seulement.
 - **BâtiPro : honoraires affichés à 2 décimales (v3.285.9).** « 949,575 $ » se lisait comme 949 575 $ ; les montants d'honoraires (dû, reste à payer) s'affichent maintenant à 2 décimales, la valeur exacte du calcul reste visible au survol et rien n'est arrondi en base.
 - **BâtiPro mobile : le montant « Budget engagé » ne déborde plus de sa carte (v3.285.8).** Valeurs et sous-textes des cartes KPI du tableau de bord réduits et retournés à la ligne sur 360/390 px.
 - **BâtiPro : Aperçu du chantier pleine largeur (v3.285.7).** Les cartes (argent, répartition des dépenses, honoraires) se répartissent en grille 1/2/3 colonnes au lieu d'une colonne de 560 px ; onglets du chantier en barre unique compacte (défilement latéral), boutons avec état actif accessible ; montants KPI jamais coupés en plein nombre. Pages publiques inchangées.

@@ -308,8 +308,8 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .g2, .g3, .g4 { grid-template-columns: minmax(0, 1fr); }
   .g3 > *, .g2 > * { min-width: 0; }
   .g4.kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .g4.kpis .kpi-value { font-size: 18px; overflow-wrap: anywhere; }
-  .g4.kpis .kpi-sub { overflow-wrap: anywhere; }
+  .g4.kpis .kpi-value { font-size: 16px; overflow-wrap: break-word; }
+  .g4.kpis .kpi-sub { overflow-wrap: break-word; }
   .span2 { grid-column: span 1; }
   table.bp { font-size: 12px; }
   table.bp th, table.bp td { padding: 9px 10px; }
