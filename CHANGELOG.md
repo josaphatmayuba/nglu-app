@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : plus de page « Eau, courant et travaux » ; « Comment remplir » et l'exemple seulement dans le cahier du bailleur (v3.285.13).** Cahier du locataire = couverture + pages à remplir + dos (2 ans : 8 pages) ; cahier du bailleur = + guide + exemple (10 pages). Pour 3 ans, une page « Notes » numérotée garde un nombre pair de pages.
 - **Domus carnet papier : « Moyen » vide aussi dès l'année 2 (v3.285.12).** Seules les lignes déjà payées restent pré-remplies.
 - **Domus carnet papier : « À payer » vide dès l'année 2 (v3.285.11).** Année 1 pré-remplie ; années suivantes laissées vides pour que le gestionnaire écrive le nouveau loyer en cas d'augmentation.
 - **BâtiPro mobile : « $ US » ne se coupe plus au milieu sur les cartes KPI (v3.285.10).** Valeur réduite à 16 px, retour à la ligne aux espaces seulement.
