@@ -436,7 +436,8 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
 
   // Exemple rempli : 6 premiers mois du bail, montants dans la devise du bail.
   const pe = (t) => `<span class="pen">${t}</span>`;
-  const vx = (k, t = "") => `<div class="via"><span><i class="${k === "E" ? "on" : ""}"></i>Espèces</span><span><i class="${k === "M" ? "on" : ""}"></i>Mobile <em>${k === "M" ? pe(t) : ""}</em></span><span><i class="${k === "B" ? "on" : ""}"></i>Banque <em>${k === "B" ? pe(t) : ""}</em></span></div>`;
+  // Colonne « Moyen » de l'exemple : écrit à la main (plus de cases à cocher).
+  const vx = (k, t = "") => (k === "E" ? pe("Espèces") : k === "M" ? pe(`Mobile ${t}`) : k === "B" ? pe(`Banque ${t}`) : "");
   const rent = L.rent || 400;
   const pr = fm ? fm.amount : rent;
   const prDays = fm ? fm.days : 13;
