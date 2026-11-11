@@ -80,6 +80,8 @@ function shellBarHtml(format, years = 3) {
         <option value="ink-pale">Gris très pâle</option>
         <option value="ink-blue">Bleu pâle</option>
       </select></label>
+    <label title="Si la ligne « couper ici » tombe trop à droite sur votre feuille, mettez un nombre négatif (ex. -10) ; trop à gauche, un nombre positif. Mémorisé pour cette imprimante.">Décalage ligne de coupe (mm) :
+      <input type="number" id="ps-shift" value="0" step="0.5" min="-30" max="30" style="width:5em" /></label>
     <label><input type="checkbox" id="ps-dup" checked /> Chaque page en 2 exemplaires</label>
   </span>
   <label id="ps-copy-wrap">Cahier :
@@ -154,6 +156,8 @@ ${PAPER_BOOK_CSS}</style>
       html = state.cache[`receipts-${copy}`] ||= `<div class="rent-book">${ctx.receiptsHtml(copy)}</div>`;
     }
     $("book").innerHTML = html;
+    const shift = Math.max(-30, Math.min(30, Number($("ps-shift").value) || 0));
+    $("book").style.setProperty("--cut-shift", `${shift}mm`);
     $("page-rule").textContent = fmt !== "paper" ? PAGE_RULES[fmt]
       : pass === "pleine" ? (size === "letter" ? PAGE_RULES.paperFullLetter : PAGE_RULES.paperFull)
       : size === "letter" ? PAGE_RULES.paperLetter : PAGE_RULES.paper;
@@ -179,7 +183,9 @@ ${PAPER_BOOK_CSS}</style>
   // Papier mémorisé (A4 / Letter) : simple confort, ignoré si le stockage est indisponible.
   try { const saved = win.localStorage.getItem("domus.paperSize"); if (saved === "a4" || saved === "letter") $("ps-size").value = saved; } catch { /* stockage indisponible */ }
   $("ps-size").addEventListener("change", () => { try { win.localStorage.setItem("domus.paperSize", $("ps-size").value); } catch { /* stockage indisponible */ } });
-  ["ps-format", "ps-pass", "ps-size", "ps-copy", "ps-years", "ps-ink", "ps-dup"].forEach((id) => $(id).addEventListener("change", render));
+  try { const s = win.localStorage.getItem("domus.cutShift"); if (s !== null && Number.isFinite(Number(s))) $("ps-shift").value = s; } catch { /* stockage indisponible */ }
+  $("ps-shift").addEventListener("change", () => { try { win.localStorage.setItem("domus.cutShift", $("ps-shift").value); } catch { /* stockage indisponible */ } });
+  ["ps-format", "ps-pass", "ps-size", "ps-copy", "ps-years", "ps-ink", "ps-dup", "ps-shift"].forEach((id) => $(id).addEventListener("change", render));
   win.addEventListener("resize", () => fit($("ps-format").value, $("ps-pass").value));
   $("ps-print").addEventListener("click", async () => {
     try {

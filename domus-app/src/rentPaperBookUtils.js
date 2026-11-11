@@ -180,6 +180,9 @@ export const PAPER_BOOK_CSS = `
   .paper .essai { display: grid; align-content: center; gap: 5mm; height: 100%; text-align: center; font-size: 13pt; }
   .paper .essai b { font-size: 26pt; }
   .paper .sheet::after { content: "✂ couper ici"; position: absolute; left: 50%; top: 0; bottom: 0; border-left: .4pt dashed #555; font-size: 6pt; color: #555; padding: 1mm 0 0 1mm; }
+  /* Calibrage imprimante : --cut-shift (mm, négatif = vers la gauche) déplace la ligne de coupe/pli et la séparation des 2 pages. */
+  .paper .sheet.cut::after, .paper .sheet.fold::after { left: calc(50% + var(--cut-shift, 0mm)); }
+  .paper .sheet.cut, .paper .sheet.fold { grid-template-columns: calc(50% + var(--cut-shift, 0mm)) 1fr; }
   .paper .single { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .paper .single .a5 { box-shadow: 0 2px 8px rgba(0,0,0,.25); }
   .paper .a5 { width: var(--half-w); height: var(--sheet-h); padding: 8mm 7mm 7mm 14mm; background: #fff; color: #222; position: relative; display: flex; flex-direction: column; gap: 2.4mm; overflow: hidden; }
@@ -319,6 +322,8 @@ export const PAPER_BOOK_CSS = `
     /* Feuille = page réellement imprimée (vw/vh) : la ligne de coupe/pli reste au milieu du papier, même si le navigateur ajoute des marges égales. */
     .paper .sheet.cut, .paper .sheet.fold { width: 100vw; height: 100vh; }
     .paper .sheet.cut .a5, .paper .sheet.fold .a5 { width: 50vw; height: 100vh; }
+    .paper .sheet.cut .a5:first-child, .paper .sheet.fold .a5:first-child { width: calc(50vw + var(--cut-shift, 0mm)); }
+    .paper .sheet.cut .a5:last-child, .paper .sheet.fold .a5:last-child { width: calc(50vw - var(--cut-shift, 0mm)); }
     .paper { display: block; padding: 0; gap: 0; }
     .paper .intro, .paper .caption { display: none !important; }
     .paper .sheet { box-shadow: none; break-after: page; page-break-after: always; }
