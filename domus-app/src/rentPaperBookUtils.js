@@ -157,6 +157,10 @@ export const PAPER_BOOK_CSS = `
   .paper .sheet.dup .a5, .paper .a5.dup { background-color: #fff; }
   .paper .a5.rdots { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%23e0404f'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
   .paper .a5.tdots { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%238fb4e3'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
+  /* Texte lisible sur la trame : fond blanc sous chaque bloc de texte et traits plus foncés (la trame reste visible tout autour). */
+  .paper .a5.rdots :is(h1, h2, .duree, .yrs, .badge2, .kv, .note, .foot, .qrrow), .paper .a5.tdots :is(h1, h2, .duree, .yrs, .badge2, .kv, .note, .foot, .qrrow) { background: #fff; width: fit-content; max-width: 100%; padding: .5mm 1.5mm; }
+  .paper .a5.rdots :is(h1, .duree), .paper .a5.tdots :is(h1, .duree) { -webkit-text-stroke-color: #333 !important; }
+  .paper .a5.rdots .lbl, .paper .a5.tdots .lbl { color: #222; }
   .paper .sheet.dup .a5 table, .paper .a5.dup table { background: #fff; }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
