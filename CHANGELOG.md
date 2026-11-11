@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : relevé avec tri, recherche et pagination.** Sélecteur « Trier par » (date récent/ancien d'abord, montant, catégorie), recherche texte, « Afficher plus » par 25 lignes avec compteur ; CSV et impression sur toutes les lignes filtrées ; filtres en grille (cibles 44 px), dates JJ/MM/AAAA, erreur avec « Réessayer » ; mêmes contrôles dans les liens publics (ingénieur sans entrées).
 - **BâtiPro : relevé trié du plus récent au plus ancien par défaut.** Bouton « Plus récent d'abord / Plus ancien d'abord » ; le solde de chaque ligne reste celui de l'ordre chronologique ; le CSV suit l'ordre affiché.
 - **BâtiPro : relevé des liens publics corrigé (v3.285.2).** Lien ingénieur : l'onglet « Relevé » ne plante plus (page blanche « stmtFetcher is not defined »). Lien propriétaire : la section « Relevé du chantier » avec le bouton « Afficher le relevé » est enfin affichée.
 - **BâtiPro : raison précise quand un SMS de lien de suivi ne part pas (v3.285.1).** Comme Domus, le résultat du service SMS partagé (CompatService.sendSms) est lu : « SMS desactives pour cette organisation (Reglages) », « Service SMS non configure » ou « Echec de la passerelle SMS » (le détail fournisseur, qui contient l’identifiant Twilio, reste dans les logs). createLink renvoie sms_error ; l’écran dit « SMS accepté par la passerelle » au lieu de « SMS envoyé ». sms_sent_at reste écrit seulement si l’envoi est accepté.
