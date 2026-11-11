@@ -67,7 +67,7 @@ function ProgressBar({ label, now }) {
  *  fees [{name, mode, percent, bases, base_amount, due, paid, remaining, currency_code, payments:[{date,label,amount}]}],
  *  deliveries [{number, expected_date, paid, total, currency_code, lines:[{designation, remaining}]}]
  */
-export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash, onOpenStatement }) {
+export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash, wide, onOpenStatement }) {
   if (loading) return <div className="sov" role="status" aria-live="polite"><div className="sov-card sov-muted">Chargement de l'aperçu…</div></div>;
 
   const pct = clampPct(progress);
@@ -84,7 +84,7 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
   const hasMoney = funds && (funds.received != null || funds.available != null);
 
   return (
-    <div className="sov">
+    <div className={wide ? "sov sov--wide" : "sov"}>
       {/* 0. Avancement */}
       <section className="sov-card sov-hero" aria-label="Avancement">
         <div className="sov-ring" role="img" aria-label={`Avancement ${fmtPct(pct)} pour cent`} style={{ background: `conic-gradient(var(--sov-accent) 0 ${pct}%, var(--sov-track) ${pct}% 100%)` }}>

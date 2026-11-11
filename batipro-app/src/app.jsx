@@ -697,7 +697,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
 
       <div className="proj-tabs">
         {PROJECT_TABS.map((t) => (
-          <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} title={t.hint || undefined}>
+          <button key={t.id} type="button" aria-current={tab === t.id ? "page" : undefined} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} title={t.hint || undefined}>
             <Icon name={t.icon} />
             <span>{t.label}</span>
             {t.hint && <span className="tab-info" title={t.hint} aria-hidden="true"><Icon name="info" /></span>}
@@ -708,7 +708,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
       <div className="proj-tab-body">
         {tab === "apercu" && (
           <>
-          <SimpleOverview {...overviewProps} onOpenStatement={() => setTab("releve")} />
+          <SimpleOverview {...overviewProps} wide onOpenStatement={() => setTab("releve")} />
           <details style={{ marginTop: 16 }}>
             <summary style={{ cursor: "pointer", minHeight: 44, display: "flex", alignItems: "center", fontSize: 13, color: "var(--ink-500)" }}>Détail du budget, de la facturation et du risque</summary>
           <div className="g3">
