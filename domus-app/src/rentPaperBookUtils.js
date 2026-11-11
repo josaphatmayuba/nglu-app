@@ -509,7 +509,7 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
         const method = paymentMethodLabel(pd.method);
         return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td><span class="pen">✓ Payé<br>${fmtDateShort(pd.paymentDate)}</span></td><td><span class="pen">${esc(moneyAfter(pd.amount, pd.currencySymbol || L.symbol))}</span></td><td>${method ? `<span class="pen">${esc(method)}</span>` : via}</td><td></td><td></td></tr>`;
       }
-      return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td></td><td></td><td>${via}</td><td></td><td></td></tr>`;
+      return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td></td><td></td><td>${k === 0 ? via : ""}</td><td></td><td></td></tr>`;
     }).join("");
     const range = `${MS[months[0].m]} ${months[0].y} → ${MS[last.m]} ${last.y}`;
     SLOTS.push(`<!--p-rent--><h2>Loyers, année ${k + 1} du bail <small>${range}</small></h2>
