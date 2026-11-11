@@ -667,7 +667,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
     <>
       <div className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-ghost" onClick={onBack}><Icon name="chevronRight" className="ic" style={{ transform: "rotate(180deg)" }} /> Retour</button>
+          <button type="button" className="btn btn-ghost btn-touch" onClick={onBack}><Icon name="chevronRight" className="ic" style={{ transform: "rotate(180deg)" }} /> Retour</button>
           <div>
             <p className="eyebrow">Chantier</p>
             <h2 className="title font-display">{p.name}</h2>

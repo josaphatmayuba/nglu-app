@@ -168,7 +168,7 @@ function TabBar({ tab, setTab, counts }) {
         const n = counts[k];
         return (
           <button key={k} type="button" aria-current={active ? "page" : undefined} onClick={() => setTab(k)}
-            style={{ flex: "0 0 auto", minHeight: 40, padding: "8px 12px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
+            style={{ flex: "0 0 auto", minHeight: 44, padding: "8px 12px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
             {label}{n ? ` · ${n}` : ""}
           </button>
         );

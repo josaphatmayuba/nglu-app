@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro mobile 360 px : relevé et tableau de bord corrigés (v3.285.6).** Libellés des listes du relevé raccourcis (plus de texte tronqué), champs et onglets ingénieur à 44 px, bouton « Retour » tactile ; le tableau de bord ne déborde plus à droite (grilles `minmax(0,1fr)`), la barre du bas et « Plus » restent accessibles.
 - **BâtiPro : relevé accessible partout + chiffres clés ingénieur (v3.285.5).** Bouton « Voir le relevé » sur la carte « L'argent du chantier » ; entrée « Relevés » dans la barre latérale (page avec sélecteur de chantier, menu « Plus » sur mobile) ; lien ingénieur : le relevé affiche « Matériaux achetés », « Honoraires payés » et « Reste à payer (honoraires) » au lieu de « Sorties » seul (toujours sans fonds ni solde).
 - **BâtiPro : relevé avec tri, recherche et pagination.** Sélecteur « Trier par » (date récent/ancien d'abord, montant, catégorie), recherche texte, « Afficher plus » par 25 lignes avec compteur ; CSV et impression sur toutes les lignes filtrées ; filtres en grille (cibles 44 px), dates JJ/MM/AAAA, erreur avec « Réessayer » ; mêmes contrôles dans les liens publics (ingénieur sans entrées).
 - **BâtiPro : relevé trié du plus récent au plus ancien par défaut.** Bouton « Plus récent d'abord / Plus ancien d'abord » ; le solde de chaque ligne reste celui de l'ordre chronologique ; le CSV suit l'ordre affiché.

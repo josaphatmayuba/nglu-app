@@ -4,7 +4,7 @@ import { api } from "./api.js";
 
 // Relevé de compte d'un chantier. Réutilisable (phase 3 publique) via `fetcher` + `hideBalance`.
 const CATEGORIES = [
-  { id: "", label: "Toutes les catégories" },
+  { id: "", label: "Toutes" },
   { id: "funding", label: "Fonds reçus" },
   { id: "funding_cancel", label: "Fonds annulés" },
   { id: "materials", label: "Matériaux" },
@@ -33,11 +33,11 @@ function amt(value, code) {
   }
 }
 const SORTS = [
-  { id: "date_desc", label: "Date (plus récent d'abord)" },
-  { id: "date_asc", label: "Date (plus ancien d'abord)" },
-  { id: "amount_desc", label: "Montant (plus grand d'abord)" },
-  { id: "amount_asc", label: "Montant (plus petit d'abord)" },
-  { id: "cat_asc", label: "Catégorie (A→Z)" },
+  { id: "date_desc", label: "Plus récent" },
+  { id: "date_asc", label: "Plus ancien" },
+  { id: "amount_desc", label: "Montant ↓" },
+  { id: "amount_asc", label: "Montant ↑" },
+  { id: "cat_asc", label: "Catégorie A→Z" },
 ];
 const PAGE = 25;
 const fmtDate = (d) => {
