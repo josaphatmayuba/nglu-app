@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : plus de cases Espèces/Mobile/Banque dans « Moyen » (v3.285.15).** Colonne vide partout ; un mois déjà payé garde sa date, son montant et son moyen écrits.
 - **Domus carnet papier : trame de points bleus sur la page de garde du cahier du locataire (v3.285.14).** Couverture et dos du locataire seulement ; les autres pages restent blanches.
 - **Domus carnet papier : plus de page « Eau, courant et travaux » ; « Comment remplir » et l'exemple seulement dans le cahier du bailleur (v3.285.13).** Cahier du locataire = couverture + pages à remplir + dos (2 ans : 8 pages) ; cahier du bailleur = + guide + exemple (10 pages). Pour 3 ans, une page « Notes » numérotée garde un nombre pair de pages.
 - **Domus carnet papier : « Moyen » vide aussi dès l'année 2 (v3.285.12).** Seules les lignes déjà payées restent pré-remplies.
