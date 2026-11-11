@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro mobile : le montant « Budget engagé » ne déborde plus de sa carte (v3.285.8).** Valeurs et sous-textes des cartes KPI du tableau de bord réduits et retournés à la ligne sur 360/390 px.
 - **BâtiPro : Aperçu du chantier pleine largeur (v3.285.7).** Les cartes (argent, répartition des dépenses, honoraires) se répartissent en grille 1/2/3 colonnes au lieu d'une colonne de 560 px ; onglets du chantier en barre unique compacte (défilement latéral), boutons avec état actif accessible ; montants KPI jamais coupés en plein nombre. Pages publiques inchangées.
 - **BâtiPro mobile 360 px : relevé et tableau de bord corrigés (v3.285.6).** Libellés des listes du relevé raccourcis (plus de texte tronqué), champs et onglets ingénieur à 44 px, bouton « Retour » tactile ; le tableau de bord ne déborde plus à droite (grilles `minmax(0,1fr)`), la barre du bas et « Plus » restent accessibles.
 - **BâtiPro : relevé accessible partout + chiffres clés ingénieur (v3.285.5).** Bouton « Voir le relevé » sur la carte « L'argent du chantier » ; entrée « Relevés » dans la barre latérale (page avec sélecteur de chantier, menu « Plus » sur mobile) ; lien ingénieur : le relevé affiche « Matériaux achetés », « Honoraires payés » et « Reste à payer (honoraires) » au lieu de « Sorties » seul (toujours sans fonds ni solde).
