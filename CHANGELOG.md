@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : trame de points plus visible (v3.285.19).** Points roses (bailleur) et bleus (locataire) de 0,3 à 0,4 mm, car ils sortaient presque invisibles à l'impression.
 - **Domus carnet papier : réglage « Décalage ligne de coupe (mm) » pour centrer la ligne sur l'imprimante (v3.285.18).** Corrige une ligne « couper ici » décalée d'environ 10 mm à l'impression ; valeur mémorisée dans le navigateur.
 - **Domus carnet papier : l'exemple de page remplie n'a plus de cases dans « Moyen » (v3.285.17).** Le moyen est écrit à la main (Espèces, Mobile M-Pesa, Banque BCDC).
 - **Domus carnet papier : l'année 1 est l'année de bail en cours (v3.285.16).** Pour un bail de plus d'un an, le carnet part du dernier anniversaire (entrée juil. 2025, nov. 2026 → année 1 = juil. 2026 → juin 2027), sans prorata ; la date d'entrée reste sur la couverture.
