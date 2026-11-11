@@ -1,8 +1,15 @@
 import React from "react";
 import { siteApi } from "./api.js";
 import { ProjectStatement } from "./statement.jsx";
+
 import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 import { Amounts, FinanceSections, Section, Shell, Thumb, btn, btnSm, card, fmtDate, money, muted, row } from "./OwnerTracking.jsx";
+
+// Relevé des sorties : fetcher stable (sinon rechargement en boucle).
+function SiteStatement({ token }) {
+  const fetcher = React.useCallback((f) => siteApi.statement(token, f), [token]);
+  return <ProjectStatement fetcher={fetcher} hideBalance />;
+}
 
 // Page publique ingenieur / responsable de chantier (sans compte). URL :
 // /batipro/chantier/:token. Avancement des phases, photos, reception des BC,
@@ -119,7 +126,7 @@ export default function EngineerSite({ token }) {
       {tab === "expenses" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["expenses"]} />}
       {tab === "invoices" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["invoices"]} />}
 
-      {tab === "statement" && <Section title="Relevé des sorties"><ProjectStatement fetcher={stmtFetcher} hideBalance /></Section>}
+      {tab === "statement" && <Section title="Relevé des sorties"><SiteStatement token={token} /></Section>}
 
       {tab === "photos" && (
         <Section title="Photos du chantier">
