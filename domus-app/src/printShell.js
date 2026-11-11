@@ -166,7 +166,7 @@ ${PAPER_BOOK_CSS}</style>
     note.hidden = fmt !== "paper";
     const landlordPages = copy !== "tenant" || ["complet", "2"].includes(pass);
     note.textContent = fmt === "paper"
-      ? `Économie d'encre : ${PAPER_INK_NOTES[ink] || PAPER_INK_NOTES[""]}${landlordPages ? " Cahier du bailleur : imprimez en « Couleur » pour garder la trame de points roses (en « Niveaux de gris », elle sort grise)." : ""}`
+      ? `Économie d'encre : ${PAPER_INK_NOTES[ink] || PAPER_INK_NOTES[""]}${landlordPages ? " Cahier du bailleur : imprimez en « Couleur » pour garder la trame de points rouges (en « Niveaux de gris », elle sort grise)." : ""}`
       : "";
     const hint = $("ps-hint");
     const preview = fmt === "paper" && pass === "cahier";

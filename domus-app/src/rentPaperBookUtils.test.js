@@ -165,7 +165,7 @@ describe("cahier complet en une impression", () => {
   it("2 ans : 4 feuilles blanches puis 5 roses (le bailleur a guide + exemple en plus)", () => {
     const h = paperBookHtml(base, { pass: "complet", years: 2, duplicate: true });
     expect((h.match(/class="sheet/g) || []).length).toBe(9);
-    expect(h).toContain("4 feuilles blanches (locataire) et 5 feuilles à points roses (bailleur)");
+    expect(h).toContain("4 feuilles blanches (locataire) et 5 feuilles à points rouges (bailleur)");
     expect(pages(h)).toEqual([[1, 5], [2, 6], [3, 7], [4, 8], [1, 6], [2, 7], [3, 8], [4, 9], [5, 10]]);
     expect(h).toContain("Exemplaire du locataire");
     expect(h).toContain("Exemplaire du bailleur");
@@ -204,13 +204,13 @@ describe("cahier plie (livret recto-verso)", () => {
     expect(h).toContain('<span class="fl">Feuille 1 · côté A</span>');
     expect(h).toContain('<span class="fl">Feuille 2 · côté B</span>');
   });
-  it("cahier du bailleur seul, puis les deux (blanches puis roses)", () => {
+  it("cahier du bailleur seul, puis les deux (blanches puis rouges)", () => {
     const b = paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" });
     expect(b).toContain("Exemplaire du bailleur");
     expect((b.match(/class="sheet fold dup"/g) || []).length).toBe(6);
     const both = paperBookHtml(base, { pass: "plie", years: 2, copy: "both" });
-    const caps = [...both.matchAll(/(blanche|roses) \(cahier/g)].map((m) => m[1]);
-    expect(caps).toEqual([...Array(4).fill("blanche"), ...Array(6).fill("roses")]);
+    const caps = [...both.matchAll(/(blanche|rouges) \(cahier/g)].map((m) => m[1]);
+    expect(caps).toEqual([...Array(4).fill("blanche"), ...Array(6).fill("rouges")]);
   });
   it("chaque page (sauf couverture) dit à qui est le cahier", () => {
     ["coupe", "pleine", "simple", "plie"].forEach((pass) => {
