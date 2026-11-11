@@ -9,6 +9,8 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : « Moyen » vide aussi dès l'année 2 (v3.285.12).** Seules les lignes déjà payées restent pré-remplies.
+- **Domus carnet papier : « À payer » vide dès l'année 2 (v3.285.11).** Année 1 pré-remplie ; années suivantes laissées vides pour que le gestionnaire écrive le nouveau loyer en cas d'augmentation.
 - **BâtiPro mobile : « $ US » ne se coupe plus au milieu sur les cartes KPI (v3.285.10).** Valeur réduite à 16 px, retour à la ligne aux espaces seulement.
 - **BâtiPro : honoraires affichés à 2 décimales (v3.285.9).** « 949,575 $ » se lisait comme 949 575 $ ; les montants d'honoraires (dû, reste à payer) s'affichent maintenant à 2 décimales, la valeur exacte du calcul reste visible au survol et rien n'est arrondi en base.
 - **BâtiPro mobile : le montant « Budget engagé » ne déborde plus de sa carte (v3.285.8).** Valeurs et sous-textes des cartes KPI du tableau de bord réduits et retournés à la ligne sur 360/390 px.
