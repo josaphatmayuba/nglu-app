@@ -9,6 +9,12 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : réglage « Décalage ligne de coupe (mm) » pour centrer la ligne sur l'imprimante (v3.285.18).** Corrige une ligne « couper ici » décalée d'environ 10 mm à l'impression ; valeur mémorisée dans le navigateur.
+- **Domus carnet papier : l'exemple de page remplie n'a plus de cases dans « Moyen » (v3.285.17).** Le moyen est écrit à la main (Espèces, Mobile M-Pesa, Banque BCDC).
+- **Domus carnet papier : l'année 1 est l'année de bail en cours (v3.285.16).** Pour un bail de plus d'un an, le carnet part du dernier anniversaire (entrée juil. 2025, nov. 2026 → année 1 = juil. 2026 → juin 2027), sans prorata ; la date d'entrée reste sur la couverture.
+- **Domus carnet papier : plus de cases Espèces/Mobile/Banque dans « Moyen » (v3.285.15).** Colonne vide partout ; un mois déjà payé garde sa date, son montant et son moyen écrits.
+- **Domus carnet papier : trame de points bleus sur la page de garde du cahier du locataire (v3.285.14).** Couverture et dos du locataire seulement ; les autres pages restent blanches.
+- **Domus carnet papier : plus de page « Eau, courant et travaux » ; « Comment remplir » et l'exemple seulement dans le cahier du bailleur (v3.285.13).** Cahier du locataire = couverture + pages à remplir + dos (2 ans : 8 pages) ; cahier du bailleur = + guide + exemple (10 pages). Pour 3 ans, une page « Notes » numérotée garde un nombre pair de pages.
 - **Domus carnet papier : « Moyen » vide aussi dès l'année 2 (v3.285.12).** Seules les lignes déjà payées restent pré-remplies.
 - **Domus carnet papier : « À payer » vide dès l'année 2 (v3.285.11).** Année 1 pré-remplie ; années suivantes laissées vides pour que le gestionnaire écrive le nouveau loyer en cas d'augmentation.
 - **BâtiPro mobile : « $ US » ne se coupe plus au milieu sur les cartes KPI (v3.285.10).** Valeur réduite à 16 px, retour à la ligne aux espaces seulement.
