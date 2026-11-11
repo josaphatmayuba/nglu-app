@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro : relevé accessible partout + chiffres clés ingénieur (v3.285.5).** Bouton « Voir le relevé » sur la carte « L'argent du chantier » ; entrée « Relevés » dans la barre latérale (page avec sélecteur de chantier, menu « Plus » sur mobile) ; lien ingénieur : le relevé affiche « Matériaux achetés », « Honoraires payés » et « Reste à payer (honoraires) » au lieu de « Sorties » seul (toujours sans fonds ni solde).
 - **BâtiPro : relevé avec tri, recherche et pagination.** Sélecteur « Trier par » (date récent/ancien d'abord, montant, catégorie), recherche texte, « Afficher plus » par 25 lignes avec compteur ; CSV et impression sur toutes les lignes filtrées ; filtres en grille (cibles 44 px), dates JJ/MM/AAAA, erreur avec « Réessayer » ; mêmes contrôles dans les liens publics (ingénieur sans entrées).
 - **BâtiPro : relevé trié du plus récent au plus ancien par défaut.** Bouton « Plus récent d'abord / Plus ancien d'abord » ; le solde de chaque ligne reste celui de l'ordre chronologique ; le CSV suit l'ordre affiché.
 - **BâtiPro : relevé des liens publics corrigé (v3.285.2).** Lien ingénieur : l'onglet « Relevé » ne plante plus (page blanche « stmtFetcher is not defined »). Lien propriétaire : la section « Relevé du chantier » avec le bouton « Afficher le relevé » est enfin affichée.

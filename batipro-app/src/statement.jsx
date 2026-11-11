@@ -162,7 +162,14 @@ export function ProjectStatement({ projectId, data: dataProp, fetcher, hideBalan
         <div className="stmt-totals">
           {!hideBalance && <div className="card stmt-kpi"><span className="muted">Solde d'ouverture</span><strong>{amt(data.opening_balance, cur)}</strong></div>}
           {!hideBalance && <div className="card stmt-kpi"><span className="muted">Entrées</span><strong>{amt(data.totals?.entries, cur)}</strong></div>}
-          <div className="card stmt-kpi"><span className="muted">Sorties</span><strong>{amt(data.totals?.exits, cur)}</strong></div>
+          {!hideBalance && <div className="card stmt-kpi"><span className="muted">Sorties</span><strong>{amt(data.totals?.exits, cur)}</strong></div>}
+          {hideBalance && (
+            <>
+              <div className="card stmt-kpi"><span className="muted">Matériaux achetés</span><strong>{amt(data.kpis?.materials_total ?? 0, data.kpis?.currency_code || cur)}</strong></div>
+              <div className="card stmt-kpi"><span className="muted">Honoraires payés</span><strong>{amt(data.kpis?.fees_paid ?? 0, data.kpis?.currency_code || cur)}</strong></div>
+              <div className="card stmt-kpi"><span className="muted">Reste à payer (honoraires)</span><strong>{data.kpis?.fees_remaining == null ? "Non configuré" : amt(data.kpis.fees_remaining, data.kpis?.currency_code || cur)}</strong></div>
+            </>
+          )}
           {!hideBalance && <div className="card stmt-kpi"><span className="muted">Solde final</span><strong>{amt(data.final_balance ?? data.closing_balance, cur)}</strong></div>}
         </div>
       )}

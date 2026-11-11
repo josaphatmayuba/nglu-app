@@ -81,6 +81,19 @@ export class BatiproStatementService {
   async getEngineerStatement(token: string, filter: StatementFilter) {
     const link = await this.resolve(token, "engineer");
     const full = await this.batipro.buildProjectStatement(link.projectId, link.organizationId, {}, "all");
-    return toExitsOnlyStatement(full as any, filter);
+    const summary: any = await this.batipro.projectBudgetSummary(link.projectId, link.organizationId);
+    // Memes calculs que l'apercu simple (SimpleOverview) : fees = blocs mode != none, sommes sans arrondi.
+    const feeList = ((summary?.fees ?? []) as any[]).filter((f) => f.mode && f.mode !== "none");
+    const materials = ((summary?.spent_by_nature ?? []) as any[]).find((r) => r.nature === "materials")?.amount ?? 0;
+    return {
+      ...toExitsOnlyStatement(full as any, filter),
+      // Liste blanche : aucun fonds, entree, solde ni total d'entrees.
+      kpis: {
+        materials_total: Number(materials),
+        fees_paid: feeList.reduce((t, f) => t + Number(f.paid || 0), 0),
+        fees_remaining: feeList.length ? feeList.reduce((t, f) => t + Number(f.remaining || 0), 0) : null,
+        currency_code: summary?.currency_code ?? (full as any).currency_code ?? null,
+      },
+    };
   }
 }

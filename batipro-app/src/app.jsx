@@ -7,6 +7,7 @@ import CurrencyPicker from "./CurrencyPicker.jsx";
 import ProjectFunds from "./components/ProjectFunds.jsx";
 import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview from "./SimpleOverview.jsx";
+import StatementPage from "./statement-page.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -74,10 +75,11 @@ const NAV = [
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "depenses", label: "Dépenses et services", icon: "receipt" },
+  { id: "releves", label: "Relevés", icon: "receipt" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "pointage"];
-const MOB_MORE = ["equipes", "previsionnel", "materiaux", "depenses", "parametres"];
+const MOB_MORE = ["equipes", "previsionnel", "materiaux", "depenses", "releves", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -232,6 +234,7 @@ function App() {
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => { setError(""); setModal({ kind: "material" }); }} onRestock={setRestock} onOpenProject={setOpenProjectId} canMutate={canMutate} />,
     depenses: <ServiceExpensesPage projects={projectRows} canMutate={canMutate} onOpenProject={setOpenProjectId} />,
+    releves: <StatementPage projects={projectRows} />,
     parametres: <Parametres />,
   };
 
@@ -705,7 +708,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
       <div className="proj-tab-body">
         {tab === "apercu" && (
           <>
-          <SimpleOverview {...overviewProps} />
+          <SimpleOverview {...overviewProps} onOpenStatement={() => setTab("releve")} />
           <details style={{ marginTop: 16 }}>
             <summary style={{ cursor: "pointer", minHeight: 44, display: "flex", alignItems: "center", fontSize: 13, color: "var(--ink-500)" }}>Détail du budget, de la facturation et du risque</summary>
           <div className="g3">

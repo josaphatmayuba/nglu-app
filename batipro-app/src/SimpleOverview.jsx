@@ -67,7 +67,7 @@ function ProgressBar({ label, now }) {
  *  fees [{name, mode, percent, bases, base_amount, due, paid, remaining, currency_code, payments:[{date,label,amount}]}],
  *  deliveries [{number, expected_date, paid, total, currency_code, lines:[{designation, remaining}]}]
  */
-export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash }) {
+export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash, onOpenStatement }) {
   if (loading) return <div className="sov" role="status" aria-live="polite"><div className="sov-card sov-muted">Chargement de l'aperçu…</div></div>;
 
   const pct = clampPct(progress);
@@ -121,6 +121,9 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
             <span className="sov-muted">Reste à payer (honoraires)</span>
             <strong className="sov-due">{feeList.length ? fmtMoney(feeRemaining, currency) : "Non configuré"}</strong>
           </div>
+        )}
+        {onOpenStatement && (
+          <button type="button" className="btn btn-ghost stmt-open-btn" onClick={onOpenStatement}>Voir le relevé</button>
         )}
       </section>
 

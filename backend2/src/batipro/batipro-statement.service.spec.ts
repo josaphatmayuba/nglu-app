@@ -37,7 +37,15 @@ const full = () => ({
 });
 
 function setup(selectQueue: any[][]) {
-  const batipro = { buildProjectStatement: jest.fn().mockImplementation(async () => full()) };
+  const batipro = {
+    buildProjectStatement: jest.fn().mockImplementation(async () => full()),
+    projectBudgetSummary: jest.fn().mockImplementation(async () => ({
+      currency_code: "USD",
+      spent_by_nature: [{ nature: "materials", label: "Materiaux", amount: 3165.25 }, { nature: "fees", label: "Honoraires", amount: 750 }],
+      funds_received: 99999,
+      fees: [{ mode: "percent_materials", paid: 750, remaining: 85.575 }, { mode: "none", paid: 5, remaining: 5 }],
+    })),
+  };
   const svc = new BatiproStatementService(makeDb(selectQueue) as any, batipro as any);
   return { svc, batipro };
 }
@@ -53,6 +61,23 @@ describe("BatiproStatementService", () => {
       expect(json).not.toContain(forbidden);
     }
     expect(res.totals).toEqual({ exits: 150.5 });
+  });
+
+  it("ingenieur : kpis materiaux / honoraires payes / reste, sans champ interdit", async () => {
+    const { svc } = setup([[linkRow()], [{ id: 5 }]]);
+    const res: any = await svc.getEngineerStatement("a-long-token-value-123456", {});
+    expect(res.kpis).toEqual({ materials_total: 3165.25, fees_paid: 750, fees_remaining: 85.575, currency_code: "USD" });
+    expect(Object.keys(res.kpis).sort()).toEqual(["currency_code", "fees_paid", "fees_remaining", "materials_total"]);
+    for (const k of ["entry", "balance", "opening_balance", "closing_balance", "final_balance", "funds"]) expect(res).not.toHaveProperty(k);
+    expect(res.totals).not.toHaveProperty("entries");
+    expect(JSON.stringify(res)).not.toContain("99999");
+  });
+
+  it("ingenieur : honoraires non configures => fees_remaining null", async () => {
+    const { svc, batipro } = setup([[linkRow()], [{ id: 5 }]]);
+    batipro.projectBudgetSummary.mockResolvedValueOnce({ currency_code: "USD", spent_by_nature: [], fees: [] });
+    const res: any = await svc.getEngineerStatement("a-long-token-value-123456", {});
+    expect(res.kpis).toEqual({ materials_total: 0, fees_paid: 0, fees_remaining: null, currency_code: "USD" });
   });
 
   it("ingenieur : filtre categorie funding ne renvoie rien", async () => {
