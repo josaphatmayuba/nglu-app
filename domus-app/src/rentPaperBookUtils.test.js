@@ -267,9 +267,9 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
     expect(h).not.toMatch(/cahier rose|page rose|se copie/);
     expect(paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" })).toContain("dans les deux cahiers");
     const p1 = paperBookHtml(base, { pass: "1", years: 2, duplicate: true });
-    expect(p1).toContain('class="a5 covpage dup"');
+    expect(p1).toContain('class="a5 covpage dup rdots"');
     expect(p1).toContain('class="sheet dup"');
-    expect(paperBookHtml(base, { pass: "cahier", years: 2 })).toContain('class="a5 covpage dup"');
+    expect(paperBookHtml(base, { pass: "cahier", years: 2 })).toContain('class="a5 covpage dup rdots"');
     expect((h.match(/class="sheet fold( dup)?"/g) || []).length).toBe(9);
   });
   it("3 ans : 5 feuilles", () => {

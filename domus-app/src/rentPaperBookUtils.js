@@ -153,10 +153,10 @@ export const PAPER_BOOK_CSS = `
   .paper { --sheet-w: 297mm; --sheet-h: 210mm; --half-w: 148.5mm; }
   .paper.letter { --sheet-w: 279.4mm; --sheet-h: 215.9mm; --half-w: 139.7mm; }
   .paper .sheet { width: var(--sheet-w); height: var(--sheet-h); background: #fff; color: #222; display: grid; grid-template-columns: 1fr 1fr; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,.25); overflow: hidden; }
-  /* Exemplaire du bailleur : trame de points rouges (0,7 mm tous les 1,5 mm, ~17 % d'encre), en SVG : un radial-gradient aussi fin disparaît à l'écran et dans l'aperçu d'impression ; cases des tableaux blanches pour écrire. */
-  .paper .sheet.dup .a5, .paper .a5.dup { background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%23e0404f'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
-  /* Exemplaire du locataire : trame de points bleus sur la page de garde (couverture et dos) seulement ; les autres pages restent blanches. */
-  .paper .a5.tdots { background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%238fb4e3'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
+  /* Trame de points (0,7 mm tous les 1,5 mm, ~17 % d'encre) sur la première et la dernière page seulement (couverture et dos) : rouge pour le bailleur, bleue pour le locataire ; le reste du cahier reste blanc ; en SVG : un radial-gradient aussi fin disparaît à l'écran et dans l'aperçu d'impression ; cases des tableaux blanches pour écrire. */
+  .paper .sheet.dup .a5, .paper .a5.dup { background-color: #fff; }
+  .paper .a5.rdots { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%23e0404f'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
+  .paper .a5.tdots { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1.5mm' height='1.5mm' viewBox='0 0 150 150'%3E%3Ccircle cx='75' cy='75' r='35' fill='%238fb4e3'/%3E%3C/svg%3E"); background-size: 1.5mm 1.5mm; }
   .paper .sheet.dup .a5 table, .paper .a5.dup table { background: #fff; }
   .paper .sheet.fold::after { content: "plier ici"; }
   .paper .sheet.fold .a5:first-child { padding: 8mm 14mm 7mm 7mm; }
@@ -603,13 +603,13 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
   const a5 = (html, d, cls = "") => `<div class="${["a5", cls, pcls(html)].filter(Boolean).join(" ")}">${d === null ? "" : tag(d)}${sig(html, d)}</div>`;
   const sheet = (l, r, cls = "") => `<div class="sheet ${cls}">${l}${r}</div>`;
   // Couverture ; « Comment remplir » + exemple seulement dans le cahier du bailleur.
-  const front = (d) => [[d ? COVER_B : COVER, null, d ? "covpage" : "covpage tdots"], ...(d ? [[GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"]] : [])];
+  const front = (d) => [[d ? COVER_B : COVER, null, d ? "covpage rdots" : "covpage tdots"], ...(d ? [[GUIDE, d, "covpage"], [EXAMPLE, d, "covpage"]] : [])];
   let out = "";
   if (pass === "cahier") {
-    out = `<p class="print-msg">Choisissez « Cahier complet » ou un passage pour imprimer.</p><div class="single">${a5(COVER, null, "covpage tdots")}${a5(COVER_B, null, "covpage dup")}${a5(GUIDE, null, "covpage")}${a5(EXAMPLE, null, "covpage")}${SLOTS.map((s, i) => a5(s, false) + (i === 1 ? a5(s, true, "dup") : "")).join("")}</div>`;
+    out = `<p class="print-msg">Choisissez « Cahier complet » ou un passage pour imprimer.</p><div class="single">${a5(COVER, null, "covpage tdots")}${a5(COVER_B, null, "covpage dup rdots")}${a5(GUIDE, null, "covpage")}${a5(EXAMPLE, null, "covpage")}${SLOTS.map((s, i) => a5(s, false) + (i === 1 ? a5(s, true, "dup") : "")).join("")}</div>`;
   } else if (pass === "coupe") {
     // Cahier coupé A5 : recto seul, feuille i = pages 2i+1 (gauche) et 2i+2 (droite) ; on coupe et on pose les morceaux dans l'ordre.
-    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage" : "covpage tdots"]];
+    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage rdots" : "covpage tdots"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     colors.forEach((d) => {
       const B = book(d);
@@ -621,7 +621,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     });
   } else if (pass === "pleine") {
     // Feuilles entières : 1 page du carnet = 1 feuille portrait, recto seul, dans l'ordre ; on agrafe, rien à monter.
-    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage" : "covpage tdots"]];
+    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage rdots" : "covpage tdots"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     colors.forEach((d) => {
       const B = book(d);
@@ -633,7 +633,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
   } else if (pass === "simple") {
     // Cahier simple : recto seul, chaque feuille pliée en deux (impression dehors) = 1 feuillet ; feuillets empilés, agrafés au pli.
     // Feuille i : gauche = page 2i+2 (dos du feuillet), droite = page 2i+1 (devant). Cahier du bailleur : trame de points rouges.
-    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage" : "covpage tdots"]];
+    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage rdots" : "covpage tdots"]];
     const colors = copy === "landlord" ? [true] : copy === "both" ? [false, true] : [false];
     const mark = (html, num, i) => `${html}<span class="bk">${num}</span><span class="fl">Feuille ${i + 1}</span>`;
     colors.forEach((d) => {
@@ -650,7 +650,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     const book = (d) => {
       const b = [...front(d), ...SLOTS.map((x) => [x, d, ""])];
       while ((b.length + 1) % 4) b.push([NOTES, d, ""]);
-      return [...b, [BACK, d, d ? "covpage" : "covpage tdots"]];
+      return [...b, [BACK, d, d ? "covpage rdots" : "covpage tdots"]];
     };
     const sides = pass === "plie-r" ? ["recto"] : pass === "plie-v" ? ["verso"] : ["recto", "verso"];
     // copy : "tenant" (papier blanc) | "landlord" (trame de points rouges) | "both" (locataire, puis bailleur).
@@ -675,7 +675,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
     out += `<div class="caption">Feuille d'essai · côté B</div>` + sheet(a5(box("<b>C'est bon</b><span>Le recto-verso est bien réglé : imprimez le cahier avec les mêmes réglages.</span>"), null, "covpage"), a5(box("<b>Pas bon</b><span>Si vous lisez ceci derrière la page 1, ou si « C'est bon » est à l'envers : changez « Retourner sur le bord court » pour « bord long » (ou l'inverse), puis refaites l'essai.</span>"), null, "covpage"), "fold");
   } else if (pass === "complet") {
     // Tout le cahier, couverture -> dos, en imposition « coupe et empile » ; feuille à points rouges = couverture du bailleur.
-    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage" : "covpage tdots"]];
+    const book = (d) => [...front(d), ...SLOTS.map((x) => [x, d, ""]), [BACK, d, d ? "covpage rdots" : "covpage tdots"]];
     (duplicate ? [false, true] : [false]).forEach((d) => {
       const B = book(d);
       imposeCutStack(B.length).forEach(([l, r], i) => {
@@ -684,7 +684,7 @@ export function paperBookHtml(lease, { pass = "coupe", ink = "", duplicate = tru
       });
     });
   } else if (pass === "1") {
-    out = `<div class="caption">Feuille 1 · carton · 1 fois</div>${sheet(a5(COVER, null, "covpage tdots"), a5(COVER_B, null, "covpage dup"))}`
+    out = `<div class="caption">Feuille 1 · carton · 1 fois</div>${sheet(a5(COVER, null, "covpage tdots"), a5(COVER_B, null, "covpage dup rdots"))}`
       + `<div class="caption">Feuille 2 · papier normal · cahier du bailleur seulement</div>${sheet(a5(GUIDE, true, "covpage"), a5(EXAMPLE, true, "covpage"), "dup")}`;
   } else {
     imposeCutStack(SLOTS.length).forEach(([l, r], i) => {
