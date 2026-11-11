@@ -5,13 +5,13 @@ import React from "react";
 // partagé par l'onglet Aperçu (app.jsx) et les pages de lien (EngineerSite, OwnerTracking).
 // Montants : jamais arrondis à 0 décimale, devise toujours issue des données (DB).
 
-export function fmtMoney(value, code) {
+export function fmtMoney(value, code, maxDigits = 4) {
   const v = Number(value || 0);
-  if (!code) return `${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} (devise non renseignée)`;
+  if (!code) return `${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: maxDigits })} (devise non renseignée)`;
   try {
-    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(v);
+    return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, minimumFractionDigits: 2, maximumFractionDigits: maxDigits }).format(v);
   } catch {
-    return `${code} ${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+    return `${code} ${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: maxDigits })}`;
   }
 }
 const fmtPct = (v) => Number(v || 0).toLocaleString("fr-CA", { maximumFractionDigits: 1 });
@@ -67,7 +67,7 @@ function ProgressBar({ label, now }) {
  *  fees [{name, mode, percent, bases, base_amount, due, paid, remaining, currency_code, payments:[{date,label,amount}]}],
  *  deliveries [{number, expected_date, paid, total, currency_code, lines:[{designation, remaining}]}]
  */
-export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash }) {
+export default function SimpleOverview({ loading, progress, phaseLabel, currency, funds, nature, fees, deliveries, name, hideCash, wide, onOpenStatement }) {
   if (loading) return <div className="sov" role="status" aria-live="polite"><div className="sov-card sov-muted">Chargement de l'aperçu…</div></div>;
 
   const pct = clampPct(progress);
@@ -84,7 +84,7 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
   const hasMoney = funds && (funds.received != null || funds.available != null);
 
   return (
-    <div className="sov">
+    <div className={wide ? "sov sov--wide" : "sov"}>
       {/* 0. Avancement */}
       <section className="sov-card sov-hero" aria-label="Avancement">
         <div className="sov-ring" role="img" aria-label={`Avancement ${fmtPct(pct)} pour cent`} style={{ background: `conic-gradient(var(--sov-accent) 0 ${pct}%, var(--sov-track) ${pct}% 100%)` }}>
@@ -107,7 +107,7 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
           <div className="sov-money">
             <div><small>Dépensé</small><strong>{fmtMoney(nature?.total ?? 0, currency)}</strong></div>
             <div><small>Honoraires payés</small><strong>{fmtMoney(feePaid, currency)}</strong></div>
-            <div className="sov-ok"><small>Reste à payer (honoraires)</small><strong>{feeList.length ? fmtMoney(feeRemaining, currency) : "—"}</strong></div>
+            <div className="sov-ok"><small>Reste à payer (honoraires)</small><strong>{feeList.length ? fmtMoney(feeRemaining, currency, 2) : "—"}</strong></div>
           </div>
         ) : hasMoney ? (
           <div className="sov-money">
@@ -119,8 +119,11 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
         {!hideCash && (
           <div className="sov-line" style={{ marginTop: 10 }}>
             <span className="sov-muted">Reste à payer (honoraires)</span>
-            <strong className="sov-due">{feeList.length ? fmtMoney(feeRemaining, currency) : "Non configuré"}</strong>
+            <strong className="sov-due">{feeList.length ? fmtMoney(feeRemaining, currency, 2) : "Non configuré"}</strong>
           </div>
+        )}
+        {onOpenStatement && (
+          <button type="button" className="btn btn-ghost stmt-open-btn" onClick={onOpenStatement}>Voir le relevé</button>
         )}
       </section>
 
@@ -153,10 +156,10 @@ export default function SimpleOverview({ loading, progress, phaseLabel, currency
         return (
           <section key={`${f.name}-${idx}`} className="sov-card sov-hon" aria-label={`Honoraires de ${f.name}`}>
             <h3 className="sov-h">Honoraires de l'ingénieur · {f.name}</h3>
-            <div className="sov-line"><span className="sov-muted">{feeLabel(f)}</span><strong>{fmtMoney(f.due, f.currency_code)}</strong></div>
+            <div className="sov-line"><span className="sov-muted">{feeLabel(f)}</span><strong title={fmtMoney(f.due, f.currency_code)}>{fmtMoney(f.due, f.currency_code, 2)}</strong></div>
             <div className="sov-line"><span className="sov-muted">Déjà payé</span><strong>{fmtMoney(f.paid, f.currency_code)}</strong></div>
             <ProgressBar label={`Payé : ${fmtPct(paidPct)} pour cent des honoraires dus`} now={paidPct} />
-            <div className="sov-line"><span>Reste à lui payer</span><strong className="sov-due">{fmtMoney(f.remaining, f.currency_code)}</strong></div>
+            <div className="sov-line"><span>Reste à lui payer</span><strong className="sov-due" title={fmtMoney(f.remaining, f.currency_code)}>{fmtMoney(f.remaining, f.currency_code, 2)}</strong></div>
             {pays.length > 0 && (
               <details className="sov-details">
                 <summary>Voir les paiements</summary>

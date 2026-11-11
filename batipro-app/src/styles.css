@@ -165,16 +165,16 @@ button, input, select, textarea { font: inherit; }
 .selected-banner { border-radius: 18px; padding: 20px; color: #fff; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 
 /* ProjectDetail : grille de boutons-cartes pour naviguer entre sections du chantier */
-.proj-tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 18px; }
-.proj-tab { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; cursor: pointer; color: var(--ink-700); }
+.proj-tabs { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; padding-bottom: 6px; margin-bottom: 14px; }
+.proj-tab { position: relative; flex: 0 0 auto; scroll-snap-align: start; display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; cursor: pointer; color: var(--ink-700); white-space: nowrap; }
 .proj-tab .ic { width: 20px; height: 20px; color: var(--ink-400); }
 .proj-tab span { font-size: 12.5px; font-weight: 600; line-height: 1.25; }
 .proj-tab:hover { border-color: var(--amber-300, var(--amber-100)); }
 .proj-tab.active { background: var(--amber-100); border-color: var(--amber-100); color: var(--amber-700); }
 .proj-tab.active .ic { color: var(--amber-700); }
-.proj-tab .proj-tab-count { position: absolute; top: 10px; right: 10px; background: var(--ink-900); color: #fff; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+.proj-tab .proj-tab-count { position: static; background: var(--ink-900); color: #fff; font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
 .proj-tab.active .proj-tab-count { background: var(--amber-700); }
-.proj-tab .tab-info { position: absolute; top: 10px; right: 10px; display: inline-flex; color: var(--ink-300, var(--ink-400)); cursor: help; }
+.proj-tab .tab-info { position: static; display: inline-flex; color: var(--ink-300, var(--ink-400)); cursor: help; }
 .proj-tab .tab-info .ic { width: 14px; height: 14px; color: inherit; }
 .proj-tab:hover .tab-info { color: var(--amber-700); }
 .proj-tab-body { min-width: 0; }
@@ -305,8 +305,11 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .mob-title { font-weight: 600; font-size: 16px; }
   .topbar { margin-bottom: 14px; }
   .title { font-size: 20px; }
-  .g2, .g3, .g4 { grid-template-columns: 1fr; }
-  .g4.kpis { grid-template-columns: 1fr 1fr; }
+  .g2, .g3, .g4 { grid-template-columns: minmax(0, 1fr); }
+  .g3 > *, .g2 > * { min-width: 0; }
+  .g4.kpis { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .g4.kpis .kpi-value { font-size: 16px; overflow-wrap: break-word; }
+  .g4.kpis .kpi-sub { overflow-wrap: break-word; }
   .span2 { grid-column: span 1; }
   table.bp { font-size: 12px; }
   table.bp th, table.bp td { padding: 9px 10px; }
@@ -458,6 +461,12 @@ table.bp td .danger-txt { color: var(--rose-600); }
 .sov-todo b { overflow-wrap: anywhere; }
 .sov-tag { font-weight: 700; font-size: 13px; background: var(--amber-700, #b45309); color: #fff; border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
 @media (max-width: 400px) { .sov-money { grid-template-columns: minmax(0, 1fr); } }
+/* Aperçu large (app connectée) : grille pleine largeur au lieu de la colonne 560 px des pages publiques */
+.sov--wide { max-width: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); align-items: start; gap: 16px; }
+.sov--wide > .sov-hero, .sov--wide > .sov-todo { grid-column: 1 / -1; }
+.sov--wide .sov-money { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.sov--wide .sov-money strong { overflow-wrap: normal; white-space: nowrap; }
+@media (max-width: 400px) { .sov--wide { grid-template-columns: minmax(0, 1fr); } }
 
 /* Bons de commande : cartes sur mobile (le tableau 8 colonnes était coupé) */
 .po-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -499,3 +508,24 @@ table.bp td .danger-txt { color: var(--rose-600); }
   .card-table > tbody > tr > td:last-child:not(:first-child) label.link { min-height: 44px; min-width: 44px; padding: 0 12px; display: inline-flex; align-items: center; }
   .card-table > tbody > tr > td:last-child:not(:first-child) > div { width: 100%; }
 }
+
+/* Relevé de chantier (.stmt-) */
+.stmt-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.stmt-btn { min-height: 44px; }
+.stmt .stmt-ctl, .stmt-filters .stmt-ctl { min-height: 44px; max-width: 100%; width: 100%; box-sizing: border-box; min-width: 0; padding-left: 8px; padding-right: 24px; text-overflow: ellipsis; }
+.stmt-search { grid-column: span 2; min-width: 0; }
+.stmt-actions { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
+.stmt-actions .stmt-btn { flex: 1 1 140px; text-decoration: none; }
+.stmt-error { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; color: var(--rose-600, #b91c1c); font-size: 13px; }
+.stmt-filters :is(input, select, button):focus-visible, .stmt-more button:focus-visible, .stmt-error button:focus-visible { outline: 2px solid var(--amber-600); outline-offset: 2px; }
+@media (max-width: 400px) { .stmt-search { grid-column: 1 / -1; } .stmt-totals { grid-template-columns: 1fr 1fr; } .stmt-kpi strong { font-size: 14px; overflow-wrap: anywhere; } }
+.stmt-more { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.stmt-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.stmt-kpi { display: grid; gap: 4px; padding: 12px 14px; }
+.stmt-kpi strong { font-size: 16px; }
+
+/* Relevés : lien depuis l'aperçu + page dédiée */
+.stmt-open-btn { margin-top: 12px; min-height: 44px; width: 100%; justify-content: center; }
+.rel-picker { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; flex-wrap: wrap; }
+.rel-picker label { font-size: 13px; font-weight: 600; color: var(--ink-700); }
+.rel-picker select { min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--ink-200); background: #fff; font-size: 14px; flex: 1 1 220px; max-width: 100%; min-width: 0; }

@@ -1,7 +1,15 @@
 import React from "react";
 import { siteApi } from "./api.js";
+import { ProjectStatement } from "./statement.jsx";
+
 import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
 import { Amounts, FinanceSections, Section, Shell, Thumb, btn, btnSm, card, fmtDate, money, muted, row } from "./OwnerTracking.jsx";
+
+// Relevé des sorties : fetcher stable (sinon rechargement en boucle).
+function SiteStatement({ token }) {
+  const fetcher = React.useCallback((f) => siteApi.statement(token, f), [token]);
+  return <ProjectStatement fetcher={fetcher} hideBalance />;
+}
 
 // Page publique ingenieur / responsable de chantier (sans compte). URL :
 // /batipro/chantier/:token. Avancement des phases, photos, reception des BC,
@@ -118,6 +126,8 @@ export default function EngineerSite({ token }) {
       {tab === "expenses" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["expenses"]} />}
       {tab === "invoices" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["invoices"]} />}
 
+      {tab === "statement" && <Section title="Relevé des sorties"><SiteStatement token={token} /></Section>}
+
       {tab === "photos" && (
         <Section title="Photos du chantier">
           <PhotoUpload token={token} onDone={done} />
@@ -142,7 +152,7 @@ export default function EngineerSite({ token }) {
 
 const TABS = [
   ["overview", "Aperçu"], ["phases", "Phases"], ["quotes", "Devis"], ["orders", "Commandes"],
-  ["expenses", "Dépenses"], ["invoices", "Factures"], ["photos", "Photos"],
+  ["expenses", "Dépenses"], ["invoices", "Factures"], ["statement", "Relevé"], ["photos", "Photos"],
 ];
 const DOC_STATUS = {
   draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", accepted: "Accepté", rejected: "Refusé", issued: "Émis",
@@ -158,7 +168,7 @@ function TabBar({ tab, setTab, counts }) {
         const n = counts[k];
         return (
           <button key={k} type="button" aria-current={active ? "page" : undefined} onClick={() => setTab(k)}
-            style={{ flex: "0 0 auto", minHeight: 40, padding: "8px 12px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
+            style={{ flex: "0 0 auto", minHeight: 44, padding: "8px 12px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
             {label}{n ? ` · ${n}` : ""}
           </button>
         );

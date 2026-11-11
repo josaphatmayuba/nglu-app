@@ -5,7 +5,9 @@ import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
 import ViewerBoundary from "./ViewerBoundary.jsx";
 import CurrencyPicker from "./CurrencyPicker.jsx";
 import ProjectFunds from "./components/ProjectFunds.jsx";
+import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview from "./SimpleOverview.jsx";
+import StatementPage from "./statement-page.jsx";
 import { BatiproPhoneField } from "./components/PhoneField.jsx";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -73,10 +75,11 @@ const NAV = [
   { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "depenses", label: "Dépenses et services", icon: "receipt" },
+  { id: "releves", label: "Relevés", icon: "receipt" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "pointage"];
-const MOB_MORE = ["equipes", "previsionnel", "materiaux", "depenses", "parametres"];
+const MOB_MORE = ["equipes", "previsionnel", "materiaux", "depenses", "releves", "parametres"];
 const TITLES = Object.fromEntries(NAV.map((n) => [n.id, n.label]));
 
 function money(value, currency) {
@@ -231,6 +234,7 @@ function App() {
     previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => { setError(""); setModal({ kind: "material" }); }} onRestock={setRestock} onOpenProject={setOpenProjectId} canMutate={canMutate} />,
     depenses: <ServiceExpensesPage projects={projectRows} canMutate={canMutate} onOpenProject={setOpenProjectId} />,
+    releves: <StatementPage projects={projectRows} />,
     parametres: <Parametres />,
   };
 
@@ -595,6 +599,7 @@ const PROJECT_TABS = [
   { id: "plan3d", label: "Plan 3D", icon: "rotate3d" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
   { id: "fonds", label: "Fonds", icon: "wallet" },
+  { id: "releve", label: "Relevé", icon: "receipt", hint: "Relevé de compte du chantier : entrées, sorties et solde." },
 ];
 function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials, onEdit }) {
   const [tab, setTab] = React.useState("apercu");
@@ -662,7 +667,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
     <>
       <div className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-ghost" onClick={onBack}><Icon name="chevronRight" className="ic" style={{ transform: "rotate(180deg)" }} /> Retour</button>
+          <button type="button" className="btn btn-ghost btn-touch" onClick={onBack}><Icon name="chevronRight" className="ic" style={{ transform: "rotate(180deg)" }} /> Retour</button>
           <div>
             <p className="eyebrow">Chantier</p>
             <h2 className="title font-display">{p.name}</h2>
@@ -692,7 +697,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
 
       <div className="proj-tabs">
         {PROJECT_TABS.map((t) => (
-          <button key={t.id} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} title={t.hint || undefined}>
+          <button key={t.id} type="button" aria-current={tab === t.id ? "page" : undefined} className={`proj-tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} title={t.hint || undefined}>
             <Icon name={t.icon} />
             <span>{t.label}</span>
             {t.hint && <span className="tab-info" title={t.hint} aria-hidden="true"><Icon name="info" /></span>}
@@ -703,7 +708,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
       <div className="proj-tab-body">
         {tab === "apercu" && (
           <>
-          <SimpleOverview {...overviewProps} />
+          <SimpleOverview {...overviewProps} wide onOpenStatement={() => setTab("releve")} />
           <details style={{ marginTop: 16 }}>
             <summary style={{ cursor: "pointer", minHeight: 44, display: "flex", alignItems: "center", fontSize: 13, color: "var(--ink-500)" }}>Détail du budget, de la facturation et du risque</summary>
           <div className="g3">
@@ -796,6 +801,7 @@ function ProjectDetail({ project, onBack, canMutate, projects, tasks, materials,
         {tab === "plan3d" && <Plan3D projects={projects} materials={materials} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "soustraitants" && <SousTraitants projects={projects} canMutate={canMutate} fixedProjectId={p.id} />}
         {tab === "fonds" && <ProjectFunds project={p} canMutate={canMutate} money={money} Icon={Icon} useCurrencies={useCurrencies} />}
+        {tab === "releve" && <ProjectStatement projectId={p.id} />}
       </div>
     </>
   );
@@ -4257,7 +4263,7 @@ function ShareLinkSmsRow({ projectId, link, onSent }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ color: "var(--ink-500)" }}>
-        {sent ? `SMS envoyé le ${fmtShareSmsDate(link.smsSentAt)} (${count} ${count > 1 ? "fois" : "fois"})` : "SMS jamais envoyé"}
+        {sent ? `SMS accepté par la passerelle le ${fmtShareSmsDate(link.smsSentAt)} (${count} ${count > 1 ? "fois" : "fois"})` : "SMS jamais envoyé"}
       </div>
       {!canSend ? (
         <>
@@ -4277,7 +4283,7 @@ function ShareLinkSmsRow({ projectId, link, onSent }) {
           </button>
         </>
       )}
-      {okPhone && <div role="status" style={{ color: "var(--ink-700, #334155)" }}>SMS envoyé à {okPhone}</div>}
+      {okPhone && <div role="status" style={{ color: "var(--ink-700, #334155)" }}>SMS accepté par la passerelle pour {okPhone}</div>}
       {error && <div role="alert" style={{ color: "var(--rose-600, #b91c1c)" }}>{error}</div>}
     </div>
   );
@@ -4353,7 +4359,7 @@ function ShareTrackingModal({ project, onClose }) {
         ? { recipient_type: "engineer", recipient_name: engName.trim(), ...(engPhoneSet ? { recipient_phone: phoneNorm } : {}), send_sms: Boolean(engPhoneSet && sendSms) }
         : { expires_in_days: Number(days), send_sms: Boolean(project.ownerPhone && sendSms) };
       const res = await api.createShareLink(project.id, body);
-      setCreated({ url: res.url, sms_sent: res.sms_sent });
+      setCreated({ url: res.url, sms_sent: res.sms_sent, sms_error: res.sms_error });
       if (isEng) { setEngName(""); setEngPhone("+243"); setSendSms(false); setSubPick(""); setPickNoPhone(false); nameEdited.current = false; phoneEdited.current = false; }
       load();
     } catch (err) { setError(err.message || String(err)); }
@@ -4444,8 +4450,8 @@ function ShareTrackingModal({ project, onClose }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <p role="status" style={{ fontSize: 13, color: "var(--ink-500)", margin: 0 }}>
               Lien créé. Cette adresse complète n'est affichée qu'ici : copiez-la maintenant si besoin. Si un numéro est renseigné, un lien court est aussi envoyé par SMS.
-              {created.sms_sent === true && " SMS envoyé."}
-              {created.sms_sent === false && " L'envoi du SMS a échoué : partagez le lien manuellement."}
+              {created.sms_sent === true && " SMS accepté par la passerelle."}
+              {created.sms_sent === false && ` SMS non envoyé : ${created.sms_error || "échec de l'envoi"} Partagez le lien manuellement.`}
             </p>
             <input readOnly value={created.url} onFocus={(e) => e.target.select()} style={{ width: "100%", padding: "9px 10px", border: "1px solid var(--ink-200, #cbd5e1)", borderRadius: 8, fontSize: 13, boxSizing: "border-box", minHeight: 44 }} aria-label="Lien créé" />
             <button type="button" className="btn btn-touch" onClick={copy}>{copied ? "Copié ✓" : "Copier le lien"}</button>

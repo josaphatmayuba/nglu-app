@@ -9,13 +9,14 @@ import { BatiproController } from "./batipro.controller";
 import { BatiproPublicController, BatiproPublicDocumentsController, BatiproPublicShortController, BatiproPublicSiteController, BatiproPublicTrackingController } from "./batipro-public.controller";
 import { BatiproOwnerNotifier } from "./batipro-owner-notifier.service";
 import { BatiproShareService } from "./batipro-share.service";
+import { BatiproStatementService } from "./batipro-statement.service";
 import { BatiproService } from "./batipro.service";
 import { OcrService } from "./ocr.service";
 
 @Module({
   imports: [DatabaseModule, LedgerModule, ProjectsModule, CompatModule],
   controllers: [BatiproController, BatiproPublicController, BatiproPublicDocumentsController, BatiproPublicTrackingController, BatiproPublicSiteController, BatiproPublicShortController],
-  providers: [BatiproService, BatiproProjectGuard, ObjectStorageService, OcrService, BatiproOwnerNotifier, BatiproShareService],
+  providers: [BatiproService, BatiproProjectGuard, ObjectStorageService, OcrService, BatiproOwnerNotifier, BatiproShareService, BatiproStatementService],
   exports: [BatiproService],
 })
 export class BatiproModule {}

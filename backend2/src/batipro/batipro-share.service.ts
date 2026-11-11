@@ -138,11 +138,11 @@ export class BatiproShareService {
     }
     const url = `${env.appUrl.replace(/\/$/, "")}/batipro/c/${row.shortCode}`;
     const kind = row.recipientType === "engineer" ? "engineer" : "owner";
-    const ok = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, kind);
+    const sent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, kind);
     recent.push(now);
     this.resendLog.set(linkId, recent);
-    if (!ok) {
-      throw new BadRequestException("SMS non envoye : SMS desactives pour l'organisation ou passerelle indisponible.");
+    if (!sent.ok) {
+      throw new BadRequestException(`SMS non envoye : ${sent.reason ?? "passerelle indisponible."}`);
     }
     if (!row.recipientPhone) {
       await this.db.update(batiproShareLinks).set({ recipientPhone: phone }).where(eq(batiproShareLinks.id, linkId));
@@ -198,12 +198,15 @@ export class BatiproShareService {
     if (!result) throw new BadRequestException("Creation du lien impossible.");
     const url = `${env.appUrl.replace(/\/$/, "")}/batipro/${isEngineer ? "chantier" : "suivi"}/${token}`;
     let smsSent: boolean | null = null;
+    let smsError: string | null = null;
     if (input.send_sms && phone) {
-      smsSent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, recipientType);
-      if (smsSent) await this.markSmsSent(Number(result.id));
+      const sent = await this.ownerNotifier.sendShareLink(orgId, projectId, phone, url, recipientType);
+      smsSent = sent.ok;
+      if (sent.ok) await this.markSmsSent(Number(result.id));
+      else smsError = sent.reason ?? null;
     }
     // Le jeton en clair n'est renvoye QU'ici (impossible a retrouver ensuite).
-    return { id: Number(result.id), token, url, expires_at: expiresAt, sms_sent: smsSent };
+    return { id: Number(result.id), token, url, expires_at: expiresAt, sms_sent: smsSent, sms_error: smsError };
   }
 
   async revokeLink(projectId: number, linkId: number, orgId: number, scope: BatiproProjectScope) {

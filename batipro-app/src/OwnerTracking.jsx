@@ -1,6 +1,16 @@
 import React from "react";
 import { trackingApi } from "./api.js";
+import { ProjectStatement } from "./statement.jsx";
 import SimpleOverview, { trackingOverviewProps } from "./SimpleOverview.jsx";
+
+// Relevé complet (entrées, sorties, solde), chargé à la demande.
+function OwnerStatement({ token }) {
+  const [open, setOpen] = React.useState(false);
+  const fetcher = React.useCallback((f) => trackingApi.statement(token, f), [token]);
+  if (!open) return <button type="button" className="btn btn-ghost" style={{ minHeight: 44 }} onClick={() => setOpen(true)}>Afficher le relevé</button>;
+  return <ProjectStatement fetcher={fetcher} />;
+}
+
 
 // Page publique de suivi financier du chantier pour le proprietaire (sans compte,
 // lecture seule). URL : /batipro/suivi/:token. Responsive 360 px : listes en cartes.
@@ -68,6 +78,8 @@ export default function OwnerTracking({ token }) {
       <SimpleOverview {...trackingOverviewProps(data)} />
 
       <FinanceSections data={data} token={token} links={trackingApi} onOpen={setViewer} />
+
+      <Section title="Relevé du chantier"><OwnerStatement token={token} /></Section>
 
       <Section title="Photos du chantier">
         {!photos.length && <p style={muted}>Aucune photo.</p>}
