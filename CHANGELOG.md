@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet papier : plus de montant « À payer » pour les mois de l'année civile suivante (v3.285.24).** Quand l'année 1 du bail déborde (ex. sept. 2026 → août 2027), janvier 2027 et la suite restent vides : le loyer peut augmenter, le gestionnaire l'écrit.
 - **Domus carnet papier : texte lisible sur la trame de points (v3.285.23).** Fond blanc sous les titres, libellés, QR et pieds de la couverture et du dos ; traits des titres plus foncés. La trame reste visible autour.
 - **Domus carnet papier : trame de points seulement sur la première et la dernière page (v3.285.22).** Rouge pour le bailleur, bleue pour le locataire ; les pages intérieures restent blanches (plus lisibles, moins d'encre).
 - **Domus carnet papier : trame du bailleur en rouge (plus rose) et points de 0,7 mm (v3.285.21).** Textes « points roses » devenus « points rouges » ; trame bleue du locataire grossie à 0,7 mm aussi.

@@ -417,3 +417,12 @@ describe("annee 1 = annee de bail en cours", () => {
     expect(h).toContain("entrée le 19/07/2025");
   });
 });
+
+describe("montants de l'annee prochaine", () => {
+  it("annee 1 a cheval sur 2 annees civiles : pas de montant a payer pour les mois de l'annee suivante", () => {
+    const h = paperBookHtml({ ...base, startDate: "2026-09-01", schedule: [] }, { pass: "coupe", years: 2, today: new Date(2026, 10, 11) });
+    expect(h).toMatch(/Décembre<small>2026<\/small><\/td><td class="due">[^<]*\d/);
+    expect(h).toMatch(/Janvier<small>2027<\/small><\/td><td class="due"><\/td>/);
+    expect(h).toMatch(/Août<small>2027<\/small><\/td><td class="due"><\/td>/);
+  });
+});

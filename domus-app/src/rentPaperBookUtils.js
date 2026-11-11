@@ -518,8 +518,8 @@ function slotsAndPages(L, lease, qrDataUrl, nYears = 3, noCopy = false, offset =
     const lastLabel = lastDay(last.y, last.m);
     const rows = months.map(({ y, m }, i) => {
       const pd = paidByMonth.get(`${y}-${pad(m + 1)}`);
-      // Année 1 : loyer pré-rempli. Années suivantes : « À payer » vide (le gestionnaire l'écrit : le loyer peut augmenter).
-      const due = k === 0 ? (i === 0 && fm ? `${money(fm.amount)}<small>${fm.days} j</small>` : money(L.rent)) : (pd ? money(L.rent) : "");
+      // Année 1 : loyer pré-rempli, sauf les mois d'une année civile postérieure à l'année en cours (le loyer peut augmenter : le gestionnaire l'écrit). Années suivantes : « À payer » vide.
+      const due = k === 0 && y <= today.getFullYear() ? (i === 0 && fm ? `${money(fm.amount)}<small>${fm.days} j</small>` : money(L.rent)) : (pd ? money(L.rent) : "");
       if (pd) {
         const method = paymentMethodLabel(pd.method);
         return `<tr><td class="m">${MF[m]}<small>${y}</small></td><td class="due">${due}</td><td><span class="pen">✓ Payé<br>${fmtDateShort(pd.paymentDate)}</span></td><td><span class="pen">${esc(moneyAfter(pd.amount, pd.currencySymbol || L.symbol))}</span></td><td>${method ? `<span class="pen">${esc(method)}</span>` : ""}</td><td></td><td></td></tr>`;
