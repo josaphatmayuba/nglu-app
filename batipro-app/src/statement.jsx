@@ -62,6 +62,8 @@ export function ProjectStatement({ projectId, data: dataProp, fetcher, hideBalan
   const [data, setData] = React.useState(dataProp || null);
   const [loading, setLoading] = React.useState(!dataProp);
   const [error, setError] = React.useState("");
+  // Tri par defaut : du plus recent au plus ancien (le solde reste celui de l'ordre chronologique).
+  const [newestFirst, setNewestFirst] = React.useState(true);
 
   React.useEffect(() => {
     if (dataProp) { setData(dataProp); setLoading(false); return; }
@@ -76,7 +78,8 @@ export function ProjectStatement({ projectId, data: dataProp, fetcher, hideBalan
   }, [projectId, from, to, category, dataProp, fetcher]);
 
   const cur = data?.currency_code;
-  const lines = data?.lines || [];
+  const chrono = data?.lines || [];
+  const lines = React.useMemo(() => (newestFirst ? [...chrono].reverse() : chrono), [chrono, newestFirst]);
   // hideBalance (lien ingenieur) : sorties seulement, ni entrees ni soldes ni categories de fonds.
   const cols = hideBalance ? 4 : 6;
   const cats = hideBalance ? CATEGORIES.filter((c) => !["funding", "funding_cancel", "client_invoice"].includes(c.id)) : CATEGORIES;
@@ -93,7 +96,8 @@ export function ProjectStatement({ projectId, data: dataProp, fetcher, hideBalan
             </select>
           </label>
         </>}
-        <button type="button" className="btn btn-ghost stmt-btn" disabled={!data || !lines.length} onClick={() => exportCsv(data, hideBalance, `releve-chantier-${projectId || "public"}.csv`)}>Exporter CSV</button>
+        <button type="button" className="btn btn-ghost stmt-btn" disabled={!data || !lines.length} onClick={() => exportCsv({ ...data, lines }, hideBalance, `releve-chantier-${projectId || "public"}.csv`)}>Exporter CSV</button>
+        <button type="button" className="btn btn-ghost stmt-btn" aria-pressed={newestFirst} onClick={() => setNewestFirst((v) => !v)}>{newestFirst ? "Plus récent d'abord" : "Plus ancien d'abord"}</button>
         <button type="button" className="btn btn-ghost stmt-btn" disabled={!data} onClick={() => window.print()}>Imprimer / PDF</button>
       </div>
 
