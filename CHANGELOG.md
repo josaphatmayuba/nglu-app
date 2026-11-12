@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **CI dev : la pile docker dev s'allume au push (dev-wake) et s'arrête 60 min après le dernier push (cron dev-autostop.sh, garde-fou .keep-alive).** Réduit la RAM du serveur ongdngolu.
 - **BâtiPro : honoraires à 2 décimales, demi-cent arrondi vers le haut à l'affichage (v3.285.25).** 949,575 $ s'affichait 949,57 $ (erreur binaire du navigateur) ; il s'affiche maintenant 949,58 $. La valeur stockée reste exacte.
 - **Domus carnet papier : plus de montant « À payer » pour les mois de l'année civile suivante (v3.285.24).** Quand l'année 1 du bail déborde (ex. sept. 2026 → août 2027), janvier 2027 et la suite restent vides : le loyer peut augmenter, le gestionnaire l'écrit.
 - **Domus carnet papier : texte lisible sur la trame de points (v3.285.23).** Fond blanc sous les titres, libellés, QR et pieds de la couverture et du dos ; traits des titres plus foncés. La trame reste visible autour.

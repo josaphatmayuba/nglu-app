@@ -156,6 +156,10 @@ If `npm run build:dev` was already run in the current session and `frontend/dist
 
 The script asserts the API target locally before uploading even with `-SkipLocalBuild`. There is no way to bypass this check.
 
+### Dev stack auto-start / auto-stop (ongdngolu)
+
+To limit RAM on the dev server, the dev docker stack is started by each push (`scripts/ci/dev-wake.sh`, which touches `<app>/.last-push`) and stopped by a cron job (`scripts/ci/dev-autostop.sh`) once `.last-push` is older than 60 minutes. To keep the stack up during a long QA session, create an empty `<app>/.keep-alive` file on the server (`touch`); the cron then never stops it. Remove the file afterwards (`rm`) so auto-stop resumes. If `.last-push` is missing, the cron does nothing. A QA tester finding dev down should push or run `dev-wake.sh`, not treat it as a bug.
+
 ## AWS Deployment Coordination
 
 Before any manual AWS deploy, an agent must check whether another agent is already deploying or has just announced a deploy in the current conversation/Jira handoff.
