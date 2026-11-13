@@ -77,7 +77,8 @@ export class LeaseAllocationService {
 
   /** Echeancier du bail ; sans prorata actif, montants pleins (comportement legacy : N mois x loyer). */
   buildSchedule(lease: any, decimals: number, todayStr: string): SchedulePeriod[] {
-    const full = scheduleForLease(lease, decimals, 0, todayStr, 24);
+    // Sans prorata : echeances au jour de debut du bail (anchored), loyer plein ; avec prorata : mois civils inchanges.
+    const full = scheduleForLease(lease, decimals, 0, todayStr, 24, !lease.rentProrationEnabled);
     const sch = lease.rentProrationEnabled ? full : full.map((p) => ({ ...p, amount: p.fullAmount, prorated: false, ratio: 1 }));
     const term = lease.status === "ended" && lease.terminationDate ? String(lease.terminationDate).slice(0, 10) : null;
     return sch.filter((p) => !term || p.periodStart <= term);
@@ -499,9 +500,16 @@ export class LeaseAllocationService {
       const existing = new Set(
         rows.filter((r) => r.rowKind === "due").map((r) => (r.periodStart ? String(r.periodStart).slice(0, 10) : String(r.paymentDate).slice(0, 10))),
       );
+      // Echeances historiques en mois civils (periodStart = 1er du mois, absent de l'echeancier ancre) :
+      // leur mois est deja occupe, on ne cree pas de doublon (pas de double comptage).
+      const starts = new Set(schedule.map((x) => x.periodStart));
+      const legacyMonths = new Set(
+        [...existing].filter((s) => !lease.rentProrationEnabled).filter((s) => !starts.has(s)).map((s) => s.slice(0, 7)),
+      );
       const created: number[] = [];
       for (const p of horizonEnd ? schedule.filter((x) => x.dueDate <= horizonEnd) : schedule) {
         if (existing.has(p.periodStart)) continue;
+        if (legacyMonths.has(p.periodStart.slice(0, 7))) continue;
         const [res] = await tx.insert(realEstateRentPayments).values({
           organizationId: orgId, leaseId, currencyId: lease.currencyId ?? null, transactionId: null,
           paymentDate: p.dueDate, amount: this.money(p.amount), method: "pending", status: "pending",

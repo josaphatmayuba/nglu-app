@@ -26,6 +26,11 @@ export interface BuildLeaseScheduleInput {
   rentAmount: number;
   currencyDecimals?: number;
   horizonPeriods?: number;
+  /**
+   * true : echeances au jour de debut du bail meme en mensuel (bail SANS prorata),
+   * periode = echeance -> veille de la suivante. false/absent : mois civils (prorata).
+   */
+  anchored?: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -118,7 +123,7 @@ export function buildLeaseSchedule(input: BuildLeaseScheduleInput): SchedulePeri
 
   for (let k = 0; ; k++) {
     if (!end && k >= horizon) break;
-    const civil = cycleMonths(cycle) === 1;
+    const civil = cycleMonths(cycle) === 1 && !input.anchored;
     // Mensuel : mois civils (1re periode = date de debut, puis 1er du mois).
     const monthFirst = (n: number) => new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + n, 1));
     const pStart = civil ? (k === 0 ? start : monthFirst(k)) : addBillingCycle(start, cycle, k);

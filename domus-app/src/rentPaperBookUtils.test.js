@@ -165,7 +165,7 @@ describe("cahier complet en une impression", () => {
   it("2 ans : 4 feuilles blanches puis 5 roses (le bailleur a guide + exemple en plus)", () => {
     const h = paperBookHtml(base, { pass: "complet", years: 2, duplicate: true });
     expect((h.match(/class="sheet/g) || []).length).toBe(9);
-    expect(h).toContain("4 feuilles blanches (locataire) et 5 feuilles à points roses (bailleur)");
+    expect(h).toContain("4 feuilles blanches (locataire) et 5 feuilles à points rouges (bailleur)");
     expect(pages(h)).toEqual([[1, 5], [2, 6], [3, 7], [4, 8], [1, 6], [2, 7], [3, 8], [4, 9], [5, 10]]);
     expect(h).toContain("Exemplaire du locataire");
     expect(h).toContain("Exemplaire du bailleur");
@@ -204,13 +204,13 @@ describe("cahier plie (livret recto-verso)", () => {
     expect(h).toContain('<span class="fl">Feuille 1 · côté A</span>');
     expect(h).toContain('<span class="fl">Feuille 2 · côté B</span>');
   });
-  it("cahier du bailleur seul, puis les deux (blanches puis roses)", () => {
+  it("cahier du bailleur seul, puis les deux (blanches puis rouges)", () => {
     const b = paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" });
     expect(b).toContain("Exemplaire du bailleur");
     expect((b.match(/class="sheet fold dup"/g) || []).length).toBe(6);
     const both = paperBookHtml(base, { pass: "plie", years: 2, copy: "both" });
-    const caps = [...both.matchAll(/(blanche|roses) \(cahier/g)].map((m) => m[1]);
-    expect(caps).toEqual([...Array(4).fill("blanche"), ...Array(6).fill("roses")]);
+    const caps = [...both.matchAll(/(blanche|rouges) \(cahier/g)].map((m) => m[1]);
+    expect(caps).toEqual([...Array(4).fill("blanche"), ...Array(6).fill("rouges")]);
   });
   it("chaque page (sauf couverture) dit à qui est le cahier", () => {
     ["coupe", "pleine", "simple", "plie"].forEach((pass) => {
@@ -267,9 +267,9 @@ describe("cahier simple (recto, plier, empiler, sans copie)", () => {
     expect(h).not.toMatch(/cahier rose|page rose|se copie/);
     expect(paperBookHtml(base, { pass: "plie", years: 2, copy: "landlord" })).toContain("dans les deux cahiers");
     const p1 = paperBookHtml(base, { pass: "1", years: 2, duplicate: true });
-    expect(p1).toContain('class="a5 covpage dup"');
+    expect(p1).toContain('class="a5 covpage dup rdots"');
     expect(p1).toContain('class="sheet dup"');
-    expect(paperBookHtml(base, { pass: "cahier", years: 2 })).toContain('class="a5 covpage dup"');
+    expect(paperBookHtml(base, { pass: "cahier", years: 2 })).toContain('class="a5 covpage dup rdots"');
     expect((h.match(/class="sheet fold( dup)?"/g) || []).length).toBe(9);
   });
   it("3 ans : 5 feuilles", () => {
@@ -415,5 +415,14 @@ describe("annee 1 = annee de bail en cours", () => {
     expect(h).not.toContain("juil. 2025");
     expect(h).not.toContain("13 j");
     expect(h).toContain("entrée le 19/07/2025");
+  });
+});
+
+describe("montants de l'annee prochaine", () => {
+  it("annee 1 a cheval sur 2 annees civiles : pas de montant a payer pour les mois de l'annee suivante", () => {
+    const h = paperBookHtml({ ...base, startDate: "2026-09-01", schedule: [] }, { pass: "coupe", years: 2, today: new Date(2026, 10, 11) });
+    expect(h).toMatch(/Décembre<small>2026<\/small><\/td><td class="due">[^<]*\d/);
+    expect(h).toMatch(/Janvier<small>2027<\/small><\/td><td class="due"><\/td>/);
+    expect(h).toMatch(/Août<small>2027<\/small><\/td><td class="due"><\/td>/);
   });
 });

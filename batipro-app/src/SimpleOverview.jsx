@@ -6,7 +6,9 @@ import React from "react";
 // Montants : jamais arrondis à 0 décimale, devise toujours issue des données (DB).
 
 export function fmtMoney(value, code, maxDigits = 4) {
-  const v = Number(value || 0);
+  const raw = Number(value || 0);
+  // Affichage à 2 décimales : demi-cent arrondi vers le haut sans l'erreur binaire (949,575 → 949,58 et non 949,57). La valeur stockée reste exacte.
+  const v = maxDigits === 2 && Number.isFinite(raw) && !/e/i.test(String(raw)) ?Number(`${Math.round(Number(`${raw}e2`))}e-2`) : raw;
   if (!code) return `${v.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: maxDigits })} (devise non renseignée)`;
   try {
     return new Intl.NumberFormat("fr-CA", { style: "currency", currency: code, minimumFractionDigits: 2, maximumFractionDigits: maxDigits }).format(v);

@@ -7,6 +7,7 @@ import { PAID_BY_DEPOSIT_PDF_LABEL, isDepositMethod, paymentMethodLabel } from "
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
 import { mountPrintShell } from "./printShell.js";
+import { normalizeGrace } from "./overdue.js";
 
 // Montant du carnet : « 300 $ » (devise apres le nombre, usage francophone),
 // et non « $ 300 » comme moneyExact utilise ailleurs dans l'app.
@@ -36,6 +37,21 @@ export function fmtDateShort(value) {
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+// Echeance AFFICHEE sur une quittance = jour du bail (dueBase, ISO) + jours de
+// grace de l'org (lease.book.graceDays / rentOverdueGraceDays). Decalage
+// d'AFFICHAGE uniquement : la dueDate du schedule reste au jour du bail (sinon
+// le Releve, qui relit dueDate et applique deja la grace, la compterait deux
+// fois). Grace nulle/inconnue -> date inchangee.
+export function dueDateWithGrace(dueBase, lease) {
+  const iso = /^\d{4}-\d{2}-\d{2}/.exec(String(dueBase || ""))?.[0];
+  if (!iso) return dueBase;
+  const g = normalizeGrace(lease?.book?.graceDays ?? lease?.graceDays);
+  if (!g) return dueBase;
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + g);
+  return d.toISOString().slice(0, 10);
 }
 
 export function monthLabel(value) {
@@ -162,19 +178,72 @@ export function buildFullRentSchedule(lease, payments) {
       return idx > max ? idx : max;
     }, startIdx);
     const paidCount = payments.filter((p) => p.status === "paid").length;
-    endIdx = Math.max(lastPaid, startIdx + 11, startIdx + paidCount - 1);
+    // Un versement peut couvrir plusieurs mois : assez de mois pour le total payé.
+    const rentC = Math.round((Number(lease.rentAmount) || 0) * 100);
+    const totalC = payments.filter((p) => p.status === "paid" && !p.periodStart).reduce((s, p) => s + Math.round((Number(p.amount) || 0) * 100), 0);
+    const coverMonths = rentC > 0 ? Math.ceil(totalC / rentC) : 0;
+    endIdx = Math.max(lastPaid, startIdx + 11, startIdx + paidCount - 1, startIdx + coverMonths - 1);
   }
 
   const keys = [];
   for (let idx = startIdx; idx <= endIdx; idx += 1) {
     keys.push(`${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`);
   }
-  const byMonth = assignPaymentsToMonths(keys, payments, Number(lease.rentAmount) || 0);
+  const { months: byMonth, leftovers } = allocatePaymentsToMonths(keys, payments, Number(lease.rentAmount) || 0);
+
+  // Échéance = jour du bail (repli fin de mois, même règle que le Relevé et
+  // dueDateForMonth), jamais le 1er ; période couverte = échéance → veille de
+  // l'échéance suivante (15/09→14/10). Champs coverStart/coverEnd distincts de
+  // periodStart/periodEnd (réservés au prorata / à l'échéancier).
+  const dueDay = Number(lease?.book?.dueDay) || Number(start[3]) || 1;
+  const keyAt = (idx) => `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+  // dueDate = jour du bail (repli fin de mois), SANS grace. Le decalage du jour
+  // de grace se fait UNIQUEMENT a l'affichage dans receiptHtml (cf. dueDateWithGrace),
+  // PAS ici : rentStatementUtils.js (Releve) relit l.dueDate de ce schedule et
+  // applique lui-meme la grace (classifyDue) ; la decaler ici la compterait DEUX
+  // fois dans le Releve et le carnet. Chemins serveur (dues/schedule) inchanges.
+  const addDays = (iso, n) => {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const dayBefore = (iso) => addDays(iso, -1);
+  const dueOf = (idx) => {
+    const y = Math.floor(idx / 12);
+    const m = idx % 12;
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return `${keyAt(idx)}-${String(Math.min(dueDay, last)).padStart(2, "0")}`;
+  };
+  const anchor = (key) => {
+    const idx = Number(key.slice(0, 4)) * 12 + (Number(key.slice(5, 7)) - 1);
+    return { dueDate: dueOf(idx), coverStart: dueOf(idx), coverEnd: dayBefore(dueOf(idx + 1)) };
+  };
 
   const schedule = keys.map((key) => {
-    const existing = byMonth.get(key);
-    if (existing) return { ...existing, rentMonth: key };
+    const m = byMonth.get(key);
+    const existing = m?.payment;
+    if (m?.kind === "cumul") {
+      const rent = Number(lease.rentAmount) || 0;
+      const settled = m.remaining <= 0.005;
+      // Versement dont une partie seulement tombe sur ce mois : on le signale (« Versement du … »).
+      const linked = m.allocations.length > 1 || m.allocations.some((a) => Math.abs((Number(a.payment.amount) || 0) - a.amount) > 0.005);
+      return {
+        ...(settled ? existing : {
+          paymentDate: `${key}-01`, currencySymbol: existing.currencySymbol || lease.currencySymbol || "CDF",
+          method: null, receivedBy: null,
+        }),
+        ...(settled ? {} : { id: null }),
+        amount: rent,
+        status: settled ? "paid" : "pending",
+        rentMonth: key,
+        ...anchor(key),
+        ...(linked || !settled ? { linkedPayments: m.allocations } : {}),
+        remaining: settled ? 0 : m.remaining,
+      };
+    }
+    if (existing) return { ...existing, rentMonth: key, ...anchor(key) };
     return {
+      ...anchor(key),
       paymentDate: `${key}-01`,
       rentMonth: key,
       amount: lease.rentAmount,
@@ -185,9 +254,17 @@ export function buildFullRentSchedule(lease, payments) {
     };
   });
   // Paiements réels non placés (doublon sur un mois, au-delà de la fin) : jamais perdus.
-  const placed = new Set(byMonth.values());
+  const placed = new Set();
+  for (const m of byMonth.values()) for (const a of m.allocations) placed.add(a.payment);
+  for (const m of byMonth.values()) if (m.kind === "pending") placed.add(m.payment);
+  const leftoverOf = new Map(leftovers.map((l) => [l.payment, l.amount]));
   for (const p of payments) {
-    if (!placed.has(p) && p.status === "paid") schedule.push(p);
+    if (p.status !== "paid") continue;
+    if (leftoverOf.has(p)) {
+      // Excédent (ou paiement à 0) non couvert par un mois : jamais perdu, pour le seul montant restant.
+      const amount = leftoverOf.get(p);
+      schedule.push(Math.abs(amount - (Number(p.amount) || 0)) > 0.005 ? { ...p, amount } : p);
+    } else if (!placed.has(p)) schedule.push(p);
   }
   return schedule;
 }
@@ -201,39 +278,66 @@ export function buildFullRentSchedule(lease, payments) {
 //   backend pour les retards / la prochaine échéance). Jamais avant le début
 //   du bail : les mois proposés commencent à lease.startDate.
 // Les lignes en attente (sans periodStart) restent rangées par leur échéance.
-export function assignPaymentsToMonths(keys, payments, rent) {
+// Imputation en centimes (exacte) : un versement peut couvrir plusieurs mois
+// (3 000 pour 1 500 = 2 mois), un mois peut recevoir plusieurs versements
+// (750 + 750), l'excédent se reporte. Retourne
+//  - months : Map mois → { payment (principal), allocations [{payment, amount}],
+//             remaining, kind: "explicit" | "cumul" | "pending" } ;
+//  - leftovers : [{payment, amount}] montants payés qu'aucun mois ne reçoit (jamais perdus).
+export function allocatePaymentsToMonths(keys, payments, rent) {
   const keySet = new Set(keys);
-  const byMonth = new Map();
+  const months = new Map();
+  const leftovers = [];
   const monthOf = (v) => /^(\d{4})-(\d{2})/.exec(String(v || ""))?.[0] || null;
+  const cents = (v) => Math.round((Number(v) || 0) * 100);
   const live = payments.filter((p) => p.status !== "voided");
 
   const cumulative = [];
   for (const p of live.filter((x) => x.status === "paid")) {
     const key = monthOf(p.periodStart);
-    if (key && keySet.has(key) && !byMonth.has(key)) byMonth.set(key, p);
+    if (key && keySet.has(key) && !months.has(key)) months.set(key, { payment: p, allocations: [{ payment: p, amount: Number(p.amount) || 0 }], remaining: 0, kind: "explicit" });
     else cumulative.push(p);
   }
   cumulative.sort((a, b) => String(a.paymentDate || "").localeCompare(String(b.paymentDate || "")) || (a.id ?? 0) - (b.id ?? 0));
-  const remaining = keys.filter((k) => !byMonth.has(k));
-  let paid = 0;
-  let count = 0;
+  const free = keys.filter((k) => !months.has(k));
+  const rentC = cents(rent);
+  let idx = 0;
+  let filled = 0; // centimes déjà imputés au mois courant
   for (const p of cumulative) {
-    paid += Number(p.amount) || 0;
-    const before = count;
-    if (rent > 0) {
-      while (count < remaining.length && paid + 0.005 >= rent * (count + 1)) count += 1;
-    } else {
-      count = Math.min(count + 1, remaining.length);
+    let left = cents(p.amount);
+    if (rentC <= 0) {
+      // Loyer inconnu : un paiement = un mois (comportement historique).
+      const key = free[idx];
+      if (key) { months.set(key, { payment: p, allocations: [{ payment: p, amount: Number(p.amount) || 0 }], remaining: 0, kind: "explicit" }); idx += 1; } else leftovers.push({ payment: p, amount: Number(p.amount) || 0 });
+      continue;
     }
-    // Premier mois complété par ce paiement ; paiement partiel → mois en cours.
-    const key = remaining[before];
-    if (key && !byMonth.has(key)) byMonth.set(key, p);
+    if (left <= 0) { leftovers.push({ payment: p, amount: Number(p.amount) || 0 }); continue; }
+    while (left > 0 && idx < free.length) {
+      const take = Math.min(left, rentC - filled);
+      const key = free[idx];
+      const m = months.get(key) || { payment: p, allocations: [], remaining: rent, kind: "cumul" };
+      m.allocations.push({ payment: p, amount: take / 100 });
+      m.payment = p;
+      filled += take;
+      left -= take;
+      m.remaining = (rentC - filled) / 100;
+      months.set(key, m);
+      if (filled >= rentC) { idx += 1; filled = 0; }
+    }
+    if (left > 0) leftovers.push({ payment: p, amount: left / 100 });
   }
 
   for (const p of live.filter((x) => x.status !== "paid")) {
     const key = monthOf(p.periodStart) || monthOf(p.paymentDate);
-    if (key && keySet.has(key) && !byMonth.has(key)) byMonth.set(key, p);
+    if (key && keySet.has(key) && !months.has(key)) months.set(key, { payment: p, allocations: [], remaining: 0, kind: "pending" });
   }
+  return { months, leftovers };
+}
+
+// Compat : mois → paiement principal (voir allocatePaymentsToMonths pour le détail).
+export function assignPaymentsToMonths(keys, payments, rent) {
+  const byMonth = new Map();
+  for (const [k, m] of allocatePaymentsToMonths(keys, payments, rent).months) byMonth.set(k, m.payment);
   return byMonth;
 }
 
@@ -351,6 +455,19 @@ export function fmtPeriodShort(start, end) {
   if (!s || !e) return "";
   if (s[1] === e[1] && s[2] === e[2]) return `${s[3]}→${e[3]}/${e[2]}/${e[1]}`;
   return `${s[3]}/${s[2]}/${s[1]}→${e[3]}/${e[2]}/${e[1]}`;
+}
+
+// Periode en toutes lettres : « du 1er novembre 2026 au 30 novembre 2026 ».
+// « 1er » pour le premier du mois, « 1 » sinon pas de regle ordinale francaise.
+export function fmtPeriodLong(start, end) {
+  const dayWord = (iso) => {
+    const long = fmtDateLong(iso);
+    return /^1 /.test(long) ? long.replace(/^1 /, "1er ") : long;
+  };
+  const s = dayWord(start);
+  const e = dayWord(end);
+  if (s === "—" || e === "—") return "";
+  return `du ${s} au ${e}`;
 }
 
 // ── Numéro de quittance : séquence calculée sur les paiements du bail,
@@ -498,14 +615,24 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
     tenantName = [tenantName, rccm && `RCCM ${rccm}`, nif && `NIF ${nif}`].filter(Boolean).join(" · ");
   }
   const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
-  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
+  // DEMANDE PROPRIETAIRE : l'echeance AFFICHEE sur la quittance = jour du bail +
+  // jours de grace de l'org (rentOverdueGraceDays). Decalage fait ICI (affichage
+  // seulement), pas dans buildFullRentSchedule, car le Releve relit dueDate du
+  // schedule et applique deja la grace -> sinon comptee deux fois. L'en-tete de
+  // mois et la periode couverte restent le mois loue (inchanges).
+  const dueBase = payment.dueDate || payment.periodStart || payment.paymentDate;
+  const dueShown = dueDateWithGrace(dueBase, lease);
+  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(dueShown)}</span>`;
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   // Mois de loyer (rentMonth, cf. assignPaymentsToMonths) et non mois du paiement.
   const headerLine = escapeHtml(monthLabel(payment.rentMonth ? `${payment.rentMonth}-01` : payment.paymentDate).toLocaleUpperCase("fr"));
   // Loyer au prorata : période exacte + mention « 20 j / 30 » (jamais affiché
   // pour un paiement sans periodStart/periodEnd, donc hors option).
-  const rangeText = payment.periodStart && payment.periodEnd ? fmtPeriodShort(payment.periodStart, payment.periodEnd) : "";
+  // Periode en toutes lettres : « du 1er novembre 2026 au 30 novembre 2026 ».
+  const rangeText = payment.periodStart && payment.periodEnd
+    ? fmtPeriodLong(payment.periodStart, payment.periodEnd)
+    : payment.coverStart && payment.coverEnd ? fmtPeriodLong(payment.coverStart, payment.coverEnd) : "";
   const prorataText = rangeText && payment.isProrata && payment.prorataDays != null && payment.periodDays != null
     ? ` · ${payment.prorataDays} j / ${payment.periodDays}`
     : "";
@@ -531,7 +658,14 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
   // Bail flagge : paiements imputes sur cette echeance (date, moyen, montant) + reste eventuel.
   const linkedRows = Array.isArray(payment.linkedPayments) && payment.linkedPayments.length
     ? `<div class="receipt-row"><div><span>Paiements liés</span><span>${payment.linkedPayments
-      .map((x) => escapeHtml(`${fmtDateShort(x.payment.paymentDate)} · ${paymentMethodLabel(x.payment.method) || "—"} · ${moneyAfter(x.amount, payment.currencySymbol || "CDF")}`))
+      .map((x) => {
+        const cur = payment.currencySymbol || "CDF";
+        const line = `${fmtDateShort(x.payment.paymentDate)} · ${paymentMethodLabel(x.payment.method) || "—"} · ${moneyAfter(x.amount, cur)}`;
+        // Versement réparti sur plusieurs mois : rappeler le versement d'origine.
+        const split = Math.abs((Number(x.payment.amount) || 0) - x.amount) > 0.005
+          ? `Versement du ${fmtDateShort(x.payment.paymentDate)} : ${moneyAfter(x.payment.amount, cur)}` : "";
+        return escapeHtml(line) + (split ? `<br/>${escapeHtml(split)}` : "");
+      })
       .join("<br/>")}</span></div>${payment.remaining > 0.005 ? `<div><span>Reste dû</span><span>${escapeHtml(moneyAfter(payment.remaining, payment.currencySymbol || "CDF"))}</span></div>` : "<div></div>"}</div>`
     : "";
   return `
@@ -554,7 +688,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
     ${linkedRows}
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
-      <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
+      <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " · à payer"}</span>
     </div>
     <div class="receipt-bottom">
       <div class="receipt-sign">

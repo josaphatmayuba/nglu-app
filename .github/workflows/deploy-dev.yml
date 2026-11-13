@@ -53,9 +53,32 @@ jobs:
       - name: Confs nginx (nginx -t)
         run: sh scripts/ci/check-nginx-confs.sh
 
+  # Reveille la pile dev (arretee apres 1 h sans push par dev-autostop.sh) et
+  # (re)installe le cron d'arret. Non bloquant : un echec ne stoppe pas le deploiement.
+  dev-wake:
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - name: Reveil dev + cron arret auto
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: |
+          set -euo pipefail
+          $SSH $SERVER "mkdir -p $APP"
+          $SCP scripts/ci/dev-wake.sh scripts/ci/dev-autostop.sh $SERVER:$APP/
+          $SSH $SERVER "sh $APP/dev-wake.sh $APP"
+          # Cron idempotent : toutes les 5 min, arret si > 60 min sans push.
+          $SSH $SERVER "( crontab -l 2>/dev/null | grep -v dev-autostop.sh; echo '*/5 * * * * sh $APP/dev-autostop.sh $APP 60 >> /tmp/dev-autostop.log 2>&1' ) | crontab -"
+
   # Calcule quels projets ont change. `deploy_all` force tout a true.
   changes:
-    needs: contracts
+    needs: [contracts, dev-wake]
+    if: ${{ !cancelled() && needs.contracts.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -441,6 +464,22 @@ jobs:
           $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
           $SCP -r marketing-site/dist $SERVER:$APP/marketing-site/
           $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+  # Relance le compteur d'inactivite (1 h) a la FIN du deploiement ongdngolu.
+  dev-idle-timer:
+    needs: [dev-wake, backend2-dev, middleware-dev, static-dev, tickets-dev, migration-dev, marketing-dev]
+    if: ${{ !cancelled() && needs.dev-wake.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ssh-setup
+        with: { key: '${{ secrets.SSH_PRIVATE_KEY }}', name: ongdngolu }
+      - name: Touch .last-push
+        env:
+          SERVER: ${{ env.ONGD_SERVER }}
+        run: $SSH $SERVER "touch $APP/.last-push"
 
   # ───────────────────── Serveur Avelomi (2e hote) → dev ─────────────────────
   # ─────────── Deploiement SEQUENTIEL (un projet a la fois) sur Avelomi ───────────
