@@ -171,10 +171,33 @@ export function buildFullRentSchedule(lease, payments) {
   }
   const byMonth = assignPaymentsToMonths(keys, payments, Number(lease.rentAmount) || 0);
 
+  // Échéance = jour du bail (repli fin de mois, même règle que le Relevé et
+  // dueDateForMonth), jamais le 1er ; période couverte = échéance → veille de
+  // l'échéance suivante (15/09→14/10). Champs coverStart/coverEnd distincts de
+  // periodStart/periodEnd (réservés au prorata / à l'échéancier).
+  const dueDay = Number(lease?.book?.dueDay) || Number(start[3]) || 1;
+  const keyAt = (idx) => `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+  const dueOf = (idx) => {
+    const y = Math.floor(idx / 12);
+    const m = idx % 12;
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return `${keyAt(idx)}-${String(Math.min(dueDay, last)).padStart(2, "0")}`;
+  };
+  const dayBefore = (iso) => {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const anchor = (key) => {
+    const idx = Number(key.slice(0, 4)) * 12 + (Number(key.slice(5, 7)) - 1);
+    return { dueDate: dueOf(idx), coverStart: dueOf(idx), coverEnd: dayBefore(dueOf(idx + 1)) };
+  };
+
   const schedule = keys.map((key) => {
     const existing = byMonth.get(key);
-    if (existing) return { ...existing, rentMonth: key };
+    if (existing) return { ...existing, rentMonth: key, ...anchor(key) };
     return {
+      ...anchor(key),
       paymentDate: `${key}-01`,
       rentMonth: key,
       amount: lease.rentAmount,
@@ -498,14 +521,16 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
     tenantName = [tenantName, rccm && `RCCM ${rccm}`, nif && `NIF ${nif}`].filter(Boolean).join(" · ");
   }
   const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
-  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.paymentDate)}</span>`;
+  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.dueDate || payment.periodStart || payment.paymentDate)}</span>`;
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   // Mois de loyer (rentMonth, cf. assignPaymentsToMonths) et non mois du paiement.
   const headerLine = escapeHtml(monthLabel(payment.rentMonth ? `${payment.rentMonth}-01` : payment.paymentDate).toLocaleUpperCase("fr"));
   // Loyer au prorata : période exacte + mention « 20 j / 30 » (jamais affiché
   // pour un paiement sans periodStart/periodEnd, donc hors option).
-  const rangeText = payment.periodStart && payment.periodEnd ? fmtPeriodShort(payment.periodStart, payment.periodEnd) : "";
+  const rangeText = payment.periodStart && payment.periodEnd
+    ? fmtPeriodShort(payment.periodStart, payment.periodEnd)
+    : payment.coverStart && payment.coverEnd ? fmtPeriodShort(payment.coverStart, payment.coverEnd) : "";
   const prorataText = rangeText && payment.isProrata && payment.prorataDays != null && payment.periodDays != null
     ? ` · ${payment.prorataDays} j / ${payment.periodDays}`
     : "";
@@ -554,7 +579,7 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
     ${linkedRows}
     <div class="receipt-amount ${isPaid ? "" : "pending"}">
       <strong>${escapeHtml(moneyAfter(payment.amount, payment.currencySymbol || "CDF"))}</strong>
-      <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " (dû)"}</span>
+      <span class="words">${escapeHtml(amountWords)}${isPaid ? "" : " · à payer"}</span>
     </div>
     <div class="receipt-bottom">
       <div class="receipt-sign">

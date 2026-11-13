@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **Domus carnet de quittances : échéance au jour du bail et période affichée (v3.285.26).** Un bail commencé le 15/09 affichait « Échéance 01/09/2026 » et seulement « Septembre 2026 » ; chaque quittance montre maintenant l'échéance au 15 (dernier jour du mois si besoin) et la période « 15/09/2026→14/10/2026 ». « (dû) » devient « à payer ». Baux sans prorata ni registre d'imputation.
 - **CI dev : la pile docker dev s'allume au push (dev-wake) et s'arrête 60 min après le dernier push (cron dev-autostop.sh, garde-fou .keep-alive).** Réduit la RAM du serveur ongdngolu.
 - **BâtiPro : honoraires à 2 décimales, demi-cent arrondi vers le haut à l'affichage (v3.285.25).** 949,575 $ s'affichait 949,57 $ (erreur binaire du navigateur) ; il s'affiche maintenant 949,58 $. La valeur stockée reste exacte.
 - **Domus carnet papier : plus de montant « À payer » pour les mois de l'année civile suivante (v3.285.24).** Quand l'année 1 du bail déborde (ex. sept. 2026 → août 2027), janvier 2027 et la suite restent vides : le loyer peut augmenter, le gestionnaire l'écrit.

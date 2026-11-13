@@ -86,3 +86,40 @@ describe("rentBookPrintBody (exemplaire)", () => {
     expect(count(both, /class="copy-break"/g)).toBe(1);
   });
 });
+
+describe("carnet de quittances : échéance au jour du bail + période", () => {
+  const leon = { id: 1, startDate: "2026-09-15", endDate: "2027-09-14", rentAmount: 1500, currencySymbol: "$" };
+
+  it("bail du 15 : 12 quittances, échéance le 15, période 15→14", () => {
+    const s = buildFullRentSchedule(leon, []);
+    expect(s).toHaveLength(12);
+    expect(s[0]).toMatchObject({ dueDate: "2026-09-15", coverStart: "2026-09-15", coverEnd: "2026-10-14" });
+    expect(s[11]).toMatchObject({ dueDate: "2027-08-15", coverEnd: "2027-09-14" });
+  });
+
+  it("bail du 15 au 15 : même 12 quittances", () => {
+    expect(buildFullRentSchedule({ ...leon, endDate: "2027-09-15" }, [])).toHaveLength(12);
+  });
+
+  it("ligne en attente en base datée du 1er : échéance quand même le 15", () => {
+    const s = buildFullRentSchedule(leon, [{ id: 9, paymentDate: "2026-09-01", amount: 1500, status: "pending" }]);
+    expect(s[0].dueDate).toBe("2026-09-15");
+  });
+
+  it("bail du 31/01 : échéances 28/02 puis 31/03", () => {
+    const s = buildFullRentSchedule({ ...leon, startDate: "2027-01-31", endDate: "2027-12-30" }, []);
+    expect(s[0].coverEnd).toBe("2027-02-27");
+    expect(s[1].dueDate).toBe("2027-02-28");
+    expect(s[1].coverEnd).toBe("2027-03-30");
+    expect(s[2].dueDate).toBe("2027-03-31");
+  });
+
+  it("HTML : échéance 15/09/2026, période affichée, « à payer » au lieu de « (dû) »", () => {
+    const html = rentBookPrintBody(leon, [], null);
+    expect(html).toContain("15/09/2026");
+    expect(html).toContain("15/09/2026→14/10/2026");
+    expect(html).not.toContain("01/09/2026");
+    expect(html).not.toContain("(dû)");
+    expect(html).toContain("à payer");
+  });
+});
