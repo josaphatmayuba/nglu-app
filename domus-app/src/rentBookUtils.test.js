@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignPaymentsToMonths, buildFullRentSchedule, rentBookPrintBody } from "./rentBookUtils.js";
+import { assignPaymentsToMonths, buildFullRentSchedule, dueDateWithGrace, rentBookPrintBody } from "./rentBookUtils.js";
 
 const paid = (id, paymentDate, amount = 230, extra = {}) => ({ id, paymentDate, amount, status: "paid", ...extra });
 
@@ -114,13 +114,46 @@ describe("carnet de quittances : échéance au jour du bail + période", () => {
     expect(s[2].dueDate).toBe("2027-03-31");
   });
 
-  it("HTML : échéance 15/09/2026, période affichée, « à payer » au lieu de « (dû) »", () => {
+  it("grâce : buildFullRentSchedule garde dueDate au jour du bail (pas de décalage dans le schedule)", () => {
+    // Le décalage est à l'affichage (dueDateWithGrace), pas ici : le Relevé relit
+    // dueDate et applique déjà la grâce, donc la décaler ici la compterait 2 fois.
+    const s = buildFullRentSchedule({ ...leon, startDate: "2026-10-01", endDate: "2027-09-30", book: { graceDays: 5 } }, []);
+    expect(s[0]).toMatchObject({ dueDate: "2026-10-01", coverStart: "2026-10-01", coverEnd: "2026-10-31" });
+  });
+
+  it("HTML : échéance 15/09/2026, période en toutes lettres, « à payer » au lieu de « (dû) »", () => {
     const html = rentBookPrintBody(leon, [], null);
     expect(html).toContain("15/09/2026");
-    expect(html).toContain("15/09/2026→14/10/2026");
+    expect(html).toContain("du 15 septembre 2026 au 14 octobre 2026");
     expect(html).not.toContain("01/09/2026");
     expect(html).not.toContain("(dû)");
     expect(html).toContain("à payer");
+  });
+
+  it("HTML grâce 33 : échéance décalée (18/10) mais période inchangée (du 15/09…)", () => {
+    const html = rentBookPrintBody({ ...leon, book: { graceDays: 33 } }, [], null);
+    expect(html).toContain("18/10/2026"); // 15/09 + 33 j
+    expect(html).toContain("du 15 septembre 2026 au 14 octobre 2026");
+  });
+});
+
+describe("dueDateWithGrace : décalage d'affichage de l'échéance", () => {
+  it("grâce nulle/inconnue/0 : date inchangée", () => {
+    expect(dueDateWithGrace("2026-10-01", { book: { graceDays: 0 } })).toBe("2026-10-01");
+    expect(dueDateWithGrace("2026-10-01", { book: { graceDays: null } })).toBe("2026-10-01");
+    expect(dueDateWithGrace("2026-10-01", {})).toBe("2026-10-01");
+  });
+
+  it("grâce 5 : 01/10 -> 06/10", () => {
+    expect(dueDateWithGrace("2026-10-01", { book: { graceDays: 5 } })).toBe("2026-10-06");
+  });
+
+  it("grâce 33 : 01/10 -> 03/11 (passage de mois)", () => {
+    expect(dueDateWithGrace("2026-10-01", { book: { graceDays: 33 } })).toBe("2026-11-03");
+  });
+
+  it("grâce lue sur lease.graceDays en repli", () => {
+    expect(dueDateWithGrace("2026-10-01", { graceDays: 5 })).toBe("2026-10-06");
   });
 });
 

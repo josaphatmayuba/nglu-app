@@ -7,6 +7,7 @@ import { PAID_BY_DEPOSIT_PDF_LABEL, isDepositMethod, paymentMethodLabel } from "
 import { escapeHtml } from "./contractUtils.js";
 import { decodeCurrencyText } from "./data.js";
 import { mountPrintShell } from "./printShell.js";
+import { normalizeGrace } from "./overdue.js";
 
 // Montant du carnet : « 300 $ » (devise apres le nombre, usage francophone),
 // et non « $ 300 » comme moneyExact utilise ailleurs dans l'app.
@@ -36,6 +37,21 @@ export function fmtDateShort(value) {
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+// Echeance AFFICHEE sur une quittance = jour du bail (dueBase, ISO) + jours de
+// grace de l'org (lease.book.graceDays / rentOverdueGraceDays). Decalage
+// d'AFFICHAGE uniquement : la dueDate du schedule reste au jour du bail (sinon
+// le Releve, qui relit dueDate et applique deja la grace, la compterait deux
+// fois). Grace nulle/inconnue -> date inchangee.
+export function dueDateWithGrace(dueBase, lease) {
+  const iso = /^\d{4}-\d{2}-\d{2}/.exec(String(dueBase || ""))?.[0];
+  if (!iso) return dueBase;
+  const g = normalizeGrace(lease?.book?.graceDays ?? lease?.graceDays);
+  if (!g) return dueBase;
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + g);
+  return d.toISOString().slice(0, 10);
 }
 
 export function monthLabel(value) {
@@ -181,16 +197,22 @@ export function buildFullRentSchedule(lease, payments) {
   // periodStart/periodEnd (réservés au prorata / à l'échéancier).
   const dueDay = Number(lease?.book?.dueDay) || Number(start[3]) || 1;
   const keyAt = (idx) => `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+  // dueDate = jour du bail (repli fin de mois), SANS grace. Le decalage du jour
+  // de grace se fait UNIQUEMENT a l'affichage dans receiptHtml (cf. dueDateWithGrace),
+  // PAS ici : rentStatementUtils.js (Releve) relit l.dueDate de ce schedule et
+  // applique lui-meme la grace (classifyDue) ; la decaler ici la compterait DEUX
+  // fois dans le Releve et le carnet. Chemins serveur (dues/schedule) inchanges.
+  const addDays = (iso, n) => {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const dayBefore = (iso) => addDays(iso, -1);
   const dueOf = (idx) => {
     const y = Math.floor(idx / 12);
     const m = idx % 12;
     const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
     return `${keyAt(idx)}-${String(Math.min(dueDay, last)).padStart(2, "0")}`;
-  };
-  const dayBefore = (iso) => {
-    const d = new Date(`${iso}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return d.toISOString().slice(0, 10);
   };
   const anchor = (key) => {
     const idx = Number(key.slice(0, 4)) * 12 + (Number(key.slice(5, 7)) - 1);
@@ -435,6 +457,19 @@ export function fmtPeriodShort(start, end) {
   return `${s[3]}/${s[2]}/${s[1]}→${e[3]}/${e[2]}/${e[1]}`;
 }
 
+// Periode en toutes lettres : « du 1er novembre 2026 au 30 novembre 2026 ».
+// « 1er » pour le premier du mois, « 1 » sinon pas de regle ordinale francaise.
+export function fmtPeriodLong(start, end) {
+  const dayWord = (iso) => {
+    const long = fmtDateLong(iso);
+    return /^1 /.test(long) ? long.replace(/^1 /, "1er ") : long;
+  };
+  const s = dayWord(start);
+  const e = dayWord(end);
+  if (s === "—" || e === "—") return "";
+  return `du ${s} au ${e}`;
+}
+
 // ── Numéro de quittance : séquence calculée sur les paiements du bail,
 // triés chronologiquement — pas besoin de le stocker en DB. ────────────────
 export function receiptNumber(lease, index) {
@@ -580,16 +615,24 @@ function receiptHtml(lease, payment, index, receiptQrDataUrl, who = "locataire")
     tenantName = [tenantName, rccm && `RCCM ${rccm}`, nif && `NIF ${nif}`].filter(Boolean).join(" · ");
   }
   const dwelling = [lease.propertyName, lease.unitName ? `Apt. ${lease.unitName}` : null].filter(Boolean).join(" — ") || "—";
-  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(payment.dueDate || payment.periodStart || payment.paymentDate)}</span>`;
+  // DEMANDE PROPRIETAIRE : l'echeance AFFICHEE sur la quittance = jour du bail +
+  // jours de grace de l'org (rentOverdueGraceDays). Decalage fait ICI (affichage
+  // seulement), pas dans buildFullRentSchedule, car le Releve relit dueDate du
+  // schedule et applique deja la grace -> sinon comptee deux fois. L'en-tete de
+  // mois et la periode couverte restent le mois loue (inchanges).
+  const dueBase = payment.dueDate || payment.periodStart || payment.paymentDate;
+  const dueShown = dueDateWithGrace(dueBase, lease);
+  const dueCell = isPaid ? "" : `<span>Échéance</span><span>${fmtDateShort(dueShown)}</span>`;
   const paidOn = isPaid ? fmtDateShort(payment.paymentDate) : "____ / ____ / ________";
   const amountWords = amountToWordsFr(payment.amount, payment.currencySymbol);
   // Mois de loyer (rentMonth, cf. assignPaymentsToMonths) et non mois du paiement.
   const headerLine = escapeHtml(monthLabel(payment.rentMonth ? `${payment.rentMonth}-01` : payment.paymentDate).toLocaleUpperCase("fr"));
   // Loyer au prorata : période exacte + mention « 20 j / 30 » (jamais affiché
   // pour un paiement sans periodStart/periodEnd, donc hors option).
+  // Periode en toutes lettres : « du 1er novembre 2026 au 30 novembre 2026 ».
   const rangeText = payment.periodStart && payment.periodEnd
-    ? fmtPeriodShort(payment.periodStart, payment.periodEnd)
-    : payment.coverStart && payment.coverEnd ? fmtPeriodShort(payment.coverStart, payment.coverEnd) : "";
+    ? fmtPeriodLong(payment.periodStart, payment.periodEnd)
+    : payment.coverStart && payment.coverEnd ? fmtPeriodLong(payment.coverStart, payment.coverEnd) : "";
   const prorataText = rangeText && payment.isProrata && payment.prorataDays != null && payment.periodDays != null
     ? ` · ${payment.prorataDays} j / ${payment.periodDays}`
     : "";
