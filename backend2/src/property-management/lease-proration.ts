@@ -46,6 +46,7 @@ export function scheduleForLease(
   paidTotal: number,
   todayStr: string,
   extraPeriods = 3,
+  anchored = false,
 ): SchedulePeriod[] {
   const rent = Number(lease.rentAmount) || 0;
   const cm = cycleMonths(lease.billingCycle);
@@ -59,6 +60,7 @@ export function scheduleForLease(
     rentAmount: rent,
     currencyDecimals: decimals,
     horizonPeriods: horizon,
+    anchored,
   });
 }
 

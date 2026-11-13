@@ -123,3 +123,71 @@ describe("carnet de quittances : échéance au jour du bail + période", () => {
     expect(html).toContain("à payer");
   });
 });
+
+describe("carnet de quittances : versements multi-mois / partiels", () => {
+  const leon = { id: 1, startDate: "2026-09-15", endDate: "2027-09-14", rentAmount: 1500, currencySymbol: "$" };
+  const pay = (id, d, amount, extra = {}) => ({ id, paymentDate: d, amount, status: "paid", method: "cash", receivedBy: "Paul", ...extra });
+  const sumPaid = (s) => s.filter((l) => l.status === "paid").reduce((t, l) => t + l.amount, 0);
+
+  it("3 000 couvre deux mois : les deux payés, 1 500 chacun, mention du versement", () => {
+    const s = buildFullRentSchedule(leon, [pay(1, "2026-09-20", 3000)]);
+    expect(s).toHaveLength(12);
+    expect(s.slice(0, 2).map((l) => [l.status, l.amount, l.paymentDate, l.method, l.receivedBy])).toEqual([
+      ["paid", 1500, "2026-09-20", "cash", "Paul"], ["paid", 1500, "2026-09-20", "cash", "Paul"],
+    ]);
+    expect(s[2].status).toBe("pending");
+    expect(sumPaid(s)).toBe(3000);
+    const html = rentBookPrintBody(leon, [pay(1, "2026-09-20", 3000)], null);
+    expect(html).toContain("Versement du 20/09/2026");
+  });
+
+  it("750 sur 1 500 : mois en attente avec reste dû 750", () => {
+    const s = buildFullRentSchedule(leon, [pay(1, "2026-09-20", 750)]);
+    expect(s[0]).toMatchObject({ status: "pending", remaining: 750, amount: 1500, rentMonth: "2026-09" });
+    expect(s[0].linkedPayments).toHaveLength(1);
+    expect(sumPaid(s)).toBe(0);
+    const html = rentBookPrintBody(leon, [pay(1, "2026-09-20", 750)], null);
+    expect(html).toContain("Paiements liés");
+    expect(html).toContain("Reste dû");
+  });
+
+  it("750 + 750 complètent le même mois, rien en fin de carnet", () => {
+    const s = buildFullRentSchedule(leon, [pay(1, "2026-09-20", 750), pay(2, "2026-10-01", 750)]);
+    expect(s).toHaveLength(12);
+    expect(s[0]).toMatchObject({ status: "paid", amount: 1500, remaining: 0, paymentDate: "2026-10-01" });
+    expect(s[0].linkedPayments.map((x) => x.amount)).toEqual([750, 750]);
+    expect(s[1].status).toBe("pending");
+  });
+
+  it("2 000 = 1 mois + 500 de reste sur le suivant", () => {
+    const s = buildFullRentSchedule(leon, [pay(1, "2026-09-20", 2000)]);
+    expect(s[0]).toMatchObject({ status: "paid", amount: 1500 });
+    expect(s[1]).toMatchObject({ status: "pending", remaining: 1000 });
+    expect(s[1].linkedPayments[0].amount).toBe(500);
+    // Excédent reporté puis complété par le versement suivant.
+    const s2 = buildFullRentSchedule(leon, [pay(1, "2026-09-20", 2000), pay(2, "2026-10-15", 1000)]);
+    expect(s2[1]).toMatchObject({ status: "paid", amount: 1500 });
+    expect(sumPaid(s2)).toBe(3000);
+  });
+
+  it("aucun paiement perdu : excédent au-delà du bail ajouté pour le seul montant restant", () => {
+    const short = { ...leon, endDate: "2026-11-14" }; // 2 mois
+    const s = buildFullRentSchedule(short, [pay(1, "2026-09-20", 4000)]);
+    expect(s).toHaveLength(3);
+    expect(s[2]).toMatchObject({ status: "paid", amount: 1000 });
+    expect(sumPaid(s)).toBe(4000);
+  });
+
+  it("bail indéterminé : assez de mois pour un gros versement", () => {
+    const open = { ...leon, endDate: null };
+    const s = buildFullRentSchedule(open, [pay(1, "2026-09-20", 1500 * 14)]);
+    expect(s.filter((l) => l.status === "paid")).toHaveLength(14);
+    expect(sumPaid(s)).toBe(21000);
+  });
+
+  it("centimes exacts : 3 × 0,10 sur loyer 0,30", () => {
+    const l = { ...leon, rentAmount: 0.3 };
+    const s = buildFullRentSchedule(l, [pay(1, "2026-09-20", 0.1), pay(2, "2026-09-21", 0.1), pay(3, "2026-09-22", 0.1)]);
+    expect(s[0]).toMatchObject({ status: "paid", remaining: 0 });
+  });
+});

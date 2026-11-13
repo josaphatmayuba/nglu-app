@@ -3675,7 +3675,8 @@ export class PropertyManagementService implements OnModuleInit {
         const covered = upToEnd
           ? monthIndex < monthsPaid || existingMonthKeys.has(monthKey)
           : monthIndex < monthsAlreadyCovered;
-        if (!covered) monthsToCreate.push(new Date(cursor.getTime()));
+        // Echeance au JOUR DE DEBUT du bail (repli fin de mois), ancree sur start (jamais chainee).
+        if (!covered) monthsToCreate.push(addScheduleCycle(start, "monthly", monthIndex));
       }
       monthIndex += 1;
       cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
@@ -3701,7 +3702,9 @@ export class PropertyManagementService implements OnModuleInit {
         method: "pending",
         status: "pending",
         reference: null,
-        notes: "Echeance generee automatiquement (bail retroactif) — a confirmer."
+        notes: (this.formatDateOnly(month) > this.formatDateOnly(today)
+            ? "Echeance a venir generee automatiquement (carnet) — a confirmer."
+            : "Echeance generee automatiquement (bail retroactif) — a confirmer.")
           + (isExit ? ` [PRORATA resiliation: ${exitProration!.occupiedDays}/${exitProration!.periodDays} jours, montant initial ${exitProration!.fullAmount.toFixed(2)}]` : ""),
         proofUrl: null,
         createdAt: sql`CURRENT_TIMESTAMP`,
