@@ -1486,10 +1486,12 @@ export function Loyers({ go }) {
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
 
-  const total = useMemo(() => cashPayments(rows).reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
+  // KPI « encaissé » : seulement les paiements confirmés (paid), pas les échéances pending.
+  const collectedRows = useMemo(() => rows.filter((r) => r.status === "paid"), [rows]);
+  const total = useMemo(() => cashPayments(collectedRows).reduce((s, r) => s + Number(r.amount || 0), 0), [collectedRows]);
   const totalByCurrency = useMemo(
-    () => groupAmountsByCurrency(cashPayments(rows), (row) => row.amount, currency.defaultCurrencySymbol),
-    [rows, currency.defaultCurrencySymbol],
+    () => groupAmountsByCurrency(cashPayments(collectedRows), (row) => row.amount, currency.defaultCurrencySymbol),
+    [collectedRows, currency.defaultCurrencySymbol],
   );
   const [view, setView] = useState("locataire");
   const formerRows = useMemo(() => (Array.isArray(data?.former?.rows) ? data.former.rows : []), [data?.former]);
@@ -1694,17 +1696,17 @@ export function Loyers({ go }) {
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-green"><CheckCircle2 size={20} /></div></div>
           <div className="immo-metric-label">Encaisse (cumul)</div><div className="immo-metric-value" style={{ color: "#059669" }}><MoneyStack rows={totalByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /></div>
-          <div className="immo-metric-helper">{rows.length} paiement(s)</div>
+          <div className="immo-metric-helper">{collectedRows.length} paiement(s)</div>
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-brand"><Wallet size={20} /></div></div>
-          <div className="immo-metric-label">Paiements</div><div className="immo-metric-value">{rows.length}</div>
+          <div className="immo-metric-label">Paiements</div><div className="immo-metric-value">{collectedRows.length}</div>
           <div className="immo-metric-helper">enregistres</div>
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-amber"><Clock size={20} /></div></div>
-          <div className="immo-metric-label">Dernier paiement</div><div className="immo-metric-value">{rows[0] ? money(rows[0].amount, rows[0].currencySymbol || currency.defaultCurrencySymbol) : "—"}</div>
-          <div className="immo-metric-helper">{rows[0] ? tenantName(rows[0]) : "aucun"}</div>
+          <div className="immo-metric-label">Dernier paiement</div><div className="immo-metric-value">{collectedRows[0] ? money(collectedRows[0].amount, collectedRows[0].currencySymbol || currency.defaultCurrencySymbol) : "—"}</div>
+          <div className="immo-metric-helper">{collectedRows[0] ? tenantName(collectedRows[0]) : "aucun"}</div>
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-red"><BellRing size={20} /></div></div>
