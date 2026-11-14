@@ -33,12 +33,14 @@ export class BatiproOwnerNotifier {
       loadBudgetSummary: () => Promise<BudgetSummaryLite>;
     },
   ) {
-    const compose = async (project: { code: string; name: string; currencyId: number | null }) => {
+    // withBudget : « Depense: X / budget Y » reserve au proprietaire ; les
+    // ingenieurs ne recoivent que le paiement (le budget ne les concerne pas).
+    const compose = async (project: { code: string; name: string; currencyId: number | null }, withBudget = true) => {
       const effCur = p.currencyId ?? project.currencyId ?? null;
       const cur = await this.currencyCode(effCur);
       const amount = `${this.fmt(p.amount)}${cur ? ` ${cur}` : ""}`;
       let tail = "";
-      if (effCur === (project.currencyId ?? null)) {
+      if (withBudget && effCur === (project.currencyId ?? null)) {
         const s = await p.loadBudgetSummary();
         tail = ` Depense: ${this.fmt(s.spent)} / budget ${this.fmt(s.budget)}${cur ? ` ${cur}` : ""}.`;
       }
@@ -56,7 +58,7 @@ export class BatiproOwnerNotifier {
         .where(and(eq(batiproProjects.id, projectId), eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
         .limit(1);
       if (!pr) return;
-      const build = await compose({ code: pr.code, name: pr.name, currencyId: pr.currencyId ?? null });
+      const build = await compose({ code: pr.code, name: pr.name, currencyId: pr.currencyId ?? null }, false);
       await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_payment", () => build);
     } catch (err) {
       this.logger.warn(`SMS ingenieurs (payment) chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
@@ -113,13 +115,15 @@ export class BatiproOwnerNotifier {
         const s = await e.loadBudgetSummary();
         tail = ` Total: ${this.fmt(s.spent)} / budget ${this.fmt(s.budget)}${cur ? ` ${cur}` : ""}.`;
       }
-      const build = (p: { code: string; name: string }) => (nameMax: number, supMax: number) =>
-        `Chantier ${p.code} ${this.cut(p.name, nameMax)}: depense ${amount} - ${this.cut(e.designation, supMax)}.${tail}`;
+      // « Total: X / budget Y » reserve au proprietaire ; les ingenieurs ne
+      // recoivent que la depense (le budget ne les concerne pas).
+      const buildWith = (t: string) => (p: { code: string; name: string }) => (nameMax: number, supMax: number) =>
+        `Chantier ${p.code} ${this.cut(p.name, nameMax)}: depense ${amount} - ${this.cut(e.designation, supMax)}.${t}`;
 
       const ownerPhone = await this.ownerPhoneIfEnabled(orgId, projectId);
-      await this.run("expense", orgId, projectId, async (p) => this.fit(build(p), p.ownerName, await this.ownerShortUrl(orgId, projectId)));
+      await this.run("expense", orgId, projectId, async (p) => this.fit(buildWith(tail)(p), p.ownerName, await this.ownerShortUrl(orgId, projectId)));
 
-      await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_expense", build);
+      await this.sendToEngineers(orgId, projectId, ownerPhone, "batipro_engineer_expense", buildWith(""));
     } catch (err) {
       this.logger.warn(`SMS depense chantier ${projectId} echoue: ${err instanceof Error ? err.message : String(err)}`);
     }
