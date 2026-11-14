@@ -22,7 +22,7 @@
 // portefeuille du proprietaire, ni un autre bail, ni une autre organisation.
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { createHash, randomBytes } from "crypto";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { UploadedBufferFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -382,8 +382,12 @@ export class DelegatePortalService {
    * leurs reponses. Permet de voir d un coup d oeil qui a confirme un
    * paiement (a valider) et qui a signale un impaye.
    */
-  async listRentChecks(orgId: number, answer?: string) {
+  async listRentChecks(orgId: number, answer?: string, scope: "all" | number[] = "all") {
     const conditions = [eq(realEstateDelegateRentChecks.organizationId, orgId)];
+    // RBAC par bien : un gestionnaire limite a certains biens ne voit que leurs retours.
+    if (scope !== "all") {
+      conditions.push(scope.length ? inArray(realEstateLeases.propertyId, scope) : sql`1 = 0`);
+    }
     if (answer === "pending") {
       conditions.push(isNull(realEstateDelegateRentChecks.answer));
     } else if (answer === "paid" || answer === "unpaid") {

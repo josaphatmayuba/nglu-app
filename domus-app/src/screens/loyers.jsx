@@ -1737,22 +1737,29 @@ export function Loyers({ go }) {
             {delegateChecks.map((c) => {
               const who = [c.tenantFirstName, c.tenantLastName].filter(Boolean).join(" ").trim();
               const paid = c.answer === "paid";
+              const linked = paid && c.rentPaymentId != null
+                ? (Array.isArray(data?.payments) ? data.payments : []).find((x) => Number(x.id) === Number(c.rentPaymentId))
+                : null;
+              const validated = linked && linked.status !== "pending";
               return (
                 <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <span className={`immo-mini-badge ${paid ? "success" : "warn"}`}>
-                    {paid ? t("Paiement declare") : t("Toujours impaye")}
+                    {validated ? t("Paiement valide") : paid ? t("Paiement declare") : t("Toujours impaye")}
                   </span>
                   <strong>{who || `Bail #${c.leaseId}`}</strong>
                   <span className="muted">{c.propertyName || ""}</span>
                   {paid && c.amount != null ? (
-                    <span>{money(c.amount, currency.defaultCurrencySymbol)}</span>
+                    <span>{money(c.amount, linked?.currencySymbol || currency.defaultCurrencySymbol)}</span>
                   ) : null}
                   {c.comment ? <em className="muted">« {c.comment} »</em> : null}
                   <span className="muted" style={{ fontSize: 12 }}>
                     {c.delegateName ? `— ${c.delegateName}` : ""}
                   </span>
-                  {/* Le paiement declare apparait aussi dans la liste ci-dessous
-                      en statut "En attente" : c'est la qu'il se valide. */}
+                  {linked && !validated && (
+                    <button type="button" className="immo-btn primary" style={{ fontSize: 12, minHeight: 36 }} onClick={() => setConfirmTarget(linked)}>
+                      <Check size={14} /> {t("Valider")}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1898,9 +1905,19 @@ const RECEIPT_PAID_DAYS = 30;
 // Quittances a afficher : toutes celles en attente (a verifier) puis les
 // payees des 30 derniers jours, pour que le gestionnaire retrouve ce qu'il
 // vient de confirmer. Au-dela, l'historique reste dans Loyers & paiements.
-function receivedReceipts(payments) {
+// Paiements declares par un delegue : rentPaymentId -> retour du delegue.
+export function delegatePaymentMap(checks) {
+  const m = new Map();
+  for (const c of Array.isArray(checks) ? checks : []) {
+    if (c?.answer === "paid" && c.rentPaymentId != null) m.set(Number(c.rentPaymentId), c);
+  }
+  return m;
+}
+
+function receivedReceipts(payments, delegateMap) {
   const since = Date.now() - RECEIPT_PAID_DAYS * 86400000;
-  const list = (Array.isArray(payments) ? payments : []).filter(isTenantReceipt);
+  const isDelegate = (p) => Boolean(delegateMap?.has(Number(p?.id)));
+  const list = (Array.isArray(payments) ? payments : []).filter((p) => isTenantReceipt(p) || isDelegate(p));
   const ts = (p) => new Date(p.updatedAt || p.paymentDate || 0).getTime() || 0;
   const pending = list.filter((p) => p.status === "pending").sort((a, b) => ts(b) - ts(a));
   const paid = list.filter((p) => p.status !== "pending" && p.status !== "settled" && ts(p) >= since).sort((a, b) => ts(b) - ts(a));
@@ -1911,9 +1928,15 @@ function receivedReceipts(payments) {
 // de verification. Le perimetre (organisation, biens du delegue) est deja
 // applique cote serveur par GET /payments.
 export function PendingReceiptsBadge() {
-  const { data, reload } = useApi(() => api.payments().catch(() => []), []);
+  const { data, reload } = useApi(
+    async () => ({
+      payments: await api.payments().catch(() => []),
+      checks: await api.delegateRentChecks("paid").catch(() => []),
+    }),
+    [],
+  );
   useRealtimeReload(reload, ["payments"]);
-  const n = receivedReceipts(data).pending.length;
+  const n = receivedReceipts(data?.payments, delegatePaymentMap(data?.checks)).pending.length;
   if (!n) return null;
   return (
     <span
@@ -1934,9 +1957,10 @@ const paymentMonth = (d) => {
   return m ? `${MONTHS_FR[Number(m[2]) - 1] || ""} ${m[1]}` : "—";
 };
 
-function ReceivedReceiptCard({ p, onConfirm }) {
+function ReceivedReceiptCard({ p, onConfirm, delegate }) {
   const [viewing, setViewing] = useState(false);
   const pending = p.status === "pending";
+  const hasPhoto = isTenantReceipt(p);
   const btn = { minHeight: 44, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 };
   return (
     <div style={{ padding: "12px 0", borderTop: "1px solid var(--line, #e5e7eb)" }}>
@@ -1951,12 +1975,15 @@ function ReceivedReceiptCard({ p, onConfirm }) {
         {paymentMonth(p.paymentDate)} · <strong style={{ color: "var(--ink-900, inherit)" }}>{money(p.amount, p.currencySymbol || "$")}</strong>
         {pending && p.updatedAt ? ` · ${t("reçue le")} ${shortDate(p.updatedAt)}` : ""}
         <ProrataBadge p={p} />
+        {delegate ? ` · ${t("Déclaré par")} ${delegate.delegateName || t("un délégué")}` : ""}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="immo-btn" style={btn}
-          onClick={() => setViewing(true)}>
-          <Camera size={16} /> {t("Voir la photo")}
-        </button>
+        {hasPhoto && (
+          <button type="button" className="immo-btn" style={btn}
+            onClick={() => setViewing(true)}>
+            <Camera size={16} /> {t("Voir la photo")}
+          </button>
+        )}
         {viewing && <ProofModal path={`/leases/payments/${p.id}/proof-file`} title={tenantName(p)} onClose={() => setViewing(false)} />}
         {pending && (
           <button type="button" className="immo-btn primary" style={btn} onClick={() => onConfirm(p)}>
@@ -1968,8 +1995,9 @@ function ReceivedReceiptCard({ p, onConfirm }) {
   );
 }
 
-function ReceivedReceipts({ payments, methods, onChanged }) {
-  const { pending, paid } = useMemo(() => receivedReceipts(payments), [payments]);
+function ReceivedReceipts({ payments, delegateChecks, methods, onChanged }) {
+  const delegateMap = useMemo(() => delegatePaymentMap(delegateChecks), [delegateChecks]);
+  const { pending, paid } = useMemo(() => receivedReceipts(payments, delegateMap), [payments, delegateMap]);
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [showPaid, setShowPaid] = useState(false);
   const toast = useToast();
@@ -1980,19 +2008,19 @@ function ReceivedReceipts({ payments, methods, onChanged }) {
         <h3 style={{ margin: 0, fontSize: 16 }}>{t("Quittances reçues")}{pending.length ? ` (${pending.length})` : ""}</h3>
       </div>
       <p className="muted" style={{ fontSize: 12.5, margin: "4px 0 8px" }}>
-        {t("Photos envoyées par vos locataires avec le QR de la quittance.")}
+        {t("Photos envoyées par vos locataires avec le QR de la quittance, et paiements déclarés par vos délégués.")}
       </p>
       {pending.length === 0 && (
         <p className="muted" style={{ fontSize: 13, margin: "8px 0 0" }}>{t("Aucune quittance à vérifier pour le moment.")}</p>
       )}
-      {pending.map((p) => <ReceivedReceiptCard key={p.id} p={p} onConfirm={setConfirmTarget} />)}
+      {pending.map((p) => <ReceivedReceiptCard key={p.id} p={p} delegate={delegateMap.get(Number(p.id))} onConfirm={setConfirmTarget} />)}
       {paid.length > 0 && (
         <button type="button" className="immo-btn" style={{ marginTop: 10, minHeight: 44, width: "100%", justifyContent: "center" }}
           onClick={() => setShowPaid((v) => !v)}>
           {showPaid ? t("Masquer les quittances déjà payées") : tf("Voir les quittances déjà payées ({n})", { n: paid.length })}
         </button>
       )}
-      {showPaid && paid.map((p) => <ReceivedReceiptCard key={p.id} p={p} onConfirm={setConfirmTarget} />)}
+      {showPaid && paid.map((p) => <ReceivedReceiptCard key={p.id} p={p} delegate={delegateMap.get(Number(p.id))} onConfirm={setConfirmTarget} />)}
       {confirmTarget && (
         <ConfirmPayModal
           payment={confirmTarget}
@@ -2009,14 +2037,15 @@ function ReceivedReceipts({ payments, methods, onChanged }) {
 export function Paiement({ go }) {
   const { data, loading, error, reload } = useApi(
     async () => {
-      const [leases, paymentMethods, payments] = await Promise.all([
+      const [leases, paymentMethods, payments, delegateChecks] = await Promise.all([
         api.leases(),
         api.paymentMethods().catch(() => []),
         // Tolerant : un echec ne doit pas bloquer l'encaissement.
         api.payments().catch(() => []),
+        api.delegateRentChecks("paid").catch(() => []),
       ]);
       const former = await api.formerDebtors().catch(() => ({ rows: [], totals: [] }));
-      return { leases, paymentMethods, payments, former };
+      return { leases, paymentMethods, payments, delegateChecks, former };
     },
     [],
   );
@@ -2176,7 +2205,7 @@ export function Paiement({ go }) {
     </div>
   );
 
-  const receipts = <ReceivedReceipts payments={data?.payments} methods={methods} onChanged={reload} />;
+  const receipts = <ReceivedReceipts payments={data?.payments} delegateChecks={data?.delegateChecks} methods={methods} onChanged={reload} />;
 
   return (
     <div style={{ maxWidth: 560 }}>
