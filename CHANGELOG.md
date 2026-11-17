@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro page ingénieur : « Devis » repliable visible (v3.286.1).** La section Devis de l'onglet Chantier affiche une flèche ▸ qui tourne à l'ouverture (trouvée en QA dev v3.286.0 : rien n'indiquait qu'on pouvait l'ouvrir).
 - **BâtiPro page ingénieur : 4 onglets au lieu de 8 + bouton photo (v3.286.0).** Le lien s'ouvre sur « Argent › Résumé » (cercle d'avancement, « Où va l'argent », honoraires) ; sous-onglets Résumé | Relevé | Factures (les dépenses sont dans le relevé). « Chantier » = phases + devis replié ; « À recevoir » = sous-onglets À réceptionner | Tous les BC, compteur rouge ; « Photos » = grand bouton « Prendre ou ajouter une photo » avec aperçu, Changer/Retirer et contrôle format/15 Mo avant envoi. Frontend seul (EngineerSite.jsx), aucune donnée ni droit modifié.
 - **BâtiPro relevé : le libellé montre la vraie dépense (v3.285.32).** Au lieu de « Dépense DEP-2026-0015 », chaque ligne affiche la désignation de la plus grosse ligne du document, suivie du numéro (« Bouffe (DEP-2026-0014) », « Ciment +3 (BC-…) »). Sans désignation, l'ancien libellé reste.
 - **BâtiPro SMS : les ingénieurs ne reçoivent plus « Total / budget » (v3.285.31).** Les SMS de dépense et de paiement envoyés aux ingénieurs du chantier s'arrêtent au montant et au libellé ; le propriétaire garde la ligne Total/budget.

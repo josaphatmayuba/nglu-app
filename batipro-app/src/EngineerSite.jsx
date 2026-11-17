@@ -100,10 +100,11 @@ export default function EngineerSite({ token }) {
             ))}
           </Section>
           {quotes.length > 0 && (
-            <details style={{ marginTop: 12 }}>
-              <summary style={SUMMARY}>Devis · {quotes.length}</summary>
+            <><style>{FOLD_CSS}</style>
+            <details className="eng-fold" style={{ marginTop: 12 }}>
+              <summary style={SUMMARY}><span className="eng-fold-ic" aria-hidden="true">▸</span>Devis · {quotes.length}</summary>
               {quotes.map((d) => <DocCard key={d.id} doc={d} phaseName={phaseName} />)}
-            </details>
+            </details></>
           )}
         </>
       )}
@@ -183,6 +184,8 @@ const SEG = { display: "grid", gap: 4, marginTop: 12, padding: 4, borderRadius: 
 const SEG_BTN = { minHeight: 44, border: 0, borderRadius: 9, background: "transparent", fontSize: 14, fontWeight: 600, color: "#475569", cursor: "pointer", padding: "0 4px", lineHeight: 1.15 };
 const SEG_ON = { background: "#fff", color: "#0f172a", boxShadow: "0 1px 3px rgba(15,23,42,.15)" };
 const SUMMARY = { cursor: "pointer", fontSize: 15, fontWeight: 600, minHeight: 44, display: "flex", alignItems: "center", color: "#0f172a" };
+// Fleche des sections repliables : tourne a l ouverture, marqueur natif masque.
+const FOLD_CSS = ".eng-fold>summary{list-style:none}.eng-fold>summary::-webkit-details-marker{display:none}.eng-fold-ic{display:inline-block;width:18px;color:#b45309;transition:transform .15s}.eng-fold[open] .eng-fold-ic{transform:rotate(90deg)}@media (prefers-reduced-motion:reduce){.eng-fold-ic{transition:none}}";
 const DOC_STATUS = {
   draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", accepted: "Accepté", rejected: "Refusé", issued: "Émis",
   partially_received: "Reçu en partie", received: "Reçu", paid: "Payé", partially_paid: "Payé en partie",
