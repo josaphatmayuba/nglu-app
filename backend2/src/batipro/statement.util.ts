@@ -29,6 +29,8 @@ export type StatementDoc = {
   paidAmountProjectCcy?: string | number | null;
   paidDate: string; // date du reglement (ecriture comptable, a defaut date du document)
   nature: SpendNature;
+  // Libelle reel (designation des lignes) affiche avant le numero.
+  description?: string | null;
   // Part du paye dont l'ecriture est encore en attente d'approbation (devise du doc).
   pendingCents?: number;
 };
@@ -71,6 +73,15 @@ export function dominantNature(lines: { lineTtc: string | number | null; lineTyp
   return best;
 }
 
+// Libelle d'un document : designation de la plus grosse ligne, "+N" s'il y en a d'autres.
+export function docDescription(lines: { lineTtc: string | number | null; designation?: string | null }[]): string {
+  const named = lines.filter((l) => (l.designation ?? "").trim());
+  if (!named.length) return "";
+  const main = named.reduce((a, b) => (toCents(b.lineTtc) > toCents(a.lineTtc) ? b : a));
+  const others = named.length - 1;
+  return `${main.designation!.trim()}${others ? ` +${others}` : ""}`;
+}
+
 export function buildStatement(input: StatementInput, filter: StatementFilter = {}) {
   const { projectCurrencyId: pc, currencyCodeById } = input;
   const code = (id: number | null) => (id != null ? currencyCodeById.get(id) ?? null : null);
@@ -102,7 +113,9 @@ export function buildStatement(input: StatementInput, filter: StatementFilter = 
     if (paid <= 0) continue;
     const eff = d.currencyId ?? pc;
     const foreign = pc != null && d.currencyId != null && d.currencyId !== pc;
-    const label = `${d.type === "purchase_order" ? "Bon de commande" : d.type === "expense" ? "Depense" : "Facture"}${d.number ? ` ${d.number}` : ""}`;
+    const kindLabel = `${d.type === "purchase_order" ? "Bon de commande" : d.type === "expense" ? "Depense" : "Facture"}${d.number ? ` ${d.number}` : ""}`;
+    const desc = (d.description ?? "").trim();
+    const label = desc ? `${desc} (${d.number || kindLabel})` : kindLabel;
 
     if (d.kind === "client_invoice") {
       push({

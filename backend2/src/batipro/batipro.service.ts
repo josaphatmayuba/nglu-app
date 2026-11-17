@@ -53,7 +53,7 @@ import { bucketPhaseSpend } from "./phase-spend.util";
 import { spentByNature } from "./spent-by-nature.util";
 import { computeSubcontractorFees } from "./subcontractor-fees.util";
 import { convertDocsToProjectCurrency, type MultiCurrencyResult } from "./multi-currency-total.util";
-import { buildStatement, dominantNature, type StatementDoc, type StatementFilter } from "./statement.util";
+import { buildStatement, docDescription, dominantNature, type StatementDoc, type StatementFilter } from "./statement.util";
 import { convertToProjectCents, decimalRateToScaled, fxRateToNumber, fxRateToString, invertDecimalRate, parseFxRate } from "./fx.util";
 import { parseSupplierDocument } from "./ocr-parser.util";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -6107,7 +6107,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
     const ids = paidDocs.map((d) => d.id);
     const lines = ids.length
       ? await this.db
-          .select({ documentId: batiproDocumentLines.documentId, lineTtc: batiproDocumentLines.lineTtc, lineType: batiproDocumentLines.lineType, serviceCategory: batiproDocumentLines.serviceCategory })
+          .select({ documentId: batiproDocumentLines.documentId, lineTtc: batiproDocumentLines.lineTtc, lineType: batiproDocumentLines.lineType, serviceCategory: batiproDocumentLines.serviceCategory, designation: batiproDocumentLines.designation })
           .from(batiproDocumentLines)
           .where(and(eq(batiproDocumentLines.organizationId, orgId), eq(batiproDocumentLines.isActive, 1), inArray(batiproDocumentLines.documentId, ids)))
       : [];
@@ -6151,6 +6151,7 @@ ${doc.notes ? `<div class="notes">Note : ${esc(doc.notes)}</div>` : ""}
       paidAmountProjectCcy: d.paidAmountProjectCcy,
       paidDate: (d.paymentEntryId != null ? entryDate.get(Number(d.paymentEntryId)) : "") || day(d.issueDate) || day(d.updatedAt),
       nature: dominantNature(linesByDoc.get(d.id) ?? []),
+      description: docDescription(linesByDoc.get(d.id) ?? []),
       pendingCents: pendingByDoc.get(d.id) ?? 0,
     }));
 

@@ -9,6 +9,7 @@ This project follows:
 - Jira issue keys and Git commit hashes for traceability.
 
 ## [Unreleased]
+- **BâtiPro relevé : le libellé montre la vraie dépense (v3.285.32).** Au lieu de « Dépense DEP-2026-0015 », chaque ligne affiche la désignation de la plus grosse ligne du document, suivie du numéro (« Bouffe (DEP-2026-0014) », « Ciment +3 (BC-…) »). Sans désignation, l'ancien libellé reste.
 - **BâtiPro SMS : les ingénieurs ne reçoivent plus « Total / budget » (v3.285.31).** Les SMS de dépense et de paiement envoyés aux ingénieurs du chantier s'arrêtent au montant et au libellé ; le propriétaire garde la ligne Total/budget.
 - **Domus : les paiements déclarés par un délégué apparaissent dans « Paiement & quittance » (v3.285.30).** Ils figurent avec les quittances reçues (mention « Déclaré par … », bouton « Confirmer le paiement ») et sont comptés dans le badge du menu. La carte « Retours des délégués » de Loyers gagne un bouton « Valider », affiche la devise du bail et passe en « Paiement valide » une fois confirmé. `GET /delegate-rent-checks` respecte désormais le périmètre par bien du gestionnaire. [Unreleased]
 - **Domus Loyers : KPI « Encaisse (cumul) », « Paiements » et « Dernier paiement » ne comptent plus les échéances pending (BUGS #94).** Seules les lignes status=paid sont comptées (prod : 156 affichés pour ~111 payés). Dashboard déjà correct, listes/calendrier/cartes inchangés.
