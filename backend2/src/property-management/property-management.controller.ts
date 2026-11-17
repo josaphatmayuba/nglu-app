@@ -799,8 +799,12 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "List rent checks sent to delegates and their answers" })
   @Permissions("readAll-propertyManagement")
   @Get("delegate-rent-checks")
-  delegateRentChecks(@CurrentOrg() orgId: number, @Query("answer") answer?: string) {
-    return this.delegatePortalService.listRentChecks(orgId, answer);
+  delegateRentChecks(
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Query("answer") answer?: string,
+  ) {
+    return this.delegatePortalService.listRentChecks(orgId, answer, scope);
   }
 
   @ApiOperation({ summary: "Create a property" })

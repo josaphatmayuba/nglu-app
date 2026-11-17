@@ -1,5 +1,5 @@
 import { buildFundsSummary, type SpendDoc } from "./funds.util";
-import { buildStatement, type StatementDoc, type StatementFund } from "./statement.util";
+import { buildStatement, docDescription, type StatementDoc, type StatementFund } from "./statement.util";
 
 const USD = 1;
 const CDF = 2;
@@ -80,5 +80,20 @@ describe("statement.util", () => {
     const s = run([fund({ id: 1, amount: 50 })], [doc({ id: 9, kind: "client_invoice", type: "invoice", paidAmount: 999 })]);
     expect(s.final_balance).toBe(50);
     expect(s.lines.find((l) => l.status === "info")?.counted).toBe(false);
+  });
+});
+
+describe("libelle reel", () => {
+  it("docDescription : plus grosse ligne + nombre d'autres", () => {
+    expect(docDescription([{ lineTtc: 5, designation: "Clous" }, { lineTtc: 100, designation: "Ciment" }, { lineTtc: 1, designation: " " }])).toBe("Ciment +1");
+    expect(docDescription([])).toBe("");
+  });
+  it("label = description (numero), sinon type + numero", () => {
+    const base = { kind: "expense_doc" as const, type: "expense", status: "paid", currencyId: 1, paidAmount: 10, paidDate: "2026-11-16", nature: "fees" as const };
+    const s = buildStatement({ projectCurrencyId: 1, currencyCodeById: new Map([[1, "USD"]]), funds: [], docs: [
+      { ...base, id: 1, number: "DEP-1", description: "Bouffe" },
+      { ...base, id: 2, number: "DEP-2" },
+    ] });
+    expect(s.lines.map((l) => l.label).sort()).toEqual(["Bouffe (DEP-1)", "Depense DEP-2"]);
   });
 });

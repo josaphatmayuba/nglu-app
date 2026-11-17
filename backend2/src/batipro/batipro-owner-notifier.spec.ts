@@ -167,6 +167,9 @@ describe("BatiproOwnerNotifier", () => {
     expect(sendSms.mock.calls[0][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/own1234567$/);
     expect(sendSms.mock.calls[1][0].message).toMatch(/ https?:\/\/[^ ]+\/batipro\/c\/eng1234567$/);
     expect(sendSms.mock.calls[1][0].logMessage).toMatch(/\[lien\]$/);
+    // Total / budget : proprietaire seulement, jamais l'ingenieur.
+    expect(sendSms.mock.calls[0][0].message).toMatch(/budget/);
+    expect(sendSms.mock.calls[1][0].message).not.toMatch(/budget|Total/);
     for (const [arg] of sendSms.mock.calls) {
       expect(arg.message.length).toBeLessThanOrEqual(160);
       expect(arg.message).toMatch(/depense 450 USD/);
@@ -194,6 +197,7 @@ describe("BatiproOwnerNotifier", () => {
     expect(sendSms.mock.calls.map((c) => c[0].phone)).toEqual(["+243990000000", "+243991112222"]);
     expect(sendSms.mock.calls[1][0].smsType).toBe("batipro_engineer_payment");
     expect(sendSms.mock.calls[1][0].message).toMatch(/paiement fournisseur 1 500\.50 USD/);
+    expect(sendSms.mock.calls[1][0].message).not.toMatch(/budget|Depense/); // budget : proprietaire seulement
     expect(sendSms.mock.calls[1][0].message).not.toMatch(/batipro\/c\//); // ancien lien sans code : sans lien
   });
 

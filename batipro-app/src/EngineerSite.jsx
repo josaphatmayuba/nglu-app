@@ -25,7 +25,9 @@ export default function EngineerSite({ token }) {
   const [errMsg, setErrMsg] = React.useState("");
   const [viewer, setViewer] = React.useState(null);
   const [flash, setFlash] = React.useState("");
-  const [tab, setTab] = React.useState("overview");
+  const [tab, setTab] = React.useState(null); // null = onglet par defaut (Argent > Resume)
+  const [moneyView, setMoneyView] = React.useState("summary"); // onglet Argent : summary (defaut) | statement | invoices (les depenses sont dans le releve)
+  const [ordersView, setOrdersView] = React.useState("todo"); // onglet A recevoir : todo (defaut) | all
 
   const load = React.useCallback((silent) => {
     if (!silent) setState("loading");
@@ -71,8 +73,10 @@ export default function EngineerSite({ token }) {
   const phaseName = (id) => phases.find((p) => p.id === id)?.label || null;
   const counts = {
     phases: phases.length, quotes: quotes.length, orders: orders.length,
-    expenses: (data.direct_expenses || []).length, invoices: (data.supplier_invoices || []).length, photos: photos.length,
+    site: 0, money: 0, expenses: (data.direct_expenses || []).length, invoices: (data.supplier_invoices || []).length, photos: photos.length,
   };
+
+  const curTab = tab || "money"; // le lien s ouvre sur Argent > Resume
 
   return (
     <Shell title="Accès chantier">
@@ -85,50 +89,62 @@ export default function EngineerSite({ token }) {
 
       {flash && <div role="status" style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, background: "#ecfdf5", color: "#065f46", fontSize: 14 }}>{flash}</div>}
 
-      <TabBar tab={tab} setTab={setTab} counts={counts} />
+      <TabBar tab={curTab} setTab={setTab} counts={counts} />
 
-      {tab === "overview" && (
+      {curTab === "site" && (
         <>
-          <div style={{ marginTop: 12 }}><SimpleOverview {...trackingOverviewProps(data)} hideCash /></div>
-          <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
+          <Section title="Avancement des phases">
+            {!phases.length && <p style={muted}>Aucune phase définie. Demandez au gestionnaire de les créer.</p>}
+            {phases.map((p) => (
+              <PhaseCard key={`${p.id}-${p.progress}-${p.status}`} token={token} phase={p} onDone={done} quoteLines={linesByPhase(quotes, p.id)} orderLines={linesByPhase(pos, p.id)} />
+            ))}
+          </Section>
+          {quotes.length > 0 && (
+            <><style>{FOLD_CSS}</style>
+            <details className="eng-fold" style={{ marginTop: 12 }}>
+              <summary style={SUMMARY}><span className="eng-fold-ic" aria-hidden="true">▸</span>Devis · {quotes.length}</summary>
+              {quotes.map((d) => <DocCard key={d.id} doc={d} phaseName={phaseName} />)}
+            </details></>
+          )}
         </>
       )}
 
-      {tab === "phases" && (
-        <Section title="Avancement des phases">
-          {!phases.length && <p style={muted}>Aucune phase définie.</p>}
-          {phases.map((p) => (
-            <PhaseCard key={`${p.id}-${p.progress}-${p.status}`} token={token} phase={p} onDone={done} quoteLines={linesByPhase(quotes, p.id)} orderLines={linesByPhase(pos, p.id)} />
-          ))}
-        </Section>
-      )}
-
-      {tab === "quotes" && (
-        <Section title="Devis">
-          {!quotes.length && <p style={muted}>Aucun devis.</p>}
-          {quotes.map((d) => <DocCard key={d.id} doc={d} phaseName={phaseName} />)}
-        </Section>
-      )}
-
-      {tab === "orders" && (
+      {curTab === "orders" && (
         <>
-          <Section title="À réceptionner">
-            {!orders.length && <p style={muted}>Aucun bon de commande en attente de réception.</p>}
-            {orders.map((o) => <ReceiveCard key={o.id} token={token} order={o} onDone={done} />)}
-          </Section>
-          <Section title="Tous les bons de commande">
-            {!pos.length && <p style={muted}>Aucun bon de commande.</p>}
-            {pos.map((d) => <DocCard key={d.id} doc={d} phaseName={phaseName} />)}
-          </Section>
+          <SubTabs label="Vue commandes" value={ordersView} onChange={setOrdersView}
+            items={[["todo", "À réceptionner", orders.length], ["all", "Tous les BC", pos.length]]} />
+          {ordersView === "todo" ? (
+            <Section title="À réceptionner">
+              {!orders.length && <p style={muted}>Aucun bon de commande en attente de réception.</p>}
+              {orders.map((o) => <ReceiveCard key={o.id} token={token} order={o} onDone={done} />)}
+            </Section>
+          ) : (
+            <Section title="Tous les bons de commande">
+              {!pos.length && <p style={muted}>Aucun bon de commande.</p>}
+              {pos.map((d) => <DocCard key={d.id} doc={d} phaseName={phaseName} />)}
+            </Section>
+          )}
         </>
       )}
 
-      {tab === "expenses" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["expenses"]} />}
-      {tab === "invoices" && <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["invoices"]} />}
+      {curTab === "money" && (
+        <>
+          <SubTabs label="Vue argent" value={moneyView} onChange={setMoneyView}
+            items={[["summary", "Résumé"], ["statement", "Relevé"], ["invoices", "Factures", counts.invoices]]} />
+          {moneyView === "summary" && (
+            <>
+              <div style={{ marginTop: 12 }}><SimpleOverview {...trackingOverviewProps(data)} hideCash onOpenStatement={() => setMoneyView("statement")} /></div>
+              <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["budget", "remaining", "subcontractors"]} />
+            </>
+          )}
+          {moneyView === "statement" && <Section title="Relevé des sorties"><SiteStatement token={token} /></Section>}
+          {moneyView === "invoices" && (counts.invoices > 0
+            ? <FinanceSections data={data} token={token} links={siteApi} onOpen={setViewer} only={["invoices"]} />
+            : <p style={{ ...muted, marginTop: 12 }}>Aucune facture.</p>)}
+        </>
+      )}
 
-      {tab === "statement" && <Section title="Relevé des sorties"><SiteStatement token={token} /></Section>}
-
-      {tab === "photos" && (
+      {curTab === "photos" && (
         <Section title="Photos du chantier">
           <PhotoUpload token={token} onDone={done} />
           {!photos.length && <p style={muted}>Aucune photo.</p>}
@@ -150,25 +166,41 @@ export default function EngineerSite({ token }) {
   );
 }
 
-const TABS = [
-  ["overview", "Aperçu"], ["phases", "Phases"], ["quotes", "Devis"], ["orders", "Commandes"],
-  ["expenses", "Dépenses"], ["invoices", "Factures"], ["statement", "Relevé"], ["photos", "Photos"],
-];
+const TABS = [["money", "Argent"], ["site", "Chantier"], ["orders", "À recevoir"], ["photos", "Photos"]];
+// Sous-onglets en tete d'un onglet (Argent, A recevoir) : cibles >= 44 px, tiennent a 360 px.
+function SubTabs({ label, value, onChange, items }) {
+  return (
+    <div role="tablist" aria-label={label} style={{ ...SEG, gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+      {items.map(([k, text, n]) => (
+        <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}
+          style={{ ...SEG_BTN, ...(value === k ? SEG_ON : null) }}>
+          {text}{n > 0 ? <span style={{ marginLeft: 4, fontSize: 12, color: "#64748b" }}>{n}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+const SEG = { display: "grid", gap: 4, marginTop: 12, padding: 4, borderRadius: 12, background: "#f1f5f9" };
+const SEG_BTN = { minHeight: 44, border: 0, borderRadius: 9, background: "transparent", fontSize: 14, fontWeight: 600, color: "#475569", cursor: "pointer", padding: "0 4px", lineHeight: 1.15 };
+const SEG_ON = { background: "#fff", color: "#0f172a", boxShadow: "0 1px 3px rgba(15,23,42,.15)" };
+const SUMMARY = { cursor: "pointer", fontSize: 15, fontWeight: 600, minHeight: 44, display: "flex", alignItems: "center", color: "#0f172a" };
+// Fleche des sections repliables : tourne a l ouverture, marqueur natif masque.
+const FOLD_CSS = ".eng-fold>summary{list-style:none}.eng-fold>summary::-webkit-details-marker{display:none}.eng-fold-ic{display:inline-block;width:18px;color:#b45309;transition:transform .15s}.eng-fold[open] .eng-fold-ic{transform:rotate(90deg)}@media (prefers-reduced-motion:reduce){.eng-fold-ic{transition:none}}";
 const DOC_STATUS = {
   draft: "Brouillon", sent: "Envoyé", confirmed: "Confirmé", accepted: "Accepté", rejected: "Refusé", issued: "Émis",
   partially_received: "Reçu en partie", received: "Reçu", paid: "Payé", partially_paid: "Payé en partie",
 };
 
-// Barre d'onglets : defile horizontalement a 360 px, collee en haut.
+// Barre d'onglets : tient sur 4 pilules a 360 px, collee en haut.
 function TabBar({ tab, setTab, counts }) {
   return (
-    <nav aria-label="Sections du chantier" style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", margin: "14px -14px 0", padding: "8px 14px", borderBottom: "1px solid #e2e8f0", display: "flex", gap: 6, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+    <nav aria-label="Sections du chantier" style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff", margin: "14px -14px 0", padding: "8px 14px", borderBottom: "1px solid #e2e8f0", display: "flex", gap: 4 }}>
       {TABS.map(([k, label]) => {
         const active = tab === k;
-        const n = counts[k];
+        const n = k === "orders" ? counts.orders : k === "photos" ? counts.photos : 0;
         return (
           <button key={k} type="button" aria-current={active ? "page" : undefined} onClick={() => setTab(k)}
-            style={{ flex: "0 0 auto", minHeight: 44, padding: "8px 12px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
+            style={{ flex: "1 1 auto", minWidth: 0, whiteSpace: "nowrap", minHeight: 44, padding: "8px 6px", borderRadius: 999, border: active ? "1px solid #d97706" : "1px solid #cbd5e1", background: active ? "#d97706" : "#fff", color: active ? "#fff" : "#0f172a", fontSize: 13, fontWeight: active ? 700 : 500, cursor: "pointer" }}>
             {label}{n ? ` · ${n}` : ""}
           </button>
         );
@@ -333,12 +365,49 @@ function ReceiveCard({ token, order, onDone }) {
   );
 }
 
+const PHOTO_MAX = 15 * 1024 * 1024;
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const fmtSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1).replace(".", ",")} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`);
+
+function CameraIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
 function PhotoUpload({ token, onDone }) {
   const [file, setFile] = React.useState(null);
+  const [preview, setPreview] = React.useState("");
   const [caption, setCaption] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [focused, setFocused] = React.useState(false);
   const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!file) { setPreview(""); return undefined; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const pick = (e) => {
+    const f = e.target.files?.[0] || null;
+    if (!f) return;
+    if (!PHOTO_TYPES.includes(f.type)) {
+      setFile(null); setError("Format non accepté. Choisissez une photo JPEG, PNG ou WebP.");
+    } else if (f.size > PHOTO_MAX) {
+      setFile(null); setError(`Photo trop lourde (${fmtSize(f.size)}). Le maximum est de 15 Mo.`);
+    } else {
+      setError(""); setFile(f);
+    }
+    e.target.value = "";
+  };
+
+  const clear = () => { setFile(null); setError(""); if (inputRef.current) inputRef.current.value = ""; };
 
   const send = async () => {
     if (!file) return;
@@ -352,18 +421,45 @@ function PhotoUpload({ token, onDone }) {
     finally { setBusy(false); }
   };
 
+  const pickLabel = {
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 10, boxSizing: "border-box", width: "100%", minHeight: 56,
+    padding: "12px 16px", border: "2px dashed #d97706", borderRadius: 10, background: "#fffbeb", color: "#b45309",
+    fontSize: 16, fontWeight: 700, cursor: busy ? "default" : "pointer", textAlign: "center",
+    outline: focused ? "3px solid #1d4ed8" : "none", outlineOffset: 2,
+  };
+  const hidden = { position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" };
+  const btnSecondary = { ...btn, background: "#fff", color: "#334155", border: "1px solid #cbd5e1", fontWeight: 600, flex: 1 };
+
   return (
-    <div style={card}>
-      <label style={{ fontSize: 12, color: "#475569" }}>Photo (JPEG, PNG, WebP — 15 Mo max)
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ ...field, padding: 8 }} />
-      </label>
+    <div style={{ ...card, position: "relative" }}>
+      <input
+        ref={inputRef} id="eng-photo-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment"
+        onChange={pick} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} disabled={busy} style={hidden}
+      />
+      {!file && (
+        <label htmlFor="eng-photo-input" style={pickLabel}>
+          <CameraIcon /> Prendre ou ajouter une photo
+        </label>
+      )}
+      <p style={{ ...muted, fontSize: 12, margin: "6px 0 0", textAlign: file ? "left" : "center" }}>Photo JPEG, PNG ou WebP, 15 Mo maximum</p>
+      {error && <p role="alert" style={{ color: "#b91c1c", fontSize: 13, margin: "8px 0 0" }}>{error}</p>}
       {file && (
         <>
-          <label style={{ fontSize: 12, color: "#475569", display: "block", marginTop: 8 }}>Légende (optionnel)
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
+            {preview && <img src={preview} alt="Aperçu de la photo choisie" style={{ width: 88, height: 88, objectFit: "cover", borderRadius: 8, border: "1px solid #e2e8f0", flexShrink: 0 }} />}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
+              <div style={{ ...muted, fontSize: 12 }}>{fmtSize(file.size)}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <label htmlFor="eng-photo-input" style={{ ...btnSecondary, display: "flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", opacity: busy ? 0.5 : 1, outline: focused ? "3px solid #1d4ed8" : "none", outlineOffset: 2 }}>Changer</label>
+            <button type="button" style={btnSecondary} disabled={busy} onClick={clear}>Retirer</button>
+          </div>
+          <label style={{ fontSize: 12, color: "#475569", display: "block", marginTop: 10 }}>Légende (optionnel)
             <input type="text" maxLength={200} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Ex. coulage dalle R+1" style={field} />
           </label>
-          {error && <p style={{ color: "#b91c1c", fontSize: 13, margin: "6px 0 0" }}>{error}</p>}
-          <button type="button" style={{ ...btn, marginTop: 8, width: "100%" }} disabled={busy} onClick={send}>{busy ? "Envoi…" : "Envoyer la photo"}</button>
+          <button type="button" style={{ ...btn, marginTop: 10, width: "100%", minHeight: 52, fontSize: 16, opacity: busy ? 0.7 : 1 }} disabled={busy} aria-busy={busy} onClick={send}>{busy ? "Envoi…" : "Envoyer la photo"}</button>
         </>
       )}
     </div>
