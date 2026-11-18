@@ -5,6 +5,10 @@
     // deepmerge 4.3.1 = derniere version publiee, aucun correctif amont.
     // Build seulement (vite-plugin-pwa > workbox-build > @rollup/plugin-node-resolve) : deepMerge({}, defaults statiques).
     // Absent du bundle et de l'APK. A retirer des qu'une version > 4.3.1 sort.
-    "GHSA-gcqx-w48m-w2h4"
+    "GHSA-gcqx-w48m-w2h4",
+    // picomatch <= 4.0.7 (GHSA-fc5q-39xc-vjpf, ReDoS extglob) : avis elargi le 2026-11-18, AUCUNE version corrigee publiee.
+    // Outillage seulement (vite/tinyglobby/rollup/workbox, jest, @nestjs/cli/schematics), jamais importe dans src/,
+    // motifs glob ecrits par nous, jamais fournis par un utilisateur. A retirer des qu'une version corrigee sort.
+    "GHSA-fc5q-39xc-vjpf"
   ]
 }
