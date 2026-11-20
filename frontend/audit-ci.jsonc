@@ -5,6 +5,10 @@
   "allowlist": [
     // minimatch < 11.0.1 (GHSA-g3hv-75wg-m249, DoS sur motifs glob) : correctif seulement en v11 (API cassante pour eslint/glob v3-9).
     // Outillage de build/lint ; motifs glob ecrits par nous, jamais fournis par un utilisateur. A retirer quand les parents passent a v11.
-    "GHSA-g3hv-75wg-m249"
+    "GHSA-g3hv-75wg-m249",
+    // picomatch <= 4.0.7 (GHSA-fc5q-39xc-vjpf, ReDoS extglob) : avis elargi le 2026-11-18, AUCUNE version corrigee publiee.
+    // Outillage seulement (vite/tinyglobby/rollup/workbox, jest, @nestjs/cli/schematics), jamais importe dans src/,
+    // motifs glob ecrits par nous, jamais fournis par un utilisateur. A retirer des qu'une version corrigee sort.
+    "GHSA-fc5q-39xc-vjpf"
   ]
 }
