@@ -1445,14 +1445,20 @@ export function FormSection({ icon, title, children }) {
   );
 }
 
-export function DomusPropertyField({ label, value, onChange, type = "text", required = false, placeholder = "", helper = "", disabled = false, textarea = false }) {
+export function DomusPropertyField({ label, value, onChange, type = "text", required = false, placeholder = "", helper = "", disabled = false, textarea = false, list = null }) {
+  const listId = list && list.length ? `dpf-${label}`.replace(/[^a-zA-Z0-9_-]/g, "-") : undefined;
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
       {textarea ? (
         <textarea value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input type={type} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+        <input type={type} list={listId} value={value ?? ""} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+      )}
+      {listId && (
+        <datalist id={listId}>
+          {list.map((opt) => <option key={opt} value={opt} />)}
+        </datalist>
       )}
       {helper && <small>{helper}</small>}
     </label>
