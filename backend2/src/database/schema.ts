@@ -1577,6 +1577,8 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   vendorName: varchar("vendor_name", { length: 255 }),
   // Lien vers le referentiel central fournisseurs (compta). vendorName reste en fallback texte legacy.
   supplierId: bigint("supplier_id", { mode: "number" }),
+  // Intervenant ayant realise le cout (ouvrier/technicien). Texte libre (option 1, migration 0340).
+  workerName: varchar("worker_name", { length: 255 }),
   paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
   paymentDate: date("payment_date", { mode: "string" }),
   notes: text("notes"),

@@ -1470,6 +1470,10 @@ export class CreateMaintenanceCostDto {
   supplierId?: number;
 
   @IsOptional()
+  @IsString()
+  workerName?: string;
+
+  @IsOptional()
   @IsIn(["cash", "bank", "mobile_money", "cheque"])
   paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
 

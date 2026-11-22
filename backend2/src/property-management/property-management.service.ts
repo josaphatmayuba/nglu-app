@@ -7162,6 +7162,7 @@ export class PropertyManagementService implements OnModuleInit {
       currencyId: input.currencyId ?? null,
       vendorName: input.vendorName ?? null,
       supplierId: input.supplierId ?? null,
+      workerName: input.workerName ?? null,
       paymentMethod: input.paymentMethod ?? "cash",
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,

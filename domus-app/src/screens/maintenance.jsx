@@ -85,6 +85,7 @@ const emptyCost = {
   currencyId: "",
   supplierId: "",
   vendorName: "",
+  workerName: "",
   paymentMethod: "cash",
   paymentDate: "",
   notes: "",
@@ -377,6 +378,7 @@ export function Maintenance() {
         currencyId: toId(form.currencyId) ?? toId(ticket.currencyId) ?? toId(currency.defaultCurrencyId),
         supplierId: toId(form.supplierId) ?? undefined,
         vendorName: form.vendorName?.trim() || undefined,
+        workerName: form.workerName?.trim() || undefined,
         paymentMethod: form.paymentMethod || "cash",
         paymentDate: form.paymentDate || undefined,
         notes: form.notes?.trim() || undefined,
@@ -1041,6 +1043,8 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
   const [form, setForm] = useState({ ...emptyCost, currencyId: ticket.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const costs = Array.isArray(costsApi.data) ? costsApi.data : costsApi.data?.data || [];
+  // Noms d'intervenants déjà saisis, pour l'autocomplétion du champ "Intervenant".
+  const workerNames = [...new Set(costs.map((c) => c.workerName).filter(Boolean))];
   // Symbole porté par le coût lui-même (repli sur la devise par défaut).
   const costSym = (cost) => cleanCurrencySymbol(cost) || defaultCurrencySymbol;
   // Total GROUPÉ par devise (SIFA : pas de somme inter-devises).
@@ -1058,7 +1062,7 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
               {costs.map((cost) => (
                 <div key={cost.id}>
                   <strong>{cost.description}</strong>
-                  <span>{moneyExact(cost.amount, costSym(cost))} - {cost.vendorName || cost.type}</span>
+                  <span>{moneyExact(cost.amount, costSym(cost))} - {cost.workerName || cost.vendorName || cost.type}</span>
                 </div>
               ))}
               {costs.length === 0 && <p className="muted">{t("Aucun cout enregistre.")}</p>}
@@ -1080,6 +1084,7 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
                 set({ supplierId, vendorName: opt ? opt[1].replace(" (personne)", "") : form.vendorName });
               }} options={[["", t("— Aucun / saisir ci-dessous —")], ...supplierOptions]} />
               <DomusPropertyField label={t("Fournisseur (texte libre)")} value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
+              <DomusPropertyField label={t("Intervenant")} value={form.workerName} onChange={(workerName) => set({ workerName })} list={workerNames} helper={t("Qui a realise ce travail")} />
               <DomusPropertyField label={t("Date paiement")} type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
               <MoneyField label={t("Montant")} value={form.amount} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(amount) => set({ amount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
             </div>

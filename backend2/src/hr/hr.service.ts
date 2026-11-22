@@ -1604,9 +1604,19 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     const orgName = (settingRow?.companyName as string | null) || "Mon Organisation";
     const today = new Date().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
     const employeeName = [userRow.firstName, userRow.lastName].filter(Boolean).join(" ");
-    const poste = contract?.designationId ? `Poste #${contract.designationId}` : "Non defini";
+    let designationName: string | null = null;
+    if (contract?.designationId) {
+      const [d] = await this.db.select({ name: designations.name }).from(designations).where(eq(designations.id, contract.designationId)).limit(1);
+      designationName = d?.name ?? null;
+    }
+    const poste = designationName || (contract?.designationId ? `Poste #${contract.designationId}` : "Non defini");
     const dateDebut = contract?.startDate ? new Date(contract.startDate).toLocaleDateString("fr-FR") : "Non defini";
-    const salaire = contract?.baseSalary ? `${contract.baseSalary}` : "0";
+    let currencyCode = "";
+    if (contract?.currencyId) {
+      const [c] = await this.db.select({ code: currencies.currencyCode }).from(currencies).where(eq(currencies.id, contract.currencyId)).limit(1);
+      currencyCode = c?.code ? ` ${c.code}` : "";
+    }
+    const salaire = contract?.baseSalary ? `${Number(contract.baseSalary).toFixed(2)}${currencyCode}` : "0";
     const typeContrat = contract?.contractType || "Non defini";
     const reference = contract?.reference || `REF-${input.userId}-${new Date().getFullYear()}`;
 
