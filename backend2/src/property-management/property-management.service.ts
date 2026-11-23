@@ -7250,6 +7250,38 @@ export class PropertyManagementService implements OnModuleInit {
       .update(realEstateMaintenanceCosts)
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
+
+    // La depense supprimee ne doit plus sortir de la caisse : on desactive
+    // l ecriture legacy et on contre-passe (ou annule si en attente) l ecriture moderne.
+    await this.db
+      .update(transactions)
+      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(
+        eq(transactions.organizationId, orgId),
+        eq(transactions.type, "BNQM - Maintenance Journal"),
+        eq(transactions.relatedId, String(costId)),
+      ));
+    const [posted] = await this.db
+      .select({ id: journalEntries.id, status: journalEntries.status, reversedById: journalEntries.reversedById })
+      .from(journalEntries)
+      .where(and(
+        eq(journalEntries.organizationId, orgId),
+        eq(journalEntries.idempotencyKey, `maintenance-cost:${costId}`),
+      ))
+      .limit(1);
+    if (posted && !posted.reversedById && posted.status !== "reversed") {
+      await this.ledger.reverse(Number(posted.id), `Suppression du cout de maintenance #${costId}`, orgId);
+    } else if (!posted) {
+      await this.db
+        .update(ledgerPendingEntries)
+        .set({ status: "cancelled" })
+        .where(and(
+          eq(ledgerPendingEntries.organizationId, orgId),
+          eq(ledgerPendingEntries.sourceModule, "maintenance"),
+          eq(ledgerPendingEntries.relatedId, String(costId)),
+          eq(ledgerPendingEntries.status, "pending"),
+        ));
+    }
     return { message: "Deleted successfully." };
   }
 
