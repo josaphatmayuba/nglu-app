@@ -9,7 +9,7 @@ import { accounts, subAccounts, transactions } from "../database/schema";
 
 const dialect = new MySqlDialect();
 
-type SubRow = { id: number; name: string; organizationId: number };
+type SubRow = { id: number; name: string; organizationId: number; status?: string };
 type AccRow = { id: number; name: string; organizationId: number };
 
 // Doublon « Cash » id 77 en org 1 volontairement place AVANT id 1.
@@ -20,10 +20,15 @@ const SUBS: SubRow[] = [
   { id: 40, name: "Mobile Money", organizationId: 1 },
   { id: 101, name: "Cash", organizationId: 2 },
   { id: 102, name: "Bank", organizationId: 2 },
+  // Org 4 : Cash desactive (soft delete) avant un Cash actif ; Bank uniquement desactive.
+  { id: 300, name: "Cash", organizationId: 4, status: "false" },
+  { id: 301, name: "Cash", organizationId: 4 },
+  { id: 302, name: "Bank", organizationId: 4, status: "false" },
 ];
 const ACCS: AccRow[] = [
   { id: 1, name: "Asset", organizationId: 1 },
   { id: 201, name: "Asset", organizationId: 2 },
+  { id: 401, name: "Asset", organizationId: 4 },
 ];
 
 function makeService() {
@@ -33,10 +38,12 @@ function makeService() {
   const resolve = (table: any, cond: any, ordered: boolean) => {
     const q = cond ? dialect.sqlToQuery(cond) : { sql: "", params: [] as any[] };
     const scoped = /organization_id/.test(q.sql);
-    const [name, org] = q.params;
+    const [name, org, status] = q.params;
     const pick = (rows: Array<SubRow | AccRow>) => {
       const hit = rows
         .filter((r) => r.name === name && (!scoped || r.organizationId === org))
+        // Filtre status (3e parametre) : comptes desactives ignores.
+        .filter((r) => status === undefined || ((r as SubRow).status ?? "true") === status)
         // Sans ORDER BY on renvoie l ordre physique (doublon 77 en tete).
         .sort((a, b) => (ordered ? a.id - b.id : 0));
       return hit.slice(0, 1).map((r) => ({ id: r.id }));
@@ -130,7 +137,7 @@ describe("resolveTreasuryAccount — tresorerie limitee a l organisation", () =>
     expect(await svc.resolveTreasuryAccount(2, "cash")).toBe(101);
     expect(await svc.resolveTreasuryAccount(2, "bank")).toBe(102);
     expect(subQueries[0].sql).toMatch(/organization_id/);
-    expect(subQueries[0].params).toEqual(["Cash", 2]);
+    expect(subQueries[0].params).toEqual(["Cash", 2, "true"]);
   });
 
   it("cree le sous-compte absent dans l org, sous SA racine Asset", async () => {
@@ -178,14 +185,106 @@ describe("Loyer / maintenance / property_expense : meme compte de tresorerie", (
     expect(await svc.resolvePaymentDebitAccount("Airtel Money", 999, 2)).toBe(555); // cree en org 2
   });
 
-  it("maintenance mobile_money / cheque : mapping historique conserve (Cash)", async () => {
-    const { svc, inserts } = makeService();
-    await svc.createMaintenanceCost(5, maintenanceInput("mobile_money"), 2);
-    expect(legacyCredit(inserts)).toBe(101);
+  it("maintenance mobile_money -> Mobile Money de l org (legacy + ledger)", async () => {
+    const { svc, inserts, ledgerPost } = makeService();
+    await svc.createMaintenanceCost(5, maintenanceInput("mobile_money"), 1);
+    expect(legacyCredit(inserts)).toBe(40);
+    expect(ledgerCredit(ledgerPost)).toBe(40);
+  });
+
+  it("maintenance cheque -> Bank de l org (legacy + ledger)", async () => {
+    const { svc, inserts, ledgerPost } = makeService();
+    await svc.createMaintenanceCost(5, maintenanceInput("cheque"), 2);
+    expect(legacyCredit(inserts)).toBe(102);
+    expect(ledgerCredit(ledgerPost)).toBe(102);
+  });
+
+  it("maintenance cash -> Cash (org 1 = id 1, comportement prod inchange)", async () => {
+    const { svc, inserts, ledgerPost } = makeService();
+    await svc.createMaintenanceCost(5, maintenanceInput("cash"), 1);
+    expect(legacyCredit(inserts)).toBe(1);
+    expect(ledgerCredit(ledgerPost)).toBe(1);
+  });
+
+  it("property_expense mobile_money -> Mobile Money, cheque -> Bank", async () => {
+    const base = { propertyId: 1, category: "insurance", description: "Assurance", amount: 500, expenseDate: "2026-09-15" };
+    const a = makeService();
+    await a.svc.createPropertyExpense({ ...base, paymentMethod: "mobile_money" }, 1, 7);
+    expect(ledgerCredit(a.ledgerPost)).toBe(40);
+    const b = makeService();
+    await b.svc.createPropertyExpense({ ...base, paymentMethod: "cheque" }, 1, 7);
+    expect(ledgerCredit(b.ledgerPost)).toBe(2);
   });
 
   it("moyen de loyer inconnu : repli sur le compte du type Rent Payment", async () => {
     const { svc } = makeService();
     expect(await svc.resolvePaymentDebitAccount("autre", 999, 2)).toBe(999);
+  });
+});
+
+describe("treasuryMethodOf — mapping unique partage", () => {
+  it.each([
+    ["cash", "cash"], ["Espèces", "cash"], ["bank", "bank"], ["cheque", "bank"], ["Chèque", "bank"],
+    ["Virement bancaire", "bank"], ["Carte", "bank"], ["card", "bank"], ["mobile_money", "mobile_money"],
+    ["M-Pesa", "mobile_money"], ["Airtel Money", "mobile_money"], ["Orange Money", "mobile_money"],
+    ["autre", null], [null, null], [undefined, null],
+  ])("%s -> %s", (method, expected) => {
+    expect(PropertyManagementService.treasuryMethodOf(method as any)).toBe(expected);
+  });
+});
+
+describe("resolveTreasuryAccount — comptes desactives ignores", () => {
+  it("ignore un Cash desactive et prend le Cash actif suivant", async () => {
+    const { svc, subQueries } = makeService();
+    expect(await svc.resolveTreasuryAccount(4, "cash")).toBe(301);
+    expect(subQueries[0].sql).toMatch(/status/);
+  });
+
+  it("tous les Bank de l org desactives : en cree un nouveau actif", async () => {
+    const { svc, inserts } = makeService();
+    expect(await svc.resolveTreasuryAccount(4, "bank")).toBe(555);
+    const created = inserts.find((i) => i.table === subAccounts)?.vals;
+    expect(created).toMatchObject({ organizationId: 4, name: "Bank", accountId: 401, status: "true" });
+  });
+});
+
+describe("Caution / hypotheque : tresorerie selon le moyen reel", () => {
+  it.each([
+    [1, "cash", 1],
+    [1, "Chèque", 2],
+    [1, "M-Pesa", 40],
+    [2, "Virement", 102],
+  ])("caution recue org %i « %s » -> debit %i (legacy + ledger)", async (org, method, expected) => {
+    const { svc, inserts, ledgerPost } = makeService();
+    svc.getLeaseOrThrow = jest.fn().mockResolvedValue({ id: 9, propertyId: 1, unitId: 2, reference: "B9", currencyId: 3 });
+    svc.ensurePropertyInScope = jest.fn();
+    svc.saveProofFile = jest.fn().mockResolvedValue(null);
+    svc.getOrCreateLiabilitySubAccount = jest.fn().mockResolvedValue(60);
+    svc.publishPaymentUpdate = jest.fn().mockResolvedValue(undefined);
+    svc.findDeposit = jest.fn().mockResolvedValue({ id: 900 });
+    await svc.collectDeposit(9, { amount: 100, paymentDate: "2026-11-01", method }, org);
+    expect(inserts.find((i) => i.table === transactions)?.vals.debitId).toBe(expected);
+    expect(ledgerPost.mock.calls[0][0].lines.find((l: any) => l.side === "DEBIT").accountId).toBe(expected);
+  });
+
+  it.each([
+    ["mobile_money", 40, "Mobile Money"],
+    ["cheque", 2, "Bank"],
+    ["cash", 1, "Cash"],
+    ["bank", 2, "Bank"],
+  ])("hypotheque « %s » -> credit tresorerie %i", async (paymentMethod, expected, label) => {
+    const { svc, ledgerPost } = makeService();
+    svc.ensureActiveUnit = jest.fn().mockResolvedValue(undefined);
+    svc.getOrCreateLiabilitySubAccount = jest.fn().mockResolvedValue(61);
+    svc.getOrCreateExpenseSubAccount = jest.fn().mockResolvedValue(62);
+    svc.getMortgagePayment = jest.fn().mockResolvedValue({ id: 900 });
+    await svc.createMortgagePayment(
+      { propertyId: 1, paymentDate: "2026-11-01", totalAmount: 150, principalAmount: 100, interestAmount: 50, paymentMethod },
+      1,
+      7,
+    );
+    const credit = ledgerPost.mock.calls[0][0].lines.find((l: any) => l.side === "CREDIT");
+    expect(credit.accountId).toBe(expected);
+    expect(credit.description).toBe(label);
   });
 });

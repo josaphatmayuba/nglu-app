@@ -111,6 +111,9 @@ function makeService(opts: {
     {} as any,
   );
 
+  // Tresorerie : helper couvert par treasury-account.spec.ts (org 1 Cash = 1 / Bank = 2).
+  (service as any).resolveTreasuryAccount = jest.fn(async (_org: number, method: string) => (method === "bank" ? 2 : 1));
+
   return { service, db, inserts, updates, deletes, ledgerPost, workflowSubmit, projectsCreate };
 }
 

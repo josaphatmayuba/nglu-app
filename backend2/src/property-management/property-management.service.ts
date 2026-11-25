@@ -4341,8 +4341,8 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Caution = passif : on débite Caisse/Banque, on crédite « Tenant Deposits ».
     // Comptes résolus directement (robuste même si les types ne sont pas seedés).
-    const bank = this.isBankMethod(input.method);
-    const debitId = bank ? 2 : 1; // 2=Bank, 1=Cash
+    // Tresorerie de l org selon le moyen reel (Cash / Bank / Mobile Money).
+    const debitId = await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(input.method));
     const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const currencyId =
       (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
@@ -4429,7 +4429,7 @@ export class PropertyManagementService implements OnModuleInit {
     // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
     const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
-    const refundCredit = this.isBankMethod(input.returnMethod) ? 2 : 1; // 2=Bank, 1=Cash
+    const refundCredit = await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(input.returnMethod));
     const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
 
     let returnTransactionId: number | null = null;
@@ -5174,7 +5174,8 @@ export class PropertyManagementService implements OnModuleInit {
     let transactionId: number | null = reservation.transactionId ?? null;
 
     if (amount > 0) {
-      const debitId = input.paymentAccountId ?? (this.isBankMethod(input.method) ? 2 : 1); // 2=Bank, 1=Cash
+      const debitId =
+        input.paymentAccountId ?? (await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(input.method)));
       const revenueId = await this.getOrCreateSubAccount("Short-term Rental Revenue", 5, orgId); // 5 = Revenue
       const particulars = input.notes || `Séjour ${reservation.reference} — ${reservation.guestName}`;
 
@@ -7175,7 +7176,7 @@ export class PropertyManagementService implements OnModuleInit {
 
     // Auto-create accounting transaction
     // Tresorerie resolue par nom dans l org (helper unique, meme compte que les loyers).
-    const creditId = await this.resolveTreasuryAccount(orgId, this.expenseTreasuryMethod(input.paymentMethod));
+    const creditId = await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(input.paymentMethod));
     // Sous-compte "Maintenance" de CETTE org (isolation P2).
     const maintenanceSubAccount = await this.db
       .select({ id: subAccounts.id })
@@ -7213,7 +7214,7 @@ export class PropertyManagementService implements OnModuleInit {
         lines: [
           // La charge porte le projet du chantier (ventilation analytique).
           { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense", projectId: projectId ?? undefined },
-          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: this.treasuryLabel(input.paymentMethod) },
         ],
       },
       orgId,
@@ -7436,7 +7437,7 @@ export class PropertyManagementService implements OnModuleInit {
     const expenseId = Number((result as any).insertId);
 
     // Ecriture comptable : debit charge (compte canonique de la categorie) / credit tresorerie.
-    const creditId = await this.resolveTreasuryAccount(orgId, this.expenseTreasuryMethod(input.paymentMethod));
+    const creditId = await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(input.paymentMethod));
     const accountName = PropertyManagementService.PROPERTY_EXPENSE_CATEGORY_ACCOUNT[input.category] ?? "Frais de bureau et divers";
     const debitId = await this.getOrCreateExpenseSubAccount(accountName, orgId);
 
@@ -7455,7 +7456,7 @@ export class PropertyManagementService implements OnModuleInit {
           idempotencyKey: `property-expense:${expenseId}`,
           lines: [
             { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Property expense", projectId: projectId ?? undefined },
-            { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+            { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: this.treasuryLabel(input.paymentMethod) },
           ],
         },
         orgId,
@@ -8460,7 +8461,7 @@ export class PropertyManagementService implements OnModuleInit {
     // Ecriture comptable : DEBIT dette (capital) + DEBIT charge (interets)
     // [+ DEBIT charge (escrow)] / CREDIT tresorerie pour le total.
     const paymentMethod = input.paymentMethod ?? "bank";
-    const creditId = paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const creditId = await this.resolveTreasuryAccount(orgId, this.treasuryMethodOrCash(paymentMethod));
     const liabilityId = await this.getOrCreateLiabilitySubAccount(
       PropertyManagementService.MORTGAGE_LIABILITY_ACCOUNT,
       orgId,
@@ -8488,7 +8489,7 @@ export class PropertyManagementService implements OnModuleInit {
       lines.push({ accountId: escrowId, side: "DEBIT", amount: escrow, description: "Mortgage escrow", projectId: projectId ?? undefined });
     }
     // Pas de projectId sur la ligne de tresorerie (identique a createPropertyExpense).
-    lines.push({ accountId: creditId, side: "CREDIT", amount: total, description: paymentMethod === "bank" ? "Bank" : "Cash" });
+    lines.push({ accountId: creditId, side: "CREDIT", amount: total, description: this.treasuryLabel(paymentMethod) });
 
     let journalEntryId: number | null = null;
     try {
@@ -9089,20 +9090,34 @@ export class PropertyManagementService implements OnModuleInit {
     fallbackId: number,
     orgId: number,
   ): Promise<number> {
+    const kind = PropertyManagementService.treasuryMethodOf(method);
+    return kind ? this.resolveTreasuryAccount(orgId, kind) : fallbackId;
+  }
+
+  // Mapping UNIQUE moyen de paiement -> tresorerie, partage par loyer, caution,
+  // sejour, maintenance, property_expense et hypotheque. Accepte les valeurs DTO
+  // (cash | bank | mobile_money | cheque) et les libelles libres du loyer
+  // (Especes, Virement bancaire, Cheque, Carte, M-Pesa, Airtel Money...).
+  // null = moyen non reconnu (le loyer replie alors sur le compte du type Rent Payment).
+  static treasuryMethodOf(method: string | null | undefined): "cash" | "bank" | "mobile_money" | null {
     const m = (method || "")
       .toLowerCase()
       .replace(/[éèê]/g, "e"); // é è ê → e (espèce, chèque)
     const has = (...keys: string[]) => keys.some((k) => m.includes(k));
-    if (has("banc", "carte", "cheque", "virement", "bank")) {
-      return this.resolveTreasuryAccount(orgId, "bank");
-    }
-    if (has("pesa", "airtel", "orange", "mobile", "mtn", "momo")) {
-      return this.resolveTreasuryAccount(orgId, "mobile_money");
-    }
-    if (has("espece", "cash", "liquide")) {
-      return this.resolveTreasuryAccount(orgId, "cash");
-    }
-    return fallbackId;
+    if (has("banc", "bank", "carte", "card", "cheque", "virement")) return "bank";
+    if (has("pesa", "airtel", "orange", "mobile", "mtn", "momo")) return "mobile_money";
+    if (has("espece", "cash", "liquide")) return "cash";
+    return null;
+  }
+
+  // Idem, avec repli Caisse pour un moyen absent/inconnu (depenses, caution, hypotheque).
+  private treasuryMethodOrCash(method: string | null | undefined): "cash" | "bank" | "mobile_money" {
+    return PropertyManagementService.treasuryMethodOf(method) ?? "cash";
+  }
+
+  // Libelle de la ligne CREDIT/DEBIT tresorerie (Cash / Bank / Mobile Money).
+  private treasuryLabel(method: string | null | undefined): string {
+    return PropertyManagementService.TREASURY_ACCOUNT_NAMES[this.treasuryMethodOrCash(method)];
   }
 
   // Noms canoniques des sous-comptes de tresorerie (cf. provisioning/chart-of-accounts.ts).
@@ -9112,17 +9127,11 @@ export class PropertyManagementService implements OnModuleInit {
     mobile_money: "Mobile Money",
   } as const;
 
-  // Moyen de paiement d'une depense (maintenance, property_expense) -> tresorerie.
-  // Conserve le mapping historique (bank -> Bank, tout le reste -> Cash) : seul
-  // le compte est desormais resolu par nom dans l'org au lieu des id 1/2 en dur.
-  private expenseTreasuryMethod(paymentMethod: string | null | undefined): "cash" | "bank" {
-    return paymentMethod === "bank" ? "bank" : "cash";
-  }
-
-  // Helper UNIQUE de tresorerie Domus (loyer, maintenance, property_expense) :
-  // sous-compte d'actif Cash / Bank / Mobile Money de l'org, recherche par nom +
-  // organization_id (plus petit id si doublon, deterministe), cree si absent sous
-  // le compte racine Asset de l'org. Org 1 : Cash = 1, Bank = 2 (ordre du seeder).
+  // Helper UNIQUE de tresorerie Domus (loyer, caution, sejour, maintenance,
+  // property_expense, hypotheque) : sous-compte d'actif Cash / Bank / Mobile Money
+  // ACTIF (status = 'true', convention accounts.service) de l'org, recherche par nom + organization_id (plus
+  // petit id si doublon, deterministe), cree si absent ou tous desactives, sous le
+  // compte racine Asset de l'org. Org 1 : Cash = 1, Bank = 2 (ordre du seeder).
   private async resolveTreasuryAccount(
     orgId: number,
     method: "cash" | "bank" | "mobile_money",
@@ -9131,7 +9140,7 @@ export class PropertyManagementService implements OnModuleInit {
     const rows = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(and(eq(subAccounts.name, name), eq(subAccounts.organizationId, orgId)))
+      .where(and(eq(subAccounts.name, name), eq(subAccounts.organizationId, orgId), eq(subAccounts.status, "true")))
       .orderBy(asc(subAccounts.id))
       .limit(1);
     if (rows.length) return rows[0].id;
