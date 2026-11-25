@@ -3,12 +3,13 @@ import { AuditService } from "../audit/audit.service";
 import { ContractsService } from "./contracts.service";
 import * as bcrypt from "bcryptjs";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { readStoredDocument } from "../common/stored-document";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  accounts,
   appSettings,
   currencies,
   customers,
@@ -3369,7 +3370,7 @@ export class PropertyManagementService implements OnModuleInit {
     // Le compte débité (où arrive l'argent) dépend du moyen de paiement :
     // Espèces → Cash, Bancaire/Carte/Chèque → Banque, Mobile money → Mobile Money.
     const debitId = input.paymentAccountId
-      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId));
+      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId, orgId));
     await this.ensureExists(subAccounts, debitId, "Payment account not found.");
 
     // Currency precedence: explicit input → lease's currency → app default
@@ -4132,7 +4133,7 @@ export class PropertyManagementService implements OnModuleInit {
     await this.ensureLeaseContractSigned(pending.leaseId);
     const rentPaymentType = await this.getRentPaymentType(orgId);
     const debitId = input.paymentAccountId
-      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId));
+      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId, orgId));
     await this.ensureExists(subAccounts, debitId, "Payment account not found.");
 
     const paymentCurrencyId =
@@ -7173,7 +7174,8 @@ export class PropertyManagementService implements OnModuleInit {
     });
 
     // Auto-create accounting transaction
-    const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    // Tresorerie resolue par nom dans l org (helper unique, meme compte que les loyers).
+    const creditId = await this.resolveTreasuryAccount(orgId, this.expenseTreasuryMethod(input.paymentMethod));
     // Sous-compte "Maintenance" de CETTE org (isolation P2).
     const maintenanceSubAccount = await this.db
       .select({ id: subAccounts.id })
@@ -7434,7 +7436,7 @@ export class PropertyManagementService implements OnModuleInit {
     const expenseId = Number((result as any).insertId);
 
     // Ecriture comptable : debit charge (compte canonique de la categorie) / credit tresorerie.
-    const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const creditId = await this.resolveTreasuryAccount(orgId, this.expenseTreasuryMethod(input.paymentMethod));
     const accountName = PropertyManagementService.PROPERTY_EXPENSE_CATEGORY_ACCOUNT[input.category] ?? "Frais de bureau et divers";
     const debitId = await this.getOrCreateExpenseSubAccount(accountName, orgId);
 
@@ -9085,39 +9087,72 @@ export class PropertyManagementService implements OnModuleInit {
   private async resolvePaymentDebitAccount(
     method: string | null | undefined,
     fallbackId: number,
+    orgId: number,
   ): Promise<number> {
     const m = (method || "")
       .toLowerCase()
       .replace(/[éèê]/g, "e"); // é è ê → e (espèce, chèque)
     const has = (...keys: string[]) => keys.some((k) => m.includes(k));
     if (has("banc", "carte", "cheque", "virement", "bank")) {
-      return this.getOrCreateAssetSubAccount("Bank");
+      return this.resolveTreasuryAccount(orgId, "bank");
     }
     if (has("pesa", "airtel", "orange", "mobile", "mtn", "momo")) {
-      return this.getOrCreateAssetSubAccount("Mobile Money");
+      return this.resolveTreasuryAccount(orgId, "mobile_money");
     }
     if (has("espece", "cash", "liquide")) {
-      return this.getOrCreateAssetSubAccount("Cash");
+      return this.resolveTreasuryAccount(orgId, "cash");
     }
     return fallbackId;
   }
 
-  // get-or-create d'un sous-compte d'actif par nom (idempotent, sans seeder).
-  private async getOrCreateAssetSubAccount(name: string): Promise<number> {
-    const ASSET = 1;
+  // Noms canoniques des sous-comptes de tresorerie (cf. provisioning/chart-of-accounts.ts).
+  static readonly TREASURY_ACCOUNT_NAMES = {
+    cash: "Cash",
+    bank: "Bank",
+    mobile_money: "Mobile Money",
+  } as const;
+
+  // Moyen de paiement d'une depense (maintenance, property_expense) -> tresorerie.
+  // Conserve le mapping historique (bank -> Bank, tout le reste -> Cash) : seul
+  // le compte est desormais resolu par nom dans l'org au lieu des id 1/2 en dur.
+  private expenseTreasuryMethod(paymentMethod: string | null | undefined): "cash" | "bank" {
+    return paymentMethod === "bank" ? "bank" : "cash";
+  }
+
+  // Helper UNIQUE de tresorerie Domus (loyer, maintenance, property_expense) :
+  // sous-compte d'actif Cash / Bank / Mobile Money de l'org, recherche par nom +
+  // organization_id (plus petit id si doublon, deterministe), cree si absent sous
+  // le compte racine Asset de l'org. Org 1 : Cash = 1, Bank = 2 (ordre du seeder).
+  private async resolveTreasuryAccount(
+    orgId: number,
+    method: "cash" | "bank" | "mobile_money",
+  ): Promise<number> {
+    const name = PropertyManagementService.TREASURY_ACCOUNT_NAMES[method];
     const rows = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(eq(subAccounts.name, name))
+      .where(and(eq(subAccounts.name, name), eq(subAccounts.organizationId, orgId)))
+      .orderBy(asc(subAccounts.id))
       .limit(1);
     if (rows.length) return rows[0].id;
+    const roots = await this.db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.name, "Asset"), eq(accounts.organizationId, orgId)))
+      .orderBy(asc(accounts.id))
+      .limit(1);
+    const assetRootId = roots[0]?.id ?? (orgId === 1 ? 1 : null);
+    if (!assetRootId) {
+      throw new BadRequestException(`Compte racine Asset introuvable pour l'organisation ${orgId}.`);
+    }
     const [result] = await this.db.insert(subAccounts).values({
+      organizationId: orgId,
       name,
-      accountId: ASSET,
+      accountId: assetRootId,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    });
+    } as any);
     return Number((result as any).insertId);
   }
 
