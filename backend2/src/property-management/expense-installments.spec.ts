@@ -400,6 +400,8 @@ describe("PropertyManagementService — createPropertyExpense non-regression (mo
       {} as any, // ownerNotifications,
       {} as any,
     );
+    // Tresorerie : helper couvert par treasury-account.spec.ts (org 1 Cash = 1 / Bank = 2).
+    (service as any).resolveTreasuryAccount = jest.fn(async (_org: number, method: string) => (method === "bank" ? 2 : 1));
 
     await service.createPropertyExpense(
       {

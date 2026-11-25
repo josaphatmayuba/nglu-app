@@ -55,6 +55,8 @@ function makeSvc(opts: { lease?: any; queue?: any[][]; updateAffected?: number }
   svc.findDeposit = jest.fn().mockResolvedValue(DEP);
   svc.saveProofFile = jest.fn().mockResolvedValue(null);
   svc.resolveDefaultCurrency = jest.fn().mockResolvedValue(1);
+  // Tresorerie : helper couvert par treasury-account.spec.ts (org 1 Cash = 1 / Bank = 2).
+  svc.resolveTreasuryAccount = jest.fn(async (_org: number, method: string) => (method === "bank" ? 2 : 1));
   svc.syncProratedNextInvoiceDate = jest.fn().mockResolvedValue(undefined);
   return { svc, rec };
 }
